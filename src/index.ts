@@ -18,7 +18,7 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: function(origin, callback) {
+  origin: function(origin: string | undefined, callback: (err: Error | null, allow: boolean) => void) {
     // Allow requests with no origin (like mobile apps or curl)
     if (!origin) return callback(null, true);
     // Allow localhost for development
@@ -54,7 +54,7 @@ app.get('/api/v1/openapi.json', (_req: Request, res: Response) => {
   try {
     const swaggerPath = path.join(__dirname, '..', 'swagger.yaml');
     const swaggerContent = fs.readFileSync(swaggerPath, 'utf8');
-    const swaggerJson = yaml.load(swaggerContent);
+    const swaggerJson = yaml.load(swaggerContent) as any;
     
     // Power Apps doesn't accept protocol in host - remove http://
     swaggerJson.servers = [{ url: 'localhost:3000' }];
@@ -71,7 +71,7 @@ app.get('/openapi.json', (_req: Request, res: Response) => {
   try {
     const swaggerPath = path.join(__dirname, '..', 'swagger.yaml');
     const swaggerContent = fs.readFileSync(swaggerPath, 'utf8');
-    const swaggerJson = yaml.load(swaggerContent);
+    const swaggerJson = yaml.load(swaggerContent) as any;
     
     // Power Apps doesn't accept protocol in host
     swaggerJson.servers = [{ url: 'localhost:3000' }];

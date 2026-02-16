@@ -13,7 +13,8 @@ const router = Router();
 // ============================================================================
 router.post('/documents/:documentId/anonymize', authenticate, async (req: Request, res: Response) => {
   try {
-    const { documentId } = req.params;
+    const documentIdParam = req.params.documentId;
+    const documentId = Array.isArray(documentIdParam) ? documentIdParam[0] : documentIdParam;
     const { aiTask, customPrompt, redactionLevel } = req.body;
     const userId = (req as any).user?.userId;
 
@@ -45,7 +46,8 @@ router.post('/documents/:documentId/anonymize', authenticate, async (req: Reques
 // ============================================================================
 router.get('/clients/:clientId/redaction-profile', authenticate, async (req: Request, res: Response) => {
   try {
-    const { clientId } = req.params;
+    const clientIdParam = req.params.clientId;
+    const clientId = Array.isArray(clientIdParam) ? clientIdParam[0] : clientIdParam;
 
     const profile = await anonymizeService.getClientRedactionProfile(clientId);
 
@@ -61,7 +63,8 @@ router.get('/clients/:clientId/redaction-profile', authenticate, async (req: Req
 // ============================================================================
 router.post('/clients/:clientId/redaction-profile', authenticate, async (req: Request, res: Response) => {
   try {
-    const { clientId } = req.params;
+    const clientIdParam = req.params.clientId;
+    const clientId = Array.isArray(clientIdParam) ? clientIdParam[0] : clientIdParam;
     const { fullName, aliases, addresses, taxId, personalId, bankAccounts, phones, emails } = req.body;
 
     const profile = await anonymizeService.upsertRedactionProfile({
@@ -88,7 +91,8 @@ router.post('/clients/:clientId/redaction-profile', authenticate, async (req: Re
 // ============================================================================
 router.get('/anonymous-documents/:id', authenticate, async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
 
     const doc = await anonymizeService.getAnonymousDocument(id);
 

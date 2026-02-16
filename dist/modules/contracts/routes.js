@@ -1,22 +1,17 @@
-"use strict";
 /**
  * Contracts Routes
  * API endpoints for contract template management and document generation
  */
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const services_1 = __importDefault(require("./services"));
-const auth_1 = require("../../middleware/auth");
-const prisma_service_1 = require("../../prisma/prisma.service");
-const types_1 = require("./types");
-const multer_1 = __importDefault(require("multer"));
-const router = (0, express_1.Router)();
+import { Router } from 'express';
+import contractsService from './services';
+import { authenticate } from '../../middleware/auth';
+import { prisma } from '../../prisma/prisma.service';
+import { ADASVETEL_VARIABLES } from './types';
+import multer from 'multer';
+const router = Router();
 // Configure multer for file uploads
-const upload = (0, multer_1.default)({
-    storage: multer_1.default.memoryStorage(),
+const upload = multer({
+    storage: multer.memoryStorage(),
     limits: {
         fileSize: 10 * 1024 * 1024, // 10MB limit
     },
@@ -33,10 +28,10 @@ const upload = (0, multer_1.default)({
  * GET /api/v1/contracts/templates
  * List all contract templates
  */
-router.get('/templates', auth_1.authenticate, async (req, res) => {
+router.get('/templates', authenticate, async (req, res) => {
     try {
         const category = req.query.category;
-        const templates = await services_1.default.getTemplates(category);
+        const templates = await contractsService.getTemplates(category);
         res.json(templates);
     }
     catch (error) {
@@ -52,10 +47,10 @@ router.get('/templates', auth_1.authenticate, async (req, res) => {
  * GET /api/v1/contracts/templates/:id
  * Get template by ID with variables
  */
-router.get('/templates/:id', auth_1.authenticate, async (req, res) => {
+router.get('/templates/:id', authenticate, async (req, res) => {
     try {
         const { id } = req.params;
-        const template = await services_1.default.getTemplateById(id);
+        const template = await contractsService.getTemplateById(id);
         if (!template) {
             res.status(404).json({
                 status: 404,
@@ -79,17 +74,17 @@ router.get('/templates/:id', auth_1.authenticate, async (req, res) => {
  * GET /api/v1/contracts/templates/adasvetel/variables
  * Get predefined variables for adásvételi contract
  */
-router.get('/templates/adasvetel/variables', auth_1.authenticate, async (req, res) => {
+router.get('/templates/adasvetel/variables', authenticate, async (req, res) => {
     res.json({
         category: 'ADASVETEL',
-        variables: types_1.ADASVETEL_VARIABLES
+        variables: ADASVETEL_VARIABLES
     });
 });
 /**
  * POST /api/v1/contracts/templates
  * Upload and register new template
  */
-router.post('/templates', auth_1.authenticate, upload.single('template'), async (req, res) => {
+router.post('/templates', authenticate, upload.single('template'), async (req, res) => {
     try {
         const userId = req.user?.userId;
         const { name, description, category, variables } = req.body;
@@ -110,7 +105,7 @@ router.post('/templates', auth_1.authenticate, upload.single('template'), async 
             return;
         }
         // Save template file
-        const templatePath = await services_1.default.saveTemplateFile({
+        const templatePath = await contractsService.saveTemplateFile({
             name: req.file.originalname,
             data: req.file.buffer
         });
@@ -124,7 +119,7 @@ router.post('/templates', auth_1.authenticate, upload.single('template'), async 
                 parsedVariables = [];
             }
         }
-        const template = await services_1.default.createTemplate({
+        const template = await contractsService.createTemplate({
             name,
             description,
             category: category,
@@ -156,7 +151,7 @@ router.post('/templates', auth_1.authenticate, upload.single('template'), async 
  * POST /api/v1/contracts/generate
  * Generate contract document
  */
-router.post('/generate', auth_1.authenticate, async (req, res) => {
+router.post('/generate', authenticate, async (req, res) => {
     try {
         const userId = req.user?.userId;
         const { templateId, caseId, data, title } = req.body;
@@ -168,7 +163,7 @@ router.post('/generate', auth_1.authenticate, async (req, res) => {
             });
             return;
         }
-        const result = await services_1.default.generateContract({
+        const result = await contractsService.generateContract({
             templateId,
             caseId,
             data,
@@ -198,7 +193,7 @@ router.post('/generate', auth_1.authenticate, async (req, res) => {
  * POST /api/v1/contracts/preview
  * Generate preview (temporary, auto-deleted after 24h)
  */
-router.post('/preview', auth_1.authenticate, async (req, res) => {
+router.post('/preview', authenticate, async (req, res) => {
     try {
         const { templateId, data } = req.body;
         if (!templateId || !data) {
@@ -209,7 +204,7 @@ router.post('/preview', auth_1.authenticate, async (req, res) => {
             });
             return;
         }
-        const result = await services_1.default.generatePreview({
+        const result = await contractsService.generatePreview({
             templateId,
             data
         });
@@ -236,10 +231,10 @@ router.post('/preview', auth_1.authenticate, async (req, res) => {
  * GET /api/v1/contracts/case/:caseId
  * Get generated contracts for a case
  */
-router.get('/case/:caseId', auth_1.authenticate, async (req, res) => {
+router.get('/case/:caseId', authenticate, async (req, res) => {
     try {
         const { caseId } = req.params;
-        const contracts = await services_1.default.getCaseContracts(caseId);
+        const contracts = await contractsService.getCaseContracts(caseId);
         res.json(contracts);
     }
     catch (error) {
@@ -255,10 +250,10 @@ router.get('/case/:caseId', auth_1.authenticate, async (req, res) => {
  * GET /api/v1/contracts/:id/download
  * Download generated contract
  */
-router.get('/:id/download', auth_1.authenticate, async (req, res) => {
+router.get('/:id/download', authenticate, async (req, res) => {
     try {
         const { id } = req.params;
-        const generation = await prisma_service_1.prisma.contractGeneration.findUnique({
+        const generation = await prisma.contractGeneration.findUnique({
             where: { id }
         });
         if (!generation) {
@@ -294,10 +289,10 @@ router.get('/:id/download', auth_1.authenticate, async (req, res) => {
  * POST /api/v1/contracts/:id/upload-sharepoint
  * Upload generated contract to SharePoint
  */
-router.post('/:id/upload-sharepoint', auth_1.authenticate, async (req, res) => {
+router.post('/:id/upload-sharepoint', authenticate, async (req, res) => {
     try {
         const { id } = req.params;
-        const result = await services_1.default.uploadToSharePoint(id);
+        const result = await contractsService.uploadToSharePoint(id);
         if (!result.success) {
             res.status(400).json({
                 status: 400,
@@ -325,11 +320,11 @@ router.post('/:id/upload-sharepoint', auth_1.authenticate, async (req, res) => {
  * POST /api/v1/contracts/cleanup
  * Cleanup expired previews (admin only)
  */
-router.post('/cleanup', auth_1.authenticate, async (req, res) => {
+router.post('/cleanup', authenticate, async (req, res) => {
     try {
         const userId = req.user?.userId;
         // Verify admin role
-        const user = await prisma_service_1.prisma.user.findUnique({
+        const user = await prisma.user.findUnique({
             where: { id: userId }
         });
         if (user?.role !== 'ADMIN') {
@@ -340,7 +335,7 @@ router.post('/cleanup', auth_1.authenticate, async (req, res) => {
             });
             return;
         }
-        const count = await services_1.default.cleanupExpiredPreviews();
+        const count = await contractsService.cleanupExpiredPreviews();
         res.json({
             success: true,
             deletedCount: count
@@ -355,5 +350,5 @@ router.post('/cleanup', auth_1.authenticate, async (req, res) => {
         });
     }
 });
-exports.default = router;
+export default router;
 //# sourceMappingURL=routes.js.map

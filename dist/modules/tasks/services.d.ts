@@ -32,9 +32,9 @@ export declare function createTask(data: {
     case: {
         id: string;
         status: import(".prisma/client").$Enums.CaseStatus;
-        title: string;
         createdAt: Date;
         updatedAt: Date;
+        title: string;
         caseNumber: string;
         description: string | null;
         caseType: import(".prisma/client").$Enums.CaseType;
@@ -65,22 +65,18 @@ export declare function createTask(data: {
         role: import(".prisma/client").$Enums.UserRole;
         status: import(".prisma/client").$Enums.UserStatus;
         skills: string[];
-        title: string | null;
-        phone: string | null;
-        hourlyRate: number | null;
-        skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
         isActive: boolean;
         lastLoginAt: Date | null;
         createdAt: Date;
         updatedAt: Date;
-    } | null;
+    };
 } & {
     id: string;
     status: import(".prisma/client").$Enums.TaskStatus;
-    title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     createdAt: Date;
     updatedAt: Date;
+    title: string;
+    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;
@@ -109,14 +105,14 @@ export declare function getCaseTasks(caseId: string, filters?: {
         id: string;
         name: string;
         role: import(".prisma/client").$Enums.UserRole;
-    } | null;
+    };
 } & {
     id: string;
     status: import(".prisma/client").$Enums.TaskStatus;
-    title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     createdAt: Date;
     updatedAt: Date;
+    title: string;
+    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;
@@ -137,13 +133,13 @@ export declare function getCaseTasks(caseId: string, filters?: {
 /**
  * Get a single task by ID
  */
-export declare function getTask(taskId: string): Promise<({
+export declare function getTask(taskId: string): Promise<{
     case: {
         id: string;
         status: import(".prisma/client").$Enums.CaseStatus;
-        title: string;
         createdAt: Date;
         updatedAt: Date;
+        title: string;
         caseNumber: string;
         description: string | null;
         caseType: import(".prisma/client").$Enums.CaseType;
@@ -174,22 +170,18 @@ export declare function getTask(taskId: string): Promise<({
         role: import(".prisma/client").$Enums.UserRole;
         status: import(".prisma/client").$Enums.UserStatus;
         skills: string[];
-        title: string | null;
-        phone: string | null;
-        hourlyRate: number | null;
-        skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
         isActive: boolean;
         lastLoginAt: Date | null;
         createdAt: Date;
         updatedAt: Date;
-    } | null;
+    };
 } & {
     id: string;
     status: import(".prisma/client").$Enums.TaskStatus;
-    title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     createdAt: Date;
     updatedAt: Date;
+    title: string;
+    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;
@@ -206,17 +198,17 @@ export declare function getTask(taskId: string): Promise<({
     submittedAt: Date | null;
     assignedToId: string | null;
     assignedById: string | null;
-}) | null>;
+}>;
 /**
  * Start a task (TODO -> IN_PROGRESS)
  */
 export declare function startTask(taskId: string, userId: string): Promise<{
     id: string;
     status: import(".prisma/client").$Enums.TaskStatus;
-    title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     createdAt: Date;
     updatedAt: Date;
+    title: string;
+    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;
@@ -240,10 +232,10 @@ export declare function startTask(taskId: string, userId: string): Promise<{
 export declare function submitTask(taskId: string, userId: string, notes?: string): Promise<{
     id: string;
     status: import(".prisma/client").$Enums.TaskStatus;
-    title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     createdAt: Date;
     updatedAt: Date;
+    title: string;
+    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;
@@ -267,10 +259,10 @@ export declare function submitTask(taskId: string, userId: string, notes?: strin
 export declare function completeTask(taskId: string, userId: string, approved: boolean, notes?: string): Promise<{
     id: string;
     status: import(".prisma/client").$Enums.TaskStatus;
-    title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     createdAt: Date;
     updatedAt: Date;
+    title: string;
+    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;
@@ -295,14 +287,14 @@ export declare function reassignTask(taskId: string, newAssigneeId: string, reas
     assignedTo: {
         id: string;
         name: string;
-    } | null;
+    };
 } & {
     id: string;
     status: import(".prisma/client").$Enums.TaskStatus;
-    title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     createdAt: Date;
     updatedAt: Date;
+    title: string;
+    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;
@@ -333,7 +325,7 @@ export declare function getTaskRecommendations(params: {
     role: import(".prisma/client").$Enums.UserRole;
     matchScore: number;
     skills: {
-        [x: string]: any;
+        [x: string]: number;
     };
     currentWorkload: string;
     totalScore: number;
@@ -346,13 +338,13 @@ export declare function autoGenerateTask(params: {
     workflowEvent: string;
     triggeredBy?: string;
     originalDocumentId?: string;
-}): Promise<({
+}): Promise<{
     case: {
         id: string;
         status: import(".prisma/client").$Enums.CaseStatus;
-        title: string;
         createdAt: Date;
         updatedAt: Date;
+        title: string;
         caseNumber: string;
         description: string | null;
         caseType: import(".prisma/client").$Enums.CaseType;
@@ -383,22 +375,18 @@ export declare function autoGenerateTask(params: {
         role: import(".prisma/client").$Enums.UserRole;
         status: import(".prisma/client").$Enums.UserStatus;
         skills: string[];
-        title: string | null;
-        phone: string | null;
-        hourlyRate: number | null;
-        skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
         isActive: boolean;
         lastLoginAt: Date | null;
         createdAt: Date;
         updatedAt: Date;
-    } | null;
+    };
 } & {
     id: string;
     status: import(".prisma/client").$Enums.TaskStatus;
-    title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     createdAt: Date;
     updatedAt: Date;
+    title: string;
+    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;
@@ -415,7 +403,7 @@ export declare function autoGenerateTask(params: {
     submittedAt: Date | null;
     assignedToId: string | null;
     assignedById: string | null;
-}) | null>;
+}>;
 /**
  * Check if user can assign to another user
  */
@@ -426,13 +414,20 @@ export declare function canAssign(assignerId: string, assigneeId: string): Promi
 export declare function getUserTasks(userId: string, filters?: {
     status?: string;
     caseId?: string;
-}): Promise<{
+}): Promise<({
+    case: {
+        id: string;
+        caseNumber: string;
+        clientName: string;
+        matterType: string;
+    };
+} & {
     id: string;
     status: import(".prisma/client").$Enums.TaskStatus;
-    title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     createdAt: Date;
     updatedAt: Date;
+    title: string;
+    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;
@@ -449,7 +444,7 @@ export declare function getUserTasks(userId: string, filters?: {
     submittedAt: Date | null;
     assignedToId: string | null;
     assignedById: string | null;
-}[]>;
+})[]>;
 declare const _default: {
     createTask: typeof createTask;
     getCaseTasks: typeof getCaseTasks;

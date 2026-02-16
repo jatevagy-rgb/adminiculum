@@ -1,22 +1,17 @@
-"use strict";
 /**
  * Settings Routes V2
  * API endpoints for application settings
  */
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const settings_1 = __importDefault(require("./settings"));
-const router = (0, express_1.Router)();
+import { Router } from 'express';
+import settingsService from './settings';
+const router = Router();
 /**
  * GET /api/v1/settings
  * Get all settings
  */
 router.get('/', async (_req, res) => {
     try {
-        const settings = await settings_1.default.getAllSettings();
+        const settings = await settingsService.getAllSettings();
         res.json(settings);
     }
     catch (error) {
@@ -30,7 +25,7 @@ router.get('/', async (_req, res) => {
  */
 router.get('/ui', async (_req, res) => {
     try {
-        const settings = await settings_1.default.getUiSettings();
+        const settings = await settingsService.getUiSettings();
         res.json(settings);
     }
     catch (error) {
@@ -45,7 +40,7 @@ router.get('/ui', async (_req, res) => {
 router.patch('/ui', async (req, res) => {
     try {
         const updates = req.body;
-        const settings = await settings_1.default.updateUiSettings(updates);
+        const settings = await settingsService.updateUiSettings(updates);
         res.json(settings);
     }
     catch (error) {
@@ -60,7 +55,7 @@ router.patch('/ui', async (req, res) => {
 router.get('/:key', async (req, res) => {
     try {
         const key = Array.isArray(req.params.key) ? req.params.key[0] : req.params.key;
-        const value = await settings_1.default.getSetting(key);
+        const value = await settingsService.getSetting(key);
         res.json({ value });
     }
     catch (error) {
@@ -75,7 +70,7 @@ router.get('/:key', async (req, res) => {
 router.put('/:key', async (req, res) => {
     try {
         const key = Array.isArray(req.params.key) ? req.params.key[0] : req.params.key;
-        await settings_1.default.updateSetting(key, req.body.value);
+        await settingsService.updateSetting(key, req.body.value);
         res.json({ success: true });
     }
     catch (error) {
@@ -83,5 +78,5 @@ router.put('/:key', async (req, res) => {
         res.status(500).json({ message: 'Failed to update setting' });
     }
 });
-exports.default = router;
+export default router;
 //# sourceMappingURL=routes.js.map

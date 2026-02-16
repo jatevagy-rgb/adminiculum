@@ -1,47 +1,12 @@
-"use strict";
 /**
  * Contracts Service
  * Handles contract template management and document generation
  */
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-const fs = __importStar(require("fs"));
-const path = __importStar(require("path"));
-const prisma_service_1 = require("../../prisma/prisma.service");
-const hungarianNumberToWords_1 = require("../../utils/hungarianNumberToWords");
-const sharepoint_1 = require("../sharepoint");
+import * as fs from 'fs';
+import * as path from 'path';
+import { prisma } from '../../prisma/prisma.service';
+import { HungarianNumberToWords } from '../../utils/hungarianNumberToWords';
+import { driveService } from '../sharepoint';
 // Template storage directory
 const TEMPLATES_DIR = path.join(process.cwd(), 'templates');
 const GENERATED_DIR = path.join(process.cwd(), 'uploads', 'generated');
@@ -61,7 +26,7 @@ class ContractsService {
      * Get all active templates
      */
     async getTemplates(category) {
-        const templates = await prisma_service_1.prisma.contractTemplate.findMany({
+        const templates = await prisma.contractTemplate.findMany({
             where: {
                 isActive: true,
                 ...(category ? { category } : {})
@@ -77,7 +42,7 @@ class ContractsService {
      * Get template by ID
      */
     async getTemplateById(id) {
-        const template = await prisma_service_1.prisma.contractTemplate.findUnique({
+        const template = await prisma.contractTemplate.findUnique({
             where: { id }
         });
         if (!template)
@@ -94,12 +59,12 @@ class ContractsService {
         try {
             // If setting as default, unset other defaults in same category
             if (data.isDefault) {
-                await prisma_service_1.prisma.contractTemplate.updateMany({
+                await prisma.contractTemplate.updateMany({
                     where: { category: data.category, isDefault: true },
                     data: { isDefault: false }
                 });
             }
-            const template = await prisma_service_1.prisma.contractTemplate.create({
+            const template = await prisma.contractTemplate.create({
                 data: {
                     name: data.name,
                     description: data.description,
@@ -140,7 +105,7 @@ class ContractsService {
         }
         // Convert price to words
         if (processed.vetelar) {
-            processed.vetelar_betukkel = hungarianNumberToWords_1.HungarianNumberToWords.toForint(processed.vetelar);
+            processed.vetelar_betukkel = HungarianNumberToWords.toForint(processed.vetelar);
         }
         // Build full address
         if (processed.ingatlan_iranyitoszam && processed.ingatlan_telepules) {
@@ -191,7 +156,7 @@ class ContractsService {
             const buffer = doc.getZip().generate({ type: 'nodebuffer' });
             fs.writeFileSync(outputPath, buffer);
             // Save to database
-            const generation = await prisma_service_1.prisma.contractGeneration.create({
+            const generation = await prisma.contractGeneration.create({
                 data: {
                     title: input.title || `${template.name} - ${timestamp}`,
                     templateId: input.templateId,
@@ -206,7 +171,7 @@ class ContractsService {
             // Upload to SharePoint if caseId provided
             let spResult = null;
             if (input.caseId) {
-                spResult = await sharepoint_1.driveService.uploadDocument({
+                spResult = await driveService.uploadDocument({
                     caseId: input.caseId,
                     fileName: fileName,
                     content: buffer,
@@ -214,7 +179,7 @@ class ContractsService {
                     folder: 'Contracts'
                 });
                 if (spResult.success) {
-                    await prisma_service_1.prisma.contractGeneration.update({
+                    await prisma.contractGeneration.update({
                         where: { id: generation.id },
                         data: { status: 'UPLOADED' }
                     });
@@ -222,10 +187,11 @@ class ContractsService {
             }
             // Create timeline event if caseId provided
             if (input.caseId && input.userId) {
-                await prisma_service_1.prisma.timelineEvent.create({
+                await prisma.timelineEvent.create({
                     data: {
                         caseId: input.caseId,
                         userId: input.userId,
+                        eventType: 'DOCUMENT_GENERATED',
                         type: 'DOCUMENT_GENERATED',
                         payload: {
                             generationId: generation.id,
@@ -288,7 +254,7 @@ class ContractsService {
             // Set expiration (24 hours from now)
             const expiresAt = new Date();
             expiresAt.setHours(expiresAt.getHours() + 24);
-            await prisma_service_1.prisma.contractGeneration.create({
+            await prisma.contractGeneration.create({
                 data: {
                     title: 'Preview',
                     templateId: input.templateId,
@@ -320,7 +286,7 @@ class ContractsService {
      * Get generated contracts for a case
      */
     async getCaseContracts(caseId) {
-        const contracts = await prisma_service_1.prisma.contractGeneration.findMany({
+        const contracts = await prisma.contractGeneration.findMany({
             where: { caseId },
             include: {
                 template: {
@@ -348,7 +314,7 @@ class ContractsService {
      * Delete expired previews (cleanup job)
      */
     async cleanupExpiredPreviews() {
-        const expired = await prisma_service_1.prisma.contractGeneration.findMany({
+        const expired = await prisma.contractGeneration.findMany({
             where: {
                 status: 'PREVIEW',
                 expiresAt: {
@@ -362,7 +328,7 @@ class ContractsService {
                 fs.unlinkSync(item.filePath);
             }
             // Delete record
-            await prisma_service_1.prisma.contractGeneration.delete({
+            await prisma.contractGeneration.delete({
                 where: { id: item.id }
             });
         }
@@ -385,7 +351,7 @@ class ContractsService {
     async uploadToSharePoint(generationId) {
         try {
             // Get the generated contract
-            const generation = await prisma_service_1.prisma.contractGeneration.findUnique({
+            const generation = await prisma.contractGeneration.findUnique({
                 where: { id: generationId },
                 include: { template: true }
             });
@@ -401,7 +367,7 @@ class ContractsService {
             }
             const fileContent = fs.readFileSync(generation.filePath);
             // Upload to SharePoint
-            const result = await sharepoint_1.driveService.uploadDocument({
+            const result = await driveService.uploadDocument({
                 caseId: generation.caseId,
                 fileName: generation.fileName,
                 content: fileContent,
@@ -410,7 +376,7 @@ class ContractsService {
             });
             if (result.success) {
                 // Update generation status
-                await prisma_service_1.prisma.contractGeneration.update({
+                await prisma.contractGeneration.update({
                     where: { id: generationId },
                     data: { status: 'UPLOADED' }
                 });
@@ -436,7 +402,7 @@ class ContractsService {
      * Get SharePoint upload status for a generation
      */
     async getSharePointStatus(generationId) {
-        const generation = await prisma_service_1.prisma.contractGeneration.findUnique({
+        const generation = await prisma.contractGeneration.findUnique({
             where: { id: generationId }
         });
         if (!generation)
@@ -449,5 +415,5 @@ class ContractsService {
         };
     }
 }
-exports.default = new ContractsService();
+export default new ContractsService();
 //# sourceMappingURL=services.js.map

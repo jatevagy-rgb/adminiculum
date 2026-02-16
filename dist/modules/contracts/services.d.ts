@@ -54,7 +54,7 @@ declare class ContractsService {
         category: import(".prisma/client").$Enums.TemplateCategory;
         status: import(".prisma/client").$Enums.GenerationStatus;
         fileName: string;
-        fileSize: number | null;
+        fileSize: number;
         generatedAt: Date;
     }[]>;
     /**

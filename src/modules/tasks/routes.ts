@@ -62,7 +62,8 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
 // ============================================================================
 router.get('/cases/:caseId/tasks', authenticate, async (req: Request, res: Response) => {
   try {
-    const caseId = req.params.caseId;
+    const caseIdParam = req.params.caseId;
+    const caseId = Array.isArray(caseIdParam) ? caseIdParam[0] : caseIdParam;
     const { status, assignedTo } = req.query;
 
     const tasks = await taskService.getCaseTasks(caseId, {
@@ -82,7 +83,8 @@ router.get('/cases/:caseId/tasks', authenticate, async (req: Request, res: Respo
 // ============================================================================
 router.get('/tasks/:id', authenticate, async (req: Request, res: Response) => {
   try {
-    const id = req.params.id;
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
     
     const task = await taskService.getTask(id);
     
@@ -102,7 +104,8 @@ router.get('/tasks/:id', authenticate, async (req: Request, res: Response) => {
 // ============================================================================
 router.post('/tasks/:id/start', authenticate, async (req: Request, res: Response) => {
   try {
-    const id = req.params.id;
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
     const userId = (req as any).user?.userId;
 
     const task = await taskService.startTask(id, userId);
@@ -118,7 +121,8 @@ router.post('/tasks/:id/start', authenticate, async (req: Request, res: Response
 // ============================================================================
 router.post('/tasks/:id/submit', authenticate, async (req: Request, res: Response) => {
   try {
-    const id = req.params.id;
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
     const { notes } = req.body;
     const userId = (req as any).user?.userId;
 
@@ -135,7 +139,8 @@ router.post('/tasks/:id/submit', authenticate, async (req: Request, res: Respons
 // ============================================================================
 router.post('/tasks/:id/complete', authenticate, async (req: Request, res: Response) => {
   try {
-    const id = req.params.id;
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
     const { approved, notes } = req.body;
     const userId = (req as any).user?.userId;
 
@@ -156,7 +161,8 @@ router.post('/tasks/:id/complete', authenticate, async (req: Request, res: Respo
 // ============================================================================
 router.post('/tasks/:id/reassign', authenticate, async (req: Request, res: Response) => {
   try {
-    const id = req.params.id;
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
     const { newAssigneeId } = req.body;
     const reassignedBy = (req as any).user?.userId;
 

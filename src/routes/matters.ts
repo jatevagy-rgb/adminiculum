@@ -58,7 +58,8 @@ router.get('/', async (req: Request, res: Response) => {
 
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
 
     const matter = await prisma.matter.findUnique({
       where: { id },
@@ -165,7 +166,8 @@ router.post('/', async (req: Request, res: Response) => {
 
 router.patch('/:id', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
     const { title, description, matterType, status, departmentId, budgetHours, closedAt } = req.body;
 
     const matter = await prisma.matter.update({
@@ -202,7 +204,8 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
 router.get('/:id/time-summary', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
 
     const timeEntries = await prisma.timeEntry.findMany({
       where: { matterId: id },
@@ -222,7 +225,7 @@ router.get('/:id/time-summary', async (req: Request, res: Response) => {
     const byUser: Record<string, { name: string; minutes: number }> = {};
     const byDepartment: Record<string, { name: string; minutes: number }> = {};
 
-    timeEntries.forEach(entry => {
+    timeEntries.forEach((entry: any) => {
       // By work type
       if (!byWorkType[entry.workType]) {
         byWorkType[entry.workType] = { count: 0, minutes: 0 };

@@ -1,23 +1,18 @@
-"use strict";
 /**
  * Auth Service V2
  * Authentication and token management
  * Matching Prisma Schema V2
  */
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const bcryptjs_1 = __importDefault(require("bcryptjs"));
-const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const prisma_service_1 = require("../../prisma/prisma.service");
-const jwt_1 = require("../../config/jwt");
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { prisma } from '../../prisma/prisma.service';
+import { jwtConfig } from '../../config/jwt';
 class AuthService {
     /**
      * Authenticate user with email and password
      */
     async login(email, password) {
-        const user = await prisma_service_1.prisma.user.findUnique({
+        const user = await prisma.user.findUnique({
             where: { email }
         });
         if (!user) {
@@ -27,7 +22,7 @@ class AuthService {
         if (!passwordHash) {
             return { status: 401, data: { error: 'Invalid credentials' } };
         }
-        const validPassword = await bcryptjs_1.default.compare(password, passwordHash);
+        const validPassword = await bcrypt.compare(password, passwordHash);
         if (!validPassword) {
             return { status: 401, data: { error: 'Invalid credentials' } };
         }
@@ -35,12 +30,12 @@ class AuthService {
             return { status: 403, data: { error: 'Account is not active' } };
         }
         // Update last login
-        await prisma_service_1.prisma.user.update({
+        await prisma.user.update({
             where: { id: user.id },
             data: { lastLoginAt: new Date() }
         });
-        const accessToken = jsonwebtoken_1.default.sign({ userId: user.id, email: user.email, role: user.role }, jwt_1.jwtConfig.secret, { expiresIn: '1h' });
-        const refreshToken = jsonwebtoken_1.default.sign({ userId: user.id }, jwt_1.jwtConfig.refreshSecret, { expiresIn: '7d' });
+        const accessToken = jwt.sign({ userId: user.id, email: user.email, role: user.role }, jwtConfig.secret, { expiresIn: '1h' });
+        const refreshToken = jwt.sign({ userId: user.id }, jwtConfig.refreshSecret, { expiresIn: '7d' });
         return {
             status: 200,
             data: {
@@ -59,7 +54,7 @@ class AuthService {
      * Get current user profile
      */
     async getMe(userId) {
-        const user = await prisma_service_1.prisma.user.findUnique({
+        const user = await prisma.user.findUnique({
             where: { id: userId }
         });
         if (!user) {
@@ -79,7 +74,7 @@ class AuthService {
      * Logout user
      */
     async logout(userId) {
-        await prisma_service_1.prisma.user.update({
+        await prisma.user.update({
             where: { id: userId },
             data: { updatedAt: new Date() }
         });
@@ -89,14 +84,14 @@ class AuthService {
      */
     async refresh(refreshToken) {
         try {
-            const decoded = jsonwebtoken_1.default.verify(refreshToken, jwt_1.jwtConfig.refreshSecret);
-            const user = await prisma_service_1.prisma.user.findUnique({
+            const decoded = jwt.verify(refreshToken, jwtConfig.refreshSecret);
+            const user = await prisma.user.findUnique({
                 where: { id: decoded.userId }
             });
             if (!user || user.status !== 'ACTIVE') {
                 return { status: 401, data: { error: 'Invalid token' } };
             }
-            const accessToken = jsonwebtoken_1.default.sign({ userId: user.id, email: user.email, role: user.role }, jwt_1.jwtConfig.secret, { expiresIn: '1h' });
+            const accessToken = jwt.sign({ userId: user.id, email: user.email, role: user.role }, jwtConfig.secret, { expiresIn: '1h' });
             return { status: 200, data: { accessToken } };
         }
         catch {
@@ -104,5 +99,5 @@ class AuthService {
         }
     }
 }
-exports.default = new AuthService();
+export default new AuthService();
 //# sourceMappingURL=services.js.map

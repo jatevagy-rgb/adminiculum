@@ -36,6 +36,13 @@ declare class CaseTimelineService {
      * Create a new timeline event
      */
     createEvent(input: TimelineEventInput): Promise<{
+        user: {
+            id: string;
+            email: string;
+            name: string;
+            role: import(".prisma/client").$Enums.UserRole;
+        };
+    } & {
         id: string;
         createdAt: Date;
         userId: string | null;
@@ -57,7 +64,7 @@ declare class CaseTimelineService {
             id: string;
             email: string;
             name: string;
-        } | null;
+        };
     } & {
         id: string;
         createdAt: Date;
@@ -75,12 +82,12 @@ declare class CaseTimelineService {
     /**
      * Get latest event for a case
      */
-    getLatestEvent(caseId: string): Promise<({
+    getLatestEvent(caseId: string): Promise<{
         user: {
             id: string;
             email: string;
             name: string;
-        } | null;
+        };
     } & {
         id: string;
         createdAt: Date;
@@ -94,7 +101,7 @@ declare class CaseTimelineService {
         documentId: string | null;
         taskId: string | null;
         timeEntryId: string | null;
-    }) | null>;
+    }>;
     /**
      * Get timeline statistics for a case
      */

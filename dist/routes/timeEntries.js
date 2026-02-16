@@ -1,4 +1,3 @@
-"use strict";
 // ============================================================================
 // TIME ENTRIES API ROUTES
 // ============================================================================
@@ -6,11 +5,10 @@
 // CRUD operations for TimeEntries (billable hours)
 // Creates TimelineEvent when time is logged
 // ============================================================================
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const client_1 = require("@prisma/client");
-const router = (0, express_1.Router)();
-const prisma = new client_1.PrismaClient();
+import { Router } from 'express';
+import { PrismaClient } from '@prisma/client';
+const router = Router();
+const prisma = new PrismaClient();
 // ============================================================================
 // GET /api/v1/time-entries - List time entries
 // ============================================================================
@@ -120,7 +118,8 @@ router.get('/summary', async (req, res) => {
 // ============================================================================
 router.get('/:id', async (req, res) => {
     try {
-        const { id } = req.params;
+        const idParam = req.params.id;
+        const id = Array.isArray(idParam) ? idParam[0] : idParam;
         const entry = await prisma.timeEntry.findUnique({
             where: { id },
             include: {
@@ -227,7 +226,8 @@ router.post('/', async (req, res) => {
 // ============================================================================
 router.patch('/:id', async (req, res) => {
     try {
-        const { id } = req.params;
+        const idParam = req.params.id;
+        const id = Array.isArray(idParam) ? idParam[0] : idParam;
         const { workType, description, minutes, workDate, departmentId } = req.body;
         // Get original entry to calculate difference
         const original = await prisma.timeEntry.findUnique({
@@ -278,7 +278,8 @@ router.patch('/:id', async (req, res) => {
 // ============================================================================
 router.delete('/:id', async (req, res) => {
     try {
-        const { id } = req.params;
+        const idParam = req.params.id;
+        const id = Array.isArray(idParam) ? idParam[0] : idParam;
         const entry = await prisma.timeEntry.findUnique({
             where: { id }
         });
@@ -305,5 +306,5 @@ router.delete('/:id', async (req, res) => {
         res.status(500).json({ error: 'Failed to delete time entry' });
     }
 });
-exports.default = router;
+export default router;
 //# sourceMappingURL=timeEntries.js.map

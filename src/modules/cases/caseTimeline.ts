@@ -127,13 +127,14 @@ class CaseTimelineService {
     const event = await prisma.timelineEvent.create({
       data: {
         caseId,
+        eventType: type,
         type: type as any,
         userId,
         payload: {
           description: description || EVENT_LABELS[type] || type,
           ...metadata,
         } as any,
-      },
+      } as any,
       include: {
         user: {
           select: { id: true, name: true, email: true, role: true }

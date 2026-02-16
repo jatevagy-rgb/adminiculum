@@ -1,15 +1,12 @@
-"use strict";
 /**
  * Adminiculum Backend V2 - Constants
  * Role definitions, permissions, and workflow states
  * Matching Prisma schema V2 enums
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.SKILL_NAMES = exports.SKILLS = exports.PAGINATION = exports.PERMISSIONS = exports.USER_STATUS = exports.PRIORITY = exports.MESSAGE_TYPE = exports.TIMELINE_EVENT = exports.SP_FOLDER = exports.ASSIGNMENT_ROLE = exports.MATTER_TYPE_NAMES = exports.MATTER_TYPE = exports.CASE_STATUS_NAMES = exports.CASE_WORKFLOW_TRANSITIONS = exports.CASE_STATUS = exports.ROLE_NAMES = exports.ROLE_HIERARCHY = exports.ROLES = void 0;
 // ============================================================================
 // USER ROLES
 // ============================================================================
-exports.ROLES = {
+export const ROLES = {
     LAWYER: 'LAWYER', // Ügyvéd
     COLLAB_LAWYER: 'COLLAB_LAWYER', // Együttműködő ügyvéd
     TRAINEE: 'TRAINEE', // Ügyvédjelölt
@@ -17,25 +14,25 @@ exports.ROLES = {
     ADMIN: 'ADMIN' // Adminisztrátor
 };
 // Role hierarchy for authorization
-exports.ROLE_HIERARCHY = {
-    [exports.ROLES.LAWYER]: 4,
-    [exports.ROLES.COLLAB_LAWYER]: 3,
-    [exports.ROLES.TRAINEE]: 2,
-    [exports.ROLES.LEGAL_ASSISTANT]: 1,
-    [exports.ROLES.ADMIN]: 5
+export const ROLE_HIERARCHY = {
+    [ROLES.LAWYER]: 4,
+    [ROLES.COLLAB_LAWYER]: 3,
+    [ROLES.TRAINEE]: 2,
+    [ROLES.LEGAL_ASSISTANT]: 1,
+    [ROLES.ADMIN]: 5
 };
 // Role names for display
-exports.ROLE_NAMES = {
-    [exports.ROLES.LAWYER]: 'Ügyvéd',
-    [exports.ROLES.COLLAB_LAWYER]: 'Együttműködő ügyvéd',
-    [exports.ROLES.TRAINEE]: 'Ügyvédjelölt',
-    [exports.ROLES.LEGAL_ASSISTANT]: 'Jogi asszisztens',
-    [exports.ROLES.ADMIN]: 'Adminisztrátor'
+export const ROLE_NAMES = {
+    [ROLES.LAWYER]: 'Ügyvéd',
+    [ROLES.COLLAB_LAWYER]: 'Együttműködő ügyvéd',
+    [ROLES.TRAINEE]: 'Ügyvédjelölt',
+    [ROLES.LEGAL_ASSISTANT]: 'Jogi asszisztens',
+    [ROLES.ADMIN]: 'Adminisztrátor'
 };
 // ============================================================================
 // CASE STATUS (Workflow)
 // ============================================================================
-exports.CASE_STATUS = {
+export const CASE_STATUS = {
     CLIENT_INPUT: 'CLIENT_INPUT', // Ügyfél adatok regisztrálva
     DRAFT: 'DRAFT', // Tervezet készül
     IN_REVIEW: 'IN_REVIEW', // Review alatt
@@ -47,33 +44,33 @@ exports.CASE_STATUS = {
     ARCHIVED: 'ARCHIVED' // Archivált
 };
 // Valid status transitions
-exports.CASE_WORKFLOW_TRANSITIONS = {
-    [exports.CASE_STATUS.CLIENT_INPUT]: [exports.CASE_STATUS.DRAFT],
-    [exports.CASE_STATUS.DRAFT]: [exports.CASE_STATUS.IN_REVIEW],
-    [exports.CASE_STATUS.IN_REVIEW]: [exports.CASE_STATUS.APPROVED, exports.CASE_STATUS.DRAFT],
-    [exports.CASE_STATUS.APPROVED]: [exports.CASE_STATUS.SENT_TO_CLIENT, exports.CASE_STATUS.FINAL],
-    [exports.CASE_STATUS.SENT_TO_CLIENT]: [exports.CASE_STATUS.CLIENT_FEEDBACK],
-    [exports.CASE_STATUS.CLIENT_FEEDBACK]: [exports.CASE_STATUS.DRAFT, exports.CASE_STATUS.APPROVED],
-    [exports.CASE_STATUS.FINAL]: [exports.CASE_STATUS.CLOSED],
-    [exports.CASE_STATUS.CLOSED]: [],
-    [exports.CASE_STATUS.ARCHIVED]: []
+export const CASE_WORKFLOW_TRANSITIONS = {
+    [CASE_STATUS.CLIENT_INPUT]: [CASE_STATUS.DRAFT],
+    [CASE_STATUS.DRAFT]: [CASE_STATUS.IN_REVIEW],
+    [CASE_STATUS.IN_REVIEW]: [CASE_STATUS.APPROVED, CASE_STATUS.DRAFT],
+    [CASE_STATUS.APPROVED]: [CASE_STATUS.SENT_TO_CLIENT, CASE_STATUS.FINAL],
+    [CASE_STATUS.SENT_TO_CLIENT]: [CASE_STATUS.CLIENT_FEEDBACK],
+    [CASE_STATUS.CLIENT_FEEDBACK]: [CASE_STATUS.DRAFT, CASE_STATUS.APPROVED],
+    [CASE_STATUS.FINAL]: [CASE_STATUS.CLOSED],
+    [CASE_STATUS.CLOSED]: [],
+    [CASE_STATUS.ARCHIVED]: []
 };
 // Case status names for display
-exports.CASE_STATUS_NAMES = {
-    [exports.CASE_STATUS.CLIENT_INPUT]: 'Ügyfél adatok',
-    [exports.CASE_STATUS.DRAFT]: 'Tervezet',
-    [exports.CASE_STATUS.IN_REVIEW]: 'Review',
-    [exports.CASE_STATUS.APPROVED]: 'Jóváhagyva',
-    [exports.CASE_STATUS.SENT_TO_CLIENT]: 'Ügyfélnek küldve',
-    [exports.CASE_STATUS.CLIENT_FEEDBACK]: 'Visszajelzés',
-    [exports.CASE_STATUS.FINAL]: 'Végleges',
-    [exports.CASE_STATUS.CLOSED]: 'Lezárva',
-    [exports.CASE_STATUS.ARCHIVED]: 'Archiválva'
+export const CASE_STATUS_NAMES = {
+    [CASE_STATUS.CLIENT_INPUT]: 'Ügyfél adatok',
+    [CASE_STATUS.DRAFT]: 'Tervezet',
+    [CASE_STATUS.IN_REVIEW]: 'Review',
+    [CASE_STATUS.APPROVED]: 'Jóváhagyva',
+    [CASE_STATUS.SENT_TO_CLIENT]: 'Ügyfélnek küldve',
+    [CASE_STATUS.CLIENT_FEEDBACK]: 'Visszajelzés',
+    [CASE_STATUS.FINAL]: 'Végleges',
+    [CASE_STATUS.CLOSED]: 'Lezárva',
+    [CASE_STATUS.ARCHIVED]: 'Archiválva'
 };
 // ============================================================================
 // MATTER TYPES
 // ============================================================================
-exports.MATTER_TYPE = {
+export const MATTER_TYPE = {
     REAL_ESTATE_SALE: 'REAL_ESTATE_SALE', // Ingatlan adásvétel
     LEASE: 'LEASE', // Bérlet
     EMPLOYMENT: 'EMPLOYMENT', // Munkaszerződés
@@ -81,18 +78,18 @@ exports.MATTER_TYPE = {
     LITIGATION: 'LITIGATION', // Peres
     OTHER: 'OTHER' // Egyéb
 };
-exports.MATTER_TYPE_NAMES = {
-    [exports.MATTER_TYPE.REAL_ESTATE_SALE]: 'Ingatlan adásvétel',
-    [exports.MATTER_TYPE.LEASE]: 'Bérlet',
-    [exports.MATTER_TYPE.EMPLOYMENT]: 'Munkaszerződés',
-    [exports.MATTER_TYPE.CORPORATE]: 'Cégjogi',
-    [exports.MATTER_TYPE.LITIGATION]: 'Peres',
-    [exports.MATTER_TYPE.OTHER]: 'Egyéb'
+export const MATTER_TYPE_NAMES = {
+    [MATTER_TYPE.REAL_ESTATE_SALE]: 'Ingatlan adásvétel',
+    [MATTER_TYPE.LEASE]: 'Bérlet',
+    [MATTER_TYPE.EMPLOYMENT]: 'Munkaszerződés',
+    [MATTER_TYPE.CORPORATE]: 'Cégjogi',
+    [MATTER_TYPE.LITIGATION]: 'Peres',
+    [MATTER_TYPE.OTHER]: 'Egyéb'
 };
 // ============================================================================
 // ASSIGNMENT ROLES
 // ============================================================================
-exports.ASSIGNMENT_ROLE = {
+export const ASSIGNMENT_ROLE = {
     OWNER_LAWYER: 'OWNER_LAWYER', // Ügy tulajdonosa
     COLLABORATING_LAWYER: 'COLLABORATING_LAWYER', // Együttműködő
     TRAINEE: 'TRAINEE', // Ügyvédjelölt
@@ -101,7 +98,7 @@ exports.ASSIGNMENT_ROLE = {
 // ============================================================================
 // DOCUMENT FOLDERS (SharePoint)
 // ============================================================================
-exports.SP_FOLDER = {
+export const SP_FOLDER = {
     CLIENT_INPUT: 'CLIENT_INPUT', // 01_Client_Input
     DRAFTS: 'DRAFTS', // 02_Drafts
     REVIEW: 'REVIEW', // 03_Review
@@ -114,7 +111,7 @@ exports.SP_FOLDER = {
 // ============================================================================
 // TIMELINE EVENT TYPES
 // ============================================================================
-exports.TIMELINE_EVENT = {
+export const TIMELINE_EVENT = {
     // Case Events
     CASE_CREATED: 'CASE_CREATED',
     CASE_ASSIGNED: 'CASE_ASSIGNED',
@@ -141,7 +138,7 @@ exports.TIMELINE_EVENT = {
 // ============================================================================
 // MESSAGE TYPES
 // ============================================================================
-exports.MESSAGE_TYPE = {
+export const MESSAGE_TYPE = {
     SYSTEM_EVENT: 'SYSTEM_EVENT', // Automatikus esemény
     USER_MESSAGE: 'USER_MESSAGE', // Belső üzenet
     REVIEW_NOTE: 'REVIEW_NOTE' // Review megjegyzés
@@ -149,7 +146,7 @@ exports.MESSAGE_TYPE = {
 // ============================================================================
 // PRIORITY
 // ============================================================================
-exports.PRIORITY = {
+export const PRIORITY = {
     LOW: 'LOW',
     MEDIUM: 'MEDIUM',
     HIGH: 'HIGH',
@@ -158,7 +155,7 @@ exports.PRIORITY = {
 // ============================================================================
 // USER STATUS
 // ============================================================================
-exports.USER_STATUS = {
+export const USER_STATUS = {
     ACTIVE: 'ACTIVE',
     INACTIVE: 'INACTIVE',
     SUSPENDED: 'SUSPENDED'
@@ -166,7 +163,7 @@ exports.USER_STATUS = {
 // ============================================================================
 // PERMISSIONS
 // ============================================================================
-exports.PERMISSIONS = {
+export const PERMISSIONS = {
     CASE_CREATE: 'case:create',
     CASE_READ: 'case:read',
     CASE_UPDATE: 'case:update',
@@ -181,7 +178,7 @@ exports.PERMISSIONS = {
 // ============================================================================
 // PAGINATION
 // ============================================================================
-exports.PAGINATION = {
+export const PAGINATION = {
     DEFAULT_PAGE: 1,
     DEFAULT_LIMIT: 20,
     MAX_LIMIT: 100
@@ -189,7 +186,7 @@ exports.PAGINATION = {
 // ============================================================================
 // SKILL NAMES
 // ============================================================================
-exports.SKILLS = {
+export const SKILLS = {
     LEGAL_ANALYSIS: 'legalAnalysis',
     DRAFTING: 'drafting',
     CLIENT_COMMUNICATION: 'clientCommunication',
@@ -197,12 +194,12 @@ exports.SKILLS = {
     COMPLIANCE: 'compliance',
     RESEARCH: 'research'
 };
-exports.SKILL_NAMES = {
-    [exports.SKILLS.LEGAL_ANALYSIS]: 'Jogi elemzés',
-    [exports.SKILLS.DRAFTING]: 'Szerződésszerkesztés',
-    [exports.SKILLS.CLIENT_COMMUNICATION]: 'Ügyfélkommunikáció',
-    [exports.SKILLS.NEGOTIATION]: 'Tárgyalás',
-    [exports.SKILLS.COMPLIANCE]: 'Compliance',
-    [exports.SKILLS.RESEARCH]: 'Jogszabályfigyelés'
+export const SKILL_NAMES = {
+    [SKILLS.LEGAL_ANALYSIS]: 'Jogi elemzés',
+    [SKILLS.DRAFTING]: 'Szerződésszerkesztés',
+    [SKILLS.CLIENT_COMMUNICATION]: 'Ügyfélkommunikáció',
+    [SKILLS.NEGOTIATION]: 'Tárgyalás',
+    [SKILLS.COMPLIANCE]: 'Compliance',
+    [SKILLS.RESEARCH]: 'Jogszabályfigyelés'
 };
 //# sourceMappingURL=constants.js.map

@@ -1,25 +1,20 @@
-"use strict";
 /**
  * Cases Routes Module V3
  * Case management endpoints with Timeline + Documents integration
  */
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const services_1 = __importDefault(require("./services"));
-const workflow_1 = require("../workflow");
-const auth_1 = require("../../middleware/auth");
-const router = (0, express_1.Router)();
+import { Router } from 'express';
+import casesService from './services';
+import { workflowService } from '../workflow';
+import { authenticate } from '../../middleware/auth';
+const router = Router();
 // ============================================================================
 // GET /cases
 // ============================================================================
-router.get('/', auth_1.authenticate, async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
     try {
         const page = req.query.page ? parseInt(req.query.page) : 1;
         const limit = req.query.limit ? parseInt(req.query.limit) : 20;
-        const result = await services_1.default.getCases({ page, limit });
+        const result = await casesService.getCases({ page, limit });
         res.json(result);
     }
     catch (error) {
@@ -30,10 +25,10 @@ router.get('/', auth_1.authenticate, async (req, res) => {
 // ============================================================================
 // GET /cases/:caseId/timeline
 // ============================================================================
-router.get('/:caseId/timeline', auth_1.authenticate, async (req, res) => {
+router.get('/:caseId/timeline', authenticate, async (req, res) => {
     try {
         const { caseId } = req.params;
-        const timeline = await services_1.default.getCaseTimeline(caseId);
+        const timeline = await casesService.getCaseTimeline(caseId);
         res.json(timeline);
     }
     catch (error) {
@@ -44,10 +39,10 @@ router.get('/:caseId/timeline', auth_1.authenticate, async (req, res) => {
 // ============================================================================
 // GET /cases/:caseId/documents
 // ============================================================================
-router.get('/:caseId/documents', auth_1.authenticate, async (req, res) => {
+router.get('/:caseId/documents', authenticate, async (req, res) => {
     try {
         const { caseId } = req.params;
-        const documents = await services_1.default.getCaseDocuments(caseId);
+        const documents = await casesService.getCaseDocuments(caseId);
         res.json(documents);
     }
     catch (error) {
@@ -55,10 +50,10 @@ router.get('/:caseId/documents', auth_1.authenticate, async (req, res) => {
         res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
     }
 });
-router.get('/:caseId/workflow', auth_1.authenticate, async (req, res) => {
+router.get('/:caseId/workflow', authenticate, async (req, res) => {
     try {
         const { caseId } = req.params;
-        const workflow = await services_1.default.getWorkflow(caseId);
+        const workflow = await casesService.getWorkflow(caseId);
         if (!workflow) {
             res.status(404).json({ status: 404, code: 'NOT_FOUND', message: 'Case not found' });
             return;
@@ -73,10 +68,10 @@ router.get('/:caseId/workflow', auth_1.authenticate, async (req, res) => {
 // ============================================================================
 // GET /cases/:caseId/workflow-graph (NEW)
 // ============================================================================
-router.get('/:caseId/workflow-graph', auth_1.authenticate, async (req, res) => {
+router.get('/:caseId/workflow-graph', authenticate, async (req, res) => {
     try {
         const { caseId } = req.params;
-        const workflowGraph = await workflow_1.workflowService.getWorkflowGraph(caseId);
+        const workflowGraph = await workflowService.getWorkflowGraph(caseId);
         if (!workflowGraph) {
             res.status(404).json({ status: 404, code: 'NOT_FOUND', message: 'Case not found' });
             return;
@@ -91,10 +86,10 @@ router.get('/:caseId/workflow-graph', auth_1.authenticate, async (req, res) => {
 // ============================================================================
 // GET /cases/:caseId/workflow-history
 // ============================================================================
-router.get('/:caseId/workflow-history', auth_1.authenticate, async (req, res) => {
+router.get('/:caseId/workflow-history', authenticate, async (req, res) => {
     try {
         const { caseId } = req.params;
-        const history = await workflow_1.workflowService.getWorkflowHistory(caseId);
+        const history = await workflowService.getWorkflowHistory(caseId);
         res.json(history);
     }
     catch (error) {
@@ -105,10 +100,10 @@ router.get('/:caseId/workflow-history', auth_1.authenticate, async (req, res) =>
 // ============================================================================
 // GET /cases/:caseId/summary
 // ============================================================================
-router.get('/:caseId/summary', auth_1.authenticate, async (req, res) => {
+router.get('/:caseId/summary', authenticate, async (req, res) => {
     try {
         const { caseId } = req.params;
-        const summary = await services_1.default.getCaseSummary(caseId);
+        const summary = await casesService.getCaseSummary(caseId);
         if (!summary) {
             res.status(404).json({ status: 404, code: 'NOT_FOUND', message: 'Case not found' });
             return;
@@ -123,10 +118,10 @@ router.get('/:caseId/summary', auth_1.authenticate, async (req, res) => {
 // ============================================================================
 // GET /cases/:caseId
 // ============================================================================
-router.get('/:caseId', auth_1.authenticate, async (req, res) => {
+router.get('/:caseId', authenticate, async (req, res) => {
     try {
         const { caseId } = req.params;
-        const caseData = await services_1.default.getCaseById(caseId);
+        const caseData = await casesService.getCaseById(caseId);
         if (!caseData) {
             res.status(404).json({ status: 404, code: 'NOT_FOUND', message: 'Case not found' });
             return;
@@ -141,7 +136,7 @@ router.get('/:caseId', auth_1.authenticate, async (req, res) => {
 // ============================================================================
 // POST /cases
 // ============================================================================
-router.post('/', auth_1.authenticate, async (req, res) => {
+router.post('/', authenticate, async (req, res) => {
     try {
         const userId = req.user?.userId;
         const { clientName, matterType, description } = req.body;
@@ -149,7 +144,7 @@ router.post('/', auth_1.authenticate, async (req, res) => {
             res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Missing required field: clientName' });
             return;
         }
-        const result = await services_1.default.createCase({
+        const result = await casesService.createCase({
             clientName,
             matterType: matterType || 'OTHER',
             description,
@@ -165,7 +160,7 @@ router.post('/', auth_1.authenticate, async (req, res) => {
 // ============================================================================
 // PATCH /cases/:caseId/status (NOW USES WORKFLOW ENGINE)
 // ============================================================================
-router.patch('/:caseId/status', auth_1.authenticate, async (req, res) => {
+router.patch('/:caseId/status', authenticate, async (req, res) => {
     try {
         const userId = req.user?.userId;
         const { caseId } = req.params;
@@ -175,12 +170,12 @@ router.patch('/:caseId/status', auth_1.authenticate, async (req, res) => {
             return;
         }
         // Validate status
-        if (!workflow_1.workflowService.isValidStatus(status)) {
+        if (!workflowService.isValidStatus(status)) {
             res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: `Invalid status: ${status}` });
             return;
         }
         // Check if transition is allowed
-        const validation = await workflow_1.workflowService.canTransition(caseId, status);
+        const validation = await workflowService.canTransition(caseId, status);
         if (!validation.allowed) {
             res.status(400).json({
                 status: 400,
@@ -191,7 +186,7 @@ router.patch('/:caseId/status', auth_1.authenticate, async (req, res) => {
             return;
         }
         // Execute status change through workflow engine
-        const result = await workflow_1.workflowService.changeStatus({
+        const result = await workflowService.changeStatus({
             caseId,
             fromStatus: validation.currentStatus,
             toStatus: status,
@@ -224,7 +219,7 @@ router.patch('/:caseId/status', auth_1.authenticate, async (req, res) => {
 // ============================================================================
 // POST /cases/:caseId/assign
 // ============================================================================
-router.post('/:caseId/assign', auth_1.authenticate, async (req, res) => {
+router.post('/:caseId/assign', authenticate, async (req, res) => {
     try {
         const assignedById = req.user?.userId;
         const { caseId } = req.params;
@@ -233,7 +228,7 @@ router.post('/:caseId/assign', auth_1.authenticate, async (req, res) => {
             res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Missing required fields: userId, role' });
             return;
         }
-        const result = await services_1.default.assignUser(caseId, userId, role, assignedById);
+        const result = await casesService.assignUser(caseId, userId, role, assignedById);
         res.status(201).json(result);
     }
     catch (error) {
@@ -244,9 +239,9 @@ router.post('/:caseId/assign', auth_1.authenticate, async (req, res) => {
 // ============================================================================
 // GET /cases/dashboard/stats
 // ============================================================================
-router.get('/dashboard/stats', auth_1.authenticate, async (req, res) => {
+router.get('/dashboard/stats', authenticate, async (req, res) => {
     try {
-        const stats = await services_1.default.getDashboardStats();
+        const stats = await casesService.getDashboardStats();
         res.json(stats);
     }
     catch (error) {
@@ -254,5 +249,5 @@ router.get('/dashboard/stats', auth_1.authenticate, async (req, res) => {
         res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
     }
 });
-exports.default = router;
+export default router;
 //# sourceMappingURL=routes.js.map

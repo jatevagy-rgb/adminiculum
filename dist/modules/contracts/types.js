@@ -1,11 +1,8 @@
-"use strict";
 /**
  * Contract Generation Types
  * Type definitions for contract template management and generation
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.ADASVETEL_VARIABLES = void 0;
-exports.ADASVETEL_VARIABLES = [
+export const ADASVETEL_VARIABLES = [
     { name: 'szerzodes_helye', label: 'Szerződés helye', type: 'string', required: true },
     { name: 'szerzodes_datuma', label: 'Szerződés dátuma', type: 'date', required: true },
     { name: 'elado_nev', label: 'Eladó neve', type: 'person', required: true },

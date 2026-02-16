@@ -1,22 +1,17 @@
-"use strict";
 /**
  * Documents Routes V2
  * Document management with SharePoint integration
  */
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const services_1 = __importDefault(require("./services"));
-const auth_1 = require("../../middleware/auth");
-const prisma_service_1 = require("../../prisma/prisma.service");
-const router = (0, express_1.Router)();
+import { Router } from 'express';
+import documentsService from './services';
+import { authenticate } from '../../middleware/auth';
+import { prisma } from '../../prisma/prisma.service';
+const router = Router();
 /**
  * POST /api/v1/documents
  * Upload new document
  */
-router.post('/', auth_1.authenticate, async (req, res) => {
+router.post('/', authenticate, async (req, res) => {
     try {
         const userId = req.user?.userId;
         const { caseId, fileName, documentType, folder } = req.body;
@@ -38,7 +33,7 @@ router.post('/', auth_1.authenticate, async (req, res) => {
             return;
         }
         const fileContentBuffer = Buffer.from(req.body.fileContent, 'base64');
-        const result = await services_1.default.createDocument({
+        const result = await documentsService.createDocument({
             caseId,
             fileName,
             fileContent: fileContentBuffer,
@@ -56,7 +51,7 @@ router.post('/', auth_1.authenticate, async (req, res) => {
             return;
         }
         // Create TimelineEvent for document upload (AUTOMATIC)
-        await prisma_service_1.prisma.timelineEvent.create({
+        await prisma.timelineEvent.create({
             data: {
                 caseId,
                 userId,
@@ -86,10 +81,10 @@ router.post('/', auth_1.authenticate, async (req, res) => {
  * GET /api/v1/documents/case/:caseId
  * Get all documents for a case
  */
-router.get('/case/:caseId', auth_1.authenticate, async (req, res) => {
+router.get('/case/:caseId', authenticate, async (req, res) => {
     try {
         const { caseId } = req.params;
-        const documents = await services_1.default.getCaseDocuments(caseId);
+        const documents = await documentsService.getCaseDocuments(caseId);
         res.json(documents);
     }
     catch (error) {
@@ -105,10 +100,10 @@ router.get('/case/:caseId', auth_1.authenticate, async (req, res) => {
  * GET /api/v1/documents/:id
  * Get document by ID
  */
-router.get('/:id', auth_1.authenticate, async (req, res) => {
+router.get('/:id', authenticate, async (req, res) => {
     try {
         const { id } = req.params;
-        const document = await services_1.default.getDocumentById(id);
+        const document = await documentsService.getDocumentById(id);
         if (!document) {
             res.status(404).json({
                 status: 404,
@@ -132,7 +127,7 @@ router.get('/:id', auth_1.authenticate, async (req, res) => {
  * POST /api/v1/documents/:id/version
  * Upload new version
  */
-router.post('/:id/version', auth_1.authenticate, async (req, res) => {
+router.post('/:id/version', authenticate, async (req, res) => {
     try {
         const userId = req.user?.userId;
         const { fileContent, comment } = req.body;
@@ -146,7 +141,7 @@ router.post('/:id/version', auth_1.authenticate, async (req, res) => {
         }
         const { id } = req.params;
         const fileBuffer = Buffer.from(fileContent, 'base64');
-        const result = await services_1.default.uploadNewVersion(id, fileBuffer, userId, comment);
+        const result = await documentsService.uploadNewVersion(id, fileBuffer, userId, comment);
         if (!result) {
             res.status(500).json({
                 status: 500,
@@ -170,11 +165,11 @@ router.post('/:id/version', auth_1.authenticate, async (req, res) => {
  * POST /api/v1/documents/:id/submit-review
  * Submit document for review
  */
-router.post('/:id/submit-review', auth_1.authenticate, async (req, res) => {
+router.post('/:id/submit-review', authenticate, async (req, res) => {
     try {
         const userId = req.user?.userId;
         const { id } = req.params;
-        const success = await services_1.default.submitForReview(id, userId);
+        const success = await documentsService.submitForReview(id, userId);
         if (!success) {
             res.status(500).json({
                 status: 500,
@@ -198,12 +193,12 @@ router.post('/:id/submit-review', auth_1.authenticate, async (req, res) => {
  * POST /api/v1/documents/:id/approve
  * Approve document
  */
-router.post('/:id/approve', auth_1.authenticate, async (req, res) => {
+router.post('/:id/approve', authenticate, async (req, res) => {
     try {
         const userId = req.user?.userId;
         const { comment } = req.body;
         const { id } = req.params;
-        const success = await services_1.default.approveDocument(id, userId, comment);
+        const success = await documentsService.approveDocument(id, userId, comment);
         if (!success) {
             res.status(500).json({
                 status: 500,
@@ -227,7 +222,7 @@ router.post('/:id/approve', auth_1.authenticate, async (req, res) => {
  * POST /api/v1/documents/:id/reject
  * Reject document
  */
-router.post('/:id/reject', auth_1.authenticate, async (req, res) => {
+router.post('/:id/reject', authenticate, async (req, res) => {
     try {
         const userId = req.user?.userId;
         const { reason } = req.body;
@@ -240,7 +235,7 @@ router.post('/:id/reject', auth_1.authenticate, async (req, res) => {
             return;
         }
         const { id } = req.params;
-        const success = await services_1.default.rejectDocument(id, userId, reason);
+        const success = await documentsService.rejectDocument(id, userId, reason);
         if (!success) {
             res.status(500).json({
                 status: 500,
@@ -260,5 +255,5 @@ router.post('/:id/reject', auth_1.authenticate, async (req, res) => {
         });
     }
 });
-exports.default = router;
+export default router;
 //# sourceMappingURL=routes.js.map

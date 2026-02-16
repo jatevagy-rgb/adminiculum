@@ -231,6 +231,7 @@ class ContractsService {
           data: {
             caseId: input.caseId,
             userId: input.userId,
+            eventType: 'DOCUMENT_GENERATED',
             type: 'DOCUMENT_GENERATED' as any,
             payload: {
               generationId: generation.id,
@@ -239,7 +240,7 @@ class ContractsService {
               spItemId: spResult?.item?.id || null,
               spWebUrl: spResult?.webUrl || null
             }
-          }
+          } as any
         });
       }
 

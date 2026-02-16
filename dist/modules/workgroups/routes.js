@@ -1,18 +1,16 @@
-"use strict";
 /**
  * Workgroup Routes
  * Client workload tracking API endpoints
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const auth_1 = require("../../middleware/auth");
-const services_1 = require("./services");
-const router = (0, express_1.Router)();
+import { Router } from 'express';
+import { authenticate } from '../../middleware/auth';
+import { workgroupService, workloadService, isValidPeriodFormat } from './services';
+const router = Router();
 // ============================================================================
 // Workgroup CRUD Endpoints
 // ============================================================================
 // POST /clients/:clientId/workgroups - Create new workgroup
-router.post('/clients/:clientId/workgroups', auth_1.authenticate, async (req, res) => {
+router.post('/clients/:clientId/workgroups', authenticate, async (req, res) => {
     try {
         const { clientId } = req.params;
         const { name, description } = req.body;
@@ -20,7 +18,7 @@ router.post('/clients/:clientId/workgroups', auth_1.authenticate, async (req, re
             res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Missing required field: name' });
             return;
         }
-        const workgroup = await services_1.workgroupService.createWorkgroup(clientId, { name, description });
+        const workgroup = await workgroupService.createWorkgroup(clientId, { name, description });
         res.status(201).json(workgroup);
     }
     catch (error) {
@@ -35,10 +33,10 @@ router.post('/clients/:clientId/workgroups', auth_1.authenticate, async (req, re
     }
 });
 // GET /clients/:clientId/workgroups - List client workgroups
-router.get('/clients/:clientId/workgroups', auth_1.authenticate, async (req, res) => {
+router.get('/clients/:clientId/workgroups', authenticate, async (req, res) => {
     try {
         const { clientId } = req.params;
-        const workgroups = await services_1.workgroupService.getWorkgroupsByClient(clientId);
+        const workgroups = await workgroupService.getWorkgroupsByClient(clientId);
         res.json(workgroups);
     }
     catch (error) {
@@ -47,10 +45,10 @@ router.get('/clients/:clientId/workgroups', auth_1.authenticate, async (req, res
     }
 });
 // GET /workgroups/:id - Get single workgroup
-router.get('/workgroups/:id', auth_1.authenticate, async (req, res) => {
+router.get('/workgroups/:id', authenticate, async (req, res) => {
     try {
         const { id } = req.params;
-        const workgroup = await services_1.workgroupService.getWorkgroupById(id);
+        const workgroup = await workgroupService.getWorkgroupById(id);
         if (!workgroup) {
             res.status(404).json({ status: 404, code: 'NOT_FOUND', message: 'Workgroup not found' });
             return;
@@ -63,11 +61,11 @@ router.get('/workgroups/:id', auth_1.authenticate, async (req, res) => {
     }
 });
 // PATCH /workgroups/:id - Update workgroup
-router.patch('/workgroups/:id', auth_1.authenticate, async (req, res) => {
+router.patch('/workgroups/:id', authenticate, async (req, res) => {
     try {
         const { id } = req.params;
         const { name, description, isActive } = req.body;
-        const workgroup = await services_1.workgroupService.updateWorkgroup(id, { name, description, isActive });
+        const workgroup = await workgroupService.updateWorkgroup(id, { name, description, isActive });
         res.json(workgroup);
     }
     catch (error) {
@@ -82,10 +80,10 @@ router.patch('/workgroups/:id', auth_1.authenticate, async (req, res) => {
     }
 });
 // DELETE /workgroups/:id - Soft delete workgroup
-router.delete('/workgroups/:id', auth_1.authenticate, async (req, res) => {
+router.delete('/workgroups/:id', authenticate, async (req, res) => {
     try {
         const { id } = req.params;
-        await services_1.workgroupService.deleteWorkgroup(id);
+        await workgroupService.deleteWorkgroup(id);
         res.status(204).send();
     }
     catch (error) {
@@ -103,7 +101,7 @@ router.delete('/workgroups/:id', auth_1.authenticate, async (req, res) => {
 // Workload Recording Endpoints
 // ============================================================================
 // POST /workgroups/:id/workload - Record workload
-router.post('/workgroups/:id/workload', auth_1.authenticate, async (req, res) => {
+router.post('/workgroups/:id/workload', authenticate, async (req, res) => {
     try {
         const { id } = req.params;
         const { period, reportedHours, note } = req.body;
@@ -116,7 +114,7 @@ router.post('/workgroups/:id/workload', auth_1.authenticate, async (req, res) =>
             return;
         }
         // Validate period format
-        if (!(0, services_1.isValidPeriodFormat)(period)) {
+        if (!isValidPeriodFormat(period)) {
             res.status(400).json({
                 status: 400,
                 code: 'VALIDATION_ERROR',
@@ -124,7 +122,7 @@ router.post('/workgroups/:id/workload', auth_1.authenticate, async (req, res) =>
             });
             return;
         }
-        const record = await services_1.workloadService.recordWorkload(id, { period, reportedHours, note });
+        const record = await workloadService.recordWorkload(id, { period, reportedHours, note });
         res.status(201).json(record);
     }
     catch (error) {
@@ -142,10 +140,10 @@ router.post('/workgroups/:id/workload', auth_1.authenticate, async (req, res) =>
     }
 });
 // GET /workgroups/:id/workload - Get workload records for workgroup
-router.get('/workgroups/:id/workload', auth_1.authenticate, async (req, res) => {
+router.get('/workgroups/:id/workload', authenticate, async (req, res) => {
     try {
         const { id } = req.params;
-        const records = await services_1.workloadService.getWorkloadByWorkgroup(id);
+        const records = await workloadService.getWorkloadByWorkgroup(id);
         res.json(records);
     }
     catch (error) {
@@ -157,7 +155,7 @@ router.get('/workgroups/:id/workload', auth_1.authenticate, async (req, res) => 
 // Workload Summary Endpoints
 // ============================================================================
 // GET /clients/:clientId/workload-summary - Get workload summary for client
-router.get('/clients/:clientId/workload-summary', auth_1.authenticate, async (req, res) => {
+router.get('/clients/:clientId/workload-summary', authenticate, async (req, res) => {
     try {
         const { clientId } = req.params;
         const { period } = req.query;
@@ -170,7 +168,7 @@ router.get('/clients/:clientId/workload-summary', auth_1.authenticate, async (re
             return;
         }
         // Validate period format
-        if (!(0, services_1.isValidPeriodFormat)(period)) {
+        if (!isValidPeriodFormat(period)) {
             res.status(400).json({
                 status: 400,
                 code: 'VALIDATION_ERROR',
@@ -178,7 +176,7 @@ router.get('/clients/:clientId/workload-summary', auth_1.authenticate, async (re
             });
             return;
         }
-        const summary = await services_1.workloadService.getClientWorkloadSummary(clientId, period);
+        const summary = await workloadService.getClientWorkloadSummary(clientId, period);
         res.json(summary);
     }
     catch (error) {
@@ -195,5 +193,5 @@ router.get('/clients/:clientId/workload-summary', auth_1.authenticate, async (re
         }
     }
 });
-exports.default = router;
+export default router;
 //# sourceMappingURL=routes.js.map

@@ -1,16 +1,7 @@
-"use strict";
 // ============================================================================
 // ANONYMIZE SERVICE - Dokumentum anonimizálás AI feldolgozáshoz
 // ============================================================================
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.anonymizeDocument = anonymizeDocument;
-exports.getClientRedactionProfile = getClientRedactionProfile;
-exports.upsertRedactionProfile = upsertRedactionProfile;
-exports.getAnonymousDocument = getAnonymousDocument;
-const database_js_1 = __importDefault(require("../../config/database.js"));
+import prisma from '../../config/database.js';
 const TimelineType = {
     CASE_CREATED: 'CASE_CREATED',
     CASE_STATUS_CHANGED: 'CASE_STATUS_CHANGED',
@@ -39,10 +30,10 @@ const TimelineType = {
 function escapeRegex(str) {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
-async function anonymizeDocument(params) {
+export async function anonymizeDocument(params) {
     try {
         // 1. Get document
-        const document = await database_js_1.default.document.findUnique({
+        const document = await prisma.document.findUnique({
             where: { id: params.documentId },
             include: { case: true }
         });
@@ -53,7 +44,7 @@ async function anonymizeDocument(params) {
         const caseData = document.case;
         let clientData = null;
         if (caseData.clientId) {
-            clientData = await database_js_1.default.client.findUnique({
+            clientData = await prisma.client.findUnique({
                 where: { id: caseData.clientId },
                 include: { redactorProfile: true }
             });
@@ -127,7 +118,7 @@ async function anonymizeDocument(params) {
             });
         }
         // 6. Create AnonymousDocument record
-        const anonymousDoc = await database_js_1.default.anonymousDocument.create({
+        const anonymousDoc = await prisma.anonymousDocument.create({
             data: {
                 originalDocId: params.documentId,
                 caseId: document.caseId,
@@ -138,7 +129,7 @@ async function anonymizeDocument(params) {
             }
         });
         // 7. Create timeline event
-        await database_js_1.default.timelineEvent.create({
+        await prisma.timelineEvent.create({
             data: {
                 caseId: document.caseId,
                 userId: params.userId,
@@ -179,16 +170,16 @@ async function anonymizeDocument(params) {
 // ============================================================================
 // Get client redaction profile
 // ============================================================================
-async function getClientRedactionProfile(clientId) {
-    return database_js_1.default.clientRedactionProfile.findUnique({
+export async function getClientRedactionProfile(clientId) {
+    return prisma.clientRedactionProfile.findUnique({
         where: { clientId }
     });
 }
 // ============================================================================
 // Create/update client redaction profile
 // ============================================================================
-async function upsertRedactionProfile(params) {
-    return database_js_1.default.clientRedactionProfile.upsert({
+export async function upsertRedactionProfile(params) {
+    return prisma.clientRedactionProfile.upsert({
         where: { clientId: params.clientId },
         update: {
             fullName: params.fullName,
@@ -216,12 +207,12 @@ async function upsertRedactionProfile(params) {
 // ============================================================================
 // Get anonymous document
 // ============================================================================
-async function getAnonymousDocument(docId) {
-    return database_js_1.default.anonymousDocument.findUnique({
+export async function getAnonymousDocument(docId) {
+    return prisma.anonymousDocument.findUnique({
         where: { id: docId }
     });
 }
-exports.default = {
+export default {
     anonymizeDocument,
     getClientRedactionProfile,
     upsertRedactionProfile,

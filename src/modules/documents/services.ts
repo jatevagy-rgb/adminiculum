@@ -81,7 +81,7 @@ class DocumentsService {
           version: uploadResult.version || '1',
           documentType: input.documentType,
           isLatest: true
-        }
+        } as any
       });
 
       // 5. Create TimelineEvent for document creation
@@ -89,6 +89,7 @@ class DocumentsService {
         data: {
           caseId: input.caseId,
           userId: input.createdById,
+          eventType: 'DOCUMENT_UPLOADED',
           type: 'DOCUMENT_UPLOADED' as any,
           payload: {
             documentId: document.id,
@@ -99,7 +100,7 @@ class DocumentsService {
             folder: folderType,
             version: uploadResult.version
           }
-        }
+        } as any
       });
 
       // 6. Update Case status to DRAFT
@@ -193,6 +194,7 @@ class DocumentsService {
         data: {
           caseId: document.caseId,
           userId: userId,
+          eventType: 'VERSION_CREATED',
           type: 'VERSION_CREATED' as any,
           payload: {
             documentId,
@@ -201,7 +203,7 @@ class DocumentsService {
             newVersion: uploadResult.version,
             comment
           }
-        }
+        } as any
       });
 
       return {
@@ -253,13 +255,14 @@ class DocumentsService {
         data: {
           caseId: document.caseId,
           userId: userId,
+          eventType: 'SENT_TO_REVIEW',
           type: 'SENT_TO_REVIEW' as any,
           payload: {
             documentId,
             fileName: document.fileName,
             folder: 'Review'
           }
-        }
+        } as any
       });
 
       // Update Case status to IN_REVIEW
@@ -306,13 +309,14 @@ class DocumentsService {
         data: {
           caseId: document.caseId,
           userId: userId,
+          eventType: 'CONTRACT_APPROVED',
           type: 'CONTRACT_APPROVED' as any,
           payload: {
             documentId,
             fileName: document.fileName,
             comment
           }
-        }
+        } as any
       });
 
       // Update Case status to APPROVED
@@ -356,13 +360,14 @@ class DocumentsService {
         data: {
           caseId: document.caseId,
           userId: userId,
+          eventType: 'CONTRACT_REJECTED',
           type: 'CONTRACT_REJECTED' as any,
           payload: {
             documentId,
             fileName: document.fileName,
             reason
           }
-        }
+        } as any
       });
 
       // Update Case status to DRAFT (back to drafting)

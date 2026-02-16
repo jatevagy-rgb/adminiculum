@@ -1,17 +1,15 @@
-"use strict";
 /**
  * Settings Service V2
  * Application settings management
  * Matching Prisma Schema V2
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-const prisma_service_1 = require("../../prisma/prisma.service");
+import { prisma } from '../../prisma/prisma.service';
 class SettingsService {
     /**
      * Get UI settings
      */
     async getUiSettings() {
-        const settings = await prisma_service_1.prisma.systemSetting.findMany({
+        const settings = await prisma.systemSetting.findMany({
             where: { key: { in: ['app_config', 'theme'] } }
         });
         const appConfig = settings.find(s => s.key === 'app_config');
@@ -31,7 +29,7 @@ class SettingsService {
      */
     async updateUiSettings(updates) {
         if (updates.theme) {
-            await prisma_service_1.prisma.systemSetting.upsert({
+            await prisma.systemSetting.upsert({
                 where: { key: 'theme' },
                 update: {
                     value: updates.theme
@@ -49,7 +47,7 @@ class SettingsService {
      * Get all settings
      */
     async getAllSettings() {
-        const settings = await prisma_service_1.prisma.systemSetting.findMany();
+        const settings = await prisma.systemSetting.findMany();
         const result = {};
         for (const s of settings) {
             result[s.key] = s.value;
@@ -60,7 +58,7 @@ class SettingsService {
      * Get single setting
      */
     async getSetting(key) {
-        const setting = await prisma_service_1.prisma.systemSetting.findUnique({
+        const setting = await prisma.systemSetting.findUnique({
             where: { key }
         });
         return setting?.value;
@@ -69,12 +67,12 @@ class SettingsService {
      * Update single setting
      */
     async updateSetting(key, value) {
-        await prisma_service_1.prisma.systemSetting.upsert({
+        await prisma.systemSetting.upsert({
             where: { key },
             update: { value: value },
             create: { key, value: value }
         });
     }
 }
-exports.default = new SettingsService();
+export default new SettingsService();
 //# sourceMappingURL=settings.js.map

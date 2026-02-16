@@ -1,13 +1,10 @@
-"use strict";
 /**
  * Case Timeline Service V2
  * Manages timeline events for case workflow
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.EVENT_COLORS = exports.EVENT_LABELS = void 0;
-const prisma_service_1 = require("../../prisma/prisma.service");
+import { prisma } from '../../prisma/prisma.service';
 // Display names in Hungarian
-exports.EVENT_LABELS = {
+export const EVENT_LABELS = {
     CASE_CREATED: 'Ügy létrehozva',
     CASE_ASSIGNED: 'Ügy hozzárendelve',
     CASE_STATUS_CHANGED: 'Státusz változás',
@@ -35,7 +32,7 @@ exports.EVENT_LABELS = {
     CUSTOM: 'Egyéni esemény',
 };
 // Colors for each event type
-exports.EVENT_COLORS = {
+export const EVENT_COLORS = {
     CASE_CREATED: '#6366f1',
     CASE_ASSIGNED: '#8b5cf6',
     CASE_STATUS_CHANGED: '#3b82f6',
@@ -64,7 +61,7 @@ class CaseTimelineService {
      * Get complete timeline for a case
      */
     async getTimeline(caseId) {
-        const events = await prisma_service_1.prisma.timelineEvent.findMany({
+        const events = await prisma.timelineEvent.findMany({
             where: { caseId },
             include: {
                 user: {
@@ -77,9 +74,9 @@ class CaseTimelineService {
             id: event.id,
             caseId: event.caseId,
             type: event.type,
-            typeLabel: exports.EVENT_LABELS[event.type] || event.type,
-            color: exports.EVENT_COLORS[event.type] || '#6366f1',
-            description: event.payload?.description || exports.EVENT_LABELS[event.type] || event.type,
+            typeLabel: EVENT_LABELS[event.type] || event.type,
+            color: EVENT_COLORS[event.type] || '#6366f1',
+            description: event.payload?.description || EVENT_LABELS[event.type] || event.type,
             metadata: event.payload,
             createdAt: event.createdAt,
             user: event.user ? {
@@ -95,13 +92,14 @@ class CaseTimelineService {
      */
     async createEvent(input) {
         const { caseId, type, description, metadata, userId } = input;
-        const event = await prisma_service_1.prisma.timelineEvent.create({
+        const event = await prisma.timelineEvent.create({
             data: {
                 caseId,
+                eventType: type,
                 type: type,
                 userId,
                 payload: {
-                    description: description || exports.EVENT_LABELS[type] || type,
+                    description: description || EVENT_LABELS[type] || type,
                     ...metadata,
                 },
             },
@@ -117,7 +115,7 @@ class CaseTimelineService {
      * Get timeline events by type
      */
     async getEventsByType(caseId, type) {
-        return prisma_service_1.prisma.timelineEvent.findMany({
+        return prisma.timelineEvent.findMany({
             where: { caseId, type: type },
             include: {
                 user: {
@@ -131,7 +129,7 @@ class CaseTimelineService {
      * Get latest event for a case
      */
     async getLatestEvent(caseId) {
-        return prisma_service_1.prisma.timelineEvent.findFirst({
+        return prisma.timelineEvent.findFirst({
             where: { caseId },
             include: {
                 user: {
@@ -145,7 +143,7 @@ class CaseTimelineService {
      * Get timeline statistics for a case
      */
     async getTimelineStats(caseId) {
-        const events = await prisma_service_1.prisma.timelineEvent.findMany({
+        const events = await prisma.timelineEvent.findMany({
             where: { caseId },
             select: { type: true },
         });
@@ -159,7 +157,7 @@ class CaseTimelineService {
      * Initialize case timeline with creation event
      */
     async initializeCase(caseId, userId) {
-        const existing = await prisma_service_1.prisma.timelineEvent.findFirst({
+        const existing = await prisma.timelineEvent.findFirst({
             where: { caseId },
             orderBy: { createdAt: 'desc' },
         });
@@ -173,5 +171,5 @@ class CaseTimelineService {
         });
     }
 }
-exports.default = new CaseTimelineService();
+export default new CaseTimelineService();
 //# sourceMappingURL=caseTimeline.js.map

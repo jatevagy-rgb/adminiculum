@@ -1,15 +1,13 @@
-"use strict";
 // ============================================================================
 // MATTERS API ROUTES
 // ============================================================================
 //
 // CRUD operations for Matters (legal matters/projects)
 // ============================================================================
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const client_1 = require("@prisma/client");
-const router = (0, express_1.Router)();
-const prisma = new client_1.PrismaClient();
+import { Router } from 'express';
+import { PrismaClient } from '@prisma/client';
+const router = Router();
+const prisma = new PrismaClient();
 // ============================================================================
 // GET /api/v1/matters - List all matters
 // ============================================================================
@@ -55,7 +53,8 @@ router.get('/', async (req, res) => {
 // ============================================================================
 router.get('/:id', async (req, res) => {
     try {
-        const { id } = req.params;
+        const idParam = req.params.id;
+        const id = Array.isArray(idParam) ? idParam[0] : idParam;
         const matter = await prisma.matter.findUnique({
             where: { id },
             include: {
@@ -145,7 +144,8 @@ router.post('/', async (req, res) => {
 // ============================================================================
 router.patch('/:id', async (req, res) => {
     try {
-        const { id } = req.params;
+        const idParam = req.params.id;
+        const id = Array.isArray(idParam) ? idParam[0] : idParam;
         const { title, description, matterType, status, departmentId, budgetHours, closedAt } = req.body;
         const matter = await prisma.matter.update({
             where: { id },
@@ -179,7 +179,8 @@ router.patch('/:id', async (req, res) => {
 // ============================================================================
 router.get('/:id/time-summary', async (req, res) => {
     try {
-        const { id } = req.params;
+        const idParam = req.params.id;
+        const id = Array.isArray(idParam) ? idParam[0] : idParam;
         const timeEntries = await prisma.timeEntry.findMany({
             where: { matterId: id },
             include: {
@@ -196,7 +197,7 @@ router.get('/:id/time-summary', async (req, res) => {
         const byWorkType = {};
         const byUser = {};
         const byDepartment = {};
-        timeEntries.forEach(entry => {
+        timeEntries.forEach((entry) => {
             // By work type
             if (!byWorkType[entry.workType]) {
                 byWorkType[entry.workType] = { count: 0, minutes: 0 };
@@ -247,5 +248,5 @@ router.get('/:id/time-summary', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch time summary' });
     }
 });
-exports.default = router;
+export default router;
 //# sourceMappingURL=matters.js.map

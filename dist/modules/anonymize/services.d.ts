@@ -31,7 +31,7 @@ export declare function getClientRedactionProfile(clientId: string): Promise<{
     personas: import("@prisma/client/runtime/library").JsonValue;
     useLLM: boolean;
     llmPrompt: string | null;
-} | null>;
+}>;
 export declare function upsertRedactionProfile(params: {
     clientId: string;
     fullName: string;
@@ -69,7 +69,7 @@ export declare function getAnonymousDocument(docId: string): Promise<{
     redactedAt: Date;
     patternCount: number;
     sourceDocId: string;
-} | null>;
+}>;
 declare const _default: {
     anonymizeDocument: typeof anonymizeDocument;
     getClientRedactionProfile: typeof getClientRedactionProfile;

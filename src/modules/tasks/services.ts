@@ -337,30 +337,21 @@ export async function getTaskRecommendations(params: {
   });
 
   // Get current workload for each user
-  const userWorkloads = await prisma.task.groupBy({
+  const userWorkloads = await (prisma.task.groupBy as any)({
     by: ['assignedToId'],
     where: {
       assignedToId: { in: eligibleUsers.map(u => u.id) },
       status: { in: ['TODO', 'IN_PROGRESS', 'IN_REVIEW'] }
     },
     _count: true
-  } as any);
+  });
 
   // Calculate recommendations
   const recommendations = eligibleUsers.map(user => {
-    const workload = userWorkloads.find((w: any) => w.assignedTo === user.id)?._count || 0;
+    const workload = userWorkloads.find((w: any) => w.assignedToId === user.id)?._count || 0;
     
-    // Calculate skill match score
+    // Calculate skill match score (skillProfile not in schema, use default)
     let skillScore = 0;
-    if (user.skillProfile) {
-      for (const skill of requiredSkills) {
-        const skillKey = skill.toLowerCase().replace(/ /g, '') as keyof typeof user.skillProfile;
-        const skillValue = (user.skillProfile as any)[skillKey];
-        if (typeof skillValue === 'number') {
-          skillScore += skillValue;
-        }
-      }
-    }
 
     const maxPossibleScore = requiredSkills.length * 5;
     const matchScore = maxPossibleScore > 0 ? Math.round((skillScore / maxPossibleScore) * 100) : 50;
@@ -377,10 +368,9 @@ export async function getTaskRecommendations(params: {
       role: user.role,
       matchScore,
       skills: requiredSkills.reduce((acc: Record<string, number>, skill) => {
-        const skillKey = skill.toLowerCase().replace(/ /g, '') as keyof typeof user.skillProfile;
         return {
           ...acc,
-          [skill]: (user.skillProfile as any)?.[skillKey] || 0
+          [skill]: 0
         };
       }, {}),
       currentWorkload: workload >= 5 ? 'HIGH' : workload >= 3 ? 'MEDIUM' : 'LOW',
@@ -456,7 +446,7 @@ export async function canAssign(assignerId: string, assigneeId: string): Promise
 export async function getUserTasks(userId: string, filters?: { status?: string; caseId?: string }) {
   return prisma.task.findMany({
     where: {
-      assignedTo: userId,
+      assignedToId: userId,
       ...(filters?.status && { status: filters.status as any }),
       ...(filters?.caseId && { caseId: filters.caseId })
     },

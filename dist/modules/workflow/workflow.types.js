@@ -1,12 +1,9 @@
-"use strict";
 /**
  * Workflow Types - Case Workflow State Machine
  *
  * Statusok és átmenetek definíciói
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.ROLE_ALLOWED_TRANSITIONS = exports.WORKFLOW_EVENTS = exports.STATUS_LABELS = exports.ALLOWED_TRANSITIONS = exports.FOLDER_TO_STATUS = exports.STATUS_TO_FOLDER = exports.WORKFLOW_STATUSES = void 0;
-exports.WORKFLOW_STATUSES = [
+export const WORKFLOW_STATUSES = [
     'CLIENT_INPUT',
     'DRAFT',
     'IN_REVIEW',
@@ -19,7 +16,7 @@ exports.WORKFLOW_STATUSES = [
 // ============================================================================
 // Status → SharePoint Folder Mapping
 // ============================================================================
-exports.STATUS_TO_FOLDER = {
+export const STATUS_TO_FOLDER = {
     'CLIENT_INPUT': '01_Client_Input',
     'DRAFT': '02_Drafts',
     'IN_REVIEW': '03_Review',
@@ -29,7 +26,7 @@ exports.STATUS_TO_FOLDER = {
     'FINAL': '07_Final',
     'CLOSED': '07_Final'
 };
-exports.FOLDER_TO_STATUS = {
+export const FOLDER_TO_STATUS = {
     '01_Client_Input': 'CLIENT_INPUT',
     '02_Drafts': 'DRAFT',
     '03_Review': 'IN_REVIEW',
@@ -41,7 +38,7 @@ exports.FOLDER_TO_STATUS = {
 // ============================================================================
 // Status Transition Rules
 // ============================================================================
-exports.ALLOWED_TRANSITIONS = {
+export const ALLOWED_TRANSITIONS = {
     'CLIENT_INPUT': ['DRAFT'],
     'DRAFT': ['IN_REVIEW', 'CLIENT_INPUT'],
     'IN_REVIEW': ['APPROVED', 'DRAFT'],
@@ -54,7 +51,7 @@ exports.ALLOWED_TRANSITIONS = {
 // ============================================================================
 // Status Display Names (Hungarian)
 // ============================================================================
-exports.STATUS_LABELS = {
+export const STATUS_LABELS = {
     'CLIENT_INPUT': 'Ügyfél adat',
     'DRAFT': 'Szerződés tervezet',
     'IN_REVIEW': 'Review',
@@ -64,7 +61,7 @@ exports.STATUS_LABELS = {
     'FINAL': 'Végleges',
     'CLOSED': 'Lezárt'
 };
-exports.WORKFLOW_EVENTS = [
+export const WORKFLOW_EVENTS = [
     'CASE_CREATED',
     'STATUS_CHANGED',
     'DOCUMENT_UPLOADED',
@@ -77,7 +74,7 @@ exports.WORKFLOW_EVENTS = [
     'FINALIZED',
     'CLOSED'
 ];
-exports.ROLE_ALLOWED_TRANSITIONS = {
+export const ROLE_ALLOWED_TRANSITIONS = {
     'ADMIN': [
         'CLIENT_INPUT',
         'DRAFT',

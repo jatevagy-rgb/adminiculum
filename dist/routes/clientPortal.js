@@ -1,4 +1,3 @@
-"use strict";
 // ============================================================================
 // CLIENT PORTAL API ROUTES
 // ============================================================================
@@ -7,11 +6,10 @@
 // Shows time summaries, department breakdowns, matter details
 // Clients can only see their own data
 // ============================================================================
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const client_1 = require("@prisma/client");
-const router = (0, express_1.Router)();
-const prisma = new client_1.PrismaClient();
+import { Router } from 'express';
+import { PrismaClient } from '@prisma/client';
+const router = Router();
+const prisma = new PrismaClient();
 // ============================================================================
 // MIDDLEWARE: Check if user is CLIENT role
 // ============================================================================
@@ -412,5 +410,5 @@ router.get('/export/:clientId', async (req, res) => {
         res.status(500).json({ error: 'Failed to export data' });
     }
 });
-exports.default = router;
+export default router;
 //# sourceMappingURL=clientPortal.js.map

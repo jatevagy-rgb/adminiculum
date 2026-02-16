@@ -1,25 +1,20 @@
-"use strict";
 /**
  * Adminiculum Backend V2 - Main Application Entry Point
  * Legal Document Management System API
  * Modular Architecture with ts-node
  */
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = __importDefault(require("express"));
-const cors_1 = __importDefault(require("cors"));
-const helmet_1 = __importDefault(require("helmet"));
-const morgan_1 = __importDefault(require("morgan"));
-const path_1 = __importDefault(require("path"));
-const fs_1 = __importDefault(require("fs"));
-const js_yaml_1 = __importDefault(require("js-yaml"));
-const app = (0, express_1.default)();
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import path from 'path';
+import fs from 'fs';
+import yaml from 'js-yaml';
+const app = express();
 const PORT = process.env.PORT || 3000;
 // Middleware
-app.use((0, helmet_1.default)());
-app.use((0, cors_1.default)({
+app.use(helmet());
+app.use(cors({
     origin: function (origin, callback) {
         // Allow requests with no origin (like mobile apps or curl)
         if (!origin)
@@ -40,9 +35,9 @@ app.use((0, cors_1.default)({
     },
     credentials: true,
 }));
-app.use((0, morgan_1.default)('combined'));
-app.use(express_1.default.json());
-app.use(express_1.default.urlencoded({ extended: true }));
+app.use(morgan('combined'));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 // Health check
 app.get('/health', (_req, res) => {
     res.json({ status: 'healthy', timestamp: new Date().toISOString() });
@@ -52,9 +47,9 @@ app.get('/health', (_req, res) => {
 // ========================================
 app.get('/api/v1/openapi.json', (_req, res) => {
     try {
-        const swaggerPath = path_1.default.join(__dirname, '..', 'swagger.yaml');
-        const swaggerContent = fs_1.default.readFileSync(swaggerPath, 'utf8');
-        const swaggerJson = js_yaml_1.default.load(swaggerContent);
+        const swaggerPath = path.join(__dirname, '..', 'swagger.yaml');
+        const swaggerContent = fs.readFileSync(swaggerPath, 'utf8');
+        const swaggerJson = yaml.load(swaggerContent);
         // Power Apps doesn't accept protocol in host - remove http://
         swaggerJson.servers = [{ url: 'localhost:3000' }];
         res.json(swaggerJson);
@@ -67,9 +62,9 @@ app.get('/api/v1/openapi.json', (_req, res) => {
 // Power Apps root endpoint (no partial path in URL)
 app.get('/openapi.json', (_req, res) => {
     try {
-        const swaggerPath = path_1.default.join(__dirname, '..', 'swagger.yaml');
-        const swaggerContent = fs_1.default.readFileSync(swaggerPath, 'utf8');
-        const swaggerJson = js_yaml_1.default.load(swaggerContent);
+        const swaggerPath = path.join(__dirname, '..', 'swagger.yaml');
+        const swaggerContent = fs.readFileSync(swaggerPath, 'utf8');
+        const swaggerJson = yaml.load(swaggerContent);
         // Power Apps doesn't accept protocol in host
         swaggerJson.servers = [{ url: 'localhost:3000' }];
         res.json(swaggerJson);
@@ -83,38 +78,38 @@ app.get('/openapi.json', (_req, res) => {
 // API Routes - V2 Modular Structure
 // ========================================
 // Auth Module
-const routes_1 = __importDefault(require("./modules/auth/routes"));
-app.use('/api/v1/auth', routes_1.default);
+import authRoutes from './modules/auth/routes';
+app.use('/api/v1/auth', authRoutes);
 // Users Module
-const routes_2 = __importDefault(require("./modules/users/routes"));
-app.use('/api/v1/users', routes_2.default);
+import usersRoutes from './modules/users/routes';
+app.use('/api/v1/users', usersRoutes);
 // Cases Module
-const routes_3 = __importDefault(require("./modules/cases/routes"));
-app.use('/api/v1/cases', routes_3.default);
+import casesRoutes from './modules/cases/routes';
+app.use('/api/v1/cases', casesRoutes);
 // Tasks Module
-const routes_4 = __importDefault(require("./modules/tasks/routes"));
-app.use('/api/v1/tasks', routes_4.default);
+import tasksRoutes from './modules/tasks/routes';
+app.use('/api/v1/tasks', tasksRoutes);
 // Settings Module
-const routes_5 = __importDefault(require("./modules/settings/routes"));
-app.use('/api/v1/settings', routes_5.default);
+import settingsRoutes from './modules/settings/routes';
+app.use('/api/v1/settings', settingsRoutes);
 // Anonymize Module
-const routes_6 = __importDefault(require("./modules/anonymize/routes"));
-app.use('/api/v1', routes_6.default);
+import anonymizeRoutes from './modules/anonymize/routes';
+app.use('/api/v1', anonymizeRoutes);
 // Matters Module
-const matters_1 = __importDefault(require("./routes/matters"));
-app.use('/api/v1/matters', matters_1.default);
+import mattersRoutes from './routes/matters';
+app.use('/api/v1/matters', mattersRoutes);
 // Time Entries Module
-const timeEntries_1 = __importDefault(require("./routes/timeEntries"));
-app.use('/api/v1/time-entries', timeEntries_1.default);
+import timeEntriesRoutes from './routes/timeEntries';
+app.use('/api/v1/time-entries', timeEntriesRoutes);
 // Client Portal Module (read-only for clients)
-const clientPortal_1 = __importDefault(require("./routes/clientPortal"));
-app.use('/api/v1/client-portal', clientPortal_1.default);
+import clientPortalRoutes from './routes/clientPortal';
+app.use('/api/v1/client-portal', clientPortalRoutes);
 // Contracts Module
-const routes_7 = __importDefault(require("./modules/contracts/routes"));
-app.use('/api/v1/contracts', routes_7.default);
+import contractsRoutes from './modules/contracts/routes';
+app.use('/api/v1/contracts', contractsRoutes);
 // Workgroups Module (Client Workload Tracking)
-const routes_8 = __importDefault(require("./modules/workgroups/routes"));
-app.use('/api/v1', routes_8.default);
+import workgroupRoutes from './modules/workgroups/routes';
+app.use('/api/v1', workgroupRoutes);
 // ========================================
 // Error Handling
 // ========================================
@@ -135,5 +130,5 @@ app.use((err, _req, res, _next) => {
 app.listen(PORT, () => {
     console.log(`🚀 Adminiculum API V2 running on http://localhost:${PORT}`);
 });
-exports.default = app;
+export default app;
 //# sourceMappingURL=index.js.map

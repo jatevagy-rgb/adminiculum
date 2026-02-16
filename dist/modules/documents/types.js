@@ -1,11 +1,8 @@
-"use strict";
 /**
  * Document Types
  * Document management with SharePoint integration
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.FOLDER_BY_DOCUMENT_TYPE = exports.DOCUMENT_TYPES = void 0;
-exports.DOCUMENT_TYPES = {
+export const DOCUMENT_TYPES = {
     CONTRACT: 'CONTRACT',
     AGREEMENT: 'AGREEMENT',
     LETTER: 'LETTER',
@@ -15,7 +12,7 @@ exports.DOCUMENT_TYPES = {
     POWER_OF_ATTORNEY: 'POWER_OF_ATTORNEY',
     OTHER: 'OTHER',
 };
-exports.FOLDER_BY_DOCUMENT_TYPE = {
+export const FOLDER_BY_DOCUMENT_TYPE = {
     CONTRACT: 'Contracts',
     AGREEMENT: 'Contracts',
     LETTER: 'Correspondence',

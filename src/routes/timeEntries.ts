@@ -126,7 +126,8 @@ router.get('/summary', async (req: Request, res: Response) => {
 
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
 
     const entry = await prisma.timeEntry.findUnique({
       where: { id },
@@ -251,7 +252,8 @@ router.post('/', async (req: Request, res: Response) => {
 
 router.patch('/:id', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
     const { workType, description, minutes, workDate, departmentId } = req.body;
 
     // Get original entry to calculate difference
@@ -309,7 +311,8 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
 
     const entry = await prisma.timeEntry.findUnique({
       where: { id }
