@@ -7,7 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "echo 'Using pre-compiled dist folder'",
     "start": "node dist/index.js",
-    "postinstall": "echo 'Skipping prisma generate - using bundled client'",
+    "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
