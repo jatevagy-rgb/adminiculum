@@ -1,17 +1,25 @@
+"use strict";
 /**
  * Workgroup Service
  * Client workload tracking business logic
  */
-import prisma from '../../prisma/prisma.service';
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.workloadService = exports.workgroupService = void 0;
+exports.isValidPeriodFormat = isValidPeriodFormat;
+exports.formatPeriod = formatPeriod;
+const prisma_service_1 = __importDefault(require("../../prisma/prisma.service"));
 // ============================================================================
 // Validation Helpers
 // ============================================================================
-export function isValidPeriodFormat(period) {
+function isValidPeriodFormat(period) {
     // YYYY-MM format validation
     const regex = /^\d{4}-(0[1-9]|1[0-2])$/;
     return regex.test(period);
 }
-export function formatPeriod(date = new Date()) {
+function formatPeriod(date = new Date()) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     return `${year}-${month}`;
@@ -19,19 +27,19 @@ export function formatPeriod(date = new Date()) {
 // ============================================================================
 // Workgroup CRUD Operations
 // ============================================================================
-export const workgroupService = {
+exports.workgroupService = {
     /**
      * Create a new workgroup for a client
      */
     async createWorkgroup(clientId, input) {
         // Verify client exists
-        const client = await prisma.client.findUnique({
+        const client = await prisma_service_1.default.client.findUnique({
             where: { id: clientId }
         });
         if (!client) {
             throw new Error('Client not found');
         }
-        const workgroup = await prisma.clientWorkgroup.create({
+        const workgroup = await prisma_service_1.default.clientWorkgroup.create({
             data: {
                 clientId,
                 name: input.name,
@@ -52,7 +60,7 @@ export const workgroupService = {
      * Get all workgroups for a client
      */
     async getWorkgroupsByClient(clientId) {
-        const workgroups = await prisma.clientWorkgroup.findMany({
+        const workgroups = await prisma_service_1.default.clientWorkgroup.findMany({
             where: {
                 clientId,
                 isActive: true
@@ -73,7 +81,7 @@ export const workgroupService = {
      * Get a single workgroup by ID
      */
     async getWorkgroupById(workgroupId) {
-        const workgroup = await prisma.clientWorkgroup.findUnique({
+        const workgroup = await prisma_service_1.default.clientWorkgroup.findUnique({
             where: { id: workgroupId }
         });
         if (!workgroup) {
@@ -93,7 +101,7 @@ export const workgroupService = {
      * Update a workgroup
      */
     async updateWorkgroup(workgroupId, input) {
-        const workgroup = await prisma.clientWorkgroup.update({
+        const workgroup = await prisma_service_1.default.clientWorkgroup.update({
             where: { id: workgroupId },
             data: {
                 name: input.name,
@@ -115,7 +123,7 @@ export const workgroupService = {
      * Soft delete a workgroup (set isActive = false)
      */
     async deleteWorkgroup(workgroupId) {
-        await prisma.clientWorkgroup.update({
+        await prisma_service_1.default.clientWorkgroup.update({
             where: { id: workgroupId },
             data: { isActive: false }
         });
@@ -124,7 +132,7 @@ export const workgroupService = {
 // ============================================================================
 // Workload Recording Operations
 // ============================================================================
-export const workloadService = {
+exports.workloadService = {
     /**
      * Record workload for a workgroup (upsert - overwrite if exists)
      */
@@ -134,13 +142,13 @@ export const workloadService = {
             throw new Error('Invalid period format. Expected YYYY-MM');
         }
         // Verify workgroup exists
-        const workgroup = await prisma.clientWorkgroup.findUnique({
+        const workgroup = await prisma_service_1.default.clientWorkgroup.findUnique({
             where: { id: workgroupId }
         });
         if (!workgroup) {
             throw new Error('Workgroup not found');
         }
-        const record = await prisma.workloadRecord.upsert({
+        const record = await prisma_service_1.default.workloadRecord.upsert({
             where: {
                 workgroupId_period: {
                     workgroupId,
@@ -172,7 +180,7 @@ export const workloadService = {
      * Get workload records for a workgroup
      */
     async getWorkloadByWorkgroup(workgroupId) {
-        const records = await prisma.workloadRecord.findMany({
+        const records = await prisma_service_1.default.workloadRecord.findMany({
             where: { workgroupId },
             orderBy: { period: 'desc' }
         });
@@ -195,7 +203,7 @@ export const workloadService = {
             throw new Error('Invalid period format. Expected YYYY-MM');
         }
         // Get all active workgroups for the client
-        const workgroups = await prisma.clientWorkgroup.findMany({
+        const workgroups = await prisma_service_1.default.clientWorkgroup.findMany({
             where: {
                 clientId,
                 isActive: true
@@ -206,7 +214,7 @@ export const workloadService = {
             }
         });
         // Get workload records for the period
-        const workloadRecords = await prisma.workloadRecord.findMany({
+        const workloadRecords = await prisma_service_1.default.workloadRecord.findMany({
             where: {
                 workgroupId: { in: workgroups.map((w) => w.id) },
                 period
@@ -247,9 +255,9 @@ export const workloadService = {
         };
     }
 };
-export default {
-    workgroupService,
-    workloadService,
+exports.default = {
+    workgroupService: exports.workgroupService,
+    workloadService: exports.workloadService,
     isValidPeriodFormat,
     formatPeriod
 };

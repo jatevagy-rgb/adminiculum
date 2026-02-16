@@ -1,14 +1,17 @@
+"use strict";
 /**
  * Prisma Database Service
  * Centralized Prisma client for Adminiculum
  */
-import { PrismaClient } from '@prisma/client';
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.prisma = void 0;
+const client_1 = require("@prisma/client");
 const globalForPrisma = globalThis;
-export const prisma = globalForPrisma.prisma ?? new PrismaClient({
+exports.prisma = globalForPrisma.prisma ?? new client_1.PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
 });
 if (process.env.NODE_ENV !== 'production') {
-    globalForPrisma.prisma = prisma;
+    globalForPrisma.prisma = exports.prisma;
 }
-export default prisma;
+exports.default = exports.prisma;
 //# sourceMappingURL=prisma.service.js.map

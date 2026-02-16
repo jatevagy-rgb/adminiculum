@@ -1,3 +1,4 @@
+"use strict";
 /**
  * Workflow Service - Case Workflow Engine v1
  *
@@ -12,9 +13,11 @@
  * - SharePoint move retry logikával (3 próbálkozás, exponential backoff)
  * - Hibák logolása a trace-elhetőség érdekében
  */
-import { prisma } from '../../prisma/prisma.service';
-import { driveService } from '../sharepoint';
-import { WORKFLOW_STATUSES, STATUS_TO_FOLDER, ALLOWED_TRANSITIONS, STATUS_LABELS, ROLE_ALLOWED_TRANSITIONS } from './workflow.types';
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.workflowService = exports.WorkflowService = void 0;
+const prisma_service_1 = require("../../prisma/prisma.service");
+const sharepoint_1 = require("../sharepoint");
+const workflow_types_1 = require("./workflow.types");
 // ============================================================================
 // Retry Helper (Exponential Backoff)
 // ============================================================================
@@ -39,7 +42,7 @@ async function withRetry(fn, retries = 3, delayMs = 1000) {
 // ============================================================================
 // Workflow Service Class
 // ============================================================================
-export class WorkflowService {
+class WorkflowService {
     // ==========================================================================
     // Status Validation
     // ==========================================================================
@@ -47,20 +50,20 @@ export class WorkflowService {
      * Ellenőrzi, hogy egy státusz átmenet megengedett-e
      */
     isValidTransition(fromStatus, toStatus) {
-        const allowed = ALLOWED_TRANSITIONS[fromStatus];
+        const allowed = workflow_types_1.ALLOWED_TRANSITIONS[fromStatus];
         return allowed.includes(toStatus);
     }
     /**
      * Validálja a státusz értéket
      */
     isValidStatus(status) {
-        return WORKFLOW_STATUSES.includes(status);
+        return workflow_types_1.WORKFLOW_STATUSES.includes(status);
     }
     /**
      * Ellenőrzi, hogy a case átvihető-e adott státuszba
      */
     async canTransition(caseId, toStatus) {
-        const caseData = await prisma.case.findUnique({
+        const caseData = await prisma_service_1.prisma.case.findUnique({
             where: { id: caseId }
         });
         if (!caseData) {
@@ -83,7 +86,7 @@ export class WorkflowService {
      * Ellenőrzi, hogy a user role-ja engedélyezi-e a státuszváltást
      */
     canUserTransition(userRole, toStatus) {
-        const allowedStatuses = ROLE_ALLOWED_TRANSITIONS[userRole];
+        const allowedStatuses = workflow_types_1.ROLE_ALLOWED_TRANSITIONS[userRole];
         if (!allowedStatuses) {
             return { allowed: false, reason: `Unknown user role: ${userRole}` };
         }
@@ -109,8 +112,8 @@ export class WorkflowService {
         try {
             // 1. Get user and case data
             const [user, caseData] = await Promise.all([
-                prisma.user.findUnique({ where: { id: userId } }),
-                prisma.case.findUnique({ where: { id: caseId } })
+                prisma_service_1.prisma.user.findUnique({ where: { id: userId } }),
+                prisma_service_1.prisma.case.findUnique({ where: { id: caseId } })
             ]);
             if (!user) {
                 return {
@@ -157,15 +160,15 @@ export class WorkflowService {
                     error: validation.reason
                 };
             }
-            const targetFolder = STATUS_TO_FOLDER[toStatus];
+            const targetFolder = workflow_types_1.STATUS_TO_FOLDER[toStatus];
             const caseNumber = caseData.caseNumber;
             const currentFolderPath = caseData.spFolderPath || `/Cases/${caseNumber}`;
             // 3. Get documents to move
-            const documentsToMove = await prisma.document.findMany({
+            const documentsToMove = await prisma_service_1.prisma.document.findMany({
                 where: { caseId, spItemId: { not: null } }
             });
             // 4. Run Prisma transaction for DB operations
-            await prisma.$transaction(async (tx) => {
+            await prisma_service_1.prisma.$transaction(async (tx) => {
                 // 4a. Update case status
                 await tx.case.update({
                     where: { id: caseId },
@@ -196,19 +199,19 @@ export class WorkflowService {
                 try {
                     await withRetry(async () => {
                         if (doc.spItemId) {
-                            await driveService.moveFile(doc.spItemId, `${currentFolderPath}/${targetFolder}`);
+                            await sharepoint_1.driveService.moveFile(doc.spItemId, `${currentFolderPath}/${targetFolder}`);
                             console.log(`[Workflow] SP: Moved document ${doc.id} to ${targetFolder}`);
                         }
                     }, 3, 500);
                     // Update document metadata in DB
-                    await prisma.document.update({
+                    await prisma_service_1.prisma.document.update({
                         where: { id: doc.id },
                         data: {
                             spParentPath: `${currentFolderPath}/${targetFolder}`
                         }
                     });
                     // Create DOCUMENT_MOVED timeline event
-                    await prisma.timelineEvent.create({
+                    await prisma_service_1.prisma.timelineEvent.create({
                         data: {
                             caseId,
                             userId,
@@ -218,7 +221,7 @@ export class WorkflowService {
                             metadata: {
                                 documentId: doc.id,
                                 documentName: doc.name,
-                                fromFolder: STATUS_TO_FOLDER[fromStatus],
+                                fromFolder: workflow_types_1.STATUS_TO_FOLDER[fromStatus],
                                 toFolder: targetFolder
                             }
                         }
@@ -235,7 +238,7 @@ export class WorkflowService {
             // 6. Handle SharePoint failures
             if (spMoveErrors.length > 0) {
                 // Log failure as a timeline event for visibility
-                await prisma.timelineEvent.create({
+                await prisma_service_1.prisma.timelineEvent.create({
                     data: {
                         caseId,
                         userId,
@@ -265,7 +268,7 @@ export class WorkflowService {
             console.error('[Workflow] CRITICAL ERROR in changeStatus:', error);
             // Create failure event
             try {
-                await prisma.timelineEvent.create({
+                await prisma_service_1.prisma.timelineEvent.create({
                     data: {
                         caseId,
                         userId,
@@ -300,16 +303,16 @@ export class WorkflowService {
      * Ezt használja a frontend a "térkép" megjelenítésére
      */
     async getWorkflowGraph(caseId) {
-        const caseData = await prisma.case.findUnique({
+        const caseData = await prisma_service_1.prisma.case.findUnique({
             where: { id: caseId }
         });
         if (!caseData)
             return null;
         const currentStatus = caseData.status;
         // Build nodes
-        const nodes = WORKFLOW_STATUSES.map((status) => {
-            const statusIndex = WORKFLOW_STATUSES.indexOf(status);
-            const currentIndex = WORKFLOW_STATUSES.indexOf(currentStatus);
+        const nodes = workflow_types_1.WORKFLOW_STATUSES.map((status) => {
+            const statusIndex = workflow_types_1.WORKFLOW_STATUSES.indexOf(status);
+            const currentIndex = workflow_types_1.WORKFLOW_STATUSES.indexOf(currentStatus);
             let nodeStatus = 'pending';
             if (status === currentStatus) {
                 nodeStatus = 'current';
@@ -319,24 +322,24 @@ export class WorkflowService {
             }
             return {
                 id: status,
-                label: STATUS_LABELS[status],
+                label: workflow_types_1.STATUS_LABELS[status],
                 status: nodeStatus
             };
         });
         // Build edges (only show valid transitions from current status)
         const edges = [];
-        const currentIndex = WORKFLOW_STATUSES.indexOf(currentStatus);
+        const currentIndex = workflow_types_1.WORKFLOW_STATUSES.indexOf(currentStatus);
         for (let i = 0; i < currentIndex; i++) {
-            const from = WORKFLOW_STATUSES[i];
-            const allowedNext = ALLOWED_TRANSITIONS[from];
+            const from = workflow_types_1.WORKFLOW_STATUSES[i];
+            const allowedNext = workflow_types_1.ALLOWED_TRANSITIONS[from];
             for (const to of allowedNext) {
-                if (WORKFLOW_STATUSES.indexOf(to) <= currentIndex) {
+                if (workflow_types_1.WORKFLOW_STATUSES.indexOf(to) <= currentIndex) {
                     edges.push({ from, to });
                 }
             }
         }
         // Add possible transitions from current status
-        const possibleTransitions = ALLOWED_TRANSITIONS[currentStatus];
+        const possibleTransitions = workflow_types_1.ALLOWED_TRANSITIONS[currentStatus];
         return {
             nodes,
             edges,
@@ -351,7 +354,7 @@ export class WorkflowService {
      * Visszaadja a case workflow történetét
      */
     async getWorkflowHistory(caseId) {
-        const events = await prisma.timelineEvent.findMany({
+        const events = await prisma_service_1.prisma.timelineEvent.findMany({
             where: {
                 caseId,
                 eventType: { in: ['CASE_CREATED', 'CASE_STATUS_CHANGED'] }
@@ -375,19 +378,20 @@ export class WorkflowService {
      */
     async getWorkflowStats() {
         const [totalCases, ...statusCounts] = await Promise.all([
-            prisma.case.count(),
-            ...WORKFLOW_STATUSES.map((status) => prisma.case.count({ where: { status: status } }))
+            prisma_service_1.prisma.case.count(),
+            ...workflow_types_1.WORKFLOW_STATUSES.map((status) => prisma_service_1.prisma.case.count({ where: { status: status } }))
         ]);
         const byStatus = {};
-        WORKFLOW_STATUSES.forEach((status, index) => {
+        workflow_types_1.WORKFLOW_STATUSES.forEach((status, index) => {
             byStatus[status] = statusCounts[index];
         });
         return { totalCases, byStatus };
     }
 }
+exports.WorkflowService = WorkflowService;
 // ============================================================================
 // Export
 // ============================================================================
-export const workflowService = new WorkflowService();
-export default workflowService;
+exports.workflowService = new WorkflowService();
+exports.default = exports.workflowService;
 //# sourceMappingURL=workflow.service.js.map

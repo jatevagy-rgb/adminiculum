@@ -1,13 +1,15 @@
+"use strict";
 // ============================================================================
 // MATTERS API ROUTES
 // ============================================================================
 //
 // CRUD operations for Matters (legal matters/projects)
 // ============================================================================
-import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
-const router = Router();
-const prisma = new PrismaClient();
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const client_1 = require("@prisma/client");
+const router = (0, express_1.Router)();
+const prisma = new client_1.PrismaClient();
 // ============================================================================
 // GET /api/v1/matters - List all matters
 // ============================================================================
@@ -248,5 +250,5 @@ router.get('/:id/time-summary', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch time summary' });
     }
 });
-export default router;
+exports.default = router;
 //# sourceMappingURL=matters.js.map

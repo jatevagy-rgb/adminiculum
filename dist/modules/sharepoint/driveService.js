@@ -1,3 +1,4 @@
+"use strict";
 /**
  * Drive Service
  * SharePoint document library operations via Graph API
@@ -5,14 +6,18 @@
  * This is the unified SharePoint service that consolidates all document
  * and folder operations through Microsoft Graph API.
  */
-import graphClient from './graphClient';
-import { SHAREPOINT_FOLDERS, } from './types';
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const graphClient_1 = __importDefault(require("./graphClient"));
+const types_1 = require("./types");
 const SITE_PATH = '/sites/LegalCases';
 class DriveService {
     siteId = '';
     async getSiteId() {
         if (!this.siteId) {
-            const site = await graphClient.get(`/sites/root:${SITE_PATH}`);
+            const site = await graphClient_1.default.get(`/sites/root:${SITE_PATH}`);
             this.siteId = site.id;
         }
         return this.siteId;
@@ -23,9 +28,9 @@ class DriveService {
     async uploadDocument(options) {
         try {
             const siteId = await this.getSiteId();
-            const folderPath = options.folder || SHAREPOINT_FOLDERS.CONTRACTS;
+            const folderPath = options.folder || types_1.SHAREPOINT_FOLDERS.CONTRACTS;
             const uploadPath = `root:/${options.caseId}/${folderPath}/${options.fileName}`;
-            const response = await graphClient.put(`/sites/${siteId}/drive/items/${uploadPath}/content`, options.content, {
+            const response = await graphClient_1.default.put(`/sites/${siteId}/drive/items/${uploadPath}/content`, options.content, {
                 siteId,
             });
             return {
@@ -49,7 +54,7 @@ class DriveService {
     async downloadDocument(documentId) {
         try {
             const siteId = await this.getSiteId();
-            const response = await graphClient.get(`/sites/${siteId}/drive/items/${documentId}/content`, { siteId });
+            const response = await graphClient_1.default.get(`/sites/${siteId}/drive/items/${documentId}/content`, { siteId });
             return Buffer.from(response);
         }
         catch (error) {
@@ -63,7 +68,7 @@ class DriveService {
     async getDocument(documentId) {
         try {
             const siteId = await this.getSiteId();
-            const response = await graphClient.get(`/sites/${siteId}/drive/items/${documentId}`, { siteId });
+            const response = await graphClient_1.default.get(`/sites/${siteId}/drive/items/${documentId}`, { siteId });
             return response;
         }
         catch (error) {
@@ -77,7 +82,7 @@ class DriveService {
     async uploadNewVersion(documentId, content) {
         try {
             const siteId = await this.getSiteId();
-            const response = await graphClient.put(`/sites/${siteId}/drive/items/${documentId}/content`, content, { siteId });
+            const response = await graphClient_1.default.put(`/sites/${siteId}/drive/items/${documentId}/content`, content, { siteId });
             return {
                 success: true,
                 item: response,
@@ -98,7 +103,7 @@ class DriveService {
     async checkoutDocument(documentId, userId) {
         try {
             const siteId = await this.getSiteId();
-            await graphClient.post(`/sites/${siteId}/drive/items/${documentId}/checkout`, {}, { siteId });
+            await graphClient_1.default.post(`/sites/${siteId}/drive/items/${documentId}/checkout`, {}, { siteId });
             return true;
         }
         catch (error) {
@@ -112,7 +117,7 @@ class DriveService {
     async checkinDocument(documentId, _userId, comment) {
         try {
             const siteId = await this.getSiteId();
-            await graphClient.post(`/sites/${siteId}/drive/items/${documentId}/checkin`, { comment }, { siteId });
+            await graphClient_1.default.post(`/sites/${siteId}/drive/items/${documentId}/checkin`, { comment }, { siteId });
             return true;
         }
         catch (error) {
@@ -126,7 +131,7 @@ class DriveService {
     async getDocumentVersions(documentId) {
         try {
             const siteId = await this.getSiteId();
-            const response = await graphClient.get(`/sites/${siteId}/drive/items/${documentId}/versions`, { siteId });
+            const response = await graphClient_1.default.get(`/sites/${siteId}/drive/items/${documentId}/versions`, { siteId });
             return response.value || [];
         }
         catch (error) {
@@ -154,7 +159,7 @@ class DriveService {
                 '08_Anonymized',
             ];
             // Create main case folder
-            const mainFolderResponse = await graphClient.post(`/sites/${siteId}/drive/root/children`, {
+            const mainFolderResponse = await graphClient_1.default.post(`/sites/${siteId}/drive/root/children`, {
                 name: caseFolderName,
                 folder: {},
                 '@microsoft.graph.conflictBehavior': 'rename',
@@ -171,7 +176,7 @@ class DriveService {
             };
             // Create subfolders
             for (const folderName of workflowFolders) {
-                const subfolderResponse = await graphClient.post(`/sites/${siteId}/drive/root:/${caseFolderName}:/children`, {
+                const subfolderResponse = await graphClient_1.default.post(`/sites/${siteId}/drive/root:/${caseFolderName}:/children`, {
                     name: folderName,
                     folder: {},
                     '@microsoft.graph.conflictBehavior': 'fail',
@@ -204,7 +209,7 @@ class DriveService {
     async folderExists(relativePath) {
         try {
             const siteId = await this.getSiteId();
-            await graphClient.get(`/sites/${siteId}/drive/root:${relativePath}`, { siteId });
+            await graphClient_1.default.get(`/sites/${siteId}/drive/root:${relativePath}`, { siteId });
             return true;
         }
         catch {
@@ -220,7 +225,7 @@ class DriveService {
             const document = await this.getDocument(documentId);
             if (!document)
                 return null;
-            const response = await graphClient.patch(`/sites/${siteId}/drive/items/${documentId}`, {
+            const response = await graphClient_1.default.patch(`/sites/${siteId}/drive/items/${documentId}`, {
                 parentReference: {
                     path: `/drive/root:/${newFolderPath}`,
                 },
@@ -262,7 +267,7 @@ class DriveService {
     async searchDocuments(query) {
         try {
             const siteId = await this.getSiteId();
-            const response = await graphClient.get(`/sites/${siteId}/drive/root/search(q='${encodeURIComponent(query)}')`, { siteId });
+            const response = await graphClient_1.default.get(`/sites/${siteId}/drive/root/search(q='${encodeURIComponent(query)}')`, { siteId });
             return response.value || [];
         }
         catch (error) {
@@ -277,7 +282,7 @@ class DriveService {
         try {
             const siteId = await this.getSiteId();
             const folderPath = folder ? `/${folder}` : '';
-            const response = await graphClient.get(`/sites/${siteId}/drive/root:/${caseId}${folderPath}:/children`, { siteId });
+            const response = await graphClient_1.default.get(`/sites/${siteId}/drive/root:/${caseId}${folderPath}:/children`, { siteId });
             return response.value || [];
         }
         catch (error) {
@@ -291,7 +296,7 @@ class DriveService {
     async deleteDocument(documentId) {
         try {
             const siteId = await this.getSiteId();
-            await graphClient.post(`/sites/${siteId}/drive/items/${documentId}/delete`, {}, { siteId });
+            await graphClient_1.default.post(`/sites/${siteId}/drive/items/${documentId}/delete`, {}, { siteId });
             return true;
         }
         catch (error) {
@@ -300,5 +305,5 @@ class DriveService {
         }
     }
 }
-export default new DriveService();
+exports.default = new DriveService();
 //# sourceMappingURL=driveService.js.map

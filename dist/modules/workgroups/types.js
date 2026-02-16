@@ -1,6 +1,7 @@
+"use strict";
 /**
  * Workgroup Module Types
  * Client workload tracking module
  */
-export {};
+Object.defineProperty(exports, "__esModule", { value: true });
 //# sourceMappingURL=types.js.map

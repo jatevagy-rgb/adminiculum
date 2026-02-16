@@ -43,7 +43,7 @@ export declare function createTask(data: {
         matterType: string | null;
         sharepointRoot: string | null;
         sharepointSite: string | null;
-        caseAssignment: import("@prisma/client/runtime/library").JsonValue | null;
+        caseAssignment: import("@prisma/client/runtime/library.js").JsonValue | null;
         spSiteId: string | null;
         spDriveId: string | null;
         spFolderPath: string | null;
@@ -76,7 +76,7 @@ export declare function createTask(data: {
     createdAt: Date;
     updatedAt: Date;
     title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
+    skillProfile: import("@prisma/client/runtime/library.js").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;
@@ -112,7 +112,7 @@ export declare function getCaseTasks(caseId: string, filters?: {
     createdAt: Date;
     updatedAt: Date;
     title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
+    skillProfile: import("@prisma/client/runtime/library.js").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;
@@ -148,7 +148,7 @@ export declare function getTask(taskId: string): Promise<{
         matterType: string | null;
         sharepointRoot: string | null;
         sharepointSite: string | null;
-        caseAssignment: import("@prisma/client/runtime/library").JsonValue | null;
+        caseAssignment: import("@prisma/client/runtime/library.js").JsonValue | null;
         spSiteId: string | null;
         spDriveId: string | null;
         spFolderPath: string | null;
@@ -181,7 +181,7 @@ export declare function getTask(taskId: string): Promise<{
     createdAt: Date;
     updatedAt: Date;
     title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
+    skillProfile: import("@prisma/client/runtime/library.js").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;
@@ -208,7 +208,7 @@ export declare function startTask(taskId: string, userId: string): Promise<{
     createdAt: Date;
     updatedAt: Date;
     title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
+    skillProfile: import("@prisma/client/runtime/library.js").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;
@@ -235,7 +235,7 @@ export declare function submitTask(taskId: string, userId: string, notes?: strin
     createdAt: Date;
     updatedAt: Date;
     title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
+    skillProfile: import("@prisma/client/runtime/library.js").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;
@@ -262,7 +262,7 @@ export declare function completeTask(taskId: string, userId: string, approved: b
     createdAt: Date;
     updatedAt: Date;
     title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
+    skillProfile: import("@prisma/client/runtime/library.js").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;
@@ -294,7 +294,7 @@ export declare function reassignTask(taskId: string, newAssigneeId: string, reas
     createdAt: Date;
     updatedAt: Date;
     title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
+    skillProfile: import("@prisma/client/runtime/library.js").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;
@@ -353,7 +353,7 @@ export declare function autoGenerateTask(params: {
         matterType: string | null;
         sharepointRoot: string | null;
         sharepointSite: string | null;
-        caseAssignment: import("@prisma/client/runtime/library").JsonValue | null;
+        caseAssignment: import("@prisma/client/runtime/library.js").JsonValue | null;
         spSiteId: string | null;
         spDriveId: string | null;
         spFolderPath: string | null;
@@ -386,7 +386,7 @@ export declare function autoGenerateTask(params: {
     createdAt: Date;
     updatedAt: Date;
     title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
+    skillProfile: import("@prisma/client/runtime/library.js").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;
@@ -427,7 +427,7 @@ export declare function getUserTasks(userId: string, filters?: {
     createdAt: Date;
     updatedAt: Date;
     title: string;
-    skillProfile: import("@prisma/client/runtime/library").JsonValue | null;
+    skillProfile: import("@prisma/client/runtime/library.js").JsonValue | null;
     description: string | null;
     priority: import(".prisma/client").$Enums.Priority;
     completedAt: Date | null;

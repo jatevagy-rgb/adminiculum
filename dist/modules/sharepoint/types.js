@@ -1,8 +1,11 @@
+"use strict";
 /**
  * SharePoint Types
  * TypeScript interfaces for SharePoint Graph API responses
  */
-export const SHAREPOINT_FOLDERS = {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SPFolderToWorkflow = exports.WorkflowToSPFolder = exports.SHAREPOINT_FOLDERS = void 0;
+exports.SHAREPOINT_FOLDERS = {
     CONTRACTS: 'Contracts',
     CORRESPONDENCE: 'Correspondence',
     COURT_DOCUMENTS: 'CourtDocuments',
@@ -23,7 +26,7 @@ export const SHAREPOINT_FOLDERS = {
     WORKFLOW_ANONYMIZED: '08_Anonymized',
 };
 // Workflow mapping constants
-export const WorkflowToSPFolder = {
+exports.WorkflowToSPFolder = {
     'CLIENT_INPUT': '01_Client_Input',
     'DRAFT': '02_Drafts',
     'IN_REVIEW': '03_Review',
@@ -32,7 +35,7 @@ export const WorkflowToSPFolder = {
     'CLIENT_FEEDBACK': '06_Client_Feedback',
     'FINAL': '07_Final',
 };
-export const SPFolderToWorkflow = {
+exports.SPFolderToWorkflow = {
     '01_Client_Input': 'CLIENT_INPUT',
     '02_Drafts': 'DRAFT',
     '03_Review': 'IN_REVIEW',

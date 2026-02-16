@@ -1,12 +1,23 @@
+"use strict";
 /**
  * Case Workflow Service V2
  * Manages case status transitions
  * Uses V2 CaseStatus values from Prisma Schema
  */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.transitionRoles = exports.transitionMessages = exports.transitionEventMap = exports.statusColors = exports.statusDisplayNames = exports.allowedTransitions = void 0;
+exports.canTransition = canTransition;
+exports.getAvailableTransitions = getAvailableTransitions;
+exports.isTerminalStatus = isTerminalStatus;
+exports.canPerformTransition = canPerformTransition;
+exports.validateTransition = validateTransition;
+exports.getAvailableEvents = getAvailableEvents;
+exports.mapLegacyStatus = mapLegacyStatus;
+exports.getAllStatuses = getAllStatuses;
 /**
  * Allowed transitions between case statuses (V2)
  */
-export const allowedTransitions = {
+exports.allowedTransitions = {
     GENERATING: ['IN_PROGRESS'],
     IN_PROGRESS: ['REVIEW'],
     REVIEW: ['CLOSED', 'ARCHIVED'],
@@ -16,19 +27,19 @@ export const allowedTransitions = {
 /**
  * Check if a status transition is allowed
  */
-export function canTransition(from, to) {
-    return allowedTransitions[from]?.includes(to) ?? false;
+function canTransition(from, to) {
+    return exports.allowedTransitions[from]?.includes(to) ?? false;
 }
 /**
  * Get available next statuses for a given current status
  */
-export function getAvailableTransitions(currentStatus) {
-    return allowedTransitions[currentStatus] ?? [];
+function getAvailableTransitions(currentStatus) {
+    return exports.allowedTransitions[currentStatus] ?? [];
 }
 /**
  * Status display names in Hungarian (V2)
  */
-export const statusDisplayNames = {
+exports.statusDisplayNames = {
     GENERATING: 'Generálás folyamatban',
     IN_PROGRESS: 'Aktív ügy',
     REVIEW: 'Felülvizsgálat alatt',
@@ -38,7 +49,7 @@ export const statusDisplayNames = {
 /**
  * Status colors for UI (V2)
  */
-export const statusColors = {
+exports.statusColors = {
     GENERATING: '#f59e0b', // Amber
     IN_PROGRESS: '#3b82f6', // Blue
     REVIEW: '#8b5cf6', // Violet
@@ -48,13 +59,13 @@ export const statusColors = {
 /**
  * Check if status is terminal (no further transitions)
  */
-export function isTerminalStatus(status) {
+function isTerminalStatus(status) {
     return status === 'ARCHIVED' || status === 'CLOSED';
 }
 /**
  * Map transition events to status changes (V2)
  */
-export const transitionEventMap = {
+exports.transitionEventMap = {
     START_CASE: 'IN_PROGRESS',
     SUBMIT_FOR_REVIEW: 'REVIEW',
     APPROVE: 'CLOSED',
@@ -65,7 +76,7 @@ export const transitionEventMap = {
 /**
  * Transition event messages in Hungarian
  */
-export const transitionMessages = {
+exports.transitionMessages = {
     START_CASE: 'Ügy elindítva',
     SUBMIT_FOR_REVIEW: 'Felülvizsgálatra beküldve',
     APPROVE: 'Jóváhagyva',
@@ -76,7 +87,7 @@ export const transitionMessages = {
 /**
  * Allowed roles for each transition event (V2)
  */
-export const transitionRoles = {
+exports.transitionRoles = {
     START_CASE: ['TRAINEE', 'LEGAL_ASSISTANT'],
     SUBMIT_FOR_REVIEW: ['TRAINEE', 'LEGAL_ASSISTANT'],
     APPROVE: ['LAWYER', 'COLLAB_LAWYER'],
@@ -87,16 +98,16 @@ export const transitionRoles = {
 /**
  * Check if a user role can perform a transition event
  */
-export function canPerformTransition(event, role) {
-    return transitionRoles[event]?.includes(role) ?? false;
+function canPerformTransition(event, role) {
+    return exports.transitionRoles[event]?.includes(role) ?? false;
 }
 /**
  * Validate transition event and return next status
  * Throws error if transition is not allowed
  */
-export function validateTransition(currentStatus, event, userRole) {
+function validateTransition(currentStatus, event, userRole) {
     // Check if event is valid
-    const nextStatus = transitionEventMap[event];
+    const nextStatus = exports.transitionEventMap[event];
     if (!nextStatus) {
         throw new Error(`Érvénytelen esemény: ${event}`);
     }
@@ -113,10 +124,10 @@ export function validateTransition(currentStatus, event, userRole) {
 /**
  * Get all available transition events for a given status and role
  */
-export function getAvailableEvents(currentStatus, userRole) {
+function getAvailableEvents(currentStatus, userRole) {
     const nextStatuses = getAvailableTransitions(currentStatus);
-    return Object.keys(transitionEventMap).filter(event => {
-        const nextStatus = transitionEventMap[event];
+    return Object.keys(exports.transitionEventMap).filter(event => {
+        const nextStatus = exports.transitionEventMap[event];
         return (nextStatuses.includes(nextStatus) &&
             canPerformTransition(event, userRole));
     });
@@ -124,7 +135,7 @@ export function getAvailableEvents(currentStatus, userRole) {
 /**
  * Map legacy status to V2 status
  */
-export function mapLegacyStatus(legacyStatus) {
+function mapLegacyStatus(legacyStatus) {
     const mapping = {
         CLIENT_REGISTERED: 'IN_PROGRESS',
         DOCUMENT_GENERATED: 'IN_PROGRESS',
@@ -140,7 +151,7 @@ export function mapLegacyStatus(legacyStatus) {
 /**
  * Get all possible statuses for dropdowns
  */
-export function getAllStatuses() {
+function getAllStatuses() {
     return ['GENERATING', 'IN_PROGRESS', 'REVIEW', 'CLOSED', 'ARCHIVED'];
 }
 //# sourceMappingURL=workflow.js.map

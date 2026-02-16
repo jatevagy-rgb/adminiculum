@@ -1,9 +1,11 @@
+"use strict";
 /**
  * Cases Service V3 - Integrated with Documents + Timeline
  * Case management with timeline, documents, and summary endpoints
  */
-import { prisma } from '../../prisma/prisma.service';
-import { driveService } from '../sharepoint';
+Object.defineProperty(exports, "__esModule", { value: true });
+const prisma_service_1 = require("../../prisma/prisma.service");
+const sharepoint_1 = require("../sharepoint");
 // Prisma schema enum values
 const VALID_MATTER_TYPES = ['REAL_ESTATE_SALE', 'LEASE', 'EMPLOYMENT', 'CORPORATE', 'LITIGATION', 'OTHER'];
 const DEFAULT_MATTER_TYPE = 'OTHER';
@@ -15,12 +17,12 @@ class CasesService {
     async getCases(params) {
         const { page = 1, limit = 20 } = params;
         const [cases, total] = await Promise.all([
-            prisma.case.findMany({
+            prisma_service_1.prisma.case.findMany({
                 orderBy: { updatedAt: 'desc' },
                 skip: (page - 1) * limit,
                 take: limit
             }),
-            prisma.case.count()
+            prisma_service_1.prisma.case.count()
         ]);
         const data = cases.map((c) => ({
             id: c.id,
@@ -41,7 +43,7 @@ class CasesService {
      * Get case by ID
      */
     async getCaseById(caseId) {
-        const caseData = await prisma.case.findUnique({
+        const caseData = await prisma_service_1.prisma.case.findUnique({
             where: { id: caseId }
         });
         if (!caseData)
@@ -65,7 +67,7 @@ class CasesService {
      * Get timeline events for a case
      */
     async getCaseTimeline(caseId) {
-        const events = await prisma.timelineEvent.findMany({
+        const events = await prisma_service_1.prisma.timelineEvent.findMany({
             where: { caseId },
             orderBy: { createdAt: 'desc' },
             include: {
@@ -92,7 +94,7 @@ class CasesService {
      * Get documents for a case
      */
     async getCaseDocuments(caseId) {
-        const documents = await prisma.document.findMany({
+        const documents = await prisma_service_1.prisma.document.findMany({
             where: { caseId },
             orderBy: { createdAt: 'desc' }
         });
@@ -114,13 +116,13 @@ class CasesService {
      * Get case summary with timeline, documents, and stats
      */
     async getCaseSummary(caseId) {
-        const caseData = await prisma.case.findUnique({
+        const caseData = await prisma_service_1.prisma.case.findUnique({
             where: { id: caseId }
         });
         if (!caseData)
             return null;
         // Get last 5 timeline events
-        const timelineEvents = await prisma.timelineEvent.findMany({
+        const timelineEvents = await prisma_service_1.prisma.timelineEvent.findMany({
             where: { caseId },
             orderBy: { createdAt: 'desc' },
             take: 5,
@@ -134,7 +136,7 @@ class CasesService {
             }
         });
         // Get active documents
-        const documents = await prisma.document.findMany({
+        const documents = await prisma_service_1.prisma.document.findMany({
             where: { caseId },
             orderBy: { createdAt: 'desc' }
         });
@@ -185,11 +187,11 @@ class CasesService {
      */
     async createCase(params) {
         const year = new Date().getFullYear();
-        const count = await prisma.case.count();
+        const count = await prisma_service_1.prisma.case.count();
         const caseNumber = `CASE-${year}-${String(count + 1).padStart(3, '0')}`;
         // Use default if invalid matterType
         const matterType = VALID_MATTER_TYPES.includes(params.matterType) ? params.matterType : DEFAULT_MATTER_TYPE;
-        const newCase = await prisma.case.create({
+        const newCase = await prisma_service_1.prisma.case.create({
             data: {
                 caseNumber,
                 clientName: params.clientName,
@@ -202,9 +204,9 @@ class CasesService {
             }
         });
         // Create case folder in SharePoint
-        await driveService.createCaseFolders(caseNumber, params.clientName);
+        await sharepoint_1.driveService.createCaseFolders(caseNumber, params.clientName);
         // Create TimelineEvent for case creation
-        await prisma.timelineEvent.create({
+        await prisma_service_1.prisma.timelineEvent.create({
             data: {
                 caseId: newCase.id,
                 userId: params.createdById,
@@ -228,19 +230,19 @@ class CasesService {
      * Update case status
      */
     async updateCaseStatus(caseId, newStatus, userId, comment) {
-        const caseData = await prisma.case.findUnique({ where: { id: caseId } });
+        const caseData = await prisma_service_1.prisma.case.findUnique({ where: { id: caseId } });
         if (!caseData) {
             throw new Error('Case not found');
         }
         const previousStatus = caseData.status;
-        const updatedCase = await prisma.case.update({
+        const updatedCase = await prisma_service_1.prisma.case.update({
             where: { id: caseId },
             data: {
                 status: newStatus
             }
         });
         // Create TimelineEvent for status change
-        await prisma.timelineEvent.create({
+        await prisma_service_1.prisma.timelineEvent.create({
             data: {
                 caseId,
                 userId,
@@ -265,7 +267,7 @@ class CasesService {
      */
     async assignUser(caseId, userId, role, assignedById) {
         // Use any type to bypass Prisma type checking
-        const assignment = await prisma.caseAssignment.create({
+        const assignment = await prisma_service_1.prisma.caseAssignment.create({
             data: {
                 caseId,
                 userId,
@@ -273,7 +275,7 @@ class CasesService {
             }
         });
         // Create TimelineEvent for assignment
-        await prisma.timelineEvent.create({
+        await prisma_service_1.prisma.timelineEvent.create({
             data: {
                 caseId,
                 userId: assignedById,
@@ -300,10 +302,10 @@ class CasesService {
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const [totalCases, inReview, pendingClient, completedThisMonth] = await Promise.all([
-            prisma.case.count(),
-            prisma.case.count({ where: { status: 'IN_REVIEW' } }),
-            prisma.case.count({ where: { status: 'CLIENT_INPUT' } }),
-            prisma.case.count({
+            prisma_service_1.prisma.case.count(),
+            prisma_service_1.prisma.case.count({ where: { status: 'IN_REVIEW' } }),
+            prisma_service_1.prisma.case.count({ where: { status: 'CLIENT_INPUT' } }),
+            prisma_service_1.prisma.case.count({
                 where: {
                     status: 'FINAL',
                     updatedAt: { gte: startOfMonth }
@@ -311,7 +313,7 @@ class CasesService {
             })
         ]);
         // Get recent activity
-        const recentEvents = await prisma.timelineEvent.findMany({
+        const recentEvents = await prisma_service_1.prisma.timelineEvent.findMany({
             orderBy: { createdAt: 'desc' },
             take: 10
         });
@@ -336,18 +338,18 @@ class CasesService {
      * Get workflow data for workflow map visualization
      */
     async getWorkflow(caseId) {
-        const caseData = await prisma.case.findUnique({
+        const caseData = await prisma_service_1.prisma.case.findUnique({
             where: { id: caseId }
         });
         if (!caseData)
             return null;
         // Get all timeline events
-        const events = await prisma.timelineEvent.findMany({
+        const events = await prisma_service_1.prisma.timelineEvent.findMany({
             where: { caseId },
             orderBy: { createdAt: 'asc' }
         });
         // Get latest document
-        const latestDoc = await prisma.document.findFirst({
+        const latestDoc = await prisma_service_1.prisma.document.findFirst({
             where: { caseId },
             orderBy: { createdAt: 'desc' }
         });
@@ -433,5 +435,5 @@ class CasesService {
         };
     }
 }
-export default new CasesService();
+exports.default = new CasesService();
 //# sourceMappingURL=services.js.map

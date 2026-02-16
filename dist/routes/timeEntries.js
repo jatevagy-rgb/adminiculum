@@ -1,3 +1,4 @@
+"use strict";
 // ============================================================================
 // TIME ENTRIES API ROUTES
 // ============================================================================
@@ -5,10 +6,11 @@
 // CRUD operations for TimeEntries (billable hours)
 // Creates TimelineEvent when time is logged
 // ============================================================================
-import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
-const router = Router();
-const prisma = new PrismaClient();
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const client_1 = require("@prisma/client");
+const router = (0, express_1.Router)();
+const prisma = new client_1.PrismaClient();
 // ============================================================================
 // GET /api/v1/time-entries - List time entries
 // ============================================================================
@@ -306,5 +308,5 @@ router.delete('/:id', async (req, res) => {
         res.status(500).json({ error: 'Failed to delete time entry' });
     }
 });
-export default router;
+exports.default = router;
 //# sourceMappingURL=timeEntries.js.map

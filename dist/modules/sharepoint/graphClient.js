@@ -1,7 +1,9 @@
+"use strict";
 /**
  * Graph Client Service
  * Microsoft Graph API client using native fetch
  */
+Object.defineProperty(exports, "__esModule", { value: true });
 class GraphClientService {
     config;
     accessToken = null;
@@ -115,5 +117,5 @@ class GraphClientService {
         return !!(this.config.clientId && this.config.clientSecret && this.config.tenantId);
     }
 }
-export default new GraphClientService();
+exports.default = new GraphClientService();
 //# sourceMappingURL=graphClient.js.map

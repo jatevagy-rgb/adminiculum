@@ -1,3 +1,4 @@
+"use strict";
 /**
  * SharePoint Module Index
  * Unified SharePoint integration via Microsoft Graph API
@@ -7,9 +8,33 @@
  * - driveService: High-level document and folder operations
  * - types: TypeScript interfaces and constants
  */
-export { default as graphClient } from './graphClient';
-export { default as driveService } from './driveService';
-export * from './types';
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SPFolderToWorkflow = exports.WorkflowToSPFolder = exports.SHAREPOINT_FOLDERS = exports.driveService = exports.graphClient = void 0;
+var graphClient_1 = require("./graphClient");
+Object.defineProperty(exports, "graphClient", { enumerable: true, get: function () { return __importDefault(graphClient_1).default; } });
+var driveService_1 = require("./driveService");
+Object.defineProperty(exports, "driveService", { enumerable: true, get: function () { return __importDefault(driveService_1).default; } });
+__exportStar(require("./types"), exports);
 // Re-export for convenience
-export { SHAREPOINT_FOLDERS, WorkflowToSPFolder, SPFolderToWorkflow, } from './types';
+var types_1 = require("./types");
+Object.defineProperty(exports, "SHAREPOINT_FOLDERS", { enumerable: true, get: function () { return types_1.SHAREPOINT_FOLDERS; } });
+Object.defineProperty(exports, "WorkflowToSPFolder", { enumerable: true, get: function () { return types_1.WorkflowToSPFolder; } });
+Object.defineProperty(exports, "SPFolderToWorkflow", { enumerable: true, get: function () { return types_1.SPFolderToWorkflow; } });
 //# sourceMappingURL=index.js.map
