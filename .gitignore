@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.txt
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test coverage
+coverage/
+
+# Temporary files
+tmp/
+temp/
+
+# Uploads (keep directory structure but ignore content)
+uploads/*
+!uploads/.gitkeep
+
+# Downloaded files
+downloaded_*.docx
+
+# Login responses
+login_response.json
+
+# Plans (development)
+plans/
+-p/
+copy/
+
+# Fix scripts
+fix-migrations.js
+setup-baseline.js

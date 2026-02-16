@@ -1,0 +1,1215 @@
+# ========================================
+# ADMINICULUM API Specification
+# Swagger/OpenAPI 3.0.3
+# ========================================
+
+openapi: 3.0.3
+info:
+  title: Adminiculum API
+  description: Legal Document Management System API
+  version: 1.0.0
+  contact:
+    name: Adminiculum Dev Team
+    email: dev@adminiculum.hu
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Development server
+  - url: https://api.adminiculum.hu/api/v1
+    description: Production server
+
+tags:
+  - name: Authentication
+    description: User authentication endpoints
+  - name: Users
+    description: User and team management
+  - name: Cases
+    description: Case management
+  - name: Documents
+    description: Document generation and management
+  - name: Tasks
+    description: Task management
+  - name: Messages
+    description: Activity log and messages
+  - name: Activity
+    description: Activity log (renamed from Messages)
+  - name: Clients
+    description: Client management
+  - name: Settings
+    description: User settings
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # Common
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+        code:
+          type: string
+
+    Success:
+      type: object
+      properties:
+        success:
+          type: boolean
+
+    # User
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [LAWYER, COLLABORATING_LAWYER, TRAINEE, ASSISTANT]
+        supervisorId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    UserWithSkills:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            skills:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  level:
+                    type: integer
+            lastActivity:
+              type: string
+              format: date-time
+
+    UserProfile:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            supervisor:
+              type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+            skills:
+              type: array
+              items:
+                type: object
+                  properties:
+                    name:
+                      type: string
+                    level:
+                      type: integer
+            recentTasks:
+              type: array
+              items:
+                type: object
+                  properties:
+                    id:
+                      type: string
+                      format: uuid
+                    title:
+                      type: string
+                    status:
+                      type: string
+
+    # Skill
+    SkillInput:
+      type: object
+      required:
+        - skillName
+        - level
+      properties:
+        skillName:
+          type: string
+        level:
+          type: integer
+          minimum: 1
+          maximum: 5
+
+    # Case
+    Case:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          type: string
+          enum: [NEW, GENERATING, REVIEW, TRANSLATION, FINAL, ARCHIVED]
+        clientId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+    CaseDetail:
+      allOf:
+        - $ref: '#/components/schemas/Case'
+        - type: object
+          properties:
+            documents:
+              type: array
+              items:
+                type: object
+                  properties:
+                    id:
+                      type: string
+                      format: uuid
+                    name:
+                      type: string
+                    status:
+                      type: string
+            tasks:
+              type: array
+              items:
+                type: object
+                  properties:
+                    id:
+                      type: string
+                      format: uuid
+                    title:
+                      type: string
+                    assignedTo:
+                      type: string
+                    status:
+                      type: string
+
+    CaseCreateInput:
+      type: object
+      required:
+        - clientId
+        - title
+      properties:
+        clientId:
+          type: string
+          format: uuid
+        title:
+          type: string
+
+    # Document
+    Document:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        documentId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+          enum: [DRAFT, IN_REVIEW, APPROVED, REJECTED, REDACTED]
+
+    DocumentGenerateInput:
+      type: object
+      required:
+        - caseId
+        - templateType
+        - data
+      properties:
+        caseId:
+          type: string
+          format: uuid
+        templateType:
+          type: string
+          enum: [ADASVETEL, BERLET, MUNKASZERZODES]
+        data:
+          type: object
+          additionalProperties: true
+
+    DocumentRedactInput:
+      type: object
+      required:
+        - redactFields
+      properties:
+        redactFields:
+          type: array
+          items:
+            type: string
+            enum: [név, születési dátum, lakcím, személyi szám, bankszámlaszám, helyrajzi szám]
+
+    # Task
+    Task:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          type: string
+          enum: [TODO, IN_PROGRESS, DONE]
+        priority:
+          type: string
+          enum: [LOW, MEDIUM, HIGH]
+        caseId:
+          type: string
+          format: uuid
+        assignedToId:
+          type: string
+          format: uuid
+        createdById:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+    TaskCreateInput:
+      type: object
+      required:
+        - title
+        - assignedTo
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        assignedTo:
+          type: string
+          format: uuid
+        caseId:
+          type: string
+          format: uuid
+        priority:
+          type: string
+          enum: [LOW, MEDIUM, HIGH]
+          default: MEDIUM
+
+    # Message
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [DOCUMENT_GENERATED, DOCUMENT_REVIEW, USER_LOGIN, TASK_COMPLETED, CASE_CREATED]
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    # Settings
+    Settings:
+      type: object
+      properties:
+        themeColor:
+          type: string
+          example: "#112233"
+        sidebarPosition:
+          type: string
+          enum: [LEFT, RIGHT]
+        language:
+          type: string
+          example: "hu"
+
+  parameters:
+    UserIdParam:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CaseIdParam:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DocumentIdParam:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TaskIdParam:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RoleQuery:
+      in: query
+      name: role
+      schema:
+        type: string
+        enum: [LAWYER, COLLABORATING_LAWYER, TRAINEE, ASSISTANT]
+    AssignedToQuery:
+      in: query
+      name: assignedTo
+      schema:
+        type: string
+        format: uuid
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ========================================
+  # 1. AUTHENTICATION
+  # ========================================
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                      role:
+                        type: string
+                        enum: [LAWYER, COLLABORATING_LAWYER, TRAINEE, ASSISTANT]
+
+    /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout successful
+
+  /auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current user data
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  role:
+                    type: string
+                  settings:
+                    type: object
+                    properties:
+                      themeColor:
+                        type: string
+                      language:
+                        type: string
+
+  # ========================================
+  # 2. USERS / MUNKATÁRSAK
+  # ========================================
+
+  /users:
+    get:
+      tags:
+        - Users
+      summary: Get users list with role filtering
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RoleQuery'
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      format: uuid
+                    name:
+                      type: string
+                    role:
+                      type: string
+                    skills:
+                      type: array
+                      items:
+                        type: object
+                          properties:
+                            name:
+                              type: string
+                            level:
+                              type: integer
+                    lastActivity:
+                      type: string
+                      format: date-time
+
+    post:
+      tags:
+        - Users
+      summary: Create new user (LAWYER or COLLABORATING_LAWYER only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - email
+                - role
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                role:
+                  type: string
+                  enum: [LAWYER, COLLABORATING_LAWYER, TRAINEE, ASSISTANT]
+                supervisorId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  role:
+                    type: string
+                  supervisorId:
+                    type: string
+                    format: uuid
+                    nullable: true
+
+  /users/{id}:
+    get:
+      tags:
+        - Users
+      summary: Get user profile
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  role:
+                    type: string
+                  supervisorId:
+                    type: string
+                    format: uuid
+                    nullable: true
+                  supervisor:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                  skills:
+                    type: array
+                    items:
+                      type: object
+                        properties:
+                          name:
+                            type: string
+                          level:
+                            type: integer
+                  recentTasks:
+                    type: array
+                    items:
+                      type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          title:
+                            type: string
+                          status:
+                            type: string
+
+    patch:
+      tags:
+        - Users
+      summary: Update user
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                role:
+                  type: string
+                  enum: [LAWYER, COLLABORATING_LAWYER, TRAINEE, ASSISTANT]
+                supervisorId:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        '200':
+          description: User updated
+
+  /users/{id}/skills:
+    get:
+      tags:
+        - Users
+      summary: Get user skills
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+      responses:
+        '200':
+          description: User skills list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                      level:
+                        type: integer
+                      createdAt:
+                        type: string
+                        format: date-time
+
+    post:
+      tags:
+        - Users
+      summary: Add or update skill
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - level
+              properties:
+                name:
+                  type: string
+                level:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+      responses:
+        '200':
+          description: Skill added/updated
+
+  # ========================================
+  # 2B. CLIENTS (ÜGYFELEK)
+  # ========================================
+
+  /clients:
+    get:
+      tags:
+        - Clients
+      summary: Get clients list
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                      email:
+                        type: string
+                        nullable: true
+                      phone:
+                        type: string
+                        nullable: true
+                      createdAt:
+                        type: string
+                        format: date-time
+
+    post:
+      tags:
+        - Clients
+      summary: Create new client
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                phone:
+                  type: string
+      responses:
+        '201':
+          description: Client created
+
+  /clients/{id}:
+    get:
+      tags:
+        - Clients
+      summary: Get client details
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Client details
+
+  /clients/{id}/cases:
+    get:
+      tags:
+        - Clients
+      summary: Get client cases
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Client cases list
+    get:
+      tags:
+        - Cases
+      summary: Get cases list
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of cases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      title:
+                        type: string
+                      status:
+                        type: string
+                        enum: [OPEN, IN_REVIEW, CLOSED]
+                      createdAt:
+                        type: string
+                        format: date-time
+
+    post:
+      tags:
+        - Cases
+      summary: Create new case
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CaseCreateInput'
+      responses:
+        '201':
+          description: Case created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  title:
+                    type: string
+                  status:
+                    type: string
+
+  /cases/{id}:
+    get:
+      tags:
+        - Cases
+      summary: Get case details
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CaseIdParam'
+      responses:
+        '200':
+          description: Case details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  title:
+                    type: string
+                  status:
+                    type: string
+                  clientId:
+                    type: string
+                    format: uuid
+                  client:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                  documents:
+                    type: array
+                    items:
+                      type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          name:
+                            type: string
+                          status:
+                            type: string
+                  tasks:
+                    type: array
+                    items:
+                      type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          title:
+                            type: string
+                          assignedTo:
+                            type: string
+                          status:
+                            type: string
+
+    patch:
+      tags:
+        - Cases
+      summary: Update case
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CaseIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                status:
+                  type: string
+                  enum: [NEW, GENERATING, REVIEW, TRANSLATION, FINAL, ARCHIVED]
+      responses:
+        '200':
+          description: Case updated
+
+  # ========================================
+  # 4. DOCUMENTS (DOKUMENTUMOK)
+  # ========================================
+
+  /documents/generate:
+    post:
+      tags:
+        - Documents
+      summary: Generate document from template
+      description: Creates a document and automatically sets status to IN_REVIEW
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentGenerateInput'
+      responses:
+        '201':
+          description: Document generated and sent to review
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documentId:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: "IN_REVIEW"
+
+  /documents/{id}/upload:
+    post:
+      tags:
+        - Documents
+      summary: Upload Word document
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DocumentIdParam'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - caseId
+              properties:
+                file:
+                  type: string
+                  format: binary
+                caseId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Document uploaded
+
+  /documents/{id}/redact:
+    post:
+      tags:
+        - Documents
+      summary: Automatic anonymization (ChatGPT-safe)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DocumentIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentRedactInput'
+      responses:
+        '200':
+          description: Document redacted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documentId:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: "REDACTED"
+
+  # ========================================
+  # 5. TASKS (FELADATOK)
+  # ========================================
+
+  /tasks:
+    get:
+      tags:
+        - Tasks
+      summary: Get tasks list
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AssignedToQuery'
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+
+    post:
+      tags:
+        - Tasks
+      summary: Create task
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreateInput'
+      responses:
+        '201':
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+
+  /tasks/{id}/complete:
+    post:
+      tags:
+        - Tasks
+      summary: Complete task
+      description: When task is completed, document goes to review
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TaskIdParam'
+      responses:
+        '200':
+          description: Task completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "COMPLETED"
+                  documentStatus:
+                    type: string
+                    example: "IN_REVIEW"
+
+  # ========================================
+  # 6. ACTIVITY / MESSAGES
+  # ========================================
+
+  /activity:
+    get:
+      tags:
+        - Activity
+      summary: Get activity feed
+      description: System log and activity feed (not chat)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: caseId
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Activity log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      type:
+                        type: string
+                        enum: [DOCUMENT_GENERATED, DOCUMENT_UPLOADED, DOCUMENT_REDACTED, DOCUMENT_REVIEWED, TASK_ASSIGNED, TASK_COMPLETED, USER_CREATED, CASE_CREATED]
+                      message:
+                        type: string
+                      user:
+                        type: string
+                      createdAt:
+                        type: string
+                        format: date-time
+
+  # ========================================
+  # 6B. MESSAGES (Legacy - renamed to activity)
+  # ========================================
+
+  /messages:
+    get:
+      tags:
+        - Messages
+      summary: Get activity feed (Legacy endpoint)
+      description: System log and activity feed - use /activity instead
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Activity log entries
+
+  # ========================================
+  # 7. SETTINGS
+  # ========================================
+
+  /settings/me:
+    get:
+      tags:
+        - Settings
+      summary: Get current user settings
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  themeColor:
+                    type: string
+                    example: "#4F46E5"
+                  sidebarPosition:
+                    type: string
+                    enum: [LEFT, RIGHT]
+                  language:
+                    type: string
+                    example: "hu"
+
+    patch:
+      tags:
+        - Settings
+      summary: Update current user settings
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                themeColor:
+                  type: string
+                sidebarPosition:
+                  type: string
+                  enum: [LEFT, RIGHT]
+                language:
+                  type: string
+      responses:
+        '200':
+          description: Settings updated
