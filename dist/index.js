@@ -16,7 +16,8 @@ const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const js_yaml_1 = __importDefault(require("js-yaml"));
 const app = (0, express_1.default)();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
+// Azure uses PORT env var, but we force 3000 for stability
 // Middleware
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)({
@@ -55,8 +56,9 @@ app.get('/api/v1/openapi.json', (_req, res) => {
         const swaggerPath = path_1.default.join(__dirname, '..', 'swagger.yaml');
         const swaggerContent = fs_1.default.readFileSync(swaggerPath, 'utf8');
         const swaggerJson = js_yaml_1.default.load(swaggerContent);
-        // Power Apps doesn't accept protocol in host - remove http://
-        swaggerJson.servers = [{ url: 'localhost:3000' }];
+        // Power Apps doesn't accept protocol in host
+        const baseUrl = process.env.WEBSITE_HOSTNAME || 'localhost:3000';
+        swaggerJson.servers = [{ url: 'https://' + baseUrl }];
         res.json(swaggerJson);
     }
     catch (error) {
@@ -71,7 +73,8 @@ app.get('/openapi.json', (_req, res) => {
         const swaggerContent = fs_1.default.readFileSync(swaggerPath, 'utf8');
         const swaggerJson = js_yaml_1.default.load(swaggerContent);
         // Power Apps doesn't accept protocol in host
-        swaggerJson.servers = [{ url: 'localhost:3000' }];
+        const baseUrl = process.env.WEBSITE_HOSTNAME || 'localhost:3000';
+        swaggerJson.servers = [{ url: 'https://' + baseUrl }];
         res.json(swaggerJson);
     }
     catch (error) {
