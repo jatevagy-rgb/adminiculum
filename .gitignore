@@ -50,3 +50,15 @@ copy/
 # Fix scripts
 fix-migrations.js
 setup-baseline.js
+
+# Secrets - these files contain sensitive credentials
+POWER_APPS_OAUTH_CONFIG.md
+scripts/create-legalcases-site.js
+scripts/get-sharepoint-ids.js
+scripts/list-all-sites.js
+
+# Large deployment files
+deploy*.zip
+deploy*.tar*
+deploy-azure*
+deploy-package*
