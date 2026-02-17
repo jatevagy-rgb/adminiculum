@@ -1,17 +1,55 @@
+"use strict";
 /**
  * Contracts Routes
  * API endpoints for contract template management and document generation
  */
-import { Router } from 'express';
-import contractsService from './services';
-import { authenticate } from '../../middleware/auth';
-import { prisma } from '../../prisma/prisma.service';
-import { ADASVETEL_VARIABLES } from './types';
-import multer from 'multer';
-const router = Router();
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const services_1 = __importDefault(require("./services"));
+const auth_1 = require("../../middleware/auth");
+const prisma_service_1 = require("../../prisma/prisma.service");
+const types_1 = require("./types");
+const multer_1 = __importDefault(require("multer"));
+const router = (0, express_1.Router)();
 // Configure multer for file uploads
-const upload = multer({
-    storage: multer.memoryStorage(),
+const upload = (0, multer_1.default)({
+    storage: multer_1.default.memoryStorage(),
     limits: {
         fileSize: 10 * 1024 * 1024, // 10MB limit
     },
@@ -28,10 +66,10 @@ const upload = multer({
  * GET /api/v1/contracts/templates
  * List all contract templates
  */
-router.get('/templates', authenticate, async (req, res) => {
+router.get('/templates', auth_1.authenticate, async (req, res) => {
     try {
         const category = req.query.category;
-        const templates = await contractsService.getTemplates(category);
+        const templates = await services_1.default.getTemplates(category);
         res.json(templates);
     }
     catch (error) {
@@ -47,10 +85,10 @@ router.get('/templates', authenticate, async (req, res) => {
  * GET /api/v1/contracts/templates/:id
  * Get template by ID with variables
  */
-router.get('/templates/:id', authenticate, async (req, res) => {
+router.get('/templates/:id', auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
-        const template = await contractsService.getTemplateById(id);
+        const template = await services_1.default.getTemplateById(id);
         if (!template) {
             res.status(404).json({
                 status: 404,
@@ -74,17 +112,17 @@ router.get('/templates/:id', authenticate, async (req, res) => {
  * GET /api/v1/contracts/templates/adasvetel/variables
  * Get predefined variables for adásvételi contract
  */
-router.get('/templates/adasvetel/variables', authenticate, async (req, res) => {
+router.get('/templates/adasvetel/variables', auth_1.authenticate, async (req, res) => {
     res.json({
         category: 'ADASVETEL',
-        variables: ADASVETEL_VARIABLES
+        variables: types_1.ADASVETEL_VARIABLES
     });
 });
 /**
  * POST /api/v1/contracts/templates
  * Upload and register new template
  */
-router.post('/templates', authenticate, upload.single('template'), async (req, res) => {
+router.post('/templates', auth_1.authenticate, upload.single('template'), async (req, res) => {
     try {
         const userId = req.user?.userId;
         const { name, description, category, variables } = req.body;
@@ -105,7 +143,7 @@ router.post('/templates', authenticate, upload.single('template'), async (req, r
             return;
         }
         // Save template file
-        const templatePath = await contractsService.saveTemplateFile({
+        const templatePath = await services_1.default.saveTemplateFile({
             name: req.file.originalname,
             data: req.file.buffer
         });
@@ -119,7 +157,7 @@ router.post('/templates', authenticate, upload.single('template'), async (req, r
                 parsedVariables = [];
             }
         }
-        const template = await contractsService.createTemplate({
+        const template = await services_1.default.createTemplate({
             name,
             description,
             category: category,
@@ -151,7 +189,7 @@ router.post('/templates', authenticate, upload.single('template'), async (req, r
  * POST /api/v1/contracts/generate
  * Generate contract document
  */
-router.post('/generate', authenticate, async (req, res) => {
+router.post('/generate', auth_1.authenticate, async (req, res) => {
     try {
         const userId = req.user?.userId;
         const { templateId, caseId, data, title } = req.body;
@@ -163,7 +201,7 @@ router.post('/generate', authenticate, async (req, res) => {
             });
             return;
         }
-        const result = await contractsService.generateContract({
+        const result = await services_1.default.generateContract({
             templateId,
             caseId,
             data,
@@ -193,7 +231,7 @@ router.post('/generate', authenticate, async (req, res) => {
  * POST /api/v1/contracts/preview
  * Generate preview (temporary, auto-deleted after 24h)
  */
-router.post('/preview', authenticate, async (req, res) => {
+router.post('/preview', auth_1.authenticate, async (req, res) => {
     try {
         const { templateId, data } = req.body;
         if (!templateId || !data) {
@@ -204,7 +242,7 @@ router.post('/preview', authenticate, async (req, res) => {
             });
             return;
         }
-        const result = await contractsService.generatePreview({
+        const result = await services_1.default.generatePreview({
             templateId,
             data
         });
@@ -231,10 +269,10 @@ router.post('/preview', authenticate, async (req, res) => {
  * GET /api/v1/contracts/case/:caseId
  * Get generated contracts for a case
  */
-router.get('/case/:caseId', authenticate, async (req, res) => {
+router.get('/case/:caseId', auth_1.authenticate, async (req, res) => {
     try {
         const { caseId } = req.params;
-        const contracts = await contractsService.getCaseContracts(caseId);
+        const contracts = await services_1.default.getCaseContracts(caseId);
         res.json(contracts);
     }
     catch (error) {
@@ -250,10 +288,10 @@ router.get('/case/:caseId', authenticate, async (req, res) => {
  * GET /api/v1/contracts/:id/download
  * Download generated contract
  */
-router.get('/:id/download', authenticate, async (req, res) => {
+router.get('/:id/download', auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
-        const generation = await prisma.contractGeneration.findUnique({
+        const generation = await prisma_service_1.prisma.contractGeneration.findUnique({
             where: { id }
         });
         if (!generation) {
@@ -265,7 +303,7 @@ router.get('/:id/download', authenticate, async (req, res) => {
             return;
         }
         // Check if file exists
-        const fs = await import('fs');
+        const fs = await Promise.resolve().then(() => __importStar(require('fs')));
         if (!fs.existsSync(generation.filePath)) {
             res.status(404).json({
                 status: 404,
@@ -289,10 +327,10 @@ router.get('/:id/download', authenticate, async (req, res) => {
  * POST /api/v1/contracts/:id/upload-sharepoint
  * Upload generated contract to SharePoint
  */
-router.post('/:id/upload-sharepoint', authenticate, async (req, res) => {
+router.post('/:id/upload-sharepoint', auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
-        const result = await contractsService.uploadToSharePoint(id);
+        const result = await services_1.default.uploadToSharePoint(id);
         if (!result.success) {
             res.status(400).json({
                 status: 400,
@@ -320,11 +358,11 @@ router.post('/:id/upload-sharepoint', authenticate, async (req, res) => {
  * POST /api/v1/contracts/cleanup
  * Cleanup expired previews (admin only)
  */
-router.post('/cleanup', authenticate, async (req, res) => {
+router.post('/cleanup', auth_1.authenticate, async (req, res) => {
     try {
         const userId = req.user?.userId;
         // Verify admin role
-        const user = await prisma.user.findUnique({
+        const user = await prisma_service_1.prisma.user.findUnique({
             where: { id: userId }
         });
         if (user?.role !== 'ADMIN') {
@@ -335,7 +373,7 @@ router.post('/cleanup', authenticate, async (req, res) => {
             });
             return;
         }
-        const count = await contractsService.cleanupExpiredPreviews();
+        const count = await services_1.default.cleanupExpiredPreviews();
         res.json({
             success: true,
             deletedCount: count
@@ -350,5 +388,5 @@ router.post('/cleanup', authenticate, async (req, res) => {
         });
     }
 });
-export default router;
+exports.default = router;
 //# sourceMappingURL=routes.js.map

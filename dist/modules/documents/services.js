@@ -1,10 +1,12 @@
+"use strict";
 /**
  * Documents Service V2 - Integrated with Case + Timeline
  * Document management with SharePoint integration + automatic workflow
  */
-import { prisma } from '../../prisma/prisma.service';
-import { driveService } from '../sharepoint';
-import { FOLDER_BY_DOCUMENT_TYPE } from './types';
+Object.defineProperty(exports, "__esModule", { value: true });
+const prisma_service_1 = require("../../prisma/prisma.service");
+const sharepoint_1 = require("../sharepoint");
+const types_1 = require("./types");
 const DEFAULT_FOLDER = 'Drafts';
 // Map document types to SpFolder enum values
 const FOLDER_MAP = {
@@ -33,17 +35,17 @@ class DocumentsService {
     async createDocument(input) {
         try {
             // 1. Verify case exists
-            const caseData = await prisma.case.findUnique({
+            const caseData = await prisma_service_1.prisma.case.findUnique({
                 where: { id: input.caseId }
             });
             if (!caseData) {
                 throw new Error('Case not found');
             }
             // 2. Determine SharePoint folder
-            const folderType = input.folder || FOLDER_BY_DOCUMENT_TYPE[input.documentType] || DEFAULT_FOLDER;
+            const folderType = input.folder || types_1.FOLDER_BY_DOCUMENT_TYPE[input.documentType] || DEFAULT_FOLDER;
             const prismaFolder = (FOLDER_MAP[folderType] || 'DRAFTS');
             // 3. Upload to SharePoint
-            const uploadResult = await driveService.uploadDocument({
+            const uploadResult = await sharepoint_1.driveService.uploadDocument({
                 caseId: input.caseId,
                 fileName: input.fileName,
                 content: input.fileContent,
@@ -54,7 +56,7 @@ class DocumentsService {
                 throw new Error(uploadResult.error || 'SharePoint upload failed');
             }
             // 4. Create CaseDocument record in database
-            const document = await prisma.document.create({
+            const document = await prisma_service_1.prisma.document.create({
                 data: {
                     caseId: input.caseId,
                     spItemId: uploadResult.item.id,
@@ -68,7 +70,7 @@ class DocumentsService {
                 }
             });
             // 5. Create TimelineEvent for document creation
-            await prisma.timelineEvent.create({
+            await prisma_service_1.prisma.timelineEvent.create({
                 data: {
                     caseId: input.caseId,
                     userId: input.createdById,
@@ -86,7 +88,7 @@ class DocumentsService {
                 }
             });
             // 6. Update Case status to DRAFT
-            await prisma.case.update({
+            await prisma_service_1.prisma.case.update({
                 where: { id: input.caseId },
                 data: { status: 'DRAFT' }
             });
@@ -116,7 +118,7 @@ class DocumentsService {
      * Get all documents for a case
      */
     async getCaseDocuments(caseId) {
-        const documents = await prisma.document.findMany({
+        const documents = await prisma_service_1.prisma.document.findMany({
             where: { caseId },
             orderBy: { createdAt: 'desc' }
         });
@@ -136,19 +138,19 @@ class DocumentsService {
      */
     async uploadNewVersion(documentId, fileContent, userId, comment) {
         try {
-            const document = await prisma.document.findUnique({
+            const document = await prisma_service_1.prisma.document.findUnique({
                 where: { id: documentId }
             });
             if (!document) {
                 throw new Error('Document not found');
             }
             // Upload new version to SharePoint
-            const uploadResult = await driveService.uploadNewVersion(document.spItemId, fileContent);
+            const uploadResult = await sharepoint_1.driveService.uploadNewVersion(document.spItemId, fileContent);
             if (!uploadResult.success) {
                 throw new Error(uploadResult.error || 'Version upload failed');
             }
             // Update document record
-            const updatedDoc = await prisma.document.update({
+            const updatedDoc = await prisma_service_1.prisma.document.update({
                 where: { id: documentId },
                 data: {
                     version: uploadResult.version || document.version || '1',
@@ -156,7 +158,7 @@ class DocumentsService {
                 }
             });
             // Create TimelineEvent for version
-            await prisma.timelineEvent.create({
+            await prisma_service_1.prisma.timelineEvent.create({
                 data: {
                     caseId: document.caseId,
                     userId: userId,
@@ -198,21 +200,21 @@ class DocumentsService {
      */
     async submitForReview(documentId, userId) {
         try {
-            const document = await prisma.document.findUnique({
+            const document = await prisma_service_1.prisma.document.findUnique({
                 where: { id: documentId }
             });
             if (!document) {
                 throw new Error('Document not found');
             }
             // Update document folder to REVIEW
-            await prisma.document.update({
+            await prisma_service_1.prisma.document.update({
                 where: { id: documentId },
                 data: { folder: 'REVIEW' }
             });
             // Check out document in SharePoint
-            await driveService.checkoutDocument(document.spItemId, userId);
+            await sharepoint_1.driveService.checkoutDocument(document.spItemId, userId);
             // Create TimelineEvent
-            await prisma.timelineEvent.create({
+            await prisma_service_1.prisma.timelineEvent.create({
                 data: {
                     caseId: document.caseId,
                     userId: userId,
@@ -226,7 +228,7 @@ class DocumentsService {
                 }
             });
             // Update Case status to IN_REVIEW
-            await prisma.case.update({
+            await prisma_service_1.prisma.case.update({
                 where: { id: document.caseId },
                 data: { status: 'IN_REVIEW' }
             });
@@ -242,21 +244,21 @@ class DocumentsService {
      */
     async approveDocument(documentId, userId, comment) {
         try {
-            const document = await prisma.document.findUnique({
+            const document = await prisma_service_1.prisma.document.findUnique({
                 where: { id: documentId }
             });
             if (!document) {
                 throw new Error('Document not found');
             }
             // Update document folder to APPROVED
-            await prisma.document.update({
+            await prisma_service_1.prisma.document.update({
                 where: { id: documentId },
                 data: { folder: 'APPROVED' }
             });
             // Check in document in SharePoint
-            await driveService.checkinDocument(document.spItemId, userId, comment || 'Document approved');
+            await sharepoint_1.driveService.checkinDocument(document.spItemId, userId, comment || 'Document approved');
             // Create TimelineEvent
-            await prisma.timelineEvent.create({
+            await prisma_service_1.prisma.timelineEvent.create({
                 data: {
                     caseId: document.caseId,
                     userId: userId,
@@ -270,7 +272,7 @@ class DocumentsService {
                 }
             });
             // Update Case status to APPROVED
-            await prisma.case.update({
+            await prisma_service_1.prisma.case.update({
                 where: { id: document.caseId },
                 data: { status: 'APPROVED' }
             });
@@ -286,19 +288,19 @@ class DocumentsService {
      */
     async rejectDocument(documentId, userId, reason) {
         try {
-            const document = await prisma.document.findUnique({
+            const document = await prisma_service_1.prisma.document.findUnique({
                 where: { id: documentId }
             });
             if (!document) {
                 throw new Error('Document not found');
             }
             // Update document folder back to DRAFTS
-            await prisma.document.update({
+            await prisma_service_1.prisma.document.update({
                 where: { id: documentId },
                 data: { folder: 'DRAFTS' }
             });
             // Create TimelineEvent
-            await prisma.timelineEvent.create({
+            await prisma_service_1.prisma.timelineEvent.create({
                 data: {
                     caseId: document.caseId,
                     userId: userId,
@@ -312,7 +314,7 @@ class DocumentsService {
                 }
             });
             // Update Case status to DRAFT (back to drafting)
-            await prisma.case.update({
+            await prisma_service_1.prisma.case.update({
                 where: { id: document.caseId },
                 data: { status: 'DRAFT' }
             });
@@ -327,7 +329,7 @@ class DocumentsService {
      * Get document by ID
      */
     async getDocumentById(documentId) {
-        const document = await prisma.document.findUnique({
+        const document = await prisma_service_1.prisma.document.findUnique({
             where: { id: documentId }
         });
         if (!document)
@@ -347,5 +349,5 @@ class DocumentsService {
         };
     }
 }
-export default new DocumentsService();
+exports.default = new DocumentsService();
 //# sourceMappingURL=services.js.map

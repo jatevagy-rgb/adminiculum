@@ -1,14 +1,19 @@
+"use strict";
 // ============================================================================
 // ANONYMIZE ROUTES - Dokumentum anonimizálás endpointok
 // ============================================================================
-import { Router } from 'express';
-import anonymizeService from './services.js';
-import { authenticate } from '../../middleware/auth.js';
-const router = Router();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const services_js_1 = __importDefault(require("./services.js"));
+const auth_js_1 = require("../../middleware/auth.js");
+const router = (0, express_1.Router)();
 // ============================================================================
 // POST /api/v1/documents/:documentId/anonymize
 // ============================================================================
-router.post('/documents/:documentId/anonymize', authenticate, async (req, res) => {
+router.post('/documents/:documentId/anonymize', auth_js_1.authenticate, async (req, res) => {
     try {
         const documentIdParam = req.params.documentId;
         const documentId = Array.isArray(documentIdParam) ? documentIdParam[0] : documentIdParam;
@@ -17,7 +22,7 @@ router.post('/documents/:documentId/anonymize', authenticate, async (req, res) =
         if (!userId) {
             return res.status(401).json({ error: 'Felhasználó nem azonosított' });
         }
-        const result = await anonymizeService.anonymizeDocument({
+        const result = await services_js_1.default.anonymizeDocument({
             documentId,
             userId,
             aiTask,
@@ -37,11 +42,11 @@ router.post('/documents/:documentId/anonymize', authenticate, async (req, res) =
 // ============================================================================
 // GET /api/v1/clients/:clientId/redaction-profile
 // ============================================================================
-router.get('/clients/:clientId/redaction-profile', authenticate, async (req, res) => {
+router.get('/clients/:clientId/redaction-profile', auth_js_1.authenticate, async (req, res) => {
     try {
         const clientIdParam = req.params.clientId;
         const clientId = Array.isArray(clientIdParam) ? clientIdParam[0] : clientIdParam;
-        const profile = await anonymizeService.getClientRedactionProfile(clientId);
+        const profile = await services_js_1.default.getClientRedactionProfile(clientId);
         res.json(profile || { error: 'Nincs redakciós profil' });
     }
     catch (error) {
@@ -52,12 +57,12 @@ router.get('/clients/:clientId/redaction-profile', authenticate, async (req, res
 // ============================================================================
 // POST /api/v1/clients/:clientId/redaction-profile
 // ============================================================================
-router.post('/clients/:clientId/redaction-profile', authenticate, async (req, res) => {
+router.post('/clients/:clientId/redaction-profile', auth_js_1.authenticate, async (req, res) => {
     try {
         const clientIdParam = req.params.clientId;
         const clientId = Array.isArray(clientIdParam) ? clientIdParam[0] : clientIdParam;
         const { fullName, aliases, addresses, taxId, personalId, bankAccounts, phones, emails } = req.body;
-        const profile = await anonymizeService.upsertRedactionProfile({
+        const profile = await services_js_1.default.upsertRedactionProfile({
             clientId,
             fullName,
             aliases,
@@ -78,11 +83,11 @@ router.post('/clients/:clientId/redaction-profile', authenticate, async (req, re
 // ============================================================================
 // GET /api/v1/anonymous-documents/:id
 // ============================================================================
-router.get('/anonymous-documents/:id', authenticate, async (req, res) => {
+router.get('/anonymous-documents/:id', auth_js_1.authenticate, async (req, res) => {
     try {
         const idParam = req.params.id;
         const id = Array.isArray(idParam) ? idParam[0] : idParam;
-        const doc = await anonymizeService.getAnonymousDocument(id);
+        const doc = await services_js_1.default.getAnonymousDocument(id);
         if (!doc) {
             return res.status(404).json({ error: 'Anoním dokumentum nem található' });
         }
@@ -93,5 +98,5 @@ router.get('/anonymous-documents/:id', authenticate, async (req, res) => {
         res.status(500).json({ error: 'Hiba a dokumentum lekérésekor' });
     }
 });
-export default router;
+exports.default = router;
 //# sourceMappingURL=routes.js.map

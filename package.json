@@ -36,7 +36,8 @@
     "pizzip": "^3.1.7",
     "prisma": "^5.22.0",
     "swagger-ui-express": "^5.0.1",
-    "yamljs": "^0.3.0"
+    "yamljs": "^0.3.0",
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

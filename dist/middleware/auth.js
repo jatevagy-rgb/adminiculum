@@ -1,13 +1,19 @@
+"use strict";
 /**
  * Authentication Middleware
  * JWT verification and role-based access control
  */
-import jwt from 'jsonwebtoken';
-import { jwtConfig } from '../config/jwt';
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ROLE_NAMES = exports.canAssignTask = exports.canAccess = exports.ROLES = exports.requireRole = exports.authenticate = void 0;
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const jwt_1 = require("../config/jwt");
 /**
  * Verify JWT token and attach user to request
  */
-export const authenticate = (req, res, next) => {
+const authenticate = (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         res.status(401).json({ error: 'No token provided' });
@@ -15,7 +21,7 @@ export const authenticate = (req, res, next) => {
     }
     const token = authHeader.split(' ')[1];
     try {
-        const decoded = jwt.verify(token, jwtConfig.secret);
+        const decoded = jsonwebtoken_1.default.verify(token, jwt_1.jwtConfig.secret);
         req.user = decoded;
         next();
     }
@@ -23,10 +29,11 @@ export const authenticate = (req, res, next) => {
         res.status(401).json({ error: 'Invalid token' });
     }
 };
+exports.authenticate = authenticate;
 /**
  * Check if user has required role
  */
-export const requireRole = (...allowedRoles) => {
+const requireRole = (...allowedRoles) => {
     return (req, res, next) => {
         if (!req.user) {
             res.status(401).json({ error: 'Not authenticated' });
@@ -39,10 +46,11 @@ export const requireRole = (...allowedRoles) => {
         next();
     };
 };
+exports.requireRole = requireRole;
 /**
  * Role constants matching Prisma schema
  */
-export const ROLES = {
+exports.ROLES = {
     LAWYER: 'LAWYER',
     COLLAB_LAWYER: 'COLLAB_LAWYER',
     TRAINEE: 'TRAINEE',
@@ -62,9 +70,10 @@ const ROLE_HIERARCHY = {
 /**
  * Check if user can access resource based on role hierarchy
  */
-export const canAccess = (userRole, requiredLevel) => {
+const canAccess = (userRole, requiredLevel) => {
     return ROLE_HIERARCHY[userRole] >= requiredLevel;
 };
+exports.canAccess = canAccess;
 /**
  * Role-based task assignment rules
  * LAWYER → TRAINEE, LEGAL_ASSISTANT
@@ -72,24 +81,25 @@ export const canAccess = (userRole, requiredLevel) => {
  * TRAINEE → LEGAL_ASSISTANT
  * LEGAL_ASSISTANT → cannot assign
  */
-export const canAssignTask = (assignorRole, assigneeRole) => {
-    const superiorRoles = [ROLES.LAWYER, ROLES.COLLAB_LAWYER, ROLES.TRAINEE];
-    const subordinateRoles = [ROLES.TRAINEE, ROLES.LEGAL_ASSISTANT];
+const canAssignTask = (assignorRole, assigneeRole) => {
+    const superiorRoles = [exports.ROLES.LAWYER, exports.ROLES.COLLAB_LAWYER, exports.ROLES.TRAINEE];
+    const subordinateRoles = [exports.ROLES.TRAINEE, exports.ROLES.LEGAL_ASSISTANT];
     if (!superiorRoles.includes(assignorRole)) {
         return false;
     }
-    if ([ROLES.LAWYER, ROLES.COLLAB_LAWYER].includes(assignorRole)) {
+    if ([exports.ROLES.LAWYER, exports.ROLES.COLLAB_LAWYER].includes(assignorRole)) {
         return subordinateRoles.includes(assigneeRole);
     }
-    if (assignorRole === ROLES.TRAINEE) {
-        return assigneeRole === ROLES.LEGAL_ASSISTANT;
+    if (assignorRole === exports.ROLES.TRAINEE) {
+        return assigneeRole === exports.ROLES.LEGAL_ASSISTANT;
     }
     return false;
 };
+exports.canAssignTask = canAssignTask;
 /**
  * Get all role names for display
  */
-export const ROLE_NAMES = {
+exports.ROLE_NAMES = {
     LAWYER: 'Ügyvéd',
     COLLAB_LAWYER: 'Együttműködő ügyvéd',
     TRAINEE: 'Ügyvédjelölt',

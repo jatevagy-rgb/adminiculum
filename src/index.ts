@@ -1,7 +1,7 @@
 /**
  * Adminiculum Backend V2 - Main Application Entry Point
  * Legal Document Management System API
- * Modular Architecture with ts-node
+ * Modular Architecture
  */
 
 import express, { Request, Response, NextFunction } from 'express';
@@ -13,7 +13,7 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = parseInt(process.env.PORT || '3000', 10);
 
 // Middleware
 app.use(helmet());
@@ -46,6 +46,24 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
+// Root endpoint - API info
+app.get('/', (_req: Request, res: Response) => {
+  res.json({
+    name: 'Adminiculum API V2',
+    version: '2.0.0',
+    description: 'Legal Document Management System API',
+    endpoints: {
+      health: '/health',
+      auth: '/api/v1/auth',
+      users: '/api/v1/users',
+      cases: '/api/v1/cases',
+      tasks: '/api/v1/tasks',
+      contracts: '/api/v1/contracts',
+      openapi: '/api/v1/openapi.json'
+    }
+  });
+});
+
 // ========================================
 // OpenAPI Spec Endpoint (for Power Apps Custom Connector)
 // ========================================
@@ -56,8 +74,9 @@ app.get('/api/v1/openapi.json', (_req: Request, res: Response) => {
     const swaggerContent = fs.readFileSync(swaggerPath, 'utf8');
     const swaggerJson = yaml.load(swaggerContent) as any;
     
-    // Azure App Service URL for Power Apps
-    swaggerJson.servers = [{ url: 'adminiculumaustriaeast-01.azurewebsites.net' }];
+    // Power Apps doesn't accept protocol in host - use WEBSITE_HOSTNAME
+    const baseUrl = process.env.WEBSITE_HOSTNAME || 'localhost:3000';
+    swaggerJson.servers = [{ url: baseUrl }];
     
     res.json(swaggerJson);
   } catch (error) {
@@ -73,8 +92,9 @@ app.get('/openapi.json', (_req: Request, res: Response) => {
     const swaggerContent = fs.readFileSync(swaggerPath, 'utf8');
     const swaggerJson = yaml.load(swaggerContent) as any;
     
-    // Azure App Service URL for Power Apps
-    swaggerJson.servers = [{ url: 'adminiculumaustriaeast-01.azurewebsites.net' }];
+    // Power Apps doesn't accept protocol in host - use WEBSITE_HOSTNAME
+    const baseUrl = process.env.WEBSITE_HOSTNAME || 'localhost:3000';
+    swaggerJson.servers = [{ url: baseUrl }];
     
     res.json(swaggerJson);
   } catch (error) {
@@ -152,7 +172,7 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 // Start Server
 // ========================================
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Adminiculum API V2 running on http://localhost:${PORT}`);
 });
 

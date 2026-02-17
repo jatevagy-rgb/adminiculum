@@ -1,16 +1,21 @@
+"use strict";
 /**
  * Users Service V2
  * User management with skill profiles
  * Matching Prisma Schema V2
  */
-import { prisma } from '../../prisma/prisma.service';
-import bcrypt from 'bcryptjs';
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const prisma_service_1 = require("../../prisma/prisma.service");
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 class UsersService {
     /**
      * Get all users
      */
     async getUsers(params) {
-        const users = await prisma.user.findMany({
+        const users = await prisma_service_1.prisma.user.findMany({
             orderBy: { name: 'asc' },
             select: {
                 id: true,
@@ -34,7 +39,7 @@ class UsersService {
      * Get user by ID
      */
     async getUserById(userId) {
-        const user = await prisma.user.findUnique({
+        const user = await prisma_service_1.prisma.user.findUnique({
             where: { id: userId },
             include: {
                 cases: {
@@ -62,8 +67,8 @@ class UsersService {
      * Create new user
      */
     async createUser(params) {
-        const hashedPassword = await bcrypt.hash('password123', 10);
-        const user = await prisma.user.create({
+        const hashedPassword = await bcryptjs_1.default.hash('password123', 10);
+        const user = await prisma_service_1.prisma.user.create({
             data: {
                 name: params.name,
                 email: params.email,
@@ -103,5 +108,5 @@ class UsersService {
         };
     }
 }
-export default new UsersService();
+exports.default = new UsersService();
 //# sourceMappingURL=services.js.map

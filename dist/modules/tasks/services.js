@@ -1,7 +1,23 @@
+"use strict";
 // ============================================================================
 // TASK SERVICE - Case-alapú feladatkezelés
 // ============================================================================
-import prisma from '../../config/database.js';
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.createTask = createTask;
+exports.getCaseTasks = getCaseTasks;
+exports.getTask = getTask;
+exports.startTask = startTask;
+exports.submitTask = submitTask;
+exports.completeTask = completeTask;
+exports.reassignTask = reassignTask;
+exports.getTaskRecommendations = getTaskRecommendations;
+exports.autoGenerateTask = autoGenerateTask;
+exports.canAssign = canAssign;
+exports.getUserTasks = getUserTasks;
+const database_js_1 = __importDefault(require("../../config/database.js"));
 const TaskStatus = {
     TODO: 'TODO',
     IN_PROGRESS: 'IN_PROGRESS',
@@ -116,8 +132,8 @@ const TASK_TYPE_SKILLS = {
 /**
  * Create a new task
  */
-export async function createTask(data) {
-    const task = await prisma.task.create({
+async function createTask(data) {
+    const task = await database_js_1.default.task.create({
         data: {
             caseId: data.caseId,
             title: data.title,
@@ -152,8 +168,8 @@ export async function createTask(data) {
 /**
  * Get all tasks for a case
  */
-export async function getCaseTasks(caseId, filters) {
-    return prisma.task.findMany({
+async function getCaseTasks(caseId, filters) {
+    return database_js_1.default.task.findMany({
         where: {
             caseId,
             ...(filters?.status && { status: filters.status }),
@@ -174,8 +190,8 @@ export async function getCaseTasks(caseId, filters) {
 /**
  * Get a single task by ID
  */
-export async function getTask(taskId) {
-    return prisma.task.findUnique({
+async function getTask(taskId) {
+    return database_js_1.default.task.findUnique({
         where: { id: taskId },
         include: {
             case: true,
@@ -186,8 +202,8 @@ export async function getTask(taskId) {
 /**
  * Start a task (TODO -> IN_PROGRESS)
  */
-export async function startTask(taskId, userId) {
-    const task = await prisma.task.update({
+async function startTask(taskId, userId) {
+    const task = await database_js_1.default.task.update({
         where: { id: taskId },
         data: {
             status: 'IN_PROGRESS',
@@ -205,8 +221,8 @@ export async function startTask(taskId, userId) {
 /**
  * Submit task for review (IN_PROGRESS -> IN_REVIEW)
  */
-export async function submitTask(taskId, userId, notes) {
-    const task = await prisma.task.update({
+async function submitTask(taskId, userId, notes) {
+    const task = await database_js_1.default.task.update({
         where: { id: taskId },
         data: {
             status: 'IN_REVIEW',
@@ -224,8 +240,8 @@ export async function submitTask(taskId, userId, notes) {
 /**
  * Complete a task (IN_REVIEW -> DONE)
  */
-export async function completeTask(taskId, userId, approved, notes) {
-    const task = await prisma.task.update({
+async function completeTask(taskId, userId, approved, notes) {
+    const task = await database_js_1.default.task.update({
         where: { id: taskId },
         data: {
             status: approved ? 'DONE' : 'IN_PROGRESS',
@@ -243,8 +259,8 @@ export async function completeTask(taskId, userId, approved, notes) {
 /**
  * Reassign a task
  */
-export async function reassignTask(taskId, newAssigneeId, reassignedBy) {
-    const task = await prisma.task.update({
+async function reassignTask(taskId, newAssigneeId, reassignedBy) {
+    const task = await database_js_1.default.task.update({
         where: { id: taskId },
         data: {
             assignedToId: newAssigneeId
@@ -270,10 +286,10 @@ export async function reassignTask(taskId, newAssigneeId, reassignedBy) {
 /**
  * Get skill-based recommendations for task assignment
  */
-export async function getTaskRecommendations(params) {
+async function getTaskRecommendations(params) {
     const requiredSkills = params.requiredSkills || TASK_TYPE_SKILLS[params.taskType] || [];
     // Get all active users who can be assigned
-    const eligibleUsers = await prisma.user.findMany({
+    const eligibleUsers = await database_js_1.default.user.findMany({
         where: {
             status: 'ACTIVE',
             role: {
@@ -282,7 +298,7 @@ export async function getTaskRecommendations(params) {
         }
     });
     // Get current workload for each user
-    const userWorkloads = await prisma.task.groupBy({
+    const userWorkloads = await database_js_1.default.task.groupBy({
         by: ['assignedToId'],
         where: {
             assignedToId: { in: eligibleUsers.map(u => u.id) },
@@ -322,7 +338,7 @@ export async function getTaskRecommendations(params) {
 /**
  * Auto-generate task based on workflow event
  */
-export async function autoGenerateTask(params) {
+async function autoGenerateTask(params) {
     const template = TASK_TEMPLATES[params.workflowEvent];
     if (!template) {
         return null;
@@ -348,14 +364,14 @@ export async function autoGenerateTask(params) {
 /**
  * Check if user can assign to another user
  */
-export async function canAssign(assignerId, assigneeId) {
-    const assigner = await prisma.user.findUnique({
+async function canAssign(assignerId, assigneeId) {
+    const assigner = await database_js_1.default.user.findUnique({
         where: { id: assignerId },
         select: { role: true }
     });
     if (!assigner)
         return false;
-    const assignee = await prisma.user.findUnique({
+    const assignee = await database_js_1.default.user.findUnique({
         where: { id: assigneeId },
         select: { role: true }
     });
@@ -367,8 +383,8 @@ export async function canAssign(assignerId, assigneeId) {
 /**
  * Get user's tasks
  */
-export async function getUserTasks(userId, filters) {
-    return prisma.task.findMany({
+async function getUserTasks(userId, filters) {
+    return database_js_1.default.task.findMany({
         where: {
             assignedToId: userId,
             ...(filters?.status && { status: filters.status }),
@@ -389,7 +405,7 @@ export async function getUserTasks(userId, filters) {
 // HELPER FUNCTIONS
 // ============================================================================
 async function createTimelineEvent(data) {
-    return prisma.timelineEvent.create({
+    return database_js_1.default.timelineEvent.create({
         data: {
             caseId: data.caseId,
             userId: data.userId,
@@ -398,7 +414,7 @@ async function createTimelineEvent(data) {
         }
     });
 }
-export default {
+exports.default = {
     createTask,
     getCaseTasks,
     getTask,

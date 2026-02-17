@@ -1,18 +1,23 @@
+"use strict";
 /**
  * Auth Routes Module V2
  * Modular route structure for authentication
  * Matching Frontend Data Contract
  */
-import { Router } from 'express';
-import { body, validationResult } from 'express-validator';
-import authService from './services';
-import { authenticate } from '../../middleware/auth';
-const router = Router();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const express_validator_1 = require("express-validator");
+const services_1 = __importDefault(require("./services"));
+const auth_1 = require("../../middleware/auth");
+const router = (0, express_1.Router)();
 /**
  * Validation middleware
  */
 const handleValidation = (req, res, next) => {
-    const errors = validationResult(req);
+    const errors = (0, express_validator_1.validationResult)(req);
     if (!errors.isEmpty()) {
         res.status(400).json({
             status: 400,
@@ -28,13 +33,13 @@ const handleValidation = (req, res, next) => {
 // POST /auth/login
 // ============================================================================
 router.post('/login', [
-    body('email').isEmail().normalizeEmail(),
-    body('password').isLength({ min: 6 }),
+    (0, express_validator_1.body)('email').isEmail().normalizeEmail(),
+    (0, express_validator_1.body)('password').isLength({ min: 6 }),
     handleValidation
 ], async (req, res) => {
     try {
         const { email, password } = req.body;
-        const result = await authService.login(email, password);
+        const result = await services_1.default.login(email, password);
         res.status(result.status).json(result.data);
     }
     catch (error) {
@@ -49,10 +54,10 @@ router.post('/login', [
 // ============================================================================
 // POST /auth/logout
 // ============================================================================
-router.post('/logout', authenticate, async (req, res) => {
+router.post('/logout', auth_1.authenticate, async (req, res) => {
     try {
         const userId = req.user?.userId;
-        await authService.logout(userId);
+        await services_1.default.logout(userId);
         res.json({ message: 'Logged out successfully' });
     }
     catch (error) {
@@ -67,10 +72,10 @@ router.post('/logout', authenticate, async (req, res) => {
 // ============================================================================
 // GET /auth/me
 // ============================================================================
-router.get('/me', authenticate, async (req, res) => {
+router.get('/me', auth_1.authenticate, async (req, res) => {
     try {
         const userId = req.user?.userId;
-        const result = await authService.getMe(userId);
+        const result = await services_1.default.getMe(userId);
         res.status(result.status).json(result.data);
     }
     catch (error) {
@@ -85,10 +90,10 @@ router.get('/me', authenticate, async (req, res) => {
 // ============================================================================
 // POST /auth/refresh
 // ============================================================================
-router.post('/refresh', [body('refreshToken').notEmpty(), handleValidation], async (req, res) => {
+router.post('/refresh', [(0, express_validator_1.body)('refreshToken').notEmpty(), handleValidation], async (req, res) => {
     try {
         const { refreshToken } = req.body;
-        const result = await authService.refresh(refreshToken);
+        const result = await services_1.default.refresh(refreshToken);
         res.status(result.status).json(result.data);
     }
     catch (error) {
@@ -100,5 +105,5 @@ router.post('/refresh', [body('refreshToken').notEmpty(), handleValidation], asy
         });
     }
 });
-export default router;
+exports.default = router;
 //# sourceMappingURL=routes.js.map

@@ -18,14 +18,20 @@ import {
   SPFolderToWorkflow,
 } from './types';
 
-const SITE_PATH = '/sites/LegalCases';
+// Get SharePoint site URL from environment
+const SITE_URL = process.env.SHAREPOINT_SITE_URL || '';
 
 class DriveService {
   private siteId: string = '';
 
   private async getSiteId(): Promise<string> {
     if (!this.siteId) {
-      const site = await graphClient.get<any>(`/sites/root:${SITE_PATH}`);
+      // Parse site URL: https://hubaygyula.sharepoint.com/sites/Adminiculum
+      // Graph API expects: hubaygyula.sharepoint.com:/sites/Adminiculum
+      const siteUrl = SITE_URL.replace(/^https?:\/\//, '');
+      const sitePath = '/' + siteUrl.split('/').slice(2).join('/');
+      
+      const site = await graphClient.get<any>(`/sites/root:${sitePath}`);
       this.siteId = site.id;
     }
     return this.siteId;

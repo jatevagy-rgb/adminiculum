@@ -1,8 +1,11 @@
+"use strict";
 /**
  * Hungarian Number to Words Converter
  * Converts numbers to Hungarian text representation
  */
-export class HungarianNumberToWords {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.HungarianNumberToWords = void 0;
+class HungarianNumberToWords {
     static unitWords = [
         'nulla', 'egy', 'kettő', 'három', 'négy', 'öt', 'hat', 'hét', 'nyolc', 'kilenc',
         'tíz', 'tizenegy', 'tizenkettő', 'tizenhárom', 'tizennégy', 'tizenöt',
@@ -88,5 +91,6 @@ export class HungarianNumberToWords {
         return fillersText ? `${forintText} forint ${fillersText}` : `${forintText} forint`;
     }
 }
-export default HungarianNumberToWords;
+exports.HungarianNumberToWords = HungarianNumberToWords;
+exports.default = HungarianNumberToWords;
 //# sourceMappingURL=hungarianNumberToWords.js.map
