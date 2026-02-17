@@ -6,7 +6,7 @@
 |------|-------|
 | **Title** | Adminiculum API |
 | **Description** | Legal Workflow Platform API |
-| **Host** | `lwp-backend-xxx.dev-tunnels.ms` |
+| **Host** | `adminiculumaustriaeast-01.azurewebsites.net` |
 | **Base URL** | `/api/v1` |
 
 ---

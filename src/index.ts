@@ -56,8 +56,8 @@ app.get('/api/v1/openapi.json', (_req: Request, res: Response) => {
     const swaggerContent = fs.readFileSync(swaggerPath, 'utf8');
     const swaggerJson = yaml.load(swaggerContent) as any;
     
-    // Power Apps doesn't accept protocol in host - remove http://
-    swaggerJson.servers = [{ url: 'localhost:3000' }];
+    // Azure App Service URL for Power Apps
+    swaggerJson.servers = [{ url: 'adminiculumaustriaeast-01.azurewebsites.net' }];
     
     res.json(swaggerJson);
   } catch (error) {
@@ -73,8 +73,8 @@ app.get('/openapi.json', (_req: Request, res: Response) => {
     const swaggerContent = fs.readFileSync(swaggerPath, 'utf8');
     const swaggerJson = yaml.load(swaggerContent) as any;
     
-    // Power Apps doesn't accept protocol in host
-    swaggerJson.servers = [{ url: 'localhost:3000' }];
+    // Azure App Service URL for Power Apps
+    swaggerJson.servers = [{ url: 'adminiculumaustriaeast-01.azurewebsites.net' }];
     
     res.json(swaggerJson);
   } catch (error) {
