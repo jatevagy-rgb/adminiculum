@@ -14,7 +14,6 @@ import yaml from 'js-yaml';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
-// Azure uses PORT env var, but we force 3000 for stability
 
 // Middleware
 app.use(helmet());
