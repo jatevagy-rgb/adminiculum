@@ -46,6 +46,24 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
+// Root endpoint - API info
+app.get('/', (_req: Request, res: Response) => {
+  res.json({
+    name: 'Adminiculum API V2',
+    version: '2.0.0',
+    description: 'Legal Document Management System API',
+    endpoints: {
+      health: '/health',
+      auth: '/api/v1/auth',
+      users: '/api/v1/users',
+      cases: '/api/v1/cases',
+      tasks: '/api/v1/tasks',
+      contracts: '/api/v1/contracts',
+      openapi: '/api/v1/openapi.json'
+    }
+  });
+});
+
 // ========================================
 // OpenAPI Spec Endpoint (for Power Apps Custom Connector)
 // ========================================
