@@ -1,2 +1,2 @@
 [config]
-command = echo "Skipping build - files already compiled"
+command = npm install && node dist/index.js
