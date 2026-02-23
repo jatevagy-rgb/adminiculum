@@ -6,17 +6,8 @@ echo "Starting custom startup script..."
 # Navigate to app directory
 cd /home/site/wwwroot
 
-# Install dependencies if node_modules doesn't exist
-if [ ! -d "node_modules" ]; then
-    echo "node_modules not found, running npm install..."
-    npm install
-else
-    echo "node_modules already exists"
-fi
-
-# Generate Prisma client if needed
-echo "Running prisma generate..."
-npx prisma generate
+# Skip npm install since we're deploying compiled code
+# Skip prisma generate since we're deploying pre-generated client
 
 # Start the application
 echo "Starting Node.js application..."
