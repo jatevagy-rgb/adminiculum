@@ -1,2 +1,2 @@
 [config]
-command = npm install && node dist/index.js
+command = bash -c "npm install"
