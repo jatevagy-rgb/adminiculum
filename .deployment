@@ -1,2 +1,2 @@
 [config]
-command = bash -c "npm install"
+command = bash -c "npm install && npx prisma generate"
