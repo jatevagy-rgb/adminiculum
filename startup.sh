@@ -1,5 +1,5 @@
 #!/bin/bash
-# Custom startup script for Azure App Service
-echo "Starting Node.js application..."
 cd /home/site/wwwroot
+npm install
+npx prisma generate
 node dist/index.js
