@@ -12,12 +12,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const graphClient_1 = __importDefault(require("./graphClient"));
 const types_1 = require("./types");
-const SITE_PATH = '/sites/LegalCases';
+// Get SharePoint site URL from environment
+const SITE_URL = process.env.SHAREPOINT_SITE_URL || '';
 class DriveService {
     siteId = '';
     async getSiteId() {
         if (!this.siteId) {
-            const site = await graphClient_1.default.get(`/sites/root:${SITE_PATH}`);
+            // Parse site URL: https://hubaygyula.sharepoint.com/sites/Adminiculum
+            // Graph API expects: hubaygyula.sharepoint.com:/sites/Adminiculum
+            const siteUrl = SITE_URL.replace(/^https?:\/\//, '');
+            const sitePath = '/' + siteUrl.split('/').slice(2).join('/');
+            const site = await graphClient_1.default.get(`/sites/root:${sitePath}`);
             this.siteId = site.id;
         }
         return this.siteId;

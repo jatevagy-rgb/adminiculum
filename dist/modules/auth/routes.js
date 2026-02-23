@@ -106,4 +106,29 @@ router.post('/refresh', [(0, express_validator_1.body)('refreshToken').notEmpty(
     }
 });
 exports.default = router;
+// ============================================================================
+// POST /auth/register (DEV/TEST ONLY - should be removed in production)
+// ============================================================================
+router.post('/register', [
+    (0, express_validator_1.body)('email').isEmail().normalizeEmail(),
+    (0, express_validator_1.body)('password').isLength({ min: 6 }),
+    (0, express_validator_1.body)('name').notEmpty(),
+    (0, express_validator_1.body)('role').isIn(['ADMIN', 'PARTNER', 'LAWYER', 'TRAINEE', 'LEGAL_ASSISTANT']),
+    handleValidation
+], async (req, res) => {
+    try {
+        const { email, password, name, role } = req.body;
+        // DEV ONLY - In production this should be secured
+        const result = await services_1.default.register(email, password, name, role);
+        res.status(result.status).json(result.data);
+    }
+    catch (error) {
+        console.error('Register error:', error);
+        res.status(500).json({
+            status: 500,
+            code: 'INTERNAL_ERROR',
+            message: 'Internal server error'
+        });
+    }
+});
 //# sourceMappingURL=routes.js.map

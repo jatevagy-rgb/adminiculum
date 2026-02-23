@@ -21,6 +21,13 @@ interface ApiError {
 }
 declare class AuthService {
     /**
+     * Register a new user (DEV/TEST ONLY)
+     */
+    register(email: string, password: string, name: string, role: string): Promise<{
+        status: number;
+        data: UserResponse | ApiError;
+    }>;
+    /**
      * Authenticate user with email and password
      */
     login(email: string, password: string): Promise<{

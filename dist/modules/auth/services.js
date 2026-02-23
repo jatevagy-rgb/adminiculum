@@ -14,6 +14,38 @@ const prisma_service_1 = require("../../prisma/prisma.service");
 const jwt_1 = require("../../config/jwt");
 class AuthService {
     /**
+     * Register a new user (DEV/TEST ONLY)
+     */
+    async register(email, password, name, role) {
+        // Check if user exists
+        const existing = await prisma_service_1.prisma.user.findUnique({ where: { email } });
+        if (existing) {
+            return { status: 400, data: { error: 'User already exists' } };
+        }
+        // Hash password
+        const passwordHash = await bcryptjs_1.default.hash(password, 10);
+        // Create user
+        const user = await prisma_service_1.prisma.user.create({
+            data: {
+                email,
+                passwordHash,
+                name,
+                role: role,
+                status: 'ACTIVE',
+                isActive: true
+            }
+        });
+        return {
+            status: 201,
+            data: {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                role: user.role
+            }
+        };
+    }
+    /**
      * Authenticate user with email and password
      */
     async login(email, password) {

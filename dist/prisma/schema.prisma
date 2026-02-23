@@ -34,6 +34,7 @@ model User {
   status       UserStatus @default(ACTIVE)
   department   String?
   skills       String[]  // JSON array of skills
+  
   isActive     Boolean   @default(true)
   lastLoginAt   DateTime?
   createdAt    DateTime  @default(now())
@@ -41,6 +42,7 @@ model User {
 
   // Relations
   assignedTasks         Task[]              @relation("AssignedTo")
+  assignedByTasks       Task[]              @relation("AssignedBy")  // Tasks assigned by this user
   createdCases          Case[]              @relation("CreatedBy")
   assignedCases         Case[]              @relation("AssignedLawyer")
   timelineEvents        TimelineEvent[]
@@ -67,6 +69,7 @@ enum UserRole {
   LEGAL_ASSISTANT
   CLIENT
   EXTERNAL_REVIEWER
+  COLLAB_LAWYER
 }
 
 // ============================================================================
@@ -92,6 +95,7 @@ model Client {
   departments     Department[]         // Client departments
   matters         Matter[]            // All matters for this client
   workgroups      ClientWorkgroup[]   // Client workgroups for workload tracking
+  redactorProfile ClientRedactionProfile? // One-to-one relation for anonymization
 
   @@map("clients")
 }
@@ -296,6 +300,13 @@ model Case {
   status          CaseStatus      @default(CLIENT_INPUT)
   priority        Priority        @default(MEDIUM)
   
+  // Additional fields for code compatibility
+  clientName      String?         // Computed from client relation
+  matterType      String?         // Computed from matter relation
+  sharepointRoot  String?         // Base SharePoint path
+  sharepointSite  String?         // SharePoint site ID (code compatibility)
+  caseAssignment  Json?          // Case assignment data (code compatibility)
+  
   // SharePoint Integration
   spSiteId        String?
   spDriveId       String?
@@ -372,6 +383,14 @@ model Document {
   description     String?
   mimeType        String          @default("application/octet-stream")
   category        DocumentCategory
+  
+  // Code compatibility fields
+  fileName        String?         // Original file name
+  documentType    String?         // Document type
+  spPath          String?         // SharePoint path
+  spDriveId       String?         // SharePoint drive ID
+  version         String?         // Document version
+  folder          String?         // Folder location
   
   // SharePoint Metadata
   spItemId        String?         @unique  // SharePoint DriveItem ID
@@ -453,13 +472,21 @@ model Task {
   title           String
   description     String?
   taskType        TaskType
+  type            String?     // For code compatibility (alternative to taskType)
   status          TaskStatus  @default(PENDING)
   priority        Priority    @default(MEDIUM)
   
   // Assignment
   assignedToId     String?
   assignedTo       User?       @relation("AssignedTo", fields: [assignedToId], references: [id])
+  assignedById     String?     // Who assigned this task
+  assignedBy       User?       @relation("AssignedBy", fields: [assignedById], references: [id])
   skillMatch      Float?       // Score of skill matching (0-1)
+  skillProfile     Json?       // Required skills profile
+  requiredSkills  String[]     // Required skills for this task
+  
+  // Document reference (if task is related to a document)
+  documentId       String?
   
   // Workflow Integration
   caseId          String
@@ -474,6 +501,7 @@ model Task {
   dueDate         DateTime?
   startedAt       DateTime?
   completedAt     DateTime?
+  submittedAt     DateTime?   // Submitted date (code compatibility)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -504,6 +532,9 @@ enum TaskStatus {
   COMPLETED
   CANCELLED
   BLOCKED
+  TODO
+  IN_REVIEW
+  DONE
 }
 
 model TaskAssignmentHistory {
@@ -526,6 +557,11 @@ model TaskAssignmentHistory {
 model ClientRedactionProfile {
   id              String    @id @default(uuid())
   clientId        String    @unique
+  client          Client    @relation(fields: [clientId], references: [id])
+  fullName        String?   // Full name for code compatibility
+  aliases         Json?     // Aliases for code compatibility
+  addresses       Json?     // Addresses for code compatibility
+  taxId           String?   // Tax ID for code compatibility
   
   // Redaction Rules (JSON stored as text)
   patterns        Json      // [{ type: 'name', pattern: '...', replacement: '...' }]
@@ -544,10 +580,14 @@ model ClientRedactionProfile {
 model AnonymousDocument {
   id              String    @id @default(uuid())
   name            String    // Original document name with _anon suffix
+  content         String?   // Anonymized content (code compatibility)
+  addresses       Json?     // Addresses (code compatibility)
   
   // Reference to source
   sourceDocId     String
   sourceDoc       Document  @relation(fields: [sourceDocId], references: [id])
+  originalDocId   String?   // Original document ID (code compatibility)
+  caseId          String?   // Case ID (code compatibility)
   
   // Anonymization details
   redactedAt      DateTime  @default(now())
@@ -569,6 +609,8 @@ model AnonymousDocument {
 model TimelineEvent {
   id              String        @id @default(uuid())
   eventType       TimelineEventType
+  type            String?       // For code compatibility
+  payload         Json?         // Additional event data (for code compatibility)
   description     String?
   metadata        Json?         // Additional event data
   
@@ -701,6 +743,9 @@ model SystemSetting {
 
   @@map("system_settings")
 }
+
+// Alias for code compatibility - use SystemSetting instead
+// (prisma.setting will work via SystemSetting)
 
 // ============================================================================
 // CONTRACT TEMPLATES

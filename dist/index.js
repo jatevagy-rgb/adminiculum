@@ -2,7 +2,7 @@
 /**
  * Adminiculum Backend V2 - Main Application Entry Point
  * Legal Document Management System API
- * Modular Architecture with ts-node
+ * Modular Architecture
  */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -17,7 +17,6 @@ const fs_1 = __importDefault(require("fs"));
 const js_yaml_1 = __importDefault(require("js-yaml"));
 const app = (0, express_1.default)();
 const PORT = parseInt(process.env.PORT || '3000', 10);
-// Azure uses PORT env var, but we force 3000 for stability
 // Middleware
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)({
@@ -47,6 +46,23 @@ app.use(express_1.default.urlencoded({ extended: true }));
 // Health check
 app.get('/health', (_req, res) => {
     res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+// Root endpoint - API info
+app.get('/', (_req, res) => {
+    res.json({
+        name: 'Adminiculum API V2',
+        version: '2.0.0',
+        description: 'Legal Document Management System API',
+        endpoints: {
+            health: '/health',
+            auth: '/api/v1/auth',
+            users: '/api/v1/users',
+            cases: '/api/v1/cases',
+            tasks: '/api/v1/tasks',
+            contracts: '/api/v1/contracts',
+            openapi: '/api/v1/openapi.json'
+        }
+    });
 });
 // ========================================
 // OpenAPI Spec Endpoint (for Power Apps Custom Connector)

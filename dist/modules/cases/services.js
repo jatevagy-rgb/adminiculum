@@ -191,16 +191,22 @@ class CasesService {
         const caseNumber = `CASE-${year}-${String(count + 1).padStart(3, '0')}`;
         // Use default if invalid matterType
         const matterType = VALID_MATTER_TYPES.includes(params.matterType) ? params.matterType : DEFAULT_MATTER_TYPE;
+        // Generate title from clientName + matterType
+        const title = params.clientName ? `${params.clientName} - ${matterType}` : `Case ${caseNumber}`;
+        // Use default createdById if not provided (e.g., for Azure AD users not in local DB)
+        const createdById = params.createdById || 'system';
         const newCase = await prisma_service_1.prisma.case.create({
             data: {
                 caseNumber,
+                title,
                 clientName: params.clientName,
                 matterType: matterType,
                 description: params.description,
                 status: DEFAULT_STATUS,
                 priority: 'MEDIUM',
                 sharepointSite: 'Adminiculum - Legal Workflow',
-                sharepointRoot: `/sites/AdminiculumLegalWorkflow/Cases/${caseNumber}`
+                sharepointRoot: `/sites/AdminiculumLegalWorkflow/Cases/${caseNumber}`,
+                createdById: createdById
             }
         });
         // Create case folder in SharePoint
@@ -209,7 +215,7 @@ class CasesService {
         await prisma_service_1.prisma.timelineEvent.create({
             data: {
                 caseId: newCase.id,
-                userId: params.createdById,
+                userId: createdById,
                 eventType: 'CASE_CREATED',
                 type: 'CASE_CREATED',
                 payload: {

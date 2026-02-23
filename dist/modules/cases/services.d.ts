@@ -65,7 +65,7 @@ interface CreateCaseInput {
     clientName: string;
     matterType: string;
     description?: string;
-    createdById: string;
+    createdById?: string;
 }
 declare class CasesService {
     /**

@@ -1,9 +1,15 @@
 /**
  * Authentication Middleware
  * JWT verification and role-based access control
+ * Supports both custom JWT and Azure AD tokens (hybrid auth for Power Apps)
  */
 import { Request, Response, NextFunction } from 'express';
 type Role = 'LAWYER' | 'COLLAB_LAWYER' | 'TRAINEE' | 'LEGAL_ASSISTANT' | 'ADMIN';
+interface JwtPayload {
+    userId: string;
+    email: string;
+    role: Role;
+}
 interface JwtPayload {
     userId: string;
     email: string;
@@ -18,8 +24,9 @@ declare global {
 }
 /**
  * Verify JWT token and attach user to request
+ * Supports both Azure AD tokens (for Power Apps) and custom JWT tokens
  */
-export declare const authenticate: (req: Request, res: Response, next: NextFunction) => void;
+export declare const authenticate: (req: Request, res: Response, next: NextFunction) => Promise<void>;
 /**
  * Check if user has required role
  */
