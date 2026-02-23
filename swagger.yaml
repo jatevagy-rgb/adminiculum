@@ -10,6 +10,8 @@ info:
 servers:
   - url: http://localhost:3000
     description: Development server
+  - url: https://adminiculumaustriaeast-01.azurewebsites.net
+    description: Production server (Azure)
 
 tags:
   - name: Authentication

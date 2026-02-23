@@ -1,0 +1,8 @@
+/**
+ * Auth Routes Module V2
+ * Modular route structure for authentication
+ * Matching Frontend Data Contract
+ */
+declare const router: import("express-serve-static-core").Router;
+export default router;
+//# sourceMappingURL=routes.d.ts.map

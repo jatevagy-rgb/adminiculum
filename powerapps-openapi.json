@@ -11,8 +11,8 @@
   },
   "servers": [
     {
-      "url": "https://your-backend-url.com",
-      "description": "Production server - change this to your actual URL"
+      "url": "https://adminiculumaustriaeast-01.azurewebsites.net",
+      "description": "Production server"
     }
   ],
   "paths": {

@@ -1,0 +1,703 @@
+swagger: '2.0'
+info:
+  title: Adminiculum API
+  description: Legal Workflow Platform API
+  version: '1.0'
+host: adminiculumaustriaeast-01.azurewebsites.net
+basePath: /
+schemes:
+  - https
+consumes:
+  - application/json
+produces:
+  - application/json
+paths:
+  /api/v1/auth/login:
+    post:
+      summary: Login
+      description: Bejelentkezés
+      operationId: Login
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            required:
+              - email
+              - password
+            properties:
+              email:
+                type: string
+                format: email
+              password:
+                type: string
+      responses:
+        '200':
+          description: Login successful
+          schema:
+            type: object
+            properties:
+              accessToken:
+                type: string
+              refreshToken:
+                type: string
+              expiresIn:
+                type: integer
+              user:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  email:
+                    type: string
+                  name:
+                    type: string
+                  role:
+                    type: string
+  /api/v1/auth/register:
+    post:
+      summary: Register
+      description: Regisztráció (teszteléshez)
+      operationId: Register
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            required:
+              - email
+              - password
+              - name
+              - role
+            properties:
+              email:
+                type: string
+              password:
+                type: string
+              name:
+                type: string
+              role:
+                type: string
+                enum:
+                  - ADMIN
+                  - PARTNER
+                  - LAWYER
+                  - TRAINEE
+                  - LEGAL_ASSISTANT
+      responses:
+        '201':
+          description: Registration successful
+  /api/v1/cases:
+    get:
+      summary: GetCases
+      description: Ügyek listázása
+      operationId: GetCases
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: List of cases
+    post:
+      summary: CreateCase
+      description: Új ügy létrehozása
+      operationId: CreateCase
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+      responses:
+        '201':
+          description: Case created
+  /api/v1/contracts/generate:
+    post:
+      summary: GenerateContract
+      description: Szerződés generálása
+      operationId: GenerateContract
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              templateId:
+                type: string
+              caseId:
+                type: string
+              title:
+                type: string
+              data:
+                type: object
+      responses:
+        '201':
+          description: Contract generated
+  /api/v1/contracts/templates:
+    get:
+      summary: GetContractTemplates
+      description: Szerződés sablonok
+      operationId: GetContractTemplates
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: List of templates
+  /api/v1/auth/me:
+    get:
+      summary: GetCurrentUser
+      description: Jelenlegi felhasználó adatai
+      operationId: GetCurrentUser
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: Current user data
+  /api/v1/cases/{id}:
+    get:
+      summary: GetCaseById
+      description: Ügy részletei
+      operationId: GetCaseById
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Case details
+  /api/v1/cases/{id}/status:
+    patch:
+      summary: UpdateCaseStatus
+      description: Ügy státusz frissítése
+      operationId: UpdateCaseStatus
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+      responses:
+        '200':
+          description: Status updated
+  /api/v1/cases/{id}/history:
+    get:
+      summary: GetCaseHistory
+      description: Ügy történet
+      operationId: GetCaseHistory
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Case history
+  /api/v1/documents:
+    get:
+      summary: GetDocuments
+      description: Dokumentumok listázása
+      operationId: GetDocuments
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: List of documents
+  /api/v1/documents/{id}:
+    get:
+      summary: GetDocumentById
+      description: Dokumentum részletei
+      operationId: GetDocumentById
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Document details
+  /api/v1/users:
+    get:
+      summary: GetUsers
+      description: Felhasználók listázása
+      operationId: GetUsers
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: List of users
+    post:
+      summary: CreateUser
+      description: Új felhasználó létrehozása
+      operationId: CreateUser
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+      responses:
+        '201':
+          description: User created
+  /api/v1/users/{id}:
+    get:
+      summary: GetUserById
+      description: Felhasználó részletei
+      operationId: GetUserById
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: User details
+  /api/v1/users/{id}/skills:
+    get:
+      summary: GetUserSkills
+      description: Felhasználó skilljei
+      operationId: GetUserSkills
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: User skills
+    put:
+      summary: UpdateUserSkills
+      description: Skill-ek frissítése
+      operationId: UpdateUserSkills
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+      responses:
+        '200':
+          description: Skills updated
+  /api/v1/clients:
+    get:
+      summary: GetClients
+      description: Ügyfelek listázása
+      operationId: GetClients
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: List of clients
+    post:
+      summary: CreateClient
+      description: Új ügyfél létrehozása
+      operationId: CreateClient
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+      responses:
+        '201':
+          description: Client created
+  /api/v1/clients/{id}:
+    get:
+      summary: GetClientById
+      description: Ügyfél részletei
+      operationId: GetClientById
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Client details
+  /api/v1/clients/{id}/requests:
+    get:
+      summary: GetClientRequests
+      description: Ügyfél kérések
+      operationId: GetClientRequests
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Client requests
+  /api/v1/messages:
+    get:
+      summary: GetMessages
+      description: Üzenetek listázása
+      operationId: GetMessages
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: List of messages
+    post:
+      summary: SendMessage
+      description: Üzenet küldése
+      operationId: SendMessage
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+      responses:
+        '201':
+          description: Message sent
+  /api/v1/messages/feed:
+    get:
+      summary: GetActivityFeed
+      description: Tevékenység hírfolyam
+      operationId: GetActivityFeed
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: Activity feed
+  /api/v1/messages/unread:
+    get:
+      summary: GetUnreadCount
+      description: Olvasatlan üzenetek száma
+      operationId: GetUnreadCount
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: Unread count
+  /api/v1/templates:
+    get:
+      summary: GetTemplates
+      description: Sablonok listázása
+      operationId: GetTemplates
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: List of templates
+    post:
+      summary: CreateTemplate
+      description: Új sablon létrehozása
+      operationId: CreateTemplate
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+      responses:
+        '201':
+          description: Template created
+  /api/v1/templates/{id}:
+    get:
+      summary: GetTemplateById
+      description: Sablon részletei
+      operationId: GetTemplateById
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Template details
+  /api/v1/contracts/templates/{id}:
+    get:
+      summary: GetContractTemplateById
+      description: Szerződés sablon részletei
+      operationId: GetContractTemplateById
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Template details
+  /api/v1/contracts/templates/adasvetel/variables:
+    get:
+      summary: GetAdasvetelVariables
+      description: Adásvételi szerződés változók
+      operationId: GetAdasvetelVariables
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: Variables
+  /api/v1/contracts/preview:
+    post:
+      summary: GenerateContractPreview
+      description: Szerződés előnézet generálás
+      operationId: GenerateContractPreview
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+      responses:
+        '201':
+          description: Preview generated
+  /api/v1/contracts/case/{caseId}:
+    get:
+      summary: GetCaseContracts
+      description: Ügy szerződései
+      operationId: GetCaseContracts
+      produces:
+        - application/json
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Case contracts
+  /api/v1/contracts/{id}/download:
+    get:
+      summary: DownloadContract
+      description: Szerződés letöltés
+      operationId: DownloadContract
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Contract file
+  /api/v1/contracts/{id}/upload-sharepoint:
+    post:
+      summary: UploadContractToSharePoint
+      description: Szerződés feltöltése SharePointba
+      operationId: UploadContractToSharePoint
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Uploaded to SharePoint
+  /api/v1/client-portal/summary/{clientId}:
+    get:
+      summary: GetClientSummary
+      description: Ügyfél összefoglaló
+      operationId: GetClientSummary
+      produces:
+        - application/json
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Client summary
+  /api/v1/client-portal/departments/{clientId}:
+    get:
+      summary: GetClientDepartments
+      description: Ügyfél osztályai
+      operationId: GetClientDepartments
+      produces:
+        - application/json
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Client departments
+  /api/v1/client-portal/departments/{deptId}/matters:
+    get:
+      summary: GetClientMatters
+      description: Ügyfél ügyei
+      operationId: GetClientMatters
+      produces:
+        - application/json
+      parameters:
+        - name: deptId
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Client matters
+  /api/v1/client-portal/matters/{matterId}:
+    get:
+      summary: GetClientMatterDetail
+      description: Ügy részletei
+      operationId: GetClientMatterDetail
+      produces:
+        - application/json
+      parameters:
+        - name: matterId
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Matter details
+  /api/v1/client-portal/matters/{matterId}/time-log:
+    get:
+      summary: GetClientTimeLog
+      description: Ügy időnaplója
+      operationId: GetClientTimeLog
+      produces:
+        - application/json
+      parameters:
+        - name: matterId
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Time log
+  /api/v1/matters:
+    get:
+      summary: GetMatters
+      description: Matters listázása
+      operationId: GetMatters
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: List of matters
+  /api/v1/matters/{id}:
+    get:
+      summary: GetMatterById
+      description: Matter részletei
+      operationId: GetMatterById
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Matter details
+  /api/v1/time-entries:
+    get:
+      summary: GetTimeEntries
+      description: Időbejegyzések
+      operationId: GetTimeEntries
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: List of time entries
+    post:
+      summary: CreateTimeEntry
+      description: Új időbejegyzés
+      operationId: CreateTimeEntry
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+      responses:
+        '201':
+          description: Time entry created
+securityDefinitions:
+  oauth2-auth:
+    type: oauth2
+    flow: accessCode
+    tokenUrl: https://login.microsoftonline.com/18b56834-dfea-4931-bdf8-e5ebb0cb4e0f/oauth2/v2.0/token
+    authorizationUrl: https://login.microsoftonline.com/18b56834-dfea-4931-bdf8-e5ebb0cb4e0f/oauth2/v2.0/authorize
+    scopes:
+      api://a1e8b8a0-7690-4d09-9974-e4742d3de4e9/access_as_user: Access as user
+security:
+  - oauth2-auth:
+      - api://a1e8b8a0-7690-4d09-9974-e4742d3de4e9/access_as_user

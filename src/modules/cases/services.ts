@@ -70,7 +70,7 @@ interface CreateCaseInput {
   clientName: string;
   matterType: string;
   description?: string;
-  createdById: string;
+  createdById?: string;
 }
 
 class CasesService {
@@ -271,16 +271,24 @@ class CasesService {
     // Use default if invalid matterType
     const matterType = VALID_MATTER_TYPES.includes(params.matterType) ? params.matterType : DEFAULT_MATTER_TYPE;
 
+    // Generate title from clientName + matterType
+    const title = params.clientName ? `${params.clientName} - ${matterType}` : `Case ${caseNumber}`;
+
+    // Use default createdById if not provided (e.g., for Azure AD users not in local DB)
+    const createdById = params.createdById || 'system';
+
     const newCase = await prisma.case.create({
       data: {
         caseNumber,
+        title,
         clientName: params.clientName,
         matterType: matterType as any,
         description: params.description,
         status: DEFAULT_STATUS as any,
         priority: 'MEDIUM' as any,
         sharepointSite: 'Adminiculum - Legal Workflow',
-        sharepointRoot: `/sites/AdminiculumLegalWorkflow/Cases/${caseNumber}`
+        sharepointRoot: `/sites/AdminiculumLegalWorkflow/Cases/${caseNumber}`,
+        createdById: createdById
       } as any
     });
 
@@ -291,7 +299,7 @@ class CasesService {
     await prisma.timelineEvent.create({
       data: {
         caseId: newCase.id,
-        userId: params.createdById,
+        userId: createdById,
         eventType: 'CASE_CREATED',
         type: 'CASE_CREATED' as any,
         payload: {
