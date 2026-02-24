@@ -144,17 +144,18 @@ router.get('/:caseId', auth_1.authenticate, async (req, res) => {
 router.post('/', auth_1.authenticate, async (req, res) => {
     try {
         const userId = req.user?.userId;
-        const { clientName, matterType, description } = req.body;
-        if (!clientName) {
-            res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Missing required field: clientName' });
+        const { clientId, clientName, matterType, caseType, description } = req.body;
+        if (!clientId && !clientName) {
+            res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Missing required field: clientId or clientName' });
             return;
         }
         const result = await services_1.default.createCase({
+            clientId,
             clientName,
-            matterType: matterType || 'OTHER',
-            description,
-            createdById: userId
-        });
+            matterType,
+            caseType,
+            description
+        }, userId);
         res.status(201).json(result);
     }
     catch (error) {

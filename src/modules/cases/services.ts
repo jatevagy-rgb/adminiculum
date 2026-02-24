@@ -5,6 +5,7 @@
 
 import { prisma } from '../../prisma/prisma.service';
 import { driveService } from '../sharepoint';
+import { Prisma, CaseType, CaseStatus, Priority } from '@prisma/client';
 
 // Prisma schema enum values
 const VALID_MATTER_TYPES = ['REAL_ESTATE_SALE', 'LEASE', 'EMPLOYMENT', 'CORPORATE', 'LITIGATION', 'OTHER'];
@@ -67,10 +68,11 @@ interface CaseSummaryDTO {
 }
 
 interface CreateCaseInput {
-  clientName: string;
-  matterType: string;
+  clientId?: string;
+  clientName?: string;
   description?: string;
-  createdById: string;
+  matterType?: string;
+  caseType?: CaseType;
 }
 
 class CasesService {
@@ -263,44 +265,99 @@ class CasesService {
   /**
    * Create new case
    */
-  async createCase(params: CreateCaseInput): Promise<{ id: string; caseNumber: string; status: string; createdAt: Date }> {
-    const year = new Date().getFullYear();
-    const count = await prisma.case.count();
-    const caseNumber = `CASE-${year}-${String(count + 1).padStart(3, '0')}`;
+  async createCase(
+    params: CreateCaseInput,
+    currentUserId: string
+  ): Promise<{ id: string; caseNumber: string; status: string; createdAt: Date }> {
+    // DB transaction for atomic operations
+    const newCase = await prisma.$transaction(async (tx) => {
+      // 1️⃣ Safe caseNumber generation (unique constraint rely)
+      const year = new Date().getFullYear();
+      const lastCase = await tx.case.findFirst({
+        where: {
+          caseNumber: { startsWith: `CASE-${year}-` }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
 
-    // Use default if invalid matterType
-    const matterType = VALID_MATTER_TYPES.includes(params.matterType) ? params.matterType : DEFAULT_MATTER_TYPE;
+      const nextSeq = lastCase
+        ? parseInt(lastCase.caseNumber.split('-')[2]) + 1
+        : 1;
 
-    const newCase = await prisma.case.create({
-      data: {
-        caseNumber,
-        clientName: params.clientName,
-        matterType: matterType as any,
-        description: params.description,
-        status: DEFAULT_STATUS as any,
-        priority: 'MEDIUM' as any,
-        sharepointSite: 'Adminiculum - Legal Workflow',
-        sharepointRoot: `/sites/AdminiculumLegalWorkflow/Cases/${caseNumber}`
-      } as any
-    });
+      const caseNumber = `CASE-${year}-${String(nextSeq).padStart(3, '0')}`;
 
-    // Create case folder in SharePoint
-    await driveService.createCaseFolders(caseNumber, params.clientName);
+      // 2️⃣ Client resolve (relation-safe)
+      let clientId: string;
 
-    // Create TimelineEvent for case creation
-    await prisma.timelineEvent.create({
-      data: {
-        caseId: newCase.id,
-        userId: params.createdById,
-        eventType: 'CASE_CREATED',
-        type: 'CASE_CREATED' as any,
-        payload: {
-          caseNumber,
-          clientName: params.clientName,
-          matterType: matterType
+      if (params.clientId) {
+        const client = await tx.client.findUnique({
+          where: { id: params.clientId }
+        });
+
+        if (!client) {
+          throw new Error('Client not found');
         }
-      } as any
+
+        clientId = client.id;
+      } else if (params.clientName) {
+        const client = await tx.client.create({
+          data: { name: params.clientName }
+        });
+        clientId = client.id;
+      } else {
+        throw new Error('clientId or clientName required');
+      }
+
+      // 3️⃣ Enum-safe mapping
+      const validatedCaseType = params.caseType && Object.values(CaseType).includes(params.caseType)
+        ? params.caseType
+        : CaseType.OTHER;
+
+      // 4️⃣ Case create
+      const createdCase = await tx.case.create({
+        data: {
+          caseNumber,
+          title: `${params.clientName ?? 'Client'} - ${validatedCaseType}`,
+          description: params.description ?? null,
+
+          caseType: validatedCaseType,
+          status: CaseStatus.CLIENT_INPUT,
+          priority: Priority.MEDIUM,
+
+          clientId,
+          createdById: currentUserId,
+
+          sharepointSite: 'Adminiculum - Legal Workflow',
+          sharepointRoot: `/sites/AdminiculumLegalWorkflow/Cases/${caseNumber}`
+        }
+      });
+
+      // 5️⃣ Timeline event
+      await tx.timelineEvent.create({
+        data: {
+          caseId: createdCase.id,
+          userId: currentUserId,
+          eventType: 'CASE_CREATED',
+          type: 'CASE_CREATED',
+          payload: {
+            caseNumber,
+            clientId,
+            caseType: validatedCaseType
+          }
+        }
+      });
+
+      return createdCase;
     });
+
+    // 6️⃣ Create SharePoint folders (outside transaction - external API call)
+    // Don't fail the whole operation if SharePoint fails
+    try {
+      await driveService.createCaseFolders(newCase.caseNumber, params.clientName ?? 'Client');
+    } catch (spError) {
+      console.error('SharePoint folder creation failed:', spError);
+      // Continue - DB operation succeeded, SharePoint is optional
+    }
 
     return {
       id: newCase.id,

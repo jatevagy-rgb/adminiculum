@@ -2,6 +2,7 @@
  * Cases Service V3 - Integrated with Documents + Timeline
  * Case management with timeline, documents, and summary endpoints
  */
+import { CaseType } from '@prisma/client';
 interface CaseListItem {
     id: string;
     caseNumber: string;
@@ -62,10 +63,11 @@ interface CaseSummaryDTO {
     };
 }
 interface CreateCaseInput {
-    clientName: string;
-    matterType: string;
+    clientId?: string;
+    clientName?: string;
     description?: string;
-    createdById: string;
+    matterType?: string;
+    caseType?: CaseType;
 }
 declare class CasesService {
     /**
@@ -101,7 +103,7 @@ declare class CasesService {
     /**
      * Create new case
      */
-    createCase(params: CreateCaseInput): Promise<{
+    createCase(params: CreateCaseInput, currentUserId: string): Promise<{
         id: string;
         caseNumber: string;
         status: string;

@@ -1,54 +1,65 @@
 # Power Apps Custom Connector - Teljes Beállítási Útmutató
 
-## 1. Általános Beállítások (General)
+## 1. Environment Ellenőrzés
 
-| Mező | Érték |
-|------|-------|
-| **Title** | Adminiculum API |
-| **Description** | Legal Workflow Platform API |
-| **Host** | `adminiculumaustriaeast-01.azurewebsites.net` |
-| **Base URL** | `/api/v1` |
+1. Menj a Power Platform: https://make.powerapps.com
+2. Nézd meg jobb felső sarokban az **Environment** mezőt
+3. Válaszd azt, ahol a Power App fut (pl. "Bálintfy és Társai Ügyvédi Iroda (default)")
+4. Győződj meg róla, hogy az appod látható az **Apps** menüben
 
 ---
 
-## 2. Security - OAuth 2.0 Beállítások
+## 2. Custom Connector Létrehozása
 
-### 2.1 Security Fül
+1. **Bal oldali menü** → **Egyéni összekötők**
+2. **New custom connector** → **Create from blank**
+3. **Név:** `Adminiculum API Connector`
+4. Mentés, hogy a **General** / **Security** fül aktiválódjon
+
+---
+
+## 3. General / Általános Információk
+
+| Mező | Érték |
+|------|-------|
+| **Icon** | PNG/JPG (<1MB) |
+| **Icon background color** | #007ee5 |
+| **Description** | "Connector for Adminiculum API integration with SharePoint" |
+| **Host** | `adminiculumaustriaeast-01.azurewebsites.net` |
+| **Base URL** | `/` |
+
+---
+
+## 4. Security / Hitelesítés (OAuth 2.0)
 
 | Mező | Érték |
 |------|-------|
 | **Authentication type** | OAuth 2.0 |
 | **Identity provider** | Azure Active Directory |
-
-### 2.2 OAuth 2.0 Parameters
-
-| Mező | Érték |
-|------|-------|
-| **Client ID** | `82b50ec7-3e89-48aa-af74-4831e1c651cd` |
-| **Client secret** | `O2O8Q~J6VGpoXqQqRYn-lwuvVFWWv8DMpKdSXcSV` |
-| **Tenant ID** | `18b56834-dfea-4931-bdf8-e5ebb0cb4e0f` |
-| **Resource URL** | `api://82b50ec7-3e89-48aa-af74-4831e1c651cd` |
-| **Scope** | `api://82b50ec7-3e89-48aa-af74-4831e1c651cd/.default` |
-
-### 2.3 OAuth 2.0 URLs
-
-| Mező | Érték |
-|------|-------|
+| **Client ID** | `a1e8b8a0-7690-4d09-9974-e4742d3de4e9` |
+| **Client secret** | `<YOUR_CLIENT_SECRET>` |
 | **Authorization URL** | `https://login.microsoftonline.com/18b56834-dfea-4931-bdf8-e5ebb0cb4e0f/oauth2/v2.0/authorize` |
 | **Token URL** | `https://login.microsoftonline.com/18b56834-dfea-4931-bdf8-e5ebb0cb4e0f/oauth2/v2.0/token` |
-| **Refresh URL** | `https://login.microsoftonline.com/18b56834-dfea-4931-bdf8-e5ebb0cb4e0f/oauth2/v2.0/token` |
+| **Tenant ID** | `18b56834-dfea-4931-bdf8-e5ebb0cb4e0f` |
+| **Resource URL** | `api://a1e8b8a0-7690-4d09-9974-e4742d3de4e9` |
+| **Scope** | `api://a1e8b8a0-7690-4d09-9974-e4742d3de4e9/access_as_user` |
+| **Enable on-behalf-of login** | `false` |
+
+### Fontos:
+- A **Scope NEM `.default`**, hanem `api://<client-id>/access_as_user`
+- A **Tenant ID NEM `common`**, hanem a tényleges tenant ID
 
 ---
 
-## 3. Azure Portal - Redirect URI Beállítása
+## 5. Azure Portal - Redirect URI Beállítása
 
-### 3.1 Ugrás az Azure Portalra
+### 5.1 Ugrás az Azure Portalra
 
 1. Nyisd meg: https://portal.azure.com
 2. Navigálj: **Azure Active Directory** → **App registrations**
-3. Válaszd ki: `Adminiculum-SharePoint`
+3. Válaszd ki: `Adminiculum-SharePoint` (vagy az app neve)
 
-### 3.2 Redirect URI Hozzáadása
+### 5.2 Redirect URI Hozzáadása
 
 1. Kattints: **Authentication** (bal menü)
 2. Kattints: **Add URI**
@@ -58,181 +69,115 @@
    ```
 4. Kattints: **Save**
 
-### 3.3 Implicit Grant (ha kell)
+### 5.3 Token Config (ha szükséges)
 
-Ugyanitt az **Authentication** oldalon:
-- ✅ Engedélyezd: **ID tokens**
-- ✅ Engedélyezd: **Access tokens**
+1. Kattints: **Token configuration** (bal menü)
+2. **Add optional claim** → **ID token**
+3. Adj hozzá: `upn`, `email`
 
 ---
 
-## 4. Műveletek (Actions) Manuális Hozzáadása
+## 6. Definition / API Végpontok
 
-### 4.1 Login Művelet
+### 6.1 Login Művelet
 
-**Művelet azonosítója:** `Login`
-**Verb:** `POST`
-**URL path:** `/auth/login`
+| Mező | Érték |
+|------|-------|
+| **Operation ID** | `Login` |
+| **Verb** | `POST` |
+| **URL** | `/api/v1/auth/login` |
 
 **Request Body:**
 ```json
 {
-  "email": "string",
-  "password": "string"
+  "email": { "type": "string" },
+  "password": { "type": "string" }
 }
 ```
 
 **Response (200):**
 ```json
 {
-  "accessToken": "string",
-  "refreshToken": "string",
-  "expiresIn": "integer",
+  "accessToken": { "type": "string" },
   "user": {
-    "id": "string",
-    "email": "string",
-    "name": "string",
-    "role": "string"
+    "id": { "type": "string" },
+    "email": { "type": "string" },
+    "name": { "type": "string" },
+    "role": { "type": "string" }
   }
 }
 ```
 
----
+### 6.2 OpenAPI Import (Ajánlott)
 
-### 4.2 GetCases Művelet
+Ha van OpenAPI spec, importálhatod:
+1. **Definition** fül
+2. **Import from URL** vagy **Import from file**
+3. URL: `https://adminiculumaustriaeast-01.azurewebsites.net/api/v1/openapi.json`
 
-**Művelet azonosítója:** `GetCases`
-**Verb:** `GET`
-**URL path:** `/cases`
-
----
-
-### 4.3 CreateCase Művelet
-
-**Művelet azonosítója:** `CreateCase`
-**Verb:** `POST`
-**URL path:** `/cases`
-
-**Request Body:**
-```json
-{
-  "title": "string",
-  "type": "string",
-  "description": "string",
-  "clientId": "string",
-  "priority": "low/normal/high/urgent",
-  "dueDate": "string (date)"
-}
-```
-
----
-
-### 4.4 GetCaseById Művelet
-
-**Művelet azonosítója:** `GetCaseById`
-**Verb:** `GET`
-**URL path:** `/cases/{id}`
-
-**Path Parameters:**
-| Name | Type | Required |
-|------|------|----------|
-| id | string | Yes |
-
----
-
-### 4.5 GetDocuments Művelet
-
-**Művelet azonosítója:** `GetDocuments`
-**Verb:** `GET`
-**URL path:** `/documents`
-
----
-
-### 4.6 GetUsers Művelet
-
-**Művelet azonosítója:** `GetUsers`
-**Verb:** `GET`
-**URL path:** `/users`
-
----
-
-### 4.7 GetClients Művelet
-
-**Művelet azonosítója:** `GetClients`
-**Verb:** `GET`
-**URL path:** `/clients`
-
----
-
-### 4.8 GetClientSummary Művelet
-
-**Művelet azonosítója:** `GetClientSummary`
-**Verb:** `GET`
-**URL path:** `/client-portal/summary/{clientId}`
-
-**Path Parameters:**
-| Name | Type | Required |
-|------|------|----------|
-| clientId | string | Yes |
-
----
-
-## 5. Teljes API Endpoint Lista
+### 6.3 Gyakori Endpoint-ok
 
 | # | Művelet | Verb | URL Path |
 |---|---------|------|----------|
-| 1 | Login | POST | /auth/login |
-| 2 | Register | POST | /auth/register |
-| 3 | GetCurrentUser | GET | /auth/me |
-| 4 | GetCases | GET | /cases |
-| 5 | CreateCase | POST | /cases |
-| 6 | GetCaseById | GET | /cases/{id} |
-| 7 | UpdateCaseStatus | PATCH | /cases/{id}/status |
-| 8 | GetCaseHistory | GET | /cases/{id}/history |
-| 9 | GetDocuments | GET | /documents |
-| 10 | GetDocumentById | GET | /documents/{id} |
-| 11 | UploadDocumentVersion | POST | /documents/{id}/version |
-| 12 | GetDocumentVersions | GET | /documents/{id}/versions |
-| 13 | GetUsers | GET | /users |
-| 14 | CreateUser | POST | /users |
-| 15 | GetUserById | GET | /users/{id} |
-| 16 | GetUserSkills | GET | /users/{id}/skills |
-| 17 | UpdateUserSkills | PUT | /users/{id}/skills |
-| 18 | GetClients | GET | /clients |
-| 19 | CreateClient | POST | /clients |
-| 20 | GetClientById | GET | /clients/{id} |
-| 21 | GetClientRequests | GET | /clients/{id}/requests |
-| 22 | GetMessages | GET | /messages |
-| 23 | SendMessage | POST | /messages |
-| 24 | GetActivityFeed | GET | /messages/feed |
-| 25 | GetTemplates | GET | /templates |
-| 26 | GetClientSummary | GET | /client-portal/summary/{clientId} |
-| 27 | GetClientDepartments | GET | /client-portal/departments/{clientId} |
-| 28 | GetClientMatters | GET | /client-portal/departments/{deptId}/matters |
-| 29 | GetClientMatterDetail | GET | /client-portal/matters/{matterId} |
-| 30 | GetClientTimeLog | GET | /client-portal/matters/{matterId}/time-log |
+| 1 | Login | POST | /api/v1/auth/login |
+| 2 | GetCases | GET | /api/v1/cases |
+| 3 | CreateCase | POST | /api/v1/cases |
+| 4 | GetCaseById | GET | /api/v1/cases/{id} |
+| 5 | GetDocuments | GET | /api/v1/documents |
+| 6 | GetUsers | GET | /api/v1/users |
+| 7 | GetClients | GET | /api/v1/clients |
+| 8 | GetContracts | GET | /api/v1/contracts |
 
 ---
 
-## 6. Gyakori Hibák és Megoldások
+## 7. Test / Tesztelés
 
-### Hiba: "Refresh URL is required"
-**Megoldás:** Add meg a Token URL-t Refresh URL-ként is.
+1. **Mentés** → **Test** fül
+2. **Create new connection**
+3. OAuth flow lefut → bejelentkezés az irodai user-rel
 
-### Hiba: "Scope is required"
-**Megoldás:** Használd: `api://<client-id>/.default`
+### Token Ellenőrzés:
+- `aud` = `a1e8b8a0-7690-4d09-9974-e4742d3de4e9`
+- `scope` = `api://a1e8b8a0-7690-4d09-9974-e4742d3de4e9/access_as_user`
 
-### Hiba: "Invalid client secret"
-**Megoldás:** Ellenőrizd a secret-et az Azure Portalon.
+### Gyakori Hibák:
 
-### Hiba: "AADSTS50011 - Redirect URI mismatch"
-**Megoldás:** Adj hozzá redirect URI-t az Azure Portalon.
+| Hiba | Megoldás |
+|------|----------|
+| "AADSTS50011 - Redirect URI mismatch" | Adj hozzá redirect URI-t az Azure Portalon |
+| "AADSTS700016 - Application not found" | Ellenőrizd a Client ID-t |
+| "AADSTS7000215 - Invalid client secret" | Ellenőrizd a secret-et |
+| Scope hiba | Használd: `api://<client-id>/access_as_user` |
+| Environment hiba | Ellenőrizd, hogy a megfelelő environment van kiválasztva |
 
 ---
 
-## 7. Tesztelés
+## 8. Power App Használata
 
-1. **Custom Connector** → **Test** fül
-2. **Connections** → **+ New connection**
-3. Jelentkezz be Microsoft fiókkal
-4. Teszteld a `Login` műveletet
+A connector létrehozása után:
+
+1. **Power Apps** → **Apps** → Új app
+2. **Data** → **Connectors** → `Adminiculum API Connector`
+3. Használd a connector-t pl. `AdminiculumAPI.Login(...)`
+
+---
+
+## 9. Alternatív Megoldás (Egyszerűbb)
+
+Ha az OAuth 2.0 nem működik, használhatsz **API Key** authentication-t:
+
+| Mező | Érték |
+|------|-------|
+| **Authentication type** | API Key |
+| **Key header name** | `Authorization` |
+| **Key value** | `Bearer <jwt-token>` |
+
+Vagy **No Authentication** és manuálisan kezeled a login-t a Power Apps-ben.
+
+---
+
+## 10. API Endpoint Lista
+
+Teljes API endpoint lista: [API_DOCUMENTATION.md](src/API_DOCUMENTATION.md)
+
+OpenAPI spec: https://adminiculumaustriaeast-01.azurewebsites.net/api/v1/openapi.json

@@ -62,3 +62,32 @@ deploy*.zip
 deploy*.tar*
 deploy-azure*
 deploy-package*
+
+# App logs
+app_logs/
+app_logs_*/
+*.zip
+
+# Deployment scripts
+deploy_*.ps1
+upload_*.ps1
+azure_deploy/
+deploy_package/
+deploy_package2/
+
+# Auth files
+auth_base64.txt
+adminiculum-connector.yaml
+POWER_APPS_OAUTH_CONFIG.md
+
+# Old deployment files (delete these)
+-p
+deploy-azure.bat
+deploy-azure.sh
+deploy-azure.zip
+deploy.zip
+deploy2.zip
+deploy_with_modules.zip
+deploy_full.zip
+full_deploy.zip
+dist.zip
