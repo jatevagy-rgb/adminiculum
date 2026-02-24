@@ -47,7 +47,10 @@ async function verifyAzureAdToken(token: string): Promise<JwtPayload> {
     jwt.verify(token, getAzureSigningKey, {
       audience: [
         'api://82b50ec7-3e89-48aa-af74-4831e1c651cd',
-        '82b50ec7-3e89-48aa-af74-4831e1c651cd'
+        '82b50ec7-3e89-48aa-af74-4831e1c651cd',
+        // Power Apps Custom Connector (new app registration)
+        'api://96872568-58a6-4ea5-8711-2d2c4ec7e16e',
+        '96872568-58a6-4ea5-8711-2d2c4ec7e16e'
       ], // Can be app ID or api://clientid
       issuer: [
         `https://login.microsoftonline.com/${AZURE_AD_TENANT_ID}/v2.0`,
