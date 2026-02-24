@@ -2,6 +2,7 @@
  * Adminiculum Backend V2 - Main Application Entry Point
  * Legal Document Management System API
  * Modular Architecture
+ * Updated: 2026-02-24 - Azure Deployment
  */
 
 import express, { Request, Response, NextFunction } from 'express';
