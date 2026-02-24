@@ -1,0 +1,1 @@
+{"version":3,"file":"azureAdAuth.d.ts","sourceRoot":"","sources":["../../src/middleware/azureAdAuth.ts"],"names":[],"mappings":"AAAA;;;;;GAKG;AAEH,OAAO,EAAE,OAAO,EAAE,QAAQ,EAAE,YAAY,EAAE,MAAM,SAAS,CAAC;AAuD1D;;;;;GAKG;AACH,eAAO,MAAM,UAAU,GACrB,KAAK,OAAO,EACZ,KAAK,QAAQ,EACb,MAAM,YAAY,KACjB,OAAO,CAAC,IAAI,CA6Cd,CAAC;AAEF,eAAe,UAAU,CAAC"}

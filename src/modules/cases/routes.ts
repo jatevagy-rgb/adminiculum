@@ -151,7 +151,11 @@ router.get('/:caseId', authenticate, async (req: Request, res: Response): Promis
 router.post('/', authenticate, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
-    const { clientName, matterType, description } = req.body;
+    
+    // Handle both JSON and form-urlencoded data
+    let clientName = req.body?.clientName || req.body?.['clientName'];
+    let matterType = req.body?.matterType || req.body?.['matterType'];
+    let description = req.body?.description || req.body?.['description'];
 
     if (!clientName) {
       res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Missing required field: clientName' });

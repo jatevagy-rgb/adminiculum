@@ -1,2 +1,2 @@
 [config]
-command = bash -c "npm install && npx prisma generate"
+SCM_DO_BUILD_DURING_DEPLOYMENT=true

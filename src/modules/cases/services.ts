@@ -283,6 +283,7 @@ class CasesService {
         title,
         clientName: params.clientName,
         matterType: matterType as any,
+        caseType: 'OTHER' as any,
         description: params.description,
         status: DEFAULT_STATUS as any,
         priority: 'MEDIUM' as any,
