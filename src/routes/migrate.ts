@@ -1,33 +1,52 @@
 /**
- * Migration Runner Endpoint
- * Temporary endpoint to run Prisma migrations
+ * Migration Runner Endpoint - Simple version using Prisma db push
  */
 
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+const prisma = new PrismaClient();
 
 export const runMigration = async (req: Request, res: Response): Promise<void> => {
   try {
-    console.log('Starting migration...');
+    console.log('Starting database migration...');
     
-    // Run prisma migrate deploy
-    const { stdout, stderr } = await execAsync('npx prisma migrate deploy', {
-      cwd: process.cwd(),
-      env: process.env
-    });
+    // Use Prisma db push to create tables from schema
+    // This is simpler than migrate deploy and works for initial setup
+    await prisma.$connect();
+    console.log('Connected to database');
     
-    console.log('Migration stdout:', stdout);
-    console.log('Migration stderr:', stderr);
+    // Check if tables exist
+    const result = await prisma.$queryRaw`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public'
+    `;
+    
+    const tables = result as any[];
+    console.log('Existing tables:', tables);
+    
+    if (tables.length === 0) {
+      // No tables - we need to create them
+      // Use prisma migrate for this
+      console.log('No tables found, running migration...');
+      
+      // Run prisma generate first to ensure client is up to date
+      const { execSync } = require('child_process');
+      try {
+        execSync('npx prisma generate', { stdio: 'inherit' });
+        execSync('npx prisma db push', { stdio: 'inherit' });
+        console.log('Migration completed');
+      } catch (e: any) {
+        console.error('Migration error:', e.message);
+        throw e;
+      }
+    }
     
     res.json({
       success: true,
-      message: 'Migration completed',
-      stdout,
-      stderr
+      message: 'Database check completed',
+      tables: tables.length
     });
   } catch (error: any) {
     console.error('Migration error:', error);
@@ -36,6 +55,8 @@ export const runMigration = async (req: Request, res: Response): Promise<void> =
       message: 'Migration failed',
       error: error.message
     });
+  } finally {
+    await prisma.$disconnect();
   }
 };
 
