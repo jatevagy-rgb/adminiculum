@@ -151,6 +151,10 @@ app.use('/api/v1/contracts', contractsRoutes);
 import workgroupRoutes from './modules/workgroups/routes';
 app.use('/api/v1', workgroupRoutes);
 
+// Migration Runner (temporary - for database setup)
+import { runMigration } from './routes/migrate';
+app.post('/api/v1/migrate', runMigration);
+
 // ========================================
 // Error Handling
 // ========================================

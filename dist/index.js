@@ -134,6 +134,9 @@ app.use('/api/v1/contracts', routes_7.default);
 // Workgroups Module (Client Workload Tracking)
 const routes_8 = __importDefault(require("./modules/workgroups/routes"));
 app.use('/api/v1', routes_8.default);
+// Migration Runner (temporary - for database setup)
+const migrate_1 = require("./routes/migrate");
+app.post('/api/v1/migrate', migrate_1.runMigration);
 // ========================================
 // Error Handling
 // ========================================
