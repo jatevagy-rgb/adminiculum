@@ -1,5 +1,5 @@
 /**
- * Migration Runner Endpoint - Simple version using Prisma db push
+ * Migration Runner Endpoint - Runs prisma db push
  */
 import { Request, Response } from 'express';
 export declare const runMigration: (req: Request, res: Response) => Promise<void>;
