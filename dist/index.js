@@ -3,6 +3,7 @@
  * Adminiculum Backend V2 - Main Application Entry Point
  * Legal Document Management System API
  * Modular Architecture
+ * Updated: 2026-02-24 - Azure Deployment v2
  */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
