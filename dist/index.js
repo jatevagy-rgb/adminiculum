@@ -137,6 +137,9 @@ app.use('/api/v1', routes_8.default);
 // Migration Runner (temporary - for database setup)
 const migrate_1 = require("./routes/migrate");
 app.post('/api/v1/migrate', migrate_1.runMigration);
+// Database Check and Sync (temporary)
+const dbcheck_1 = require("./routes/dbcheck");
+app.get('/api/v1/dbcheck', dbcheck_1.checkAndSyncDatabase);
 // ========================================
 // Error Handling
 // ========================================

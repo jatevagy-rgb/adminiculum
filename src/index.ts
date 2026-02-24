@@ -155,6 +155,10 @@ app.use('/api/v1', workgroupRoutes);
 import { runMigration } from './routes/migrate';
 app.post('/api/v1/migrate', runMigration);
 
+// Database Check and Sync (temporary)
+import { checkAndSyncDatabase } from './routes/dbcheck';
+app.get('/api/v1/dbcheck', checkAndSyncDatabase);
+
 // ========================================
 // Error Handling
 // ========================================
