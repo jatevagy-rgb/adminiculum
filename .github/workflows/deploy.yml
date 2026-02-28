@@ -1,44 +1,35 @@
-name: Deploy to Azure
+name: Deploy to Azure Web App
 
 on:
   push:
-    branches: [ master ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
-    
-    - name: Install dependencies
-      run: npm ci
-    
-    - name: Generate Prisma Client
-      run: npx prisma generate
-    
-    - name: Build TypeScript
-      run: npx tsc
-    
-    - name: Zip deployment package (Linux-friendly)
-      run: |
-        zip -r deploy.zip dist/ prisma/ package.json package-lock.json .deployment
-    
-    - name: Deploy to Azure App Service
-      uses: azure/webapps-deploy@v3
-      with:
-        app-name: adminiculumaustriaeast-01
-        resource-group: Adminiculum
-        package: ./deploy.zip
-      env:
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        JWT_SECRET: ${{ secrets.JWT_SECRET }}
-        SP_CLIENT_ID: ${{ secrets.SP_CLIENT_ID }}
-        SP_TENANT_ID: ${{ secrets.SP_TENANT_ID }}
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Build
+        run: npm run build
+
+      - name: Deploy
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: .
