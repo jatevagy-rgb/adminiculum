@@ -1,0 +1,863 @@
+openapi: 3.0.0
+info:
+  title: Legal Workflow Platform API
+  description: 'Professional legal workflow management system API
+
+
+    PowerApps import edition: paths prefixed with /api/v1 and localhost removed.'
+  version: 1.0.0
+  contact:
+    name: LWP Team
+    email: support@lwp.hu
+servers:
+- url: https://{host}
+  description: Custom host (Dev Tunnel / Staging)
+  variables:
+    host:
+      default: your-tunnel-host.dev-tunnels.ms
+- url: https://adminiculumaustriaeast-01.azurewebsites.net
+  description: Production server (Azure)
+tags:
+- name: Authentication
+  description: User authentication and authorization
+- name: Users
+  description: User management and skills
+- name: Cases
+  description: Case management and workflow
+- name: Documents
+  description: Document versioning and management
+- name: Clients
+  description: Client management
+- name: Messages
+  description: Messages and activity feed
+- name: Templates
+  description: Document templates
+paths:
+  /api/v1/auth/login:
+    post:
+      tags:
+      - Authentication
+      summary: User login
+      description: Authenticate user and receive JWT tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - email
+              - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: admin@lwp.hu
+                password:
+                  type: string
+                  format: password
+                  example: admin123
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  refreshToken:
+                    type: string
+                  expiresIn:
+                    type: integer
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      email:
+                        type: string
+                      name:
+                        type: string
+                      role:
+                        type: string
+        '401':
+          description: Invalid credentials
+      security: []
+  /api/v1/auth/register:
+    post:
+      tags:
+      - Authentication
+      summary: Register new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - email
+              - password
+              - name
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+                  minLength: 6
+                name:
+                  type: string
+                role:
+                  type: string
+                  enum:
+                  - admin
+                  - associate
+                  - junior
+                  - paralegal
+      responses:
+        '201':
+          description: User registered
+        '400':
+          description: Email already registered
+      security: []
+  /api/v1/auth/me:
+    get:
+      tags:
+      - Authentication
+      summary: Get current user
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Current user data
+  /api/v1/cases:
+    get:
+      tags:
+      - Cases
+      summary: List all cases
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - GENERATING
+          - REVIEW
+          - FINAL
+          - ARCHIVED
+      - in: query
+        name: type
+        schema:
+          type: string
+      - in: query
+        name: page
+        schema:
+          type: integer
+          default: 1
+      responses:
+        '200':
+          description: List of cases
+    post:
+      tags:
+      - Cases
+      summary: Create new case
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - title
+              - type
+              properties:
+                title:
+                  type: string
+                type:
+                  type: string
+                description:
+                  type: string
+                clientId:
+                  type: string
+                priority:
+                  type: string
+                  enum:
+                  - low
+                  - normal
+                  - high
+                  - urgent
+                dueDate:
+                  type: string
+                  format: date
+      responses:
+        '201':
+          description: Case created
+  /api/v1/cases/{id}:
+    get:
+      tags:
+      - Cases
+      summary: Get case by ID
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Case data
+        '404':
+          description: Case not found
+  /api/v1/cases/{id}/status:
+    patch:
+      tags:
+      - Cases
+      summary: Update case status
+      description: 'Valid transitions:
+
+        - GENERATING → REVIEW
+
+        - REVIEW → GENERATING (return) or FINAL (approve)
+
+        - FINAL → REVIEW (modify) or ARCHIVED
+
+        '
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - status
+              properties:
+                status:
+                  type: string
+                  enum:
+                  - GENERATING
+                  - REVIEW
+                  - FINAL
+                  - ARCHIVED
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Status updated
+        '400':
+          description: Invalid transition
+  /api/v1/cases/{id}/history:
+    get:
+      tags:
+      - Cases
+      summary: Get case history (audit trail)
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Case history timeline
+  /api/v1/documents:
+    get:
+      tags:
+      - Documents
+      summary: List documents
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: List of documents
+  /api/v1/documents/{id}:
+    get:
+      tags:
+      - Documents
+      summary: Get document
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Document data
+  /api/v1/documents/{id}/version:
+    post:
+      tags:
+      - Documents
+      summary: Create new document version
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '201':
+          description: New version created
+  /api/v1/documents/{id}/versions:
+    get:
+      tags:
+      - Documents
+      summary: Get all versions of a document
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: List of versions
+  /api/v1/users:
+    get:
+      tags:
+      - Users
+      summary: List users
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: List of users
+    post:
+      tags:
+      - Users
+      summary: Create user (admin only)
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          description: User created
+  /api/v1/users/{id}:
+    get:
+      tags:
+      - Users
+      summary: Get user
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: User data
+  /api/v1/users/{id}/skills:
+    get:
+      tags:
+      - Users
+      summary: Get user skills
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: User skills
+    put:
+      tags:
+      - Users
+      summary: Update user skills
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                skills:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      skillType:
+                        type: string
+                      level:
+                        type: integer
+                        minimum: 1
+                        maximum: 5
+      responses:
+        '200':
+          description: Skills updated
+  /api/v1/clients:
+    get:
+      tags:
+      - Clients
+      summary: List clients
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: List of clients
+    post:
+      tags:
+      - Clients
+      summary: Create client
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          description: Client created
+  /api/v1/clients/{id}:
+    get:
+      tags:
+      - Clients
+      summary: Get client
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Client data
+  /api/v1/clients/{id}/requests:
+    get:
+      tags:
+      - Clients
+      summary: Get client requests
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Client requests
+  /api/v1/messages:
+    get:
+      tags:
+      - Messages
+      summary: Get messages
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: List of messages
+    post:
+      tags:
+      - Messages
+      summary: Send message
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          description: Message sent
+  /api/v1/messages/feed:
+    get:
+      tags:
+      - Messages
+      summary: Get activity feed
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Activity feed
+  /api/v1/messages/unread:
+    get:
+      tags:
+      - Messages
+      summary: Get unread count
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Unread count
+  /api/v1/templates:
+    get:
+      tags:
+      - Templates
+      summary: List templates
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: List of templates
+    post:
+      tags:
+      - Templates
+      summary: Create template (admin only)
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          description: Template created
+  /api/v1/templates/{id}:
+    get:
+      tags:
+      - Templates
+      summary: Get template
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Template data
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ContractTemplate:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+          enum:
+          - ADASVETEL
+          - BERLET
+          - MEGBIZAS
+          - MUNKASZERZODES
+          - VALLALKOZAS
+          - EGYEB
+        variables:
+          type: array
+        isActive:
+          type: boolean
+        isDefault:
+          type: boolean
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ContractGeneration:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        templateId:
+          type: string
+        caseId:
+          type: string
+        fileName:
+          type: string
+        fileSize:
+          type: integer
+        status:
+          type: string
+          enum:
+          - PENDING
+          - PREVIEW
+          - GENERATED
+          - UPLOADED
+          - FAILED
+          - EXPIRED
+        generatedAt:
+          type: string
+          format: date-time
+    GenerateContractRequest:
+      type: object
+      required:
+      - templateId
+      - data
+      properties:
+        templateId:
+          type: string
+        caseId:
+          type: string
+        title:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+    GeneratePreviewRequest:
+      type: object
+      required:
+      - templateId
+      - data
+      properties:
+        templateId:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+  /contracts/templates:
+    get:
+      tags:
+      - Contracts
+      summary: List contract templates
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+          enum:
+          - ADASVETEL
+          - BERLET
+          - MEGBIZAS
+          - MUNKASZERZODES
+          - VALLALKOZAS
+          - EGYEB
+      responses:
+        '200':
+          description: List of contract templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContractTemplate'
+    post:
+      tags:
+      - Contracts
+      summary: Upload new contract template
+      security:
+      - bearerAuth: []
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - name
+              - category
+              - template
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                category:
+                  type: string
+                  enum:
+                  - ADASVETEL
+                  - BERLET
+                  - MEGBIZAS
+                  - MUNKASZERZODES
+                  - VALLALKOZAS
+                  - EGYEB
+                template:
+                  type: string
+                  format: binary
+                variables:
+                  type: string
+                isDefault:
+                  type: boolean
+      responses:
+        '201':
+          description: Template created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractTemplate'
+  /contracts/templates/{id}:
+    get:
+      tags:
+      - Contracts
+      summary: Get contract template by ID
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Template data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractTemplate'
+        '404':
+          description: Template not found
+  /contracts/templates/adasvetel/variables:
+    get:
+      tags:
+      - Contracts
+      summary: Get predefined variables for adásvételi contract
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: List of variables for adásvételi contract
+  /contracts/generate:
+    post:
+      tags:
+      - Contracts
+      summary: Generate contract document
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateContractRequest'
+      responses:
+        '201':
+          description: Contract generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  document:
+                    $ref: '#/components/schemas/ContractGeneration'
+        '400':
+          description: Generation failed
+  /contracts/preview:
+    post:
+      tags:
+      - Contracts
+      summary: Generate contract preview (temporary)
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeneratePreviewRequest'
+      responses:
+        '200':
+          description: Preview generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  preview:
+                    type: object
+                    properties:
+                      base64Content:
+                        type: string
+                      fileName:
+                        type: string
+  /contracts/case/{caseId}:
+    get:
+      tags:
+      - Contracts
+      summary: Get generated contracts for a case
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: caseId
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: List of generated contracts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContractGeneration'
+  /contracts/{id}/download:
+    get:
+      tags:
+      - Contracts
+      summary: Download generated contract
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: File download
+          content:
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Contract not found
+  /contracts/cleanup:
+    post:
+      tags:
+      - Contracts
+      summary: Cleanup expired previews (admin only)
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Cleanup completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  deletedCount:
+                    type: integer
+security:
+- bearerAuth: []

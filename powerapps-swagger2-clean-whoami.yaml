@@ -6,45 +6,36 @@ info:
 host: adminiculumaustriaeast-01.azurewebsites.net
 basePath: /
 schemes:
-  - https
+- https
 consumes:
-  - application/json
+- application/json
 produces:
-  - application/json
-securityDefinitions:
-  bearerAuth:
-    type: apiKey
-    in: header
-    name: Authorization
-    description: 'Bearer JWT token (Azure AD or custom JWT)'
-security:
-  - bearerAuth: []
+- application/json
 paths:
   /api/v1/auth/login:
     post:
       summary: Login
       description: Bejelentkezés
       operationId: Login
-      security: []
       consumes:
-        - application/json
+      - application/json
       produces:
-        - application/json
+      - application/json
       parameters:
-        - in: body
-          name: body
-          required: true
-          schema:
-            type: object
-            required:
-              - email
-              - password
-            properties:
-              email:
-                type: string
-                format: email
-              password:
-                type: string
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+          - email
+          - password
+          properties:
+            email:
+              type: string
+              format: email
+            password:
+              type: string
       responses:
         '200':
           description: Login successful
@@ -68,42 +59,42 @@ paths:
                     type: string
                   role:
                     type: string
+      security: []
   /api/v1/auth/register:
     post:
       summary: Register
       description: Regisztráció (teszteléshez)
       operationId: Register
-      security: []
       consumes:
-        - application/json
+      - application/json
       produces:
-        - application/json
+      - application/json
       parameters:
-        - in: body
-          name: body
-          required: true
-          schema:
-            type: object
-            required:
-              - email
-              - password
-              - name
-              - role
-            properties:
-              email:
-                type: string
-              password:
-                type: string
-              name:
-                type: string
-              role:
-                type: string
-                enum:
-                  - ADMIN
-                  - PARTNER
-                  - LAWYER
-                  - TRAINEE
-                  - LEGAL_ASSISTANT
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+          - email
+          - password
+          - name
+          - role
+          properties:
+            email:
+              type: string
+            password:
+              type: string
+            name:
+              type: string
+            role:
+              type: string
+              enum:
+              - ADMIN
+              - PARTNER
+              - LAWYER
+              - TRAINEE
+              - LEGAL_ASSISTANT
       responses:
         '201':
           description: Registration successful
@@ -113,7 +104,7 @@ paths:
       description: Ügyek listázása
       operationId: GetCases
       produces:
-        - application/json
+      - application/json
       responses:
         '200':
           description: List of cases
@@ -122,24 +113,24 @@ paths:
       description: Új ügy létrehozása
       operationId: CreateCase
       consumes:
-        - application/json
+      - application/json
       produces:
-        - application/json
+      - application/json
       parameters:
-        - in: body
-          name: body
-          required: true
-          schema:
-            type: object
-            required:
-              - clientName
-            properties:
-              clientName:
-                type: string
-                description: Ügyfél neve (kötelező)
-              matterType:
-                type: string
-                description: Ügytípus (pl. ADASVETEL, KARTYA, INGATLAN, EGYEB)
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+          - clientName
+          properties:
+            clientName:
+              type: string
+              description: Ügyfél neve (kötelező)
+            matterType:
+              type: string
+              description: Ügytípus (pl. ADASVETEL, KARTYA, INGATLAN, EGYEB)
       responses:
         '201':
           description: Case created
@@ -149,24 +140,24 @@ paths:
       description: Szerződés generálása
       operationId: GenerateContract
       consumes:
-        - application/json
+      - application/json
       produces:
-        - application/json
+      - application/json
       parameters:
-        - in: body
-          name: body
-          required: true
-          schema:
-            type: object
-            properties:
-              templateId:
-                type: string
-              caseId:
-                type: string
-              title:
-                type: string
-              data:
-                type: object
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          properties:
+            templateId:
+              type: string
+            caseId:
+              type: string
+            title:
+              type: string
+            data:
+              type: object
       responses:
         '201':
           description: Contract generated
@@ -176,7 +167,7 @@ paths:
       description: Szerződés sablonok
       operationId: GetContractTemplates
       produces:
-        - application/json
+      - application/json
       responses:
         '200':
           description: List of templates
@@ -186,7 +177,7 @@ paths:
       description: Jelenlegi felhasználó adatai
       operationId: GetCurrentUser
       produces:
-        - application/json
+      - application/json
       responses:
         '200':
           description: Current user data
@@ -196,12 +187,12 @@ paths:
       description: Ügy részletei
       operationId: GetCaseById
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
+      - name: id
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: Case details
@@ -211,22 +202,22 @@ paths:
       description: Ügy státusz frissítése
       operationId: UpdateCaseStatus
       consumes:
-        - application/json
+      - application/json
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
-        - in: body
-          name: body
-          required: true
-          schema:
-            type: object
-            properties:
-              status:
-                type: string
+      - name: id
+        in: path
+        required: true
+        type: string
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
       responses:
         '200':
           description: Status updated
@@ -236,12 +227,12 @@ paths:
       description: Ügy történet
       operationId: GetCaseHistory
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
+      - name: id
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: Case history
@@ -251,7 +242,7 @@ paths:
       description: Dokumentumok listázása
       operationId: GetDocuments
       produces:
-        - application/json
+      - application/json
       responses:
         '200':
           description: List of documents
@@ -261,12 +252,12 @@ paths:
       description: Dokumentum részletei
       operationId: GetDocumentById
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
+      - name: id
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: Document details
@@ -276,7 +267,7 @@ paths:
       description: Felhasználók listázása
       operationId: GetUsers
       produces:
-        - application/json
+      - application/json
       responses:
         '200':
           description: List of users
@@ -285,15 +276,15 @@ paths:
       description: Új felhasználó létrehozása
       operationId: CreateUser
       consumes:
-        - application/json
+      - application/json
       produces:
-        - application/json
+      - application/json
       parameters:
-        - in: body
-          name: body
-          required: true
-          schema:
-            type: object
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
       responses:
         '201':
           description: User created
@@ -303,12 +294,12 @@ paths:
       description: Felhasználó részletei
       operationId: GetUserById
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
+      - name: id
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: User details
@@ -318,12 +309,12 @@ paths:
       description: Felhasználó skilljei
       operationId: GetUserSkills
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
+      - name: id
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: User skills
@@ -332,19 +323,19 @@ paths:
       description: Skill-ek frissítése
       operationId: UpdateUserSkills
       consumes:
-        - application/json
+      - application/json
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
-        - in: body
-          name: body
-          required: true
-          schema:
-            type: object
+      - name: id
+        in: path
+        required: true
+        type: string
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
       responses:
         '200':
           description: Skills updated
@@ -354,7 +345,7 @@ paths:
       description: Ügyfelek listázása
       operationId: GetClients
       produces:
-        - application/json
+      - application/json
       responses:
         '200':
           description: List of clients
@@ -363,15 +354,15 @@ paths:
       description: Új ügyfél létrehozása
       operationId: CreateClient
       consumes:
-        - application/json
+      - application/json
       produces:
-        - application/json
+      - application/json
       parameters:
-        - in: body
-          name: body
-          required: true
-          schema:
-            type: object
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
       responses:
         '201':
           description: Client created
@@ -381,12 +372,12 @@ paths:
       description: Ügyfél részletei
       operationId: GetClientById
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
+      - name: id
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: Client details
@@ -396,12 +387,12 @@ paths:
       description: Ügyfél kérések
       operationId: GetClientRequests
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
+      - name: id
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: Client requests
@@ -411,7 +402,7 @@ paths:
       description: Üzenetek listázása
       operationId: GetMessages
       produces:
-        - application/json
+      - application/json
       responses:
         '200':
           description: List of messages
@@ -420,15 +411,15 @@ paths:
       description: Üzenet küldése
       operationId: SendMessage
       consumes:
-        - application/json
+      - application/json
       produces:
-        - application/json
+      - application/json
       parameters:
-        - in: body
-          name: body
-          required: true
-          schema:
-            type: object
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
       responses:
         '201':
           description: Message sent
@@ -438,7 +429,7 @@ paths:
       description: Tevékenység hírfolyam
       operationId: GetActivityFeed
       produces:
-        - application/json
+      - application/json
       responses:
         '200':
           description: Activity feed
@@ -448,7 +439,7 @@ paths:
       description: Olvasatlan üzenetek száma
       operationId: GetUnreadCount
       produces:
-        - application/json
+      - application/json
       responses:
         '200':
           description: Unread count
@@ -458,7 +449,7 @@ paths:
       description: Sablonok listázása
       operationId: GetTemplates
       produces:
-        - application/json
+      - application/json
       responses:
         '200':
           description: List of templates
@@ -467,15 +458,15 @@ paths:
       description: Új sablon létrehozása
       operationId: CreateTemplate
       consumes:
-        - application/json
+      - application/json
       produces:
-        - application/json
+      - application/json
       parameters:
-        - in: body
-          name: body
-          required: true
-          schema:
-            type: object
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
       responses:
         '201':
           description: Template created
@@ -485,12 +476,12 @@ paths:
       description: Sablon részletei
       operationId: GetTemplateById
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
+      - name: id
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: Template details
@@ -500,12 +491,12 @@ paths:
       description: Szerződés sablon részletei
       operationId: GetContractTemplateById
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
+      - name: id
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: Template details
@@ -515,7 +506,7 @@ paths:
       description: Adásvételi szerződés változók
       operationId: GetAdasvetelVariables
       produces:
-        - application/json
+      - application/json
       responses:
         '200':
           description: Variables
@@ -525,15 +516,15 @@ paths:
       description: Szerződés előnézet generálás
       operationId: GenerateContractPreview
       consumes:
-        - application/json
+      - application/json
       produces:
-        - application/json
+      - application/json
       parameters:
-        - in: body
-          name: body
-          required: true
-          schema:
-            type: object
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
       responses:
         '201':
           description: Preview generated
@@ -543,12 +534,12 @@ paths:
       description: Ügy szerződései
       operationId: GetCaseContracts
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: caseId
-          in: path
-          required: true
-          type: string
+      - name: caseId
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: Case contracts
@@ -558,12 +549,12 @@ paths:
       description: Szerződés letöltés
       operationId: DownloadContract
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
+      - name: id
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: Contract file
@@ -573,12 +564,12 @@ paths:
       description: Szerződés feltöltése SharePointba
       operationId: UploadContractToSharePoint
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
+      - name: id
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: Uploaded to SharePoint
@@ -588,12 +579,12 @@ paths:
       description: Ügyfél összefoglaló
       operationId: GetClientSummary
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: clientId
-          in: path
-          required: true
-          type: string
+      - name: clientId
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: Client summary
@@ -603,12 +594,12 @@ paths:
       description: Ügyfél osztályai
       operationId: GetClientDepartments
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: clientId
-          in: path
-          required: true
-          type: string
+      - name: clientId
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: Client departments
@@ -618,12 +609,12 @@ paths:
       description: Ügyfél ügyei
       operationId: GetClientMatters
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: deptId
-          in: path
-          required: true
-          type: string
+      - name: deptId
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: Client matters
@@ -633,12 +624,12 @@ paths:
       description: Ügy részletei
       operationId: GetClientMatterDetail
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: matterId
-          in: path
-          required: true
-          type: string
+      - name: matterId
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: Matter details
@@ -648,12 +639,12 @@ paths:
       description: Ügy időnaplója
       operationId: GetClientTimeLog
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: matterId
-          in: path
-          required: true
-          type: string
+      - name: matterId
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: Time log
@@ -663,7 +654,7 @@ paths:
       description: Matters listázása
       operationId: GetMatters
       produces:
-        - application/json
+      - application/json
       responses:
         '200':
           description: List of matters
@@ -673,12 +664,12 @@ paths:
       description: Matter részletei
       operationId: GetMatterById
       produces:
-        - application/json
+      - application/json
       parameters:
-        - name: id
-          in: path
-          required: true
-          type: string
+      - name: id
+        in: path
+        required: true
+        type: string
       responses:
         '200':
           description: Matter details
@@ -688,7 +679,7 @@ paths:
       description: Időbejegyzések
       operationId: GetTimeEntries
       produces:
-        - application/json
+      - application/json
       responses:
         '200':
           description: List of time entries
@@ -697,26 +688,57 @@ paths:
       description: Új időbejegyzés
       operationId: CreateTimeEntry
       consumes:
-        - application/json
+      - application/json
       produces:
-        - application/json
+      - application/json
       parameters:
-        - in: body
-          name: body
-          required: true
-          schema:
-            type: object
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
       responses:
         '201':
           description: Time entry created
+  /api/v1/debug/whoami:
+    get:
+      tags:
+      - Debug
+      summary: Who am I
+      description: Returns information about the authenticated user/token (Azure AD
+        or internal JWT).
+      operationId: DebugWhoAmI
+      produces:
+      - application/json
+      responses:
+        '200':
+          description: Token information
+          schema:
+            $ref: '#/definitions/WhoAmIResponse'
+        '401':
+          description: Unauthorized
 securityDefinitions:
-  oauth2-auth:
-    type: oauth2
-    flow: accessCode
-    tokenUrl: https://login.microsoftonline.com/18b56834-dfea-4931-bdf8-e5ebb0cb4e0f/oauth2/v2.0/token
-    authorizationUrl: https://login.microsoftonline.com/18b56834-dfea-4931-bdf8-e5ebb0cb4e0f/oauth2/v2.0/authorize
-    scopes:
-      api://a1e8b8a0-7690-4d09-9974-e4742d3de4e9/access_as_user: Access as user
+  bearerAuth:
+    type: apiKey
+    name: Authorization
+    in: header
+    description: Bearer {token}
 security:
-  - oauth2-auth:
-      - api://a1e8b8a0-7690-4d09-9974-e4742d3de4e9/access_as_user
+- bearerAuth: []
+definitions:
+  WhoAmIResponse:
+    type: object
+    properties:
+      isAuthenticated:
+        type: boolean
+      tokenType:
+        type: string
+        enum:
+        - azure_ad
+        - jwt
+        - none
+      claims:
+        type: object
+        additionalProperties: true
+      message:
+        type: string

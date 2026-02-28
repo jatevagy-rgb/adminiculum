@@ -24,11 +24,11 @@
 
 | Mező | Érték |
 |------|-------|
-| **Client ID** | `82b50ec7-3e89-48aa-af74-4831e1c651cd` |
-| **Client secret** | `O2O8Q~J6VGpoXqQqRYn-lwuvVFWWv8DMpKdSXcSV` |
+| **Client ID** | `96872568-58a6-4ea5-8711-2d2c4ec7e16e` |
+| **Client secret** | [REDACTED - stored in GitHub Secrets] |
 | **Tenant ID** | `18b56834-dfea-4931-bdf8-e5ebb0cb4e0f` |
-| **Resource URL** | `api://82b50ec7-3e89-48aa-af74-4831e1c651cd` |
-| **Scope** | `api://82b50ec7-3e89-48aa-af74-4831e1c651cd/.default` |
+| **Resource URL** | `api://96872568-58a6-4ea5-8711-2d2c4ec7e16e` |
+| **Scope** | `api://96872568-58a6-4ea5-8711-2d2c4ec7e16e/.default` |
 
 ### 2.3 OAuth 2.0 URLs
 
@@ -40,13 +40,13 @@
 
 ---
 
-## 3. Azure Portal - Redirect URI Beállítása
+## 3. Azure Portal - Redirect URI és API Expose Beállítása
 
 ### 3.1 Ugrás az Azure Portalra
 
 1. Nyisd meg: https://portal.azure.com
 2. Navigálj: **Azure Active Directory** → **App registrations**
-3. Válaszd ki: `Adminiculum-SharePoint`
+3. Válaszd ki: `adminiculum-powerapps-client`
 
 ### 3.2 Redirect URI Hozzáadása
 
@@ -58,7 +58,22 @@
    ```
 4. Kattints: **Save**
 
-### 3.3 Implicit Grant (ha kell)
+### 3.3 API Expose (Application ID URI)
+
+1. Kattints: **Expose an API** (bal menü)
+2. Kattints: **Add** az "Application ID URI" mellett
+3. Javasolt érték: `api://96872568-58a6-4ea5-8711-2d2c4ec7e16e`
+4. Kattints: **Save**
+
+### 3.4 Scope Hozzáadása
+
+1. Ugyanitt az "Expose an API" oldalon:
+2. Kattints: **Add a scope**
+3. Scope name: `access_as_user`
+4. Admin consent required: **Yes**
+5. Kattints: **Save**
+
+### 3.5 Implicit Grant (ha kell)
 
 Ugyanitt az **Authentication** oldalon:
 - ✅ Engedélyezd: **ID tokens**
