@@ -148,6 +148,10 @@ app.use('/api/v1/client-portal', clientPortalRoutes);
 import contractsRoutes from './modules/contracts/routes';
 app.use('/api/v1/contracts', contractsRoutes);
 
+// Clients Module
+import clientsRoutes from './modules/clients/routes';
+app.use('/api/v1/clients', clientsRoutes);
+
 // Workgroups Module (Client Workload Tracking)
 import workgroupRoutes from './modules/workgroups/routes';
 app.use('/api/v1', workgroupRoutes);
