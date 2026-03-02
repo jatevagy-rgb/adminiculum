@@ -10,6 +10,11 @@ import { authenticate } from '../../middleware/auth';
 
 const router = Router();
 
+// Ping endpoint for debugging
+router.get('/ping', (_req: Request, res: Response) => {
+  res.json({ ok: true, message: 'Clients router working' });
+});
+
 // ============================================================================
 // GET /clients
 // ============================================================================
