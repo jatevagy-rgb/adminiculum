@@ -60,6 +60,7 @@ app.get('/', (_req: Request, res: Response) => {
       cases: '/api/v1/cases',
       tasks: '/api/v1/tasks',
       contracts: '/api/v1/contracts',
+      clients: '/api/v1/clients',
       openapi: '/api/v1/openapi.json'
     }
   });
@@ -147,6 +148,10 @@ app.use('/api/v1/client-portal', clientPortalRoutes);
 // Contracts Module
 import contractsRoutes from './modules/contracts/routes';
 app.use('/api/v1/contracts', contractsRoutes);
+
+// Clients Module
+import clientsRoutes from './modules/clients/routes';
+app.use('/api/v1/clients', clientsRoutes);
 
 // Workgroups Module (Client Workload Tracking)
 import workgroupRoutes from './modules/workgroups/routes';
