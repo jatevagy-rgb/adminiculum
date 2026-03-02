@@ -59,6 +59,7 @@ app.get('/', (_req: Request, res: Response) => {
       cases: '/api/v1/cases',
       tasks: '/api/v1/tasks',
       contracts: '/api/v1/contracts',
+      clients: '/api/v1/clients',
       openapi: '/api/v1/openapi.json'
     }
   });
