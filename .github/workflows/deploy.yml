@@ -6,8 +6,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
+    env:
+      RUN_MIGRATIONS: ${{ vars.RUN_MIGRATIONS }}
 
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +29,45 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Run Prisma migrations (optional)
+        if: ${{ env.RUN_MIGRATIONS == 'true' }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma migrate deploy
+
+      - name: Prune dev dependencies
+        run: npm prune --omit=dev
+
+      - name: Prepare deployment artifact
+        run: |
+          mkdir -p release
+          cp -R dist release/dist
+          cp -R node_modules release/node_modules
+          cp -R prisma release/prisma
+          if [ -d templates ]; then cp -R templates release/templates; fi
+          cp package.json release/package.json
+          cp package-lock.json release/package-lock.json
+          if [ -f swagger.yaml ]; then cp swagger.yaml release/swagger.yaml; fi
+          if [ -f swagger2.yaml ]; then cp swagger2.yaml release/swagger2.yaml; fi
+
+      - name: Upload deployment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: webapp-package
+          path: release
+          if-no-files-found: error
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Download deployment artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: webapp-package
+          path: release
+
       - name: Check secrets presence
         run: |
           if [ -z "${{ secrets.AZURE_WEBAPP_NAME }}" ]; then echo "AZURE_WEBAPP_NAME is EMPTY" && exit 1; else echo "AZURE_WEBAPP_NAME is set"; fi
@@ -37,4 +78,31 @@ jobs:
         with:
           app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: .
+          package: release
+
+  smoke:
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: ${{ vars.RUN_SMOKE == 'true' }}
+    env:
+      SMOKE_BASE_URL: ${{ vars.SMOKE_BASE_URL }}
+      SMOKE_TOKEN: ${{ secrets.SMOKE_TOKEN }}
+      SMOKE_CHECK_NOTIFICATIONS: ${{ vars.SMOKE_CHECK_NOTIFICATIONS }}
+      SMOKE_CHECK_DRY_RUN: ${{ vars.SMOKE_CHECK_DRY_RUN }}
+      SMOKE_TASK_ID: ${{ vars.SMOKE_TASK_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run smoke suite
+        run: node scripts/smoke.js
+
+
