@@ -4,9 +4,42 @@
 
 import { Router, Request, Response } from 'express';
 import taskService from './services.js';
+import { TaskValidationError } from './services.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
+import { buildPrismaErrorResponse } from '../../utils/prismaError';
 
 const router = Router();
+
+// ============================================================================
+// GET /api/v1/tasks - Feladatok listázása (current user / case scope)
+// ============================================================================
+router.get('/', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { status, caseId, assignedTo } = req.query;
+
+    if (caseId) {
+      const tasks = await taskService.getCaseTasks(String(caseId), {
+        status: status as string | undefined,
+        assignedTo: assignedTo as string | undefined,
+      });
+      return res.json(tasks);
+    }
+
+    const tasks = await taskService.getUserTasks(userId, {
+      status: status as string | undefined,
+    });
+
+    return res.json(tasks);
+  } catch (error) {
+    console.error('Error listing tasks:', error);
+    return res.status(500).json({ error: 'Hiba a feladatok listázásakor' });
+  }
+});
 
 // ============================================================================
 // POST /api/v1/tasks - Új feladat létrehozása
@@ -53,6 +86,17 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
     res.status(201).json(task);
   } catch (error) {
     console.error('Error creating task:', error);
+    if (error instanceof TaskValidationError) {
+      return res.status(400).json({
+        error: 'Validation error',
+        field: 'taskType',
+        message: error.message,
+      });
+    }
+    const prismaErr = buildPrismaErrorResponse(error);
+    if (prismaErr) {
+      return res.status(prismaErr.status).json(prismaErr.body);
+    }
     res.status(500).json({ error: 'Hiba a feladat létrehozásakor' });
   }
 });
@@ -81,7 +125,7 @@ router.get('/cases/:caseId/tasks', authenticate, async (req: Request, res: Respo
 // ============================================================================
 // GET /api/v1/tasks/:id - Egy feladat adatai
 // ============================================================================
-router.get('/tasks/:id', authenticate, async (req: Request, res: Response) => {
+router.get('/:id', authenticate, async (req: Request, res: Response) => {
   try {
     const idParam = req.params.id;
     const id = Array.isArray(idParam) ? idParam[0] : idParam;
@@ -102,7 +146,7 @@ router.get('/tasks/:id', authenticate, async (req: Request, res: Response) => {
 // ============================================================================
 // POST /api/v1/tasks/:id/start - Feladat elkezdése
 // ============================================================================
-router.post('/tasks/:id/start', authenticate, async (req: Request, res: Response) => {
+router.post('/:id/start', authenticate, async (req: Request, res: Response) => {
   try {
     const idParam = req.params.id;
     const id = Array.isArray(idParam) ? idParam[0] : idParam;
@@ -112,6 +156,10 @@ router.post('/tasks/:id/start', authenticate, async (req: Request, res: Response
     res.json(task);
   } catch (error) {
     console.error('Error starting task:', error);
+    const prismaErr = buildPrismaErrorResponse(error);
+    if (prismaErr) {
+      return res.status(prismaErr.status).json(prismaErr.body);
+    }
     res.status(500).json({ error: 'Hiba a feladat elkezdésekor' });
   }
 });
@@ -119,7 +167,7 @@ router.post('/tasks/:id/start', authenticate, async (req: Request, res: Response
 // ============================================================================
 // POST /api/v1/tasks/:id/submit - Feladat beküldése review-ra
 // ============================================================================
-router.post('/tasks/:id/submit', authenticate, async (req: Request, res: Response) => {
+router.post('/:id/submit', authenticate, async (req: Request, res: Response) => {
   try {
     const idParam = req.params.id;
     const id = Array.isArray(idParam) ? idParam[0] : idParam;
@@ -130,6 +178,10 @@ router.post('/tasks/:id/submit', authenticate, async (req: Request, res: Respons
     res.json(task);
   } catch (error) {
     console.error('Error submitting task:', error);
+    const prismaErr = buildPrismaErrorResponse(error);
+    if (prismaErr) {
+      return res.status(prismaErr.status).json(prismaErr.body);
+    }
     res.status(500).json({ error: 'Hiba a feladat beküldésekor' });
   }
 });
@@ -137,7 +189,7 @@ router.post('/tasks/:id/submit', authenticate, async (req: Request, res: Respons
 // ============================================================================
 // POST /api/v1/tasks/:id/complete - Feladat jóváhagyása/elutasítása
 // ============================================================================
-router.post('/tasks/:id/complete', authenticate, async (req: Request, res: Response) => {
+router.post('/:id/complete', authenticate, async (req: Request, res: Response) => {
   try {
     const idParam = req.params.id;
     const id = Array.isArray(idParam) ? idParam[0] : idParam;
@@ -152,6 +204,10 @@ router.post('/tasks/:id/complete', authenticate, async (req: Request, res: Respo
     res.json(task);
   } catch (error) {
     console.error('Error completing task:', error);
+    const prismaErr = buildPrismaErrorResponse(error);
+    if (prismaErr) {
+      return res.status(prismaErr.status).json(prismaErr.body);
+    }
     res.status(500).json({ error: 'Hiba a feladat lezárásakor' });
   }
 });
@@ -159,7 +215,7 @@ router.post('/tasks/:id/complete', authenticate, async (req: Request, res: Respo
 // ============================================================================
 // POST /api/v1/tasks/:id/reassign - Feladat átadása
 // ============================================================================
-router.post('/tasks/:id/reassign', authenticate, async (req: Request, res: Response) => {
+router.post('/:id/reassign', authenticate, async (req: Request, res: Response) => {
   try {
     const idParam = req.params.id;
     const id = Array.isArray(idParam) ? idParam[0] : idParam;
@@ -182,6 +238,10 @@ router.post('/tasks/:id/reassign', authenticate, async (req: Request, res: Respo
     res.json(task);
   } catch (error) {
     console.error('Error reassigning task:', error);
+    const prismaErr = buildPrismaErrorResponse(error);
+    if (prismaErr) {
+      return res.status(prismaErr.status).json(prismaErr.body);
+    }
     res.status(500).json({ error: 'Hiba a feladat átadásakor' });
   }
 });

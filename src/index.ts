@@ -1,7 +1,5 @@
 /**
- * Adminiculum Backend V2 - Main Application Entry Point
- * Legal Document Management System API
- * Modular Architecture
+ * Adminiculum Backend V2 - Main Application Entry Point (minimal deployable)
  */
 
 import express, { Request, Response, NextFunction } from 'express';
@@ -11,17 +9,6 @@ import morgan from 'morgan';
 import path from 'path';
 import fs from 'fs';
 import yaml from 'js-yaml';
-import { attachFeatures } from './middleware/features';
-import { authenticate } from './middleware/auth';
-import { getConfigPresenceStatus } from './config/configStatus';
-import { getEscalationConfig } from './modules/escalation/config';
-import { prisma } from './prisma/prisma.service';
-
-type AutomationSchemaSanityStatus = {
-  checkedAt: string;
-  ok: boolean;
-  missing: string[];
-};
 
 type StartupConfigHealthStatus = {
   checkedAt: string;
@@ -30,60 +17,7 @@ type StartupConfigHealthStatus = {
   matchedCredentialSet: 'SP_CLIENT_PAIR' | 'LEGACY_SHAREPOINT_PAIR' | 'AZURE_APP_TRIPLET' | null;
 };
 
-let automationSchemaSanity: AutomationSchemaSanityStatus | null = null;
 let startupConfigHealth: StartupConfigHealthStatus | null = null;
-
-async function runAutomationSchemaSanityCheck(): Promise<AutomationSchemaSanityStatus> {
-  const missing: string[] = [];
-
-  try {
-    const [tableRows, policyEnumRows, retryabilityEnumRows, compensationEnumRows] = await Promise.all([
-      prisma.$queryRawUnsafe<Array<{ regclass: string | null }>>(
-        "SELECT to_regclass('public.automation_execution_step_logs') AS regclass",
-      ),
-      prisma.$queryRawUnsafe<Array<{ enumlabel: string }>>(
-        `SELECT e.enumlabel
-         FROM pg_type t
-         JOIN pg_enum e ON t.oid = e.enumtypid
-         WHERE t.typname = 'AutomationActionPolicy'`,
-      ),
-      prisma.$queryRawUnsafe<Array<{ enumlabel: string }>>(
-        `SELECT e.enumlabel
-         FROM pg_type t
-         JOIN pg_enum e ON t.oid = e.enumtypid
-         WHERE t.typname = 'AutomationStepRetryability'`,
-      ),
-      prisma.$queryRawUnsafe<Array<{ enumlabel: string }>>(
-        `SELECT e.enumlabel
-         FROM pg_type t
-         JOIN pg_enum e ON t.oid = e.enumtypid
-         WHERE t.typname = 'AutomationCompensationReadiness'`,
-      ),
-    ]);
-
-    if (!tableRows?.[0]?.regclass) {
-      missing.push('table:automation_execution_step_logs');
-    }
-
-    if (!policyEnumRows?.length) {
-      missing.push('enum:AutomationActionPolicy');
-    }
-    if (!retryabilityEnumRows?.length) {
-      missing.push('enum:AutomationStepRetryability');
-    }
-    if (!compensationEnumRows?.length) {
-      missing.push('enum:AutomationCompensationReadiness');
-    }
-  } catch (error) {
-    missing.push(`check_error:${error instanceof Error ? error.message : 'unknown'}`);
-  }
-
-  return {
-    checkedAt: new Date().toISOString(),
-    ok: missing.length === 0,
-    missing,
-  };
-}
 
 function parseCsvEnv(value: string | undefined): string[] {
   return String(value || '')
@@ -149,7 +83,7 @@ function resolveOpenApiSpecPath(): string {
     }
   }
 
-  const fallbackNames = ['swagger.yaml', 'swagger2.yaml'];
+  const fallbackNames = ['powerapps-swagger2-runtime-aligned.yaml', 'swagger2.yaml', 'swagger.yaml'];
   for (const fileName of fallbackNames) {
     candidates.push(path.resolve(process.cwd(), fileName));
     candidates.push(path.resolve(__dirname, '..', fileName));
@@ -229,7 +163,6 @@ app.use(cors({
 app.use(morgan('combined'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(attachFeatures);
 
 app.get('/health', (_req: Request, res: Response) => {
   const configHealth = startupConfigHealth || evaluateStartupConfigHealth();
@@ -238,7 +171,6 @@ app.get('/health', (_req: Request, res: Response) => {
     status: configHealth.status,
     timestamp: new Date().toISOString(),
     startupConfigHealth: configHealth,
-    automationSchemaSanity,
   });
 });
 
@@ -307,44 +239,18 @@ app.use('/api/v1', deadlinesRoutes);
 
 import documentClassificationRoutes from './modules/documentClassification/routes';
 app.use('/api/v1', documentClassificationRoutes);
+app.use('/api/v1/classification', documentClassificationRoutes);
 
 import automationEventsRoutes from './modules/automationEvents/routes';
 app.use('/api/v1', automationEventsRoutes);
-
-import automationPreferencesRoutes from './modules/automationPreferences/routes';
-app.use('/api/v1', automationPreferencesRoutes);
+app.use('/', automationEventsRoutes);
 
 import automationSuggestionsRoutes from './modules/automationSuggestions/routes';
 app.use('/api/v1', automationSuggestionsRoutes);
-
-import knowledgeBaseRoutes from './modules/knowledgeBase/routes';
-app.use('/api/v1/knowledge-base', knowledgeBaseRoutes);
-
-import learningRoutes from './modules/learning/routes';
-app.use('/api/v1/learning', learningRoutes);
-
-import escalationRoutes from './modules/escalation/routes';
-app.use('/api/v1/escalation', escalationRoutes);
-import { startEscalationCronJob } from './modules/escalation/cron';
-import { ensureDefaultEscalationRule } from './modules/escalation/bootstrap';
-
-import knowledgeRoutes from './modules/knowledgeBase/routes/knowledge.routes';
-app.use('/api/v1', knowledgeRoutes);
+app.use('/', automationSuggestionsRoutes);
 
 import workgroupRoutes from './modules/workgroups/routes';
 app.use('/api/v1', workgroupRoutes);
-
-import { runMigration } from './routes/migrate';
-app.post('/api/v1/migrate', authenticate, runMigration);
-
-import { debugWhoami } from './routes/debug';
-app.get('/api/v1/debug/whoami', debugWhoami);
-
-import { checkAndSyncDatabase } from './routes/dbcheck';
-app.get('/api/v1/dbcheck', checkAndSyncDatabase);
-
-import adminConfigRoutes from './routes/adminConfig';
-app.use('/api/v1/admin', adminConfigRoutes);
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ message: 'Endpoint not found' });
@@ -357,23 +263,10 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
-app.listen(PORT, '0.0.0.0', async () => {
-  const escalationConfig = getEscalationConfig();
+app.listen(PORT, '0.0.0.0', () => {
   console.log(
-    `[Startup] NODE_ENV=${process.env.NODE_ENV || 'development'} PORT=${PORT} ESCALATION_ENGINE=${escalationConfig.engineEnabled} ESCALATION_BOOTSTRAP=${escalationConfig.bootstrapEnabled}`,
+    `[Startup] NODE_ENV=${process.env.NODE_ENV || 'development'} PORT=${PORT}`,
   );
-
-  if (process.env.ENABLE_LEARNING_AUTO_UPDATE === 'true') {
-    console.log('[Startup] Learning auto-update enabled');
-  }
-
-  const configPresence = getConfigPresenceStatus();
-  const hasMissingConfig = Object.values(configPresence).some((status) => status === 'missing');
-  if (hasMissingConfig) {
-    console.log(`[Config Presence] ${JSON.stringify(configPresence)}`);
-  } else {
-    console.log('[Config Presence] OK');
-  }
 
   startupConfigHealth = evaluateStartupConfigHealth();
   if (startupConfigHealth.status === 'healthy') {
@@ -384,32 +277,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     );
   }
 
-  let dbConnectivityOk = false;
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    dbConnectivityOk = true;
-  } catch {
-    dbConnectivityOk = false;
-  }
-  console.log(`[Startup] DB connectivity: ${dbConnectivityOk ? 'PASS' : 'FAIL'}`);
-
-  if (dbConnectivityOk) {
-    automationSchemaSanity = await runAutomationSchemaSanityCheck();
-    if (automationSchemaSanity.ok) {
-      console.log('[Startup] Automation schema sanity: PASS');
-    } else {
-      console.warn(
-        `[Startup] Automation schema sanity: WARN missing=${automationSchemaSanity.missing.join(', ')}`,
-      );
-    }
-  }
-
   console.log(`🚀 Adminiculum API V2 running on http://localhost:${PORT}`);
-
-  ensureDefaultEscalationRule().catch((error) => {
-    console.error('Failed to load default escalation rule:', error?.message || error);
-  });
-  startEscalationCronJob();
 });
 
 export default app;

@@ -8,53 +8,26 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      RUN_MIGRATIONS: ${{ vars.RUN_MIGRATIONS }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Generate Prisma Client
-        run: npx prisma generate
-
-      - name: Build
-        run: npm run build
-
-      - name: Run Prisma migrations (optional)
-        if: ${{ env.RUN_MIGRATIONS == 'true' }}
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: npx prisma migrate deploy
-
-      - name: Prune dev dependencies
-        run: npm prune --omit=dev
-
-      - name: Prepare deployment artifact
+      - name: Zip deployment package (source package for Oryx server-side build)
         run: |
-          mkdir -p release
-          cp -R dist release/dist
-          cp -R node_modules release/node_modules
-          cp -R prisma release/prisma
-          if [ -d templates ]; then cp -R templates release/templates; fi
-          cp package.json release/package.json
-          cp package-lock.json release/package-lock.json
-          if [ -f swagger.yaml ]; then cp swagger.yaml release/swagger.yaml; fi
-          if [ -f swagger2.yaml ]; then cp swagger2.yaml release/swagger2.yaml; fi
+          zip -r deploy.zip src/ prisma/ package.json package-lock.json tsconfig.json .deployment swagger.yaml swagger2.yaml || true
+          ls -la
+          echo "CHECK src/index.ts in ZIP:"
+          unzip -l deploy.zip | grep -E 'src/index\.ts$' || true
+          echo "CHECK package.json in ZIP:"
+          unzip -l deploy.zip | grep -E 'package\.json$' || true
+          echo "TOP LEVEL DIRS in ZIP:"
+          unzip -l deploy.zip | head -n 30
 
       - name: Upload deployment artifact
         uses: actions/upload-artifact@v4
         with:
           name: webapp-package
-          path: release
+          path: deploy.zip
           if-no-files-found: error
 
   deploy:
@@ -66,7 +39,16 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: webapp-package
-          path: release
+          path: .
+
+      - name: Verify downloaded deployment package
+        run: |
+          echo "CHECK src/index.ts in downloaded ZIP:"
+          unzip -l ./deploy.zip | grep -E 'src/index\.ts$' || true
+          echo "CHECK package.json in downloaded ZIP:"
+          unzip -l ./deploy.zip | grep -E 'package\.json$' || true
+          echo "TOP LEVEL DIRS in downloaded ZIP:"
+          unzip -l ./deploy.zip | head -n 30
 
       - name: Check secrets presence
         run: |
@@ -78,7 +60,7 @@ jobs:
         with:
           app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: release
+          package: ./deploy.zip
 
   smoke:
     runs-on: ubuntu-latest
