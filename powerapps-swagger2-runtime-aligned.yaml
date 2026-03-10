@@ -1,0 +1,1607 @@
+swagger: '2.0'
+info:
+  title: Adminiculum API (Runtime Aligned)
+  description: Swagger 2.0 aligned to full runtime router map used for Power Apps UI deployment and verification.
+  version: 1.0-runtime-aligned
+host: adminiculumaustriaeast-01.azurewebsites.net
+basePath: /
+schemes:
+  - https
+consumes:
+  - application/json
+produces:
+  - application/json
+paths:
+  /api/v1/auth/login:
+    post:
+      summary: Login
+      description: Bejelentkezés
+      operationId: Login
+      security: []
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            required:
+              - email
+              - password
+            properties:
+              email:
+                type: string
+                format: email
+              password:
+                type: string
+      responses:
+        '200':
+          description: Login successful
+          schema:
+            type: object
+            properties:
+              accessToken:
+                type: string
+              refreshToken:
+                type: string
+              expiresIn:
+                type: integer
+              user:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  email:
+                    type: string
+                  name:
+                    type: string
+                  role:
+                    type: string
+  /api/v1/auth/register:
+    post:
+      summary: Register
+      description: Regisztráció (teszteléshez)
+      operationId: Register
+      security: []
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            required:
+              - email
+              - password
+              - name
+              - role
+            properties:
+              email:
+                type: string
+              password:
+                type: string
+              name:
+                type: string
+              role:
+                type: string
+                enum:
+                  - ADMIN
+                  - PARTNER
+                  - LAWYER
+                  - TRAINEE
+                  - LEGAL_ASSISTANT
+      responses:
+        '201':
+          description: Registration successful
+  /api/v1/cases:
+    get:
+      summary: GetCases
+      description: Ügyek listázása
+      operationId: GetCases
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: List of cases (paginated)
+          schema:
+            $ref: '#/definitions/GetCasesResponse'
+      parameters:
+        - name: page
+          in: query
+          required: false
+          type: integer
+          default: 1
+          description: Page number (1-based)
+        - name: limit
+          in: query
+          required: false
+          type: integer
+          default: 20
+          description: Items per page
+    post:
+      summary: CreateCase
+      description: Új ügy létrehozása
+      operationId: CreateCase
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            required:
+              - clientName
+            properties:
+              clientName:
+                type: string
+                description: Ügyfél neve (kötelező)
+              clientEmail:
+                type: string
+                description: Ügyfél email címe (opcionális)
+              clientPhone:
+                type: string
+                description: Ügyfél telefonszáma (opcionális)
+              clientAddress:
+                type: string
+                description: Ügyfél címe (opcionális)
+              matterType:
+                type: string
+                description: Ügytípus (pl. ADASVETEL, KARTYA, INGATLAN, EGYEB)
+              description:
+                type: string
+                description: Rövid leírás (opcionális)
+              createdById:
+                type: string
+                description: Létrehozó userId (opcionális)
+      responses:
+        '201':
+          description: Case created
+        '400':
+          description: Validation error
+  /api/v1/auth/me:
+    get:
+      summary: GetCurrentUser
+      description: Jelenlegi felhasználó adatai
+      operationId: GetCurrentUser
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: Current user data
+  /api/v1/cases/{id}:
+    get:
+      summary: GetCaseById
+      description: Ügy részletei
+      operationId: GetCaseById
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Case details
+  /api/v1/cases/{id}/status:
+    patch:
+      summary: UpdateCaseStatus
+      description: Ügy státusz frissítése
+      operationId: UpdateCaseStatus
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+      responses:
+        '200':
+          description: Status updated
+  /api/v1/cases/{id}/history:
+    get:
+      summary: GetCaseHistory
+      description: Ügy történet
+      operationId: GetCaseHistory
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Case history
+  /api/v1/documents:
+    get:
+      summary: GetDocuments
+      description: Dokumentumok listázása
+      operationId: GetDocuments
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: List of documents
+    post:
+      summary: CreateDocument
+      description: Upload new document
+      operationId: CreateDocument
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              caseId:
+                type: string
+              fileName:
+                type: string
+              fileContent:
+                type: string
+              mimeType:
+                type: string
+              documentType:
+                type: string
+              folder:
+                type: string
+            required:
+              - caseId
+              - fileName
+              - fileContent
+      responses:
+        '201':
+          description: Document created
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/documents/{id}:
+    get:
+      summary: GetDocumentById
+      description: Dokumentum részletei
+      operationId: GetDocumentById
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Document details
+  /api/v1/users:
+    get:
+      summary: GetUsers
+      description: Felhasználók listázása
+      operationId: GetUsers
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: List of users
+    post:
+      summary: CreateUser
+      description: Új felhasználó létrehozása
+      operationId: CreateUser
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+      responses:
+        '201':
+          description: User created
+  /api/v1/users/{id}:
+    get:
+      summary: GetUserById
+      description: Felhasználó részletei
+      operationId: GetUserById
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: User details
+  /api/v1/users/{id}/skills:
+    get:
+      summary: GetUserSkills
+      description: Felhasználó skilljei
+      operationId: GetUserSkills
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: User skills
+    put:
+      summary: UpdateUserSkills
+      description: Skill-ek frissítése
+      operationId: UpdateUserSkills
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+      responses:
+        '200':
+          description: Skills updated
+  /api/v1/clients:
+    get:
+      summary: GetClients
+      description: Ügyfelek listázása
+      operationId: GetClients
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: List of clients
+    post:
+      summary: CreateClient
+      description: Új ügyfél létrehozása
+      operationId: CreateClient
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+      responses:
+        '201':
+          description: Client created
+  /api/v1/clients/{id}:
+    get:
+      summary: GetClientById
+      description: Ügyfél részletei
+      operationId: GetClientById
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Client details
+  /api/v1/clients/{id}/requests:
+    get:
+      summary: GetClientRequests
+      description: Ügyfél kérések
+      operationId: GetClientRequests
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Client requests
+  /api/v1/auth/logout:
+    post:
+      summary: Logout
+      description: Felhasználó kijelentkezés
+      operationId: Logout
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: Logout successful
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/auth/refresh:
+    post:
+      summary: RefreshToken
+      description: Refresh token alapján új access token
+      operationId: RefreshToken
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              refreshToken:
+                type: string
+            required:
+              - refreshToken
+      responses:
+        '200':
+          description: Token refreshed
+          schema:
+            type: object
+            additionalProperties: true
+      security: []
+  /api/v1/automation/events:
+    post:
+      summary: IngestAutomationEvent
+      description: Automation trigger event ingest + L3 pilot autopilot outcome metadata
+      operationId: IngestAutomationEvent
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              entityType:
+                type: string
+              entityId:
+                type: string
+              screen:
+                type: string
+              actionType:
+                type: string
+              actionKey:
+                type: string
+              payloadClass:
+                type: string
+              source:
+                type: string
+              context:
+                type: object
+                additionalProperties: true
+            required:
+              - entityType
+              - entityId
+              - screen
+              - actionType
+              - actionKey
+      responses:
+        '201':
+          description: Event stored
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/automation/preferences:
+    get:
+      summary: GetAutomationPreferences
+      description: Current user automation preferences
+      operationId: GetAutomationPreferences
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: Preferences
+          schema:
+            type: object
+            additionalProperties: true
+    put:
+      summary: UpdateAutomationPreferences
+      description: Update current user automation preferences
+      operationId: UpdateAutomationPreferences
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: false
+          schema:
+            type: object
+            properties:
+              suggestionsEnabled:
+                type: boolean
+              level1Enabled:
+                type: boolean
+              level2Enabled:
+                type: boolean
+              level3Enabled:
+                type: boolean
+      responses:
+        '200':
+          description: Preferences updated
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/automation/preferences/suppress:
+    post:
+      summary: CreateAutomationSuppression
+      description: Create suppression rule for current user
+      operationId: CreateAutomationSuppression
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              suppressionType:
+                type: string
+              value:
+                type: string
+            required:
+              - suppressionType
+              - value
+      responses:
+        '200':
+          description: Suppression already existed
+          schema:
+            type: object
+            additionalProperties: true
+        '201':
+          description: Suppression created
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/automation/preferences/suppressions:
+    get:
+      summary: GetAutomationSuppressions
+      description: List current user suppression rules
+      operationId: GetAutomationSuppressions
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: Suppression list
+          schema:
+            type: array
+            items:
+              type: object
+              additionalProperties: true
+  /api/v1/automation/preferences/suppressions/{id}:
+    delete:
+      summary: DeleteAutomationSuppression
+      description: Delete suppression rule
+      operationId: DeleteAutomationSuppression
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+          description: Suppression id
+      responses:
+        '200':
+          description: Suppression deleted
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/automation/suggestions/current:
+    get:
+      summary: GetCurrentAutomationSuggestion
+      description: Get current active offered suggestion for entity
+      operationId: GetCurrentAutomationSuggestion
+      produces:
+        - application/json
+      parameters:
+        - name: entityType
+          in: query
+          required: true
+          type: string
+        - name: entityId
+          in: query
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Current suggestion response
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/automation/suggestions/{id}/dismiss:
+    post:
+      summary: DismissAutomationSuggestion
+      description: Dismiss own automation suggestion
+      operationId: DismissAutomationSuggestion
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+          description: Suggestion id
+      responses:
+        '200':
+          description: Suggestion dismissed
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/automation/suggestions/{id}/accept:
+    post:
+      summary: AcceptAutomationSuggestion
+      description: Accept and execute own automation suggestion
+      operationId: AcceptAutomationSuggestion
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+          description: Suggestion id
+        - in: body
+          name: body
+          required: false
+          schema:
+            type: object
+            properties:
+              operationToken:
+                type: string
+              status:
+                type: string
+              dueDate:
+                type: string
+              assigneeId:
+                type: string
+              checklistItem:
+                type: string
+              note:
+                type: string
+      responses:
+        '200':
+          description: Suggestion accepted and executed
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/automation/stats/level1:
+    get:
+      summary: GetAutomationStatsLevel1
+      description: Automation L1 statistics
+      operationId: GetAutomationStatsLevel1
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: L1 stats
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/automation/stats/stuck-processing:
+    get:
+      summary: GetAutomationStatsStuckProcessing
+      description: Potentially stuck PROCESSING suggestions
+      operationId: GetAutomationStatsStuckProcessing
+      produces:
+        - application/json
+      parameters:
+        - name: maxAgeMinutes
+          in: query
+          required: false
+          type: integer
+          default: 30
+      responses:
+        '200':
+          description: Stuck processing stats
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/automation/stats/operability:
+    get:
+      summary: GetAutomationStatsOperability
+      description: Automation operability snapshot
+      operationId: GetAutomationStatsOperability
+      produces:
+        - application/json
+      parameters:
+        - name: windowHours
+          in: query
+          required: false
+          type: integer
+          default: 24
+        - name: maxAgeMinutes
+          in: query
+          required: false
+          type: integer
+          default: 30
+      responses:
+        '200':
+          description: Operability stats
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/automation/reconcile-processing:
+    post:
+      summary: ReconcileAutomationProcessing
+      description: Reconcile stuck processing suggestions
+      operationId: ReconcileAutomationProcessing
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: false
+          schema:
+            type: object
+            properties:
+              maxAgeMinutes:
+                type: integer
+              apply:
+                type: boolean
+      responses:
+        '200':
+          description: Reconciliation result
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/documents/case/{caseId}:
+    get:
+      summary: GetDocumentsByCase
+      description: List documents for case
+      operationId: GetDocumentsByCase
+      produces:
+        - application/json
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          type: string
+          description: Case id
+      responses:
+        '200':
+          description: Case documents
+          schema:
+            type: array
+            items:
+              type: object
+              additionalProperties: true
+  /api/v1/documents/{id}/version:
+    post:
+      summary: UploadDocumentVersion
+      description: Upload new document version
+      operationId: UploadDocumentVersion
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+          description: Document id
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              fileContent:
+                type: string
+              comment:
+                type: string
+            required:
+              - fileContent
+      responses:
+        '200':
+          description: Document version uploaded
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/documents/{id}/submit-review:
+    post:
+      summary: SubmitDocumentForReview
+      description: Submit document for review
+      operationId: SubmitDocumentForReview
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+          description: Document id
+      responses:
+        '200':
+          description: Document submitted for review
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/documents/{id}/approve:
+    post:
+      summary: ApproveDocument
+      description: Approve document
+      operationId: ApproveDocument
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+          description: Document id
+        - in: body
+          name: body
+          required: false
+          schema:
+            type: object
+            properties:
+              comment:
+                type: string
+      responses:
+        '200':
+          description: Document approved
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/documents/{id}/reject:
+    post:
+      summary: RejectDocument
+      description: Reject document
+      operationId: RejectDocument
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+          description: Document id
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              reason:
+                type: string
+            required:
+              - reason
+      responses:
+        '200':
+          description: Document rejected
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/deadlines/extract:
+    post:
+      summary: ExtractDeadlines
+      description: Extract deadlines from document
+      operationId: ExtractDeadlines
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              caseId:
+                type: string
+              documentId:
+                type: string
+              servedAt:
+                type: string
+            required:
+              - caseId
+              - documentId
+      responses:
+        '201':
+          description: Deadlines extracted
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/cases/{caseId}/deadlines:
+    get:
+      summary: GetCaseDeadlines
+      description: List case deadlines
+      operationId: GetCaseDeadlines
+      produces:
+        - application/json
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          type: string
+          description: Case id
+      responses:
+        '200':
+          description: Case deadlines
+          schema:
+            type: array
+            items:
+              type: object
+              additionalProperties: true
+  /api/v1/change-reports/generate:
+    post:
+      summary: GenerateChangeReport
+      description: Generate change report between document versions
+      operationId: GenerateChangeReport
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              documentId:
+                type: string
+              fromVersionInt:
+                type: integer
+              toVersionInt:
+                type: integer
+            required:
+              - documentId
+              - fromVersionInt
+              - toVersionInt
+      responses:
+        '201':
+          description: Change report generated
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/change-reports/{id}:
+    get:
+      summary: GetChangeReportById
+      description: Get change report by id
+      operationId: GetChangeReportById
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+          description: Change report id
+      responses:
+        '200':
+          description: Change report
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/documents/{id}/classify:
+    post:
+      summary: ClassifyDocument
+      description: Classify document by rules
+      operationId: ClassifyDocument
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+          description: Document id
+      responses:
+        '201':
+          description: Document classified
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/documents/{id}/classification:
+    get:
+      summary: GetDocumentClassification
+      description: Get latest document classification
+      operationId: GetDocumentClassification
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+          description: Document id
+      responses:
+        '200':
+          description: Document classification
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/tasks:
+    post:
+      summary: CreateTask
+      description: Create task
+      operationId: CreateTask
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              caseId:
+                type: string
+              title:
+                type: string
+              type:
+                type: string
+              description:
+                type: string
+              priority:
+                type: string
+              assignedTo:
+                type: string
+              requiredSkills:
+                type: array
+                items:
+                  type: string
+              dueDate:
+                type: string
+              documentId:
+                type: string
+            required:
+              - caseId
+              - title
+              - type
+      responses:
+        '201':
+          description: Task created
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/tasks/cases/{caseId}/tasks:
+    get:
+      summary: GetCaseTasks
+      description: List tasks for case
+      operationId: GetCaseTasks
+      produces:
+        - application/json
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          type: string
+          description: Case id
+        - name: status
+          in: query
+          required: false
+          type: string
+        - name: assignedTo
+          in: query
+          required: false
+          type: string
+      responses:
+        '200':
+          description: Case tasks
+          schema:
+            type: array
+            items:
+              type: object
+              additionalProperties: true
+  /api/v1/tasks/{id}:
+    get:
+      summary: GetTaskById
+      description: Get task by id
+      operationId: GetTaskById
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+          description: Task id
+      responses:
+        '200':
+          description: Task details
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/tasks/{id}/start:
+    post:
+      summary: StartTask
+      description: Start task
+      operationId: StartTask
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+          description: Task id
+      responses:
+        '200':
+          description: Task started
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/tasks/{id}/submit:
+    post:
+      summary: SubmitTask
+      description: Submit task for review
+      operationId: SubmitTask
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+          description: Task id
+        - in: body
+          name: body
+          required: false
+          schema:
+            type: object
+            properties:
+              notes:
+                type: string
+      responses:
+        '200':
+          description: Task submitted
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/tasks/{id}/complete:
+    post:
+      summary: CompleteTask
+      description: Approve/reject task completion
+      operationId: CompleteTask
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+          description: Task id
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              approved:
+                type: boolean
+              notes:
+                type: string
+            required:
+              - approved
+      responses:
+        '200':
+          description: Task completion recorded
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/tasks/{id}/reassign:
+    post:
+      summary: ReassignTask
+      description: Reassign task to another user
+      operationId: ReassignTask
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+          description: Task id
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              newAssigneeId:
+                type: string
+            required:
+              - newAssigneeId
+      responses:
+        '200':
+          description: Task reassigned
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/tasks/recommendations:
+    get:
+      summary: GetTaskRecommendations
+      description: Skill-based assignee recommendations
+      operationId: GetTaskRecommendations
+      produces:
+        - application/json
+      parameters:
+        - name: taskType
+          in: query
+          required: true
+          type: string
+        - name: caseId
+          in: query
+          required: true
+          type: string
+        - name: requiredSkills
+          in: query
+          required: false
+          type: string
+      responses:
+        '200':
+          description: Recommendations
+          schema:
+            type: array
+            items:
+              type: object
+              additionalProperties: true
+  /api/v1/tasks/my/tasks:
+    get:
+      summary: GetMyTasks
+      description: Current user tasks
+      operationId: GetMyTasks
+      produces:
+        - application/json
+      parameters:
+        - name: status
+          in: query
+          required: false
+          type: string
+        - name: caseId
+          in: query
+          required: false
+          type: string
+      responses:
+        '200':
+          description: User tasks
+          schema:
+            type: array
+            items:
+              type: object
+              additionalProperties: true
+  /api/v1/tasks/auto-generate:
+    post:
+      summary: AutoGenerateTask
+      description: Auto-generate task from workflow event
+      operationId: AutoGenerateTask
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              caseId:
+                type: string
+              workflowEvent:
+                type: string
+              originalDocumentId:
+                type: string
+            required:
+              - caseId
+              - workflowEvent
+      responses:
+        '200':
+          description: Auto-generated task result
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/clients/{clientId}/workgroups:
+    get:
+      summary: GetClientWorkgroups
+      description: List workgroups for client
+      operationId: GetClientWorkgroups
+      produces:
+        - application/json
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          type: string
+          description: Client id
+      responses:
+        '200':
+          description: Workgroups
+          schema:
+            type: array
+            items:
+              type: object
+              additionalProperties: true
+    post:
+      summary: CreateClientWorkgroup
+      description: Create workgroup for client
+      operationId: CreateClientWorkgroup
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          type: string
+          description: Client id
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+            required:
+              - name
+      responses:
+        '201':
+          description: Workgroup created
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/clients/{clientId}/workload-summary:
+    get:
+      summary: GetClientWorkloadSummary
+      description: Get client workload summary for period
+      operationId: GetClientWorkloadSummary
+      produces:
+        - application/json
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          type: string
+          description: Client id
+        - name: period
+          in: query
+          required: true
+          type: string
+          description: YYYY-MM format
+      responses:
+        '200':
+          description: Workload summary
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/clients/{clientId}/redaction-profile:
+    get:
+      summary: GetClientRedactionProfile
+      description: Get redaction profile for client
+      operationId: GetClientRedactionProfile
+      produces:
+        - application/json
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          type: string
+          description: Client id
+      responses:
+        '200':
+          description: Redaction profile
+          schema:
+            type: object
+            additionalProperties: true
+    post:
+      summary: UpsertClientRedactionProfile
+      description: Create/update redaction profile for client
+      operationId: UpsertClientRedactionProfile
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          type: string
+          description: Client id
+        - in: body
+          name: body
+          required: false
+          schema:
+            type: object
+            properties:
+              fullName:
+                type: string
+              aliases:
+                type: array
+                items:
+                  type: string
+              addresses:
+                type: array
+                items:
+                  type: string
+              taxId:
+                type: string
+              personalId:
+                type: string
+              bankAccounts:
+                type: array
+                items:
+                  type: string
+              phones:
+                type: array
+                items:
+                  type: string
+              emails:
+                type: array
+                items:
+                  type: string
+      responses:
+        '200':
+          description: Redaction profile upserted
+          schema:
+            type: object
+            additionalProperties: true
+  /api/v1/documents/{documentId}/anonymize:
+    post:
+      summary: AnonymizeDocument
+      description: Anonymize document
+      operationId: AnonymizeDocument
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          type: string
+          description: Document id
+        - in: body
+          name: body
+          required: false
+          schema:
+            type: object
+            properties:
+              aiTask:
+                type: string
+              customPrompt:
+                type: string
+              redactionLevel:
+                type: string
+      responses:
+        '200':
+          description: Anonymization result
+          schema:
+            type: object
+            additionalProperties: true
+securityDefinitions:
+  bearerAuth:
+    type: apiKey
+    name: Authorization
+    in: header
+    description: Bearer {token}
+security:
+  - bearerAuth: []
+definitions:
+  Pagination:
+    type: object
+    properties:
+      page:
+        type: integer
+        example: 1
+      limit:
+        type: integer
+        example: 20
+      total:
+        type: integer
+        example: 0
+  CaseListItem:
+    type: object
+    properties:
+      id:
+        type: string
+        example: case_123
+      caseNumber:
+        type: string
+        example: 2026-001
+      title:
+        type: string
+        example: Acme Kft. - REAL_ESTATE_SALE
+      clientName:
+        type: string
+        example: Acme Kft.
+      matterType:
+        type: string
+        example: REAL_ESTATE_SALE
+      status:
+        type: string
+        example: CLIENT_INPUT
+      priority:
+        type: string
+        example: NORMAL
+      createdAt:
+        type: string
+        format: date-time
+      updatedAt:
+        type: string
+        format: date-time
+  GetCasesResponse:
+    type: object
+    properties:
+      data:
+        type: array
+        items:
+          $ref: '#/definitions/CaseListItem'
+      pagination:
+        $ref: '#/definitions/Pagination'
+  WhoAmIResponse:
+    type: object
+    properties:
+      success:
+        type: boolean
+        example: true
+      tokenType:
+        type: string
+        example: Azure AD
+      claims:
+        type: object
+        additionalProperties: true
+      header:
+        type: object
+        additionalProperties: true
