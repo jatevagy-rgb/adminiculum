@@ -231,24 +231,6 @@ app.use('/api/v1/contracts', contractsRoutes);
 import documentsRoutes from './modules/documents/routes';
 app.use('/api/v1/documents', documentsRoutes);
 
-import changeReportsRoutes from './modules/changeReports/routes';
-app.use('/api/v1', changeReportsRoutes);
-
-import deadlinesRoutes from './modules/deadlines/routes';
-app.use('/api/v1', deadlinesRoutes);
-
-import documentClassificationRoutes from './modules/documentClassification/routes';
-app.use('/api/v1', documentClassificationRoutes);
-app.use('/api/v1/classification', documentClassificationRoutes);
-
-import automationEventsRoutes from './modules/automationEvents/routes';
-app.use('/api/v1', automationEventsRoutes);
-app.use('/', automationEventsRoutes);
-
-import automationSuggestionsRoutes from './modules/automationSuggestions/routes';
-app.use('/api/v1', automationSuggestionsRoutes);
-app.use('/', automationSuggestionsRoutes);
-
 import workgroupRoutes from './modules/workgroups/routes';
 app.use('/api/v1', workgroupRoutes);
 
