@@ -51,6 +51,19 @@ model User {
   taskAssignments       TaskAssignmentHistory[]
   notifications         Notification[]
   timeEntries           TimeEntry[]         // Time entries created by user
+  createdChangeReports  ChangeReport[]      @relation("ChangeReportCreatedBy")
+  kbDocumentUsages      KnowledgeBaseDocumentUsage[]
+  kbApprovals           KnowledgeBaseApproval[]       @relation("KBApprovedBy")
+  kbApprovalHistoryChanges KnowledgeBaseApprovalHistory[] @relation("KBChangedBy")
+  experienceLevels      ExperienceLevel[]
+  levelHistoryEntries   LevelHistory[]
+  escalationLogs        EscalationLog[]
+  automationPreference  UserAutomationPreference? @relation("AutomationPreferenceUser")
+  automationSuppressions UserAutomationSuppression[] @relation("AutomationSuppressionUser")
+  automationTriggerEvents AutomationTriggerEvent[] @relation("AutomationTriggerEventUser")
+  automationSuggestions AutomationSuggestion[] @relation("AutomationSuggestionUser")
+  automationExecutionLogs AutomationExecutionLog[] @relation("AutomationExecutionLogUser")
+  automationExecutionStepLogs AutomationExecutionStepLog[] @relation("AutomationExecutionStepLogUser")
 
   @@map("users")
 }
@@ -79,7 +92,7 @@ enum UserRole {
 model Client {
   id              String    @id @default(uuid())
   name            String
-  email           String?
+  email           String?   @unique
   phone           String?
   address         String?
   company         String?
@@ -337,6 +350,9 @@ model Case {
   tasks           Task[]
   timelineEvents  TimelineEvent[]
   comments        Comment[]
+  deadlines       Deadline[]
+  kbDocumentUsages KnowledgeBaseDocumentUsage[]
+  escalationLogs  EscalationLog[]
 
   @@map("cases")
 }
@@ -401,6 +417,7 @@ model Document {
   
   // Local Metadata
   currentVersion  Int             @default(1)
+  currentVersionInt Int           @default(1)
   isLatest        Boolean         @default(true)
   size            Int?            // bytes
   checksum        String?         // SHA-256 hash for change detection
@@ -415,6 +432,9 @@ model Document {
   client          Client          @relation(fields: [clientId], references: [id])
   
   versions        DocumentVersion[]
+  changeReports   ChangeReport[]
+  deadlines       Deadline[]
+  classifications DocumentClassification[]
   comments        Comment[]
   anonymizedDocs  AnonymousDocument[]
   timelineEvents  TimelineEvent[]
@@ -463,6 +483,264 @@ model DocumentVersion {
   @@map("document_versions")
 }
 
+model ChangeReport {
+  id              String    @id @default(uuid())
+  documentId      String
+  document        Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  fromVersionInt  Int
+  toVersionInt    Int
+  summaryMarkdown String
+  changesJson     Json
+  redFlags        String[]  @default([])
+  createdById     String
+  createdBy       User      @relation("ChangeReportCreatedBy", fields: [createdById], references: [id])
+  createdAt       DateTime  @default(now())
+
+  @@index([documentId, createdAt])
+  @@index([createdById])
+  @@map("change_reports")
+}
+
+model Deadline {
+  id              String          @id @default(uuid())
+  caseId          String
+  case            Case            @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  documentId      String
+  document        Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  extractedPhrase String
+  triggerDate     DateTime
+  durationDays    Int
+  businessDays    Boolean         @default(false)
+  dueDate         DateTime
+  ruleSet         DeadlineRuleSet @default(UNKNOWN)
+  confidence      Float           @default(0.0)
+  status          DeadlineStatus  @default(OPEN)
+  createdAt       DateTime        @default(now())
+
+  @@index([caseId, dueDate])
+  @@index([documentId])
+  @@map("deadlines")
+}
+
+model DocumentClassification {
+  id              String    @id @default(uuid())
+  documentId      String
+  document        Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  category        String
+  tags            String[]  @default([])
+  confidence      Float     @default(0.0)
+  createdAt       DateTime  @default(now())
+
+  @@index([documentId, createdAt])
+  @@map("document_classifications")
+}
+
+enum DeadlineRuleSet {
+  PP
+  AKR
+  BE
+  UNKNOWN
+}
+
+enum DeadlineStatus {
+  OPEN
+  DONE
+}
+
+// ============================================================================
+// AUTOMATION FOUNDATION
+// ============================================================================
+
+model UserAutomationPreference {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  user               User     @relation("AutomationPreferenceUser", fields: [userId], references: [id], onDelete: Cascade)
+  suggestionsEnabled Boolean  @default(true)
+  level1Enabled      Boolean  @default(true)
+  level2Enabled      Boolean  @default(true)
+  level3Enabled      Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("user_automation_preferences")
+}
+
+model UserAutomationSuppression {
+  id              String                    @id @default(uuid())
+  userId          String
+  user            User                      @relation("AutomationSuppressionUser", fields: [userId], references: [id], onDelete: Cascade)
+  suppressionType AutomationSuppressionType
+  value           String
+  createdAt       DateTime                  @default(now())
+
+  @@index([userId, suppressionType, value])
+  @@map("user_automation_suppressions")
+}
+
+model AutomationTriggerEvent {
+  id           String                @id @default(uuid())
+  userId       String
+  user         User                  @relation("AutomationTriggerEventUser", fields: [userId], references: [id], onDelete: Cascade)
+  entityType   AutomationEntityType
+  entityId     String
+  screen       String
+  actionType   String
+  actionKey    String
+  payloadClass String?
+  contextKey   String
+  source       AutomationEventSource @default(HUMAN)
+  createdAt    DateTime              @default(now())
+
+  @@index([userId, entityType, entityId])
+  @@index([userId, contextKey])
+  @@index([createdAt])
+  @@map("automation_trigger_events")
+}
+
+model AutomationSuggestion {
+  id                    String                    @id @default(uuid())
+  userId                String
+  user                  User                      @relation("AutomationSuggestionUser", fields: [userId], references: [id], onDelete: Cascade)
+  entityType            AutomationEntityType
+  entityId              String
+  suggestionType        AutomationSuggestionType
+  suggestedActionKey    String
+  suggestedPayloadClass String?
+  bundlePreview         Json?
+  confidence            Float
+  contextKey            String
+  state                 AutomationSuggestionState
+  processingStartedAt   DateTime?
+  expiresAt             DateTime
+  createdAt             DateTime                  @default(now())
+
+  executionLogs         AutomationExecutionLog[]
+  stepLogs              AutomationExecutionStepLog[]
+
+  @@index([userId, entityType, entityId, state])
+  @@map("automation_suggestions")
+}
+
+model AutomationExecutionLog {
+  id            String                  @id @default(uuid())
+  userId        String
+  user          User                    @relation("AutomationExecutionLogUser", fields: [userId], references: [id], onDelete: Cascade)
+  entityType    AutomationEntityType
+  entityId      String
+  suggestionId  String?
+  suggestion    AutomationSuggestion?   @relation(fields: [suggestionId], references: [id], onDelete: SetNull)
+  executionMode AutomationExecutionMode
+  status        AutomationExecutionStatus
+  operationToken String?                @unique
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  resultSummary String?
+  failureCode   String?
+  failureDetails Json?
+  rollbackData  Json?
+  createdAt     DateTime                @default(now())
+
+  stepLogs      AutomationExecutionStepLog[]
+
+  @@index([userId, entityType, entityId])
+  @@index([createdAt])
+  @@map("automation_execution_logs")
+}
+
+model AutomationExecutionStepLog {
+  id                     String                         @id @default(uuid())
+  executionLogId         String
+  executionLog           AutomationExecutionLog         @relation(fields: [executionLogId], references: [id], onDelete: Cascade)
+  suggestionId           String?
+  suggestion             AutomationSuggestion?          @relation(fields: [suggestionId], references: [id], onDelete: SetNull)
+  userId                 String
+  user                   User                           @relation("AutomationExecutionStepLogUser", fields: [userId], references: [id], onDelete: Cascade)
+  entityType             AutomationEntityType
+  entityId               String
+  executionMode          AutomationExecutionMode
+  stepOrder              Int
+  actionKey              String
+  payloadClass           String?
+  status                 AutomationExecutionStatus
+  actionPolicy           AutomationActionPolicy
+  retryability           AutomationStepRetryability
+  compensationReadiness  AutomationCompensationReadiness
+  compensationHint       String?
+  attemptNumber          Int                            @default(1)
+  resultSummary          String?
+  failureCode            String?
+  failureDetails         Json?
+  executedAt             DateTime                       @default(now())
+  finishedAt             DateTime?
+  createdAt              DateTime                       @default(now())
+
+  @@unique([executionLogId, stepOrder])
+  @@index([suggestionId])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([actionKey, createdAt])
+  @@map("automation_execution_step_logs")
+}
+
+enum AutomationSuppressionType {
+  ACTION_KEY
+  TEMPLATE_ID
+}
+
+enum AutomationEntityType {
+  TASK
+  CASE
+  DOCUMENT
+}
+
+enum AutomationEventSource {
+  HUMAN
+  AUTOMATION
+}
+
+enum AutomationSuggestionType {
+  NEXT_STEP
+  ACTION_BUNDLE
+}
+
+enum AutomationSuggestionState {
+  OFFERED
+  PROCESSING
+  ACCEPTED
+  DISMISSED
+  EXPIRED
+}
+
+enum AutomationExecutionMode {
+  LEVEL1
+  LEVEL2
+  LEVEL3
+}
+
+enum AutomationExecutionStatus {
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+enum AutomationActionPolicy {
+  SAFE_AUTOPILOT_ALLOWED
+  USER_APPROVAL_REQUIRED
+  NEVER_AUTOPILOT
+}
+
+enum AutomationStepRetryability {
+  RETRYABLE
+  MANUAL_RETRY_ONLY
+  NON_RETRYABLE
+}
+
+enum AutomationCompensationReadiness {
+  NONE
+  COMPENSATION_READY
+  MANUAL_COMPENSATION_REQUIRED
+}
+
 // ============================================================================
 // TASK MANAGEMENT
 // ============================================================================
@@ -496,6 +774,14 @@ model Task {
   // Matter reference (NEW)
   matterId        String?
   matter          Matter?     @relation(fields: [matterId], references: [id])
+
+  // Task Intelligence (additive)
+  stuckReason     TaskStuckReason?
+  maturityStage   TaskMaturityStage?
+  complexityScore Int         @default(3)
+  riskScore       Int         @default(3)
+  lastProgressAt  DateTime?
+  stuckSince      DateTime?
   
   // Dates
   dueDate         DateTime?
@@ -507,6 +793,12 @@ model Task {
 
   // Relations
   assignmentHistory TaskAssignmentHistory[]
+  escalationLogs     EscalationLog[]
+
+  @@index([stuckReason])
+  @@index([maturityStage])
+  @@index([riskScore])
+  @@index([complexityScore])
 
   @@map("tasks")
 }
@@ -535,6 +827,24 @@ enum TaskStatus {
   TODO
   IN_REVIEW
   DONE
+}
+enum TaskStuckReason {
+  INFORMATION_MISSING
+  CLIENT_WAITING
+  LEGAL_RESEARCH
+  TECHNICAL_BLOCK
+  DEPENDENCY
+  INTERNAL_REVIEW
+  EXTERNAL_APPROVAL
+}
+
+enum TaskMaturityStage {
+  DRAFTING
+  REVIEW
+  CLIENT_REVIEW
+  REVISION
+  FINALIZING
+  COMPLETED
 }
 
 model TaskAssignmentHistory {
@@ -715,6 +1025,16 @@ model Notification {
   @@map("notifications")
 }
 
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+}
+
 enum NotificationType {
   TASK_ASSIGNED
   TASK_DUE_SOON
@@ -808,3 +1128,277 @@ enum GenerationStatus {
   FAILED
   EXPIRED
 }
+
+// ============================================================================
+// KNOWLEDGE BASE (SharePoint metadata only)
+// ============================================================================
+
+model KnowledgeBaseDocument {
+  id              String    @id @default(uuid())
+  title           String
+  description     String?
+  fileName        String
+  mimeType        String?
+  fileSize        Int?
+
+  // SharePoint metadata only (NO content storage)
+  spSiteId        String?
+  spDriveId       String?
+  spItemId        String?   @unique
+  spWebUrl        String?
+  spParentPath    String?
+  spVersionLabel  String?
+
+  metadata        Json?
+  tags            String[]  @default([])
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  usageLogs       KnowledgeBaseDocumentUsage[]
+  approvals       KnowledgeBaseApproval[]
+  approvalHistory KnowledgeBaseApprovalHistory[]
+  outgoingRelations KnowledgeBaseDocumentRelation[] @relation("KBRelationFrom")
+  incomingRelations KnowledgeBaseDocumentRelation[] @relation("KBRelationTo")
+
+  @@index([spDriveId, spItemId])
+  @@map("knowledge_base_documents")
+}
+
+model KnowledgeBaseDocumentUsage {
+  id              String    @id @default(uuid())
+  documentId      String
+  document        KnowledgeBaseDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  caseId          String?
+  case            Case?     @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  userId          String?
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  usageType       KBUsageType
+  dedupeKey       String?   @unique
+  details         Json?
+  usedAt          DateTime  @default(now())
+
+  @@index([documentId, usedAt])
+  @@index([userId, usedAt])
+  @@index([caseId, usedAt])
+  @@map("knowledge_base_document_usages")
+}
+
+enum KBUsageType {
+  VIEWED
+  REFERENCED
+  LINKED_TO_CASE
+  USED_FOR_DRAFT
+  USED_FOR_REVIEW
+  OTHER
+}
+
+model KnowledgeBaseApproval {
+  id              String    @id @default(uuid())
+  documentId      String
+  document        KnowledgeBaseDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  approvedById    String?
+  approvedBy      User?     @relation("KBApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  spVersionLabel  String?
+  status          KBApprovalStatus @default(PENDING)
+  note            String?
+  approvedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  historyEntries  KnowledgeBaseApprovalHistory[]
+
+  @@index([documentId, status])
+  @@map("knowledge_base_approvals")
+}
+
+model KnowledgeBaseApprovalHistory {
+  id              String    @id @default(uuid())
+  documentId      String
+  document        KnowledgeBaseDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  approvalId      String?
+  approval        KnowledgeBaseApproval? @relation(fields: [approvalId], references: [id], onDelete: SetNull)
+  changedById     String?
+  changedBy       User?     @relation("KBChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+  fromStatus      KBApprovalStatus?
+  toStatus        KBApprovalStatus
+  note            String?
+  changedAt       DateTime  @default(now())
+
+  @@index([documentId, changedAt])
+  @@map("knowledge_base_approval_history")
+}
+
+enum KBApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVOKED
+}
+
+model KnowledgeBaseDocumentRelation {
+  id              String    @id @default(uuid())
+  fromDocumentId  String
+  fromDocument    KnowledgeBaseDocument @relation("KBRelationFrom", fields: [fromDocumentId], references: [id], onDelete: Cascade)
+  toDocumentId    String
+  toDocument      KnowledgeBaseDocument @relation("KBRelationTo", fields: [toDocumentId], references: [id], onDelete: Cascade)
+  relationType    KBRelationType
+  metadata        Json?
+  createdAt       DateTime  @default(now())
+
+  @@unique([fromDocumentId, toDocumentId, relationType])
+  @@index([fromDocumentId])
+  @@index([toDocumentId])
+  @@map("knowledge_base_document_relations")
+}
+
+enum KBRelationType {
+  RELATED
+  PRECEDENT
+  SUPERSEDES
+  DERIVED_FROM
+  DUPLICATE_OF
+  CITES
+}
+
+// ============================================================================
+// LEARNING MODULE
+// ============================================================================
+
+model ExperienceLevel {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  overallLevel    Int       @default(1)
+  areaLevels      Json      @default("{}")
+  totalPoints     Int       @default(0)
+  lastCalculated  DateTime  @default(now())
+  area            String
+  level           Int       @default(1)
+  score           Float     @default(0)
+  lastRecalculatedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  history         LevelHistory[]
+
+  @@unique([userId, area])
+  @@index([area, level])
+  @@map("experience_levels")
+}
+
+model LevelHistory {
+  id              String    @id @default(uuid())
+  experienceLevelId String
+  experienceLevel ExperienceLevel @relation(fields: [experienceLevelId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  area            String
+  previousLevel   Int
+  newLevel        Int
+  previousScore   Float?
+  newScore        Float?
+  reason          String?
+  changedAt       DateTime  @default(now())
+
+  @@index([userId, area, changedAt])
+  @@map("level_history")
+}
+
+// ============================================================================
+// ESCALATION MODULE
+// ============================================================================
+
+model EscalationRule {
+  id              String    @id @default(uuid())
+  name            String
+  description     String?
+  isActive        Boolean   @default(true)
+  taskType        TaskType?
+  priority        Priority?
+  triggerWhenHoursOverdue Int @default(0)
+  escalationLevel Int       @default(1)
+  notifyRole      UserRole?
+  metadata        Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  logs            EscalationLog[]
+
+  @@index([isActive])
+  @@index([taskType, priority])
+  @@map("escalation_rules")
+}
+
+model EscalationLog {
+  id              String    @id @default(uuid())
+  taskId          String
+  task            Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  ruleId          String?
+  rule            EscalationRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  caseId          String?
+  case            Case?     @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  escalatedToUserId String?
+  escalatedToUser User?     @relation(fields: [escalatedToUserId], references: [id], onDelete: SetNull)
+  escalationLevel Int       @default(1)
+  reason          String
+  details         Json?
+  escalatedAt     DateTime  @default(now())
+
+  @@index([taskId])
+  @@index([taskId, escalatedAt])
+  @@index([ruleId])
+  @@index([caseId])
+  @@map("escalation_logs")
+}
+
+model TaskHistory {
+  id            String   @id @default(cuid())
+  taskId        String
+  action        String
+  previousValue Json?
+  newValue      Json?
+  changedById   String?
+  reason        String?
+  createdAt     DateTime @default(now())
+
+  @@index([taskId, createdAt])
+  @@map("task_history")
+}
+
+model KnowledgeDocument {
+  id           String   @id @default(cuid())
+  sharepointId String   @unique
+  title        String
+  documentType String
+  area         String
+  status       String
+  difficulty   String?
+  approvedBy   String?
+  approvedAt   DateTime?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([area])
+}
+
+model DocumentUsage {
+  id         String   @id @default(cuid())
+  documentId String
+  userId     String
+  caseId     String?
+  usedAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([caseId])
+}
+
+model DocumentApproval {
+  id         String   @id @default(cuid())
+  documentId String
+  partnerId  String
+  approvedAt DateTime @default(now())
+}
+
+
+

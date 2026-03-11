@@ -1,441 +1,482 @@
-openapi: 3.0.0
+openapi: 3.0.3
 info:
-  title: Legal Workflow Platform API
-  description: Professional legal workflow management system API
-  version: 1.0.0
-  contact:
-    name: LWP Team
-    email: support@lwp.hu
+  title: Adminiculum API
+  version: 2.0.0
+  description: >
+    Contract-level OpenAPI specification for Adminiculum runtime routes.
+    Base URL already contains `/api/v1` to match application mounting.
 
 servers:
-  - url: http://localhost:3000
-    description: Development server
-  - url: https://adminiculumaustriaeast-01.azurewebsites.net
-    description: Production server (Azure)
+  - url: http://localhost:3000/api/v1
+    description: Local development
 
 tags:
-  - name: Authentication
-    description: User authentication and authorization
-  - name: Users
-    description: User management and skills
-  - name: Cases
-    description: Case management and workflow
   - name: Documents
-    description: Document versioning and management
-  - name: Clients
-    description: Client management
-  - name: Messages
-    description: Messages and activity feed
-  - name: Templates
-    description: Document templates
+    description: Document lifecycle and version operations
+  - name: AutomationEvents
+    description: Ingestion of normalized user/automation trigger events
+  - name: AutomationPreferences
+    description: User-level automation preferences and suppression settings
+  - name: AutomationSuggestions
+    description: Level 1 next-step suggestion retrieval and lifecycle actions
+  - name: ChangeReports
+    description: Diff reports between document versions
+  - name: Deadlines
+    description: Deadline extraction and listing
+  - name: DocumentClassification
+    description: Rule-based document categorization
 
 paths:
-  /auth/login:
+  /documents:
     post:
-      tags:
-        - Authentication
-      summary: User login
-      description: Authenticate user and receive JWT tokens
+      tags: [Documents]
+      summary: Upload a new document
+      description: >
+        Creates SharePoint-backed document metadata and initial version.
+        Requires authenticated user.
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - email
-                - password
-              properties:
-                email:
-                  type: string
-                  format: email
-                  example: admin@lwp.hu
-                password:
-                  type: string
-                  format: password
-                  example: admin123
+              $ref: '#/components/schemas/CreateDocumentRequest'
       responses:
-        '200':
-          description: Successful login
+        '201':
+          description: Document created
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  accessToken:
-                    type: string
-                  refreshToken:
-                    type: string
-                  expiresIn:
-                    type: integer
-                  user:
-                    type: object
-                    properties:
-                      id:
-                        type: string
-                      email:
-                        type: string
-                      name:
-                        type: string
-                      role:
-                        type: string
-        '401':
-          description: Invalid credentials
-
-  /auth/register:
-    post:
-      tags:
-        - Authentication
-      summary: Register new user
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - email
-                - password
-                - name
-              properties:
-                email:
-                  type: string
-                password:
-                  type: string
-                  minLength: 6
-                name:
-                  type: string
-                role:
-                  type: string
-                  enum: [admin, associate, junior, paralegal]
-      responses:
-        '201':
-          description: User registered
+                $ref: '#/components/schemas/DocumentResponse'
         '400':
-          description: Email already registered
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/StandardError'
+                  - $ref: '#/components/schemas/DocumentValidationError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
 
-  /auth/me:
+  /documents/case/{caseId}:
     get:
-      tags:
-        - Authentication
-      summary: Get current user
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Current user data
-
-  /cases:
-    get:
-      tags:
-        - Cases
-      summary: List all cases
+      tags: [Documents]
+      summary: List documents by case
+      description: Returns documents linked to a given case.
       security:
         - bearerAuth: []
       parameters:
-        - in: query
-          name: status
-          schema:
-            type: string
-            enum: [GENERATING, REVIEW, FINAL, ARCHIVED]
-        - in: query
-          name: type
-          schema:
-            type: string
-        - in: query
-          name: page
-          schema:
-            type: integer
-            default: 1
+        - $ref: '#/components/parameters/CaseIdPathParam'
       responses:
         '200':
-          description: List of cases
+          description: Document list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DocumentListItem'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
 
-    post:
-      tags:
-        - Cases
-      summary: Create new case
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - title
-                - type
-              properties:
-                title:
-                  type: string
-                type:
-                  type: string
-                description:
-                  type: string
-                clientId:
-                  type: string
-                priority:
-                  type: string
-                  enum: [low, normal, high, urgent]
-                dueDate:
-                  type: string
-                  format: date
-      responses:
-        '201':
-          description: Case created
-
-  /cases/{id}:
+  /documents/{id}:
     get:
-      tags:
-        - Cases
-      summary: Get case by ID
+      tags: [Documents]
+      summary: Get document details
+      description: Returns current stored document metadata.
       security:
         - bearerAuth: []
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/DocumentIdPathParam'
       responses:
         '200':
-          description: Case data
+          description: Document details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentDetailResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
         '404':
-          description: Case not found
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
 
-  /cases/{id}/status:
-    patch:
-      tags:
-        - Cases
-      summary: Update case status
-      description: |
-        Valid transitions:
-        - GENERATING → REVIEW
-        - REVIEW → GENERATING (return) or FINAL (approve)
-        - FINAL → REVIEW (modify) or ARCHIVED
+  /documents/{id}/version:
+    post:
+      tags: [Documents]
+      summary: Upload new document version
+      description: Creates new SharePoint and local `DocumentVersion` entry.
       security:
         - bearerAuth: []
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/DocumentIdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadDocumentVersionRequest'
+      responses:
+        '200':
+          description: Updated document snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Upload failure / internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+
+  /documents/{id}/submit-review:
+    post:
+      tags: [Documents]
+      summary: Submit document for review
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DocumentIdPathParam'
+      responses:
+        '200':
+          description: Operation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationSuccessResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+
+  /documents/{id}/approve:
+    post:
+      tags: [Documents]
+      summary: Approve document
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DocumentIdPathParam'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                comment:
+                  type: string
+                  nullable: true
+      responses:
+        '200':
+          description: Operation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationSuccessResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+
+  /documents/{id}/reject:
+    post:
+      tags: [Documents]
+      summary: Reject document
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DocumentIdPathParam'
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required:
-                - status
+              additionalProperties: false
+              required: [reason]
               properties:
-                status:
-                  type: string
-                  enum: [GENERATING, REVIEW, FINAL, ARCHIVED]
                 reason:
                   type: string
       responses:
         '200':
-          description: Status updated
+          description: Operation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationSuccessResponse'
         '400':
-          description: Invalid transition
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
 
-  /cases/{id}/history:
-    get:
-      tags:
-        - Cases
-      summary: Get case history (audit trail)
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Case history timeline
-
-  /documents:
-    get:
-      tags:
-        - Documents
-      summary: List documents
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: List of documents
-
-  /documents/{id}:
-    get:
-      tags:
-        - Documents
-      summary: Get document
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Document data
-
-  /documents/{id}/version:
+  /automation/events:
     post:
-      tags:
-        - Documents
-      summary: Create new document version
+      tags: [AutomationEvents]
+      summary: Ingest normalized automation trigger event
+      description: >
+        Accepts authenticated user action events and persists them into
+        AutomationTriggerEvent for personalized suggestion modeling.
+        May also run narrow L3 SAFE pilot autopilot execution for
+        `task.addChecklist` when all runtime and policy guardrails pass.
       security:
         - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '201':
-          description: New version created
-
-  /documents/{id}/versions:
-    get:
-      tags:
-        - Documents
-      summary: Get all versions of a document
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: List of versions
-
-  /users:
-    get:
-      tags:
-        - Users
-      summary: List users
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: List of users
-
-    post:
-      tags:
-        - Users
-      summary: Create user (admin only)
-      security:
-        - bearerAuth: []
-      responses:
-        '201':
-          description: User created
-
-  /users/{id}:
-    get:
-      tags:
-        - Users
-      summary: Get user
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: User data
-
-  /users/{id}/skills:
-    get:
-      tags:
-        - Users
-      summary: Get user skills
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: User skills
-
-    put:
-      tags:
-        - Users
-      summary: Update user skills
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                skills:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      skillType:
-                        type: string
-                      level:
-                        type: integer
-                        minimum: 1
-                        maximum: 5
-      responses:
-        '200':
-          description: Skills updated
-
-  /clients:
-    get:
-      tags:
-        - Clients
-      summary: List clients
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: List of clients
-
-    post:
-      tags:
-        - Clients
-      summary: Create client
-      security:
-        - bearerAuth: []
+              $ref: '#/components/schemas/AutomationEventIngestRequest'
       responses:
         '201':
-          description: Client created
+          description: Event stored successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationEventIngestResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
 
-  /clients/{id}:
+  /automation/preferences:
     get:
-      tags:
-        - Clients
-      summary: Get client
+      tags: [AutomationPreferences]
+      summary: Get current user's automation preferences
+      description: Returns authenticated user's preferences, lazily creating defaults when missing.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Preference record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationPreferences'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+    put:
+      tags: [AutomationPreferences]
+      summary: Update current user's automation preferences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAutomationPreferencesRequest'
+      responses:
+        '200':
+          description: Updated preference record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationPreferences'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+
+  /automation/preferences/suppress:
+    post:
+      tags: [AutomationPreferences]
+      summary: Create suppression rule for current user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAutomationSuppressionRequest'
+      responses:
+        '201':
+          description: Suppression created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateAutomationSuppressionResponse'
+        '200':
+          description: Suppression already existed (deduplicated)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateAutomationSuppressionResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+
+  /automation/preferences/suppressions:
+    get:
+      tags: [AutomationPreferences]
+      summary: List current user's suppression rules
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Suppression list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AutomationSuppression'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+
+  /automation/preferences/suppressions/{id}:
+    delete:
+      tags: [AutomationPreferences]
+      summary: Delete suppression rule by id for current user
       security:
         - bearerAuth: []
       parameters:
@@ -444,15 +485,87 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         '200':
-          description: Client data
+          description: Deletion success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationSuppressionDeleteResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '404':
+          description: Suppression not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
 
-  /clients/{id}/requests:
+  /automation/suggestions/current:
     get:
-      tags:
-        - Clients
-      summary: Get client requests
+      tags: [AutomationSuggestions]
+      summary: Get current active OFFERED suggestion for entity
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: entityType
+          required: true
+          schema:
+            $ref: '#/components/schemas/AutomationEntityType'
+        - in: query
+          name: entityId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Current suggestion (or null)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentAutomationSuggestionResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+
+  /automation/suggestions/{id}/dismiss:
+    post:
+      tags: [AutomationSuggestions]
+      summary: Dismiss own suggestion
       security:
         - bearerAuth: []
       parameters:
@@ -461,79 +574,47 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         '200':
-          description: Client requests
+          description: Suggestion dismissed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationSuggestionDismissResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '404':
+          description: Suggestion not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
 
-  /messages:
-    get:
-      tags:
-        - Messages
-      summary: Get messages
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: List of messages
-
+  /automation/suggestions/{id}/accept:
     post:
-      tags:
-        - Messages
-      summary: Send message
-      security:
-        - bearerAuth: []
-      responses:
-        '201':
-          description: Message sent
-
-  /messages/feed:
-    get:
-      tags:
-        - Messages
-      summary: Get activity feed
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Activity feed
-
-  /messages/unread:
-    get:
-      tags:
-        - Messages
-      summary: Get unread count
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Unread count
-
-  /templates:
-    get:
-      tags:
-        - Templates
-      summary: List templates
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: List of templates
-
-    post:
-      tags:
-        - Templates
-      summary: Create template (admin only)
-      security:
-        - bearerAuth: []
-      responses:
-        '201':
-          description: Template created
-
-  /templates/{id}:
-    get:
-      tags:
-        - Templates
-      summary: Get template
+      tags: [AutomationSuggestions]
+      summary: Accept and execute own automation suggestion (Level 1 or Level 2 bundle)
+      description: >
+        Executes the suggestion in LEVEL1 (single action) or LEVEL2 (ACTION_BUNDLE)
+        mode with safety checks (ownership, state, expiry, preference, suppression,
+        idempotency and single-winner processing).
       security:
         - bearerAuth: []
       parameters:
@@ -542,9 +623,493 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuggestionAcceptRequest'
       responses:
         '200':
-          description: Template data
+          description: Suggestion accepted and action executed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationSuggestionAcceptResponse'
+        '400':
+          description: Validation/precondition error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '404':
+          description: Suggestion or target entity not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '409':
+          description: Conflict (already processing/processed or idempotency token collision)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+
+  /automation/stats/level1:
+    get:
+      tags: [AutomationSuggestions]
+      summary: Get Level 1 automation suggestion statistics
+      description: >
+        Internal/admin observability endpoint for L1 suggestion funnel and acceptance rates.
+        Requires authenticated user with elevated role.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: L1 stats snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Level1AutomationStatsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+
+  /automation/stats/stuck-processing:
+    get:
+      tags: [AutomationSuggestions]
+      summary: Get potentially stuck PROCESSING suggestions
+      description: >
+        Internal/admin endpoint that lists suggestions in PROCESSING state older than
+        `maxAgeMinutes` (default 30) and recommends reconciliation action.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: maxAgeMinutes
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 30
+      responses:
+        '200':
+          description: Snapshot of stuck processing suggestions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StuckProcessingStatsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+
+  /automation/stats/operability:
+    get:
+      tags: [AutomationSuggestions]
+      summary: Get automation operability snapshot
+      description: >
+        Internal/admin endpoint for pre-Level-3 operability. Returns recent failed executions,
+        Level2 bundle step failure breakdown, and current stuck processing count.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: windowHours
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 24
+        - in: query
+          name: maxAgeMinutes
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 30
+      responses:
+        '200':
+          description: Operability stats snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationOperabilityStatsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+
+  /automation/reconcile-processing:
+    post:
+      tags: [AutomationSuggestions]
+      summary: Reconcile stuck PROCESSING suggestions
+      description: >
+        Internal/admin endpoint. In dry-run mode (`apply=false`) it returns what would be
+        reconciled. With `apply=true` it updates suggestion states based on recommended action.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReconcileProcessingRequest'
+      responses:
+        '200':
+          description: Reconciliation summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReconcileProcessingResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+
+  /change-reports/generate:
+    post:
+      tags: [ChangeReports]
+      summary: Generate change report
+      description: Compares two document versions and stores a report.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateChangeReportRequest'
+      responses:
+        '201':
+          description: Change report created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeReportResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+
+  /change-reports/{id}:
+    get:
+      tags: [ChangeReports]
+      summary: Get change report by id
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Report details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeReportResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+
+  /deadlines/extract:
+    post:
+      tags: [Deadlines]
+      summary: Extract deadlines from a document
+      description: Detects deadline phrases and persists due date records.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtractDeadlinesRequest'
+      responses:
+        '201':
+          description: Deadlines extracted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadlineExtractionResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '404':
+          description: Case/document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+
+  /cases/{caseId}/deadlines:
+    get:
+      tags: [Deadlines]
+      summary: List deadlines for case
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CaseIdPathParam'
+      responses:
+        '200':
+          description: Deadline list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadlineListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '404':
+          description: Case not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+
+  /documents/{id}/classify:
+    post:
+      tags: [DocumentClassification]
+      summary: Classify a document
+      description: Persists latest classification by content and filename rules.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DocumentIdPathParam'
+      responses:
+        '201':
+          description: Classification created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentClassificationResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
+
+  /documents/{id}/classification:
+    get:
+      tags: [DocumentClassification]
+      summary: Get latest document classification
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DocumentIdPathParam'
+      responses:
+        '200':
+          description: Latest classification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentClassificationResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '404':
+          description: Classification not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardError'
 
 components:
   securitySchemes:
@@ -553,28 +1118,205 @@ components:
       scheme: bearer
       bearerFormat: JWT
 
-  # Contract Templates Schemas
+  parameters:
+    CaseIdPathParam:
+      in: path
+      name: caseId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DocumentIdPathParam:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+
   schemas:
-    ContractTemplate:
+    StandardError:
       type: object
+      description: Generic error shape used in most endpoints.
+      required: [status, code, message]
+      properties:
+        status:
+          type: integer
+          example: 500
+        code:
+          type: string
+          example: INTERNAL_ERROR
+        message:
+          type: string
+          example: Internal server error
+
+    UnauthorizedError:
+      type: object
+      description: >
+        Runtime may return either a compact `{ error }` shape or standardized
+        `{ status, code, message }` shape depending on middleware path.
+      oneOf:
+        - type: object
+          required: [error]
+          properties:
+            error:
+              type: string
+              example: Invalid token
+        - $ref: '#/components/schemas/StandardError'
+
+    ForbiddenError:
+      type: object
+      required: [status, code, message]
+      properties:
+        status:
+          type: integer
+          enum: [403]
+        code:
+          type: string
+          enum: [FORBIDDEN]
+        message:
+          type: string
+
+    NotFoundError:
+      type: object
+      required: [status, code, message]
+      properties:
+        status:
+          type: integer
+          enum: [404]
+        code:
+          type: string
+          enum: [NOT_FOUND]
+        message:
+          type: string
+
+    DocumentType:
+      type: string
+      enum:
+        - CONTRACT
+        - AGREEMENT
+        - LETTER
+        - MOTION
+        - RULING
+        - EVIDENCE
+        - POWER_OF_ATTORNEY
+        - OTHER
+
+    SharePointFolderType:
+      type: string
+      enum:
+        - Contracts
+        - Correspondence
+        - CourtDocuments
+        - Internal
+        - ClientInput
+        - Drafts
+        - Review
+        - Approved
+        - Final
+
+    CreateDocumentRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - caseId
+        - fileName
+        - fileContent
+      properties:
+        caseId:
+          type: string
+          format: uuid
+        fileName:
+          type: string
+        fileContent:
+          type: string
+          description: Base64-encoded file content.
+        mimeType:
+          type: string
+          nullable: true
+          default: application/octet-stream
+        documentType:
+          $ref: '#/components/schemas/DocumentType'
+        folder:
+          $ref: '#/components/schemas/SharePointFolderType'
+
+    DocumentCreatedBy:
+      type: object
+      required: [id, name]
       properties:
         id:
           type: string
+          format: uuid
         name:
           type: string
-        description:
+
+    DocumentResponse:
+      type: object
+      required:
+        - id
+        - caseId
+        - fileName
+        - documentType
+        - spItemId
+        - spWebUrl
+        - version
+        - status
+        - createdAt
+        - updatedAt
+        - createdBy
+      properties:
+        id:
           type: string
-        category:
+          format: uuid
+        caseId:
           type: string
-          enum: [ADASVETEL, BERLET, MEGBIZAS, MUNKASZERZODES, VALLALKOZAS, EGYEB]
-        variables:
-          type: array
-        isActive:
-          type: boolean
-        isDefault:
-          type: boolean
+          format: uuid
+        fileName:
+          type: string
+        documentType:
+          type: string
+        spItemId:
+          type: string
+        spWebUrl:
+          type: string
         version:
-          type: integer
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        createdBy:
+          $ref: '#/components/schemas/DocumentCreatedBy'
+
+    DocumentListItem:
+      type: object
+      required:
+        - id
+        - fileName
+        - documentType
+        - version
+        - status
+        - spWebUrl
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        fileName:
+          type: string
+        documentType:
+          type: string
+        version:
+          type: string
+        status:
+          type: string
+        spWebUrl:
+          type: string
         createdAt:
           type: string
           format: date-time
@@ -582,274 +1324,1157 @@ components:
           type: string
           format: date-time
 
-    ContractGeneration:
+    DocumentDetailResponse:
       type: object
+      required:
+        - id
+        - caseId
+        - fileName
+        - documentType
+        - spItemId
+        - spWebUrl
+        - version
+        - folder
+        - isLatest
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: string
-        title:
-          type: string
-        templateId:
-          type: string
+          format: uuid
         caseId:
           type: string
+          format: uuid
         fileName:
           type: string
-        fileSize:
-          type: integer
+          nullable: true
+        documentType:
+          type: string
+          nullable: true
+        spItemId:
+          type: string
+          nullable: true
+        spWebUrl:
+          type: string
+          nullable: true
+        version:
+          type: string
+          nullable: true
+        folder:
+          type: string
+          nullable: true
+        isLatest:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    UploadDocumentVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [fileContent]
+      properties:
+        fileContent:
+          type: string
+          description: Base64-encoded file content.
+        comment:
+          type: string
+          nullable: true
+
+    OperationSuccessResponse:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+
+    DocumentValidationError:
+      type: object
+      required: [error, field, message]
+      properties:
+        error:
+          type: string
+          enum: [Validation error]
+        field:
+          type: string
+        message:
+          type: string
+
+    AutomationEntityType:
+      type: string
+      enum: [TASK, CASE, DOCUMENT]
+
+    AutomationEventSource:
+      type: string
+      enum: [HUMAN, AUTOMATION]
+
+    AutomationEventContext:
+      type: object
+      description: Arbitrary normalized context map used for deterministic contextKey generation.
+      additionalProperties: true
+
+    AutomationEventIngestRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - entityType
+        - entityId
+        - screen
+        - actionType
+        - actionKey
+      properties:
+        entityType:
+          $ref: '#/components/schemas/AutomationEntityType'
+        entityId:
+          type: string
+          minLength: 1
+        screen:
+          type: string
+          minLength: 1
+        actionType:
+          type: string
+          minLength: 1
+        actionKey:
+          type: string
+          minLength: 1
+        payloadClass:
+          type: string
+          nullable: true
+          description: Bucket/category token only (not raw sensitive text).
+          example: CONTRACT_DRAFT_FORM
+        source:
+          $ref: '#/components/schemas/AutomationEventSource'
+        context:
+          $ref: '#/components/schemas/AutomationEventContext'
+
+    AutomationEventIngestResponse:
+      type: object
+      required: [id, contextKey, source, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        contextKey:
+          type: string
+          description: Deterministic key generated from normalized context or fallback dimensions.
+        source:
+          $ref: '#/components/schemas/AutomationEventSource'
+        createdAt:
+          type: string
+          format: date-time
+        suggestion:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/AutomationSuggestionRecord'
+        autopilotExecution:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/AutomationAutopilotExecutionOutcome'
+
+    AutomationAutopilotExecutionOutcome:
+      type: object
+      required: [attempted, status]
+      properties:
+        attempted:
+          type: boolean
         status:
           type: string
-          enum: [PENDING, PREVIEW, GENERATED, UPLOADED, FAILED, EXPIRED]
+          enum: [EXECUTED, BLOCKED, NOT_ATTEMPTED]
+        reason:
+          type: string
+          nullable: true
+        actionKey:
+          type: string
+          nullable: true
+        suggestionId:
+          type: string
+          format: uuid
+          nullable: true
+        executionLogId:
+          type: string
+          format: uuid
+          nullable: true
+        operationToken:
+          type: string
+          nullable: true
+        undoWindowEndsAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    AutomationSuppressionType:
+      type: string
+      enum: [ACTION_KEY, TEMPLATE_ID]
+
+    AutomationPreferences:
+      type: object
+      required:
+        - id
+        - userId
+        - suggestionsEnabled
+        - level1Enabled
+        - level2Enabled
+        - level3Enabled
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        suggestionsEnabled:
+          type: boolean
+        level1Enabled:
+          type: boolean
+        level2Enabled:
+          type: boolean
+        level3Enabled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    UpdateAutomationPreferencesRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        suggestionsEnabled:
+          type: boolean
+        level1Enabled:
+          type: boolean
+        level2Enabled:
+          type: boolean
+        level3Enabled:
+          type: boolean
+
+    AutomationSuppression:
+      type: object
+      required: [id, userId, suppressionType, value, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        suppressionType:
+          $ref: '#/components/schemas/AutomationSuppressionType'
+        value:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateAutomationSuppressionRequest:
+      type: object
+      additionalProperties: false
+      required: [suppressionType, value]
+      properties:
+        suppressionType:
+          $ref: '#/components/schemas/AutomationSuppressionType'
+        value:
+          type: string
+          minLength: 1
+
+    CreateAutomationSuppressionResponse:
+      type: object
+      required: [created, suppression]
+      properties:
+        created:
+          type: boolean
+        suppression:
+          $ref: '#/components/schemas/AutomationSuppression'
+
+    AutomationSuppressionDeleteResponse:
+      type: object
+      required: [success, id]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        id:
+          type: string
+          format: uuid
+
+    AutomationSuggestionState:
+      type: string
+      enum: [OFFERED, PROCESSING, ACCEPTED, DISMISSED, EXPIRED]
+
+    AutomationSuggestionType:
+      type: string
+      enum: [NEXT_STEP, ACTION_BUNDLE]
+
+    AutomationBundlePreviewStep:
+      type: object
+      required: [order, actionKey]
+      properties:
+        order:
+          type: integer
+          minimum: 1
+        actionKey:
+          type: string
+        payloadClass:
+          type: string
+          nullable: true
+
+    AutomationBundlePreview:
+      type: object
+      required:
+        - version
+        - triggerActionKey
+        - sequenceLength
+        - sampleCount
+        - supportCount
+        - confidence
+        - steps
+      properties:
+        version:
+          type: string
+          enum: [v1]
+        triggerActionKey:
+          type: string
+        sequenceLength:
+          type: integer
+          minimum: 2
+          maximum: 6
+        sampleCount:
+          type: integer
+          minimum: 0
+        supportCount:
+          type: integer
+          minimum: 0
+        confidence:
+          type: number
+          format: float
+        steps:
+          type: array
+          minItems: 2
+          maxItems: 6
+          items:
+            $ref: '#/components/schemas/AutomationBundlePreviewStep'
+
+    AutomationSuggestionRecord:
+      type: object
+      required:
+        - id
+        - userId
+        - entityType
+        - entityId
+        - suggestionType
+        - suggestedActionKey
+        - confidence
+        - contextKey
+        - state
+        - expiresAt
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        entityType:
+          $ref: '#/components/schemas/AutomationEntityType'
+        entityId:
+          type: string
+        suggestionType:
+          $ref: '#/components/schemas/AutomationSuggestionType'
+        suggestedActionKey:
+          type: string
+        suggestedPayloadClass:
+          type: string
+          nullable: true
+        bundlePreview:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/AutomationBundlePreview'
+        confidence:
+          type: number
+          format: float
+        contextKey:
+          type: string
+        state:
+          $ref: '#/components/schemas/AutomationSuggestionState'
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    CurrentAutomationSuggestionResponse:
+      type: object
+      required: [suggestion]
+      properties:
+        suggestion:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/AutomationSuggestionRecord'
+
+    AutomationSuggestionDismissResponse:
+      type: object
+      required: [success, id, state]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        id:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum: [DISMISSED]
+
+    SuggestionAcceptRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        operationToken:
+          type: string
+          minLength: 1
+          description: Optional idempotency token. If omitted, backend generates one.
+        status:
+          type: string
+          description: Used by actionKey `task.setStatus`
+        dueDate:
+          type: string
+          format: date-time
+          description: Used by actionKey `task.setDeadline`
+        assigneeId:
+          type: string
+          format: uuid
+          description: Used by actionKey `task.setAssignee`
+        checklistItem:
+          type: string
+          description: Used by actionKey `task.addChecklist`
+        note:
+          type: string
+          description: Optional execution note forwarded to domain service when supported
+
+    BundleStepExecutionStatus:
+      type: string
+      enum: [SUCCESS, FAILED, SKIPPED]
+
+    BundleStepExecutionResult:
+      type: object
+      required:
+        - order
+        - actionKey
+        - payloadClass
+        - status
+        - actionPolicy
+        - retryability
+        - compensationReadiness
+        - attemptNumber
+      properties:
+        order:
+          type: integer
+          minimum: 1
+        actionKey:
+          type: string
+        payloadClass:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/BundleStepExecutionStatus'
+        actionPolicy:
+          $ref: '#/components/schemas/AutomationActionPolicy'
+        retryability:
+          $ref: '#/components/schemas/AutomationStepRetryability'
+        compensationReadiness:
+          $ref: '#/components/schemas/AutomationCompensationReadiness'
+        compensationHint:
+          type: string
+          nullable: true
+        attemptNumber:
+          type: integer
+          minimum: 1
+        resultSummary:
+          type: string
+        failureCode:
+          type: string
+        failureMessage:
+          type: string
+
+    AutomationActionPolicy:
+      type: string
+      enum:
+        - SAFE_AUTOPILOT_ALLOWED
+        - USER_APPROVAL_REQUIRED
+        - NEVER_AUTOPILOT
+
+    AutomationStepRetryability:
+      type: string
+      enum:
+        - RETRYABLE
+        - MANUAL_RETRY_ONLY
+        - NON_RETRYABLE
+
+    AutomationCompensationReadiness:
+      type: string
+      enum:
+        - NONE
+        - COMPENSATION_READY
+        - MANUAL_COMPENSATION_REQUIRED
+
+    AutomationSuggestionAcceptResponse:
+      type: object
+      required:
+        - executed
+        - executionLogId
+        - suggestionId
+        - suggestionType
+        - entityId
+        - operationToken
+        - totalSteps
+        - completedSteps
+        - stepResults
+      properties:
+        executed:
+          type: boolean
+          enum: [true]
+        executionLogId:
+          type: string
+          format: uuid
+        suggestionId:
+          type: string
+          format: uuid
+        suggestionType:
+          $ref: '#/components/schemas/AutomationSuggestionType'
+        actionKey:
+          type: string
+          nullable: true
+        entityId:
+          type: string
+        operationToken:
+          type: string
+          description: Effective idempotency token used for this execution.
+        totalSteps:
+          type: integer
+          minimum: 1
+        completedSteps:
+          type: integer
+          minimum: 0
+        failedStep:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/BundleStepExecutionResult'
+        stepResults:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/BundleStepExecutionResult'
+
+    Level1AcceptanceRateByActionKey:
+      type: object
+      required: [actionKey, generatedCount, acceptedCount, acceptanceRate]
+      properties:
+        actionKey:
+          type: string
+        generatedCount:
+          type: integer
+          minimum: 0
+        acceptedCount:
+          type: integer
+          minimum: 0
+        acceptanceRate:
+          type: number
+          format: float
+
+    Level1AcceptanceRateByConfidenceBucket:
+      type: object
+      required: [confidenceBucket, generatedCount, acceptedCount, acceptanceRate]
+      properties:
+        confidenceBucket:
+          type: string
+          example: 0.80-0.89
+        generatedCount:
+          type: integer
+          minimum: 0
+        acceptedCount:
+          type: integer
+          minimum: 0
+        acceptanceRate:
+          type: number
+          format: float
+
+    Level1AutomationStatsResponse:
+      type: object
+      required:
+        - generatedSuggestionCount
+        - processingSuggestionCount
+        - acceptedSuggestionCount
+        - dismissedSuggestionCount
+        - expiredSuggestionCount
+        - failedExecutionCount
+        - acceptanceRateByActionKey
+        - acceptanceRateByConfidenceBucket
+        - generatedAt
+      properties:
+        generatedSuggestionCount:
+          type: integer
+          minimum: 0
+        processingSuggestionCount:
+          type: integer
+          minimum: 0
+        acceptedSuggestionCount:
+          type: integer
+          minimum: 0
+        dismissedSuggestionCount:
+          type: integer
+          minimum: 0
+        expiredSuggestionCount:
+          type: integer
+          minimum: 0
+        failedExecutionCount:
+          type: integer
+          minimum: 0
+        acceptanceRateByActionKey:
+          type: array
+          items:
+            $ref: '#/components/schemas/Level1AcceptanceRateByActionKey'
+        acceptanceRateByConfidenceBucket:
+          type: array
+          items:
+            $ref: '#/components/schemas/Level1AcceptanceRateByConfidenceBucket'
         generatedAt:
           type: string
           format: date-time
 
-    GenerateContractRequest:
+    StuckProcessingSuggestedAction:
+      type: string
+      enum: [SET_OFFERED, SET_ACCEPTED, MANUAL_REVIEW]
+
+    StuckProcessingSuggestion:
       type: object
       required:
-        - templateId
-        - data
+        - suggestionId
+        - userId
+        - entityType
+        - entityId
+        - actionKey
+        - recommendedAction
       properties:
-        templateId:
+        suggestionId:
           type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        entityType:
+          type: string
+        entityId:
+          type: string
+        actionKey:
+          type: string
+        processingStartedAt:
+          type: string
+          format: date-time
+          nullable: true
+        latestExecutionLogId:
+          type: string
+          format: uuid
+          nullable: true
+        latestExecutionStatus:
+          type: string
+          nullable: true
+        latestExecutionStartedAt:
+          type: string
+          format: date-time
+          nullable: true
+        latestExecutionFinishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        recommendedAction:
+          $ref: '#/components/schemas/StuckProcessingSuggestedAction'
+
+    StuckProcessingStatsResponse:
+      type: object
+      required: [count, maxAgeMinutes, inspectedAt, suggestions]
+      properties:
+        count:
+          type: integer
+          minimum: 0
+        maxAgeMinutes:
+          type: integer
+          minimum: 1
+        inspectedAt:
+          type: string
+          format: date-time
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/StuckProcessingSuggestion'
+
+    ReconcileProcessingRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        maxAgeMinutes:
+          type: integer
+          minimum: 1
+          default: 30
+        apply:
+          type: boolean
+          default: false
+
+    ReconcileProcessingResponse:
+      type: object
+      required:
+        - applied
+        - maxAgeMinutes
+        - inspected
+        - setOffered
+        - setAccepted
+        - manualReview
+        - reconciledAt
+        - details
+      properties:
+        applied:
+          type: boolean
+        maxAgeMinutes:
+          type: integer
+          minimum: 1
+        inspected:
+          type: integer
+          minimum: 0
+        setOffered:
+          type: integer
+          minimum: 0
+        setAccepted:
+          type: integer
+          minimum: 0
+        manualReview:
+          type: integer
+          minimum: 0
+        reconciledAt:
+          type: string
+          format: date-time
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/StuckProcessingSuggestion'
+
+    RecentFailedExecutionRecord:
+      type: object
+      required:
+        - executionLogId
+        - userId
+        - entityType
+        - entityId
+        - executionMode
+        - createdAt
+      properties:
+        executionLogId:
+          type: string
+          format: uuid
+        suggestionId:
+          type: string
+          format: uuid
+          nullable: true
+        userId:
+          type: string
+          format: uuid
+        entityType:
+          type: string
+        entityId:
+          type: string
+        executionMode:
+          type: string
+          enum: [LEVEL1, LEVEL2, LEVEL3]
+        failureCode:
+          type: string
+          nullable: true
+        resultSummary:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    BundleStepFailureBreakdownEntry:
+      type: object
+      required: [actionKey, failureCode, failureCount, lastSeenAt, retryableCount]
+      properties:
+        actionKey:
+          type: string
+        failureCode:
+          type: string
+        failureCount:
+          type: integer
+          minimum: 0
+        lastSeenAt:
+          type: string
+          format: date-time
+        retryableCount:
+          type: integer
+          minimum: 0
+
+    ActionKeysByPolicyClassEntry:
+      type: object
+      required: [policy, actionKeys]
+      properties:
+        policy:
+          $ref: '#/components/schemas/AutomationActionPolicy'
+        actionKeys:
+          type: array
+          items:
+            type: string
+
+    FailureRateByActionKeyEntry:
+      type: object
+      required: [actionKey, totalSteps, failedSteps, failureRate]
+      properties:
+        actionKey:
+          type: string
+        totalSteps:
+          type: integer
+          minimum: 0
+        failedSteps:
+          type: integer
+          minimum: 0
+        failureRate:
+          type: number
+          format: float
+
+    RetryabilityFailureDistributionEntry:
+      type: object
+      required: [retryability, failureCount, percentage]
+      properties:
+        retryability:
+          $ref: '#/components/schemas/AutomationStepRetryability'
+        failureCount:
+          type: integer
+          minimum: 0
+        percentage:
+          type: number
+          format: float
+
+    SafeAutopilotCandidateRecommendation:
+      type: string
+      enum: [PILOT_CANDIDATE, MONITOR_ONLY]
+
+    SafeAutopilotCandidateEntry:
+      type: object
+      required: [actionKey, policy, totalSteps, failedSteps, failureRate, recommendation]
+      properties:
+        actionKey:
+          type: string
+        policy:
+          $ref: '#/components/schemas/AutomationActionPolicy'
+        totalSteps:
+          type: integer
+          minimum: 0
+        failedSteps:
+          type: integer
+          minimum: 0
+        failureRate:
+          type: number
+          format: float
+        recommendation:
+          $ref: '#/components/schemas/SafeAutopilotCandidateRecommendation'
+
+    AutopilotBlockedReasonEntry:
+      type: object
+      required: [reason, count]
+      properties:
+        reason:
+          type: string
+        count:
+          type: integer
+          minimum: 0
+
+    AutomationOperabilityStatsResponse:
+      type: object
+      required:
+        - windowHours
+        - maxAgeMinutes
+        - generatedAt
+        - recentFailedExecutions
+        - bundleStepFailureBreakdown
+        - actionKeysByPolicyClass
+        - failureRateByActionKey
+        - retryabilityFailureDistribution
+        - safeAutopilotCandidates
+        - autopilotExecutionCount
+        - autopilotSuccessCount
+        - autopilotFailureCount
+        - autopilotSuccessRate
+        - autopilotFailureRate
+        - autopilotByActionKey
+        - autopilotBlockedAttempts
+        - autopilotBlockedReasons
+        - stuckProcessingCount
+      properties:
+        windowHours:
+          type: integer
+          minimum: 1
+        maxAgeMinutes:
+          type: integer
+          minimum: 1
+        generatedAt:
+          type: string
+          format: date-time
+        recentFailedExecutions:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecentFailedExecutionRecord'
+        bundleStepFailureBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/BundleStepFailureBreakdownEntry'
+        actionKeysByPolicyClass:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActionKeysByPolicyClassEntry'
+        failureRateByActionKey:
+          type: array
+          items:
+            $ref: '#/components/schemas/FailureRateByActionKeyEntry'
+        retryabilityFailureDistribution:
+          type: array
+          items:
+            $ref: '#/components/schemas/RetryabilityFailureDistributionEntry'
+        safeAutopilotCandidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/SafeAutopilotCandidateEntry'
+        autopilotExecutionCount:
+          type: integer
+          minimum: 0
+        autopilotSuccessCount:
+          type: integer
+          minimum: 0
+        autopilotFailureCount:
+          type: integer
+          minimum: 0
+        autopilotSuccessRate:
+          type: number
+          format: float
+        autopilotFailureRate:
+          type: number
+          format: float
+        autopilotByActionKey:
+          type: array
+          items:
+            $ref: '#/components/schemas/FailureRateByActionKeyEntry'
+        autopilotBlockedAttempts:
+          type: integer
+          minimum: 0
+        autopilotBlockedReasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/AutopilotBlockedReasonEntry'
+        stuckProcessingCount:
+          type: integer
+          minimum: 0
+
+    ChangeImpact:
+      type: string
+      enum: [LOW, MEDIUM, HIGH]
+
+    ChangeEntry:
+      type: object
+      required: [sectionKey, beforeSnippet, afterSnippet, tags, impact]
+      properties:
+        sectionKey:
+          type: string
+        beforeSnippet:
+          type: string
+        afterSnippet:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        impact:
+          $ref: '#/components/schemas/ChangeImpact'
+
+    GenerateChangeReportRequest:
+      type: object
+      additionalProperties: false
+      required: [documentId, fromVersionInt, toVersionInt]
+      properties:
+        documentId:
+          type: string
+          format: uuid
+        fromVersionInt:
+          type: integer
+          minimum: 1
+        toVersionInt:
+          type: integer
+          minimum: 1
+
+    ChangeReportResponse:
+      type: object
+      required:
+        - id
+        - documentId
+        - fromVersionInt
+        - toVersionInt
+        - summaryMarkdown
+        - changesJson
+        - redFlags
+        - createdById
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        documentId:
+          type: string
+          format: uuid
+        fromVersionInt:
+          type: integer
+        toVersionInt:
+          type: integer
+        summaryMarkdown:
+          type: string
+        changesJson:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChangeEntry'
+        redFlags:
+          type: array
+          items:
+            type: string
+        createdById:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+    DeadlineRuleSet:
+      type: string
+      enum: [PP, AKR, BE, UNKNOWN]
+
+    DeadlineStatus:
+      type: string
+      enum: [OPEN, DONE]
+
+    DeadlineRecord:
+      type: object
+      required:
+        - id
+        - caseId
+        - documentId
+        - extractedPhrase
+        - triggerDate
+        - durationDays
+        - businessDays
+        - dueDate
+        - ruleSet
+        - confidence
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
         caseId:
           type: string
-        title:
+          format: uuid
+        documentId:
           type: string
-        data:
-          type: object
-          additionalProperties: true
+          format: uuid
+        extractedPhrase:
+          type: string
+        triggerDate:
+          type: string
+          format: date-time
+        durationDays:
+          type: integer
+        businessDays:
+          type: boolean
+        dueDate:
+          type: string
+          format: date-time
+        ruleSet:
+          $ref: '#/components/schemas/DeadlineRuleSet'
+        confidence:
+          type: number
+          format: float
+        status:
+          $ref: '#/components/schemas/DeadlineStatus'
+        createdAt:
+          type: string
+          format: date-time
 
-    GeneratePreviewRequest:
+    ExtractDeadlinesRequest:
       type: object
-      required:
-        - templateId
-        - data
+      additionalProperties: false
+      required: [caseId, documentId]
       properties:
-        templateId:
+        caseId:
           type: string
-        data:
-          type: object
-          additionalProperties: true
+          format: uuid
+        documentId:
+          type: string
+          format: uuid
+        servedAt:
+          type: string
+          format: date-time
+          nullable: true
 
-# Contract Templates Paths
-  /contracts/templates:
-    get:
-      tags:
-        - Contracts
-      summary: List contract templates
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: query
-          name: category
-          schema:
+    DeadlineExtractionResponse:
+      type: object
+      required: [count, deadlines]
+      properties:
+        count:
+          type: integer
+          minimum: 0
+        deadlines:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeadlineRecord'
+
+    DeadlineListResponse:
+      type: array
+      items:
+        $ref: '#/components/schemas/DeadlineRecord'
+
+    ClassifiedCategory:
+      type: string
+      enum: [CONTRACT, COURT_DOCUMENT, CORRESPONDENCE, INVOICE, OTHER]
+
+    DocumentClassificationResponse:
+      type: object
+      required: [id, documentId, category, tags, confidence, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        documentId:
+          type: string
+          format: uuid
+        category:
+          $ref: '#/components/schemas/ClassifiedCategory'
+        tags:
+          type: array
+          items:
             type: string
-            enum: [ADASVETEL, BERLET, MEGBIZAS, MUNKASZERZODES, VALLALKOZAS, EGYEB]
-      responses:
-        '200':
-          description: List of contract templates
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ContractTemplate'
+        confidence:
+          type: number
+          format: float
+        createdAt:
+          type: string
+          format: date-time
 
-    post:
-      tags:
-        - Contracts
-      summary: Upload new contract template
-      security:
-        - bearerAuth: []
-      requestBody:
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required:
-                - name
-                - category
-                - template
-              properties:
-                name:
-                  type: string
-                description:
-                  type: string
-                category:
-                  type: string
-                  enum: [ADASVETEL, BERLET, MEGBIZAS, MUNKASZERZODES, VALLALKOZAS, EGYEB]
-                template:
-                  type: string
-                  format: binary
-                variables:
-                  type: string
-                isDefault:
-                  type: boolean
-      responses:
-        '201':
-          description: Template created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ContractTemplate'
-
-  /contracts/templates/{id}:
-    get:
-      tags:
-        - Contracts
-      summary: Get contract template by ID
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Template data
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ContractTemplate'
-        '404':
-          description: Template not found
-
-  /contracts/templates/adasvetel/variables:
-    get:
-      tags:
-        - Contracts
-      summary: Get predefined variables for adásvételi contract
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: List of variables for adásvételi contract
-
-  /contracts/generate:
-    post:
-      tags:
-        - Contracts
-      summary: Generate contract document
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GenerateContractRequest'
-      responses:
-        '201':
-          description: Contract generated successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                  document:
-                    $ref: '#/components/schemas/ContractGeneration'
-        '400':
-          description: Generation failed
-
-  /contracts/preview:
-    post:
-      tags:
-        - Contracts
-      summary: Generate contract preview (temporary)
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GeneratePreviewRequest'
-      responses:
-        '200':
-          description: Preview generated successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                  preview:
-                    type: object
-                    properties:
-                      base64Content:
-                        type: string
-                      fileName:
-                        type: string
-
-  /contracts/case/{caseId}:
-    get:
-      tags:
-        - Contracts
-      summary: Get generated contracts for a case
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: caseId
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: List of generated contracts
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ContractGeneration'
-
-  /contracts/{id}/download:
-    get:
-      tags:
-        - Contracts
-      summary: Download generated contract
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: File download
-          content:
-            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
-              schema:
-                type: string
-                format: binary
-        '404':
-          description: Contract not found
-
-  /contracts/cleanup:
-    post:
-      tags:
-        - Contracts
-      summary: Cleanup expired previews (admin only)
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Cleanup completed
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                  deletedCount:
-                    type: integer
