@@ -4,6 +4,23 @@
 
 import { PrismaClient } from '@prisma/client';
 import prisma from '../../config/database.js';
+import escalationService from '../escalation/services';
+
+export class TaskNotFoundError extends Error {
+  statusCode = 404;
+  constructor(taskId: string) {
+    super(`Task not found: ${taskId}`);
+    this.name = 'TaskNotFoundError';
+  }
+}
+
+export class TaskValidationError extends Error {
+  statusCode = 400;
+  constructor(message: string) {
+    super(message);
+    this.name = 'TaskValidationError';
+  }
+}
 
 const TaskStatus = {
   TODO: 'TODO',
@@ -28,6 +45,34 @@ const TaskType = {
   CLIENT_COMMUNICATION: 'CLIENT_COMMUNICATION',
   ADMIN_SUPPORT: 'ADMIN_SUPPORT'
 } as const;
+
+const TASK_TYPE_TO_DB: Record<string, string> = {
+  CONTRACT_REVIEW: 'REVIEW_CONTRACT',
+  CONTRACT_DRAFTING: 'DRAFT_CONTRACT',
+  DOCUMENT_TRANSLATION: 'OTHER',
+  LEGAL_RESEARCH: 'RESEARCH',
+  CLIENT_COMMUNICATION: 'CLIENT_MEETING',
+  ADMIN_SUPPORT: 'OTHER',
+  REVIEW_CONTRACT: 'REVIEW_CONTRACT',
+  DRAFT_CONTRACT: 'DRAFT_CONTRACT',
+  CLIENT_MEETING: 'CLIENT_MEETING',
+  RESEARCH: 'RESEARCH',
+  COURT_FILING: 'COURT_FILING',
+  DEADLINE: 'DEADLINE',
+  APPROVAL: 'APPROVAL',
+  REVIEW_ANONYMIZED: 'REVIEW_ANONYMIZED',
+  QUALITY_CHECK: 'QUALITY_CHECK',
+  OTHER: 'OTHER',
+};
+
+function mapTaskTypeToDb(input: string): string {
+  const normalized = String(input || '').trim().toUpperCase();
+  const mapped = TASK_TYPE_TO_DB[normalized];
+  if (!mapped) {
+    throw new TaskValidationError(`Invalid enum value for taskType: ${input}`);
+  }
+  return mapped;
+}
 
 const TimelineType = {
   CASE_CREATED: 'CASE_CREATED',
@@ -67,6 +112,10 @@ type TaskStatus = typeof TaskStatus[keyof typeof TaskStatus];
 type TaskPriority = typeof TaskPriority[keyof typeof TaskPriority];
 type TimelineType = typeof TimelineType[keyof typeof TimelineType];
 type UserRole = typeof UserRole[keyof typeof UserRole];
+type TaskProgressReason = 'STATUS_CHANGE' | 'MATURITY_CHANGE' | 'COMMENT';
+
+const ACTIONABLE_TASK_STATUSES = ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'] as const;
+type ActionableTaskStatus = (typeof ACTIONABLE_TASK_STATUSES)[number];
 
 // ============================================================================
 // TASK TEMPLATES - Automatikus feladat generálás workflow eseményekhez
@@ -134,6 +183,211 @@ const TASK_TYPE_SKILLS: Record<TaskType, string[]> = {
 // SERVICE FUNCTIONS
 // ============================================================================
 
+
+/**
+ * Set structured stuck reason on task (Task Intelligence D2)
+ */
+export async function setTaskStuckReason(
+  taskId: string,
+  stuckReason: string | null,
+  note?: string,
+  actorUserId?: string,
+) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: {
+      id: true,
+      stuckReason: true,
+      stuckSince: true,
+      maturityStage: true,
+      complexityScore: true,
+      riskScore: true,
+      lastProgressAt: true,
+      updatedAt: true,
+    } as any,
+  });
+
+  if (!task) throw new TaskNotFoundError(taskId);
+
+  const now = new Date();
+  const nextStuckSince = stuckReason === null ? null : task.stuckReason === null ? now : task.stuckSince;
+
+  const updated = await prisma.task.update({
+    where: { id: taskId },
+    data: {
+      stuckReason: (stuckReason as any) ?? null,
+      stuckSince: nextStuckSince,
+    } as any,
+    select: {
+      id: true,
+      stuckReason: true,
+      stuckSince: true,
+      maturityStage: true,
+      complexityScore: true,
+      riskScore: true,
+      lastProgressAt: true,
+      updatedAt: true,
+    } as any,
+  });
+
+  await createTaskHistoryEntry({
+    taskId,
+    changedById: actorUserId,
+    action: 'TASK_INTELLIGENCE_UPDATED',
+    note,
+    previousValue: {
+      type: 'TASK_INTELLIGENCE',
+      field: 'stuckReason',
+      previous: { stuckReason: task.stuckReason, stuckSince: task.stuckSince },
+      note: note || null,
+      actorUserId: actorUserId || null,
+    },
+    newValue: {
+      type: 'TASK_INTELLIGENCE',
+      field: 'stuckReason',
+      next: { stuckReason: updated.stuckReason, stuckSince: updated.stuckSince },
+      note: note || null,
+      actorUserId: actorUserId || null,
+    },
+  });
+
+  return updated;
+}
+
+/**
+ * Set structured maturity stage on task (Task Intelligence D2)
+ */
+export async function setTaskMaturityStage(
+  taskId: string,
+  maturityStage: string | null,
+  note?: string,
+  actorUserId?: string,
+) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: {
+      id: true,
+      maturityStage: true,
+      lastProgressAt: true,
+      stuckReason: true,
+      stuckSince: true,
+      complexityScore: true,
+      riskScore: true,
+      updatedAt: true,
+    } as any,
+  });
+
+  if (!task) throw new TaskNotFoundError(taskId);
+
+  const changed = (task as any).maturityStage !== maturityStage;
+
+  const updated = await prisma.task.update({
+    where: { id: taskId },
+    data: {
+      maturityStage: (maturityStage as any) ?? null,
+    } as any,
+    select: {
+      id: true,
+      stuckReason: true,
+      stuckSince: true,
+      maturityStage: true,
+      complexityScore: true,
+      riskScore: true,
+      lastProgressAt: true,
+      updatedAt: true,
+    } as any,
+  });
+
+  if (changed) {
+    await markTaskProgress(taskId, actorUserId, 'MATURITY_CHANGE', { historyNote: note, skipHistory: true });
+    const refreshed = await prisma.task.findUnique({
+      where: { id: taskId },
+      select: {
+        id: true,
+        stuckReason: true,
+        stuckSince: true,
+        maturityStage: true,
+        complexityScore: true,
+        riskScore: true,
+        lastProgressAt: true,
+        updatedAt: true,
+      } as any,
+    });
+    return refreshed || updated;
+  }
+
+  return updated;
+}
+
+/**
+ * Set task intelligence scores (Task Intelligence D2)
+ */
+export async function setTaskScores(
+  taskId: string,
+  complexityScore: number,
+  riskScore: number,
+  note?: string,
+  actorUserId?: string,
+) {
+  const isValid = (v: number) => Number.isInteger(v) && v >= 1 && v <= 5;
+  if (!isValid(complexityScore)) throw new TaskValidationError('complexityScore must be an integer between 1 and 5');
+  if (!isValid(riskScore)) throw new TaskValidationError('riskScore must be an integer between 1 and 5');
+
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: {
+      id: true,
+      complexityScore: true,
+      riskScore: true,
+      stuckReason: true,
+      stuckSince: true,
+      maturityStage: true,
+      lastProgressAt: true,
+      updatedAt: true,
+    } as any,
+  });
+
+  if (!task) throw new TaskNotFoundError(taskId);
+
+  const updated = await prisma.task.update({
+    where: { id: taskId },
+    data: { complexityScore, riskScore } as any,
+    select: {
+      id: true,
+      stuckReason: true,
+      stuckSince: true,
+      maturityStage: true,
+      complexityScore: true,
+      riskScore: true,
+      lastProgressAt: true,
+      updatedAt: true,
+    } as any,
+  });
+
+  await createTaskHistoryEntry({
+    taskId,
+    changedById: actorUserId,
+    action: 'TASK_INTELLIGENCE_UPDATED',
+    note,
+    previousValue: {
+      type: 'TASK_INTELLIGENCE',
+      field: 'scores',
+      previous: { complexityScore: task.complexityScore, riskScore: task.riskScore },
+      note: note || null,
+      actorUserId: actorUserId || null,
+    },
+    newValue: {
+      type: 'TASK_INTELLIGENCE',
+      field: 'scores',
+      next: { complexityScore: updated.complexityScore, riskScore: updated.riskScore },
+      note: note || null,
+      actorUserId: actorUserId || null,
+    },
+  });
+
+  return updated;
+}
+
 /**
  * Create a new task
  */
@@ -149,19 +403,24 @@ export async function createTask(data: {
   dueDate?: Date;
   documentId?: string;
 }) {
+  const mappedTaskType = mapTaskTypeToDb(data.type);
+
   const task = await prisma.task.create({
     data: {
-      caseId: data.caseId,
+      case: {
+        connect: { id: data.caseId },
+      },
       title: data.title,
-      description: data.description,
-      type: data.type,
+      description: data.description ?? null,
+      taskType: mappedTaskType as any,
+      type: data.type ?? null,
       priority: data.priority || TaskPriority.MEDIUM,
       status: 'TODO',
-      assignedToId: data.assignedTo,
-      assignedById: data.assignedBy,
+      assignedToId: data.assignedTo ?? null,
+      assignedById: data.assignedBy ?? null,
       requiredSkills: data.requiredSkills || TASK_TYPE_SKILLS[data.type] || [],
-      dueDate: data.dueDate,
-      documentId: data.documentId
+      dueDate: data.dueDate ?? null,
+      documentId: data.documentId ?? null
     } as any,
     include: {
       case: true,
@@ -180,6 +439,9 @@ export async function createTask(data: {
       assignedTo: data.assignedTo
     }
   });
+
+  // Escalation integration: evaluate immediate escalation eligibility (e.g. overdue on creation)
+  await escalationService.evaluateTask(task.id);
 
   return task;
 }
@@ -224,6 +486,11 @@ export async function getTask(taskId: string) {
  * Start a task (TODO -> IN_PROGRESS)
  */
 export async function startTask(taskId: string, userId: string) {
+  const previous = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { status: true }
+  });
+
   const task = await prisma.task.update({
     where: { id: taskId },
     data: {
@@ -239,6 +506,15 @@ export async function startTask(taskId: string, userId: string) {
     payload: { taskId, taskTitle: task.title }
   });
 
+  const nextStatus = 'IN_PROGRESS';
+  if ((previous?.status as any) !== nextStatus) {
+    await markTaskProgress(task.id, userId, 'STATUS_CHANGE', {
+      metadata: { previousStatus: previous?.status ?? null, nextStatus }
+    });
+  }
+
+  await escalationService.evaluateTask(task.id);
+
   return task;
 }
 
@@ -246,6 +522,11 @@ export async function startTask(taskId: string, userId: string) {
  * Submit task for review (IN_PROGRESS -> IN_REVIEW)
  */
 export async function submitTask(taskId: string, userId: string, notes?: string) {
+  const previous = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { status: true }
+  });
+
   const task = await prisma.task.update({
     where: { id: taskId },
     data: {
@@ -261,6 +542,15 @@ export async function submitTask(taskId: string, userId: string, notes?: string)
     payload: { taskId, taskTitle: task.title, notes }
   });
 
+  const nextStatus = 'IN_REVIEW';
+  if ((previous?.status as any) !== nextStatus) {
+    await markTaskProgress(task.id, userId, 'STATUS_CHANGE', {
+      metadata: { previousStatus: previous?.status ?? null, nextStatus }
+    });
+  }
+
+  await escalationService.evaluateTask(task.id);
+
   return task;
 }
 
@@ -268,6 +558,11 @@ export async function submitTask(taskId: string, userId: string, notes?: string)
  * Complete a task (IN_REVIEW -> DONE)
  */
 export async function completeTask(taskId: string, userId: string, approved: boolean, notes?: string) {
+  const previous = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { status: true }
+  });
+
   const task = await prisma.task.update({
     where: { id: taskId },
     data: {
@@ -283,7 +578,157 @@ export async function completeTask(taskId: string, userId: string, approved: boo
     payload: { taskId, taskTitle: task.title, notes }
   });
 
+  const nextStatus = approved ? 'DONE' : 'IN_PROGRESS';
+  if ((previous?.status as any) !== nextStatus) {
+    await markTaskProgress(task.id, userId, 'STATUS_CHANGE', {
+      metadata: { previousStatus: previous?.status ?? null, nextStatus }
+    });
+  }
+
+  if (!approved) {
+    await escalationService.evaluateTask(task.id);
+  }
+
   return task;
+}
+
+/**
+ * Set task status using existing domain flow operations where possible.
+ */
+export async function setTaskStatus(taskId: string, status: string, actorUserId: string, notes?: string) {
+  const normalized = String(status || '').trim().toUpperCase();
+  if (!ACTIONABLE_TASK_STATUSES.includes(normalized as ActionableTaskStatus)) {
+    throw new TaskValidationError(`Unsupported status: ${status}. Allowed: ${ACTIONABLE_TASK_STATUSES.join(', ')}`);
+  }
+
+  if (normalized === 'IN_PROGRESS') {
+    return startTask(taskId, actorUserId);
+  }
+  if (normalized === 'IN_REVIEW') {
+    return submitTask(taskId, actorUserId, notes);
+  }
+  if (normalized === 'DONE') {
+    return completeTask(taskId, actorUserId, true, notes);
+  }
+
+  const previous = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { id: true, status: true },
+  });
+
+  if (!previous) {
+    throw new TaskNotFoundError(taskId);
+  }
+
+  const updated = await prisma.task.update({
+    where: { id: taskId },
+    data: {
+      status: 'TODO',
+      completedAt: null,
+      submittedAt: null,
+    },
+  });
+
+  if ((previous.status as any) !== 'TODO') {
+    await markTaskProgress(updated.id, actorUserId, 'STATUS_CHANGE', {
+      metadata: { previousStatus: previous.status, nextStatus: 'TODO' },
+    });
+  }
+
+  await escalationService.evaluateTask(updated.id);
+
+  return updated;
+}
+
+/**
+ * Set task deadline in domain layer.
+ */
+export async function setTaskDeadline(taskId: string, dueDate: Date, actorUserId?: string, note?: string) {
+  if (!(dueDate instanceof Date) || Number.isNaN(dueDate.getTime())) {
+    throw new TaskValidationError('dueDate must be a valid date');
+  }
+
+  const existing = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: {
+      id: true,
+      dueDate: true,
+      title: true,
+      caseId: true,
+    },
+  });
+
+  if (!existing) {
+    throw new TaskNotFoundError(taskId);
+  }
+
+  const updated = await prisma.task.update({
+    where: { id: taskId },
+    data: { dueDate },
+  });
+
+  await createTaskHistoryEntry({
+    taskId,
+    changedById: actorUserId,
+    action: 'TASK_DEADLINE_SET',
+    note,
+    previousValue: {
+      type: 'TASK_DEADLINE',
+      previousDueDate: existing.dueDate ? existing.dueDate.toISOString() : null,
+    },
+    newValue: {
+      type: 'TASK_DEADLINE',
+      nextDueDate: dueDate.toISOString(),
+    },
+  });
+
+  await escalationService.evaluateTask(updated.id);
+
+  return updated;
+}
+
+/**
+ * Add checklist item through task domain history.
+ */
+export async function addTaskChecklistItem(taskId: string, checklistItem: string, actorUserId?: string) {
+  const value = String(checklistItem || '').trim();
+  if (!value) {
+    throw new TaskValidationError('checklistItem is required');
+  }
+
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { id: true },
+  });
+
+  if (!task) {
+    throw new TaskNotFoundError(taskId);
+  }
+
+  const checklistEntryId = `chk_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+  const createdAt = new Date();
+
+  await createTaskHistoryEntry({
+    taskId,
+    changedById: actorUserId,
+    action: 'TASK_CHECKLIST_ITEM_ADDED',
+    newValue: {
+      type: 'TASK_CHECKLIST_ITEM',
+      checklistEntryId,
+      item: value,
+      createdAt: createdAt.toISOString(),
+      actorUserId: actorUserId || null,
+    },
+  });
+
+  await markTaskProgress(taskId, actorUserId, 'COMMENT', { skipHistory: true });
+
+  return {
+    taskId,
+    checklistEntryId,
+    item: value,
+    createdAt,
+  };
 }
 
 /**
@@ -312,6 +757,8 @@ export async function reassignTask(taskId: string, newAssigneeId: string, reassi
       assignedTo: newAssigneeId
     }
   });
+
+  await escalationService.evaluateTask(task.id);
 
   return task;
 }
@@ -466,6 +913,36 @@ export async function getUserTasks(userId: string, filters?: { status?: string; 
 // HELPER FUNCTIONS
 // ============================================================================
 
+export async function markTaskProgress(
+  taskId: string,
+  actorUserId: string | undefined,
+  reason: TaskProgressReason,
+  options?: { historyNote?: string; metadata?: Record<string, unknown>; skipHistory?: boolean },
+) {
+  const now = new Date();
+
+  await prisma.task.update({
+    where: { id: taskId },
+    data: { lastProgressAt: now } as any,
+  });
+
+  if (options?.skipHistory) return;
+
+  await createTaskHistoryEntry({
+    taskId,
+    changedById: actorUserId,
+    action: 'TASK_PROGRESS',
+    note: options?.historyNote,
+    newValue: {
+      type: 'TASK_PROGRESS',
+      reason,
+      at: now.toISOString(),
+      actorUserId: actorUserId || null,
+      ...(options?.metadata || {}),
+    },
+  });
+}
+
 async function createTimelineEvent(data: {
   caseId: string;
   userId?: string;
@@ -475,10 +952,31 @@ async function createTimelineEvent(data: {
   return prisma.timelineEvent.create({
     data: {
       caseId: data.caseId,
-      userId: data.userId,
+      userId: data.userId ?? null,
       type: data.type as any,
-      payload: data.payload as any
+      payload: (data.payload as any) ?? null
     } as any
+  });
+}
+
+
+async function createTaskHistoryEntry(data: {
+  taskId: string;
+  action: string;
+  previousValue?: Record<string, unknown>;
+  newValue?: Record<string, unknown>;
+  changedById?: string;
+  note?: string;
+}) {
+  return (prisma as any).taskHistory.create({
+    data: {
+      taskId: data.taskId,
+      action: data.action,
+      previousValue: (data.previousValue || null) as any,
+      newValue: (data.newValue || null) as any,
+      changedById: data.changedById || null,
+      reason: data.note || null,
+    } as any,
   });
 }
 
@@ -489,9 +987,19 @@ export default {
   startTask,
   submitTask,
   completeTask,
+  setTaskStatus,
+  setTaskDeadline,
   reassignTask,
+  addTaskChecklistItem,
   getTaskRecommendations,
   autoGenerateTask,
   canAssign,
-  getUserTasks
+  getUserTasks,
+  setTaskStuckReason,
+  setTaskMaturityStage,
+  setTaskScores,
+  markTaskProgress
 };
+
+
+
