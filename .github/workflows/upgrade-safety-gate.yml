@@ -1,0 +1,162 @@
+name: Upgrade Safety Gate
+
+on:
+  # Run on every dependency update PR from Dependabot
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+  # Optional: also run weekly even without a PR (to catch transitive issues)
+  # schedule:
+  #   - cron: "0 9 * * 1"  # Monday 9am
+
+jobs:
+  backend-checks:
+    name: Backend Type Check + Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"  # Must match .nvmrc
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: Backend/node_modules
+          key: ${{ runner.os }}-backend-npm-${{ hashFiles('Backend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-backend-npm-
+
+      - name: Install dependencies
+        working-directory: Backend
+        run: npm ci --ignore-scripts
+
+      - name: Generate Prisma client
+        working-directory: Backend
+        run: npx prisma generate
+
+      - name: TypeScript type check
+        working-directory: Backend
+        run: npx tsc --noEmit
+
+      - name: Production build
+        working-directory: Backend
+        run: npm run build
+
+  frontend-checks:
+    name: Frontend Type Check + Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"  # Must match .nvmrc
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: Frontend/node_modules
+          key: ${{ runner.os }}-frontend-npm-${{ hashFiles('Frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-frontend-npm-
+
+      - name: Install dependencies
+        working-directory: Frontend
+        run: npm ci --ignore-scripts
+
+      - name: TypeScript type check
+        working-directory: Frontend
+        run: npx tsc --noEmit
+
+      - name: Production build
+        working-directory: Frontend
+        run: npm run build
+
+  optional-module-sanity:
+    name: Optional Module Feature Flag Sanity
+    runs-on: ubuntu-latest
+
+    # Only run when backend package-lock.json changed (not frontend-only changes)
+    if: contains(github.event.pull_request.labels.*.name, 'dependencies')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check ENABLE_CONTRACT_GENERATION flag presence
+        run: |
+          if grep -q "ENABLE_CONTRACT_GENERATION" Backend/src/modules/contracts/routes.ts; then
+            echo "✅ ENABLE_CONTRACT_GENERATION flag found in contracts module"
+          else
+            echo "❌ ENABLE_CONTRACT_GENERATION flag MISSING in contracts module"
+            exit 1
+          fi
+
+      - name: Check feature-pack guard middleware exists
+        run: |
+          echo "Checking for feature-pack guard patterns..."
+          # This is a lightweight sanity check, not a deep audit
+          grep -r "process.env.ENABLE_" Backend/src/modules/*/routes.ts || echo "Note: No additional ENABLE_ flags found"
+
+  docker-build-checks:
+    name: Docker Image Build Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Backend Docker image (no push, validation only)
+        uses: docker/build-push-action@v5
+        with:
+          context: Backend
+          load: true
+          tags: adminiculum-backend:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+          build-args: |
+            NODE_ENV=production
+          file: Backend/Dockerfile
+
+      - name: Build Frontend Docker image (no push, validation only)
+        uses: docker/build-push-action@v5
+        with:
+          context: Frontend
+          load: true
+          tags: adminiculum-frontend:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+          build-args: |
+            NODE_ENV=production
+          file: Frontend/Dockerfile
+
+      - name: Validate Backend image exists
+        run: |
+          if docker image inspect adminiculum-backend:test > /dev/null 2>&1; then
+            echo "✅ Backend Docker image built successfully"
+          else
+            echo "❌ Backend Docker image build failed"
+            exit 1
+          fi
+
+      - name: Validate Frontend image exists
+        run: |
+          if docker image inspect adminiculum-frontend:test > /dev/null 2>&1; then
+            echo "✅ Frontend Docker image built successfully"
+          else
+            echo "❌ Frontend Docker image build failed"
+            exit 1
+          fi

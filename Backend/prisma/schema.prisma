@@ -1,0 +1,1342 @@
+// ============================================================================
+// ADMINICULUM DATABASE SCHEMA
+// ============================================================================
+//
+// Architecture: Hybrid SharePoint + PostgreSQL
+// - Documents: SharePoint (driveItems with SP metadata)
+// - App Data: PostgreSQL (cases, tasks, users, timeline events)
+//
+// NEW: Client Time & Matter Visibility Module
+// - Department: Client departments (HR, Legal, Compliance, etc.)
+// - Matter: High-level legal matters under departments
+// - TimeEntry: Billable hours tracked per matter
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USER & AUTHENTICATION
+// ============================================================================
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String?
+  name         String
+  role         UserRole  @default(LEGAL_ASSISTANT)
+  status       UserStatus @default(ACTIVE)
+  department   String?
+  skills       String[]  // JSON array of skills
+  
+  isActive     Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relations
+  assignedTasks         Task[]              @relation("AssignedTo")
+  assignedByTasks       Task[]              @relation("AssignedBy")  // Tasks assigned by this user
+  createdCases          Case[]              @relation("CreatedBy")
+  assignedCases         Case[]              @relation("AssignedLawyer")
+  timelineEvents        TimelineEvent[]
+  comments              Comment[]
+  caseCollaborations    CaseCollaborator[]
+  documentVersions      DocumentVersion[]
+  taskAssignments       TaskAssignmentHistory[]
+  notifications         Notification[]
+  timeEntries           TimeEntry[]         // Time entries created by user
+
+  @@map("users")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum UserRole {
+  ADMIN
+  PARTNER
+  LAWYER
+  TRAINEE
+  LEGAL_ASSISTANT
+  CLIENT
+  EXTERNAL_REVIEWER
+  COLLAB_LAWYER
+}
+
+// ============================================================================
+// CLIENT MANAGEMENT
+// ============================================================================
+
+model Client {
+  id              String    @id @default(uuid())
+  name            String
+  email           String?
+  phone           String?
+  address         String?
+  taxNumber       String?
+  companyRegistrationNumber String?
+  authorizedRepresentative  String?
+  company         String?
+  vatNumber       String?
+  contactPerson   String?
+  notes           String?
+  color           String?   // Hex color for client identity visualization (e.g. #2D6A4F)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  cases           Case[]
+  documents       Document[]
+  departments     Department[]         // Client departments
+  matters         Matter[]            // All matters for this client
+  workgroups      ClientWorkgroup[]   // Client workgroups for workload tracking
+  redactorProfile ClientRedactionProfile? // One-to-one relation for anonymization
+
+  @@map("clients")
+}
+
+// ============================================================================
+// CLIENT WORKGROUPS (NEW)
+// ============================================================================
+//
+// Workgroups for workload tracking per client
+// Manually aggregated hours per period
+// ============================================================================
+
+model ClientWorkgroup {
+  id              String    @id @default(uuid())
+  name            String
+  description     String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  clientId        String
+  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  workloadRecords WorkloadRecord[]
+
+  @@unique([clientId, name])
+  @@index([clientId])
+  @@map("client_workgroups")
+}
+
+// ============================================================================
+// WORKLOAD RECORDS (NEW)
+// ============================================================================
+//
+// Manually recorded workload hours per workgroup per period
+// Period format: YYYY-MM
+// ============================================================================
+
+model WorkloadRecord {
+  id              String    @id @default(uuid())
+  period          String    // YYYY-MM format
+  reportedHours   Float
+  note            String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  workgroupId     String
+  workgroup       ClientWorkgroup @relation(fields: [workgroupId], references: [id], onDelete: Cascade)
+
+  @@unique([workgroupId, period])
+  @@index([workgroupId])
+  @@map("workload_records")
+}
+
+// ============================================================================
+// CLIENT DEPARTMENTS (NEW)
+// ============================================================================
+//
+// Each client can have multiple departments (HR, Legal, Compliance, etc.)
+// Matters belong to departments
+// ============================================================================
+
+model Department {
+  id              String    @id @default(uuid())
+  name            String    // e.g., "HR", "Legal", "Compliance", "Finance"
+  description     String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  clientId        String
+  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  matters         Matter[]
+  timeEntries     TimeEntry[]
+
+  @@unique([clientId, name])
+  @@map("departments")
+}
+
+// ============================================================================
+// MATTERS (NEW)
+// ============================================================================
+//
+// Matters are high-level legal matters/projects
+// Cases belong to matters
+// TimeEntries track work on matters
+// ============================================================================
+
+model Matter {
+  id              String      @id @default(uuid())
+  title           String      // e.g., "Munkaszerződés módosítás projekt"
+  description     String?
+  matterType      MatterType
+  status          MatterStatus @default(OPEN)
+  
+  // Financial/Tracking info
+  budgetHours     Float?      // Estimated hours
+  totalMinutes    Int         @default(0)  // Actual minutes logged
+  
+  // Dates
+  openedAt        DateTime    @default(now())
+  closedAt        DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  clientId        String
+  client          Client      @relation(fields: [clientId], references: [id])
+  
+  departmentId    String?
+  department      Department? @relation(fields: [departmentId], references: [id])
+  
+  cases           Case[]
+  timeEntries     TimeEntry[]
+  tasks           Task[]
+
+  @@map("matters")
+}
+
+enum MatterType {
+  REAL_ESTATE
+  EMPLOYMENT
+  CONTRACT
+  LITIGATION
+  COMPLIANCE
+  CORPORATE
+  IP
+  MERGERS_ACQUISITIONS
+  OTHER
+}
+
+enum MatterStatus {
+  OPEN
+  ON_HOLD
+  CLOSED
+}
+
+// ============================================================================
+// TIME ENTRIES (NEW)
+// ============================================================================
+//
+// Tracks billable hours per matter
+// Visible to clients in client portal
+// ============================================================================
+
+model TimeEntry {
+  id              String      @id @default(uuid())
+  workType        WorkType
+  description     String      // Client-friendly description (high-level only)
+  minutes         Int         // Time spent in minutes
+  billable        Boolean     @default(true)
+  
+  // Date of work (can be backdated)
+  workDate        DateTime    @default(now())
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  matterId        String
+  matter          Matter      @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  
+  departmentId    String?
+  department      Department? @relation(fields: [departmentId], references: [id])
+
+  @@index([matterId, workDate])
+  @@map("time_entries")
+}
+
+model TimesheetReportInstance {
+  id                     String                        @id @default(uuid())
+  templateId             String
+  templateFamily         TimesheetReportTemplateFamily
+  reportPeriod           String
+  clientId               String?
+  clientName             String?
+  matterId               String?
+  matterName             String?
+  caseId                 String?
+  caseReference          String?
+  presetId               String?
+  monthlyClosure         String?
+  pendingOpenMattersNote String?
+  clientClosingText      String?
+  defaultLawyerName      String?
+  carriedHours           Float                         @default(0)
+  overtimeHours          Float                         @default(0)
+  aboveThresholdHours    Float                         @default(0)
+  rows                   Json
+  totalsSnapshot         Json
+  status                 TimesheetReportInstanceStatus @default(DRAFT)
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @updatedAt
+
+  renderedArtifacts      TimesheetReportArtifact[]
+
+  @@index([updatedAt])
+  @@index([reportPeriod])
+  @@map("timesheet_report_instances")
+}
+
+model TimesheetReportArtifact {
+  id               String                       @id @default(uuid())
+  reportInstanceId String
+  reportInstance   TimesheetReportInstance      @relation(fields: [reportInstanceId], references: [id], onDelete: Cascade)
+  format           TimesheetReportArtifactFormat
+  mimeType         String
+  fileName         String
+  contentText      String?
+  contentBase64    String?
+  createdAt        DateTime                     @default(now())
+
+  @@index([reportInstanceId, createdAt])
+  @@map("timesheet_report_artifacts")
+}
+
+model TimesheetPreset {
+  id                     String                    @id @default(uuid())
+  name                   String
+  templateFamily         TimesheetReportTemplateFamily
+  layer                  TimesheetPresetLayer
+  lawyerId               String?
+  lawyerName             String?
+  clientId               String?
+  clientName             String?
+  monthlyClosure         String?
+  pendingOpenMattersNote String?
+  clientClosingText      String?
+  defaultLawyerName      String?
+  isActive               Boolean                   @default(true)
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+
+  @@index([templateFamily, isActive])
+  @@index([layer, isActive])
+  @@index([templateFamily, lawyerId, clientId, isActive])
+  @@map("timesheet_presets")
+}
+
+enum TimesheetReportTemplateFamily {
+  HU_DETAILED_MONTHLY
+  CORPORATE_SUMMARY
+}
+
+enum TimesheetReportInstanceStatus {
+  DRAFT
+  GENERATED
+}
+
+enum TimesheetReportArtifactFormat {
+  TEXT_V1
+  DOCX_V1
+}
+
+enum TimesheetPresetLayer {
+  TEMPLATE_DEFAULT
+  LAWYER_DEFAULT
+  CLIENT_DEFAULT
+  CLIENT_LAWYER_OVERRIDE
+}
+
+enum WorkType {
+  DRAFTING           // Szerkesztés, tervezet készítés
+  REVIEW             // Átnézés, ellenőrzés
+  CLIENT_CALL        // Ügyfélhívás
+  LEGAL_RESEARCH     // Jogi kutatás
+  INTERNAL_MEETING   // Belső megbeszélés
+  DOCUMENT_GENERATION // Dokumentum generálás
+  COURT_PREPARATION  // Bírósági felkészülés
+  TRANSLATION        // Fordítás
+  ADMIN              // Adminisztratív
+  OTHER              // Egyéb
+}
+
+// ============================================================================
+// CASE MANAGEMENT
+// ============================================================================
+
+model Case {
+  id              String          @id @default(uuid())
+  caseNumber      String          @unique
+  title           String
+  description     String?
+  caseType        CaseType
+  status          CaseStatus      @default(CLIENT_INPUT)
+  priority        Priority        @default(MEDIUM)
+  
+  // Additional fields for code compatibility
+  clientName      String?         // Computed from client relation
+  matterType      String?         // Computed from matter relation
+  sharepointRoot  String?         // Base SharePoint path
+  clientRole     String?         // Case-level client role for generation/anonymization targeting (e.g., CLIENT, COUNTERPARTY, OPPOSING_COUNSEL, BENEFICIARY)
+  sharepointSite  String?         // SharePoint site ID (code compatibility)
+  caseAssignment  Json?          // Case assignment data (code compatibility)
+  
+  // SharePoint Integration
+  spSiteId        String?
+  spDriveId       String?
+  spFolderPath    String?         // /Cases/{caseNumber} - {clientName}
+  spMainFolderId  String?
+  
+  // Dates
+  receivedAt      DateTime        @default(now())
+  deadline        DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Relations
+  clientId        String
+  client          Client          @relation(fields: [clientId], references: [id])
+  
+  // Matter relation (NEW - cases belong to matters)
+  matterId        String?
+  matter          Matter?         @relation(fields: [matterId], references: [id])
+  
+  createdById     String
+  createdBy       User            @relation("CreatedBy", fields: [createdById], references: [id])
+  assignedLawyerId String?
+  assignedLawyer  User?           @relation("AssignedLawyer", fields: [assignedLawyerId], references: [id])
+  
+  documents       Document[]
+  tasks           Task[]
+  timelineEvents  TimelineEvent[]
+  comments        Comment[]
+  collaborators   CaseCollaborator[]
+
+  @@map("cases")
+}
+
+// Case collaborators — internal operational team members on a case (separate from assignedLawyer)
+model CaseCollaborator {
+  id        String   @id @default(uuid())
+  caseId    String
+  userId    String
+  role      String   @default("COLLABORATOR") // ASSISTANT, REVIEWER, CONSULTANT, PARALEGAL
+  addedAt   DateTime @default(now())
+
+  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([caseId, userId])
+  @@map("case_collaborators")
+}
+
+enum CaseType {
+  CONTRACT_REVIEW
+  CONTRACT_DRAFTING
+  LITIGATION
+  CORPORATE
+  IP
+  EMPLOYMENT
+  REAL_ESTATE
+  MERGERS_ACQUISITIONS
+  OTHER
+}
+
+enum CaseStatus {
+  CLIENT_INPUT
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  SENT_TO_CLIENT
+  CLIENT_FEEDBACK
+  FINAL
+  ON_HOLD
+  CANCELLED
+  ARCHIVED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// ============================================================================
+// DOCUMENT MANAGEMENT (SharePoint-backed)
+// ============================================================================
+
+model Document {
+  id              String          @id @default(uuid())
+  name            String
+  description     String?
+  mimeType        String          @default("application/octet-stream")
+  category        DocumentCategory
+  
+  // Code compatibility fields
+  fileName        String?         // Original file name
+  documentType    String?         // Document type
+  spPath          String?         // SharePoint path
+  spDriveId       String?         // SharePoint drive ID
+  version         String?         // Document version
+  folder          String?         // Folder location
+  
+  // SharePoint Metadata
+  spItemId        String?         @unique  // SharePoint DriveItem ID
+  spWebUrl        String?         // SharePoint web URL
+  spParentPath    String?         // SP folder path (e.g., /Cases/2024-001/02_Drafts)
+  spVersionId     String?         // SP version ID
+  spCheckOutUser  String?         // Who has it checked out
+  
+  // Local Metadata
+  currentVersion  Int             @default(1)
+  isLatest        Boolean         @default(true)
+  size            Int?            // bytes
+  checksum        String?         // SHA-256 hash for change detection
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Relations
+  caseId          String
+  case            Case            @relation(fields: [caseId], references: [id])
+  clientId        String
+  client          Client          @relation(fields: [clientId], references: [id])
+  
+  versions        DocumentVersion[]
+
+  @@map("documents")
+}
+
+enum DocumentCategory {
+  CONTRACT
+  CORRESPONDENCE
+  EVIDENCE
+  COURT_FILING
+  INTERNAL_MEMO
+  RESEARCH
+  TEMPLATE
+  CLIENT_INPUT
+  OTHER
+}
+
+// ============================================================================
+// DOCUMENT VERSION TRACKING
+// ============================================================================
+
+model DocumentVersion {
+  id              String    @id @default(uuid())
+  version         Int
+  name            String
+  description     String?
+  
+  // SharePoint Version Info
+  spVersionLabel  String?   // e.g., "1.0", "2.0"
+  spVersionId     String?
+  spAuthorId      String?   // SP user ID
+  
+  // Local Tracking
+  uploadedById    String
+  uploadedBy      User      @relation(fields: [uploadedById], references: [id])
+  
+  createdAt       DateTime  @default(now())
+
+  // Relations
+  documentId      String
+  document        Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, version])
+  @@map("document_versions")
+}
+
+// ============================================================================
+// TASK MANAGEMENT
+// ============================================================================
+
+model Task {
+  id              String      @id @default(uuid())
+  title           String
+  description     String?
+  taskType        TaskType
+  type            String?     // For code compatibility (alternative to taskType)
+  status          TaskStatus  @default(PENDING)
+  priority        Priority    @default(MEDIUM)
+  
+  // Assignment
+  assignedToId     String?
+  assignedTo       User?       @relation("AssignedTo", fields: [assignedToId], references: [id])
+  assignedById     String?     // Who assigned this task
+  assignedBy       User?       @relation("AssignedBy", fields: [assignedById], references: [id])
+  skillMatch      Float?       // Score of skill matching (0-1)
+  skillProfile     Json?       // Required skills profile
+  requiredSkills  String[]     // Required skills for this task
+  
+  // Document reference (if task is related to a document)
+  documentId       String?
+  
+  // Workflow Integration
+  caseId          String
+  case            Case        @relation(fields: [caseId], references: [id])
+  workflowEvent   String?     // Event that triggered this task
+  
+  // Matter reference (NEW)
+  matterId        String?
+  matter          Matter?     @relation(fields: [matterId], references: [id])
+  
+  // Dates
+  dueDate         DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  submittedAt     DateTime?   // Submitted date (code compatibility)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  assignmentHistory TaskAssignmentHistory[]
+  sourceCommunication Communication? @relation("CommunicationTasks", fields: [sourceCommunicationId], references: [id])
+  sourceCommunicationId String?
+
+  @@map("tasks")
+}
+
+enum TaskType {
+  REVIEW_CONTRACT
+  DRAFT_CONTRACT
+  CLIENT_MEETING
+  RESEARCH
+  COURT_FILING
+  DEADLINE
+  APPROVAL
+  REVIEW_ANONYMIZED
+  QUALITY_CHECK
+  OTHER
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  SUBMITTED
+  UNDER_REVIEW
+  COMPLETED
+  CANCELLED
+  BLOCKED
+  TODO
+  IN_REVIEW
+  DONE
+}
+
+model TaskAssignmentHistory {
+  id          String    @id @default(uuid())
+  taskId      String
+  task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fromUserId  String?
+  toUserId    String
+  toUser      User      @relation(fields: [toUserId], references: [id])
+  reason      String?
+  assignedAt  DateTime  @default(now())
+
+  @@map("task_assignment_history")
+}
+
+// ============================================================================
+// OPTIONAL PACK: AI Anonymization
+// ============================================================================
+
+model ClientRedactionProfile {
+  id              String    @id @default(uuid())
+  clientId        String    @unique
+  client          Client    @relation(fields: [clientId], references: [id])
+  fullName        String?   // Full name for code compatibility
+  aliases         Json?     // Aliases for code compatibility
+  addresses       Json?     // Addresses for code compatibility
+  taxId           String?   // Tax ID for code compatibility
+  
+  // Redaction Rules (JSON stored as text)
+  patterns        Json      // [{ type: 'name', pattern: '...', replacement: '...' }]
+  personas        Json      // [{ name: 'Person A', details: {...} }]
+  
+  // AI Anonymization Settings
+  useLLM          Boolean   @default(false)
+  llmPrompt       String?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("client_redaction_profiles")
+}
+
+model AnonymousDocument {
+  id              String    @id @default(uuid())
+  name            String    // Original document name with _anon suffix
+  content         String    // Anonymized content
+  addresses       Json?     // Addresses (code compatibility)
+  
+  // Reference to source - using foreign key only
+  sourceDocId     String
+  
+  redactedItems   Json      // Array of {type, original, replacement, position} for rehydration
+  
+  // AI task metadata
+  aiTask          String?   // AI task type (REVIEW_RISKS, COMPARE_TEMPLATE, SUMMARIZE, CUSTOM)
+  customPrompt    String?   // Custom AI instructions if aiTask is CUSTOM
+  originalDocId   String?   // Original document ID (code compatibility)
+  caseId          String?   // Case ID (code compatibility)
+  
+  // Anonymization details
+  redactedAt      DateTime  @default(now())
+  patternCount    Int       // Number of redactions applied
+  
+  // AI Response & Rehydration (added for Secure Bridge workflow)
+  aiResponseText    String?   // Raw AI response text imported from external AI
+  rehydratedContent String?  // Rehydrated result with real names restored
+  rehydrationStatus String?  // PENDING | COMPLETE | PARTIAL | FAILED
+  rehydrationWarnings Json? // Array of unresolved token warnings
+  rehydratedAt      DateTime? // When rehydration was performed
+  
+  // SharePoint (optional - could be uploaded)
+  spItemId        String?
+  spWebUrl        String?
+  
+  createdAt       DateTime  @default(now())
+
+  @@map("anonymous_documents")
+}
+
+// ============================================================================
+// TIMELINE & ACTIVITY LOG
+// ============================================================================
+
+model TimelineEvent {
+  id              String        @id @default(uuid())
+  eventType       TimelineEventType
+  type            String?       // For code compatibility
+  payload         Json?         // Additional event data (for code compatibility)
+  description     String?
+  metadata        Json?         // Additional event data
+  
+  // Case reference
+  caseId          String
+  
+  // User who performed action
+  userId          String?
+  
+  // Document reference (if applicable)
+  documentId      String?
+  
+  // Task reference (if applicable)
+  taskId          String?
+  
+  // Communication reference (if applicable)
+  communicationId String?
+  
+  // TimeEntry reference (NEW)
+  timeEntryId     String?
+  
+  // Back relations
+  case            Case          @relation(fields: [caseId], references: [id])
+  user            User?         @relation(fields: [userId], references: [id])
+  
+  createdAt       DateTime      @default(now())
+
+  @@index([caseId, createdAt])
+  @@map("timeline_events")
+}
+
+enum TimelineEventType {
+  CASE_CREATED
+  CASE_ASSIGNED
+  CASE_STATUS_CHANGED
+  DOCUMENT_UPLOADED
+  DOCUMENT_VERSION_CREATED
+  DOCUMENT_APPROVED
+  DOCUMENT_REJECTED
+  DOCUMENT_SENT_TO_CLIENT
+  DOCUMENT_RECEIVED_FROM_CLIENT
+  TASK_CREATED
+  TASK_ASSIGNED
+  TASK_STARTED
+  TASK_COMPLETED
+  TASK_BLOCKED
+  COMMENT_ADDED
+  CONTRACT_GENERATED
+  REVIEW_REQUESTED
+  REVIEW_COMPLETED
+  ANONYMIZATION_STARTED
+  ANONYMIZATION_COMPLETED
+  CLIENT_CONTACT
+  MEETING_SCHEDULED
+  DEADLINE_SET
+  DEADLINE_WARNING
+  DEADLINE_MISSED
+  TIME_LOGGED           // NEW: Time entry logged
+  CUSTOM
+}
+
+// ============================================================================
+// COMMENTS & COLLABORATION
+// ============================================================================
+
+model Comment {
+  id              String    @id @default(uuid())
+  content         String
+  isResolved      Boolean   @default(false)
+  
+  // Polymorphic relation (document or case)
+  documentId      String?
+  caseId          String?
+  
+  // Author
+  userId          String
+  
+  // Back relations
+  user            User      @relation(fields: [userId], references: [id])
+  case            Case?     @relation(fields: [caseId], references: [id])
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("comments")
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+model Notification {
+  id              String            @id @default(uuid())
+  type            NotificationType
+  title           String
+  message         String
+  link            String?
+  isRead          Boolean           @default(false)
+  
+  userId          String
+  user            User              @relation(fields: [userId], references: [id])
+  
+  createdAt       DateTime          @default(now())
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_DUE_SOON
+  TASK_OVERDUE
+  CASE_ASSIGNED
+  CASE_STATUS_CHANGED
+  DOCUMENT_UPLOADED
+  DOCUMENT_APPROVED
+  COMMENT_ADDED
+  REVIEW_REQUESTED
+  REVIEW_COMPLETED
+  TIME_LOGGED
+  SYSTEM
+}
+
+// ============================================================================
+// SYSTEM CONFIGURATION
+// ============================================================================
+
+model SystemSetting {
+  id              String    @id @default(uuid())
+  key             String    @unique
+  value           Json
+  description     String?
+  updatedAt       DateTime  @updatedAt
+
+  @@map("system_settings")
+}
+
+// Alias for code compatibility - use SystemSetting instead
+// (prisma.setting will work via SystemSetting)
+
+// ============================================================================
+// OPTIONAL PACK: Contract Generation
+// ============================================================================
+
+model ContractTemplate {
+  id              String          @id @default(uuid())
+  name            String
+  description     String?
+  category        TemplateCategory
+  templatePath    String
+  originalFileName String?
+  variables       Json
+  isActive        Boolean         @default(true)
+  isDefault       Boolean         @default(false)
+  version         Int             @default(1)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  generatedContracts ContractGeneration[]
+
+  @@map("contract_templates")
+}
+
+enum TemplateCategory {
+  ADASVETEL
+  BERLET
+  MEGBIZAS
+  MUNKASZERZODES
+  VALLALKOZAS
+  EGYEB
+}
+
+// ============================================================================
+// OPTIONAL PACK: Contract Generation
+// ============================================================================
+
+model ContractGeneration {
+  id              String          @id @default(uuid())
+  title           String
+  templateId      String
+  template        ContractTemplate @relation(fields: [templateId], references: [id])
+  caseId          String?
+  templateData    Json
+  comparisonSnapshot Json?
+  fileName        String
+  filePath        String
+  fileSize        Int?
+  status          GenerationStatus @default(PENDING)
+  generatedAt     DateTime        @default(now())
+  expiresAt       DateTime?
+  
+  // SharePoint metadata - persisted for reliable "Open in SharePoint"
+  spItemId        String?
+  spWebUrl        String?
+  
+  // Finalization semantics
+  isFinalRevision Boolean         @default(false)
+  finalizedAt     DateTime?
+  
+  // Revision lineage
+  revisionNumber  Int             @default(1)
+  parentRevisionId String?
+  isCurrentRevision Boolean       @default(true)
+  supersededAt    DateTime?
+
+  @@map("contract_generations")
+}
+
+// ============================================================================
+// GENERATION DRAFTS (PERSISTED USER-ENTERED DATA)
+// ============================================================================
+// NOTE: GenerationDraft model defined at lines 821-851 (before Communication)
+// This duplicate was removed to avoid schema conflicts
+
+enum GenerationStatus {
+  PENDING
+  PREVIEW
+  GENERATED
+  UPLOADED
+  APPROVED
+  REJECTED
+  FAILED
+  EXPIRED
+}
+
+// ============================================================================
+// COMMUNICATIONS MODULE
+// ============================================================================
+
+model Communication {
+  id              String          @id @default(uuid())
+  type            CommunicationType
+  subject         String
+  senderName      String?
+  senderEmail     String?
+  recipientName   String?
+  recipientEmail  String?
+  content         String?         // Full message content
+  summary         String?         // AI-extracted summary
+  
+  // Linkage - using foreign keys directly to avoid relation conflicts
+  caseId          String?
+  clientId        String?
+  documentId      String?
+  
+  // Meta
+  createdById     String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  // Relations - optional back relations
+  attachments     CommunicationAttachment[]
+  relatedTasks    Task[]          @relation("CommunicationTasks")
+  
+  @@index([caseId, createdAt])
+  @@index([clientId, createdAt])
+  @@map("communications")
+}
+
+enum CommunicationType {
+  EMAIL
+  PHONE
+  MEETING
+  LETTER
+  NOTE
+}
+
+// ============================================================================
+// COMMUNICATION ATTACHMENTS
+// ============================================================================
+
+model CommunicationAttachment {
+  id              String    @id @default(uuid())
+  fileName        String
+  fileType        String?
+  description     String?
+  url             String?   // URL or path to file
+  spItemId        String?   // SharePoint item ID
+  
+  // Relations
+  communicationId String
+  communication   Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+  documentId      String?
+  uploadedById    String
+  createdAt       DateTime  @default(now())
+  
+  @@map("communication_attachments")
+}
+
+// ============================================================================
+// OPTIONAL PACK: Contract Generation — Persisted Draft Data
+// ============================================================================
+
+model GenerationDraft {
+  id              String          @id @default(uuid())
+  
+  // Case reference
+  caseId          String
+  
+  // Template reference (which document type this draft is for)
+  templateId      String?
+  templateName    String?         // Store template name for display
+  
+  // Document family (sale_purchase, gift_usufruct, standalone_registration)
+  documentFamily  String?
+  
+  // Persisted draft data - all user-entered fields
+  draftData       Json            // { fieldKey: value, ... }
+  
+  // Timestamps
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  // Who created/edited
+  createdById     String?
+  lastEditedById   String?
+
+  // Index for fast lookup
+  @@unique([caseId, templateId])
+  @@index([caseId])
+  @@index([templateId])
+  
+  @@map("generation_drafts")
+}
+
+// ============================================================================
+// CONTRACT REVIEW NOTES — Patch 6A
+// ============================================================================
+// Additive persisted review-note layer on top of the existing contract
+// workflow. Does NOT replace existing approve/reject/back-to-review actions.
+// ============================================================================
+
+model ContractReviewRecord {
+  id              String    @id @default(uuid())
+  generationId    String    @unique  // one review record per ContractGeneration revision
+  overallStatus   ReviewOverallStatus @default(NEEDS_REVISION)
+  overallTitle    String?
+  overallNote     String?
+  authorId        String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Block-level notes
+  blockNotes      BlockReviewNote[]
+
+  @@map("contract_review_records")
+}
+
+enum ReviewOverallStatus {
+  NEEDS_REVISION
+  APPROVED_FOR_NEXT_STEP
+  FLAGGED
+}
+
+model BlockReviewNote {
+  id              String           @id @default(uuid())
+  reviewRecordId  String
+  blockKey        String           // stable block identity (slug / paragraph ref / clause id)
+  blockOrderIndex Int?
+  sourceClauseId  String?
+  status          BlockReviewStatus @default(OK)
+  title           String?
+  note            String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  reviewRecord    ContractReviewRecord @relation(fields: [reviewRecordId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewRecordId, blockKey])
+  @@index([reviewRecordId])
+  @@map("block_review_notes")
+}
+
+enum BlockReviewStatus {
+  OK
+  REVIEW_NEEDED
+  RISK_ISSUE
+}
+
+// ============================================================================
+// CLAUSE LIBRARY (Contract Assembly Foundation)
+// ============================================================================
+//
+// Shared knowledge layer for contract CREATE / REVIEW / EDIT modes.
+// Each clause is a structured record with trigger conditions, not raw text.
+// ============================================================================
+
+model ClauseLibraryItem {
+  id              String          @id @default(uuid())
+  
+  // Identification
+  title           String          // Short human-readable title (e.g., "Eladói szavatosság")
+  slug            String          // URL-safe identifier (e.g., "elado-szavatossag")
+  body            String          // Full clause text (Hungarian legal prose)
+  summary         String?         // One-line description for UI listings
+  
+  // Classification
+  contractType    ClauseContractType
+  clauseKind     ClauseKind      // REQUIRED | RECOMMENDED | OPTIONAL | SPECIAL
+  representedSide RepresentedSide // Which party this clause protects/favors
+  category        ClauseCategory  // PARTY | PROPERTY | WARRANTIES | PRICE | FINANCING | POSSESSION | TITLE | CLOSING | SPECIAL
+  
+  // Search & discovery
+  keywords        String[]        // For clause search (e.g., ["szavatosság", "hibak", "kötelezettség"])
+  isActive        Boolean         @default(true)
+  
+  // Ordering
+  sortOrder       Int             @default(0)   // Display order within category
+  version         Int             @default(1)
+  
+  // Source tracking
+  sourceType      String?         // "STANDARD" | "BANK_TEMPLATE" | "CUSTOM"
+  bankPackTag    String?         // e.g., "OTP_BANK" | "GENERIC_BANK" — for bank-specific packs
+  lawyerProfileId String?         // Null = shared across all lawyers
+  lawyerProfile   LawyerProfile?   @relation(fields: [lawyerProfileId], references: [id])
+  
+  // Trigger conditions — simple key-value rules that the recommendation engine evaluates
+  // Stored as JSON array: [{ field: "financingType", operator: "neq", value: "CASH" }]
+  triggerConditions Json?
+  
+  // Relations
+  assemblyClauses ContractAssemblyClause[]
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@unique([slug, lawyerProfileId])
+  @@index([contractType, clauseKind])
+  @@index([representedSide])
+  @@map("clause_library_items")
+}
+
+enum ClauseContractType {
+  ADASVETEL
+  BERLET
+  MEGBIZAS
+  MUNKASZERZODES
+  VALLALKOZAS
+  EGYEB
+}
+
+enum ClauseKind {
+  REQUIRED     // Always included in this contract type
+  RECOMMENDED // Suggested by default, can be removed
+  OPTIONAL    // Not suggested, added manually
+  SPECIAL     // Conditional on specific facts (e.g., condominium, foreign party)
+}
+
+enum RepresentedSide {
+  EITHER      // Neutral clause applicable to both sides
+  ELOADO       // Favors/addresses the seller (Eladó)
+  VEVO        // Favors/addresses the buyer (Vevő)
+  NEUTRAL     // Procedural clause (határidők, jogszabályi hivatkozások)
+}
+
+enum ClauseCategory {
+  PARTY            // Felek megnevezése
+  PROPERTY         // Ingatlan leírás
+  OWNERSHIP_PROOF  // Tulajdonjog igazolása
+  TITLE            // Tulajdonjog, bejegyzés
+  WARRANTIES       // Szavatosság, nyilatkozatok
+  PRICE            // Vételár, fizetés
+  FINANCING        // Finanszírozás, bank, jelzálog
+  POSSESSION       // Birtokbaadás
+  CLOSING          // Záró rendelkezések, aláírás
+  SPECIAL          // Condominium, preemption, usufruct, farmland, etc.
+}
+
+// ============================================================================
+// LAWYER PROFILE (Clause Preferences)
+// ============================================================================
+//
+// Per-lawyer clause ordering and style preferences.
+// Expandable to multiple lawyers in future passes.
+// ============================================================================
+
+model LawyerProfile {
+  id              String          @id @default(uuid())
+  
+  // Lawyer identification
+  lawyerName      String          // e.g., "Dr. Trugly Csanád"
+  lawyerEmail     String?         // Unique email for lookup
+  
+  // Style preferences
+  preferredNumbering String?     // "DECIMAL" | "ALPHA" | "ROMAN" | "BULLET"
+  defaultClosingText String?     // Standard closing clause text this lawyer uses
+  
+  // Notes
+  styleNotes      String?         // Free-text notes on clause style preferences
+  
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  // Relations
+  clauses         ClauseLibraryItem[]
+  preferredClauses LawyerPreferredClause[]
+  assemblyDrafts  ContractAssemblyDraft[]
+  
+  @@unique([lawyerEmail])
+  @@map("lawyer_profiles")
+}
+
+// Explicit ordering preference for a specific clause within a category
+model LawyerPreferredClause {
+  id              String          @id @default(uuid())
+  lawyerProfileId String
+  lawyerProfile   LawyerProfile   @relation(fields: [lawyerProfileId], references: [id], onDelete: Cascade)
+  clauseId        String
+  
+  // Override sort order for this lawyer
+  sortOrder       Int             @default(0)
+  
+  // Whether this lawyer always includes this clause (even if OPTIONAL)
+  alwaysInclude   Boolean         @default(false)
+  
+  // Whether this lawyer always excludes this clause
+  alwaysExclude   Boolean         @default(false)
+  
+  createdAt       DateTime        @default(now())
+  
+  @@unique([lawyerProfileId, clauseId])
+  @@map("lawyer_preferred_clauses")
+}
+
+// ============================================================================
+// CONTRACT ASSEMBLY DRAFT (In-progress Contract Creation)
+// ============================================================================
+//
+// Stores an in-progress contract assembly: intake answers, selected clauses,
+// assembled body text, and linkage to the final generation payload.
+// Reusable by future REVIEW and EDIT modes.
+// ============================================================================
+
+model ContractAssemblyDraft {
+  id              String          @id @default(uuid())
+  
+  // Case reference
+  caseId          String
+  
+  // Contract type
+  contractType    ClauseContractType  @default(ADASVETEL)
+  
+  // Intake answers (B400-style structured facts)
+  intakeData      Json            // { representedSide, sellerCount, buyerCount, ... }
+  
+  // Assembled clause IDs and order
+  selectedClauses Json            // [{ clauseId, sortOrder, editedBody? }]
+  
+  // Final assembled text (for display/preview)
+  assembledText   String?         // Concatenated clause bodies, ready for review
+  
+  // Status
+  status          AssemblyStatus  @default(IN_PROGRESS)
+  
+  // Link to the lawyer profile used
+  lawyerProfileId String?
+  lawyerProfile   LawyerProfile?  @relation(fields: [lawyerProfileId], references: [id])
+  
+  // Link to ContractTemplate used for final generation (if generated)
+  templateId      String?
+  
+  // Timestamps
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  createdById     String?
+  
+  // Relations
+  clauses         ContractAssemblyClause[]
+  
+  @@unique([caseId, contractType])
+  @@index([caseId])
+  @@index([lawyerProfileId])
+  
+  @@map("contract_assembly_drafts")
+}
+
+enum AssemblyStatus {
+  IN_PROGRESS   // User is still assembling
+  READY          // Ready to generate
+  GENERATED      // A contract has been generated from this assembly
+}
+
+// Junction table for assembly-to-clause relationship
+model ContractAssemblyClause {
+  id              String          @id @default(uuid())
+  assemblyDraftId String
+  assemblyDraft   ContractAssemblyDraft @relation(fields: [assemblyDraftId], references: [id], onDelete: Cascade)
+  clauseId        String
+  clause          ClauseLibraryItem @relation(fields: [clauseId], references: [id], onDelete: Cascade)
+  
+  // Override: lawyer-edited body text (null = use clause.body as-is)
+  editedBody     String?
+  
+  // Position in the assembled contract
+  sortOrder      Int             @default(0)
+  
+  // Whether this clause was manually added vs. auto-recommended
+  isManual       Boolean         @default(false)
+  
+  createdAt       DateTime        @default(now())
+  
+  @@unique([assemblyDraftId, clauseId])
+  @@index([assemblyDraftId])
+  @@map("contract_assembly_clauses")
+}

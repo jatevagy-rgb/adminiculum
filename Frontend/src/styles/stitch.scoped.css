@@ -1,0 +1,540 @@
+.stitch-app {
+  color: #0c1c2b;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f3f6fb;
+  margin: 0;
+  min-height: 100vh;
+  /* Note: original body styles moved here */
+}
+
+.stitch-app * {
+  box-sizing: border-box;
+}
+
+.stitch-app body {
+  margin: 0;
+  min-height: 100vh;
+  background: #eef3fb;
+}
+
+.stitch-app .layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+}
+
+.stitch-app .card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 10px 35px rgba(15, 23, 42, 0.07);
+}
+
+.stitch-app .app-header h1 {
+  margin: 4px 0 0;
+  font-size: 28px;
+  color: #091021;
+}
+
+.stitch-app .app-header {
+  padding: 16px 0 8px;
+  border-bottom: 1px solid rgba(9, 16, 33, 0.08);
+}
+
+.stitch-app .eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 12px;
+  color: #7b8498;
+}
+
+.stitch-app .sub {
+  margin: 6px 0 0;
+  color: #52596f;
+}
+
+.stitch-app .connection-panel {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.stitch-app .connection-panel .fields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stitch-app .connection-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.stitch-app textarea,
+.stitch-app input {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid #d7dbe7;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.stitch-app .shell {
+  display: grid;
+  grid-template-columns: 200px auto;
+  gap: 16px;
+}
+
+.stitch-app .nav-card {
+  padding-bottom: 16px;
+}
+
+.stitch-app .nav-card nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.stitch-app .nav-link {
+  background: #f5f7fb;
+  border: none;
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 14px;
+  border-radius: 10px;
+  color: #19283d;
+  cursor: pointer;
+}
+
+.stitch-app .nav-link.active {
+  background: #0a5fff;
+  color: #fff;
+}
+
+.stitch-app .nav-link:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.stitch-app .content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stitch-app .status-strip {
+  padding: 12px;
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid #e0e4ee;
+}
+
+.stitch-app .stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.stitch-app .stats-card {
+  background: #f7faff;
+  border-radius: 10px;
+  padding: 14px;
+  border: 1px solid #e1e6f2;
+}
+
+.stitch-app .case-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.45fr) minmax(420px, 0.55fr);
+  gap: 20px;
+  align-items: stretch;
+}
+
+.stitch-app .case-list header,
+.stitch-app .case-details header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.stitch-app .list-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.stitch-app .list-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.stitch-app .list-controls input {
+  width: 60px;
+  padding: 4px 8px;
+}
+
+.stitch-app .list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.stitch-app .list-item {
+  border: 1px solid #e4e9f4;
+  padding: 10px 12px;
+  border-radius: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stitch-app .list-item h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.stitch-app .list-item p {
+  margin: 0;
+  color: #5b647a;
+  font-size: 13px;
+}
+
+.stitch-app .btn {
+  background: #0a5fff;
+  border: none;
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.stitch-app .btn:hover {
+  background: #0a52df;
+}
+
+.stitch-app .btn.ghost {
+  background: transparent;
+  color: #0a5fff;
+  border: 1px solid #0a5fff;
+}
+
+.stitch-app .btn.ghost:hover {
+  background: #f0f5ff;
+}
+
+.stitch-app .btn.secondary {
+  background: #6b7280;
+  color: #fff;
+}
+
+.stitch-app .btn.secondary:hover {
+  background: #4b5563;
+}
+
+.stitch-app .btn.small {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.stitch-app .summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stitch-app .summary-cell {
+  border: 1px solid #e2e7f3;
+  border-radius: 10px;
+  padding: 12px;
+  background: #f9fbff;
+}
+
+.stitch-app .summary-cell strong {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #7b8498;
+  margin-bottom: 4px;
+}
+
+.stitch-app .summary-cell p {
+  margin: 0;
+  font-size: 14px;
+  color: #0c1c2b;
+}
+
+.stitch-app .detail-block {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e8edf5;
+}
+
+.stitch-app .detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.stitch-app .detail-header h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.stitch-app .workflow {
+  color: #37414a;
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+.stitch-app .notes {
+  margin-top: auto;
+  font-size: 14px;
+  color: #515a6b;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.stitch-app .muted {
+  color: #5c667f;
+  font-size: 14px;
+}
+
+/* UX ÁLLAPOT STÍLUSOK */
+.stitch-app .list-item.loading {
+  text-align: center;
+  padding: 20px;
+  color: #5c667f;
+}
+
+.stitch-app .list-item.empty {
+  text-align: center;
+  padding: 20px;
+  color: #8b92a5;
+  font-style: italic;
+}
+
+.stitch-app .list-item.error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.stitch-app .stats-card.error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.stitch-app .list-item.active {
+  border-color: #0a5fff;
+  background: #f0f5ff;
+}
+
+/* ÁLLAPOT SÁV VARIÁNS STÍLUSOK */
+.stitch-app .status-strip.loading {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+
+.stitch-app .status-strip.error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.stitch-app .status-strip.success {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.stitch-app .status-strip.info {
+  background: #f0f9ff;
+  border-color: #bae6fd;
+  color: #075985;
+}
+
+/* STÁTUSZ BADGE ÉS EGYÉB STÍLUSOK */
+.stitch-app .status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #e5e7eb;
+  color: #374151;
+}
+
+/* Link stílus a dokumentumoknál */
+.stitch-app .list-item a {
+  color: #0a5fff;
+  text-decoration: none;
+}
+
+.stitch-app .list-item a:hover {
+  text-decoration: underline;
+}
+
+/* Új funkciók stílusai */
+.stitch-app .upload-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e8edf5;
+}
+
+.stitch-app .status-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.stitch-app .status-controls select {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #d7dbe7;
+  font: inherit;
+  background: #fff;
+}
+
+.stitch-app .btn.primary {
+  background: #059669;
+  color: #fff;
+}
+
+.stitch-app .btn.primary:hover {
+  background: #047857;
+}
+
+/* Task akció gombok */
+.stitch-app .task-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.stitch-app .task-actions .btn {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+/* Timeline items */
+.stitch-app .timeline-item {
+  border-left: 3px solid #0a5fff;
+  background: #fafcff;
+}
+
+.stitch-app .timeline-item:hover {
+  background: #f0f5ff;
+}
+
+/* Upload form stílusok */
+.stitch-app .upload-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stitch-app .upload-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.stitch-app .upload-row input[type="text"],
+.stitch-app .upload-row select {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #d7dbe7;
+  font: inherit;
+  font-size: 13px;
+}
+
+.stitch-app .upload-state {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-top: 4px;
+}
+
+.stitch-app .upload-state.state-loading {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.stitch-app .upload-state.state-error {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.stitch-app .upload-state.upload-ready {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.stitch-app .upload-state.state-empty {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+/* Dokumentum kártya stílusok */
+.stitch-app .document-card {
+  padding: 12px;
+  border: 1px solid #e4e9f4;
+  border-radius: 10px;
+  background: #fff;
+  margin-bottom: 8px;
+}
+
+.stitch-app .document-card .doc-name {
+  font-weight: 600;
+  color: #0c1c2b;
+  font-size: 14px;
+}
+
+.stitch-app .document-card .doc-meta {
+  font-size: 12px;
+  color: #5b647a;
+  margin-top: 4px;
+}
+
+.stitch-app .document-card .doc-link {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #0a5fff;
+  text-decoration: none;
+}
+
+.stitch-app .document-card .doc-link:hover {
+  text-decoration: underline;
+}
+
+/* Reszponzív */
+@media (max-width: 1024px) {
+  .stitch-app .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .stitch-app .case-layout {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,996 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Warm neutral palette for legal workflow app */
+  --background: #FAF8F5;
+  --foreground: #2D2A26;
+  --card-bg: #FFFFFF;
+  --card-border: #E8E4DE;
+  --sidebar-bg: #2D2A26;
+  --sidebar-text: #F5F3EF;
+  --sidebar-text-muted: #9C9890;
+  --sidebar-hover: #3D3935;
+  --accent-primary: #C9A227;
+  --accent-primary-hover: #B8911F;
+  --accent-secondary: #6B655B;
+  --text-muted: #6B655B;
+  --text-light: #9C9890;
+  --success: #4A7C59;
+  --warning: #D4A017;
+  --error: #A63D40;
+  --info: #5B7C99;
+  
+  /* Design system - Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  
+  /* Design system - Shadows */
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.03);
+  --auth-ink: #1f2b22;
+  --auth-paper: #f7f4ee;
+  --auth-panel: #ffffff;
+  --auth-accent: #10281b;
+  --auth-accent-soft: #e8e2d8;
+  --auth-border: #d7d0c3;
+  --auth-muted: #7a746b;
+  --auth-alert: #8f3d32;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+  opacity: 0;
+}
+
+.animate-delay-1 {
+  animation-delay: 0.1s;
+}
+
+.animate-delay-2 {
+  animation-delay: 0.2s;
+}
+
+.animate-delay-3 {
+  animation-delay: 0.3s;
+}
+
+.animate-delay-4 {
+  animation-delay: 0.4s;
+}
+
+/* Card lift on hover */
+.card-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Line clamp utilities */
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.auth-page {
+  min-height: 100vh;
+  padding: 16px;
+  background:
+    radial-gradient(circle at top left, rgba(255,255,255,0.18) 0, rgba(255,255,255,0.18) 1px, transparent 1px) 0 0 / 18px 18px,
+    #17191d;
+}
+
+.auth-frame {
+  min-height: calc(100vh - 32px);
+  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--auth-paper);
+  color: var(--auth-ink);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.auth-brandbar {
+  padding: 18px 24px 0;
+  color: #f5f1e8;
+  background: transparent;
+  font-size: 14px;
+}
+
+.auth-shell {
+  display: grid;
+  grid-template-columns: 5fr 7fr;
+  gap: 0;
+  align-items: stretch;
+  padding: 40px 56px 32px;
+}
+
+.auth-brand-panel {
+  background: #162c1f;
+  color: rgba(244, 240, 232, 0.92);
+  padding: 56px 36px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 600px;
+}
+
+.auth-wordmark {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #143122;
+  margin-bottom: 72px;
+}
+
+.auth-brand-title,
+.auth-title {
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+.auth-brand-title {
+  font-size: 54px;
+  line-height: 1;
+  margin-bottom: 24px;
+  color: rgba(16, 28, 20, 0.72);
+}
+
+.auth-brand-copy {
+  max-width: 280px;
+  color: rgba(232, 226, 212, 0.62);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.auth-brand-footer {
+  border-left: 1px solid rgba(232, 226, 212, 0.28);
+  padding-left: 16px;
+  color: rgba(232, 226, 212, 0.52);
+}
+
+.auth-brand-footer-label,
+.auth-divider,
+.auth-meta-row,
+.auth-footer-row,
+.auth-inline-link,
+.auth-field span,
+.auth-brandbar {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+}
+
+.auth-brand-footer-label,
+.auth-field span,
+.auth-divider,
+.auth-meta-row,
+.auth-footer-row,
+.auth-inline-link {
+  font-size: 10px;
+}
+
+.auth-brand-footer-copy {
+  margin-top: 8px;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.auth-content-panel {
+  background: var(--auth-panel);
+  padding: 56px 58px;
+}
+
+.auth-card-inner {
+  max-width: 430px;
+}
+
+.auth-eyebrow {
+  color: var(--auth-muted);
+  font-size: 11px;
+  margin-bottom: 18px;
+}
+
+.auth-title {
+  font-size: 54px;
+  line-height: 1.04;
+  margin: 0 0 16px;
+}
+
+.auth-subtitle {
+  color: var(--auth-muted);
+  margin: 0 0 34px;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.auth-notice {
+  border: 1px solid var(--auth-border);
+  padding: 16px 18px;
+  margin-bottom: 22px;
+  background: #f7f3ed;
+}
+
+.auth-notice-warning {
+  border-color: rgba(143, 61, 50, 0.35);
+  background: rgba(143, 61, 50, 0.08);
+}
+
+.auth-notice-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.auth-notice-body {
+  color: #584f47;
+  line-height: 1.5;
+}
+
+.auth-form-grid {
+  display: grid;
+  gap: 26px;
+}
+
+.auth-field {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-field input {
+  border: 0;
+  border-bottom: 1px solid var(--auth-border);
+  background: transparent;
+  padding: 10px 0 12px;
+  outline: none;
+  color: var(--auth-ink);
+}
+
+.auth-field input::placeholder {
+  color: #c5beb2;
+}
+
+.auth-password-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 24px;
+  align-items: end;
+}
+
+.auth-inline-link {
+  border: 0;
+  background: transparent;
+  color: var(--auth-ink);
+  padding: 0 0 12px;
+}
+
+.auth-primary-button,
+.auth-microsoft-button {
+  width: 100%;
+  height: 54px;
+  border: 0;
+  cursor: pointer;
+}
+
+.auth-primary-button {
+  margin-top: 34px;
+  background: var(--auth-accent);
+  color: #f2eee5;
+  text-transform: uppercase;
+  letter-spacing: 0.26em;
+  font-size: 12px;
+}
+
+.auth-primary-button:disabled,
+.auth-microsoft-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #a39989;
+  margin: 28px 0 22px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid #e6dfd3;
+}
+
+.auth-microsoft-button {
+  border: 1px solid #e3ddd2;
+  background: #fff;
+  color: var(--auth-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.auth-microsoft-badge {
+  display: grid;
+  grid-template-columns: repeat(2, 6px);
+  grid-template-rows: repeat(2, 6px);
+  gap: 1px;
+}
+
+.ms-box { display: block; width: 6px; height: 6px; }
+.ms-red { background: #f25022; }
+.ms-green { background: #7fba00; }
+.ms-blue { background: #00a4ef; }
+.ms-yellow { background: #ffb900; }
+
+.auth-support-copy {
+  margin-top: 18px;
+  color: var(--auth-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.auth-meta-row,
+.auth-footer-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  color: #9f978b;
+}
+
+.auth-meta-row {
+  margin-top: 58px;
+}
+
+.auth-footer-row {
+  padding: 0 56px 26px;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.auth-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+@media (max-width: 1100px) {
+  .auth-shell {
+    grid-template-columns: 1fr;
+    padding: 24px;
+  }
+
+  .auth-brand-panel,
+  .auth-content-panel {
+    min-height: auto;
+  }
+
+  .auth-content-panel {
+    padding: 32px 26px;
+  }
+
+  .auth-title,
+  .auth-brand-title {
+    font-size: 38px;
+  }
+
+  .auth-footer-row {
+    padding: 0 24px 24px;
+  }
+}
+
+@media (max-width: 700px) {
+  .auth-page {
+    padding: 0;
+  }
+
+  .auth-frame {
+    min-height: 100vh;
+  }
+
+  .auth-brandbar {
+    padding: 16px 16px 0;
+    font-size: 12px;
+  }
+
+  .auth-shell {
+    padding: 16px;
+  }
+
+  .auth-brand-panel {
+    padding: 28px 20px;
+  }
+
+  .auth-content-panel {
+    padding: 28px 20px;
+  }
+
+  .auth-password-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .auth-title,
+  .auth-brand-title {
+    font-size: 32px;
+  }
+
+  .auth-footer-row {
+    gap: 12px;
+  }
+
+  .auth-footer-links {
+    gap: 12px 18px;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Selectable UI Pack System                                                   */
+/* -------------------------------------------------------------------------- */
+
+.app-shell {
+  background: #f8f5ef;
+}
+
+.app-shell-content {
+  backdrop-filter: saturate(105%);
+}
+
+.app-shell-main {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(255, 255, 255, 0.7) 0, rgba(255, 255, 255, 0) 38%),
+    linear-gradient(180deg, #faf8f5 0%, #f6f2e8 100%);
+}
+
+.app-shell-footer {
+  background: #f6f2e8;
+}
+
+[data-ui-pack="legal_ops_atelier"].app-shell {
+  color: #2d2a26;
+}
+
+[data-ui-pack="legal_ops_atelier"] .app-shell-content {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(247, 241, 228, 0.64) 100%);
+}
+
+[data-ui-pack="legal_ops_atelier"] .app-shell-main {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(255, 255, 255, 0.72) 0, rgba(255, 255, 255, 0) 36%),
+    linear-gradient(180deg, #fbf9f4 0%, #f5f1e7 100%);
+}
+
+[data-ui-pack="legal_ops_atelier"] .app-shell-footer {
+  border-color: #d8d1c3;
+  color: #5f5a52;
+}
+
+[data-ui-pack="legal_ops_atelier"] .dashboard-surface {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.58) 0%, rgba(250, 245, 234, 0.68) 100%);
+  border: 1px solid #ddd4c4;
+  box-shadow: 0 10px 24px rgba(93, 83, 62, 0.08);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+[data-ui-pack="legal_ops_atelier"] .dashboard-surface > .flex:first-child {
+  border-bottom: 1px solid #ddd4c4;
+  padding-bottom: 10px;
+}
+
+[data-ui-pack="legal_ops_atelier"] .dashboard-surface section,
+[data-ui-pack="legal_ops_atelier"] .dashboard-surface article {
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(34, 26, 15, 0.05);
+}
+
+[data-ui-pack="legal_ops_atelier"] .dashboard-surface section {
+  background: linear-gradient(180deg, #fffdfa 0%, #fbf8f1 100%) !important;
+}
+
+[data-ui-pack="legal_ops_atelier"] .dashboard-surface h1,
+[data-ui-pack="legal_ops_atelier"] .dashboard-surface h2,
+[data-ui-pack="legal_ops_atelier"] .dashboard-surface h3 {
+  color: #1f2b22;
+}
+
+[data-ui-pack="legal_ops_atelier"] .dashboard-surface a,
+[data-ui-pack="legal_ops_atelier"] .dashboard-surface button {
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+[data-ui-pack="legal_ops_atelier"] .case-detail-surface {
+  background: linear-gradient(180deg, #f8f4ec 0%, #f3efe5 100%);
+  border: 1px solid #d8d1c3;
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(70, 58, 39, 0.08);
+}
+
+[data-ui-pack="legal_ops_atelier"] .case-detail-surface > aside {
+  background: linear-gradient(180deg, #f8f3e7 0%, #f2ecdf 100%) !important;
+}
+
+[data-ui-pack="legal_ops_atelier"] .case-detail-surface > aside,
+[data-ui-pack="legal_ops_atelier"] .case-detail-surface .border,
+[data-ui-pack="legal_ops_atelier"] .case-detail-surface section,
+[data-ui-pack="legal_ops_atelier"] .case-detail-surface article {
+  border-color: #d8d1c3 !important;
+}
+
+[data-ui-pack="legal_ops_atelier"] .case-detail-surface main h1,
+[data-ui-pack="legal_ops_atelier"] .case-detail-surface main h2,
+[data-ui-pack="legal_ops_atelier"] .case-detail-surface main h3 {
+  color: #1f2b22;
+}
+
+[data-ui-pack="legal_ops_atelier"] .case-detail-surface .bg-white,
+[data-ui-pack="legal_ops_atelier"] .case-detail-surface .bg-\[\#F6F2E8\],
+[data-ui-pack="legal_ops_atelier"] .case-detail-surface .bg-\[\#FFFBEB\] {
+  background: linear-gradient(180deg, #fffdfa 0%, #f8f2e6 100%) !important;
+}
+
+[data-ui-pack="legal_ops_atelier"] .case-detail-surface button,
+[data-ui-pack="legal_ops_atelier"] .case-detail-surface a {
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+[data-ui-pack="legal_ops_atelier"] .time-entries-surface {
+  background: linear-gradient(180deg, #faf7f1 0%, #f3eee3 100%);
+  border: 1px solid #d8d1c3;
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(75, 63, 44, 0.1);
+}
+
+[data-ui-pack="legal_ops_atelier"] .time-entries-surface > .flex:first-child {
+  border-bottom: 1px solid #ddd4c4;
+  padding-bottom: 10px;
+}
+
+[data-ui-pack="legal_ops_atelier"] .time-entries-surface .bg-white,
+[data-ui-pack="legal_ops_atelier"] .time-entries-surface .bg-\[\#F6F2E8\] {
+  background: linear-gradient(180deg, #fffdfa 0%, #f9f3e7 100%) !important;
+}
+
+[data-ui-pack="legal_ops_atelier"] .time-entries-surface .border,
+[data-ui-pack="legal_ops_atelier"] .time-entries-surface table,
+[data-ui-pack="legal_ops_atelier"] .time-entries-surface thead,
+[data-ui-pack="legal_ops_atelier"] .time-entries-surface tbody tr {
+  border-color: #ddd4c4 !important;
+}
+
+[data-ui-pack="legal_ops_atelier"] .time-entries-surface h1,
+[data-ui-pack="legal_ops_atelier"] .time-entries-surface h2,
+[data-ui-pack="legal_ops_atelier"] .time-entries-surface h3,
+[data-ui-pack="legal_ops_atelier"] .time-entries-surface p {
+  color: inherit;
+}
+
+[data-ui-pack="signal_tiles_console"].app-shell {
+  background: #020617;
+  color: #e5e7eb;
+}
+
+[data-ui-pack="signal_tiles_console"] .app-shell-content {
+  background:
+    radial-gradient(circle at 95% 5%, rgba(34, 211, 238, 0.08) 0, rgba(34, 211, 238, 0) 28%),
+    linear-gradient(180deg, #0b1220 0%, #080d17 100%);
+}
+
+[data-ui-pack="signal_tiles_console"] .app-shell-main {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(34, 211, 238, 0.1) 0, rgba(34, 211, 238, 0) 28%),
+    linear-gradient(180deg, #0b1220 0%, #090f1a 100%);
+}
+
+[data-ui-pack="signal_tiles_console"] .app-shell-footer {
+  background: #0f172a;
+  border-color: #1f2937;
+  color: #94a3b8;
+}
+
+[data-ui-pack="signal_tiles_console"] .dashboard-surface {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(34, 211, 238, 0.08) 0, rgba(34, 211, 238, 0) 40%),
+    rgba(15, 23, 42, 0.66);
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  box-shadow: 0 16px 34px rgba(2, 6, 23, 0.48);
+  padding: 16px;
+}
+
+[data-ui-pack="signal_tiles_console"] .dashboard-surface > .flex:first-child {
+  border-bottom: 1px solid #1f2937;
+  padding-bottom: 10px;
+}
+
+[data-ui-pack="signal_tiles_console"] .dashboard-surface section,
+[data-ui-pack="signal_tiles_console"] .dashboard-surface article {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+  box-shadow: inset 0 0 0 1px rgba(51, 65, 85, 0.25);
+}
+
+[data-ui-pack="signal_tiles_console"] .dashboard-surface h1,
+[data-ui-pack="signal_tiles_console"] .dashboard-surface h2,
+[data-ui-pack="signal_tiles_console"] .dashboard-surface h3 {
+  color: #e2e8f0 !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .dashboard-surface p,
+[data-ui-pack="signal_tiles_console"] .dashboard-surface span,
+[data-ui-pack="signal_tiles_console"] .dashboard-surface a {
+  color: #94a3b8;
+}
+
+[data-ui-pack="signal_tiles_console"] .dashboard-surface .text-\[\#C9A227\],
+[data-ui-pack="signal_tiles_console"] .dashboard-surface .text-\[\#1A2E21\] {
+  color: #67e8f9 !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .dashboard-surface a:hover {
+  color: #67e8f9;
+}
+
+[data-ui-pack="signal_tiles_console"] .dashboard-surface button {
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+  background: #111827;
+}
+
+[data-ui-pack="signal_tiles_console"] .dashboard-surface button:hover {
+  background: #1f2937;
+  color: #e2e8f0 !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .case-detail-surface {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(34, 211, 238, 0.08) 0, rgba(34, 211, 238, 0) 38%),
+    #0b1220;
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  box-shadow: 0 16px 34px rgba(2, 6, 23, 0.45);
+}
+
+[data-ui-pack="signal_tiles_console"] .case-detail-surface > aside {
+  background: linear-gradient(180deg, #0b1323 0%, #0a1120 100%) !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .case-detail-surface > aside,
+[data-ui-pack="signal_tiles_console"] .case-detail-surface .border,
+[data-ui-pack="signal_tiles_console"] .case-detail-surface section,
+[data-ui-pack="signal_tiles_console"] .case-detail-surface article {
+  border-color: #334155 !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .case-detail-surface main,
+[data-ui-pack="signal_tiles_console"] .case-detail-surface aside {
+  background: transparent;
+}
+
+[data-ui-pack="signal_tiles_console"] .case-detail-surface .bg-white,
+[data-ui-pack="signal_tiles_console"] .case-detail-surface .bg-\[\#F6F2E8\],
+[data-ui-pack="signal_tiles_console"] .case-detail-surface .bg-\[\#FFFBEB\],
+[data-ui-pack="signal_tiles_console"] .case-detail-surface .bg-\[\#F9FAFB\] {
+  background: #0f172a !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .case-detail-surface .text-\[\#C9A227\],
+[data-ui-pack="signal_tiles_console"] .case-detail-surface .text-\[\#1F2821\] {
+  color: #67e8f9 !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .case-detail-surface h1,
+[data-ui-pack="signal_tiles_console"] .case-detail-surface h2,
+[data-ui-pack="signal_tiles_console"] .case-detail-surface h3,
+[data-ui-pack="signal_tiles_console"] .case-detail-surface p,
+[data-ui-pack="signal_tiles_console"] .case-detail-surface span,
+[data-ui-pack="signal_tiles_console"] .case-detail-surface a,
+[data-ui-pack="signal_tiles_console"] .case-detail-surface button {
+  color: #cbd5e1;
+}
+
+[data-ui-pack="signal_tiles_console"] .case-detail-surface button,
+[data-ui-pack="signal_tiles_console"] .case-detail-surface input,
+[data-ui-pack="signal_tiles_console"] .case-detail-surface select,
+[data-ui-pack="signal_tiles_console"] .case-detail-surface textarea {
+  border-color: #334155 !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .case-detail-surface input,
+[data-ui-pack="signal_tiles_console"] .case-detail-surface select,
+[data-ui-pack="signal_tiles_console"] .case-detail-surface textarea {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+[data-ui-pack="signal_tiles_console"] .time-entries-surface {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(34, 211, 238, 0.09) 0, rgba(34, 211, 238, 0) 36%),
+    #0f172a;
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.42);
+}
+
+[data-ui-pack="signal_tiles_console"] .time-entries-surface > .flex:first-child {
+  border-bottom: 1px solid #1f2937;
+  padding-bottom: 10px;
+}
+
+[data-ui-pack="signal_tiles_console"] .time-entries-surface .border,
+[data-ui-pack="signal_tiles_console"] .time-entries-surface table,
+[data-ui-pack="signal_tiles_console"] .time-entries-surface thead,
+[data-ui-pack="signal_tiles_console"] .time-entries-surface tbody tr {
+  border-color: #334155 !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .time-entries-surface h1,
+[data-ui-pack="signal_tiles_console"] .time-entries-surface h2,
+[data-ui-pack="signal_tiles_console"] .time-entries-surface h3 {
+  color: #e2e8f0 !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .time-entries-surface p,
+[data-ui-pack="signal_tiles_console"] .time-entries-surface span,
+[data-ui-pack="signal_tiles_console"] .time-entries-surface a,
+[data-ui-pack="signal_tiles_console"] .time-entries-surface label {
+  color: #94a3b8;
+}
+
+[data-ui-pack="signal_tiles_console"] .time-entries-surface .bg-white,
+[data-ui-pack="signal_tiles_console"] .time-entries-surface .bg-\[\#F6F2E8\],
+[data-ui-pack="signal_tiles_console"] .time-entries-surface .bg-\[\#FBF9F3\] {
+  background: #0f172a !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .time-entries-surface .text-\[\#1F2821\],
+[data-ui-pack="signal_tiles_console"] .time-entries-surface .text-\[\#C9A227\] {
+  color: #67e8f9 !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .time-entries-surface button,
+[data-ui-pack="signal_tiles_console"] .time-entries-surface input,
+[data-ui-pack="signal_tiles_console"] .time-entries-surface select,
+[data-ui-pack="signal_tiles_console"] .time-entries-surface textarea {
+  border-color: #334155 !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .time-entries-surface input,
+[data-ui-pack="signal_tiles_console"] .time-entries-surface select,
+[data-ui-pack="signal_tiles_console"] .time-entries-surface textarea {
+  background: #0b1220;
+  color: #e2e8f0;
+}
+
+[data-ui-pack="legal_ops_atelier"] .documents-surface,
+[data-ui-pack="legal_ops_atelier"] .review-surface,
+[data-ui-pack="legal_ops_atelier"] .generate-surface,
+[data-ui-pack="legal_ops_atelier"] .deadlines-surface,
+[data-ui-pack="legal_ops_atelier"] .settings-surface {
+  background: linear-gradient(180deg, #faf7f1 0%, #f3eee3 100%);
+  border: 1px solid #d8d1c3;
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(75, 63, 44, 0.1);
+}
+
+[data-ui-pack="legal_ops_atelier"] .documents-surface .bg-white,
+[data-ui-pack="legal_ops_atelier"] .review-surface .bg-white,
+[data-ui-pack="legal_ops_atelier"] .generate-surface .bg-white,
+[data-ui-pack="legal_ops_atelier"] .deadlines-surface .bg-white,
+[data-ui-pack="legal_ops_atelier"] .settings-surface .bg-white,
+[data-ui-pack="legal_ops_atelier"] .documents-surface .bg-\[\#F6F2E8\],
+[data-ui-pack="legal_ops_atelier"] .review-surface .bg-\[\#F6F2E8\],
+[data-ui-pack="legal_ops_atelier"] .generate-surface .bg-\[\#F6F2E8\],
+[data-ui-pack="legal_ops_atelier"] .deadlines-surface .bg-\[\#F6F2E8\],
+[data-ui-pack="legal_ops_atelier"] .settings-surface .bg-\[\#F6F2E8\] {
+  background: linear-gradient(180deg, #fffdfa 0%, #f9f3e7 100%) !important;
+}
+
+[data-ui-pack="legal_ops_atelier"] .documents-surface .border,
+[data-ui-pack="legal_ops_atelier"] .review-surface .border,
+[data-ui-pack="legal_ops_atelier"] .generate-surface .border,
+[data-ui-pack="legal_ops_atelier"] .deadlines-surface .border,
+[data-ui-pack="legal_ops_atelier"] .settings-surface .border,
+[data-ui-pack="legal_ops_atelier"] .documents-surface section,
+[data-ui-pack="legal_ops_atelier"] .review-surface section,
+[data-ui-pack="legal_ops_atelier"] .generate-surface section,
+[data-ui-pack="legal_ops_atelier"] .deadlines-surface section,
+[data-ui-pack="legal_ops_atelier"] .settings-surface section,
+[data-ui-pack="legal_ops_atelier"] .documents-surface article,
+[data-ui-pack="legal_ops_atelier"] .review-surface article,
+[data-ui-pack="legal_ops_atelier"] .generate-surface article,
+[data-ui-pack="legal_ops_atelier"] .deadlines-surface article,
+[data-ui-pack="legal_ops_atelier"] .settings-surface article {
+  border-color: #ddd4c4 !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .documents-surface,
+[data-ui-pack="signal_tiles_console"] .review-surface,
+[data-ui-pack="signal_tiles_console"] .generate-surface,
+[data-ui-pack="signal_tiles_console"] .deadlines-surface,
+[data-ui-pack="signal_tiles_console"] .settings-surface {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(34, 211, 238, 0.09) 0, rgba(34, 211, 238, 0) 36%),
+    #0f172a;
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.42);
+}
+
+[data-ui-pack="signal_tiles_console"] .documents-surface .bg-white,
+[data-ui-pack="signal_tiles_console"] .review-surface .bg-white,
+[data-ui-pack="signal_tiles_console"] .generate-surface .bg-white,
+[data-ui-pack="signal_tiles_console"] .deadlines-surface .bg-white,
+[data-ui-pack="signal_tiles_console"] .settings-surface .bg-white,
+[data-ui-pack="signal_tiles_console"] .documents-surface .bg-\[\#F6F2E8\],
+[data-ui-pack="signal_tiles_console"] .review-surface .bg-\[\#F6F2E8\],
+[data-ui-pack="signal_tiles_console"] .generate-surface .bg-\[\#F6F2E8\],
+[data-ui-pack="signal_tiles_console"] .deadlines-surface .bg-\[\#F6F2E8\],
+[data-ui-pack="signal_tiles_console"] .settings-surface .bg-\[\#F6F2E8\],
+[data-ui-pack="signal_tiles_console"] .documents-surface .bg-\[\#FBF9F3\],
+[data-ui-pack="signal_tiles_console"] .review-surface .bg-\[\#FBF9F3\],
+[data-ui-pack="signal_tiles_console"] .generate-surface .bg-\[\#FBF9F3\],
+[data-ui-pack="signal_tiles_console"] .deadlines-surface .bg-\[\#FBF9F3\],
+[data-ui-pack="signal_tiles_console"] .settings-surface .bg-\[\#FBF9F3\] {
+  background: #0f172a !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .documents-surface .border,
+[data-ui-pack="signal_tiles_console"] .review-surface .border,
+[data-ui-pack="signal_tiles_console"] .generate-surface .border,
+[data-ui-pack="signal_tiles_console"] .deadlines-surface .border,
+[data-ui-pack="signal_tiles_console"] .settings-surface .border,
+[data-ui-pack="signal_tiles_console"] .documents-surface section,
+[data-ui-pack="signal_tiles_console"] .review-surface section,
+[data-ui-pack="signal_tiles_console"] .generate-surface section,
+[data-ui-pack="signal_tiles_console"] .deadlines-surface section,
+[data-ui-pack="signal_tiles_console"] .settings-surface section,
+[data-ui-pack="signal_tiles_console"] .documents-surface article,
+[data-ui-pack="signal_tiles_console"] .review-surface article,
+[data-ui-pack="signal_tiles_console"] .generate-surface article,
+[data-ui-pack="signal_tiles_console"] .deadlines-surface article,
+[data-ui-pack="signal_tiles_console"] .settings-surface article,
+[data-ui-pack="signal_tiles_console"] .documents-surface aside,
+[data-ui-pack="signal_tiles_console"] .review-surface aside,
+[data-ui-pack="signal_tiles_console"] .generate-surface aside {
+  border-color: #334155 !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .documents-surface h1,
+[data-ui-pack="signal_tiles_console"] .documents-surface h2,
+[data-ui-pack="signal_tiles_console"] .documents-surface h3,
+[data-ui-pack="signal_tiles_console"] .review-surface h1,
+[data-ui-pack="signal_tiles_console"] .review-surface h2,
+[data-ui-pack="signal_tiles_console"] .review-surface h3,
+[data-ui-pack="signal_tiles_console"] .generate-surface h1,
+[data-ui-pack="signal_tiles_console"] .generate-surface h2,
+[data-ui-pack="signal_tiles_console"] .generate-surface h3,
+[data-ui-pack="signal_tiles_console"] .deadlines-surface h1,
+[data-ui-pack="signal_tiles_console"] .deadlines-surface h2,
+[data-ui-pack="signal_tiles_console"] .deadlines-surface h3,
+[data-ui-pack="signal_tiles_console"] .settings-surface h1,
+[data-ui-pack="signal_tiles_console"] .settings-surface h2,
+[data-ui-pack="signal_tiles_console"] .settings-surface h3,
+[data-ui-pack="signal_tiles_console"] .documents-surface .text-\[\#1F2821\],
+[data-ui-pack="signal_tiles_console"] .review-surface .text-\[\#1F2821\],
+[data-ui-pack="signal_tiles_console"] .generate-surface .text-\[\#1F2821\],
+[data-ui-pack="signal_tiles_console"] .deadlines-surface .text-\[\#1F2821\],
+[data-ui-pack="signal_tiles_console"] .settings-surface .text-\[\#1F2821\],
+[data-ui-pack="signal_tiles_console"] .documents-surface .text-\[\#C9A227\],
+[data-ui-pack="signal_tiles_console"] .review-surface .text-\[\#C9A227\],
+[data-ui-pack="signal_tiles_console"] .generate-surface .text-\[\#C9A227\],
+[data-ui-pack="signal_tiles_console"] .deadlines-surface .text-\[\#C9A227\],
+[data-ui-pack="signal_tiles_console"] .settings-surface .text-\[\#C9A227\] {
+  color: #67e8f9 !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .documents-surface p,
+[data-ui-pack="signal_tiles_console"] .review-surface p,
+[data-ui-pack="signal_tiles_console"] .generate-surface p,
+[data-ui-pack="signal_tiles_console"] .deadlines-surface p,
+[data-ui-pack="signal_tiles_console"] .settings-surface p,
+[data-ui-pack="signal_tiles_console"] .documents-surface span,
+[data-ui-pack="signal_tiles_console"] .review-surface span,
+[data-ui-pack="signal_tiles_console"] .generate-surface span,
+[data-ui-pack="signal_tiles_console"] .deadlines-surface span,
+[data-ui-pack="signal_tiles_console"] .settings-surface span,
+[data-ui-pack="signal_tiles_console"] .documents-surface a,
+[data-ui-pack="signal_tiles_console"] .review-surface a,
+[data-ui-pack="signal_tiles_console"] .generate-surface a,
+[data-ui-pack="signal_tiles_console"] .deadlines-surface a,
+[data-ui-pack="signal_tiles_console"] .settings-surface a,
+[data-ui-pack="signal_tiles_console"] .documents-surface label,
+[data-ui-pack="signal_tiles_console"] .review-surface label,
+[data-ui-pack="signal_tiles_console"] .generate-surface label,
+[data-ui-pack="signal_tiles_console"] .deadlines-surface label,
+[data-ui-pack="signal_tiles_console"] .settings-surface label {
+  color: #94a3b8;
+}
+
+[data-ui-pack="signal_tiles_console"] .documents-surface button,
+[data-ui-pack="signal_tiles_console"] .review-surface button,
+[data-ui-pack="signal_tiles_console"] .generate-surface button,
+[data-ui-pack="signal_tiles_console"] .deadlines-surface button,
+[data-ui-pack="signal_tiles_console"] .settings-surface button {
+  border-color: #334155 !important;
+}
+
+[data-ui-pack="signal_tiles_console"] .documents-surface input,
+[data-ui-pack="signal_tiles_console"] .documents-surface select,
+[data-ui-pack="signal_tiles_console"] .documents-surface textarea,
+[data-ui-pack="signal_tiles_console"] .review-surface input,
+[data-ui-pack="signal_tiles_console"] .review-surface select,
+[data-ui-pack="signal_tiles_console"] .review-surface textarea,
+[data-ui-pack="signal_tiles_console"] .generate-surface input,
+[data-ui-pack="signal_tiles_console"] .generate-surface select,
+[data-ui-pack="signal_tiles_console"] .generate-surface textarea,
+[data-ui-pack="signal_tiles_console"] .deadlines-surface input,
+[data-ui-pack="signal_tiles_console"] .deadlines-surface select,
+[data-ui-pack="signal_tiles_console"] .deadlines-surface textarea,
+[data-ui-pack="signal_tiles_console"] .settings-surface input,
+[data-ui-pack="signal_tiles_console"] .settings-surface select,
+[data-ui-pack="signal_tiles_console"] .settings-surface textarea {
+  border-color: #334155 !important;
+  background: #0b1220;
+  color: #e2e8f0;
+}

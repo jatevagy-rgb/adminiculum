@@ -14,12 +14,14 @@ jobs:
 
       - name: Zip deployment package (source package for Oryx server-side build)
         run: |
-          zip -r deploy.zip src/ prisma/ package.json package-lock.json tsconfig.json .deployment swagger.yaml swagger2.yaml || true
+          zip -r deploy.zip Backend/src/ Backend/prisma/ Backend/templates/ Backend/package.json Backend/package-lock.json Backend/tsconfig.json .deployment swagger.yaml swagger2.yaml || true
           ls -la
-          echo "CHECK src/index.ts in ZIP:"
-          unzip -l deploy.zip | grep -E 'src/index\.ts$' || true
-          echo "CHECK package.json in ZIP:"
-          unzip -l deploy.zip | grep -E 'package\.json$' || true
+          echo "CHECK Backend/src/index.ts in ZIP:"
+          unzip -l deploy.zip | grep -E 'Backend/src/index\.ts$' || true
+          echo "CHECK Backend/package.json in ZIP:"
+          unzip -l deploy.zip | grep -E 'Backend/package\.json$' || true
+          echo "CHECK Backend/templates/ in ZIP:"
+          unzip -l deploy.zip | grep -E 'Backend/templates/' || true
           echo "TOP LEVEL DIRS in ZIP:"
           unzip -l deploy.zip | head -n 30
 
@@ -43,10 +45,10 @@ jobs:
 
       - name: Verify downloaded deployment package
         run: |
-          echo "CHECK src/index.ts in downloaded ZIP:"
-          unzip -l ./deploy.zip | grep -E 'src/index\.ts$' || true
-          echo "CHECK package.json in downloaded ZIP:"
-          unzip -l ./deploy.zip | grep -E 'package\.json$' || true
+          echo "CHECK Backend/src/index.ts in downloaded ZIP:"
+          unzip -l ./deploy.zip | grep -E 'Backend/src/index\.ts$' || true
+          echo "CHECK Backend/package.json in downloaded ZIP:"
+          unzip -l ./deploy.zip | grep -E 'Backend/package\.json$' || true
           echo "TOP LEVEL DIRS in downloaded ZIP:"
           unzip -l ./deploy.zip | head -n 30
 

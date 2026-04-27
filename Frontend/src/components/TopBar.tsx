@@ -1,0 +1,43 @@
+"use client";
+
+import Link from "next/link";
+import type { UiPackId } from "@/lib/uiPack";
+
+type TopBarProps = {
+  title: string;
+  onSignOut: () => void;
+  profileName: string;
+  uiPack?: UiPackId;
+};
+
+export function TopBar({ title, onSignOut, profileName, uiPack = "legal_ops_atelier" }: TopBarProps) {
+  const isSignal = uiPack === "signal_tiles_console";
+
+  return (
+    <header className={`${isSignal ? "bg-[#0F172A] border-[#1F2937]" : "bg-[#F6F2E8] border-[#DDD7CA]"} border-b px-8 py-6`}>
+      <div className="flex flex-wrap items-center gap-5">
+        <h1 className={`text-[44px] leading-none ${isSignal ? "text-[#E5E7EB]" : "text-[#1A2E21]"}`} style={{ fontFamily: 'var(--font-newsreader)' }}>{title}</h1>
+
+        <div className="ml-auto flex items-center gap-2">
+          <Link href="/search" className={`h-10 w-10 border grid place-items-center ${isSignal ? "border-[#334155] bg-[#111827] text-[#CBD5E1] hover:bg-[#1F2937]" : "border-[#DDD7CA] bg-white text-[#4F5A50] hover:bg-[#f5f3ee]"}`} title="Keresés">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-5-5m0-6a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </Link>
+          <button className={`h-10 w-10 border grid place-items-center ${isSignal ? "border-[#334155] bg-[#111827] text-[#CBD5E1]" : "border-[#DDD7CA] bg-white text-[#4F5A50]"}`} title="Notifications">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0h6z" />
+            </svg>
+          </button>
+          <div className={`h-10 px-3 border flex items-center gap-2 ${isSignal ? "border-[#334155] bg-[#111827]" : "border-[#DDD7CA] bg-white"}`}>
+            <span className={`w-6 h-6 rounded-full text-[10px] grid place-items-center ${isSignal ? "bg-[#22D3EE] text-[#0B1220]" : "bg-[#1A2E21] text-white"}`}>A</span>
+            <span className={`text-[10px] uppercase tracking-[0.25em] ${isSignal ? "text-[#CBD5E1]" : "text-[#4F5A50]"}`}>{profileName}</span>
+          </div>
+          <button onClick={onSignOut} className={`h-10 px-3 border text-[10px] uppercase tracking-[0.25em] ${isSignal ? "border-[#334155] bg-[#111827] text-[#CBD5E1] hover:text-[#67E8F9]" : "border-[#DDD7CA] bg-white text-[#4F5A50] hover:text-[#8F3D32]"}`}>
+            Sign Out
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+}

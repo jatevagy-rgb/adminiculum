@@ -1,0 +1,49 @@
+# Dependencies
+node_modules
+.npm
+
+# Build output
+dist
+
+# Prisma
+node_modules/.prisma
+node_modules/@prisma/client
+
+# Dev files
+.env
+.env.local
+.env.test
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Archives and backups
+Archive
+*.zip
+*.tar.gz
+*.bak
+
+# Scripts (local dev only)
+scripts/
+tmp/
+
+# Docs
+*.md
+!README.md
+
+# Azure / deployment
+.deployment
+.dev-pids.json
+.frontend-dev.pid
