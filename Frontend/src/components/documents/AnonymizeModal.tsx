@@ -194,27 +194,39 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientName, 
     }
   };
 
-  const handleCopyRedactedText = () => {
+  const handleCopyRedactedText = async () => {
     if (result?.redactedText) {
-      navigator.clipboard.writeText(result.redactedText);
-      setCopiedState("redacted");
-      setTimeout(() => setCopiedState(null), 2000);
+      try {
+        await navigator.clipboard.writeText(result.redactedText);
+        setCopiedState("redacted");
+        setTimeout(() => setCopiedState(null), 2000);
+      } catch {
+        setError("Failed to copy text to clipboard");
+      }
     }
   };
 
-  const handleCopyAIPrompt = () => {
+  const handleCopyAIPrompt = async () => {
     if (result?.aiReadyPrompt) {
-      navigator.clipboard.writeText(result.aiReadyPrompt);
-      setCopiedState("prompt");
-      setTimeout(() => setCopiedState(null), 2000);
+      try {
+        await navigator.clipboard.writeText(result.aiReadyPrompt);
+        setCopiedState("prompt");
+        setTimeout(() => setCopiedState(null), 2000);
+      } catch {
+        setError("Failed to copy prompt to clipboard");
+      }
     }
   };
 
-  const handleCopyPromptAndText = () => {
+  const handleCopyPromptAndText = async () => {
     if (result?.aiReadyPrompt && result?.redactedText) {
-      navigator.clipboard.writeText(`${result.aiReadyPrompt}\n\n---\n\nANONYMIZED TEXT:\n${result.redactedText}`);
-      setCopiedState("both");
-      setTimeout(() => setCopiedState(null), 2000);
+      try {
+        await navigator.clipboard.writeText(`${result.aiReadyPrompt}\n\n---\n\nANONYMIZED TEXT:\n${result.redactedText}`);
+        setCopiedState("both");
+        setTimeout(() => setCopiedState(null), 2000);
+      } catch {
+        setError("Failed to copy prompt and text to clipboard");
+      }
     }
   };
 

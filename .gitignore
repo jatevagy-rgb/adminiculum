@@ -1,19 +1,53 @@
 # Dependencies
 node_modules/
 
-# Build output - dist is needed for Azure deployment
-# dist/
+# Build artifacts
+.next/
+dist/
+build/
+coverage/
 
 # Environment files
 .env
-.env.local
-.env.*.local
-.env.txt
+.env.*
+!.env.example
+!.env.container.example
+!.env.*.example
 
 # Logs
 logs/
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Caches / temporary
+.cache/
+.turbo/
+.eslintcache
+tmp/
+temp/
+
+# Uploads / generated documents
+uploads/
+Backend/uploads/
+generated/
+Backend/generated/
+output/
+Backend/output/
+Frontend/output/
+
+# Database dumps / local DB files
+*.dump
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+
+# Runtime / pid files
+*.pid
+*.seed
 
 # OS files
 .DS_Store
@@ -24,17 +58,6 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
-
-# Test coverage
-coverage/
-
-# Temporary files
-tmp/
-temp/
-
-# Uploads (keep directory structure but ignore content)
-uploads/*
-!uploads/.gitkeep
 
 # Downloaded files
 downloaded_*.docx

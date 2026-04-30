@@ -59,11 +59,15 @@ export function RehydrateModal({
     }
   };
 
-  const handleCopyRehydrated = () => {
+  const handleCopyRehydrated = async () => {
     if (result?.rehydratedContent) {
-      navigator.clipboard.writeText(result.rehydratedContent);
-      setCopiedState(true);
-      setTimeout(() => setCopiedState(false), 2000);
+      try {
+        await navigator.clipboard.writeText(result.rehydratedContent);
+        setCopiedState(true);
+        setTimeout(() => setCopiedState(false), 2000);
+      } catch {
+        setError("Failed to copy text to clipboard");
+      }
     }
   };
 

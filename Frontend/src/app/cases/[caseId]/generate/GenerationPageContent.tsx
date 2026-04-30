@@ -247,15 +247,16 @@ export default function GenerationPageContent({ params }: GenerationPageProps) {
   const family = familyOverride === "auto" ? "sale_purchase" : familyOverride;
   const schema = useMemo(() => DOCUMENT_FAMILIES[family as DocumentFamilyId] ?? DOCUMENT_FAMILIES.sale_purchase, [family]);
 
+  const { fields: schemaFields } = schema;
   const fieldMap = useMemo(() => {
-    const map: Record<string, (typeof schema.fields)[0]> = {};
-    for (const field of schema.fields) {
+    const map: Record<string, (typeof schemaFields)[0]> = {};
+    for (const field of schemaFields) {
       if (!field.documentScope || field.documentScope === activeDocumentId) {
         map[field.id] = field;
       }
     }
     return map;
-  }, [schema, schema.fields, activeDocumentId]);
+  }, [schemaFields, activeDocumentId]);
 
   const resolvedTemplates = useMemo(() => {
     const resolved: Partial<Record<BundleDocId, ContractTemplateItem | null>> = {};
