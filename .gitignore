@@ -85,3 +85,15 @@ deploy*.zip
 deploy*.tar*
 deploy-azure*
 deploy-package*
+
+# Build result logs
+*_result.txt
+*_output.txt
+tsc*.txt
+build-output.txt
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Dev server PIDs
+.dev-pids.json
