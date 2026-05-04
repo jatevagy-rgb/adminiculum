@@ -801,7 +801,12 @@ function DocumentsComparePageContent() {
                   <div className="p-3 border border-[#EEE7D9] bg-white">
                     <p className="text-[10px] uppercase text-[#7B776D]">Összevetési alapdokumentum</p>
                     {!selectedBaseline ? (
-                      <p className="text-xs text-[#9C9890] mt-2">Nincs kiválasztott baseline dokumentum.</p>
+                      <div className="mt-2 space-y-1">
+                        <p className="text-xs text-[#9C9890]">Nincs kiválasztott baseline dokumentum.</p>
+                        <p className="text-[11px] text-[#7B776D]">
+                          Szöveg-diff megjelenítéshez válassz egy előző verziót (baseline), majd a blokk-szintű panelen jelennek meg a módosítások.
+                        </p>
+                      </div>
                     ) : (
                       <>
                         <p className="text-sm font-semibold text-[#1F2821] mt-1 break-all">{selectedBaseline.fileName}</p>
@@ -830,6 +835,28 @@ function DocumentsComparePageContent() {
                   {comparisonSummary.map((line, index) => (
                     <p key={`${line}-${index}`}>{line}</p>
                   ))}
+                </div>
+
+                <div className="mt-3 p-3 border border-[#EEE7D9] bg-white text-xs text-[#514D45] space-y-1">
+                  <p className="font-semibold text-[#1F2821]">Szöveg-diff állapot</p>
+                  {!selectedBaseline ? (
+                    <p className="text-[#7B776D]">
+                      Jelenleg csak metaadat összehasonlítás látszik. Szöveg-diffhez válassz baseline dokumentumot.
+                    </p>
+                  ) : selectedDocument.kind !== "contract" ? (
+                    <p className="text-[#7B776D]">
+                      A felület metaadat összehasonlítást mutat; blokk-szintű szöveg-diff jelenleg csak támogatott szerződés revíziók esetén érhető el.
+                    </p>
+                  ) : comparisonData ? (
+                    <p>
+                      Szöveg-diff betöltve. Módosított blokkok:{" "}
+                      <span className="font-semibold">{comparisonData.summary.modified}</span>.
+                    </p>
+                  ) : (
+                    <p className="text-[#7B776D]">
+                      A rendszer összehasonlítási adatot tölt. Ha nem érhető el blokk-adat, a nézet metaadat összevetésre korlátozódik.
+                    </p>
+                  )}
                 </div>
               </section>
 

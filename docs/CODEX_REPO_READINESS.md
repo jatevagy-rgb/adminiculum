@@ -279,6 +279,25 @@ git push -u origin codex/my-feature
 
 ---
 
+## 6A. CODEX ENVIRONMENT SETUP
+
+### Critical Setup Rule
+- Do NOT run `npm ci` at the repository root.
+
+### Active Node Projects
+- `Frontend/` — Next.js App Router
+- `Backend/` — Express + TypeScript
+
+### Setup Commands
+```bash
+cd Frontend && npm ci
+cd ../Backend && npm ci
+```
+
+Do NOT run `npm ci` from the repository root. The root is not a Node project.
+
+---
+
 ## 7. SAFE GIT WORKFLOW
 
 ### Always:
