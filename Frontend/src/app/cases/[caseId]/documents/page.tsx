@@ -289,7 +289,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setActionResult({ type: 'success', message: 'Download started' });
     } catch (err) {
       console.error('Download failed:', err);
-      setActionResult({ type: 'error', message: 'Download failed' });
+      setActionResult({ type: 'error', message: 'Letöltés sikertelen' });
     } finally {
       setIsDownloading(null);
     }
@@ -303,11 +303,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
         setActionResult({ type: 'success', message: 'Uploaded to SharePoint' });
         loadData(); // Refresh data
       } else {
-        setActionResult({ type: 'error', message: 'SharePoint upload failed' });
+        setActionResult({ type: 'error', message: 'SharePoint feltöltés sikertelen' });
       }
     } catch (err) {
       console.error('SharePoint upload failed:', err);
-      setActionResult({ type: 'error', message: 'SharePoint upload failed' });
+      setActionResult({ type: 'error', message: 'SharePoint feltöltés sikertelen' });
     } finally {
       setIsUploadingToSP(null);
     }
@@ -588,6 +588,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
           >
             Csomag letöltése
           </button>
+          <p className={`text-[9px] ${p.textMuted} mt-1`}>
+            Letöltés: az ügy aktuális dokumentumkészlete egy csomagban.
+          </p>
         </div>
       </aside>
 
@@ -1019,7 +1022,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               disabled={isCreatingRevision === contract.id}
                               className={`text-[9px] font-bold uppercase tracking-widest ${p.textDark} hover:${isSignalTiles ? 'text-cyan-400' : 'text-[#06190d]'} transition-all disabled:opacity-50`}
                             >
-                              {isCreatingRevision === contract.id ? 'Creating...' : 'Create Revision'}
+                              {isCreatingRevision === contract.id ? 'Létrehozás...' : 'Új revízió'}
                             </button>
                             </>
                           )}
@@ -1033,7 +1036,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 disabled={isFinalizing === contract.id}
                                 className={`text-[9px] font-bold uppercase tracking-widest ${isSignalTiles ? 'text-cyan-400 border-b border-cyan-400/20 hover:border-cyan-400' : 'text-[#06190d] border-b border-[#06190d]/20 hover:border-[#06190d]'} transition-all disabled:opacity-50`}
                               >
-                                {isFinalizing === contract.id ? 'Finalizing...' : 'Mark as Final'}
+                                {isFinalizing === contract.id ? 'Véglegesítés...' : 'Véglegesítés'}
                               </button>
                               {!contract.spItemId && (
                                 <button
@@ -1044,7 +1047,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                   disabled={isUploadingToSP === contract.id}
                                   className={`text-[9px] font-bold uppercase tracking-widest ${p.textDark} hover:${isSignalTiles ? 'text-cyan-400' : 'text-[#06190d]'} transition-all disabled:opacity-50`}
                                 >
-                                  {isUploadingToSP === contract.id ? 'Uploading...' : 'Sync to SharePoint'}
+                                  {isUploadingToSP === contract.id ? 'Feltöltés...' : 'Sync SharePointra'}
                                 </button>
                               )}
                             </>
@@ -1159,11 +1162,14 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </span>
                       </div>
 
-                      {/* Actions */}
+                      {/* Dokumentum műveletek */}
                       <div className="space-y-3 pt-4">
                         <span className={`text-[10px] uppercase font-bold ${isSignalTiles ? 'text-cyan-400' : 'text-[#06190d]'} block border-b ${isSignalTiles ? 'border-slate-700' : 'border-[#06190d]/10'} pb-1`}>
-                          Actions
+                          Műveletek
                         </span>
+                        <p className={`text-[9px] ${p.textMuted}`}>
+                          Válassz műveletet: letöltés, review, metaadat összevetés, vagy előző verzióval összevetés.
+                        </p>
                         <button
                           onClick={() => handleDownload(selectedContract)}
                           disabled={isDownloading === selectedContract.id}

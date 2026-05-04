@@ -1008,11 +1008,14 @@ function DocumentsComparePageContent() {
                       </p>
                       <p className="text-[11px] text-[#7B776D] mt-1">{comparisonData.confidenceReason}</p>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        <span className="px-2 py-0.5 border border-[#DDD7CA]">Unchanged: {comparisonData.summary.unchanged}</span>
-                        <span className="px-2 py-0.5 border border-[#DDD7CA]">Modified: {comparisonData.summary.modified}</span>
-                        <span className="px-2 py-0.5 border border-[#DDD7CA]">Added: {comparisonData.summary.added}</span>
-                        <span className="px-2 py-0.5 border border-[#DDD7CA]">Removed: {comparisonData.summary.removed}</span>
+                        <span className="px-2 py-0.5 border border-[#DDD7CA]">Változatlan: {comparisonData.summary.unchanged}</span>
+                        <span className="px-2 py-0.5 border border-[#DDD7CA]">Módosított: {comparisonData.summary.modified}</span>
+                        <span className="px-2 py-0.5 border border-[#DDD7CA]">Hozzáadott: {comparisonData.summary.added}</span>
+                        <span className="px-2 py-0.5 border border-[#DDD7CA]">Eltávolított: {comparisonData.summary.removed}</span>
                       </div>
+                      <p className="text-[9px] text-[#7B776D] italic mt-2">
+                        Az összevetés döntéstámogatásra szolgál: metaadat és elérhető blokk-szintű különbségek alapján segíti a review lépéseket.
+                      </p>
                     </div>
 
                     <div className="space-y-2">
