@@ -778,27 +778,27 @@ function DocumentsComparePageContent() {
 
                 <div className="mb-3 p-3 border border-[#EEE7D9] bg-[#FBF9F3] space-y-2">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <h3 className="text-xs font-semibold text-[#1F2821]">Review workflow</h3>
+                    <h3 className="text-xs font-semibold text-[#1F2821]">Review folyamat</h3>
                     <div className="flex items-center gap-2 flex-wrap">
                       {selectedDocument.kind === "contract" && (
                         <Link
                           href={`/cases/${selectedDocument.caseId}/review/${selectedDocument.id}`}
                           className="px-2 py-1 text-[10px] border border-[#DDD7CA] hover:bg-white"
                         >
-                          Continue to Review
+                          Review megnyitása
                         </Link>
                       )}
                       <Link
                         href={`/cases/${selectedDocument.caseId}/documents`}
                         className="px-2 py-1 text-[10px] border border-[#DDD7CA] hover:bg-white"
                       >
-                        Open case documents
+                        Ügy dokumentumai
                       </Link>
                       <button
                         onClick={() => handleDownload(selectedDocument)}
                         className="px-2 py-1 text-[10px] border border-[#DDD7CA] hover:bg-white"
                       >
-                        Download current document
+                        Aktuális dokumentum letöltése
                       </button>
                     </div>
                   </div>
@@ -872,7 +872,7 @@ function DocumentsComparePageContent() {
                             )}
                           </li>
                           <li>Frissítve: {formatDateTime(selectedBaseline.updatedAt || selectedBaseline.createdAt)}</li>
-                          <li>{previousVersion?.id === selectedBaseline.id ? "Direct previous version" : "Historical version"}</li>
+                          <li>{previousVersion?.id === selectedBaseline.id ? "Közvetlen előző verzió" : "Történeti verzió"}</li>
                         </ul>
                       </>
                     )}
@@ -956,7 +956,7 @@ function DocumentsComparePageContent() {
                         disabled={reviewSummaryDownloading}
                         className="px-3 py-1.5 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3] disabled:opacity-50"
                       >
-                        {reviewSummaryDownloading ? "Exporting..." : "Export Review Summary"}
+                        {reviewSummaryDownloading ? "Exportálás..." : "Review összefoglaló exportálása"}
                       </button>
                     )}
                     {selectedDocument?.kind === "contract" && (
@@ -965,7 +965,7 @@ function DocumentsComparePageContent() {
                         disabled={blockNotesSaving || comparisonLoading || reviewNotesLoading || !comparisonData}
                         className="px-3 py-1.5 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3] disabled:opacity-50"
                       >
-                        {blockNotesSaving ? "Saving..." : "Save Block Notes"}
+                        {blockNotesSaving ? "Mentés..." : "Blokk megjegyzések mentése"}
                       </button>
                     )}
                     {selectedDocument?.kind === "contract" && (
@@ -973,7 +973,7 @@ function DocumentsComparePageContent() {
                         href={`/cases/${selectedDocument.caseId}/review/${selectedDocument.id}`}
                         className="px-3 py-1.5 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
                       >
-                        Continue to Review
+                        Review megnyitása
                       </Link>
                     )}
                   </div>
@@ -1036,7 +1036,7 @@ function DocumentsComparePageContent() {
                             </div>
                             <div className="grid md:grid-cols-2">
                               <div className="p-3 border-r border-[#EEE7D9] bg-[#FBF9F3]">
-                                <p className="text-[10px] uppercase text-[#7B776D] mb-1">Source</p>
+                                <p className="text-[10px] uppercase text-[#7B776D] mb-1">Forrás</p>
                                 {block.sourceBlock ? (
                                   <>
                                     <p className="text-xs font-semibold text-[#1F2821]">{block.sourceBlock.title || "—"}</p>
@@ -1052,7 +1052,7 @@ function DocumentsComparePageContent() {
                                 )}
                               </div>
                               <div className="p-3 bg-white">
-                                <p className="text-[10px] uppercase text-[#7B776D] mb-1">Revision</p>
+                                <p className="text-[10px] uppercase text-[#7B776D] mb-1">Revízió</p>
                                 {block.targetBlock ? (
                                   <>
                                     <p className="text-xs font-semibold text-[#1F2821]">{block.targetBlock.title || "—"}</p>
@@ -1070,7 +1070,7 @@ function DocumentsComparePageContent() {
                             </div>
                             <div className="px-3 py-3 border-t border-[#EEE7D9] bg-[#FDFBF6] space-y-2">
                               <div className="grid md:grid-cols-[180px_1fr] gap-2 items-center">
-                                <label className="text-[10px] uppercase text-[#7B776D]">Review status</label>
+                                <label className="text-[10px] uppercase text-[#7B776D]">Review státusz</label>
                                 <select
                                   value={draft.status}
                                   onChange={(e) => updateBlockDraft(blockKey, { status: e.target.value as BlockReviewStatus })}
@@ -1082,21 +1082,21 @@ function DocumentsComparePageContent() {
                                 </select>
                               </div>
                               <div className="grid md:grid-cols-[180px_1fr] gap-2 items-center">
-                                <label className="text-[10px] uppercase text-[#7B776D]">Short title</label>
+                                <label className="text-[10px] uppercase text-[#7B776D]">Rövid cím</label>
                                 <input
                                   value={draft.title}
                                   onChange={(e) => updateBlockDraft(blockKey, { title: e.target.value })}
-                                  placeholder="Optional short title"
+                                  placeholder="Opcionális rövid cím"
                                   className="w-full border border-[#DDD7CA] bg-white px-2 py-1 text-xs"
                                 />
                               </div>
                               <div className="grid md:grid-cols-[180px_1fr] gap-2">
-                                <label className="text-[10px] uppercase text-[#7B776D] pt-1">Note</label>
+                                <label className="text-[10px] uppercase text-[#7B776D] pt-1">Megjegyzés</label>
                                 <textarea
                                   value={draft.note}
                                   onChange={(e) => updateBlockDraft(blockKey, { note: e.target.value })}
                                   rows={3}
-                                  placeholder="Optional note"
+                                  placeholder="Opcionális megjegyzés"
                                   className="w-full border border-[#DDD7CA] bg-white px-2 py-1 text-xs resize-y"
                                 />
                               </div>

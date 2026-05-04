@@ -586,7 +586,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
             onClick={handleBundleDownload}
             className={`w-full mt-2 border ${p.border} ${p.textDark} py-2 text-xs font-bold uppercase tracking-widest ${p.bgHover} transition-colors`}
           >
-            Download Bundle
+            Csomag letöltése
           </button>
         </div>
       </aside>
@@ -974,7 +974,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               }}
                               disabled={isDownloading === contract.id}
                               className={`p-1 ${isSignalTiles ? 'hover:bg-slate-700' : 'hover:bg-[#eae8e3]'} transition-colors disabled:opacity-50`}
-                              title="Download"
+                              title="Letöltés"
                             >
                               <span className="material-symbols-outlined text-lg">download</span>
                             </button>
@@ -1000,7 +1000,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 }}
                                 className={`text-[9px] font-bold uppercase tracking-widest ${isSignalTiles ? 'text-cyan-400 border-b border-cyan-400/20 hover:border-cyan-400' : 'text-[#06190d] border-b border-[#06190d]/20 hover:border-[#06190d]'} transition-all`}
                                 >
-                                Send to Review
+                                Reviewre küldés
                               </button>
                             <button
                               onClick={(e) => {
@@ -1009,7 +1009,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               }}
                               className={`text-[9px] font-bold uppercase tracking-widest ${p.textDark} hover:${isSignalTiles ? 'text-cyan-400' : 'text-[#06190d]'} transition-all`}
                             >
-                              Compare
+                              Összevetés
                             </button>
                             <button
                               onClick={(e) => {
@@ -1170,21 +1170,21 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           className={`w-full ${isSignalTiles ? 'bg-cyan-700 text-white hover:bg-cyan-600' : 'bg-[#06190d] text-white hover:opacity-90'} py-3 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 transition-colors`}
                         >
                           <span className="material-symbols-outlined text-sm">download</span>
-                          {isDownloading === selectedContract.id ? 'Downloading...' : 'Download'}
+                          {isDownloading === selectedContract.id ? 'Letöltés...' : 'Letöltés'}
                         </button>
                         {selectedContract.status !== 'FINAL' && (
                           <button
                             onClick={() => handleReview(selectedContract.id)}
                             className={`w-full border ${isSignalTiles ? 'border-cyan-700 text-cyan-300 hover:bg-cyan-900/30' : 'border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5'} py-3 text-xs font-bold uppercase tracking-widest transition-colors`}
                           >
-                            Open Review
+                            Review megnyitása
                           </button>
                         )}
                         <button
                           onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedContract.id)}`)}
                           className={`w-full border ${isSignalTiles ? 'border-cyan-700 text-cyan-300 hover:bg-cyan-900/30' : 'border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5'} py-3 text-xs font-bold uppercase tracking-widest transition-colors`}
                         >
-                          Compare Metadata
+                          Metaadat összevetés
                         </button>
                         {previousVersionForSelected && (
                           <button
@@ -1195,7 +1195,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             }
                             className={`w-full border ${isSignalTiles ? 'border-cyan-700 text-cyan-300 hover:bg-cyan-900/30' : 'border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5'} py-3 text-xs font-bold uppercase tracking-widest transition-colors`}
                           >
-                            Compare with Previous
+                            Összevetés előző verzióval
                           </button>
                         )}
                         {!selectedContract.spItemId && selectedContract.status === 'APPROVED' && (
