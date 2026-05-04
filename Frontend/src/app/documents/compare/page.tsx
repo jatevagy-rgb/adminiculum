@@ -776,6 +776,54 @@ function DocumentsComparePageContent() {
                   </div>
                 </div>
 
+                <div className="mb-3 p-3 border border-[#EEE7D9] bg-[#FBF9F3] space-y-2">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <h3 className="text-xs font-semibold text-[#1F2821]">Review workflow</h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {selectedDocument.kind === "contract" && (
+                        <Link
+                          href={`/cases/${selectedDocument.caseId}/review/${selectedDocument.id}`}
+                          className="px-2 py-1 text-[10px] border border-[#DDD7CA] hover:bg-white"
+                        >
+                          Continue to Review
+                        </Link>
+                      )}
+                      <Link
+                        href={`/cases/${selectedDocument.caseId}/documents`}
+                        className="px-2 py-1 text-[10px] border border-[#DDD7CA] hover:bg-white"
+                      >
+                        Open case documents
+                      </Link>
+                      <button
+                        onClick={() => handleDownload(selectedDocument)}
+                        className="px-2 py-1 text-[10px] border border-[#DDD7CA] hover:bg-white"
+                      >
+                        Download current document
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 text-[10px] text-[#514D45]">
+                    <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">Dokumentum státusz: {selectedDocument.status}</span>
+                    <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">Forrás: {selectedDocument.source}</span>
+                    <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">Baseline: {selectedBaseline ? "kiválasztva" : "nincs"}</span>
+                    <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">
+                      Blokk compare: {selectedDocument.kind === "contract" && !!comparisonData ? "elérhető" : "nem elérhető"}
+                    </span>
+                    <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">Review feladatok: {reviewTaskCount}</span>
+                  </div>
+
+                  {!selectedBaseline ? (
+                    <p className="text-[11px] text-[#7B776D]">Válassz baseline dokumentumot a pontosabb összevetéshez.</p>
+                  ) : selectedDocument.kind !== "contract" ? (
+                    <p className="text-[11px] text-[#7B776D]">Ehhez a dokumentumtípushoz jelenleg metaadat alapú összevetés érhető el.</p>
+                  ) : comparisonData ? (
+                    <p className="text-[11px] text-[#7B776D]">A blokk-szintű összevetés betöltve; folytatható a review.</p>
+                  ) : (
+                    <p className="text-[11px] text-[#7B776D]">A blokk-szintű összevetés betöltése folyamatban vagy nem érhető el.</p>
+                  )}
+                </div>
+
                 <div className="grid md:grid-cols-2 gap-3">
                   <div className="p-3 border border-[#EEE7D9] bg-[#FBF9F3]">
                     <p className="text-[10px] uppercase text-[#7B776D]">Aktuális dokumentum</p>
