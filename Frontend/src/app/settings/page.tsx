@@ -6,10 +6,11 @@ import { loadPreferences, savePreferences, getPreference } from "@/lib/preferenc
 import { UI_PACKS, useUiPack } from "@/lib/uiPack";
 
 /**
- * Settings Page - Workflow Assistance Preferences
+ * Settings Page — Browser-Local UI and Workflow Preferences
  * 
- * A small, truthful control for workflow assistance behaviors.
- * Stored locally in this browser only.
+ * Controls: workflow assistance toggle, UI pack selector.
+ * Storage: localStorage only (per-browser, no account sync).
+ * Scope: does NOT affect case data, documents, permissions, or authentication.
  */
 export default function SettingsPage() {
   return (
@@ -80,7 +81,7 @@ function SettingsPageContent() {
     <div className={`flex-1 overflow-y-auto settings-surface ${p.bg}`}>
       <div className="max-w-xl mx-auto p-8">
         {/* Page Header */}
-        <div className="mb-8">
+        <div className="mb-6">
           <div className="flex items-center gap-2 mb-3">
             <span className={`text-[9px] uppercase tracking-[0.35em] ${p.textMuted} px-2 py-1 ${p.bgAlt}`}>Beállítások</span>
           </div>
@@ -88,11 +89,20 @@ function SettingsPageContent() {
             Beállítások
           </h1>
           <p className={`text-sm ${p.textMuted} mt-3`}>
-            Ezen az oldalon a böngészőhöz kötött felületi és munkafolyamat-beállításokat módosíthatsz. A módosítások nem érintik az ügyadatokat, dokumentumokat vagy jogosultságokat.
+            Az itt végrehajtott módosítások csak a böngészőben tárolódnak. Nem befolyásolják az ügyeket, dokumentumokat vagy jogosultságokat.
           </p>
         </div>
         
-        {/* Single Working Preference */}
+        {/* Section Context Strip */}
+        <div className={`flex items-center gap-1 mb-6 pb-4 border-b ${p.borderLight}`}>
+          <span className={`text-[10px] uppercase tracking-[0.2em] ${p.textMuted} px-2 py-1 ${p.bgAlt} rounded`}>Felület</span>
+          <span className={`text-[10px] uppercase tracking-[0.2em] ${p.textMuted}`}>·</span>
+          <span className={`text-[10px] uppercase tracking-[0.2em] ${p.textMuted} px-2 py-1 ${p.bgAlt} rounded`}>Munkafolyamat</span>
+          <span className={`text-[10px] uppercase tracking-[0.2em] ${p.textMuted}`}>·</span>
+          <span className={`text-[10px] uppercase tracking-[0.2em] ${p.textMuted} px-2 py-1 ${p.bgAlt} rounded`}>Helyi beállítások</span>
+        </div>
+        
+        {/* Workflow Assistance Section */}
         <section className={`${p.bgCard} border ${p.border} rounded p-6 mb-6`}>
           <div className="flex items-center gap-2 mb-4">
             <svg className={`w-5 h-5 ${p.textMuted}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
@@ -102,14 +112,13 @@ function SettingsPageContent() {
             <h2 className={`text-lg font-semibold ${p.textDark}`}>Munkafolyamat-asszisztencia</h2>
           </div>
           
-          {/* Toggle: Review Task Suggestions - THE ONLY REAL CONTROL */}
           <div className="flex items-start justify-between py-2">
             <div className="flex-1 pr-4">
               <h3 className={`text-sm font-medium ${p.textDark}`}>
                 Review feladatjavaslatok
               </h3>
               <p className={`text-xs ${p.textMuted} mt-1`}>
-                Mutassa a javasolt követő feladatokat dokumentum-review döntések után.
+                Dokumentum-review döntés után a rendszer felajánlja a követő feladatok létrehozását. Ha kikapcsolod, a felület nem jelenít meg feladatjavaslatokat.
               </p>
             </div>
             <button
@@ -128,14 +137,18 @@ function SettingsPageContent() {
           </div>
         </section>
 
+        {/* UI Pack Selector Section */}
         <section className={`${p.bgCard} border ${p.border} rounded p-6 mb-6`}>
           <div className="flex items-center gap-2 mb-4">
+            <svg className={`w-5 h-5 ${p.textMuted}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.429 9.75L2.25 12l4.179 2.25m0-4.5l5.571 3 5.571-3m-11.142 0L2.25 7.5 12 2.25l9.75 5.25-4.179 2.25m0 0L21.75 12l-4.179 2.25m0 0l4.179 2.25L12 21.75 2.25 16.5l4.179-2.25m11.143 0l-5.571 3-5.571-3" />
+            </svg>
             <h2 className={`text-lg font-semibold ${p.textDark}`}>Felületcsomag</h2>
           </div>
           <p className={`text-xs ${p.textMuted} mb-4`}>
-            Válaszd ki, milyen vizuális felületet használjon az alkalmazás. A választás a böngészőben tárolódik, és nem érinti az ügyfelek adataihoz való hozzáférést.
+            Válaszd ki a kívánt vizuális stílust. A beállítás a böngészőben tárolódik, és nem befolyásolja az ügyféladatokhoz való hozzáférést.
           </p>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {UI_PACKS.map((pack) => {
               const selected = pack.id === uiPack;
               return (
@@ -143,18 +156,31 @@ function SettingsPageContent() {
                   key={pack.id}
                   type="button"
                   onClick={() => setUiPack(pack.id)}
-                  className={`settings-ui-pack-option w-full text-left border px-3 py-3 transition-colors ${
+                  className={`settings-ui-pack-option w-full text-left border rounded-lg p-4 transition-all ${
                     selected
-                      ? `${p.accent} border-cyan-400/50 ${p.accentBg}`
+                      ? `${p.accent} border-cyan-400/50 ${p.accentBg} shadow-sm`
                       : `${p.border} ${p.bgCard} ${p.bgHover}`
                   }`}
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className={`text-sm font-medium ${p.textDark}`}>{pack.label}</p>
-                      <p className={`text-[11px] ${p.textMuted} mt-1`}>{pack.description}</p>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className={`text-sm font-semibold ${p.textDark}`}>{pack.label}</p>
+                        {selected && (
+                          <span className={`text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full ${p.badge}`}>
+                            Aktív
+                          </span>
+                        )}
+                      </div>
+                      <p className={`text-[11px] ${p.textMuted}`}>{pack.description}</p>
                     </div>
-                    {selected && <span className={`text-[10px] uppercase tracking-[0.2em] ${p.accent}`}>Aktív</span>}
+                    <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${
+                      selected ? `border-cyan-400 ${p.accent}` : `border-${p.border}`
+                    }`}>
+                      {selected && (
+                        <div className={`w-full h-full rounded-full ${p.accent}`} />
+                      )}
+                    </div>
                   </div>
                 </button>
               );
@@ -163,17 +189,26 @@ function SettingsPageContent() {
         </section>
         
         {/* Storage Scope Note */}
-        <div className={`${p.bgSection} border ${p.border} p-4`}>
-          <p className={`text-xs ${p.textMuted}`}>
-            <strong className={p.text}>A beállítások csak ebben a böngészőben tárolódnak.</strong> 
-            {' '}Nem szinkronizálódnak a fiókoddal vagy más eszközökkel.
-          </p>
+        <div className={`${p.bgSection} border ${p.border} rounded p-4`}>
+          <div className="flex items-start gap-3">
+            <svg className={`w-4 h-4 ${p.textMuted} flex-shrink-0 mt-0.5`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+            </svg>
+            <div>
+              <p className={`text-xs font-medium ${p.textDark}`}>
+                Csak helyi tárolás
+              </p>
+              <p className={`text-[11px] ${p.textMuted} mt-1`}>
+                A beállítások nem szinkronizálódnak a fiókoddal vagy más eszközökkel.
+              </p>
+            </div>
+          </div>
         </div>
         
         {/* Save indicator */}
         {isSaving && (
           <p className="text-xs text-[#059669] mt-4 animate-pulse">
-            ✓ Saved
+            ✓ Elmentve
           </p>
         )}
       </div>
