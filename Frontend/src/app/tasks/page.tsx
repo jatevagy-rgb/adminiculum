@@ -200,6 +200,11 @@ function TasksPageContent() {
     [tasks, selectedTaskId]
   );
 
+  const selectedCreateCase = useMemo(
+    () => cases.find((caseItem) => caseItem.id === createData.caseId) ?? null,
+    [cases, createData.caseId]
+  );
+
   useEffect(() => {
     const loadSummaryAndCollaborators = async () => {
       if (!selectedTask?.case?.id) {
@@ -341,8 +346,10 @@ function TasksPageContent() {
           {isLoading ? (
             <div className="py-10 text-center text-xs text-[#7B776D]">Feladatok betöltése...</div>
           ) : filteredTasks.length === 0 ? (
-            <div className="py-10 text-center text-xs text-[#7B776D] border border-dashed border-[#DDD7CA]">
-              A szűrésnek megfelelő feladat nem található.
+            <div className="py-10 text-center text-xs text-[#7B776D] border border-dashed border-[#DDD7CA] space-y-1">
+              <p>Nincs megjeleníthető feladat.</p>
+              <p>Új feladat létrehozásához válassz ügyet, majd add meg a feladat címét és határidejét.</p>
+              <p>A feladatok ügyhöz kapcsolódnak; az ügyből következik az ügyfélkörnyezet.</p>
             </div>
           ) : (
             <div className="border border-[#DDD7CA] bg-white overflow-hidden">
@@ -552,6 +559,14 @@ function TasksPageContent() {
                     </option>
                   ))}
                 </select>
+                <span className="mt-1 block text-[10px] text-[#9C9890]">
+                  Az ügy kiválasztása határozza meg az ügyfélkörnyezetet.
+                </span>
+                {selectedCreateCase?.clientName && (
+                  <span className="mt-1 block text-[10px] font-semibold text-[#514D45]">
+                    Kapcsolt ügyfél: {selectedCreateCase.clientName}
+                  </span>
+                )}
               </label>
 
               <label className="block text-xs text-[#7B776D]">

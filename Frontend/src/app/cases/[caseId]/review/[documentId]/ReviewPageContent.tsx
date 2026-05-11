@@ -484,6 +484,7 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
             <span className={`material-symbols-outlined text-2xl ${isSignal ? "text-emerald-400" : "text-emerald-600"}`} style={{ fontVariationSettings: "'FILL' 1" }}>task_alt</span>
             <div className="flex-1 min-w-0">
               <h3 className={`text-sm font-semibold mb-1 ${pal.text}`}>Következő lépés: Feladat létrehozása</h3>
+              <p className={`text-[11px] mb-3 ${pal.label}`}>Az így létrehozott feladat az aktuális ügyhöz kapcsolódik.</p>
               <div className={`rounded-lg p-3 mb-3 ${isSignal ? "bg-[#0B1220] border border-[#1E293B]" : "bg-slate-50 border border-[#E2E8F0]"}`}>
                 <p className={`text-[11px] font-bold mb-1 ${suggestedTask.priority === "URGENT" ? "text-red-400" : suggestedTask.priority === "HIGH" ? "text-amber-400" : pal.label}`}>{suggestedTask.priority} · {suggestedTask.type}</p>
                 <p className={`text-sm font-semibold ${pal.text}`}>{suggestedTask.title}</p>
