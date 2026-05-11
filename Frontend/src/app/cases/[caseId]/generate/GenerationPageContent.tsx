@@ -279,6 +279,9 @@ export default function GenerationPageContent({ params }: GenerationPageProps) {
   const family = familyOverride === "auto" ? "sale_purchase" : familyOverride;
   const schema = useMemo(() => DOCUMENT_FAMILIES[family as DocumentFamilyId] ?? DOCUMENT_FAMILIES.sale_purchase, [family]);
 
+  const isLitigationCase = (caseData?.matterType || "").toUpperCase() === "LITIGATION";
+  const familyLabel = schema.label;
+
   const { fields: schemaFields } = schema;
   const fieldMap = useMemo(() => {
     const map: Record<string, (typeof schemaFields)[0]> = {};
@@ -794,7 +797,19 @@ export default function GenerationPageContent({ params }: GenerationPageProps) {
 
   const signalCenterContent = (
     <div className="flex-1 overflow-y-auto">
-      {activeSection === "bundle" ? (
+      {isLitigationCase ? (
+        <div className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`text-[9px] uppercase tracking-[0.35em] px-2 py-1 ${isSignalTiles ? "bg-[#16253D] text-slate-400 border border-[#1E293B]" : "bg-[#ECE6DA] text-[#7B776D]"}`}>Case Document Preparation</span>
+              </div>
+              <h1 className={`text-xl font-serif ${p.text}`}>Dokumentum-előkészítés</h1>
+              <p className={`text-[10px] mt-1 ${p.textMuted}`}>Ehhez a munkafolyamathoz még nincs bekötött generálási űrlap. A clause-editor fogja kezelni.</p>
+            </div>
+          </div>
+        </div>
+      ) : activeSection === "bundle" ? (
         <div className="p-6 space-y-4">
           {/* Compact header row */}
           <div className="flex items-center justify-between">
@@ -803,7 +818,7 @@ export default function GenerationPageContent({ params }: GenerationPageProps) {
                 <span className={`text-[9px] uppercase tracking-[0.35em] px-2 py-1 ${isSignalTiles ? "bg-[#16253D] text-slate-400 border border-[#1E293B]" : "bg-[#ECE6DA] text-[#7B776D]"}`}>Case Document Preparation</span>
                 <span className={`text-[9px] uppercase tracking-[0.25em] px-2 py-1 border ${isSignalTiles ? "bg-[#0F172A] text-slate-400 border-[#1E293B]" : "bg-[#FEF9E7] text-[#1F2821] border-[#E6D39A]"}`}>{selectedCount} selected</span>
               </div>
-              <h1 className={`text-xl font-serif ${p.text}`}>{schema.label}</h1>
+              <h1 className={`text-xl font-serif ${p.text}`}>{familyLabel}</h1>
             </div>
           </div>
 
@@ -837,10 +852,10 @@ export default function GenerationPageContent({ params }: GenerationPageProps) {
         </div>
       ) : (
         <div className="p-6 space-y-4">
-          <div>
-            <h1 className={`text-lg font-serif ${p.text}`}>{readinessSections.find((s) => s.id === activeSection)?.label || activeSection}</h1>
-            <p className={`text-[10px] mt-0.5 ${p.textMuted}`}>{schema.label} · Section {readinessSections.findIndex((s) => s.id === activeSection) + 1} of {readinessSections.length}</p>
-          </div>
+            <div>
+              <h1 className={`text-lg font-serif ${p.text}`}>{readinessSections.find((s) => s.id === activeSection)?.label || activeSection}</h1>
+              <p className={`text-[10px] mt-0.5 ${p.textMuted}`}>{familyLabel} · Section {readinessSections.findIndex((s) => s.id === activeSection) + 1} of {readinessSections.length}</p>
+            </div>
           <SectionBlock title={readinessSections.find((s) => s.id === activeSection)?.label || ""} subtitle={`Family: ${schema.id} · Document: ${bundleDocs[activeDocumentId] || activeDocumentId}`} uiPack={uiPack}>
             <div className="space-y-3">
               {schema.fields.filter((field) => field.section === activeSection).filter((field) => !field.dependsOnToggle || clauseToggles[field.dependsOnToggle]).map((field) => (
@@ -1058,11 +1073,19 @@ export default function GenerationPageContent({ params }: GenerationPageProps) {
 
   const insightCenterContent = (
     <div className="flex-1 overflow-y-auto">
-      {activeSection === "bundle" ? (
+      {isLitigationCase ? (
         <div className="p-8 max-w-3xl mx-auto space-y-6">
           <div>
             <span className={`text-[9px] uppercase tracking-[0.35em] px-3 py-1 ${isSignalTiles ? "bg-[#16253D] text-slate-400" : "bg-[#ECE6DA] text-[#7B776D]"}`}>Dokumentum-előkészítés</span>
-            <h1 className={`text-3xl font-serif mt-4 ${p.text}`}>{schema.label}</h1>
+            <h1 className={`text-3xl font-serif mt-4 ${p.text}`}>Dokumentum-előkészítés</h1>
+            <p className={`text-xs mt-2 leading-relaxed ${p.textMuted}`}>Ehhez a munkafolyamathoz még nincs bekötött generálási űrlap. A későbbi clause-editor alapú szerkesztő fogja kezelni ezt a dokumentumtípust.</p>
+          </div>
+        </div>
+      ) : activeSection === "bundle" ? (
+        <div className="p-8 max-w-3xl mx-auto space-y-6">
+          <div>
+            <span className={`text-[9px] uppercase tracking-[0.35em] px-3 py-1 ${isSignalTiles ? "bg-[#16253D] text-slate-400" : "bg-[#ECE6DA] text-[#7B776D]"}`}>Dokumentum-előkészítés</span>
+            <h1 className={`text-3xl font-serif mt-4 ${p.text}`}>{familyLabel}</h1>
             <p className={`text-xs mt-2 leading-relaxed ${p.textMuted}`}>Válassza ki a generálandó dokumentumokat. Minden dokumentum sablonja automatikusan felismerésre kerül.</p>
           </div>
 
@@ -1099,7 +1122,7 @@ export default function GenerationPageContent({ params }: GenerationPageProps) {
         <div className="p-8 max-w-3xl mx-auto space-y-6">
           <div>
             <h1 className={`text-2xl font-serif ${p.text}`}>{readinessSections.find((s) => s.id === activeSection)?.label || activeSection}</h1>
-            <p className={`text-xs mt-1 ${p.textMuted}`}>{schema.label} · {readinessSections.findIndex((s) => s.id === activeSection) + 1}. szakasz a {readinessSections.length} közül</p>
+            <p className={`text-xs mt-1 ${p.textMuted}`}>{familyLabel} · {readinessSections.findIndex((s) => s.id === activeSection) + 1}. szakasz a {readinessSections.length} közül</p>
           </div>
           <SectionBlock title={readinessSections.find((s) => s.id === activeSection)?.label || ""} subtitle={`Család: ${schema.id} · Dokumentum: ${bundleDocs[activeDocumentId] || activeDocumentId}`} uiPack={uiPack}>
             <div className="space-y-4">
