@@ -331,6 +331,7 @@ export async function anonymizeDocument(params: {
       data: {
         caseId: sourceCaseId,
         userId: params.userId,
+        eventType: 'ANONYMIZATION_COMPLETED',
         type: TimelineType.DOCUMENT_ANONYMIZED_FOR_AI,
         payload: {
           documentId: params.documentId,
@@ -780,6 +781,7 @@ export async function saveRehydratedResultToDocument(params: {
       data: {
         caseId: anonDoc.caseId,
         userId: params.userId,
+        eventType: 'DOCUMENT_UPLOADED',
         type: 'DOCUMENT_UPLOADED' as any,
         payload: {
           documentId: document.id,
@@ -865,6 +867,7 @@ export async function importAIResponse(params: {
         data: {
           caseId: anonDoc.caseId,
           userId: params.userId,
+          eventType: 'ANONYMIZATION_COMPLETED',
           type: 'ANONYMIZATION_COMPLETED',
           payload: {
             anonymousDocId: params.anonymousDocId,
