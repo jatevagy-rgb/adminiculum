@@ -186,6 +186,20 @@ export async function anonymizeDocument(params: {
       }
     }
 
+    // Add UI-provided metadata as known-party candidates. These values are already
+    // user-entered context for this anonymization request; do not log their content.
+    if (params.metadata) {
+      if (params.metadata.clientName && params.metadata.clientName.trim().length > 2) {
+        itemsToRedact.push(params.metadata.clientName.trim());
+      }
+      if (params.metadata.clientRole && params.metadata.clientRole.trim().length > 2) {
+        itemsToRedact.push(params.metadata.clientRole.trim());
+      }
+      if (params.metadata.counterparty && params.metadata.counterparty.trim().length > 2) {
+        itemsToRedact.push(params.metadata.counterparty.trim());
+      }
+    }
+
     // Remove duplicates
     const uniqueItems = [...new Set(itemsToRedact)].filter(i => i && i.length > 2);
 
@@ -279,6 +293,15 @@ export async function anonymizeDocument(params: {
         return replacement;
       });
     }
+
+    console.info('[Anonymize] Redaction summary', {
+      documentId: params.documentId,
+      sourceType,
+      redactionLevel: params.redactionLevel || 'FULL',
+      candidateCount: uniqueItems.length,
+      redactedCount: redactedItems.length,
+      sourceTextProvided: providedSourceText.length > 0,
+    });
 
     // 6. Create AnonymousDocument record
     // Determine caseId and sourceName based on source type

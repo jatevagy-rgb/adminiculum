@@ -488,6 +488,9 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientName, 
                     </button>
                   ))}
                 </div>
+                <p className="mt-2 text-[10px] text-[#434843]/60">
+                  Az anonimizálás jelenleg pontos ismert értékeket cserél: a tárolt ügyfél-/profiladatokat, valamint az itt megadott ügyfél- és ellenoldali adatokat. Nem végez automatikus AI/NER alapú felismerést ismeretlen e-mailekre, telefonszámokra, dátumokra, címekre vagy azonosítókra.
+                </p>
               </div>
 
               {/* Error Message */}
