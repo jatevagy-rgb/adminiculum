@@ -14,6 +14,7 @@ import {
   type ContractTemplateItem,
   type ContractGenerateResponse,
   type CaseListItem,
+  type CaseContractListItem,
 } from "@/lib/api";
 import { useUiPack } from "@/lib/uiPack";
 import { WorkspaceLayout, Panel, Card, SectionBlock } from "@/components/ui/WorkspacePrimitives";
@@ -238,9 +239,40 @@ export default function GenerationPageContent({ params }: GenerationPageProps) {
   const [bundleResults, setBundleResults] = useState<Partial<Record<BundleDocId, BundleGenerationResult>>>({});
   const [resolvedGenerationCaseId] = useState<string>(resolvedParams.caseId);
   const [familyOverride, setFamilyOverride] = useState<"auto" | DocumentFamilyId>("auto");
-  const [anonymizeModalContract, setAnonymizeModalContract] = useState<{ id: string; title?: string; templateName?: string; revisionNumber?: number; status: string } | null>(null);
+  const [anonymizeModalContract, setAnonymizeModalContract] = useState<CaseContractListItem | null>(null);
   const [rehydrateDoc, setRehydrateDoc] = useState<{ id: string; name: string } | null>(null);
   const [rehydrateModalOpen, setRehydrateModalOpen] = useState(false);
+
+  const handleAnonymize = useCallback(() => {
+    if (!generatedDoc?.document?.id) return;
+    const doc = generatedDoc.document;
+    setAnonymizeModalContract({
+      id: doc.id,
+      title: doc.title,
+      templateName: doc.templateId,
+      revisionNumber: doc.revisionNumber,
+      status: doc.status || "GENERATED",
+      category: "",
+      fileName: doc.fileName,
+      generatedAt: doc.generatedAt,
+    });
+  }, [generatedDoc]);
+
+  const handleAnonymizeSuccess = useCallback((result: AnonymizeResult) => {
+    setAnonymizeModalContract(null);
+    setRehydrateDoc({ id: result.anonymizedDocumentId, name: result.name });
+    setRehydrateModalOpen(true);
+  }, []);
+
+  const handleRehydrateSuccess = useCallback(() => {
+    setRehydrateModalOpen(false);
+    setRehydrateDoc(null);
+  }, []);
+
+  const handleRehydrateSaveSuccess = useCallback((/* _documentId: string, _fileName: string */) => {
+    setRehydrateModalOpen(false);
+    setRehydrateDoc(null);
+  }, []);
 
   // ─── DERIVED VALUES (declaration order matters for dependency tracking) ────
 
@@ -1209,6 +1241,14 @@ export default function GenerationPageContent({ params }: GenerationPageProps) {
               ))}
             </div>
           )}
+          {generatedDoc?.document?.id && (
+            <button
+              onClick={handleAnonymize}
+              className={`w-full py-2.5 px-4 rounded-lg text-xs font-semibold border transition-colors ${isSignalTiles ? "border-emerald-700 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-900/60" : "border-[#23472F] bg-[#e2ede5] text-[#23472F] hover:bg-[#d4e8d7]"}`}
+            >
+              Anonimizálás
+            </button>
+          )}
         </SectionBlock>
       </div>
     </div>
@@ -1216,15 +1256,73 @@ export default function GenerationPageContent({ params }: GenerationPageProps) {
 
   // ─── RETURN — conditional layout based on pack
   if (isSignalTiles) {
-    return (
-      <WorkspaceLayout uiPack={uiPack} left={signalLeftRail} right={signalRightRail} data-surface="generate">
-        {signalCenterContent}
-      </WorkspaceLayout>
-    );
-  }
+  return (
+    <WorkspaceLayout uiPack={uiPack} left={signalLeftRail} right={signalRightRail} data-surface="generate">
+      {signalCenterContent}
+
+      {/* Anonymize Modal */}
+      {anonymizeModalContract && (
+        <AnonymizeModal
+          isOpen={!!anonymizeModalContract}
+          onClose={() => setAnonymizeModalContract(null)}
+          contract={anonymizeModalContract}
+          caseId={resolvedGenerationCaseId}
+          clientName={caseData?.clientName ?? undefined}
+          clientRole={caseData?.clientRole ?? undefined}
+          onSuccess={handleAnonymizeSuccess}
+        />
+      )}
+
+      {/* Rehydrate Modal */}
+      {rehydrateDoc && (
+        <RehydrateModal
+          isOpen={rehydrateModalOpen}
+          onClose={() => {
+            setRehydrateModalOpen(false);
+            setRehydrateDoc(null);
+          }}
+          anonymousDocId={rehydrateDoc.id}
+          anonymousDocName={rehydrateDoc.name}
+          caseId={resolvedGenerationCaseId}
+          onSuccess={handleRehydrateSuccess}
+          onSaveSuccess={handleRehydrateSaveSuccess}
+        />
+      )}
+    </WorkspaceLayout>
+  );
+}
   return (
     <WorkspaceLayout uiPack={uiPack} left={insightLeftRail} right={insightRightRail} data-surface="generate">
       {insightCenterContent}
+
+      {/* Anonymize Modal */}
+      {anonymizeModalContract && (
+        <AnonymizeModal
+          isOpen={!!anonymizeModalContract}
+          onClose={() => setAnonymizeModalContract(null)}
+          contract={anonymizeModalContract}
+          caseId={resolvedGenerationCaseId}
+          clientName={caseData?.clientName ?? undefined}
+          clientRole={caseData?.clientRole ?? undefined}
+          onSuccess={handleAnonymizeSuccess}
+        />
+      )}
+
+      {/* Rehydrate Modal */}
+      {rehydrateDoc && (
+        <RehydrateModal
+          isOpen={rehydrateModalOpen}
+          onClose={() => {
+            setRehydrateModalOpen(false);
+            setRehydrateDoc(null);
+          }}
+          anonymousDocId={rehydrateDoc.id}
+          anonymousDocName={rehydrateDoc.name}
+          caseId={resolvedGenerationCaseId}
+          onSuccess={handleRehydrateSuccess}
+          onSaveSuccess={handleRehydrateSaveSuccess}
+        />
+      )}
     </WorkspaceLayout>
   );
 }
