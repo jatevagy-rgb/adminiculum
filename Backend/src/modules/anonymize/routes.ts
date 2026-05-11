@@ -55,7 +55,10 @@ router.post('/documents/:documentId/anonymize', authenticate, requireAnonymizeEn
     res.json(result);
   } catch (error) {
     console.error('Anonymize error:', error);
-    res.status(500).json({ error: 'Hiba az anonimizálás során' });
+    res.status(500).json({
+      error: 'Hiba az anonimizálás során',
+      details: error instanceof Error ? error.message : String(error),
+    });
   }
 });
 

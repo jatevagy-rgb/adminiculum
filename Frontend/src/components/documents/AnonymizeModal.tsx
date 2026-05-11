@@ -188,7 +188,17 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientName, 
         setError(response.error || "Anonymization failed");
       }
     } catch (err) {
-      setError("Failed to anonymize document");
+      const e = err as any;
+      const rd = e?.response?.data;
+      const msg =
+        (typeof rd?.details === 'string' && rd.details) ||
+        (typeof rd?.message === 'string' && rd.message) ||
+        (typeof rd?.error === 'string' && rd.error) ||
+        (typeof e?.details === 'string' && e.details) ||
+        (typeof e?.message === 'string' && e.message) ||
+        (typeof e?.error === 'string' && e.error) ||
+        "Failed to anonymize document";
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
