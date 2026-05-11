@@ -366,7 +366,13 @@ export async function anonymizeDocument(params: {
 
   } catch (error) {
     console.error('Anonymize error:', error);
-    return { success: false, error: 'Hiba az anonimizálás során' };
+    const safeMessage = error instanceof Error ? error.message : String(error);
+    return {
+      success: false,
+      error: safeMessage
+        ? `Hiba az anonimizálás során: ${safeMessage}`
+        : 'Hiba az anonimizálás során',
+    };
   }
 }
 
