@@ -235,6 +235,9 @@ app.use('/api/v1/contracts', contractsRoutes);
 import reviewNotesRoutes from './modules/review-notes/routes';
 app.use('/api/v1/contracts', reviewNotesRoutes);
 
+import legalAnalysesRoutes from './modules/legal-analyses/routes';
+app.use('/api/v1', legalAnalysesRoutes);
+
 import documentsRoutes from './modules/documents/routes';
 app.use('/api/v1/documents', documentsRoutes);
 

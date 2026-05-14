@@ -434,6 +434,7 @@ model Case {
   timelineEvents  TimelineEvent[]
   comments        Comment[]
   collaborators   CaseCollaborator[]
+  legalAnalyses   LegalAnalysis[]
 
   @@map("cases")
 }
@@ -940,6 +941,66 @@ model ContractGeneration {
   supersededAt    DateTime?
 
   @@map("contract_generations")
+}
+
+// ============================================================================
+// LEGAL ANALYSIS PERSISTENCE
+// ============================================================================
+// Lawyer-reviewable legal analyses pasted from external AI tools or entered
+// manually. documentId is intentionally flexible: the source may be an uploaded
+// Document, a generated ContractGeneration, or an AnonymousDocument.
+// ============================================================================
+
+model LegalAnalysis {
+  id                            String                          @id @default(uuid())
+  caseId                        String
+  documentId                    String?
+  documentSourceType            LegalAnalysisSourceDocumentType @default(DOCUMENT)
+
+  title                         String
+  analysisText                  String
+  status                        LegalAnalysisStatus             @default(DRAFT)
+  sourceType                    LegalAnalysisSourceType         @default(PASTED_AI_OUTPUT)
+  aiToolName                    String?
+  anonymizedInputSnapshot       String?
+
+  riskMatrixDetected            Boolean                         @default(false)
+  missingDataDetected           Boolean                         @default(false)
+  suggestedChangesDetected      Boolean                         @default(false)
+  lawyerDecisionPointsDetected  Boolean                         @default(false)
+
+  createdById                   String?
+  reviewedById                  String?
+  reviewedAt                    DateTime?
+
+  createdAt                     DateTime                        @default(now())
+  updatedAt                     DateTime                        @updatedAt
+
+  case                          Case                            @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, updatedAt])
+  @@index([documentId, updatedAt])
+  @@map("legal_analyses")
+}
+
+enum LegalAnalysisStatus {
+  DRAFT
+  CANDIDATE_REVIEW
+  LAWYER_REVIEW
+  READY_FOR_APPROVAL
+  APPROVED
+  ARCHIVED
+}
+
+enum LegalAnalysisSourceType {
+  PASTED_AI_OUTPUT
+  MANUAL
+}
+
+enum LegalAnalysisSourceDocumentType {
+  DOCUMENT
+  CONTRACT_GENERATION
+  ANONYMOUS_DOCUMENT
 }
 
 // ============================================================================

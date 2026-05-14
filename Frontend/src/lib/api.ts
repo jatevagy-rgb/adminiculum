@@ -679,6 +679,100 @@ export async function getDocumentClassification(documentId: string): Promise<Rec
   return fetchApi<Record<string, unknown>>(`/documents/${documentId}/classification`);
 }
 
+export type LegalAnalysisStatus =
+  | 'DRAFT'
+  | 'CANDIDATE_REVIEW'
+  | 'LAWYER_REVIEW'
+  | 'READY_FOR_APPROVAL'
+  | 'APPROVED'
+  | 'ARCHIVED';
+
+export type LegalAnalysisSourceType = 'PASTED_AI_OUTPUT' | 'MANUAL';
+
+export type LegalAnalysisSourceDocumentType = 'DOCUMENT' | 'CONTRACT_GENERATION' | 'ANONYMOUS_DOCUMENT';
+
+export interface LegalAnalysisRecord {
+  id: string;
+  caseId: string;
+  documentId: string | null;
+  documentSourceType: LegalAnalysisSourceDocumentType;
+  title: string;
+  analysisText: string;
+  status: LegalAnalysisStatus;
+  sourceType: LegalAnalysisSourceType;
+  aiToolName: string | null;
+  anonymizedInputSnapshot: string | null;
+  riskMatrixDetected: boolean;
+  missingDataDetected: boolean;
+  suggestedChangesDetected: boolean;
+  lawyerDecisionPointsDetected: boolean;
+  createdById: string | null;
+  reviewedById: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateLegalAnalysisPayload {
+  caseId: string;
+  documentSourceType?: LegalAnalysisSourceDocumentType;
+  title?: string;
+  analysisText: string;
+  status?: LegalAnalysisStatus;
+  sourceType?: LegalAnalysisSourceType;
+  aiToolName?: string | null;
+  anonymizedInputSnapshot?: string | null;
+}
+
+export interface UpdateLegalAnalysisPayload {
+  title?: string;
+  analysisText?: string;
+  status?: LegalAnalysisStatus;
+  aiToolName?: string | null;
+  anonymizedInputSnapshot?: string | null;
+}
+
+export async function listDocumentLegalAnalyses(
+  documentId: string,
+  params?: { caseId?: string; documentSourceType?: LegalAnalysisSourceDocumentType },
+): Promise<LegalAnalysisRecord[]> {
+  const query = new URLSearchParams();
+  if (params?.caseId) query.set('caseId', params.caseId);
+  if (params?.documentSourceType) query.set('documentSourceType', params.documentSourceType);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return fetchApi<LegalAnalysisRecord[]>(`/documents/${encodeURIComponent(documentId)}/legal-analyses${suffix}`);
+}
+
+export async function createDocumentLegalAnalysis(
+  documentId: string,
+  payload: CreateLegalAnalysisPayload,
+): Promise<LegalAnalysisRecord> {
+  return fetchApi<LegalAnalysisRecord>(`/documents/${encodeURIComponent(documentId)}/legal-analyses`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getLegalAnalysis(id: string): Promise<LegalAnalysisRecord> {
+  return fetchApi<LegalAnalysisRecord>(`/legal-analyses/${encodeURIComponent(id)}`);
+}
+
+export async function updateLegalAnalysis(
+  id: string,
+  payload: UpdateLegalAnalysisPayload,
+): Promise<LegalAnalysisRecord> {
+  return fetchApi<LegalAnalysisRecord>(`/legal-analyses/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteLegalAnalysis(id: string): Promise<void> {
+  return fetchApi<void>(`/legal-analyses/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
 // Minimal structured counterparty input for extra-party context in anonymization
 interface CounterpartyInput {
   name: string;
