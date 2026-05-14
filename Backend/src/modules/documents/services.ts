@@ -16,6 +16,12 @@ import {
 
 const DEFAULT_FOLDER: SharePointFolderType = 'Drafts';
 
+const normalizeSharePointItemId = (itemId: unknown): string | null => {
+  if (typeof itemId !== 'string') return null;
+  const trimmed = itemId.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
 // Map document types to SpFolder enum values
 const FOLDER_MAP: Record<string, string> = {
   'Contracts': 'DRAFTS',
@@ -76,13 +82,14 @@ class DocumentsService {
       const storedFileName = uploadResult.item?.name || '';
       const documentTitle = (input as any).title || '';
       const nameField = uploadedFileName || storedFileName || documentTitle || `Uploaded document - ${new Date().toISOString()}`;
+      const sharePointItemId = normalizeSharePointItemId(uploadResult.item.id);
       const document = await prisma.document.create({
         data: {
           name: nameField,
           clientId: caseData.clientId,
           category: (input.documentType as any) || 'OTHER',
           caseId: input.caseId,
-          spItemId: uploadResult.item.id,
+          spItemId: sharePointItemId,
           spDriveId: '',
           spPath: uploadResult.webUrl || '',
           fileName: uploadedFileName || storedFileName || null,
@@ -104,7 +111,7 @@ class DocumentsService {
             documentId: document.id,
             fileName: input.fileName,
             documentType: input.documentType,
-            spItemId: uploadResult.item.id,
+            spItemId: sharePointItemId,
             spPath: uploadResult.webUrl,
             folder: folderType,
             version: uploadResult.version

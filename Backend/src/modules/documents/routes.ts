@@ -4,6 +4,7 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import documentsService from './services';
 import { authenticate } from '../../middleware/auth';
 import { prisma } from '../../prisma/prisma.service';
@@ -96,7 +97,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
 
     res.status(201).json(result);
   } catch (error) {
-    console.error('Create document error:', error);
+    console.error('Create document error:', error instanceof Error ? error.message : error);
     const message = error instanceof Error ? error.message : 'Internal server error';
     if (message === 'Case not found') {
       res.status(404).json({
@@ -114,10 +115,18 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
       });
       return;
     }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      res.status(409).json({
+        status: 409,
+        code: 'DOCUMENT_UPLOAD_CONFLICT',
+        message: 'Dokumentum feltöltése sikertelen. Ütköző dokumentumazonosító keletkezett.'
+      });
+      return;
+    }
     res.status(500).json({ 
       status: 500, 
       code: 'INTERNAL_ERROR', 
-      message
+      message: 'Dokumentum feltöltése sikertelen.'
     });
   }
 });

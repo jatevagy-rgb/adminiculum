@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, use, useEffect, useCallback, useMemo } from "react";
+import { useState, use, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import {
   getCaseContracts,
   getCases,
   getCaseTimeline,
+  getCaseDocuments,
   downloadContract,
+  downloadDocument,
+  uploadCaseDocument,
   uploadGeneratedContractToSharePoint,
   createContractGenerationRevision,
   finalizeContractGeneration,
@@ -15,6 +18,7 @@ import {
   getCommunications,
   createCommunication,
   type CaseContractListItem,
+  type DocumentItem,
   type TimelineEventItem,
   type CommunicationItem,
 } from "@/lib/api";
@@ -150,6 +154,21 @@ type DocumentLedgerPageProps = {
   params: Promise<{ caseId: string }>;
 };
 
+type SelectedLedgerItem =
+  | { kind: 'uploaded'; item: DocumentItem }
+  | { kind: 'generated'; item: CaseContractListItem };
+
+const fileToBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      resolve(result.includes(',') ? result.split(',')[1] : result);
+    };
+    reader.onerror = () => reject(reader.error || new Error('File read failed'));
+    reader.readAsDataURL(file);
+  });
+
 export default function WrappedDocumentLedgerPage({ params }: DocumentLedgerPageProps) {
   return (
     <AuthenticatedApp section="case-detail">
@@ -186,6 +205,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   };
 
   const [contracts, setContracts] = useState<CaseContractListItem[]>([]);
+  const [uploadedDocuments, setUploadedDocuments] = useState<DocumentItem[]>([]);
   const [caseRecord, setCaseRecord] = useState<{
     id: string;
     caseNumber: string;
@@ -198,8 +218,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   } | null>(null);
   const [timeline, setTimeline] = useState<TimelineEventItem[]>([]);
   const [selectedContract, setSelectedContract] = useState<CaseContractListItem | null>(null);
+  const [selectedLedgerItem, setSelectedLedgerItem] = useState<SelectedLedgerItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [isUploadingToSP, setIsUploadingToSP] = useState<string | null>(null);
   const [isCreatingRevision, setIsCreatingRevision] = useState<string | null>(null);
   const [isFinalizing, setIsFinalizing] = useState<string | null>(null);
@@ -207,6 +229,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [anonymizeModalContract, setAnonymizeModalContract] = useState<CaseContractListItem | null>(null);
   const [rehydrateModalDoc, setRehydrateModalDoc] = useState<{ id: string; name: string } | null>(null);
   const [rehydrateModalOpen, setRehydrateModalOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Document notes state (reusing Communication model with type: NOTE)
   const [documentNotes, setDocumentNotes] = useState<CommunicationItem[]>([]);
@@ -250,14 +273,25 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     try {
       setIsLoading(true);
       // Use caseRecord.id (CUID) — NOT resolvedParams.caseId which may be a caseNumber string
-      const [contractsData, timelineData] = await Promise.all([
+      const [contractsData, uploadedDocsData, timelineData] = await Promise.all([
         getCaseContracts(caseRecord.id).catch(() => []),
+        getCaseDocuments(caseRecord.id).catch(() => []),
         getCaseTimeline(caseRecord.id).catch(() => []),
       ]);
       setContracts(contractsData);
+      setUploadedDocuments(uploadedDocsData);
       setTimeline(timelineData);
-      // Auto-select first contract if available
-      if (contractsData.length > 0 && !selectedContract) {
+      // Auto-select uploaded documents first because this page is the case document workspace entry point.
+      if (!selectedLedgerItem) {
+        if (uploadedDocsData.length > 0) {
+          setSelectedLedgerItem({ kind: 'uploaded', item: uploadedDocsData[0] });
+          setSelectedContract(null);
+        } else if (contractsData.length > 0) {
+          setSelectedLedgerItem({ kind: 'generated', item: contractsData[0] });
+          setSelectedContract(contractsData[0]);
+        }
+      }
+      if (contractsData.length > 0 && !selectedContract && !selectedLedgerItem) {
         setSelectedContract(contractsData[0]);
       }
     } catch (err) {
@@ -265,7 +299,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [caseRecord?.id, selectedContract]);
+  }, [caseRecord?.id, selectedContract, selectedLedgerItem]);
 
   // Re-trigger loadData once caseRecord is resolved to CUID
   useEffect(() => {
@@ -292,6 +326,59 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setActionResult({ type: 'error', message: 'Letöltés sikertelen' });
     } finally {
       setIsDownloading(null);
+    }
+  };
+
+  const handleDownloadUploadedDocument = async (document: DocumentItem) => {
+    setIsDownloading(document.id);
+    try {
+      const blob = await downloadDocument(document.id);
+      const url = URL.createObjectURL(blob);
+      const a = globalThis.document.createElement('a');
+      a.href = url;
+      a.download = document.fileName || 'document';
+      globalThis.document.body.appendChild(a);
+      a.click();
+      globalThis.document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setActionResult({ type: 'success', message: 'Download started' });
+    } catch (err) {
+      console.error('Document download failed:', err);
+      setActionResult({ type: 'error', message: 'Letöltés sikertelen' });
+    } finally {
+      setIsDownloading(null);
+    }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !caseRecord?.id) return;
+
+    setIsUploading(true);
+    setActionResult(null);
+    try {
+      const base64 = await fileToBase64(file);
+      const uploaded = await uploadCaseDocument({
+        caseId: caseRecord.id,
+        fileName: file.name,
+        fileContentBase64: base64,
+        mimeType: file.type || 'application/octet-stream',
+        documentType: 'CLIENT_INPUT',
+        folder: 'CLIENT_INPUT',
+      });
+      const docs = await getCaseDocuments(caseRecord.id).catch(() => [uploaded]);
+      setUploadedDocuments(docs);
+      setSelectedLedgerItem({ kind: 'uploaded', item: uploaded });
+      setSelectedContract(null);
+      setActionResult({ type: 'success', message: 'Dokumentum feltöltve' });
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (err) {
+      console.error('Upload failed:', err);
+      setActionResult({ type: 'error', message: 'Dokumentum feltöltése sikertelen. Kérjük, próbáld újra később.' });
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -373,7 +460,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   };
 
   const handleGenerate = () => {
-    router.push(`/cases/${canonicalCaseId}/generate`);
+    router.push(`/cases/${canonicalCaseId}/generate/assembly`);
+  };
+
+  const handleLegacyGenerate = () => {
+    router.push(`/cases/${canonicalCaseId}/generate?family=sale_purchase`);
   };
 
   const handleAnonymize = (contract: CaseContractListItem) => {
@@ -401,6 +492,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     setRehydrateModalDoc(null);
   };
 
+  const selectedUploadedDocument = selectedLedgerItem?.kind === 'uploaded' ? selectedLedgerItem.item : null;
+  const selectedGeneratedContract = selectedLedgerItem?.kind === 'generated' ? selectedLedgerItem.item : selectedContract;
+
   // Load document notes when a contract is selected
   const loadDocumentNotes = useCallback(async (docId: string) => {
     setIsLoadingNotes(true);
@@ -418,7 +512,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
   // Handle adding a new note
   const handleAddNote = async () => {
-    if (!selectedContract || !newNoteContent.trim()) return;
+    if (!selectedGeneratedContract || !newNoteContent.trim()) return;
     setIsAddingNote(true);
     setNoteError(null);
     try {
@@ -426,7 +520,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
         type: 'NOTE',
         subject: newNoteSubject.trim() || '(no subject)',
         content: newNoteContent.trim(),
-        documentId: selectedContract.id,
+        documentId: selectedGeneratedContract.id,
         caseId: canonicalCaseId,
       });
       setDocumentNotes((prev) => [newNote, ...prev]);
@@ -439,14 +533,14 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     }
   };
 
-  // Load notes when selectedContract changes
+  // Load notes when a generated contract is selected.
   useEffect(() => {
-    if (selectedContract?.id) {
-      loadDocumentNotes(selectedContract.id);
+    if (selectedGeneratedContract?.id && !selectedUploadedDocument) {
+      loadDocumentNotes(selectedGeneratedContract.id);
     } else {
       setDocumentNotes([]);
     }
-  }, [selectedContract?.id, loadDocumentNotes]);
+  }, [selectedGeneratedContract?.id, selectedUploadedDocument, loadDocumentNotes]);
 
   const displayCaseId = caseRecord?.caseNumber || resolvedParams.caseId;
   const displayMatterName = (caseRecord?.title && caseRecord.title !== 'null' && caseRecord.title !== 'null - null') ? caseRecord.title : 'Document Ledger';
@@ -455,6 +549,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
   // Package health calculations
   const totalContracts = contracts.length;
+  const totalUploadedDocuments = uploadedDocuments.length;
+  const totalLedgerDocuments = totalContracts + totalUploadedDocuments;
   const approvedContracts = contracts.filter(c => c.status === 'APPROVED' || c.status === 'FINAL').length;
   const finalContracts = contracts.filter(c => c.isFinalRevision).length;
   const pendingReview = contracts.filter(c => c.status === 'IN_REVIEW' || c.status === 'SUBMITTED').length;
@@ -474,9 +570,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const completedChecklist = checklistItems.filter(i => i.status === 'FINAL' || i.status === 'APPROVED').length;
 
   const selectedFamily = useMemo(() => {
-    if (!selectedContract) return null;
-    return families.find((family) => family.items.some((item) => item.id === selectedContract.id)) || null;
-  }, [families, selectedContract]);
+    if (!selectedGeneratedContract) return null;
+    return families.find((family) => family.items.some((item) => item.id === selectedGeneratedContract.id)) || null;
+  }, [families, selectedGeneratedContract]);
 
   const sourceTitleMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -504,11 +600,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   };
 
   const previousVersionForSelected = useMemo(() => {
-    if (!selectedFamily || !selectedContract) return null;
-    const index = selectedFamily.items.findIndex((item) => item.id === selectedContract.id);
+    if (!selectedFamily || !selectedGeneratedContract) return null;
+    const index = selectedFamily.items.findIndex((item) => item.id === selectedGeneratedContract.id);
     if (index < 0) return null;
     return selectedFamily.items[index + 1] || null;
-  }, [selectedFamily, selectedContract]);
+  }, [selectedFamily, selectedGeneratedContract]);
 
   // Get contract status badge
   const getStatusBadge = (contract: CaseContractListItem) => {
@@ -556,10 +652,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
             Document Ledger
           </button>
           <button
-            onClick={() => router.push(`/cases/${canonicalCaseId}/generate`)}
+            onClick={handleGenerate}
             className={`w-full text-left px-3 py-2 text-xs font-semibold rounded transition-colors ${p.textDark} ${p.bgHover}`}
           >
-            Generate
+            Klauzula-építő
           </button>
           <button
             onClick={() => router.push(`/cases/${canonicalCaseId}/communications`)}
@@ -580,8 +676,17 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
             onClick={handleGenerate}
             className={`w-full ${p.accentBg} py-2 text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-colors`}
           >
-            + Generate New
+            Klauzula-alapú dokumentumépítő
           </button>
+          <button
+            onClick={handleLegacyGenerate}
+            className={`w-full mt-2 border ${p.border} ${p.textDark} py-2 text-xs font-bold uppercase tracking-widest ${p.bgHover} transition-colors`}
+          >
+            Régi adásvételi generátor
+          </button>
+          <p className={`text-[9px] ${p.textMuted} mt-1`}>
+            A klauzula-rendszer külön patchben lesz bekötve.
+          </p>
           <button
             onClick={handleBundleDownload}
             className={`w-full mt-2 border ${p.border} ${p.textDark} py-2 text-xs font-bold uppercase tracking-widest ${p.bgHover} transition-colors`}
@@ -649,13 +754,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     Document Set Status
                   </span>
                   <span className="text-sm font-['Newsreader'] italic">
-                    {completedChecklist} of {contracts.length} approved or final
+                    {completedChecklist} of {totalLedgerDocuments} approved or final
                   </span>
                 </div>
                 <div className={`h-1.5 w-full ${isSignalTiles ? 'bg-slate-700' : 'bg-[#eae8e3]'}`}>
                   <div
                     className={`h-full ${isSignalTiles ? 'bg-cyan-500' : 'bg-[#06190d]'}`}
-                    style={{ width: contracts.length > 0 ? `${(completedChecklist / Math.max(contracts.length, 1)) * 100}%` : '0%' }}
+                    style={{ width: totalLedgerDocuments > 0 ? `${(completedChecklist / Math.max(totalLedgerDocuments, 1)) * 100}%` : '0%' }}
                   ></div>
                 </div>
               </div>
@@ -670,7 +775,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 </div>
                 <div className="text-center">
                   <p className={`text-xl font-['Newsreader'] leading-none ${isSignalTiles ? 'text-red-400' : 'text-[#ba1a1a]'}`}>
-                    {Math.max(0, contracts.length - completedChecklist)}
+                    {Math.max(0, totalLedgerDocuments - completedChecklist)}
                   </p>
                   <p className={`text-[9px] uppercase tracking-tighter ${isSignalTiles ? 'text-red-400' : 'text-[#ba1a1a]'}`}>Open</p>
                 </div>
@@ -688,6 +793,17 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   Document Status List
                 </h3>
                 <ul className="space-y-4">
+                  {uploadedDocuments.map((doc) => (
+                    <li key={`uploaded-${doc.id}`} className="flex items-start gap-3">
+                      <span className={`material-symbols-outlined ${isSignalTiles ? 'text-cyan-400' : 'text-[#819684]'} text-lg`} data-icon="description">
+                        description
+                      </span>
+                      <div>
+                        <p className={`text-xs font-bold ${isSignalTiles ? 'text-slate-200' : 'text-[#06190d]'}`}>{doc.fileName || 'Untitled document'}</p>
+                        <p className={`text-[10px] uppercase ${p.textDark}`}>{doc.documentType || doc.folder || 'UPLOADED'}</p>
+                      </div>
+                    </li>
+                  ))}
                   {checklistItems.map((item) => (
                     <li key={item.id} className="flex items-start gap-3">
                       {item.status === 'FINAL' ? (
@@ -715,8 +831,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     </li>
                   ))}
                 </ul>
-                {contracts.length === 0 && (
-                  <p className={`text-[10px] ${p.textDark} italic mt-4`}>No documents generated yet</p>
+                {totalLedgerDocuments === 0 && (
+                  <p className={`text-[10px] ${p.textDark} italic mt-4`}>No documents yet</p>
                 )}
               </section>
 
@@ -747,30 +863,55 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
             <div className="col-span-12 lg:col-span-6 space-y-6">
               <div className="flex justify-between items-center">
                 <h2 className={`text-xl font-['Newsreader'] font-bold ${isSignalTiles ? 'text-slate-100' : 'text-[#06190d]'}`}>Document Ledger</h2>
-                <div className="flex items-center gap-2">
-                  <span className={`material-symbols-outlined ${p.textDark} text-sm`}>filter_list</span>
-                  <span className={`text-[10px] font-bold uppercase tracking-tighter ${p.textDark}`}>
-                    Filter by Status
-                  </span>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={!caseRecord?.id || isUploading}
+                    className={`px-3 py-2 text-[10px] font-bold uppercase tracking-widest ${isSignalTiles ? 'bg-cyan-700 text-white hover:bg-cyan-600' : 'bg-[#06190d] text-white hover:bg-black'} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+                  >
+                    {isUploading ? 'Feltöltés...' : 'Dokumentum feltöltése'}
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <button
+                    disabled
+                    className={`px-3 py-2 text-[10px] font-bold uppercase tracking-widest border ${p.border} ${p.textMuted} opacity-60 cursor-not-allowed`}
+                  >
+                    Szöveg beillesztése
+                  </button>
                 </div>
               </div>
+              <p className={`text-[10px] ${p.textMuted}`}>
+                Szöveg beillesztése külön következő patchben lesz kezelve.
+              </p>
 
               {isLoading ? (
                 <div className="text-center py-12">
                   <p className={p.textDark}>Loading documents...</p>
                 </div>
-              ) : contracts.length === 0 ? (
+              ) : totalLedgerDocuments === 0 ? (
                 <div className={`text-center py-12 ${p.bgSection} border ${isSignalTiles ? 'border-slate-700' : 'border-[#c3c8c1]/10'}`}>
                   <span className={`material-symbols-outlined text-4xl ${isSignalTiles ? 'text-slate-600' : 'text-[#c3c8c1]'}`}>description</span>
                   <p className={`${p.textDark} mt-4`}>No case documents yet</p>
                   <p className={`${p.textMuted} text-xs mt-2 max-w-md mx-auto`}>
-                    Documents appear here after generation or when linked to this case. Continue with generation to create the first draft.
+                    Documents appear here after upload or generation. Upload a client document or use the clause-based builder when ready.
                   </p>
                   <button
-                    onClick={handleGenerate}
+                    onClick={() => fileInputRef.current?.click()}
                     className={`mt-4 px-4 py-2 text-xs font-bold uppercase tracking-widest ${isSignalTiles ? 'bg-cyan-700 text-white hover:bg-cyan-600' : 'bg-[#06190d] text-white hover:bg-black'} transition-colors`}
                   >
-                    Generate First Document
+                    Dokumentum feltöltése
+                  </button>
+                  <button
+                    onClick={handleGenerate}
+                    className={`mt-4 ml-2 px-4 py-2 text-xs font-bold uppercase tracking-widest border ${p.border} ${p.textDark} ${p.bgHover} transition-colors`}
+                  >
+                    Klauzula-alapú dokumentumépítő
                   </button>
                 </div>
               ) : families.length === 0 && standalone.length === 0 ? (
@@ -780,6 +921,82 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 </div>
               ) : (
                 <div className="space-y-6">
+                  {/* Uploaded Documents */}
+                  {uploadedDocuments.length > 0 && (
+                    <section className={`border ${p.border} ${p.bgCard}`}>
+                      <div className={`${p.bgSection} px-5 py-3 border-b ${p.border} flex items-center justify-between`}>
+                        <div className="flex items-center gap-3">
+                          <span className={`material-symbols-outlined ${isSignalTiles ? 'text-cyan-400' : 'text-[#06190d]'}`}>upload_file</span>
+                          <div>
+                            <h4 className={`text-sm font-bold ${isSignalTiles ? 'text-slate-200' : 'text-[#06190d]'}`}>Uploaded documents</h4>
+                            <p className={`text-[10px] ${p.textDark}`}>{uploadedDocuments.length} ügyféltől érkezett dokumentum</p>
+                          </div>
+                        </div>
+                        <span className={`text-[8px] px-1.5 py-0.5 ${p.badge} font-bold uppercase tracking-wide`}>CLIENT INPUT</span>
+                      </div>
+                      <div className={`divide-y ${p.borderLight}`}>
+                        {uploadedDocuments.map((doc) => {
+                          const isSelected = selectedLedgerItem?.kind === 'uploaded' && selectedLedgerItem.item.id === doc.id;
+                          return (
+                            <div
+                              key={doc.id}
+                              onClick={() => {
+                                setSelectedLedgerItem({ kind: 'uploaded', item: doc });
+                                setSelectedContract(null);
+                              }}
+                              className={`p-4 transition-all cursor-pointer ${isSelected ? p.bgSection : isSignalTiles ? 'hover:bg-slate-700' : 'hover:bg-[#fafaf8]'}`}
+                            >
+                              <div className="flex justify-between items-start gap-3">
+                                <div>
+                                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                    <h5 className={`text-xs font-bold ${isSignalTiles ? 'text-slate-200' : 'text-[#06190d]'}`}>{doc.fileName || 'Untitled document'}</h5>
+                                    <span className={`text-[8px] px-1.5 py-0.5 ${p.badge} font-bold uppercase tracking-wide`}>UPLOADED</span>
+                                  </div>
+                                  <p className={`text-[10px] ${p.textDark}`}>
+                                    {doc.documentType || 'OTHER'} • {doc.folder || 'CLIENT_INPUT'} • {doc.createdAt ? new Date(doc.createdAt).toLocaleDateString('hu-HU') : '—'}
+                                  </p>
+                                  <div className="mt-2 flex items-center gap-3 flex-wrap">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(doc.id)}`);
+                                      }}
+                                      className={`text-[8px] font-bold uppercase tracking-wide ${isSignalTiles ? 'text-cyan-400' : 'text-[#06190d]'} hover:underline`}
+                                    >
+                                      Szerződés-workspace
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDownloadUploadedDocument(doc);
+                                      }}
+                                      disabled={isDownloading === doc.id}
+                                      className={`text-[8px] font-bold uppercase tracking-wide ${p.textDark} hover:underline disabled:opacity-50`}
+                                    >
+                                      {isDownloading === doc.id ? 'Letöltés...' : 'Letöltés'}
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(doc.id)}`);
+                                      }}
+                                      className={`text-[8px] font-bold uppercase tracking-wide ${p.textDark} hover:underline`}
+                                    >
+                                      Összevetés
+                                    </button>
+                                  </div>
+                                </div>
+                                <span className={`text-[9px] px-1.5 py-0.5 font-bold uppercase tracking-widest ${p.badge}`}>
+                                  {doc.version ? `v${doc.version}` : 'v1'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  )}
+
                   {/* Document Families */}
                   {families.map((family) => (
                     <div key={family.familyId} className={`border ${p.border} ${p.bgCard}`}>
@@ -828,7 +1045,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           return (
                             <div
                               key={contract.id}
-                              onClick={() => setSelectedContract(contract)}
+                              onClick={() => {
+                                setSelectedContract(contract);
+                                setSelectedLedgerItem({ kind: 'generated', item: contract });
+                              }}
                               className={`p-4 transition-all cursor-pointer ${
                                 selectedContract?.id === contract.id ? p.bgSection : isSignalTiles ? 'hover:bg-slate-700' : 'hover:bg-[#fafaf8]'
                               }`}
@@ -881,6 +1101,15 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                       </p>
                                     )}
                                     <div className="mt-2 flex items-center gap-3">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(contract.id)}`);
+                                        }}
+                                        className={`text-[8px] font-bold uppercase tracking-wide ${isSignalTiles ? 'text-cyan-400' : 'text-[#06190d]'} hover:underline`}
+                                      >
+                                        Szerződés-workspace
+                                      </button>
                                       {previousInFamily ? (
                                         <button
                                           onClick={(e) => {
@@ -920,7 +1149,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     return (
                       <div
                         key={contract.id}
-                        onClick={() => setSelectedContract(contract)}
+                        onClick={() => {
+                          setSelectedContract(contract);
+                          setSelectedLedgerItem({ kind: 'generated', item: contract });
+                        }}
                         className={`${p.bgCard} border-l-4 p-5 transition-all cursor-pointer group shadow-sm ${
                           isSelected ? `${isSignalTiles ? 'border-cyan-500' : 'border-[#819684]'} ${p.bgSection}` : isSignalTiles ? 'border-slate-600 hover:bg-slate-800' : 'border-[#c3c8c1] hover:bg-white'
                         } ${badge.label === 'Needs Revision' ? 'border-l-4 !border-red-500' : ''}`}
@@ -1005,6 +1237,15 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 >
                                 Reviewre küldés
                               </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(contract.id)}`);
+                                }}
+                                className={`text-[9px] font-bold uppercase tracking-widest ${p.textDark} hover:${isSignalTiles ? 'text-cyan-400' : 'text-[#06190d]'} transition-all`}
+                              >
+                              Szerződés-workspace
+                            </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1063,20 +1304,84 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
             {/* RIGHT COLUMN: Detail Panel */}
             <div className="col-span-12 lg:col-span-3">
               <section className={`${isSignalTiles ? 'bg-slate-800' : 'bg-[#eae8e3]'} p-6 border-t-2 ${isSignalTiles ? 'border-cyan-600' : 'border-[#06190d]'} sticky top-24`}>
-                {selectedContract ? (
+                {selectedUploadedDocument ? (
                   <>
                     <div className="mb-6">
                       <h3 className={`text-xs font-bold uppercase tracking-widest ${p.textDark} mb-1`}>
                         Selection Focus
                       </h3>
                       <h2 className={`text-xl font-['Newsreader'] font-bold leading-tight ${isSignalTiles ? 'text-slate-100' : 'text-[#06190d]'}`}>
-                        {selectedContract.title || selectedContract.templateName || 'Document'}
-                        {selectedContract.revisionNumber && ` v${selectedContract.revisionNumber}`}
+                        {selectedUploadedDocument.fileName || 'Uploaded document'}
+                      </h2>
+                    </div>
+                    <div className="space-y-6">
+                      <div className={`flex items-center justify-between py-2 border-b ${isSignalTiles ? 'border-slate-700' : 'border-[#c3c8c1]/20'}`}>
+                        <span className={`text-[10px] uppercase font-bold ${p.textDark}`}>Source</span>
+                        <span className="text-xs font-bold uppercase tracking-widest">UPLOADED</span>
+                      </div>
+                      <div className={`flex items-center justify-between py-2 border-b ${isSignalTiles ? 'border-slate-700' : 'border-[#c3c8c1]/20'}`}>
+                        <span className={`text-[10px] uppercase font-bold ${p.textDark}`}>Type</span>
+                        <span className="text-xs">{selectedUploadedDocument.documentType || 'OTHER'}</span>
+                      </div>
+                      <div className={`flex items-center justify-between py-2 border-b ${isSignalTiles ? 'border-slate-700' : 'border-[#c3c8c1]/20'}`}>
+                        <span className={`text-[10px] uppercase font-bold ${p.textDark}`}>Status</span>
+                        <span className="text-xs">{selectedUploadedDocument.folder || 'CLIENT_INPUT'}</span>
+                      </div>
+                      <div className={`flex items-center justify-between py-2 border-b ${isSignalTiles ? 'border-slate-700' : 'border-[#c3c8c1]/20'}`}>
+                        <span className={`text-[10px] uppercase font-bold ${p.textDark}`}>Version</span>
+                        <span className="text-xs font-bold">v{selectedUploadedDocument.version || '1'}</span>
+                      </div>
+                      <div className={`flex items-center justify-between py-2 border-b ${isSignalTiles ? 'border-slate-700' : 'border-[#c3c8c1]/20'}`}>
+                        <span className={`text-[10px] uppercase font-bold ${p.textDark}`}>Date</span>
+                        <span className="text-xs">
+                          {selectedUploadedDocument.updatedAt
+                            ? new Date(selectedUploadedDocument.updatedAt).toLocaleDateString('hu-HU')
+                            : selectedUploadedDocument.createdAt
+                              ? new Date(selectedUploadedDocument.createdAt).toLocaleDateString('hu-HU')
+                              : 'Unknown'}
+                        </span>
+                      </div>
+                      <div className="space-y-3 pt-4">
+                        <span className={`text-[10px] uppercase font-bold ${isSignalTiles ? 'text-cyan-400' : 'text-[#06190d]'} block border-b ${isSignalTiles ? 'border-slate-700' : 'border-[#06190d]/10'} pb-1`}>
+                          Műveletek
+                        </span>
+                        <button
+                          onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedUploadedDocument.id)}`)}
+                          className={`w-full ${isSignalTiles ? 'bg-cyan-700 text-white hover:bg-cyan-600' : 'bg-[#06190d] text-white hover:opacity-90'} py-3 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-colors`}
+                        >
+                          <span className="material-symbols-outlined text-sm">article</span>
+                          Szerződés-workspace
+                        </button>
+                        <button
+                          onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)}
+                          disabled={isDownloading === selectedUploadedDocument.id}
+                          className={`w-full border ${isSignalTiles ? 'border-cyan-700 text-cyan-300 hover:bg-cyan-900/30' : 'border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5'} py-3 text-xs font-bold uppercase tracking-widest disabled:opacity-50 transition-colors`}
+                        >
+                          {isDownloading === selectedUploadedDocument.id ? 'Letöltés...' : 'Letöltés'}
+                        </button>
+                        <button
+                          onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedUploadedDocument.id)}`)}
+                          className={`w-full border ${isSignalTiles ? 'border-cyan-700 text-cyan-300 hover:bg-cyan-900/30' : 'border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5'} py-3 text-xs font-bold uppercase tracking-widest transition-colors`}
+                        >
+                          Metaadat összevetés
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : selectedGeneratedContract ? (
+                  <>
+                    <div className="mb-6">
+                      <h3 className={`text-xs font-bold uppercase tracking-widest ${p.textDark} mb-1`}>
+                        Selection Focus
+                      </h3>
+                      <h2 className={`text-xl font-['Newsreader'] font-bold leading-tight ${isSignalTiles ? 'text-slate-100' : 'text-[#06190d]'}`}>
+                        {selectedGeneratedContract.title || selectedGeneratedContract.templateName || 'Document'}
+                        {selectedGeneratedContract.revisionNumber && ` v${selectedGeneratedContract.revisionNumber}`}
                       </h2>
                     </div>
                     <div className="space-y-6">
                       {(() => {
-                        const selectedRevisionMeta = getRevisionMeta(selectedContract);
+                        const selectedRevisionMeta = getRevisionMeta(selectedGeneratedContract);
                         if (!selectedRevisionMeta.isDerived && !selectedRevisionMeta.revisionLabel) {
                           return null;
                         }
@@ -1106,9 +1411,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <div className={`flex items-center justify-between py-2 border-b ${isSignalTiles ? 'border-slate-700' : 'border-[#c3c8c1]/20'}`}>
                         <span className={`text-[10px] uppercase font-bold ${p.textDark}`}>Status</span>
                         <span className={`text-xs font-bold uppercase tracking-widest ${
-                          selectedContract.isFinalRevision ? (isSignalTiles ? 'text-cyan-400' : 'text-[#06190d]') : (isSignalTiles ? 'text-emerald-400' : 'text-[#819684]')
+                          selectedGeneratedContract.isFinalRevision ? (isSignalTiles ? 'text-cyan-400' : 'text-[#06190d]') : (isSignalTiles ? 'text-emerald-400' : 'text-[#819684]')
                         }`}>
-                          {selectedContract.isFinalRevision ? 'FINAL' : selectedContract.status}
+                          {selectedGeneratedContract.isFinalRevision ? 'FINAL' : selectedGeneratedContract.status}
                         </span>
                       </div>
 
@@ -1116,9 +1421,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <div className={`flex items-center justify-between py-2 border-b ${isSignalTiles ? 'border-slate-700' : 'border-[#c3c8c1]/20'}`}>
                         <span className={`text-[10px] uppercase font-bold ${p.textDark}`}>SharePoint</span>
                         <span className={`text-xs font-bold ${
-                          selectedContract.spItemId ? (isSignalTiles ? 'text-emerald-400' : 'text-[#059669]') : (isSignalTiles ? 'text-red-400' : 'text-[#ba1a1a]')
+                          selectedGeneratedContract.spItemId ? (isSignalTiles ? 'text-emerald-400' : 'text-[#059669]') : (isSignalTiles ? 'text-red-400' : 'text-[#ba1a1a]')
                         }`}>
-                          {selectedContract.spItemId ? 'Synced' : 'Not Synced'}
+                          {selectedGeneratedContract.spItemId ? 'Synced' : 'Not Synced'}
                         </span>
                       </div>
 
@@ -1126,7 +1431,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <div className={`flex items-center justify-between py-2 border-b ${isSignalTiles ? 'border-slate-700' : 'border-[#c3c8c1]/20'}`}>
                         <span className={`text-[10px] uppercase font-bold ${p.textDark}`}>Version</span>
                         <span className="text-xs font-bold">
-                          {selectedContract.revisionNumber ? `v${selectedContract.revisionNumber}` : 'v1'}
+                          {selectedGeneratedContract.revisionNumber ? `v${selectedGeneratedContract.revisionNumber}` : 'v1'}
                         </span>
                       </div>
 
@@ -1137,10 +1442,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <>
                             <p className="text-xs">{selectedFamily.versionCount} version{selectedFamily.versionCount !== 1 ? 's' : ''} in family</p>
                             <p className={`text-xs ${p.textMuted}`}>{selectedFamily.groupingStrength === 'explicit' ? 'threadId-based (grounded)' : 'title-based (inferred)'}</p>
-                            {selectedContract.isCurrentRevision && (
+                            {selectedGeneratedContract.isCurrentRevision && (
                               <p className={`text-xs font-bold mt-1 ${isSignalTiles ? 'text-emerald-400' : 'text-[#23472F]'}`}>← Current working version</p>
                             )}
-                            {selectedContract.isFinalRevision && (
+                            {selectedGeneratedContract.isFinalRevision && (
                               <p className={`text-xs font-bold mt-1 ${isSignalTiles ? 'text-cyan-400' : 'text-[#06190d]'}`}>← Final approved version</p>
                             )}
                             <p className="text-xs mt-1">
@@ -1156,8 +1461,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <div className={`flex items-center justify-between py-2 border-b ${isSignalTiles ? 'border-slate-700' : 'border-[#c3c8c1]/20'}`}>
                         <span className={`text-[10px] uppercase font-bold ${p.textDark}`}>Generated</span>
                         <span className="text-xs">
-                          {selectedContract.generatedAt
-                            ? new Date(selectedContract.generatedAt).toLocaleDateString('hu-HU')
+                          {selectedGeneratedContract.generatedAt
+                            ? new Date(selectedGeneratedContract.generatedAt).toLocaleDateString('hu-HU')
                             : 'Unknown'}
                         </span>
                       </div>
@@ -1171,7 +1476,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           Válassz műveletet: workspace, letöltés, review, metaadat összevetés, vagy előző verzióval összevetés.
                         </p>
                         <button
-                          onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedContract.id)}`)}
+                          onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedGeneratedContract.id)}`)}
                           title="Anonimizált szöveg, összevetés és AI promptok előkészítése."
                           className={`w-full ${isSignalTiles ? 'bg-cyan-700 text-white hover:bg-cyan-600' : 'bg-[#06190d] text-white hover:opacity-90'} py-3 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-colors`}
                         >
@@ -1179,23 +1484,23 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           Szerződés-workspace
                         </button>
                         <button
-                          onClick={() => handleDownload(selectedContract)}
-                          disabled={isDownloading === selectedContract.id}
+                          onClick={() => handleDownload(selectedGeneratedContract)}
+                          disabled={isDownloading === selectedGeneratedContract.id}
                           className={`w-full ${isSignalTiles ? 'bg-cyan-700 text-white hover:bg-cyan-600' : 'bg-[#06190d] text-white hover:opacity-90'} py-3 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 transition-colors`}
                         >
                           <span className="material-symbols-outlined text-sm">download</span>
-                          {isDownloading === selectedContract.id ? 'Letöltés...' : 'Letöltés'}
+                          {isDownloading === selectedGeneratedContract.id ? 'Letöltés...' : 'Letöltés'}
                         </button>
-                        {selectedContract.status !== 'FINAL' && (
+                        {selectedGeneratedContract.status !== 'FINAL' && (
                           <button
-                            onClick={() => handleReview(selectedContract.id)}
+                            onClick={() => handleReview(selectedGeneratedContract.id)}
                             className={`w-full border ${isSignalTiles ? 'border-cyan-700 text-cyan-300 hover:bg-cyan-900/30' : 'border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5'} py-3 text-xs font-bold uppercase tracking-widest transition-colors`}
                           >
                             Review megnyitása
                           </button>
                         )}
                         <button
-                          onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedContract.id)}`)}
+                          onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedGeneratedContract.id)}`)}
                           className={`w-full border ${isSignalTiles ? 'border-cyan-700 text-cyan-300 hover:bg-cyan-900/30' : 'border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5'} py-3 text-xs font-bold uppercase tracking-widest transition-colors`}
                         >
                           Metaadat összevetés
@@ -1204,7 +1509,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <button
                             onClick={() =>
                               router.push(
-                                `/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedContract.id)}&baselineId=${encodeURIComponent(previousVersionForSelected.id)}`
+                                  `/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedGeneratedContract.id)}&baselineId=${encodeURIComponent(previousVersionForSelected.id)}`
                               )
                             }
                             className={`w-full border ${isSignalTiles ? 'border-cyan-700 text-cyan-300 hover:bg-cyan-900/30' : 'border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5'} py-3 text-xs font-bold uppercase tracking-widest transition-colors`}
@@ -1212,13 +1517,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             Összevetés előző verzióval
                           </button>
                         )}
-                        {!selectedContract.spItemId && selectedContract.status === 'APPROVED' && (
+                        {!selectedGeneratedContract.spItemId && selectedGeneratedContract.status === 'APPROVED' && (
                           <button
-                            onClick={() => handleSharePointUpload(selectedContract)}
-                            disabled={isUploadingToSP === selectedContract.id}
+                            onClick={() => handleSharePointUpload(selectedGeneratedContract)}
+                            disabled={isUploadingToSP === selectedGeneratedContract.id}
                             className={`w-full border ${isSignalTiles ? 'border-cyan-700 text-cyan-300 hover:bg-cyan-900/30' : 'border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5'} py-3 text-xs font-bold uppercase tracking-widest disabled:opacity-50 transition-colors`}
                           >
-                            {isUploadingToSP === selectedContract.id ? 'Uploading...' : 'Sync to SharePoint'}
+                            {isUploadingToSP === selectedGeneratedContract.id ? 'Uploading...' : 'Sync to SharePoint'}
                           </button>
                         )}
                       </div>

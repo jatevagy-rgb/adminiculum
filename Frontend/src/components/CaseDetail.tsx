@@ -1028,10 +1028,10 @@ export function CaseDetail({ params }: CaseDetailProps) {
             Dokumentumok
           </button>
           <button
-            onClick={() => router.push(`/cases/${canonicalCaseId}/generate`)}
+            onClick={() => router.push(`/cases/${canonicalCaseId}/generate/assembly`)}
             className="w-full text-left px-3 py-2 text-xs text-[#514D45] hover:bg-[#ECE6DA] rounded"
           >
-            Generálás
+            Klauzula-építő
           </button>
           <button
             onClick={() => router.push(`/cases/${canonicalCaseId}/communications`)}
@@ -1297,7 +1297,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
             <div className="mb-8">
               <div className="grid grid-cols-3 gap-3">
                 <button 
-                  onClick={() => router.push(`/cases/${canonicalCaseId}/generate`)}
+                  onClick={() => router.push(`/cases/${canonicalCaseId}/generate/assembly`)}
                   disabled={isArchived}
                   className={`p-4 border bg-white text-left transition-colors ${isArchived ? 'border-[#E5E7EB] opacity-50 cursor-not-allowed' : 'border-[#DDD7CA] hover:bg-[#FBF9F3]'}`}
                 >
@@ -1307,8 +1307,8 @@ export function CaseDetail({ params }: CaseDetailProps) {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 11v6M9 14h6" />
                     </svg>
                   </div>
-                  <p className="text-xs font-semibold text-[#1F2821]">Generálás indítása</p>
-                  <p className="text-[10px] text-[#7B776D] mt-1">{isArchived ? 'Archivált ügy - csak megtekintés' : 'Sablon alapú dokumentumkészítés'}</p>
+                  <p className="text-xs font-semibold text-[#1F2821]">Klauzula-alapú dokumentumépítő</p>
+                  <p className="text-[10px] text-[#7B776D] mt-1">{isArchived ? 'Archivált ügy - csak megtekintés' : 'A klauzula-rendszer külön patchben lesz bekötve.'}</p>
                 </button>
                 <button 
                   onClick={() => !isArchived && fileInputRef.current?.click()}
@@ -1628,10 +1628,10 @@ export function CaseDetail({ params }: CaseDetailProps) {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#C9A227]">Generated Contracts</h3>
                   <button
-                    onClick={() => router.push(`/cases/${canonicalCaseId}/generate`)}
+                    onClick={() => router.push(`/cases/${canonicalCaseId}/generate?family=sale_purchase`)}
                     className="text-[10px] text-[#C9A227] hover:underline"
                   >
-                    + New
+                    Régi adásvételi generátor
                   </button>
                 </div>
                 <div className="space-y-2">
@@ -1689,14 +1689,24 @@ export function CaseDetail({ params }: CaseDetailProps) {
 
             <div>
               <button
-                onClick={() => !isArchived && router.push(`/cases/${canonicalCaseId}/generate`)}
+                onClick={() => !isArchived && router.push(`/cases/${canonicalCaseId}/generate/assembly`)}
                 disabled={isArchived}
                 className={`w-full py-3 text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-colors ${isArchived ? 'bg-[#9CA3AF] text-white cursor-not-allowed' : 'bg-[#C9A227] text-white hover:bg-[#B8911F]'}`}
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.801 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.87.688 2.006 1.649L19 6v-.75a2.25 2.25 0 00-2.25-2.25h-1.5" />
                 </svg>
-                {isArchived ? 'Generate Document (Archived)' : 'Generate Document'}
+                {isArchived ? 'Klauzula-alapú dokumentumépítő (archivált)' : 'Klauzula-alapú dokumentumépítő'}
+              </button>
+              <p className="mt-2 text-[10px] text-[#7B776D] text-center">
+                A klauzula-rendszer külön patchben lesz bekötve.
+              </p>
+              <button
+                onClick={() => !isArchived && router.push(`/cases/${canonicalCaseId}/generate?family=sale_purchase`)}
+                disabled={isArchived}
+                className="mt-2 w-full py-2 text-[10px] uppercase tracking-[0.18em] border border-[#DDD7CA] text-[#514D45] hover:bg-[#FBF9F3] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Régi adásvételi generátor
               </button>
             </div>
 
