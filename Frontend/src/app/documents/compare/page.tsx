@@ -1184,7 +1184,7 @@ function DocumentsComparePageContent() {
 
               <div className="border border-[#DDD7CA] bg-[#FBF9F3] p-3">
                 <p className="text-[11px] text-[#514D45]">
-                  Ez a v1 munkafelület: prompt másolás, AI válasz beillesztés és ügyvédi review előkészítés. Mentés/adatbázisba rögzítés külön következő patch lesz.
+                  Ez a v1 munkafelület: prompt másolás, AI válasz beillesztés és ügyvédi review előkészítés.
                 </p>
               </div>
 
@@ -1195,7 +1195,12 @@ function DocumentsComparePageContent() {
                 anonymizedText={visibleWorkspaceText}
               />
 
-              <LegalAnalysisIntakePanel />
+              <LegalAnalysisIntakePanel
+                caseId={selectedDocument.caseId}
+                documentId={selectedDocument.id}
+                documentSourceType="DOCUMENT"
+                documentTitle={selectedDocument.fileName || selectedDocument.title}
+              />
 
               <div className="border border-[#DDD7CA] p-3 space-y-2">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Recent activity</p>
