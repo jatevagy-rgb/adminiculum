@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '../../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { driveService } from '../sharepoint';
 import {
   CreateDocumentInput,
@@ -20,6 +21,18 @@ const normalizeSharePointItemId = (itemId: unknown): string | null => {
   if (typeof itemId !== 'string') return null;
   const trimmed = itemId.trim();
   return trimmed.length > 0 ? trimmed : null;
+};
+
+const isSpItemIdUniqueConflict = (error: unknown): boolean => {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+    return false;
+  }
+
+  const target = (error.meta as { target?: unknown } | undefined)?.target;
+  if (Array.isArray(target)) {
+    return target.includes('spItemId');
+  }
+  return typeof target === 'string' && target.includes('spItemId');
 };
 
 // Map document types to SpFolder enum values
@@ -83,22 +96,38 @@ class DocumentsService {
       const documentTitle = (input as any).title || '';
       const nameField = uploadedFileName || storedFileName || documentTitle || `Uploaded document - ${new Date().toISOString()}`;
       const sharePointItemId = normalizeSharePointItemId(uploadResult.item.id);
-      const document = await prisma.document.create({
-        data: {
-          name: nameField,
-          clientId: caseData.clientId,
-          category: (input.documentType as any) || 'OTHER',
-          caseId: input.caseId,
-          spItemId: sharePointItemId,
-          spDriveId: '',
-          spPath: uploadResult.webUrl || '',
-          fileName: uploadedFileName || storedFileName || null,
-          folder: prismaFolder,
-          version: uploadResult.version || '1',
-          documentType: input.documentType,
-          isLatest: true
-        } as any
-      });
+      const baseDocumentData = {
+        name: nameField,
+        clientId: caseData.clientId,
+        category: (input.documentType as any) || 'OTHER',
+        caseId: input.caseId,
+        spItemId: sharePointItemId,
+        spDriveId: '',
+        spPath: uploadResult.webUrl || '',
+        fileName: uploadedFileName || storedFileName || null,
+        folder: prismaFolder,
+        version: uploadResult.version || '1',
+        documentType: input.documentType,
+        isLatest: true
+      } as any;
+
+      let persistedSpItemId = sharePointItemId;
+      let document: any;
+      try {
+        document = await prisma.document.create({ data: baseDocumentData });
+      } catch (error) {
+        if (sharePointItemId && isSpItemIdUniqueConflict(error)) {
+          persistedSpItemId = null;
+          document = await prisma.document.create({
+            data: {
+              ...baseDocumentData,
+              spItemId: null,
+            },
+          });
+        } else {
+          throw error;
+        }
+      }
 
       // 5. Create TimelineEvent for document creation
       await prisma.timelineEvent.create({
@@ -111,7 +140,7 @@ class DocumentsService {
             documentId: document.id,
             fileName: input.fileName,
             documentType: input.documentType,
-            spItemId: sharePointItemId,
+            spItemId: persistedSpItemId,
             spPath: uploadResult.webUrl,
             folder: folderType,
             version: uploadResult.version
