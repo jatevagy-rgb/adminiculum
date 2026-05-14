@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AIPromptPanel } from "@/components/documents/AIPromptPanel";
+import { LegalAnalysisIntakePanel } from "@/components/documents/LegalAnalysisIntakePanel";
 import {
   downloadReviewSummary,
   downloadContract,
@@ -1183,7 +1184,7 @@ function DocumentsComparePageContent() {
 
               <div className="border border-[#DDD7CA] bg-[#FBF9F3] p-3">
                 <p className="text-[11px] text-[#514D45]">
-                  Ez a felület v1 szerződés-workspace-ként is használható: az anonimizált vagy összevetett szöveg alapján külső AI eszközbe másolható promptokat készít.
+                  Ez a v1 munkafelület: prompt másolás, AI válasz beillesztés és ügyvédi review előkészítés. Mentés/adatbázisba rögzítés külön következő patch lesz.
                 </p>
               </div>
 
@@ -1193,6 +1194,8 @@ function DocumentsComparePageContent() {
                 documentTitle={selectedDocument.fileName || selectedDocument.title}
                 anonymizedText={visibleWorkspaceText}
               />
+
+              <LegalAnalysisIntakePanel />
 
               <div className="border border-[#DDD7CA] p-3 space-y-2">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Recent activity</p>
