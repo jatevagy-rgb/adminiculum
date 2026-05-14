@@ -7,6 +7,7 @@ import {
   type AnonymizationMetadataInput,
   type CaseContractListItem,
 } from "@/lib/api";
+import { AIPromptPanel } from "@/components/documents/AIPromptPanel";
 
 // Minimal structured counterparty input
 interface CounterpartyInput {
@@ -608,6 +609,9 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientName, 
                     <p className="text-xs text-[#23472F]/70">
                       {result.redactedItems.length} items redacted
                     </p>
+                    <p className="text-xs text-[#23472F]/70 mt-1">
+                      Az alábbi prompt panelből külső AI eszközbe másolható munkapromptokat készíthetsz az anonimizált szöveghez.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -633,6 +637,16 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientName, 
                   </div>
                 </div>
               )}
+
+              <div className="mb-6">
+                <AIPromptPanel
+                  caseId={caseId}
+                  documentId={contract.id}
+                  documentTitle={contract.title || contract.fileName || contract.templateName}
+                  anonymizedText={result.redactedText}
+                  className="w-full"
+                />
+              </div>
 
               {/* Actions */}
               <div className="flex gap-3 flex-wrap">

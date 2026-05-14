@@ -1168,8 +1168,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           Műveletek
                         </span>
                         <p className={`text-[9px] ${p.textMuted}`}>
-                          Válassz műveletet: letöltés, review, metaadat összevetés, vagy előző verzióval összevetés.
+                          Válassz műveletet: workspace, letöltés, review, metaadat összevetés, vagy előző verzióval összevetés.
                         </p>
+                        <button
+                          onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedContract.id)}`)}
+                          title="Anonimizált szöveg, összevetés és AI promptok előkészítése."
+                          className={`w-full ${isSignalTiles ? 'bg-cyan-700 text-white hover:bg-cyan-600' : 'bg-[#06190d] text-white hover:opacity-90'} py-3 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-colors`}
+                        >
+                          <span className="material-symbols-outlined text-sm">article</span>
+                          Szerződés-workspace
+                        </button>
                         <button
                           onClick={() => handleDownload(selectedContract)}
                           disabled={isDownloading === selectedContract.id}
