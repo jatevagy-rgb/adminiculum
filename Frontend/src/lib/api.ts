@@ -691,6 +691,31 @@ export interface AnonymizationMetadataInput {
   clientRole?: string;
   counterparty?: string;
   notes?: string;
+  knownParty?: {
+    kind?: 'PERSON' | 'COMPANY';
+    legalRole?: string;
+    name?: string;
+    role?: string;
+    notes?: string;
+    birthName?: string;
+    birthPlace?: string;
+    birthDate?: string;
+    mothersName?: string;
+    address?: string;
+    taxId?: string;
+    personalId?: string;
+    personalIdentifierNumber?: string;
+    identityCardNumber?: string;
+    companyName?: string;
+    seat?: string;
+    companyTaxNumber?: string;
+    euVatNumber?: string;
+    companyRegistrationNumber?: string;
+    representativeName?: string;
+    representativeTitle?: string;
+    contactEmail?: string;
+    phone?: string;
+  };
 }
 
 export interface AnonymizationSourceTextResponse {

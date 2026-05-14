@@ -47,7 +47,7 @@ interface RedactionCandidate {
   value: string;
   token: string;
   source: string;
-  category: 'CLIENT' | 'COUNTERPARTY' | 'EMAIL' | 'PHONE' | 'ADDRESS' | 'IDENTIFIER';
+  category: 'CLIENT' | 'COUNTERPARTY' | 'EMAIL' | 'PHONE' | 'ADDRESS' | 'IDENTIFIER' | 'BIRTH_PLACE' | 'BIRTH_DATE' | 'MOTHERS_NAME' | 'PERSONAL_IDENTIFIER' | 'IDENTITY_CARD' | 'REPRESENTATIVE';
 }
 
 // ============================================================================
@@ -65,6 +65,31 @@ interface AnonymizationMetadataInput {
   clientRole?: string;
   counterparty?: string;
   notes?: string;
+  knownParty?: {
+    kind?: 'PERSON' | 'COMPANY';
+    legalRole?: string;
+    name?: string;
+    role?: string;
+    notes?: string;
+    birthName?: string;
+    birthPlace?: string;
+    birthDate?: string;
+    mothersName?: string;
+    address?: string;
+    taxId?: string;
+    personalId?: string;
+    personalIdentifierNumber?: string;
+    identityCardNumber?: string;
+    companyName?: string;
+    seat?: string;
+    companyTaxNumber?: string;
+    euVatNumber?: string;
+    companyRegistrationNumber?: string;
+    representativeName?: string;
+    representativeTitle?: string;
+    contactEmail?: string;
+    phone?: string;
+  };
 }
 
 const SOURCE_TEXT_LIMITATION_MESSAGE = 'A dokumentum teljes szöveges előnézete jelenleg nem érhető el. Az anonimizálás a feltöltött dokumentum backend feldolgozásán fut.';
@@ -78,6 +103,26 @@ function normalizeRoleToken(role?: string): '[MEGBÍZÓ]' | '[ÜGYFÉL]' {
   if (normalized.includes('megbízó')) return '[MEGBÍZÓ]';
   if (normalized.includes('ugyfel') || normalized.includes('ügyfél')) return '[ÜGYFÉL]';
   return '[ÜGYFÉL]';
+}
+
+function isCounterpartyRole(role?: string): boolean {
+  const normalized = (role || '').trim().toLowerCase();
+  return normalized.includes('ellenérdek') || normalized.includes('ellenoldal') || normalized.includes('opponent') || normalized.includes('counterparty');
+}
+
+function isPlaceholderValue(value: string): boolean {
+  return /^\[[^\]]+\]$/.test(value.trim());
+}
+
+function replaceOutsidePlaceholders(
+  input: string,
+  regex: RegExp,
+  replaceMatch: (match: string) => string
+): string {
+  return input
+    .split(/(\[[^\]]+\])/g)
+    .map((part) => (isPlaceholderValue(part) ? part : part.replace(regex, replaceMatch)))
+    .join('');
 }
 
 export async function anonymizeDocument(params: {
@@ -161,6 +206,12 @@ export async function anonymizeDocument(params: {
       PHONE: 0,
       ADDRESS: 0,
       IDENTIFIER: 0,
+      BIRTH_DATE: 0,
+      BIRTH_PLACE: 0,
+      MOTHERS_NAME: 0,
+      PERSONAL_IDENTIFIER: 0,
+      IDENTITY_CARD: 0,
+      REPRESENTATIVE: 0,
       COUNTERPARTY: 0,
     };
 
@@ -168,6 +219,7 @@ export async function anonymizeDocument(params: {
       if (!candidate) return;
       const value = candidate.value.trim();
       if (value.length <= 2) return;
+      if (isPlaceholderValue(value)) return;
       candidates.push({ ...candidate, value });
     };
 
@@ -194,7 +246,7 @@ export async function anonymizeDocument(params: {
 
     const addTypedCandidate = (
       value: string | undefined,
-      category: 'EMAIL' | 'PHONE' | 'ADDRESS' | 'IDENTIFIER',
+      category: 'EMAIL' | 'PHONE' | 'ADDRESS' | 'IDENTIFIER' | 'BIRTH_PLACE' | 'BIRTH_DATE' | 'MOTHERS_NAME' | 'PERSONAL_IDENTIFIER' | 'IDENTITY_CARD' | 'REPRESENTATIVE',
       source: string,
       tokenPrefix: string
     ) => {
@@ -274,6 +326,39 @@ export async function anonymizeDocument(params: {
       if (params.metadata.counterparty && params.metadata.counterparty.trim().length > 2) {
         addCounterpartyCandidate(params.metadata.counterparty.trim(), 'params.metadata.counterparty', '[ELLENÉRDEKŰ FÉL]');
       }
+
+      const knownParty = params.metadata.knownParty;
+      if (knownParty) {
+        const knownRole = knownParty.legalRole || knownParty.role || effectiveClientRole;
+        const isOpponent = isCounterpartyRole(knownRole);
+        const addPartyName = (value?: string, source = 'params.metadata.knownParty.name') => {
+          if (!value) return;
+          if (isOpponent) {
+            addCounterpartyCandidate(value.trim(), source, '[ELLENÉRDEKŰ FÉL]');
+          } else {
+            addClientCandidate(value.trim(), source, knownRole);
+          }
+        };
+
+        addPartyName(knownParty.name, 'params.metadata.knownParty.name');
+        addPartyName(knownParty.companyName, 'params.metadata.knownParty.companyName');
+        addPartyName(knownParty.birthName, 'params.metadata.knownParty.birthName');
+        addTypedCandidate(knownParty.address, 'ADDRESS', 'params.metadata.knownParty.address', 'CÍM');
+        addTypedCandidate(knownParty.seat, 'ADDRESS', 'params.metadata.knownParty.seat', 'CÍM');
+        addTypedCandidate(knownParty.birthPlace, 'BIRTH_PLACE', 'params.metadata.knownParty.birthPlace', 'SZÜLETÉSI_HELY');
+        addTypedCandidate(knownParty.birthDate, 'BIRTH_DATE', 'params.metadata.knownParty.birthDate', 'SZÜLETÉSI_IDŐ');
+        addTypedCandidate(knownParty.mothersName, 'MOTHERS_NAME', 'params.metadata.knownParty.mothersName', 'ANYJA_NEVE');
+        addTypedCandidate(knownParty.taxId, 'IDENTIFIER', 'params.metadata.knownParty.taxId', 'AZONOSÍTÓ');
+        addTypedCandidate(knownParty.personalIdentifierNumber, 'PERSONAL_IDENTIFIER', 'params.metadata.knownParty.personalIdentifierNumber', 'SZEMÉLYI_AZONOSÍTÓ');
+        addTypedCandidate(knownParty.identityCardNumber, 'IDENTITY_CARD', 'params.metadata.knownParty.identityCardNumber', 'SZEMÉLYI_IGAZOLVÁNY');
+        addTypedCandidate(knownParty.personalId, 'IDENTIFIER', 'params.metadata.knownParty.personalId', 'AZONOSÍTÓ');
+        addTypedCandidate(knownParty.companyTaxNumber, 'IDENTIFIER', 'params.metadata.knownParty.companyTaxNumber', 'AZONOSÍTÓ');
+        addTypedCandidate(knownParty.euVatNumber, 'IDENTIFIER', 'params.metadata.knownParty.euVatNumber', 'AZONOSÍTÓ');
+        addTypedCandidate(knownParty.companyRegistrationNumber, 'IDENTIFIER', 'params.metadata.knownParty.companyRegistrationNumber', 'AZONOSÍTÓ');
+        addTypedCandidate(knownParty.contactEmail, 'EMAIL', 'params.metadata.knownParty.contactEmail', 'EMAIL');
+        addTypedCandidate(knownParty.phone, 'PHONE', 'params.metadata.knownParty.phone', 'TELEFON');
+        addTypedCandidate(knownParty.representativeName, 'REPRESENTATIVE', 'params.metadata.knownParty.representativeName', 'KÉPVISELŐ');
+      }
     }
 
     // Remove duplicates by value+token pair
@@ -284,7 +369,7 @@ export async function anonymizeDocument(params: {
         uniqueMap.set(key, candidate);
       }
     }
-    const uniqueCandidates = Array.from(uniqueMap.values());
+    const uniqueCandidates = Array.from(uniqueMap.values()).sort((a, b) => b.value.length - a.value.length);
 
     // 4. Get document content (UI-provided text first, otherwise backend extraction)
     let content: string;
@@ -366,7 +451,7 @@ export async function anonymizeDocument(params: {
     for (const candidate of uniqueCandidates) {
       const regex = new RegExp(escapeRegex(candidate.value), 'gi');
       const replacement = candidate.token;
-      redactedContent = redactedContent.replace(regex, (match) => {
+      redactedContent = replaceOutsidePlaceholders(redactedContent, regex, (match) => {
         redactedItems.push({
           type: candidate.source,
           original: match,
@@ -398,23 +483,21 @@ export async function anonymizeDocument(params: {
     if (params.counterparties && params.counterparties.length > 0) {
       const validCounterparties = params.counterparties.filter(cp => cp.name && cp.name.trim().length > 0);
       if (validCounterparties.length > 0) {
-        const cpList = validCounterparties
-          .map(cp => `  - ${cp.name.trim()} (${cp.side}${cp.partyType ? `, ${cp.partyType}` : ''})`)
-          .join('\n');
-        effectiveCustomPrompt += (effectiveCustomPrompt ? '\n\n' : '') + `Opposing parties (extra-party context):\n${cpList}`;
+        effectiveCustomPrompt += (effectiveCustomPrompt ? '\n\n' : '') + `Opposing parties (extra-party context): ${validCounterparties.length} known value(s) supplied.`;
       }
     }
 
     if (params.metadata) {
       const metadataLines = [
-        params.metadata.clientName ? `Client name: ${params.metadata.clientName}` : null,
-        params.metadata.clientRole ? `Client role: ${params.metadata.clientRole}` : null,
-        params.metadata.counterparty ? `Counterparty: ${params.metadata.counterparty}` : null,
-        params.metadata.notes ? `Notes: ${params.metadata.notes}` : null,
+        params.metadata.clientName ? 'Client name supplied' : null,
+        params.metadata.clientRole ? 'Client role supplied' : null,
+        params.metadata.counterparty ? 'Counterparty supplied' : null,
+        params.metadata.knownParty ? 'Known-party exact-redaction fields supplied' : null,
+        params.metadata.notes ? 'Workspace notes supplied' : null,
       ].filter(Boolean) as string[];
 
       if (metadataLines.length > 0) {
-        effectiveCustomPrompt += `${effectiveCustomPrompt ? '\n\n' : ''}Workspace metadata:\n${metadataLines.map((line) => `  - ${line}`).join('\n')}`;
+        effectiveCustomPrompt += `${effectiveCustomPrompt ? '\n\n' : ''}Workspace metadata summary:\n${metadataLines.map((line) => `  - ${line}`).join('\n')}`;
       }
     }
 

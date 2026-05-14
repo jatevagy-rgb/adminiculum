@@ -43,6 +43,7 @@ export interface AnonymizeResult {
 
 type AITask = "REVIEW_RISKS" | "COMPARE_TEMPLATE" | "SUMMARIZE" | "CUSTOM";
 type RedactionLevel = "FULL" | "CLIENT_ONLY";
+type KnownPartyKind = "PERSON" | "COMPANY";
 
 const aiTaskOptions: { value: AITask; label: string; description: string }[] = [
   { value: "REVIEW_RISKS", label: "Review Risks", description: "Analyze for legal risks" },
@@ -55,6 +56,8 @@ const redactionLevelOptions: { value: RedactionLevel; label: string }[] = [
   { value: "FULL", label: "Full Redaction" },
   { value: "CLIENT_ONLY", label: "Client Data Only" },
 ];
+
+const legalRoleOptions = ["Ügyfél", "Megbízó", "Eladó", "Vevő", "Ellenérdekű fél", "Egyéb fél"];
 
 const SOURCE_TEXT_LIMITATION_MESSAGE = "A dokumentum teljes szöveges előnézete jelenleg nem érhető el. Az anonimizálás a feltöltött dokumentum backend feldolgozásán fut.";
 
@@ -74,8 +77,28 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientName, 
 
   const [metadataClientName, setMetadataClientName] = useState(clientName || "");
   const [metadataClientRole, setMetadataClientRole] = useState(clientRole || "");
-  const [metadataCounterparty, setMetadataCounterparty] = useState("");
-  const [metadataNotes, setMetadataNotes] = useState("");
+  const [knownPartyKind, setKnownPartyKind] = useState<KnownPartyKind>("PERSON");
+  const [knownPartyLegalRole, setKnownPartyLegalRole] = useState(clientRole || "Ügyfél");
+  const [knownPartyName, setKnownPartyName] = useState(clientName || "");
+  const [knownPartyRole, setKnownPartyRole] = useState(clientRole || "");
+  const [knownPartyNotes, setKnownPartyNotes] = useState("");
+  const [birthName, setBirthName] = useState("");
+  const [birthPlace, setBirthPlace] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [mothersName, setMothersName] = useState("");
+  const [personAddress, setPersonAddress] = useState("");
+  const [personTaxId, setPersonTaxId] = useState("");
+  const [personalIdentifierNumber, setPersonalIdentifierNumber] = useState("");
+  const [identityCardNumber, setIdentityCardNumber] = useState("");
+  const [companyName, setCompanyName] = useState(clientName || "");
+  const [companySeat, setCompanySeat] = useState("");
+  const [companyTaxNumber, setCompanyTaxNumber] = useState("");
+  const [euVatNumber, setEuVatNumber] = useState("");
+  const [companyRegistrationNumber, setCompanyRegistrationNumber] = useState("");
+  const [representativeName, setRepresentativeName] = useState("");
+  const [representativeTitle, setRepresentativeTitle] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [phone, setPhone] = useState("");
 
   // Structured counterparty (extra-party) input
   const [counterparties, setCounterparties] = useState<CounterpartyInput[]>([]);
@@ -85,7 +108,15 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientName, 
   useEffect(() => {
     setMetadataClientName(clientName || "");
     setMetadataClientRole(clientRole || "");
+    setKnownPartyName(clientName || "");
+    setKnownPartyRole(clientRole || "");
+    setKnownPartyLegalRole(clientRole || "Ügyfél");
+    setCompanyName(clientName || "");
   }, [clientName, clientRole]);
+
+  const knownPartyPrimaryName = knownPartyKind === "COMPANY"
+    ? (companyName.trim() || knownPartyName.trim())
+    : knownPartyName.trim();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -154,10 +185,35 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientName, 
         counterparties: counterparties.length > 0 ? counterparties : undefined,
         sourceText: sourceTextAvailable && workspaceText.trim().length > 0 ? workspaceText : undefined,
         metadata: {
-          clientName: metadataClientName.trim() || undefined,
-          clientRole: metadataClientRole.trim() || undefined,
-          counterparty: metadataCounterparty.trim() || undefined,
-          notes: metadataNotes.trim() || undefined,
+          clientName: metadataClientName.trim() || knownPartyPrimaryName || undefined,
+          clientRole: metadataClientRole.trim() || knownPartyLegalRole.trim() || undefined,
+          counterparty: knownPartyLegalRole.toLowerCase().includes("ellenérdek") ? knownPartyPrimaryName || undefined : undefined,
+          notes: knownPartyNotes.trim() || undefined,
+          knownParty: {
+            kind: knownPartyKind,
+            legalRole: knownPartyLegalRole.trim() || undefined,
+            name: knownPartyPrimaryName || undefined,
+            role: knownPartyRole.trim() || undefined,
+            notes: knownPartyNotes.trim() || undefined,
+            birthName: birthName.trim() || undefined,
+            birthPlace: birthPlace.trim() || undefined,
+            birthDate: birthDate.trim() || undefined,
+            mothersName: mothersName.trim() || undefined,
+            address: personAddress.trim() || undefined,
+            taxId: personTaxId.trim() || undefined,
+            personalId: identityCardNumber.trim() || personalIdentifierNumber.trim() || undefined,
+            personalIdentifierNumber: personalIdentifierNumber.trim() || undefined,
+            identityCardNumber: identityCardNumber.trim() || undefined,
+            companyName: companyName.trim() || undefined,
+            seat: companySeat.trim() || undefined,
+            companyTaxNumber: companyTaxNumber.trim() || undefined,
+            euVatNumber: euVatNumber.trim() || undefined,
+            companyRegistrationNumber: companyRegistrationNumber.trim() || undefined,
+            representativeName: representativeName.trim() || undefined,
+            representativeTitle: representativeTitle.trim() || undefined,
+            contactEmail: contactEmail.trim() || undefined,
+            phone: phone.trim() || undefined,
+          },
         } as AnonymizationMetadataInput,
       }) as unknown as {
         success: boolean;
@@ -316,41 +372,84 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientName, 
                 )}
               </div>
 
-              {/* Metadata Inputs */}
+              {/* Known Party Metadata */}
               <div className="mb-6 p-4 border border-[#c3c8c1]/20">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="material-symbols-outlined text-[#434843] text-base">badge</span>
-                  <p className="text-xs font-bold text-[#06190d]">Anonimizálási metaadatok</p>
+                  <p className="text-xs font-bold text-[#06190d]">Ismert fél adatai</p>
                 </div>
+                <p className="text-[10px] text-[#434843]/70 mb-3">
+                  Az itt megadott adatok pontos egyezés alapján anonimizálódnak. Nem automatikus adatfelismerés, hanem ismert adatok védelme.
+                </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <select
+                    value={knownPartyKind}
+                    onChange={(e) => setKnownPartyKind(e.target.value as KnownPartyKind)}
+                    className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] focus:outline-none focus:border-[#06190d] bg-white"
+                  >
+                    <option value="PERSON">Természetes személy</option>
+                    <option value="COMPANY">Jogi személy / cég</option>
+                  </select>
+                  <select
+                    value={knownPartyLegalRole}
+                    onChange={(e) => {
+                      setKnownPartyLegalRole(e.target.value);
+                      setMetadataClientRole(e.target.value);
+                    }}
+                    className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] focus:outline-none focus:border-[#06190d] bg-white"
+                  >
+                    {legalRoleOptions.map((role) => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
+                  </select>
                   <input
                     type="text"
-                    value={metadataClientName}
-                    onChange={(e) => setMetadataClientName(e.target.value)}
-                    placeholder="Ügyfél neve"
+                    value={knownPartyName}
+                    onChange={(e) => {
+                      setKnownPartyName(e.target.value);
+                      setMetadataClientName(e.target.value);
+                    }}
+                    placeholder="Név / cégnév"
                     className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]"
                   />
                   <input
                     type="text"
-                    value={metadataClientRole}
-                    onChange={(e) => setMetadataClientRole(e.target.value)}
-                    placeholder="Ügyfél szerepe"
+                    value={knownPartyRole}
+                    onChange={(e) => setKnownPartyRole(e.target.value)}
+                    placeholder="Szerep"
                     className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]"
                   />
                   <input
                     type="text"
-                    value={metadataCounterparty}
-                    onChange={(e) => setMetadataCounterparty(e.target.value)}
-                    placeholder="Ellenérdekű fél"
+                    value={knownPartyNotes}
+                    onChange={(e) => setKnownPartyNotes(e.target.value)}
+                    placeholder="Megjegyzés"
                     className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]"
                   />
-                  <input
-                    type="text"
-                    value={metadataNotes}
-                    onChange={(e) => setMetadataNotes(e.target.value)}
-                    placeholder="Megjegyzés (opcionális)"
-                    className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]"
-                  />
+                  {knownPartyKind === "PERSON" ? (
+                    <>
+                      <input type="text" value={birthName} onChange={(e) => setBirthName(e.target.value)} placeholder="Születési név" className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]" />
+                      <input type="text" value={birthPlace} onChange={(e) => setBirthPlace(e.target.value)} placeholder="Születési hely" className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]" />
+                      <input type="text" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} placeholder="Születési idő" className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]" />
+                      <input type="text" value={mothersName} onChange={(e) => setMothersName(e.target.value)} placeholder="Anyja neve" className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]" />
+                      <input type="text" value={personAddress} onChange={(e) => setPersonAddress(e.target.value)} placeholder="Lakcím" className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]" />
+                      <input type="text" value={personTaxId} onChange={(e) => setPersonTaxId(e.target.value)} placeholder="Adóazonosító jel" className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]" />
+                      <input type="text" value={personalIdentifierNumber} onChange={(e) => setPersonalIdentifierNumber(e.target.value)} placeholder="Személyi azonosító jel" className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]" />
+                      <input type="text" value={identityCardNumber} onChange={(e) => setIdentityCardNumber(e.target.value)} placeholder="Személyi igazolvány száma" className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]" />
+                    </>
+                  ) : (
+                    <>
+                      <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Cégnév" className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]" />
+                      <input type="text" value={companySeat} onChange={(e) => setCompanySeat(e.target.value)} placeholder="Székhely" className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]" />
+                      <input type="text" value={companyTaxNumber} onChange={(e) => setCompanyTaxNumber(e.target.value)} placeholder="Adószám" className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]" />
+                      <input type="text" value={euVatNumber} onChange={(e) => setEuVatNumber(e.target.value)} placeholder="Közösségi adószám" className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]" />
+                      <input type="text" value={companyRegistrationNumber} onChange={(e) => setCompanyRegistrationNumber(e.target.value)} placeholder="Cégjegyzékszám" className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]" />
+                      <input type="text" value={representativeName} onChange={(e) => setRepresentativeName(e.target.value)} placeholder="Képviselő neve" className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]" />
+                      <input type="text" value={representativeTitle} onChange={(e) => setRepresentativeTitle(e.target.value)} placeholder="Képviselő tisztsége" className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]" />
+                      <input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="Kapcsolattartó email" className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]" />
+                      <input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Telefonszám" className="px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]" />
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -413,7 +512,7 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientName, 
                       <div key={i} className="flex items-center justify-between px-2 py-1.5 bg-[#f5f3ee] border border-[#c3c8c1]/10">
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] text-[#434843]/50">
-                            {cp.side === 'OPPONENT' ? '🔴' : '🟡'}
+                            {cp.side === 'OPPONENT' ? 'E' : 'T'}
                           </span>
                           <span className="text-xs text-[#06190d]">{cp.name}</span>
                         </div>
@@ -421,7 +520,7 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientName, 
                           onClick={() => handleRemoveCounterparty(i)}
                           className="text-[#8b3a3a] hover:text-[#6b2020] text-xs font-bold"
                         >
-                          ✕
+                          x
                         </button>
                       </div>
                     ))}
@@ -430,27 +529,25 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientName, 
               </div>
 
               {/* AI Task Selection */}
-              <div className="mb-6">
-                <label className="block text-xs font-bold uppercase tracking-widest text-[#434843] mb-3">
-                  AI Analysis Task
-                </label>
-                <div className="grid grid-cols-2 gap-3">
+              <details className="mb-6 border border-[#c3c8c1]/20 p-3">
+                <summary className="cursor-pointer text-xs font-bold uppercase tracking-widest text-[#434843]">
+                  AI prompt beállítás
+                </summary>
+                <p className="mt-2 text-[10px] text-[#434843]/70">
+                  Alapértelmezett prompt: szerződéses kockázatelemzés. Részletes promptok később a szerződés-workspace jobb oldali paneljén lesznek elérhetők.
+                </p>
+                <select
+                  value={aiTask}
+                  onChange={(e) => setAiTask(e.target.value as AITask)}
+                  className="mt-3 w-full px-2 py-2 text-xs border border-[#c3c8c1]/20 text-[#06190d] focus:outline-none focus:border-[#06190d] bg-white"
+                >
                   {aiTaskOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      onClick={() => setAiTask(option.value)}
-                      className={`p-3 text-left border transition-all ${
-                        aiTask === option.value
-                          ? "border-[#06190d] bg-[#06190d]/5"
-                          : "border-[#c3c8c1]/20 hover:border-[#c3c8c1]/40"
-                      }`}
-                    >
-                      <p className="text-xs font-bold text-[#06190d]">{option.label}</p>
-                      <p className="text-[10px] text-[#434843] mt-1">{option.description}</p>
-                    </button>
+                    <option key={option.value} value={option.value}>
+                      {option.label} - {option.description}
+                    </option>
                   ))}
-                </div>
-              </div>
+                </select>
+              </details>
 
               {/* Custom Prompt (if CUSTOM selected) */}
               {aiTask === "CUSTOM" && (
