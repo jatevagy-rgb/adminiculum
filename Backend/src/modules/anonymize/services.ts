@@ -43,6 +43,13 @@ interface RedactionItem {
   position: number;
 }
 
+interface RedactionCandidate {
+  value: string;
+  token: string;
+  source: string;
+  category: 'CLIENT' | 'COUNTERPARTY' | 'EMAIL' | 'PHONE' | 'ADDRESS' | 'IDENTIFIER';
+}
+
 // ============================================================================
 // Counterparty structured input (minimal shape for extra-party context)
 // ============================================================================
@@ -64,6 +71,13 @@ const SOURCE_TEXT_LIMITATION_MESSAGE = 'A dokumentum teljes szöveges előnézet
 
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeRoleToken(role?: string): '[MEGBÍZÓ]' | '[ÜGYFÉL]' {
+  const normalized = (role || '').trim().toLowerCase();
+  if (normalized.includes('megbízó')) return '[MEGBÍZÓ]';
+  if (normalized.includes('ugyfel') || normalized.includes('ügyfél')) return '[ÜGYFÉL]';
+  return '[ÜGYFÉL]';
 }
 
 export async function anonymizeDocument(params: {
@@ -139,40 +153,95 @@ export async function anonymizeDocument(params: {
     }
 
     // 3. Collect all items to redact
-    const itemsToRedact: string[] = [];
+    const candidates: RedactionCandidate[] = [];
     const redactedItems: RedactionItem[] = [];
+
+    const counters = {
+      EMAIL: 0,
+      PHONE: 0,
+      ADDRESS: 0,
+      IDENTIFIER: 0,
+      COUNTERPARTY: 0,
+    };
+
+    const addCandidate = (candidate: RedactionCandidate | null) => {
+      if (!candidate) return;
+      const value = candidate.value.trim();
+      if (value.length <= 2) return;
+      candidates.push({ ...candidate, value });
+    };
+
+    const addClientCandidate = (value?: string, source = 'unknown', role?: string) => {
+      if (!value) return;
+      addCandidate({
+        value,
+        token: normalizeRoleToken(role),
+        source,
+        category: 'CLIENT',
+      });
+    };
+
+    const addCounterpartyCandidate = (value?: string, source = 'unknown', token?: string) => {
+      if (!value) return;
+      const resolvedToken = token || `[FÉL_${++counters.COUNTERPARTY}]`;
+      addCandidate({
+        value,
+        token: resolvedToken,
+        source,
+        category: 'COUNTERPARTY',
+      });
+    };
+
+    const addTypedCandidate = (
+      value: string | undefined,
+      category: 'EMAIL' | 'PHONE' | 'ADDRESS' | 'IDENTIFIER',
+      source: string,
+      tokenPrefix: string
+    ) => {
+      if (!value) return;
+      counters[category] += 1;
+      addCandidate({
+        value,
+        token: `[${tokenPrefix}_${counters[category]}]`,
+        source,
+        category,
+      });
+    };
+
+    const effectiveClientRole =
+      params.metadata?.clientRole || caseData?.clientRole || undefined;
 
     // Add client name
     if (caseData.clientName && (!params.redactionLevel || params.redactionLevel !== 'CLIENT_ONLY')) {
-      itemsToRedact.push(caseData.clientName);
+      addClientCandidate(caseData.clientName, 'case.clientName', effectiveClientRole);
     }
 
     // Add case-level client role (e.g., "Megbízó", "Ellenérdekű fél") — helps catch role-prefixed name patterns
     if (caseData.clientRole && (!params.redactionLevel || params.redactionLevel !== 'CLIENT_ONLY')) {
-      itemsToRedact.push(caseData.clientRole);
+      addClientCandidate(caseData.clientRole, 'case.clientRole', effectiveClientRole);
     }
 
     // Add client details
     if (clientData) {
-      if (clientData.name) itemsToRedact.push(clientData.name);
-      if (clientData.taxId) itemsToRedact.push(clientData.taxId);
-      if (clientData.personalId) itemsToRedact.push(clientData.personalId);
-      if (clientData.bankAccount) itemsToRedact.push(clientData.bankAccount);
-      if (clientData.email) itemsToRedact.push(clientData.email);
-      if (clientData.phone) itemsToRedact.push(clientData.phone);
-      if (clientData.address) itemsToRedact.push(clientData.address);
+      addClientCandidate(clientData.name, 'client.name', effectiveClientRole);
+      addTypedCandidate(clientData.taxId, 'IDENTIFIER', 'client.taxId', 'AZONOSÍTÓ');
+      addTypedCandidate(clientData.personalId, 'IDENTIFIER', 'client.personalId', 'AZONOSÍTÓ');
+      addTypedCandidate(clientData.bankAccount, 'IDENTIFIER', 'client.bankAccount', 'AZONOSÍTÓ');
+      addTypedCandidate(clientData.email, 'EMAIL', 'client.email', 'EMAIL');
+      addTypedCandidate(clientData.phone, 'PHONE', 'client.phone', 'TELEFON');
+      addTypedCandidate(clientData.address, 'ADDRESS', 'client.address', 'CÍM');
       
       // Add from redactor profile
       if (clientData.redactorProfile) {
         const profile = clientData.redactorProfile;
-        itemsToRedact.push(profile.fullName);
-        profile.aliases?.forEach(a => itemsToRedact.push(a));
-        profile.addresses?.forEach(a => itemsToRedact.push(a));
-        profile.taxId && itemsToRedact.push(profile.taxId);
-        profile.personalId && itemsToRedact.push(profile.personalId);
-        profile.bankAccounts?.forEach(a => itemsToRedact.push(a));
-        profile.phones?.forEach(a => itemsToRedact.push(a));
-        profile.emails?.forEach(a => itemsToRedact.push(a));
+        addClientCandidate(profile.fullName, 'redactorProfile.fullName', effectiveClientRole);
+        profile.aliases?.forEach(a => addClientCandidate(a, 'redactorProfile.aliases', effectiveClientRole));
+        profile.addresses?.forEach(a => addTypedCandidate(a, 'ADDRESS', 'redactorProfile.addresses', 'CÍM'));
+        addTypedCandidate(profile.taxId, 'IDENTIFIER', 'redactorProfile.taxId', 'AZONOSÍTÓ');
+        addTypedCandidate(profile.personalId, 'IDENTIFIER', 'redactorProfile.personalId', 'AZONOSÍTÓ');
+        profile.bankAccounts?.forEach(a => addTypedCandidate(a, 'IDENTIFIER', 'redactorProfile.bankAccounts', 'AZONOSÍTÓ'));
+        profile.phones?.forEach(a => addTypedCandidate(a, 'PHONE', 'redactorProfile.phones', 'TELEFON'));
+        profile.emails?.forEach(a => addTypedCandidate(a, 'EMAIL', 'redactorProfile.emails', 'EMAIL'));
       }
     }
 
@@ -181,7 +250,14 @@ export async function anonymizeDocument(params: {
     if (params.counterparties && params.counterparties.length > 0) {
       for (const cp of params.counterparties) {
         if (cp.name && cp.name.trim().length > 2) {
-          itemsToRedact.push(cp.name.trim());
+          const hasOpponentRole =
+            cp.side === 'OPPONENT' ||
+            (cp.partyType && cp.partyType.trim().length > 0);
+          addCounterpartyCandidate(
+            cp.name.trim(),
+            'params.counterparties',
+            hasOpponentRole ? '[ELLENÉRDEKŰ FÉL]' : undefined
+          );
         }
       }
     }
@@ -190,18 +266,25 @@ export async function anonymizeDocument(params: {
     // user-entered context for this anonymization request; do not log their content.
     if (params.metadata) {
       if (params.metadata.clientName && params.metadata.clientName.trim().length > 2) {
-        itemsToRedact.push(params.metadata.clientName.trim());
+        addClientCandidate(params.metadata.clientName.trim(), 'params.metadata.clientName', effectiveClientRole);
       }
       if (params.metadata.clientRole && params.metadata.clientRole.trim().length > 2) {
-        itemsToRedact.push(params.metadata.clientRole.trim());
+        addClientCandidate(params.metadata.clientRole.trim(), 'params.metadata.clientRole', effectiveClientRole);
       }
       if (params.metadata.counterparty && params.metadata.counterparty.trim().length > 2) {
-        itemsToRedact.push(params.metadata.counterparty.trim());
+        addCounterpartyCandidate(params.metadata.counterparty.trim(), 'params.metadata.counterparty', '[ELLENÉRDEKŰ FÉL]');
       }
     }
 
-    // Remove duplicates
-    const uniqueItems = [...new Set(itemsToRedact)].filter(i => i && i.length > 2);
+    // Remove duplicates by value+token pair
+    const uniqueMap = new Map<string, RedactionCandidate>();
+    for (const candidate of candidates) {
+      const key = `${candidate.value}|||${candidate.token}`;
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, candidate);
+      }
+    }
+    const uniqueCandidates = Array.from(uniqueMap.values());
 
     // 4. Get document content (UI-provided text first, otherwise backend extraction)
     let content: string;
@@ -280,12 +363,12 @@ export async function anonymizeDocument(params: {
     let redactedContent = content;
     let position = 0;
 
-    for (const item of uniqueItems) {
-      const regex = new RegExp(escapeRegex(item), 'gi');
-      const replacement = `[${item.toUpperCase().replace(/[^A-Z0-9]/g, '_')}]`;
+    for (const candidate of uniqueCandidates) {
+      const regex = new RegExp(escapeRegex(candidate.value), 'gi');
+      const replacement = candidate.token;
       redactedContent = redactedContent.replace(regex, (match) => {
         redactedItems.push({
-          type: 'CLIENT_DATA',
+          type: candidate.source,
           original: match,
           replacement: replacement,
           position: position++
@@ -298,7 +381,7 @@ export async function anonymizeDocument(params: {
       documentId: params.documentId,
       sourceType,
       redactionLevel: params.redactionLevel || 'FULL',
-      candidateCount: uniqueItems.length,
+      candidateCount: uniqueCandidates.length,
       redactedCount: redactedItems.length,
       sourceTextProvided: providedSourceText.length > 0,
     });
@@ -345,7 +428,7 @@ export async function anonymizeDocument(params: {
         aiTask: params.aiTask,
         customPrompt: effectiveCustomPrompt,
         name: `[ANONYMIZED] ${sourceName}`,
-        patternCount: uniqueItems.length
+        patternCount: uniqueCandidates.length
       } as any
     });
 
