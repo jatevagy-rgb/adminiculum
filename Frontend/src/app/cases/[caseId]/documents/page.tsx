@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, use, useEffect, useCallback, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import {
   getCaseContracts,
@@ -240,6 +240,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [noteError, setNoteError] = useState<string | null>(null);
   const [isLoadingNotes, setIsLoadingNotes] = useState(false);
 
+  const searchParams = useSearchParams();
+  const requestedDocumentId = searchParams?.get("documentId") ?? null;
+  const requestedDocumentIdRef = useRef<string | null>(requestedDocumentId);
+  if (requestedDocumentId) {
+    requestedDocumentIdRef.current = requestedDocumentId;
+  }
+
   // Fetch case record from case list to resolve caseNumber -> CUID.
   // caseRecord.id (CUID) is used for ALL API calls; resolvedParams.caseId may be a caseNumber string.
   useEffect(() => {
@@ -281,8 +288,23 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setContracts(contractsData);
       setUploadedDocuments(uploadedDocsData);
       setTimeline(timelineData);
-      // Auto-select uploaded documents first because this page is the case document workspace entry point.
-      if (!selectedLedgerItem) {
+      // Auto-select deep-linked document if requested, otherwise default first-available.
+      const deepLinkedId = requestedDocumentIdRef.current;
+      if (deepLinkedId) {
+        const uploadedMatch = uploadedDocsData.find(doc => doc.id === deepLinkedId);
+        if (uploadedMatch) {
+          setSelectedLedgerItem({ kind: 'uploaded', item: uploadedMatch });
+          setSelectedContract(null);
+          requestedDocumentIdRef.current = null;
+        } else {
+          const contractMatch = contractsData.find(c => c.id === deepLinkedId);
+          if (contractMatch) {
+            setSelectedLedgerItem({ kind: 'generated', item: contractMatch });
+            setSelectedContract(contractMatch);
+            requestedDocumentIdRef.current = null;
+          }
+        }
+      } else if (!selectedLedgerItem) {
         if (uploadedDocsData.length > 0) {
           setSelectedLedgerItem({ kind: 'uploaded', item: uploadedDocsData[0] });
           setSelectedContract(null);
@@ -783,6 +805,63 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
             </div>
           </section>
 
+          {/* WORKFLOW STEPPER */}
+          {(() => {
+            const hasAnyDocument = uploadedDocuments.length + contracts.length > 0;
+            const hasSelectedDocument = selectedLedgerItem !== null;
+            const steps = [
+              { label: 'Forrásdokumentum' },
+              { label: 'Anonimizálás' },
+              { label: 'AI elemzés' },
+              { label: 'Módosított dokumentum' },
+              { label: 'Ügyvédi leadás' },
+            ];
+            const getStepStatus = (idx: number): 'completed' | 'active' | 'locked' => {
+              if (idx === 0) {
+                if (!hasAnyDocument) return 'locked';
+                if (hasSelectedDocument) return 'completed';
+                return 'active';
+              }
+              if (idx === 1) {
+                if (hasSelectedDocument) return 'active';
+                return 'locked';
+              }
+              return 'locked';
+            };
+            return (
+              <div className={`border ${p.border} ${p.bgCard} p-4`}>
+                <p className={`text-[10px] uppercase tracking-widest ${p.textMuted} mb-3`}>Szerződés munkafolyamat</p>
+                <div className="flex items-center gap-1">
+                  {steps.map((step, i) => {
+                    const status = getStepStatus(i);
+                    return (
+                      <div key={i} className="flex items-center">
+                        <div className="flex flex-col items-center">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                            status === 'completed' ? 'bg-[#23472F] text-white'
+                            : status === 'active' ? 'bg-[#C9A227] text-white'
+                            : 'bg-[#EEE7D9] text-[#9C9890]'
+                          }`}>
+                            {status === 'completed' ? '✓' : i + 1}
+                          </div>
+                          <span className={`text-[8px] mt-1 whitespace-nowrap ${status === 'locked' ? 'text-[#9C9890]' : 'text-[#514D45]'}`}>
+                            {step.label}
+                          </span>
+                        </div>
+                        {i < steps.length - 1 && (
+                          <div className={`w-4 h-0.5 mb-4 ${status === 'completed' ? 'bg-[#23472F]' : 'bg-[#DDD7CA]'}`} />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className={`text-[9px] ${p.textMuted} mt-2`}>
+                  A lépések v1-ben tájékoztató jellegűek. Csak az aktív dokumentum kiválasztása alapján változnak, nem jelentenek végleges ügyvédi jóváhagyást.
+                </p>
+              </div>
+            );
+          })()}
+
           {/* MAIN GRID */}
           <div className="grid grid-cols-12 gap-8">
             {/* LEFT COLUMN: Checklist & Audit */}
@@ -886,9 +965,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   </button>
                 </div>
               </div>
-              <p className={`text-[10px] ${p.textMuted}`}>
-                Szöveg beillesztése külön következő patchben lesz kezelve.
-              </p>
+              <div className={`text-[9px] ${p.textMuted} border border-[#EEE7D9] bg-[#F6F2E8] p-2`}>
+                Az aktív munkadokumentum határozza meg, melyik iraton fut az anonimizálás, workspace, elemzés és review-előkészítés.
+              </div>
 
               {isLoading ? (
                 <div className="text-center py-12">
@@ -897,22 +976,35 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
               ) : totalLedgerDocuments === 0 ? (
                 <div className={`text-center py-12 ${p.bgSection} border ${isSignalTiles ? 'border-slate-700' : 'border-[#c3c8c1]/10'}`}>
                   <span className={`material-symbols-outlined text-4xl ${isSignalTiles ? 'text-slate-600' : 'text-[#c3c8c1]'}`}>description</span>
-                  <p className={`${p.textDark} mt-4`}>No case documents yet</p>
+                  <p className={`${p.textDark} mt-4 font-bold`}>Nincs még aktív munkadokumentum</p>
                   <p className={`${p.textMuted} text-xs mt-2 max-w-md mx-auto`}>
-                    Documents appear here after upload or generation. Upload a client document or use the clause-based builder when ready.
+                    Kezdéshez tölts fel egy dokumentumot, vagy indíts klauzula-alapú dokumentumépítést.
                   </p>
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`mt-4 px-4 py-2 text-xs font-bold uppercase tracking-widest ${isSignalTiles ? 'bg-cyan-700 text-white hover:bg-cyan-600' : 'bg-[#06190d] text-white hover:bg-black'} transition-colors`}
-                  >
-                    Dokumentum feltöltése
-                  </button>
-                  <button
-                    onClick={handleGenerate}
-                    className={`mt-4 ml-2 px-4 py-2 text-xs font-bold uppercase tracking-widest border ${p.border} ${p.textDark} ${p.bgHover} transition-colors`}
-                  >
-                    Klauzula-alapú dokumentumépítő
-                  </button>
+                  <div className="mt-4 flex flex-col items-center gap-3">
+                    <div className="flex gap-3 justify-center">
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`px-4 py-2 text-xs font-bold uppercase tracking-widest ${isSignalTiles ? 'bg-cyan-700 text-white hover:bg-cyan-600' : 'bg-[#06190d] text-white hover:bg-black'} transition-colors`}
+                      >
+                        Dokumentum feltöltése
+                      </button>
+                      <button
+                        onClick={handleGenerate}
+                        className={`px-4 py-2 text-xs font-bold uppercase tracking-widest border ${p.border} ${p.textDark} ${p.bgHover} transition-colors`}
+                      >
+                        Klauzula-alapú dokumentumépítő
+                      </button>
+                    </div>
+                    <button
+                      onClick={handleLegacyGenerate}
+                      className={`text-[9px] uppercase tracking-wide ${p.textMuted} hover:underline`}
+                    >
+                      Régi adásvételi generátor
+                    </button>
+                    <p className={`text-[8px] ${p.textMuted} max-w-xs`}>
+                      Legacy folyamat; csak akkor használd, ha kifejezetten az adásvételi ügyletcsomagra van szükség.
+                    </p>
+                  </div>
                 </div>
               ) : families.length === 0 && standalone.length === 0 ? (
                 <div className={`text-center py-12 ${p.bgSection} border ${isSignalTiles ? 'border-slate-700' : 'border-[#c3c8c1]/10'}`}>
@@ -924,15 +1016,15 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   {/* Uploaded Documents */}
                   {uploadedDocuments.length > 0 && (
                     <section className={`border ${p.border} ${p.bgCard}`}>
-                      <div className={`${p.bgSection} px-5 py-3 border-b ${p.border} flex items-center justify-between`}>
+                      <div className={`${p.bgSection} px-5 py-3 border-b ${p.border}`}>
                         <div className="flex items-center gap-3">
                           <span className={`material-symbols-outlined ${isSignalTiles ? 'text-cyan-400' : 'text-[#06190d]'}`}>upload_file</span>
                           <div>
-                            <h4 className={`text-sm font-bold ${isSignalTiles ? 'text-slate-200' : 'text-[#06190d]'}`}>Uploaded documents</h4>
-                            <p className={`text-[10px] ${p.textDark}`}>{uploadedDocuments.length} ügyféltől érkezett dokumentum</p>
+                            <h4 className={`text-sm font-bold ${isSignalTiles ? 'text-slate-200' : 'text-[#06190d]'}`}>Feltöltött dokumentumok</h4>
+                            <p className={`text-[10px] ${p.textDark}`}>Ezek az ügyhöz feltöltött eredeti vagy beérkezett munkadokumentumok.</p>
+                            <p className={`text-[9px] ${p.textMuted} mt-0.5`}>Több dokumentum is tárolható, de egyszerre mindig egy aktív munkadokumentumon dolgozol.</p>
                           </div>
                         </div>
-                        <span className={`text-[8px] px-1.5 py-0.5 ${p.badge} font-bold uppercase tracking-wide`}>CLIENT INPUT</span>
                       </div>
                       <div className={`divide-y ${p.borderLight}`}>
                         {uploadedDocuments.map((doc) => {
@@ -944,13 +1036,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 setSelectedLedgerItem({ kind: 'uploaded', item: doc });
                                 setSelectedContract(null);
                               }}
-                              className={`p-4 transition-all cursor-pointer ${isSelected ? p.bgSection : isSignalTiles ? 'hover:bg-slate-700' : 'hover:bg-[#fafaf8]'}`}
+                              className={`p-4 transition-all cursor-pointer ${isSelected ? `${p.bgSection} border-l-4 border-[#23472F]` : isSignalTiles ? 'hover:bg-slate-700' : 'hover:bg-[#fafaf8]'}`}
                             >
                               <div className="flex justify-between items-start gap-3">
                                 <div>
                                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                                     <h5 className={`text-xs font-bold ${isSignalTiles ? 'text-slate-200' : 'text-[#06190d]'}`}>{doc.fileName || 'Untitled document'}</h5>
-                                    <span className={`text-[8px] px-1.5 py-0.5 ${p.badge} font-bold uppercase tracking-wide`}>UPLOADED</span>
+                                    <span className={`text-[8px] px-1.5 py-0.5 ${p.badge} font-bold uppercase tracking-wide`}>Feltöltött</span>
+                                    {isSelected && (
+                                      <span className="text-[8px] px-1.5 py-0.5 bg-[#23472F] text-white font-bold uppercase tracking-wide">Aktív</span>
+                                    )}
                                   </div>
                                   <p className={`text-[10px] ${p.textDark}`}>
                                     {doc.documentType || 'OTHER'} • {doc.folder || 'CLIENT_INPUT'} • {doc.createdAt ? new Date(doc.createdAt).toLocaleDateString('hu-HU') : '—'}
@@ -998,6 +1093,19 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   )}
 
                   {/* Document Families */}
+                  {families.length > 0 && (
+                    <section className={`border ${p.border} ${p.bgCard}`}>
+                      <div className={`${p.bgSection} px-5 py-3 border-b ${p.border}`}>
+                        <div className="flex items-center gap-3">
+                          <span className={`material-symbols-outlined ${isSignalTiles ? 'text-cyan-400' : 'text-[#06190d]'}`}>description</span>
+                          <div>
+                            <h4 className={`text-sm font-bold ${isSignalTiles ? 'text-slate-200' : 'text-[#06190d]'}`}>Generált dokumentumok</h4>
+                            <p className={`text-[10px] ${p.textDark}`}>Ezek az Adminiculum által létrehozott vagy előkészített dokumentumok.</p>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                  )}
                   {families.map((family) => (
                     <div key={family.familyId} className={`border ${p.border} ${p.bgCard}`}>
                       {/* Family Header */}
@@ -1042,6 +1150,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           const isLatest = contract.id === family.latestItemId;
                           const previousInFamily = family.items[idx + 1] || null;
                           const revisionMeta = getRevisionMeta(contract);
+                          const isSelected = selectedContract?.id === contract.id || selectedLedgerItem?.kind === 'generated' && selectedLedgerItem.item.id === contract.id;
                           return (
                             <div
                               key={contract.id}
@@ -1050,7 +1159,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 setSelectedLedgerItem({ kind: 'generated', item: contract });
                               }}
                               className={`p-4 transition-all cursor-pointer ${
-                                selectedContract?.id === contract.id ? p.bgSection : isSignalTiles ? 'hover:bg-slate-700' : 'hover:bg-[#fafaf8]'
+                                isSelected ? `${p.bgSection} border-l-4 border-[#23472F]` : isSignalTiles ? 'hover:bg-slate-700' : 'hover:bg-[#fafaf8]'
                               }`}
                             >
                               <div className="flex justify-between items-start">
@@ -1063,6 +1172,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                       <h5 className={`text-xs font-bold ${isSignalTiles ? 'text-slate-200' : 'text-[#06190d]'}`}>
                                         {contract.title || contract.templateName || 'Untitled Document'}
                                       </h5>
+                                      <span className={`text-[8px] px-1.5 py-0.5 ${p.badge} font-bold uppercase tracking-wide`}>Generált</span>
+                                      {isSelected && (
+                                        <span className="text-[8px] px-1.5 py-0.5 bg-[#23472F] text-white font-bold uppercase tracking-wide">Aktív</span>
+                                      )}
                                       {revisionMeta.isDerived && (
                                         <span className="text-[8px] px-1 py-0.5 bg-purple-900 text-purple-200 font-bold uppercase tracking-wide">
                                           Szerkesztett verzió
@@ -1313,6 +1426,14 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <h2 className={`text-xl font-['Newsreader'] font-bold leading-tight ${isSignalTiles ? 'text-slate-100' : 'text-[#06190d]'}`}>
                         {selectedUploadedDocument.fileName || 'Uploaded document'}
                       </h2>
+                      {requestedDocumentId === selectedUploadedDocument.id && (
+                        <p className={`text-[9px] mt-2 ${p.textMuted}`}>
+                          Ezt a dokumentumot a Szerződés-workspace-ből nyitottad meg. Következő lépésként indíts anonimizálást, hogy a prompt panel tényleges dokumentumszöveggel dolgozzon.
+                        </p>
+                      )}
+                      <p className={`text-[9px] mt-1 ${p.textMuted}`}>
+                        Az anonimizálás után a Szerződés-workspace automatikusan a legutóbbi anonimizált munkaszöveget használja.
+                      </p>
                     </div>
                     <div className="space-y-6">
                       <div className={`flex items-center justify-between py-2 border-b ${isSignalTiles ? 'border-slate-700' : 'border-[#c3c8c1]/20'}`}>
@@ -1342,34 +1463,85 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </span>
                       </div>
                       <div className="space-y-3 pt-4">
-                        <span className={`text-[10px] uppercase font-bold ${isSignalTiles ? 'text-cyan-400' : 'text-[#06190d]'} block border-b ${isSignalTiles ? 'border-slate-700' : 'border-[#06190d]/10'} pb-1`}>
-                          Műveletek
-                        </span>
-                        <button
-                          onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedUploadedDocument.id)}`)}
-                          className={`w-full ${isSignalTiles ? 'bg-cyan-700 text-white hover:bg-cyan-600' : 'bg-[#06190d] text-white hover:opacity-90'} py-3 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-colors`}
-                        >
-                          <span className="material-symbols-outlined text-sm">article</span>
-                          Szerződés-workspace
-                        </button>
-                        <button
-                          onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)}
-                          disabled={isDownloading === selectedUploadedDocument.id}
-                          className={`w-full border ${isSignalTiles ? 'border-cyan-700 text-cyan-300 hover:bg-cyan-900/30' : 'border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5'} py-3 text-xs font-bold uppercase tracking-widest disabled:opacity-50 transition-colors`}
-                        >
-                          {isDownloading === selectedUploadedDocument.id ? 'Letöltés...' : 'Letöltés'}
-                        </button>
-                        <button
-                          onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedUploadedDocument.id)}`)}
-                          className={`w-full border ${isSignalTiles ? 'border-cyan-700 text-cyan-300 hover:bg-cyan-900/30' : 'border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5'} py-3 text-xs font-bold uppercase tracking-widest transition-colors`}
-                        >
-                          Metaadat összevetés
-                        </button>
+                        {/* Section 1: Következő ajánlott lépés */}
+                        <div className="border border-[#23472F] bg-[#e2ede5] p-3">
+                          <p className="text-[9px] text-[#23472F] mb-2">
+                            Első lépésként anonimizáld a dokumentumot, hogy a Szerződés-workspace prompt panelje tényleges dokumentumszöveggel dolgozzon.
+                          </p>
+                          <button
+                            onClick={() => {
+                              const fakeContract: CaseContractListItem = {
+                                id: selectedUploadedDocument.id,
+                                title: selectedUploadedDocument.fileName || 'Uploaded Document',
+                                templateName: '',
+                                category: selectedUploadedDocument.documentType || 'CLIENT_INPUT',
+                                status: selectedUploadedDocument.folder || 'CLIENT_INPUT',
+                                fileName: selectedUploadedDocument.fileName || 'document',
+                                fileSize: 0,
+                                generatedAt: selectedUploadedDocument.createdAt || new Date().toISOString(),
+                                revisionNumber: Number(selectedUploadedDocument.version) || 1,
+                                isCurrentRevision: true,
+                                isFinalRevision: false,
+                              };
+                              setAnonymizeModalContract(fakeContract);
+                            }}
+                            className={`w-full ${isSignalTiles ? 'bg-emerald-700 text-white hover:bg-emerald-600' : 'bg-[#23472F] text-white hover:opacity-90'} py-3 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-colors`}
+                          >
+                            <span className="material-symbols-outlined text-sm">shield</span>
+                            Anonimizálás indítása
+                          </button>
+                        </div>
+
+                        {/* Section 2: Workspace és elemzés */}
+                        <div className="space-y-2">
+                          <span className={`text-[10px] uppercase font-bold ${isSignalTiles ? 'text-slate-400' : 'text-[#7B776D]'} block`}>
+                            Workspace és elemzés
+                          </span>
+                          <button
+                            onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedUploadedDocument.id)}`)}
+                            className={`w-full ${isSignalTiles ? 'bg-cyan-700 text-white hover:bg-cyan-600' : 'bg-[#06190d] text-white hover:opacity-90'} py-3 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-colors`}
+                          >
+                            <span className="material-symbols-outlined text-sm">article</span>
+                            Szerződés-workspace
+                          </button>
+                          <p className={`text-[9px] ${p.textMuted} -mt-1`}>
+                            Anonimizálás után itt jelenik meg a promptolásra használható munkaszöveg.
+                          </p>
+                          <button
+                            onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)}
+                            disabled={isDownloading === selectedUploadedDocument.id}
+                            className={`w-full border ${isSignalTiles ? 'border-cyan-700 text-cyan-300 hover:bg-cyan-900/30' : 'border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5'} py-3 text-xs font-bold uppercase tracking-widest disabled:opacity-50 transition-colors`}
+                          >
+                            {isDownloading === selectedUploadedDocument.id ? 'Letöltés...' : 'Letöltés'}
+                          </button>
+                        </div>
+
+                        {/* Section 3: Haladó / technikai műveletek */}
+                        <div className="space-y-2">
+                          <span className={`text-[10px] uppercase font-bold ${isSignalTiles ? 'text-slate-400' : 'text-[#7B776D]'} block`}>
+                            Haladó / technikai műveletek
+                          </span>
+                          <button
+                            onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedUploadedDocument.id)}`)}
+                            className={`w-full border ${isSignalTiles ? 'border-slate-600 text-slate-300' : 'border-[#c3c8c1] text-[#7B776D]'} py-2 text-[10px] font-bold uppercase tracking-widest transition-colors`}
+                          >
+                            Metaadat összevetés
+                          </button>
+                          <p className={`text-[8px] ${p.textMuted}`}>
+                            Az összevetés jelenleg segédeszköz; nem helyettesíti a későbbi teljes dokumentumszerkesztési folyamatot.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </>
                 ) : selectedGeneratedContract ? (
                   <>
+                    <div className={`border ${p.border} ${p.bgSection} p-3 mb-4`}>
+                      <p className={`text-[9px] uppercase tracking-widest ${p.textMuted} mb-1`}>Aktív munkadokumentum</p>
+                      <p className={`text-xs font-bold ${isSignalTiles ? 'text-slate-200' : 'text-[#06190d]'}`}>{selectedGeneratedContract.title || selectedGeneratedContract.fileName || selectedGeneratedContract.templateName || 'Névtelen dokumentum'}</p>
+                      <span className="inline-block mt-1 text-[8px] px-1.5 py-0.5 bg-[#d1e8d3] text-[#23472F] font-bold uppercase tracking-wide">Generált dokumentum</span>
+                      <p className={`text-[10px] ${p.textMuted} mt-2`}>Ez a generált dokumentum review-ra, összevetésre vagy mentésre előkészíthető.</p>
+                    </div>
                     <div className="mb-6">
                       <h3 className={`text-xs font-bold uppercase tracking-widest ${p.textDark} mb-1`}>
                         Selection Focus
@@ -1467,26 +1639,29 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </span>
                       </div>
 
-                      {/* Dokumentum műveletek */}
-                      <div className="space-y-3 pt-4">
-                        <span className={`text-[10px] uppercase font-bold ${isSignalTiles ? 'text-cyan-400' : 'text-[#06190d]'} block border-b ${isSignalTiles ? 'border-slate-700' : 'border-[#06190d]/10'} pb-1`}>
-                          Műveletek
-                        </span>
-                        <p className={`text-[9px] ${p.textMuted}`}>
-                          Válassz műveletet: workspace, letöltés, review, metaadat összevetés, vagy előző verzióval összevetés.
+                      {/* Section 1: Következő ajánlott lépés */}
+                      <div className="border border-[#23472F] bg-[#e2ede5] p-3">
+                        <p className="text-[9px] text-[#23472F] mb-2">
+                          A workspace-ben AI promptok, jogi elemzés és review-előkészítés végezhető.
                         </p>
                         <button
                           onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedGeneratedContract.id)}`)}
-                          title="Anonimizált szöveg, összevetés és AI promptok előkészítése."
-                          className={`w-full ${isSignalTiles ? 'bg-cyan-700 text-white hover:bg-cyan-600' : 'bg-[#06190d] text-white hover:opacity-90'} py-3 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-colors`}
+                          className={`w-full ${isSignalTiles ? 'bg-emerald-700 text-white hover:bg-emerald-600' : 'bg-[#23472F] text-white hover:opacity-90'} py-3 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-colors`}
                         >
                           <span className="material-symbols-outlined text-sm">article</span>
                           Szerződés-workspace
                         </button>
+                      </div>
+
+                      {/* Section 2: Dokumentum műveletek */}
+                      <div className="space-y-2">
+                        <span className={`text-[10px] uppercase font-bold ${isSignalTiles ? 'text-slate-400' : 'text-[#7B776D]'} block`}>
+                          Dokumentum műveletek
+                        </span>
                         <button
                           onClick={() => handleDownload(selectedGeneratedContract)}
                           disabled={isDownloading === selectedGeneratedContract.id}
-                          className={`w-full ${isSignalTiles ? 'bg-cyan-700 text-white hover:bg-cyan-600' : 'bg-[#06190d] text-white hover:opacity-90'} py-3 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 transition-colors`}
+                          className={`w-full border ${isSignalTiles ? 'border-cyan-700 text-cyan-300 hover:bg-cyan-900/30' : 'border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5'} py-3 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 transition-colors`}
                         >
                           <span className="material-symbols-outlined text-sm">download</span>
                           {isDownloading === selectedGeneratedContract.id ? 'Letöltés...' : 'Letöltés'}
@@ -1499,9 +1674,25 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             Review megnyitása
                           </button>
                         )}
+                        {!selectedGeneratedContract.spItemId && selectedGeneratedContract.status === 'APPROVED' && (
+                          <button
+                            onClick={() => handleSharePointUpload(selectedGeneratedContract)}
+                            disabled={isUploadingToSP === selectedGeneratedContract.id}
+                            className={`w-full border ${isSignalTiles ? 'border-cyan-700 text-cyan-300 hover:bg-cyan-900/30' : 'border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5'} py-3 text-xs font-bold uppercase tracking-widest disabled:opacity-50 transition-colors`}
+                          >
+                            {isUploadingToSP === selectedGeneratedContract.id ? 'Uploading...' : 'Sync to SharePoint'}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Section 3: Haladó / technikai műveletek */}
+                      <div className="space-y-2">
+                        <span className={`text-[10px] uppercase font-bold ${isSignalTiles ? 'text-slate-400' : 'text-[#7B776D]'} block`}>
+                          Haladó / technikai műveletek
+                        </span>
                         <button
                           onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedGeneratedContract.id)}`)}
-                          className={`w-full border ${isSignalTiles ? 'border-cyan-700 text-cyan-300 hover:bg-cyan-900/30' : 'border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5'} py-3 text-xs font-bold uppercase tracking-widest transition-colors`}
+                          className={`w-full border ${isSignalTiles ? 'border-slate-600 text-slate-300' : 'border-[#c3c8c1] text-[#7B776D]'} py-2 text-[10px] font-bold uppercase tracking-widest transition-colors`}
                         >
                           Metaadat összevetés
                         </button>
@@ -1512,20 +1703,14 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                   `/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedGeneratedContract.id)}&baselineId=${encodeURIComponent(previousVersionForSelected.id)}`
                               )
                             }
-                            className={`w-full border ${isSignalTiles ? 'border-cyan-700 text-cyan-300 hover:bg-cyan-900/30' : 'border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5'} py-3 text-xs font-bold uppercase tracking-widest transition-colors`}
+                            className={`w-full border ${isSignalTiles ? 'border-slate-600 text-slate-300' : 'border-[#c3c8c1] text-[#7B776D]'} py-2 text-[10px] font-bold uppercase tracking-widest transition-colors`}
                           >
                             Összevetés előző verzióval
                           </button>
                         )}
-                        {!selectedGeneratedContract.spItemId && selectedGeneratedContract.status === 'APPROVED' && (
-                          <button
-                            onClick={() => handleSharePointUpload(selectedGeneratedContract)}
-                            disabled={isUploadingToSP === selectedGeneratedContract.id}
-                            className={`w-full border ${isSignalTiles ? 'border-cyan-700 text-cyan-300 hover:bg-cyan-900/30' : 'border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5'} py-3 text-xs font-bold uppercase tracking-widest disabled:opacity-50 transition-colors`}
-                          >
-                            {isUploadingToSP === selectedGeneratedContract.id ? 'Uploading...' : 'Sync to SharePoint'}
-                          </button>
-                        )}
+                        <p className={`text-[8px] ${p.textMuted}`}>
+                          Ezek technikai ellenőrző műveletek; a fő munkafolyamat a workspace-ben folytatódik.
+                        </p>
                       </div>
 
                       {/* NOTES SECTION - Document Internal Notes */}

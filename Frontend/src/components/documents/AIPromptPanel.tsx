@@ -31,50 +31,191 @@ const promptOptions: PromptOption[] = [
     id: "quickRisk",
     label: "Gyors kockázatelemzés",
     description: "2-4 oldalas, táblázatos kockázati áttekintés.",
-    instruction:
-      "Készíts gyors, ügyvédi felülvizsgálatra alkalmas jogi kockázatelemzést legfeljebb 2-4 oldalban. A válasz szerkezete pontosan ez legyen: 1. Rövid összefoglaló. 2. Legfontosabb problémák táblázata ezekkel az oszlopokkal: Probléma | Kockázat szintje | Miért gond? | Javasolt javítás. 3. Hiányzó / ellenőrizendő adatok. 4. Gyors ügyvédi döntési pontok. A válasz legyen gyakorlati, tömör, döntés-előkészítő jellegű.",
+    instruction: `Készíts gyors, ügyvédi felülvizsgálatra alkalmas jogi kockázatelemzést legfeljebb 2-4 oldalban. A válasz szerkezete pontosan ez legyen, és semmi mást ne tartalmazzon a megadott struktúrán kívül:
+
+# Gyors jogi kockázatelemzés
+
+## 1. Rövid összefoglaló
+- Szerződés típusa:
+- Felek szerepe:
+- Szerződés tárgya:
+- Legfontosabb kockázat egy mondatban:
+
+## 2. Kockázati táblázat
+| # | Probléma | Kockázat szintje | Miért gond? | Javasolt javítás | Ügyvédi döntési pont |
+|---|---|---|---|---|---|---|
+
+## 3. Hiányzó / ellenőrizendő adatok
+| Hiányzó adat/irat | Miért szükséges? | Ki tudja megadni? | Sürgősség |
+|---|---|---|---|---|
+
+## 4. Javasolt következő lépések
+Numbered list, maximum 6 elem.
+
+Csak anyagi (jogi relevanciájú) problémákat szerepeltess. Kockázati szintek: Alacsony / Közepes / Magas / Kritikus.`,
   },
   {
     id: "fullLegal",
     label: "Teljes jogi elemzés",
     description: "Tények, jogi kérdések, kockázati mátrix, alkupontok.",
-    instruction:
-      "Készíts teljes, ügyvédi felülvizsgálatra alkalmas jogi elemzést. A válasz szerkezete pontosan ez legyen: 1. Vezetői összefoglaló. 2. Tényállás és dokumentum kontextus. 3. Fő jogi kérdések. 4. Kockázati mátrix. 5. Hiányzó iratok/adatok. 6. Várható ellenoldali érvek és válaszok. 7. Javasolt szerződésmódosítások. 8. Beilleszthető szövegblokkok. 9. Ügyvédi döntési pontok. 10. Figyelmeztetés: ügyvédi review szükséges. A beilleszthető szövegblokkoknál csak olyan klauzulát javasolj, amelyhez a tények rendelkezésre állnak; hiányzó tény esetén ezt külön jelezd.",
+    instruction: `Készíts teljes, ügyvédi felülvizsgálatra alkalmas jogi elemzést. A válasz szerkezete pontosan ez legyen, és semmi mást ne tartalmazzon:
+
+# Teljes jogi elemzés ügyvédi review-hoz
+
+## 1. Vezetői összefoglaló
+Maximum 8 bullet point, gyakorlati és tömör.
+
+## 2. Tényállás és dokumentum kontextus
+| Elem | Megállapítás | Bizonytalanság / hiány |
+|---|---|---|
+
+## 3. Fő jogi kérdések
+| Jogi kérdés | Relevancia | Kockázat | Ellenőrizendő tény |
+|---|---|---|---|---|
+
+## 4. Kockázati mátrix
+| # | Kockázat | Szint | Érintett rendelkezés | Hatás | Javasolt kezelés |
+|---|---|---|---|---|---|---|
+
+## 5. Hiányzó iratok/adatok
+| Irat/adat | Kritikus? | Miért kell? | Beszerzés forrása |
+|---|---|---|---|---|
+
+## 6. Várható ellenoldali érvek és válaszok
+| Várható ellenoldali érv | Erősség | Lehetséges válasz | Tárgyalási javaslat |
+|---|---|---|---|---|
+
+## 7. Javasolt szerződésmódosítások
+| Eredeti probléma | Javasolt módosítás iránya | Konkrét beilleszthető szöveg | Indoklás |
+|---|---|---|---|---|
+
+## 8. Beilleszthető szövegblokkok
+Csak akkor javasolj szöveget, ha a tények elegendők. Ha hiányzó tény van, ezt írd: „Szöveg nem javasolható a következő hiányzó tény miatt: …"
+
+## 9. Ügyvédi döntési pontok
+Numbered list.
+
+## 10. Figyelmeztetés
+„Ez az elemzés ügyvédi felülvizsgálatot igényel; nem minősül végleges jogi állásfoglalásnak."`,
   },
   {
     id: "missingData",
     label: "Hiányzó adatok és iratok",
     description: "Kritikus, ajánlott és opcionális hiányok listája.",
-    instruction:
-      "Készíts hiányzó adat- és iratlistát ügyvédi munkához. A válasz szerkezete ez legyen: Kritikus hiányok; Ajánlott ellenőrzések; Opcionális kiegészítések; Kihez kell fordulni / milyen irat kell. Minden elemnél írd le röviden, miért szükséges, milyen döntést akadályoz, és ki lehet a valószínű adatgazda. Ne találj ki nem szereplő adatot.",
+    instruction: `Készíts hiányzó adat- és iratlistát ügyvédi munkához. A válasz szerkezete pontosan ez legyen:
+
+# Hiányzó adatok és iratok listája
+
+## 1. Kritikus hiányok
+| Hiányzó adat/irat | Miért kritikus? | Milyen döntést akadályoz? | Kihez kell fordulni? |
+|---|---|---|---|---|
+
+## 2. Ajánlott ellenőrzések
+| Ellenőrzés | Cél | Forrás | Határidő / prioritás |
+|---|---|---|---|---|
+
+## 3. Opcionális kiegészítések
+| Kiegészítés | Haszna | Mikor szükséges? |
+|---|---|---|
+
+## 4. Kérdéslista az ügyfélnek
+Numbered, gyakorlati kérdések.
+
+Ne találj ki nem szereplő adatot.`,
   },
   {
     id: "clauseEdits",
     label: "Módosítási javaslatok",
     description: "Konkrét klauzula-javítások indokolással.",
-    instruction:
-      "Tegyél konkrét szerződésmódosítási javaslatokat ügyvédi review-hoz. Minden javaslatnál ezt a szerkezetet használd: eredeti probléma; javasolt új szöveg; indoklás; kockázati hatás. Őrizd meg a jogi szerkesztési stílust. Ha a tényállás hiányos, ne írj fiktív klauzulát; helyette jelöld meg, milyen tény vagy dokumentum szükséges a szövegezéshez.",
+    instruction: `Tegyél konkrét szerződésmódosítási javaslatokat ügyvédi review-hoz. Minden javaslat az alábbi táblázatban legyen:
+
+# Szerződésmódosítási javaslatok
+
+## Javaslat [sorszám]
+
+| Mező | Tartalom |
+|---|---|
+| Eredeti probléma | … |
+| Érintett rendelkezés | … |
+| Javasolt új szöveg | … |
+| Indoklás | … |
+| Kockázati hatás | … |
+| Ügyvédi review megjegyzés | … |
+
+Több javaslat esetén ismételd a táblát minden javaslathoz. Őrizd meg a jogi szerkesztési stílust. Ha a tényállás hiányos, ne írj fiktív klauzulát; helyettesítsd a „Javasolt új szöveg" mezőt a megjegyzéssel: „Hiányzó tény: … — szövegezéshez további információ szükséges." Ha kétnyelvű vagy kéthasábos szerkesztés lehet szükséges, adj hozzá egy külön megjegyzést: „Kétnyelvű vagy kéthasábos szerkesztés esetén külön formázási review szükséges."`,
   },
   {
     id: "counterpartyArguments",
     label: "Ellenoldali érvek",
     description: "Várható ellenérvek és válaszstratégia.",
-    instruction:
-      "Azonosítsd a várható ellenoldali érveket, kifogásokat és alkupozíciókat. Táblázatos szerkezetet használj ezekkel az oszlopokkal: Várható ellenoldali érv; Erősség; Válasz; Tárgyalási javaslat. A válasz legyen tárgyalás-előkészítő, ne végleges állásfoglalás. Jelöld külön, ha valamely érv csak feltételezés a dokumentum alapján.",
+    instruction: `Azonosítsd a várható ellenoldali érveket, kifogásokat és alkupozíciókat. A válasz szerkezete pontosan ez legyen:
+
+# Ellenoldali érvek és válaszstratégia
+
+| # | Várható ellenoldali érv | Erősség | Miért várható? | Javasolt válasz | Tárgyalási javaslat |
+|---|---|---|---|---|---|---|
+
+## Legjobb alkuirány
+Bullet points, rövid és gyakorlati.
+
+## Nem javasolt engedmények
+Bullet points.
+
+A válasz legyen tárgyalás-előkészítő, ne végleges állásfoglalás. Ha valamely érv csak feltételezés, azt „(feltételezés)" megjegyzéssel jelöld.`,
   },
   {
     id: "formatting",
     label: "Formázás / helyesírás",
     description: "Nyelvi, formai és konzisztencia-ellenőrzés.",
-    instruction:
-      "Csak helyesírási, nyelvhelyességi, formázási, számozási, hivatkozási és stílusbeli konzisztencia-ellenőrzést végezz. Ne tegyél érdemi jogi változtatást, kivéve ha külön, elkülönített megjegyzésben jelzed, hogy az már nem pusztán formai javítás és külön ügyvédi döntést igényel. A válasz listázza: észlelt hiba; javasolt javítás; javítás típusa.",
+    instruction: `Végezz helyesírási, nyelvhelyességi, formázási, számozási, hivatkozási és stílusbeli konzisztencia-ellenőrzést. A válasz szerkezete pontosan ez legyen:
+
+# Formázási és nyelvi review
+
+## 1. Javítandó hibák
+| Hiba típusa | Hely / rész | Javasolt javítás | Megjegyzés |
+|---|---|---|---|---|
+
+## 2. Számozás és hivatkozások
+| Probléma | Javasolt javítás |
+|---|---|
+| Hivatkozás hibás | Javított hivatkozás |
+| Számozás hiányzik | Javasolt számozás |
+
+## 3. Stílus és koherencia
+Bullet points.
+
+Ne tegyél érdemi jogi változtatást. Ha egy mondat jogi jelentéskockázatot hordoz, jelöld meg: „jogi review szükséges".`,
   },
   {
     id: "partnerVerification",
     label: "Partnerellenőrzési összefoglaló vázlat",
     description: "Checklist-vázlat fél- és cégellenőrzéshez.",
-    instruction:
-      "Készíts partnerellenőrzési összefoglaló vázlatot checklist táblázat formában. A státusz maradjon 'nem ellenőrzött', kivéve ha a felhasználó konkrét bizonyítékot adott. A táblázat tartalmazza: ellenőrzési pont; bekért/adott adat; státusz; hiányzó bizonyíték; megjegyzés. Térj ki ezekre: adószám, EU VAT number / közösségi adószám, megbízható adózói és nyilvános listák, cégjegyzék, végrehajtási/adósság indikátorok, köztartozásmentes adatbázis, csatolt bizonyíték zip. Ne állítsd, hogy bármely nyilvántartásban tényleges ellenőrzés történt, ha nincs megadott bizonyíték.",
+    instruction: `Készíts partnerellenőrzési összefoglaló vázlatot checklist táblázat formában. A válasz szerkezete pontosan ez legyen:
+
+# Partnerellenőrzési összefoglaló vázlat
+
+## 1. Ellenőrzési státusz
+„Nem ellenőrzött — a dokumentumban szereplő adatok alapján csak checklist készült."
+
+## 2. Checklist
+| Ellenőrzési pont | Szükséges adat/bizonyíték | Státusz | Megjegyzés |
+|---|---|---|---|
+| Adószám | | nem ellenőrzött | |
+| EU VAT szám / közösségi adószám | | nem ellenőrzött | |
+| Megbízható adózói lista | | nem ellenőrzött | |
+| ÁFA-bevallást elmulasztók listája | | nem ellenőrzött | |
+| Adótartozás / végrehajtási lista | | nem ellenőrzött | |
+| Cégjegyzék | | nem ellenőrzött | |
+| Köztartozásmentes adózói adatbázis | | nem ellenőrzött | |
+| Csatolt bizonyíték zip | | nem ellenőrzött | |
+
+## 3. Hiányzó bizonyítékok
+Bullet points.
+
+## 4. Ügyvédi döntési pontok
+Bullet points.
+
+Ne állítsd, hogy bármely nyilvántartásban tényleges ellenőrzés történt, ha nincs megadott bizonyíték.`,
   },
 ];
 
@@ -92,13 +233,13 @@ function buildPrompt(option: PromptOption, props: AIPromptPanelProps): string {
     `Dokumentum címe: ${props.documentTitle || "nem ismert"}`,
     "",
     "Magyar nyelven válaszolj.",
-    "A dokumentumszöveg anonimizált. Őrizd meg változatlanul az anonimizált placeholder tokeneket, például [ÜGYFÉL], [MEGBÍZÓ], [ELLENÉRDEKŰ FÉL], [CÍM_1], [AZONOSÍTÓ_1].",
-    "Ne találj ki hiányzó tényeket. A feltételezéseket külön, egyértelműen jelöld.",
-    "Ügyvédi felülvizsgálatra alkalmas munkaterméket készíts, ne végleges jogi tanácsot.",
-    option.id === "fullLegal"
-      ? "Részletes elemzést készíts, de maradj strukturált, gyakorlati és ügyvédi döntésre előkészített."
-      : "Kerüld a túl hosszú, akadémikus esszét; gyakorlati, áttekinthető választ adj.",
-    "Ne hivatkozz arra, hogy külső adatbázisban ellenőriztél bármit, ha a szükséges adatokat vagy bizonyítékokat nem kaptad meg.",
+    "A dokumentumszöveg anonimizált.",
+    "Őrizd meg változatlanul a placeholder tokeneket: [ÜGYFÉL], [MEGBÍZÓ], [ELLENÉRDEKŰ FÉL], [CÍM_1], [AZONOSÍTÓ_1].",
+    "Ne találj ki hiányzó tényeket.",
+    "A feltételezéseket külön jelöld.",
+    "Ügyvédi felülvizsgálatra alkalmas munkaterméket készíts.",
+    "Ne adj végleges jogi tanácsot.",
+    "Ne hivatkozz külső adatbázis-ellenőrzésre, ha adatot/bizonyítékot nem kaptál.",
     "",
     "Feladat:",
     option.instruction,

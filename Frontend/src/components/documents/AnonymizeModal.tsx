@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   anonymizeDocument,
   getAnonymizationSourceText,
@@ -99,7 +100,9 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientName, 
   const [representativeName, setRepresentativeName] = useState("");
   const [representativeTitle, setRepresentativeTitle] = useState("");
   const [contactEmail, setContactEmail] = useState("");
-  const [phone, setPhone] = useState("");
+const [phone, setPhone] = useState("");
+
+  const router = useRouter();
 
   // Structured counterparty (extra-party) input
   const [counterparties, setCounterparties] = useState<CounterpartyInput[]>([]);
@@ -648,7 +651,7 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientName, 
                 />
               </div>
 
-              {/* Actions */}
+{/* Actions */}
               <div className="flex gap-3 flex-wrap">
                 <button
                   onClick={handleCopyRedactedText}
@@ -681,6 +684,22 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientName, 
                   {copiedState === "both" ? "✓ Copied" : "Copy Prompt + Text"}
                 </button>
               </div>
+
+              {/* Workspace return CTA */}
+              {caseId && (
+                <div className="mt-4 pt-4 border-t border-[#c3c8c1]/20">
+                  <button
+                    onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(caseId)}&documentId=${encodeURIComponent(contract.id)}`)}
+                    className="w-full py-3 text-xs font-bold uppercase tracking-widest bg-[#23472F] text-white hover:opacity-90 transition-colors"
+                  >
+                    Megnyitás Szerződés-workspace-ben
+                  </button>
+                  <p className="text-[10px] text-[#434843]/60 mt-2 text-center">
+                    Az anonimizált szöveg innen már betölthető a workspace prompt paneljébe.
+                  </p>
+                </div>
+              )}
+
               <div className="mt-2">
                 <button
                   onClick={handleReset}

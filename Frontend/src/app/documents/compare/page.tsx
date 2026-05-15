@@ -20,6 +20,7 @@ import {
   getCurrentUser,
   getReviewNotes,
   saveReviewNotes,
+  getAnonymousDocumentsBySource,
   type BlockReviewStatus,
   type CaseContractListItem,
   type CaseListItem,
@@ -173,6 +174,12 @@ function DocumentsComparePageContent() {
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [hasPreviousOnly, setHasPreviousOnly] = useState(false);
   const [recentOnly, setRecentOnly] = useState(false);
+
+  // Anonymous document text loading state
+  const [latestAnonymousText, setLatestAnonymousText] = useState("");
+  const [latestAnonymousDocumentId, setLatestAnonymousDocumentId] = useState<string | null>(null);
+  const [isLoadingAnonymousText, setIsLoadingAnonymousText] = useState(false);
+  const [anonymousTextError, setAnonymousTextError] = useState<string | null>(null);
 
   type ScopedCase = {
     id: string;
@@ -463,6 +470,42 @@ function DocumentsComparePageContent() {
     loadReviewNotesForSelected();
   }, [selectedDocument]);
 
+  // Load latest anonymized text for the selected document
+  useEffect(() => {
+    if (!selectedDocument) {
+      setLatestAnonymousText("");
+      setLatestAnonymousDocumentId(null);
+      setAnonymousTextError(null);
+      setIsLoadingAnonymousText(false);
+      return;
+    }
+
+    const loadAnonymousText = async () => {
+      setIsLoadingAnonymousText(true);
+      setAnonymousTextError(null);
+      try {
+        const docs = await getAnonymousDocumentsBySource(selectedDocument.id);
+        if (docs.length > 0) {
+          const latest = docs[0];
+          setLatestAnonymousText(latest.redactedText || "");
+          setLatestAnonymousDocumentId(latest.id);
+        } else {
+          setLatestAnonymousText("");
+          setLatestAnonymousDocumentId(null);
+        }
+      } catch (err) {
+        console.error("Anonymous text load failed:", err);
+        setLatestAnonymousText("");
+        setLatestAnonymousDocumentId(null);
+        setAnonymousTextError("Az anonimizált szöveg betöltése nem sikerült.");
+      } finally {
+        setIsLoadingAnonymousText(false);
+      }
+    };
+
+    loadAnonymousText();
+  }, [selectedDocument]);
+
   useEffect(() => {
     if (!comparisonData || !selectedDocument || selectedDocument.kind !== "contract") {
       setBlockNoteDrafts({});
@@ -547,17 +590,24 @@ function DocumentsComparePageContent() {
     return lines;
   }, [selectedDocument, effectiveBaseline, lineage, reviewTaskCount]);
 
-  const visibleWorkspaceText = useMemo(() => {
-    if (!comparisonData?.blocks?.length) return "";
-    return comparisonData.blocks
-      .map((block) => {
-        const title = block.targetBlock?.title || block.sourceBlock?.title || "Szerződésblokk";
-        const body = block.targetBlock?.body || block.sourceBlock?.body || "";
-        return body ? `${title}\n${body}` : "";
-      })
-      .filter(Boolean)
-      .join("\n\n---\n\n");
-  }, [comparisonData]);
+const effectiveWorkspaceText = useMemo(() => {
+    // Use comparison block text first (available for generated contracts with baseline selected)
+    if (comparisonData?.blocks?.length) {
+      return comparisonData.blocks
+        .map((block) => {
+          const title = block.targetBlock?.title || block.sourceBlock?.title || "Szerződésblokk";
+          const body = block.targetBlock?.body || block.sourceBlock?.body || "";
+          return body ? `${title}\n${body}` : "";
+        })
+        .filter(Boolean)
+        .join("\n\n---\n\n");
+    }
+    // Fall back to latest anonymized text (available for uploaded documents after anonymization)
+    if (latestAnonymousText) {
+      return latestAnonymousText;
+    }
+    return "";
+  }, [comparisonData, latestAnonymousText]);
 
   const caseOptions = useMemo(() => {
     const map = new Map<string, { id: string; label: string }>();
@@ -751,9 +801,8 @@ function DocumentsComparePageContent() {
       <main className="flex-1 overflow-y-auto border-r border-[#DDD7CA]">
         <div className="p-6 space-y-4">
           <header className="border border-[#DDD7CA] bg-white p-4">
-            <h1 className="text-2xl font-serif text-[#1F2821]">Dokumentum-összevetés (segédeszköz)</h1>
-            <p className="text-xs text-[#7B776D] mt-1">Verzió- és review-kontextus ellenőrzése valós dokumentum adatokból</p>
-            <p className="text-[11px] text-[#514D45] mt-2">Ez a felület metaadat, lineage és workflow-kapcsolat összevetést ad. Módosított blokkoknál inline szövegkülönbség is megjelenik.</p>
+            <h1 className="text-2xl font-serif text-[#1F2821]">Szerződés-workspace</h1>
+            <p className="text-xs text-[#7B776D] mt-1">Itt készíthető elő a dokumentum átnézése: összevetés, AI promptok, jogi elemzés és ügyvédi review.</p>
           </header>
 
           {error && <div className="p-3 text-xs bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a]">{error}</div>}
@@ -766,7 +815,7 @@ function DocumentsComparePageContent() {
             <>
               <section className="border border-[#DDD7CA] bg-white p-4">
                 <div className="flex items-center justify-between gap-4 mb-3">
-                  <h2 className="text-sm font-semibold text-[#1F2821]">Összevetési munkafelület</h2>
+                  <h2 className="text-sm font-semibold text-[#1F2821]">Dokumentum áttekintés és összevetés</h2>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setSelectedBaselineId(previousVersion?.id || null)}
@@ -789,6 +838,9 @@ function DocumentsComparePageContent() {
                     </select>
                   </div>
                 </div>
+                <p className="text-[11px] text-[#7B776D]">
+                  Az összevetés itt segédeszköz: ha nincs kiválasztott alapdokumentum, a felület akkor is használható dokumentum-workspace-ként.
+                </p>
 
                 <div className="mb-3 p-3 border border-[#EEE7D9] bg-[#FBF9F3] space-y-2">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1132,91 +1184,155 @@ function DocumentsComparePageContent() {
 
       <aside className="w-80 bg-white overflow-y-auto">
         <div className="p-4 space-y-4">
-          <h2 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Jobb oldali kontextus</h2>
+<h2 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Jobb oldali kontextus</h2>
 
-          {!selectedDocument ? (
-            <p className="text-xs text-[#9C9890]">Nincs kiválasztott dokumentum.</p>
-          ) : (
-            <>
-              <div className="border border-[#DDD7CA] p-3 space-y-1">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Linked case</p>
-                <p className="text-sm font-semibold text-[#1F2821]">{selectedDocument.caseNumber}</p>
-                <p className="text-xs text-[#514D45]">{selectedDocument.caseTitle}</p>
-                <p className="text-[11px] text-[#7B776D]">Ügyfél: {selectedDocument.caseClientName || "—"}</p>
-                <p className="text-[11px] text-[#7B776D]">Case státusz: {caseSummaries[selectedDocument.caseId]?.case.status || "—"}</p>
-                <p className="text-[11px] text-[#7B776D]">Ügyfél: {caseSummaries[selectedDocument.caseId]?.case.clientName || "—"}</p>
-                <Link href={`/cases/${selectedDocument.caseId}`} className="block mt-2 px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Ügy megnyitása</Link>
-              </div>
-
-              <div className="border border-[#DDD7CA] p-3 space-y-1">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Review context</p>
-                <p className="text-xs text-[#514D45]">Dokumentum státusz: {selectedDocument.status}</p>
-                <p className="text-xs text-[#514D45]">Review-jellegű feladatok az ügyön: {reviewTaskCount}</p>
-                {selectedDocument.kind === "contract" ? (
-                  <Link href={`/cases/${selectedDocument.caseId}/review/${selectedDocument.id}`} className="block mt-2 px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">
-                    Review megnyitása
-                  </Link>
-                ) : (
-                  <p className="text-[11px] text-[#9C9890] mt-1">Ehhez a rekordhoz közvetlen review route nem áll rendelkezésre.</p>
-                )}
-              </div>
-
-              <div className="border border-[#DDD7CA] p-3 space-y-2">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Kapcsolódó műveletek</p>
-                <button
-                  onClick={() => handleDownload(selectedDocument)}
-                  className="w-full px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
-                >
-                  Aktuális dokumentum letöltése
-                </button>
-                {selectedBaseline && (
-                  <button
-                    onClick={() => handleDownload(selectedBaseline)}
-                    className="w-full px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
-                  >
-                    Alapdokumentum letöltése
-                  </button>
-                )}
-                <Link href={`/cases/${selectedDocument.caseId}/documents`} className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">
-                  Dokumentumok megnyitása
-                </Link>
-              </div>
-
-              <div className="border border-[#DDD7CA] bg-[#FBF9F3] p-3">
-                <p className="text-[11px] text-[#514D45]">
-                  Ez a v1 munkafelület: prompt másolás, AI válasz beillesztés és ügyvédi review előkészítés.
-                </p>
-              </div>
-
-              <AIPromptPanel
-                caseId={selectedDocument.caseId}
-                documentId={selectedDocument.id}
-                documentTitle={selectedDocument.fileName || selectedDocument.title}
-                anonymizedText={visibleWorkspaceText}
-              />
-
-              <LegalAnalysisIntakePanel
-                caseId={selectedDocument.caseId}
-                documentId={selectedDocument.id}
-                documentSourceType="DOCUMENT"
-                documentTitle={selectedDocument.fileName || selectedDocument.title}
-              />
-
-              <div className="border border-[#DDD7CA] p-3 space-y-2">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Recent activity</p>
-                {timelineEvents.length === 0 ? (
-                  <p className="text-xs text-[#9C9890]">Nincs kapcsolt aktivitás.</p>
-                ) : (
-                  timelineEvents.map((event) => (
-                    <div key={event.id} className="border border-[#EEE7D9] p-2">
-                      <p className="text-xs font-semibold text-[#1F2821]">{event.description}</p>
-                      <p className="text-[10px] text-[#7B776D]">{formatDateTime(event.createdAt)}</p>
+              {!selectedDocument ? (
+                <p className="text-xs text-[#9C9890]">Nincs kiválasztott dokumentum.</p>
+              ) : (
+                <>
+                  {/* Munkafolyamat állapota */}
+                  <div className={`border border-[#EEE7D9] p-3 bg-[#F6F2E8] space-y-2`}>
+                    <p className="text-[10px] uppercase tracking-widest text-[#514D45] font-bold">Munkafolyamat állapota</p>
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[11px] text-[#7B776D]">Dokumentum</span>
+                        <span className="text-[11px] font-semibold text-[#1F2821]">
+                          {selectedDocument.fileName || selectedDocument.title || "Nincs kiválasztva"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[11px] text-[#7B776D]">Szöveg a promptokhoz</span>
+                        <span className={`text-[11px] font-semibold ${effectiveWorkspaceText ? "text-[#23472F]" : "text-[#9C9890]"}`}>
+                          {effectiveWorkspaceText ? "Elérhető" : isLoadingAnonymousText ? "Betöltés..." : "Anonimizálás szükséges"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[11px] text-[#7B776D]">AI elemzés</span>
+                        <span className="text-[11px] font-semibold text-[#9C9890]">Beilleszthető / menthető</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[11px] text-[#7B776D]">Külső AI hívás</span>
+                        <span className="text-[11px] font-semibold text-[#9C9890]">Nincs — csak prompt másolás</span>
+                      </div>
                     </div>
-                  ))
-                )}
-              </div>
-            </>
-          )}
+                  </div>
+
+                  {/* Workspace helper */}
+                  <div className="border border-[#DDD7CA] bg-[#FBF9F3] p-3">
+                    <p className="text-[11px] text-[#514D45]">
+                      Ez a workspace nem hív külső AI-t. A promptok külső AI eszközbe másolhatók, az elkészült jogi elemzés pedig itt illeszthető vissza ügyvédi review előkészítéséhez.
+                    </p>
+                  </div>
+
+                  {/* Anonymous text loading status */}
+                  {isLoadingAnonymousText ? (
+                    <p className="text-[10px] text-[#9C9890]">Anonimizált szöveg keresése...</p>
+                  ) : latestAnonymousText ? (
+                    <p className="text-[10px] text-[#819684]">Legutóbbi anonimizált szöveg betöltve a promptokhoz.</p>
+                  ) : null}
+
+                  {/* Empty-text warning + next-step CTA */}
+                  {Boolean(!effectiveWorkspaceText) && (
+                    <div className="border border-[#EEE7D9] bg-[#FEF9EC] p-3">
+                      <p className="text-[11px] font-bold text-[#7A5A1F] mb-1">Nincs még anonimizált munkaszöveg</p>
+                      <p className="text-[11px] text-[#7A5A1F] mb-3">
+                        A prompt panel akkor lesz igazán használható, ha a dokumentum anonimizált szövege már rendelkezésre áll. Indíts anonimizálást a Dokumentumtárban, majd térj vissza ide a jogi elemzéshez.
+                      </p>
+                      <Link
+                        href={`/cases/${encodeURIComponent(selectedDocument.caseId)}/documents?documentId=${encodeURIComponent(selectedDocument.id)}`}
+                        className="block w-full px-3 py-2 text-xs font-bold uppercase tracking-widest bg-[#C9A227] text-white hover:bg-[#b8931f] text-center transition-colors"
+                      >
+                        Anonimizálás indítása
+                      </Link>
+                      <p className="text-[9px] text-[#9C9890] mt-2">
+                        Az anonimizálás után a workspace automatikusan a legutóbbi anonimizált szöveget használja a promptokhoz.
+                      </p>
+                    </div>
+                  )}
+                  {!effectiveWorkspaceText && (
+                    <div className="border border-[#EEE7D9] bg-[#F6F2E8] p-3">
+                      <p className="text-[10px] text-[#7B776D]">
+                        Prompt-vázak továbbra is másolhatók, de teljes dokumentumszöveg nélkül csak sablonként használhatók.
+                      </p>
+                    </div>
+                  )}
+
+                  <AIPromptPanel
+                    caseId={selectedDocument.caseId}
+                    documentId={selectedDocument.id}
+                    documentTitle={selectedDocument.fileName || selectedDocument.title}
+                    anonymizedText={effectiveWorkspaceText}
+                  />
+
+                  <LegalAnalysisIntakePanel
+                    caseId={selectedDocument.caseId}
+                    documentId={selectedDocument.id}
+                    documentSourceType="DOCUMENT"
+                    documentTitle={selectedDocument.fileName || selectedDocument.title}
+                  />
+
+                  {/* Recent activity */}
+                  <div className="border border-[#DDD7CA] p-3 space-y-2">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Recent activity</p>
+                    {timelineEvents.length === 0 ? (
+                      <p className="text-xs text-[#9C9890]">Nincs kapcsolt aktivitás.</p>
+                    ) : (
+                      timelineEvents.map((event) => (
+                        <div key={event.id} className="border border-[#EEE7D9] p-2">
+                          <p className="text-xs font-semibold text-[#1F2821]">{event.description}</p>
+                          <p className="text-[10px] text-[#7B776D]">{formatDateTime(event.createdAt)}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Linked case */}
+                  <div className="border border-[#DDD7CA] p-3 space-y-1">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Linked case</p>
+                    <p className="text-sm font-semibold text-[#1F2821]">{selectedDocument.caseNumber}</p>
+                    <p className="text-xs text-[#514D45]">{selectedDocument.caseTitle}</p>
+                    <p className="text-[11px] text-[#7B776D]">Ügyfél: {selectedDocument.caseClientName || "—"}</p>
+                    <p className="text-[11px] text-[#7B776D]">Case státusz: {caseSummaries[selectedDocument.caseId]?.case.status || "—"}</p>
+                    <Link href={`/cases/${selectedDocument.caseId}`} className="block mt-2 px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Ügy megnyitása</Link>
+                  </div>
+
+                  {/* Review context */}
+                  <div className="border border-[#DDD7CA] p-3 space-y-1">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Review context</p>
+                    <p className="text-xs text-[#514D45]">Dokumentum státusz: {selectedDocument.status}</p>
+                    <p className="text-xs text-[#514D45]">Review-jellegű feladatok az ügyön: {reviewTaskCount}</p>
+                    {selectedDocument.kind === "contract" ? (
+                      <Link href={`/cases/${selectedDocument.caseId}/review/${selectedDocument.id}`} className="block mt-2 px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">
+                        Review megnyitása
+                      </Link>
+                    ) : (
+                      <p className="text-[11px] text-[#9C9890] mt-1">Ehhez a rekordhoz közvetlen review route nem áll rendelkezésre.</p>
+                    )}
+                  </div>
+
+                  {/* Kapcsolódó műveletek */}
+                  <div className="border border-[#DDD7CA] p-3 space-y-2">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Kapcsolódó műveletek</p>
+                    <button
+                      onClick={() => handleDownload(selectedDocument)}
+                      className="w-full px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
+                    >
+                      Aktuális dokumentum letöltése
+                    </button>
+                    {selectedBaseline && (
+                      <button
+                        onClick={() => handleDownload(selectedBaseline)}
+                        className="w-full px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
+                      >
+                        Alapdokumentum letöltése
+                      </button>
+                    )}
+                    <Link href={`/cases/${selectedDocument.caseId}/documents`} className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">
+                      Dokumentumok megnyitása
+                    </Link>
+                  </div>
+                </>
+              )}
         </div>
       </aside>
     </div>

@@ -229,6 +229,44 @@ router.post('/anonymous-documents/:id/save-as-document', authenticate, requireAn
 });
 
 // ============================================================================
+// GET /api/v1/anonymous-documents/by-source/:sourceDocumentId
+// ============================================================================
+// List anonymized documents for a source document, newest first.
+// Returns redactedText and redactedItems so the workspace can load AI-ready text.
+router.get('/anonymous-documents/by-source/:sourceDocumentId', authenticate, requireAnonymizeEnabled, async (req: Request, res: Response) => {
+  try {
+    const sourceDocIdParam = req.params.sourceDocumentId;
+    const sourceDocumentId = Array.isArray(sourceDocIdParam) ? sourceDocIdParam[0] : sourceDocIdParam;
+
+    if (!sourceDocumentId) {
+      return res.status(400).json({ error: 'sourceDocumentId is required' });
+    }
+
+    const docs = await anonymizeService.listAnonymousDocumentsBySource(sourceDocumentId);
+
+    const result = docs.map(doc => ({
+      id: doc.id,
+      name: doc.name,
+      sourceDocId: doc.sourceDocId,
+      caseId: doc.caseId,
+      aiTask: doc.aiTask,
+      customPrompt: doc.customPrompt,
+      rehydrationStatus: doc.rehydrationStatus,
+      rehydratedAt: doc.rehydratedAt,
+      createdAt: doc.createdAt,
+      // Include redactedText and redactedItems for workspace text loading
+      redactedText: doc.content,
+      redactedItems: doc.redactedItems,
+    }));
+
+    res.json(result);
+  } catch (error) {
+    console.error('List anonymous docs by source error:', error);
+    res.status(500).json({ error: 'Hiba a dokumentumok lekérésekor' });
+  }
+});
+
+// ============================================================================
 // GET /api/v1/anonymous-documents?caseId=xxx
 // ============================================================================
 // List anonymous documents for a case

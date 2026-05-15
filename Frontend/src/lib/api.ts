@@ -962,11 +962,38 @@ export interface AnonymousDocumentListItem {
 }
 
 /**
+ * Anonymous document item with redactedText for workspace text loading
+ */
+export interface AnonymousDocumentItem {
+  id: string;
+  name: string;
+  sourceDocId: string;
+  caseId: string;
+  aiTask: string | null;
+  customPrompt: string | null;
+  rehydrationStatus: string | null;
+  rehydratedAt: string | null;
+  createdAt: string;
+  redactedText: string;
+  redactedItems: unknown[];
+}
+
+/**
  * List anonymous documents for a case
  */
 export async function getCaseAnonymousDocuments(caseId: string): Promise<AnonymousDocumentListItem[]> {
   return fetchApi<AnonymousDocumentListItem[]>(
     `/anonymous-documents?caseId=${encodeURIComponent(caseId)}`
+  );
+}
+
+/**
+ * List anonymized documents by source document ID (newest first).
+ * Returns redactedText for workspace text loading.
+ */
+export async function getAnonymousDocumentsBySource(sourceDocumentId: string): Promise<AnonymousDocumentItem[]> {
+  return fetchApi<AnonymousDocumentItem[]>(
+    `/anonymous-documents/by-source/${encodeURIComponent(sourceDocumentId)}`
   );
 }
 
