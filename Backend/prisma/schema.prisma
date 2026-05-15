@@ -429,12 +429,13 @@ model Case {
   assignedLawyerId String?
   assignedLawyer  User?           @relation("AssignedLawyer", fields: [assignedLawyerId], references: [id])
   
-  documents       Document[]
+documents       Document[]
   tasks           Task[]
   timelineEvents  TimelineEvent[]
   comments        Comment[]
   collaborators   CaseCollaborator[]
   legalAnalyses   LegalAnalysis[]
+  lawyerHandoffPackages LawyerHandoffPackage[]
 
   @@map("cases")
 }
@@ -1400,4 +1401,67 @@ model ContractAssemblyClause {
   @@unique([assemblyDraftId, clauseId])
   @@index([assemblyDraftId])
   @@map("contract_assembly_clauses")
+}
+
+// ============================================================================
+// LAWYER HANDOFF PACKAGE (v1A)
+// ============================================================================
+// Minimal persisted container for lawyer review package.
+// References existing records (Document, AnonymousDocument, ContractGeneration,
+// LegalAnalysis, ContractReviewRecord) without duplicating content.
+// ============================================================================
+
+enum LawyerHandoffPackageType {
+  STANDARD
+  FINAL_APPROVAL
+}
+
+enum LawyerHandoffStatus {
+  DRAFT
+  PREPARED
+  SUBMITTED
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
+enum LawyerHandoffDecision {
+  APPROVED
+  REJECTED_NEEDS_REVISION
+  REJECTED_BLOCKING
+}
+
+model LawyerHandoffPackage {
+  id                    String                   @id @default(uuid())
+  caseId                String
+
+  status                LawyerHandoffStatus     @default(DRAFT)
+  packageType           LawyerHandoffPackageType @default(STANDARD)
+
+  sourceDocumentId      String?
+  anonymizedDocumentId  String?
+  generatedContractId   String?
+  legalAnalysisId       String?
+  reviewNotesId         String?
+
+  preparerSummary       String?
+
+  preparedById          String?
+  submittedAt           DateTime?
+
+  reviewedById          String?
+  reviewedAt            DateTime?
+  reviewDecision        LawyerHandoffDecision?
+  reviewComment         String?
+
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  case                  Case                    @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, status])
+  @@index([sourceDocumentId])
+  @@index([legalAnalysisId])
+  @@map("lawyer_handoff_packages")
 }

@@ -17,6 +17,9 @@ import {
   downloadCaseBundle,
   getCommunications,
   createCommunication,
+  createCaseHandoffPackage,
+  getAnonymousDocumentsBySource,
+  listDocumentLegalAnalyses,
   type CaseContractListItem,
   type DocumentItem,
   type TimelineEventItem,
@@ -24,6 +27,7 @@ import {
 } from "@/lib/api";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
+import { HandoffPackagePanel } from "@/components/handoff/HandoffPackagePanel";
 import { useUiPack } from "@/lib/uiPack";
 
 // Document Family / Lineage Types
@@ -239,6 +243,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [showNotes, setShowNotes] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
   const [isLoadingNotes, setIsLoadingNotes] = useState(false);
+
+  // Handoff package creation state
+  const [isCreatingHandoffPackage, setIsCreatingHandoffPackage] = useState(false);
+  const [handoffPackageMessage, setHandoffPackageMessage] = useState<string | null>(null);
+  const [handoffPackageError, setHandoffPackageError] = useState<string | null>(null);
+  const [handoffPanelRefreshKey, setHandoffPanelRefreshKey] = useState(0);
 
   const searchParams = useSearchParams();
   const requestedDocumentId = searchParams?.get("documentId") ?? null;
@@ -512,6 +522,68 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const handleRehydrateSaveSuccess = (_documentId: string, _fileName: string) => {
     setRehydrateModalOpen(false);
     setRehydrateModalDoc(null);
+  };
+
+  const resolveHandoffPackageLinks = async (
+    ledgerItem: SelectedLedgerItem,
+    caseId: string,
+  ): Promise<{ anonymizedDocumentId?: string; legalAnalysisId?: string }> => {
+    try {
+      if (ledgerItem.kind === 'uploaded') {
+        const [anonDocs, analyses] = await Promise.all([
+          getAnonymousDocumentsBySource(ledgerItem.item.id).catch(() => []),
+          listDocumentLegalAnalyses(ledgerItem.item.id, {
+            caseId,
+            documentSourceType: 'DOCUMENT',
+          }).catch(() => []),
+        ]);
+        return {
+          anonymizedDocumentId: anonDocs[0]?.id,
+          legalAnalysisId: analyses[0]?.id,
+        };
+      } else {
+        const analyses = await listDocumentLegalAnalyses(ledgerItem.item.id, {
+          caseId,
+          documentSourceType: 'CONTRACT_GENERATION',
+        }).catch(() => []);
+        return {
+          legalAnalysisId: analyses[0]?.id,
+        };
+      }
+    } catch {
+      return {};
+    }
+  };
+
+  const handleCreateHandoffPackage = async () => {
+    if (!caseRecord?.id || !selectedLedgerItem) return;
+    setHandoffPackageMessage(null);
+    setHandoffPackageError(null);
+    setIsCreatingHandoffPackage(true);
+    try {
+      const resolved = await resolveHandoffPackageLinks(selectedLedgerItem, caseRecord.id);
+      const payload = {
+        packageType: 'STANDARD' as const,
+        preparerSummary: '',
+        ...(selectedLedgerItem.kind === 'uploaded'
+          ? {
+              sourceDocumentId: selectedLedgerItem.item.id,
+              anonymizedDocumentId: resolved.anonymizedDocumentId,
+              legalAnalysisId: resolved.legalAnalysisId,
+            }
+          : {
+              generatedContractId: selectedLedgerItem.item.id,
+              legalAnalysisId: resolved.legalAnalysisId,
+            }),
+      };
+      await createCaseHandoffPackage(caseRecord.id, payload);
+      setHandoffPackageMessage('Leadási csomag piszkozat létrehozva. A meglévő anonimizált szöveg és jogi elemzés automatikusan csatolva lett, ha elérhető volt.');
+      setHandoffPanelRefreshKey((k) => k + 1);
+    } catch {
+      setHandoffPackageError('Nem sikerült létrehozni a leadási csomagot.');
+    } finally {
+      setIsCreatingHandoffPackage(false);
+    }
   };
 
   const selectedUploadedDocument = selectedLedgerItem?.kind === 'uploaded' ? selectedLedgerItem.item : null;
@@ -933,8 +1005,18 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     ))
                   ) : (
                     <p className={`text-[10px] ${p.textDark} italic`}>No timeline events</p>
-                  )}
-                </div>
+)}
+                        <button
+                          onClick={handleCreateHandoffPackage}
+                          disabled={isCreatingHandoffPackage}
+                          className={`w-full border ${isSignalTiles ? 'border-slate-600 text-slate-300 hover:bg-slate-700' : 'border-[#c3c8c1] text-[#7B776D] hover:bg-[#f5f3ee]'} py-2 text-[10px] font-bold uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+                        >
+                          {isCreatingHandoffPackage ? 'Csomag készül...' : 'Csomag készítése'}
+                        </button>
+                        <p className={`text-[8px] ${p.textMuted}`}>
+                          Piszkozat leadási csomag készítése ezzel a generált dokumentummal.
+                        </p>
+                      </div>
               </section>
             </div>
 
@@ -1514,6 +1596,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           >
                             {isDownloading === selectedUploadedDocument.id ? 'Letöltés...' : 'Letöltés'}
                           </button>
+                          <button
+                            onClick={handleCreateHandoffPackage}
+                            disabled={isCreatingHandoffPackage}
+                            className={`w-full border ${isSignalTiles ? 'border-slate-600 text-slate-300 hover:bg-slate-700' : 'border-[#c3c8c1] text-[#7B776D] hover:bg-[#f5f3ee]'} py-2 text-[10px] font-bold uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+                          >
+                            {isCreatingHandoffPackage ? 'Csomag készül...' : 'Csomag készítése'}
+                          </button>
+                          <p className={`text-[8px] ${p.textMuted}`}>
+                            Piszkozat leadási csomag készítése az ügyvédi review előkészítéséhez.
+                          </p>
                         </div>
 
                         {/* Section 3: Haladó / technikai műveletek */}
@@ -1792,6 +1884,15 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     </div>
                   )}
                 </section>
+                {caseRecord && (
+                  <HandoffPackagePanel caseId={caseRecord.id} refreshKey={handoffPanelRefreshKey} />
+                )}
+                {handoffPackageMessage && (
+                  <p className="text-[10px] text-[#23472F] font-bold mt-2">{handoffPackageMessage}</p>
+                )}
+                {handoffPackageError && (
+                  <p className="text-[10px] text-[#ba1a1a] font-bold mt-2">{handoffPackageError}</p>
+                )}
             </div>
           </div>
         </main>

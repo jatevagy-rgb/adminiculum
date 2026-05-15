@@ -259,6 +259,9 @@ app.use('/api/v1/clause-library', clauseLibraryRoutes);
 import timesheetReportRoutes from './modules/timesheet-reports/routes';
 app.use('/api/v1/timesheet-reports', timesheetReportRoutes);
 
+import handoffPackagesRoutes from './modules/handoff-packages/routes';
+app.use('/api/v1', handoffPackagesRoutes);
+
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ message: 'Endpoint not found' });
 });

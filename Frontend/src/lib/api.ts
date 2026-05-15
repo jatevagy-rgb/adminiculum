@@ -3182,4 +3182,127 @@ export async function downloadReviewSummary(generationId: string): Promise<Blob>
   return response.blob();
 }
 
+// ============================================================================
+// LAWYER HANDOFF PACKAGES — v1A
+// ============================================================================
+
+export type LawyerHandoffPackageType =
+  | 'STANDARD'
+  | 'FINAL_APPROVAL';
+
+export type LawyerHandoffStatus =
+  | 'DRAFT'
+  | 'PREPARED'
+  | 'SUBMITTED'
+  | 'IN_REVIEW'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'ARCHIVED';
+
+export type LawyerHandoffDecision =
+  | 'APPROVED'
+  | 'REJECTED_NEEDS_REVISION'
+  | 'REJECTED_BLOCKING';
+
+export interface LawyerHandoffPackageRecord {
+  id: string;
+  caseId: string;
+  packageType: LawyerHandoffPackageType;
+  status: LawyerHandoffStatus;
+  sourceDocumentId?: string | null;
+  anonymizedDocumentId?: string | null;
+  generatedContractId?: string | null;
+  legalAnalysisId?: string | null;
+  reviewNotesId?: string | null;
+  preparerSummary?: string | null;
+  preparedById?: string | null;
+  submittedAt?: string | null;
+  reviewedById?: string | null;
+  reviewedAt?: string | null;
+  reviewDecision?: LawyerHandoffDecision | null;
+  reviewComment?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateLawyerHandoffPackagePayload {
+  sourceDocumentId?: string;
+  anonymizedDocumentId?: string;
+  generatedContractId?: string;
+  legalAnalysisId?: string;
+  reviewNotesId?: string;
+  preparerSummary?: string;
+  packageType?: LawyerHandoffPackageType;
+}
+
+export interface UpdateLawyerHandoffPackagePayload {
+  sourceDocumentId?: string | null;
+  anonymizedDocumentId?: string | null;
+  generatedContractId?: string | null;
+  legalAnalysisId?: string | null;
+  reviewNotesId?: string | null;
+  preparerSummary?: string | null;
+  status?: LawyerHandoffStatus;
+}
+
+export interface ReviewLawyerHandoffPackagePayload {
+  decision: LawyerHandoffDecision;
+  reviewComment?: string;
+}
+
+export async function listCaseHandoffPackages(
+  caseId: string
+): Promise<LawyerHandoffPackageRecord[]> {
+  return fetchApi<LawyerHandoffPackageRecord[]>(
+    `/cases/${encodeURIComponent(caseId)}/handoff-packages`
+  );
+}
+
+export async function createCaseHandoffPackage(
+  caseId: string,
+  payload: CreateLawyerHandoffPackagePayload
+): Promise<LawyerHandoffPackageRecord> {
+  return fetchApi<LawyerHandoffPackageRecord>(
+    `/cases/${encodeURIComponent(caseId)}/handoff-packages`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function getHandoffPackage(
+  id: string
+): Promise<LawyerHandoffPackageRecord> {
+  return fetchApi<LawyerHandoffPackageRecord>(
+    `/handoff-packages/${encodeURIComponent(id)}`
+  );
+}
+
+export async function updateHandoffPackage(
+  id: string,
+  payload: UpdateLawyerHandoffPackagePayload
+): Promise<LawyerHandoffPackageRecord> {
+  return fetchApi<LawyerHandoffPackageRecord>(
+    `/handoff-packages/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function reviewHandoffPackage(
+  id: string,
+  payload: ReviewLawyerHandoffPackagePayload
+): Promise<LawyerHandoffPackageRecord> {
+  return fetchApi<LawyerHandoffPackageRecord>(
+    `/handoff-packages/${encodeURIComponent(id)}/review`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
 export { fetchApi, ApiError };
