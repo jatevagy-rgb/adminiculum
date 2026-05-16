@@ -29,6 +29,19 @@ interface ApiError {
   error: string;
 }
 
+const DEFAULT_LOCAL_DEV_EMAIL = 'attorney@adminiculum.law';
+const DEFAULT_LOCAL_DEV_PASSWORD = 'Password123!';
+const DEFAULT_LOCAL_DEV_NAME = 'Test Attorney';
+
+const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production';
+
+function isLocalDevLogin(email: string, password: string): boolean {
+  if (isProduction) return false;
+  const configuredEmail = (process.env.DEV_LOGIN_EMAIL || DEFAULT_LOCAL_DEV_EMAIL).trim().toLowerCase();
+  const configuredPassword = process.env.DEV_LOGIN_PASSWORD || DEFAULT_LOCAL_DEV_PASSWORD;
+  return email.trim().toLowerCase() === configuredEmail && password === configuredPassword;
+}
+
 class AuthService {
   /**
    * Register a new user (DEV/TEST ONLY)
@@ -78,20 +91,56 @@ class AuthService {
     email: string,
     password: string
   ): Promise<{ status: number; data: LoginResult | ApiError }> {
-    const user = await prisma.user.findUnique({
-      where: { email }
+    const normalizedEmail = email.trim().toLowerCase();
+    const shouldProvisionLocalDevUser = isLocalDevLogin(normalizedEmail, password);
+
+    let user = await prisma.user.findUnique({
+      where: { email: normalizedEmail }
     });
+
+    if (!user && shouldProvisionLocalDevUser) {
+      const passwordHash = await bcrypt.hash(password, 10);
+      user = await prisma.user.upsert({
+        where: { email: normalizedEmail },
+        update: {
+          passwordHash,
+          name: process.env.DEV_LOGIN_NAME || DEFAULT_LOCAL_DEV_NAME,
+          role: 'LAWYER',
+          status: 'ACTIVE',
+          isActive: true,
+        },
+        create: {
+          email: normalizedEmail,
+          passwordHash,
+          name: process.env.DEV_LOGIN_NAME || DEFAULT_LOCAL_DEV_NAME,
+          role: 'LAWYER',
+          status: 'ACTIVE',
+          isActive: true,
+        },
+      });
+    }
 
     if (!user) {
       return { status: 401, data: { error: 'Invalid credentials' } };
     }
 
     const passwordHash = (user as any).passwordHash || (user as any).password_hash;
-    if (!passwordHash) {
+    if (!passwordHash && shouldProvisionLocalDevUser) {
+      const nextPasswordHash = await bcrypt.hash(password, 10);
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash: nextPasswordHash,
+          status: 'ACTIVE',
+          isActive: true,
+        },
+      });
+    } else if (!passwordHash) {
       return { status: 401, data: { error: 'Invalid credentials' } };
     }
 
-    const validPassword = await bcrypt.compare(password, passwordHash);
+    const effectivePasswordHash = (user as any).passwordHash || (user as any).password_hash;
+    const validPassword = await bcrypt.compare(password, effectivePasswordHash);
     if (!validPassword) {
       return { status: 401, data: { error: 'Invalid credentials' } };
     }

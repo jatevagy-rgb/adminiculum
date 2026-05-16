@@ -48,8 +48,8 @@ router.post(
       console.error('Login error:', error);
       res.status(500).json({
         status: 500,
-        code: 'INTERNAL_ERROR',
-        message: 'Internal server error'
+        code: 'LOCAL_DEV_LOGIN_SETUP_FAILED',
+        message: 'Local dev login setup failed. Check backend logs.'
       });
     }
   }
