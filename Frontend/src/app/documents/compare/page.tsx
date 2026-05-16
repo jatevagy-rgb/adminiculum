@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
+import { AdminBadge, AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import { AIPromptPanel } from "@/components/documents/AIPromptPanel";
 import { LegalAnalysisIntakePanel } from "@/components/documents/LegalAnalysisIntakePanel";
 import {
@@ -61,6 +62,73 @@ type BlockNoteDraft = {
   title: string;
   note: string;
 };
+
+type WorkspaceToolType = 'clause' | 'prompt' | 'template';
+type WorkspaceToolFilter = 'all' | 'clause' | 'prompt' | 'template';
+
+type WorkspaceClauseItem = {
+  id: string;
+  type: 'clause';
+  title: string;
+  description: string;
+  tags: string[];
+  text: string;
+};
+
+type WorkspacePromptTool = {
+  id: string;
+  type: 'prompt';
+  title: string;
+  description: string;
+  tags: string[];
+};
+
+const toReadableStatus = (value?: string | null) => {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "—";
+  const labels: Record<string, string> = {
+    GENERATED: "Generált",
+    APPROVED: "Jóváhagyott",
+    SUBMITTED: "Beküldve",
+    IN_REVIEW: "Review alatt",
+    NEEDS_REVIEW: "Review szükséges",
+    UPLOADED: "Feltöltött",
+    CONTRACT: "Szerződés",
+    DOCUMENT: "Dokumentum",
+  };
+  return labels[normalized.toUpperCase()] || normalized.replace(/_/g, " ").toLowerCase().replace(/^./, (char) => char.toUpperCase());
+};
+
+const workspaceClauseCatalogue: WorkspaceClauseItem[] = [
+  { id: "clause-elallasi-jog", type: "clause", title: "Elállási jog", description: "Alap elállási rendelkezés szerződéses megszüntetési helyzetekhez.", tags: ["megszuntetes", "jog"], text: "A fél jogosult a szerződéstől elállni, ha a másik fél lényeges szerződésszegését írásbeli felszólítás ellenére sem orvosolja." },
+  { id: "clause-felelossegkorlatozas", type: "clause", title: "Felelősségkorlátozás", description: "Keretszöveg a kártérítési felelősség ésszerű korlátozásához.", tags: ["kockazat", "kar"], text: "A felek felelőssége a közvetlen, igazolt károkra terjed ki; az elmaradt haszonért való felelősség kizárt, kivéve szándékos károkozás esetén." },
+  { id: "clause-titoktartas", type: "clause", title: "Titoktartás", description: "Bizalmas információk kezelésére szolgáló alapklauzula.", tags: ["bizalmassag", "adat"], text: "A felek kötelesek a szerződés teljesítése során tudomásukra jutott bizalmas információkat megőrizni, és azokat harmadik személy részére csak jogszabály vagy előzetes írásbeli hozzájárulás alapján átadni." },
+  { id: "clause-fizetesi-hatarido", type: "clause", title: "Fizetési határidő", description: "Fizetés esedékességét rögzítő indító szöveg.", tags: ["fizetes", "hatarido"], text: "A fizetési kötelezettség a szabályszerű számla kézhezvételétől számított 8 napon belül esedékes." },
+  { id: "clause-ketnyelvu-rendelkezes", type: "clause", title: "Kétnyelvű rendelkezés", description: "Nyelvi elsőbbséget rögzítő kétnyelvű szerződésekhez.", tags: ["nyelv", "ertelmezes"], text: "A szerződés több nyelvű változata közötti eltérés esetén a magyar nyelvű szöveg az irányadó, kivéve ha a felek ettől írásban eltérően rendelkeznek." },
+  { id: "clause-jogvalasztas", type: "clause", title: "Jogválasztás", description: "Alkalmazandó jogra vonatkozó alapklauzula.", tags: ["jog", "iranyado"], text: "A jelen szerződésre Magyarország joga irányadó." },
+  { id: "clause-illetekesseg-joghatosag", type: "clause", title: "Illetékesség / joghatóság", description: "Jogvita rendezésére szolgáló fórumkijelölés.", tags: ["jogvita", "forum"], text: "A felek a szerződésből eredő vitáikat elsősorban tárgyalás útján rendezik; ennek sikertelensége esetén a hatáskörrel és illetékességgel rendelkező magyar bíróság jár el." },
+  { id: "clause-vis-maior", type: "clause", title: "Vis maior", description: "Elháríthatatlan külső okokra vonatkozó mentesülési szöveg.", tags: ["kockazat", "teljesites"], text: "Vis maior esemény esetén az érintett fél a teljesítés akadályáról haladéktalanul értesíti a másik felet, és az akadály fennállása alatt a késedelem jogkövetkezményei alól mentesül." },
+  { id: "clause-szerzodesszeges-kovetkezmenyei", type: "clause", title: "Szerződésszegés következményei", description: "Szerződésszegés kezelésének rövid kerete.", tags: ["szerzodesszeges", "jogkovetkezmeny"], text: "Szerződésszegés esetén a sérelmet szenvedett fél jogosult a szerződésszegés megszüntetését, kára megtérítését, valamint a szerződésben meghatározott egyéb jogkövetkezményeket érvényesíteni." },
+  { id: "clause-adatkezelesi-rendelkezes", type: "clause", title: "Adatkezelési rendelkezés", description: "Személyes adatok kezelésére figyelmeztető indító klauzula.", tags: ["adatkezeles", "gdpr"], text: "A felek a szerződés teljesítése során kezelt személyes adatokat a vonatkozó adatvédelmi jogszabályokkal összhangban kezelik." },
+  { id: "clause-kesedelmi-kamat", type: "clause", title: "Késedelmi kamat", description: "Fizetési késedelem esetére szóló starter rendelkezés.", tags: ["fizetes", "kesedelem"], text: "Fizetési késedelem esetén a késedelembe eső fél a Ptk. szerinti késedelmi kamat megfizetésére köteles." },
+  { id: "clause-teljesitesi-hatarido", type: "clause", title: "Teljesítési határidő", description: "Teljesítés időpontját rögzítő alapmondat.", tags: ["teljesites", "hatarido"], text: "A teljesítés határideje a szerződés hatálybalépésétől számított, a felek által rögzített időtartam." },
+  { id: "clause-birtokbaadas", type: "clause", title: "Birtokbaadás", description: "Ingatlan birtokbaadásához használható rövid klauzula.", tags: ["ingatlan", "birtok"], text: "Az eladó az ingatlant a teljes vételár megfizetését követően, jegyzőkönyv felvétele mellett adja a vevő birtokába." },
+  { id: "clause-szavatossag", type: "clause", title: "Szavatosság", description: "Szavatossági nyilatkozat kezdőszövegként.", tags: ["szavatossag", "ingatlan"], text: "Az eladó szavatolja, hogy a szerződésben tett nyilatkozatai a szerződés aláírásának napján valósak és teljesek." },
+  { id: "clause-tehermentesites", type: "clause", title: "Tehermentesítés", description: "Tehermentes állapot biztosításához.", tags: ["ingatlan", "teher"], text: "Az eladó kötelezettséget vállal arra, hogy az ingatlant a birtokbaadás időpontjáig a szerződésben meghatározott terhektől mentesíti." },
+  { id: "clause-foglalo", type: "clause", title: "Foglaló", description: "Foglaló megfizetését rögzítő starter rendelkezés.", tags: ["vetelar", "biztositek"], text: "A vevő a szerződés aláírásával egyidejűleg foglalót fizet az eladó részére, amely a vételárba beszámít." },
+  { id: "clause-vetelar-reszlet", type: "clause", title: "Vételár-részlet", description: "Részletekben történő vételárfizetéshez.", tags: ["vetelar", "fizetes"], text: "A vételár fennmaradó részét a vevő a szerződésben meghatározott ütemezés szerint, banki átutalással fizeti meg." },
+  { id: "clause-alairas-ellenjegyzes", type: "clause", title: "Aláírás / ellenjegyzés", description: "Záró aláírási és ellenjegyzési rendelkezés.", tags: ["zaradek", "ellenjegyzes"], text: "A felek a szerződést elolvasás és értelmezés után, mint akaratukkal mindenben megegyezőt írják alá; az okiratot az eljáró ügyvéd ellenjegyzi." },
+];
+
+const workspacePromptTools: WorkspacePromptTool[] = [
+  { id: "prompt-gyors-kockazatelemzes", type: "prompt", title: "Gyors kockázatelemzés", description: "Rövid, célzott kockázati áttekintés előkészítése.", tags: ["ai", "kockazat"] },
+  { id: "prompt-teljes-jogi-elemzes", type: "prompt", title: "Teljes jogi elemzés", description: "Átfogó jogi elemzési prompt előkészítése.", tags: ["ai", "elemzes"] },
+  { id: "prompt-hianyzo-adatok-es-iratok", type: "prompt", title: "Hiányzó adatok és iratok", description: "Hiánypótlási pontok összegyűjtéséhez.", tags: ["ai", "hianypotlas"] },
+  { id: "prompt-modositasi-javaslatok", type: "prompt", title: "Módosítási javaslatok", description: "Szerződésszöveg javítási irányainak előkészítése.", tags: ["ai", "modositas"] },
+  { id: "prompt-ellenoldali-ervek", type: "prompt", title: "Ellenoldali érvek", description: "Ellenérvek és tárgyalási pozíciók feltárásához.", tags: ["ai", "targyalas"] },
+  { id: "prompt-formazasi-szamozasi-ellenorzes", type: "prompt", title: "Formázási / számozási ellenőrzés", description: "Szerkezeti és számozási hibák kereséséhez.", tags: ["ai", "formazas"] },
+  { id: "prompt-partnerellenorzesi-vazlat", type: "prompt", title: "Partnerellenőrzési vázlat", description: "Partner- és háttérellenőrzéshez használható vázlat.", tags: ["ai", "partner"] },
+];
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return "—";
@@ -131,6 +199,14 @@ const buildBlockNoteKey = (block: ContractCompareBlock) => {
   return `order:${orderIndex}:title:${title || 'untitled'}`;
 };
 
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
 export default function DocumentsComparePage() {
   return (
     <AuthenticatedApp section="documents-compare">
@@ -140,6 +216,7 @@ export default function DocumentsComparePage() {
 }
 
 function DocumentsComparePageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const requestedCaseId = searchParams?.get("caseId") || "";
   const requestedDocumentId = searchParams?.get("documentId") || "";
@@ -170,10 +247,20 @@ function DocumentsComparePageContent() {
 
   const [search, setSearch] = useState("");
   const [caseFilter, setCaseFilter] = useState<string>(requestedCaseId || "all");
-  const [reviewFilter, setReviewFilter] = useState<string>("all");
+  const [reviewFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
-  const [hasPreviousOnly, setHasPreviousOnly] = useState(false);
-  const [recentOnly, setRecentOnly] = useState(false);
+  const [hasPreviousOnly] = useState(false);
+  const [recentOnly] = useState(false);
+  const [toolSearch, setToolSearch] = useState("");
+  const [toolFilter, setToolFilter] = useState<WorkspaceToolFilter>("all");
+  const [expandedToolId, setExpandedToolId] = useState<string | null>(null);
+  const [editorDraft, setEditorDraft] = useState("");
+  const [editorTouched, setEditorTouched] = useState(false);
+  const [editorNotice, setEditorNotice] = useState<string | null>(null);
+  const [localCommentDraft, setLocalCommentDraft] = useState("");
+  const [localComments, setLocalComments] = useState<string[]>([]);
+  const toolSearchRef = useRef<HTMLInputElement | null>(null);
+  const localCommentRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Anonymous document text loading state
   const [latestAnonymousText, setLatestAnonymousText] = useState("");
@@ -360,6 +447,22 @@ function DocumentsComparePageContent() {
     () => filteredDocuments.find((doc) => doc.id === selectedDocumentId) || filteredDocuments[0] || null,
     [filteredDocuments, selectedDocumentId]
   );
+
+  const caseScopedDocuments = useMemo(() => {
+    if (!requestedCaseId) return documents;
+    return documents.filter((doc) => doc.caseId === requestedCaseId || doc.caseNumber === requestedCaseId);
+  }, [documents, requestedCaseId]);
+
+  const handleWorkspaceDocumentChange = (documentId: string) => {
+    const nextDoc = documents.find((doc) => doc.id === documentId);
+    setSelectedDocumentId(documentId || null);
+    if (nextDoc) {
+      const params = new URLSearchParams();
+      params.set("caseId", nextDoc.caseId);
+      params.set("documentId", nextDoc.id);
+      router.push(`/documents/compare?${params.toString()}`);
+    }
+  };
 
   const lineage = useMemo(() => {
     if (!selectedDocument) return [] as CompareDocument[];
@@ -569,28 +672,28 @@ function DocumentsComparePageContent() {
     if (!selectedDocument) return [] as string[];
     if (!effectiveBaseline) {
       return [
-        "Nincs elérhető korábbi baseline ugyanabban az ügyben és dokumentumcsaládban.",
-        `Lineage elemszám: ${lineage.length}`,
+        "Nincs elérhető korábbi összevetési alap ugyanabban az ügyben és dokumentumcsaládban.",
+        `Kapcsolódó változatok: ${lineage.length}`,
       ];
     }
 
     const lines: string[] = [];
     lines.push(`Azonos ügy: ${selectedDocument.caseNumber}`);
-    lines.push(`Azonos lineage: ${lineageKey(selectedDocument) === lineageKey(effectiveBaseline) ? "igen" : "nem"}`);
+    lines.push(`Azonos dokumentumcsalád: ${lineageKey(selectedDocument) === lineageKey(effectiveBaseline) ? "igen" : "nem"}`);
     const dayDiff = toDaysDiff(selectedDocument.updatedAt || selectedDocument.createdAt, effectiveBaseline.updatedAt || effectiveBaseline.createdAt);
     if (dayDiff !== null) lines.push(`Frissebb ${Math.max(0, dayDiff)} nappal`);
     if (selectedDocument.status !== effectiveBaseline.status) {
-      lines.push(`Státusz változás: ${effectiveBaseline.status} → ${selectedDocument.status}`);
+      lines.push(`Státusz változás: ${toReadableStatus(effectiveBaseline.status)} → ${toReadableStatus(selectedDocument.status)}`);
     }
     if (selectedDocument.source !== effectiveBaseline.source) {
       lines.push(`Forrás változás: ${effectiveBaseline.source} → ${selectedDocument.source}`);
     }
-    lines.push(`Lineage elemszám: ${lineage.length}`);
+    lines.push(`Kapcsolódó változatok: ${lineage.length}`);
     lines.push(`Review feladatok (ügy): ${reviewTaskCount}`);
     return lines;
   }, [selectedDocument, effectiveBaseline, lineage, reviewTaskCount]);
 
-const effectiveWorkspaceText = useMemo(() => {
+  const effectiveWorkspaceText = useMemo(() => {
     // Use comparison block text first (available for generated contracts with baseline selected)
     if (comparisonData?.blocks?.length) {
       return comparisonData.blocks
@@ -609,11 +712,153 @@ const effectiveWorkspaceText = useMemo(() => {
     return "";
   }, [comparisonData, latestAnonymousText]);
 
-  const caseOptions = useMemo(() => {
-    const map = new Map<string, { id: string; label: string }>();
-    documents.forEach((doc) => map.set(doc.caseId, { id: doc.caseId, label: `${doc.caseNumber} · ${doc.caseTitle}` }));
-    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label, "hu-HU"));
-  }, [documents]);
+  const activeDraftText = editorDraft || effectiveWorkspaceText || "";
+  const hasWorkspaceText = Boolean(effectiveWorkspaceText.trim());
+  const hasLocalDraftText = Boolean(editorDraft.trim());
+  const isDraftDirty = editorTouched && editorDraft !== effectiveWorkspaceText;
+  const editorStatusLabel =
+    !hasWorkspaceText && !hasLocalDraftText
+      ? "Előkészítő munkanézet"
+      : isDraftDirty
+        ? "Nem mentett helyi módosítások"
+        : "Munkapéldány előkészítve";
+
+  const formatDraftForPreview = (value: string) =>
+    value
+      .split(/\n\s*\n|\n/g)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(0, 80);
+
+  const draftPreviewParagraphs = useMemo(() => formatDraftForPreview(activeDraftText), [activeDraftText]);
+  const isDraftPreviewTruncated = useMemo(() => {
+    const paragraphCount = activeDraftText
+      .split(/\n\s*\n|\n/g)
+      .map((line) => line.trim())
+      .filter(Boolean).length;
+    return paragraphCount > 80;
+  }, [activeDraftText]);
+
+  const normalizedToolSearch = useMemo(() => toolSearch.trim().toLowerCase(), [toolSearch]);
+
+  const filteredClauseTools = useMemo(() => {
+    if (toolFilter !== "all" && toolFilter !== "clause") return [];
+    return workspaceClauseCatalogue.filter((tool) => {
+      if (!normalizedToolSearch) return true;
+      return (
+        tool.title.toLowerCase().includes(normalizedToolSearch) ||
+        tool.description.toLowerCase().includes(normalizedToolSearch) ||
+        tool.tags.some((tag) => tag.toLowerCase().includes(normalizedToolSearch))
+      );
+    });
+  }, [normalizedToolSearch, toolFilter]);
+
+  const filteredPromptTools = useMemo(() => {
+    if (toolFilter !== "all" && toolFilter !== "prompt") return [];
+    return workspacePromptTools.filter((tool) => {
+      if (!normalizedToolSearch) return true;
+      return (
+        tool.title.toLowerCase().includes(normalizedToolSearch) ||
+        tool.description.toLowerCase().includes(normalizedToolSearch) ||
+        tool.tags.some((tag) => tag.toLowerCase().includes(normalizedToolSearch))
+      );
+    });
+  }, [normalizedToolSearch, toolFilter]);
+
+  const showTemplatePlaceholder = toolFilter === "all" || toolFilter === "template";
+
+  useEffect(() => {
+    if (!editorTouched) {
+      setEditorDraft(effectiveWorkspaceText || "");
+    }
+  }, [effectiveWorkspaceText, editorTouched]);
+
+  const getWorkspaceDocumentTitle = () => selectedDocument?.fileName || selectedDocument?.title || "Nincs kiválasztott dokumentum";
+
+  const getWorkspaceDocumentKindLabel = () => {
+    if (selectedDocument?.kind === "document") return "Feltöltött dokumentum";
+    if (selectedDocument?.kind === "contract") return "Generált dokumentum";
+    return "Dokumentum";
+  };
+
+  const getDocumentLedgerHref = () => {
+    if (selectedDocument?.caseId) {
+      return `/cases/${encodeURIComponent(selectedDocument.caseId)}/documents?documentId=${encodeURIComponent(selectedDocument.id)}`;
+    }
+    if (requestedCaseId) {
+      return `/cases/${encodeURIComponent(requestedCaseId)}/documents`;
+    }
+    return "/cases";
+  };
+
+  const focusToolSearch = () => {
+    toolSearchRef.current?.focus();
+  };
+
+  const insertClauseIntoDraft = (clauseText: string) => {
+    const base = editorDraft || effectiveWorkspaceText || "";
+    const nextDraft = base ? `${base}\n\n${clauseText}` : clauseText;
+    setEditorDraft(nextDraft);
+    setEditorTouched(true);
+    setEditorNotice("Klauzula beszúrva a helyi munkapéldányba.");
+  };
+
+  const handleLocalWordCompatibleExport = () => {
+    const text = editorDraft || effectiveWorkspaceText;
+    if (!text.trim()) {
+      setEditorNotice("Nincs exportálható munkaszöveg.");
+      return;
+    }
+
+    const escapedText = escapeHtml(text).replace(/\n/g, "<br />");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${getWorkspaceDocumentTitle()}</title></head><body>${escapedText}</body></html>`;
+    const blob = new Blob([html], { type: "application/msword;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = globalThis.document.createElement("a");
+    const safeName = getWorkspaceDocumentTitle()
+      .replace(/\.[^.]+$/, "")
+      .replace(/[^a-zA-Z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "szerzodes-workspace";
+    anchor.href = url;
+    anchor.download = `${safeName}.doc`;
+    globalThis.document.body.appendChild(anchor);
+    anchor.click();
+    globalThis.document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+    setEditorNotice("Word-kompatibilis export elkészült.");
+  };
+
+  const handleAddLocalComment = () => {
+    const text = localCommentDraft.trim();
+    if (!text) return;
+    setLocalComments((prev) => [...prev, text]);
+    setLocalCommentDraft("");
+    setEditorNotice("Helyi megjegyzés hozzáadva. Mentés külön patchben lesz bekötve.");
+  };
+
+  const handleCopyPromptTool = async (toolTitle: string) => {
+    const prompt = [
+      `Cím: ${toolTitle}`,
+      "Magyar nyelven válaszolj.",
+      "Őrizd meg a dokumentumban szereplő jelöléseket, placeholder-eket és anonimizált azonosítókat.",
+      "Ügyvédi felülvizsgálatra alkalmas munkaterméket készíts, ne végleges jogi tanácsként fogalmazz.",
+      "Ne találj ki hiányzó tényeket, adatokat vagy dokumentumtartalmat.",
+      effectiveWorkspaceText
+        ? `=== ANONIMIZÁLT DOKUMENTUMSZÖVEG ===\n${effectiveWorkspaceText}`
+        : "=== DOKUMENTUMSZÖVEG ===\nIlleszd be ide az anonimizált dokumentumszöveget.",
+    ].join("\n\n");
+
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setEditorNotice(
+        effectiveWorkspaceText
+          ? "Prompt vágólapra másolva."
+          : "Prompt-váz másolva. Teljes dokumentumszöveg nélkül csak sablonként használható."
+      );
+    } catch {
+      setEditorNotice("Nem sikerült a prompt másolása.");
+    }
+  };
 
   const handleDownload = async (doc: CompareDocument) => {
     const blob = doc.kind === "contract" ? await downloadContract(doc.id) : await downloadDocument(doc.id);
@@ -736,86 +981,368 @@ const effectiveWorkspaceText = useMemo(() => {
   };
 
   return (
-    <div className="flex-1 flex min-h-0 bg-[#fbf9f4]">
-      <aside className="w-72 border-r border-[#DDD7CA] bg-[#F6F2E8] overflow-y-auto">
-        <div className="p-4 space-y-3">
-          <h2 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Szűrők és kontextus</h2>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Fájlnév / cím keresése"
-            className="w-full px-2 py-2 border border-[#DDD7CA] text-xs bg-white"
-          />
-          <select value={caseFilter} onChange={(e) => setCaseFilter(e.target.value)} className="w-full px-2 py-2 border border-[#DDD7CA] text-xs bg-white">
-            <option value="all">Minden ügy</option>
-            {caseOptions.map((option) => (
-              <option key={option.id} value={option.id}>{option.label}</option>
-            ))}
-          </select>
-          <select value={reviewFilter} onChange={(e) => setReviewFilter(e.target.value)} className="w-full px-2 py-2 border border-[#DDD7CA] text-xs bg-white">
-            <option value="all">Minden review állapot</option>
-            <option value="needs-review">Needs review</option>
-            <option value="approved">Approved</option>
-            <option value="generated">Generated</option>
-          </select>
-          <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="w-full px-2 py-2 border border-[#DDD7CA] text-xs bg-white">
-            <option value="all">Minden forrás</option>
-            <option value="GENERATED">Generated</option>
-            <option value="UPLOADED">Uploaded</option>
-          </select>
-          <label className="flex items-center gap-2 text-xs text-[#514D45]">
-            <input type="checkbox" checked={hasPreviousOnly} onChange={(e) => setHasPreviousOnly(e.target.checked)} />
-            Csak előzményes dokumentumok
-          </label>
-          <label className="flex items-center gap-2 text-xs text-[#514D45]">
-            <input type="checkbox" checked={recentOnly} onChange={(e) => setRecentOnly(e.target.checked)} />
-            Csak friss változások (14 nap)
-          </label>
-
-          <div className="pt-2 border-t border-[#DDD7CA] space-y-2">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Összevethető dokumentumok</p>
-            <div className="space-y-2 max-h-[56vh] overflow-y-auto">
-              {filteredDocuments.map((doc) => {
-                const active = selectedDocument?.id === doc.id;
-                const hasLineage = (familiesByDocId[doc.id]?.length || 0) > 1;
-                return (
-                  <button
-                    key={`${doc.kind}-${doc.id}`}
-                    onClick={() => setSelectedDocumentId(doc.id)}
-                    className={`w-full text-left p-2 border ${active ? "border-[#C9A227] bg-[#FBF9F3]" : "border-[#DDD7CA] bg-white hover:bg-[#FBF9F3]"}`}
-                  >
-                    <p className="text-xs font-semibold text-[#1F2821] truncate">{doc.fileName}</p>
-                    <p className="text-[10px] text-[#7B776D]">{doc.caseNumber} · {doc.source}</p>
-                    <p className="text-[10px] text-[#7B776D]">{doc.status} · {hasLineage ? "van előzmény" : "nincs előzmény"}</p>
-                  </button>
-                );
-              })}
-              {!isLoading && filteredDocuments.length === 0 && (
-                <p className="text-xs text-[#9C9890] border border-dashed border-[#DDD7CA] p-3">Nincs találat a jelenlegi szűrők mellett.</p>
-              )}
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      <main className="flex-1 overflow-y-auto border-r border-[#DDD7CA]">
+    <div className="flex-1 flex min-h-0 flex-col bg-[#EFE7CF] xl:flex-row">
+      <main className="min-w-0 flex-1 overflow-y-auto border-b border-[#DDD7CA] xl:border-b-0 xl:border-r">
         <div className="p-6 space-y-4">
-          <header className="border border-[#DDD7CA] bg-white p-4">
-            <h1 className="text-2xl font-serif text-[#1F2821]">Szerződés-workspace</h1>
-            <p className="text-xs text-[#7B776D] mt-1">Itt készíthető elő a dokumentum átnézése: összevetés, AI promptok, jogi elemzés és ügyvédi review.</p>
+          <header className="border border-[#DDD7CA] bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0 space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7B776D]">
+                  Ügyeim › {selectedDocument?.caseClientName || selectedDocument?.caseTitle || "Ügy"} › Szerződés-workspace
+                </p>
+                <div>
+                  <h1 className="font-serif text-3xl font-medium leading-tight text-[#1F2821]">Szerződés-workspace</h1>
+                  <p className="mt-1 max-w-3xl text-sm text-[#7B776D]">
+                    Itt készíthető elő a dokumentum átnézése, anonimizálása, AI elemzése és ügyvédi review-ja.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="max-w-full truncate text-sm font-semibold text-[#1F2821]">{getWorkspaceDocumentTitle()}</span>
+                  <AdminBadge tone={selectedDocument?.kind === "contract" ? "green" : "gold"}>{getWorkspaceDocumentKindLabel()}</AdminBadge>
+                  <AdminStatusPill tone={effectiveWorkspaceText ? "green" : isLoadingAnonymousText ? "blue" : "amber"}>
+                    {effectiveWorkspaceText ? "Anonimizált szöveg elérhető" : isLoadingAnonymousText ? "Betöltés..." : "Előkészítő nézet"}
+                  </AdminStatusPill>
+                </div>
+                <div className="grid gap-2 rounded-[6px] border border-[#DDD7CA] bg-[#FBF6E7] p-3 md:grid-cols-[1fr_180px_180px]">
+                  <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
+                    Dokumentum kiválasztása
+                    <select value={selectedDocument?.id || ""} onChange={(e) => handleWorkspaceDocumentChange(e.target.value)} className="mt-2 w-full rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[#1F2821]">
+                      <option value="">Válassz dokumentumot</option>
+                      {caseScopedDocuments.map((doc) => (
+                        <option key={`${doc.kind}-${doc.id}`} value={doc.id}>{doc.fileName} · {doc.source === "GENERATED" ? "Generált" : "Feltöltött"}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
+                    Forrás
+                    <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="mt-2 w-full rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[#1F2821]">
+                      <option value="all">Minden forrás</option>
+                      <option value="GENERATED">Generált</option>
+                      <option value="UPLOADED">Feltöltött</option>
+                    </select>
+                  </label>
+                  <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
+                    Keresés
+                    <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Fájlnév / cím" className="mt-2 w-full rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[#1F2821]" />
+                  </label>
+                </div>
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Link
+                  href={getDocumentLedgerHref()}
+                  className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-4 py-2 text-[13px] font-semibold leading-none text-[#16201A] transition-colors hover:border-[#16201A] hover:bg-[#FBF6E7]"
+                >
+                  Vissza a Dokumentumtárba
+                </Link>
+                <AdminButton onClick={handleLocalWordCompatibleExport} variant="gold">
+                  Word-kompatibilis export
+                </AdminButton>
+                <AdminButton
+                  onClick={() => globalThis.document.getElementById("version-compare-panel")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                  variant="muted"
+                  title="Az összevetés a lenti összevetési panelen érhető el."
+                >
+                  Verziók összevetése
+                </AdminButton>
+              </div>
+            </div>
           </header>
 
           {error && <div className="p-3 text-xs bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a]">{error}</div>}
 
-          {isLoading ? (
-            <div className="py-12 text-center text-xs text-[#7B776D]">Összevető board betöltése...</div>
+              {isLoading ? (
+            <div className="py-12 text-center text-xs text-[#7B776D]">Szerződés-workspace betöltése...</div>
           ) : !selectedDocument ? (
-            <div className="py-12 text-center text-xs text-[#7B776D] border border-dashed border-[#DDD7CA]">Válassz dokumentumot az összevetéshez.</div>
+            <div className="py-12 text-center text-xs text-[#7B776D] border border-dashed border-[#DDD7CA]">Válassz dokumentumot a munkapéldány előkészítéséhez.</div>
           ) : (
-            <>
-              <section className="border border-[#DDD7CA] bg-white p-4">
+            <div className="grid gap-4 2xl:grid-cols-[300px_minmax(720px,1fr)] xl:grid-cols-[280px_minmax(0,1fr)]">
+              <aside className="min-w-0 space-y-4 rounded-[8px] border border-[#DDD7CA] bg-white p-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+                <div>
+                  <h2 className="font-serif text-2xl font-medium text-[#1F2821]">Eszközök</h2>
+                  <p className="mt-1 text-xs text-[#7B776D]">Klauzulák, AI promptok és sablonok egy helyen.</p>
+                </div>
+
+                <input
+                  ref={toolSearchRef}
+                  value={toolSearch}
+                  onChange={(e) => setToolSearch(e.target.value)}
+                  placeholder="Keress klauzulát vagy promptot…"
+                  className="w-full rounded-[5px] border border-[#DDD7CA] bg-[#FBF9F3] px-3 py-2 text-xs text-[#1F2821]"
+                />
+
+                <div className="flex flex-wrap gap-2">
+                  {(["all", "clause", "prompt", "template"] as WorkspaceToolFilter[]).map((filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => {
+                        setToolFilter(filter);
+                        focusToolSearch();
+                      }}
+                      className={`rounded-[4px] border px-2.5 py-1 text-[11px] font-semibold ${
+                        toolFilter === filter
+                          ? "border-[#1F4A33] bg-[#E2E8DA] text-[#1F4A33]"
+                          : "border-[#DDD7CA] bg-white text-[#514D45] hover:bg-[#FBF9F3]"
+                      }`}
+                    >
+                      {filter === "all" ? "Mind" : filter === "clause" ? "Klauzulák" : filter === "prompt" ? "AI promptok" : "Sablonok"}
+                    </button>
+                  ))}
+                </div>
+
+                {editorNotice ? (
+                  <div className="flex items-start justify-between gap-3 rounded-[5px] border border-[#A6C0AF] bg-[#E2EDE5] p-3 text-[11px] text-[#23472F]">
+                    <p className="font-semibold">{editorNotice}</p>
+                    <button type="button" onClick={() => setEditorNotice(null)} className="text-sm font-bold leading-none text-[#23472F]" aria-label="Értesítés bezárása">
+                      ×
+                    </button>
+                  </div>
+                ) : null}
+
+                {(toolFilter === "all" || toolFilter === "clause") ? (
+                  <section className="space-y-2">
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Klauzulák</h3>
+                    {filteredClauseTools.length === 0 ? (
+                      <p className="rounded-[5px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] p-3 text-xs text-[#9C9890]">Nincs találat a klauzulák között.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {filteredClauseTools.map((clause) => (
+                          <div key={clause.id} className="rounded-[6px] border border-[#EEE7D9] bg-[#FBF9F3] p-3">
+                            <div className="space-y-1">
+                              <h4 className="text-sm font-semibold text-[#1F2821]">{clause.title}</h4>
+                              <p className="text-[11px] text-[#7B776D]">{clause.description}</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {clause.tags.map((tag) => (
+                                  <span key={`${clause.id}-${tag}`} className="rounded-full border border-[#DDD7CA] bg-white px-2 py-0.5 text-[10px] text-[#514D45]">
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            {expandedToolId === clause.id ? (
+                              <p className="mt-3 whitespace-pre-wrap rounded-[5px] border border-[#DDD7CA] bg-white p-3 text-[11px] leading-relaxed text-[#514D45]">{clause.text}</p>
+                            ) : null}
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <AdminButton size="xs" variant="neutral" onClick={() => setExpandedToolId(expandedToolId === clause.id ? null : clause.id)}>
+                                Előnézet
+                              </AdminButton>
+                              <AdminButton size="xs" variant="primary" onClick={() => insertClauseIntoDraft(clause.text)}>
+                                Beszúrás
+                              </AdminButton>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                ) : null}
+
+                {(toolFilter === "all" || toolFilter === "prompt") ? (
+                  <section className="space-y-2">
+                    <div>
+                      <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">AI promptok</h3>
+                      <p className="mt-1 text-[11px] text-[#7B776D]">Adminiculum nem hív külső AI-t. A promptokat vágólapra másolhatod.</p>
+                    </div>
+                    {filteredPromptTools.length === 0 ? (
+                      <p className="rounded-[5px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] p-3 text-xs text-[#9C9890]">Nincs találat a promptok között.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {filteredPromptTools.map((tool) => (
+                          <div key={tool.id} className="rounded-[6px] border border-[#D6DEEC] bg-white p-3">
+                            <div className="space-y-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <h4 className="text-sm font-semibold text-[#1F2821]">{tool.title}</h4>
+                                <AdminStatusPill tone={effectiveWorkspaceText ? "green" : "neutral"} className="shrink-0">
+                                  {effectiveWorkspaceText ? "Szöveggel használható" : "Csak prompt-váz"}
+                                </AdminStatusPill>
+                              </div>
+                              <p className="text-[11px] text-[#7B776D]">{tool.description}</p>
+                            </div>
+                            {expandedToolId === tool.id ? (
+                              <div className="mt-3 space-y-1 rounded-[5px] border border-[#D6DEEC] bg-[#EAEFF6] p-3 text-[11px] text-[#2D4A7C]">
+                                <p>Magyar nyelven válaszolj.</p>
+                                <p>Ne találj ki hiányzó tényeket.</p>
+                                <p>Ügyvédi felülvizsgálatra alkalmas munkaterméket készíts.</p>
+                                {!effectiveWorkspaceText ? <p>A dokumentumszöveget külön kell beilleszteni.</p> : null}
+                              </div>
+                            ) : null}
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <AdminButton size="xs" variant="ai" onClick={() => setExpandedToolId(expandedToolId === tool.id ? null : tool.id)}>
+                                Megnéz
+                              </AdminButton>
+                              <AdminButton size="xs" variant="gold" onClick={() => handleCopyPromptTool(tool.title)}>
+                                Másolás
+                              </AdminButton>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                ) : null}
+
+                {showTemplatePlaceholder ? (
+                  <section className="space-y-2">
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Ügyfél-specifikus sablonok</h3>
+                    <div className="rounded-[6px] border border-dashed border-[#DDD7CA] bg-[#F6F2E8] p-3">
+                      <h4 className="text-sm font-semibold text-[#1F2821]">Nincs még ügyfélprofil</h4>
+                      <p className="mt-1 text-[11px] text-[#7B776D]">Ehhez az ügyfélhez még nincs dokumentumstílus- vagy promptprofil beállítva.</p>
+                      <AdminButton size="xs" variant="muted" disabled className="mt-3">
+                        Sablonprofil később
+                      </AdminButton>
+                      <p className="mt-3 text-[10px] leading-relaxed text-[#7B776D]">
+                        Szerveroldali klauzulatár külön patchben lesz bekötve.
+                      </p>
+                    </div>
+                  </section>
+                ) : null}
+              </aside>
+
+              <div className="min-w-0 space-y-4">
+                <section className="overflow-hidden rounded-[8px] border border-[#DDD7CA] bg-white">
+                  <div className="flex flex-col gap-3 border-b border-[#EEE7D9] p-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="font-serif text-2xl font-medium text-[#1F2821]">Munkapéldány</h2>
+                        <AdminStatusPill tone={isDraftDirty ? "amber" : activeDraftText ? "green" : "neutral"}>{editorStatusLabel}</AdminStatusPill>
+                      </div>
+                      <p className="text-[11px] text-[#7B776D]">Helyi szerkesztési nézet · a szerveroldali mentés külön patchben lesz bekötve</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <AdminButton size="sm" variant="neutral" onClick={focusToolSearch} title="Bal oldali eszköztárban kereshetsz klauzulát.">
+                        Klauzula beszúrása
+                      </AdminButton>
+                      <AdminButton
+                        size="sm"
+                        variant="neutral"
+                        onClick={() => {
+                          if (localCommentRef.current) {
+                            localCommentRef.current.focus();
+                            localCommentRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+                          } else {
+                            setEditorNotice("A megjegyzésmező lent található.");
+                          }
+                        }}
+                      >
+                        Megjegyzés hozzáadása
+                      </AdminButton>
+                      <AdminButton size="sm" variant="gold" onClick={handleLocalWordCompatibleExport}>
+                        Word-kompatibilis export
+                      </AdminButton>
+                      <AdminButton size="sm" variant="muted" disabled title="A szerveroldali szerkesztés mentése külön patchben lesz bekötve.">
+                        Piszkozat mentése
+                      </AdminButton>
+                    </div>
+                  </div>
+
+                  {isDraftDirty ? (
+                    <div className="border-b border-[#E6C987] bg-[#FAEFCF] px-4 py-3 text-xs font-semibold text-[#7A5A1F]">
+                      A munkapéldány helyi módosításokat tartalmaz. Ezek még nincsenek szerveroldalon mentve.
+                    </div>
+                  ) : null}
+
+                  <div className="bg-[#EFE7CF] px-3 py-5 sm:px-6 lg:px-8">
+                    <div className="mx-auto flex w-full max-w-[1120px] items-start gap-4">
+                    <div className="min-h-[760px] flex-1 border border-[rgba(22,32,26,0.14)] bg-white px-6 py-8 shadow-[0_18px_50px_rgba(22,32,26,0.14)] sm:px-10 lg:px-16">
+                      <div className="border-b border-[#EEE7D9] pb-4">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Helyi munkapéldány</p>
+                        <h3 className="mt-2 break-words font-serif text-2xl font-medium leading-tight text-[#1F2821]">{getWorkspaceDocumentTitle()}</h3>
+                        <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-[#7B776D]">
+                          <span className="rounded-full border border-[#DDD7CA] px-2 py-0.5">{getWorkspaceDocumentKindLabel()}</span>
+                          <span className="rounded-full border border-[#DDD7CA] px-2 py-0.5">helyi munkapéldány</span>
+                          {selectedDocument?.id ? <span className="rounded-full border border-[#DDD7CA] px-2 py-0.5">ID: {selectedDocument.id.slice(0, 8)}</span> : null}
+                        </div>
+                      </div>
+
+                      {activeDraftText ? (
+                        <div className="pt-6">
+                          <textarea
+                            value={editorDraft}
+                            onChange={(event) => {
+                              setEditorDraft(event.target.value);
+                              setEditorTouched(true);
+                            }}
+                            placeholder="Itt jelenik meg az anonimizált munkaszöveg vagy a beszúrt klauzulák helyi munkapéldánya."
+                            className="min-h-[600px] w-full resize-y border-0 bg-white p-0 font-serif text-[15px] leading-8 text-[#1F2821] outline-none placeholder:text-[#A6AEA3] focus:ring-0"
+                          />
+                          {isDraftPreviewTruncated ? (
+                            <p className="mt-3 text-[11px] text-[#7B776D]">A hosszú dokumentum előnézete rövidítve jelenik meg.</p>
+                          ) : null}
+                          <p className="mt-3 text-[10px] text-[#9C9890]">Bekezdések: {draftPreviewParagraphs.length}</p>
+                        </div>
+                      ) : (
+                        <div className="flex min-h-[520px] flex-col items-center justify-center text-center">
+                          <h3 className="font-serif text-2xl font-medium text-[#1F2821]">Szerződésszerkesztő / Munkapéldány</h3>
+                          <p className="mt-3 max-w-xl text-sm leading-6 text-[#7B776D]">
+                            A teljes szöveges munkapéldány anonimizálás után, vagy későbbi dokumentumszöveg-betöltés után jelenik meg.
+                          </p>
+                          <div className="mt-6 w-full max-w-lg rounded-[6px] border border-[#EEE7D9] bg-[#FBF6E7] p-4 text-left text-sm leading-7 text-[#3D4842]">
+                            <p className="text-center font-serif text-lg font-semibold uppercase tracking-[0.12em] text-[#16201A]">{getWorkspaceDocumentTitle()}</p>
+                            <p className="mt-4"><span className="rounded bg-[#E2E8DA] px-1 text-[#1F4A33]">[beszúrt klauzula]</span> Klauzulák a bal oldali eszköztárból helyi munkapéldányként hozzáadhatók.</p>
+                            <p><span className="text-[#8B2A2A] line-through">[törölt szöveg]</span> A piros áthúzás csak vizuális review-jelölés, nem valódi Word változáskövetés.</p>
+                          </div>
+                          <div className="mt-5 flex flex-wrap justify-center gap-2">
+                            <AdminButton variant="neutral" onClick={focusToolSearch}>
+                              Klauzula keresése
+                            </AdminButton>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <aside className="hidden w-56 shrink-0 space-y-3 lg:block">
+                      <div className="rounded-[6px] border border-[#F2E4BD] bg-[#FFFCEB] p-3 text-[11px] text-[#3D4842] shadow-sm">
+                        <p className="font-semibold text-[#16201A]">Review megjegyzés</p>
+                        <p className="mt-1">A helyi megjegyzések ügyvédi review előkészítésére szolgálnak.</p>
+                      </div>
+                      {localComments.slice(-3).map((comment, index) => (
+                        <div key={`margin-${index}-${comment.slice(0, 12)}`} className="rounded-[6px] border border-[#F2E4BD] bg-[#FFFCEB] p-3 text-[11px] text-[#3D4842] shadow-sm">
+                          <p className="font-semibold text-[#16201A]">Helyi megjegyzés</p>
+                          <p className="mt-1 line-clamp-4">{comment}</p>
+                        </div>
+                      ))}
+                    </aside>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-[#EEE7D9] bg-[#FBF9F3] p-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <h3 className="text-sm font-semibold text-[#1F2821]">Helyi megjegyzések</h3>
+                        <p className="mt-1 text-[11px] text-[#7B776D]">Ezek a megjegyzések ebben a v1 munkanézetben helyiek; szerveroldali mentésük külön patch lesz.</p>
+                      </div>
+                      <AdminButton size="sm" variant="primary" onClick={handleAddLocalComment}>
+                        Megjegyzés hozzáadása
+                      </AdminButton>
+                    </div>
+                    <textarea
+                      ref={localCommentRef}
+                      value={localCommentDraft}
+                      onChange={(event) => setLocalCommentDraft(event.target.value)}
+                      placeholder="Írj előkészítő megjegyzést az ügyvédnek…"
+                      rows={3}
+                      className="mt-3 w-full resize-y rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-sm text-[#1F2821] outline-none focus:border-[#1F4A33]"
+                    />
+                    <div className="mt-3 space-y-2">
+                      {localComments.length > 0 ? (
+                        localComments.map((comment, index) => (
+                          <div key={`${index}-${comment.slice(0, 16)}`} className="rounded-[5px] border border-[#DDD7CA] bg-white p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Megjegyzés #{index + 1}</p>
+                            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[#1F2821]">{comment}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="rounded-[5px] border border-dashed border-[#DDD7CA] bg-white p-3 text-xs text-[#9C9890]">Még nincs helyi megjegyzés.</p>
+                      )}
+                    </div>
+                  </div>
+                </section>
+
+                <section id="version-compare-panel" className="scroll-mt-4 border border-[#DDD7CA] bg-white p-4">
                 <div className="flex items-center justify-between gap-4 mb-3">
-                  <h2 className="text-sm font-semibold text-[#1F2821]">Dokumentum áttekintés és összevetés</h2>
+                  <div>
+                    <h2 className="text-sm font-semibold text-[#1F2821]">Verziók és összevetés</h2>
+                    <p className="mt-1 text-[11px] text-[#7B776D]">A munkapéldány szerkesztése és az ügyvédi review ettől külön kezelendő.</p>
+                  </div>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setSelectedBaselineId(previousVersion?.id || null)}
@@ -829,17 +1356,17 @@ const effectiveWorkspaceText = useMemo(() => {
                       onChange={(e) => setSelectedBaselineId(e.target.value || null)}
                       className="px-2 py-1 border border-[#DDD7CA] text-xs"
                     >
-                      <option value="">Nincs baseline</option>
+                      <option value="">Nincs összevetési alap</option>
                       {baselineCandidates.map((candidate) => (
                         <option key={candidate.id} value={candidate.id}>
-                          {candidate.fileName} · {candidate.status} · {formatDateTime(candidate.updatedAt || candidate.createdAt)}
+                          {candidate.fileName} · {toReadableStatus(candidate.status)} · {formatDateTime(candidate.updatedAt || candidate.createdAt)}
                         </option>
                       ))}
                     </select>
                   </div>
                 </div>
                 <p className="text-[11px] text-[#7B776D]">
-                  Az összevetés itt segédeszköz: ha nincs kiválasztott alapdokumentum, a felület akkor is használható dokumentum-workspace-ként.
+                  Ha nincs kiválasztott alapdokumentum, a felület akkor is használható munkapéldányként.
                 </p>
 
                 <div className="mb-3 p-3 border border-[#EEE7D9] bg-[#FBF9F3] space-y-2">
@@ -870,17 +1397,17 @@ const effectiveWorkspaceText = useMemo(() => {
                   </div>
 
                   <div className="flex flex-wrap gap-2 text-[10px] text-[#514D45]">
-                    <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">Dokumentum státusz: {selectedDocument.status}</span>
-                    <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">Forrás: {selectedDocument.source}</span>
-                    <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">Baseline: {selectedBaseline ? "kiválasztva" : "nincs"}</span>
+                    <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">Dokumentum státusz: {toReadableStatus(selectedDocument.status)}</span>
+                    <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">Forrás: {selectedDocument.source === "GENERATED" ? "Generált" : "Feltöltött"}</span>
+                    <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">Összevetési alap: {selectedBaseline ? "kiválasztva" : "nincs"}</span>
                     <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">
-                      Blokk compare: {selectedDocument.kind === "contract" && !!comparisonData ? "elérhető" : "nem elérhető"}
+                      Blokk-összevetés: {selectedDocument.kind === "contract" && !!comparisonData ? "elérhető" : "nem elérhető"}
                     </span>
                     <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">Review feladatok: {reviewTaskCount}</span>
                   </div>
 
                   {!selectedBaseline ? (
-                    <p className="text-[11px] text-[#7B776D]">Válassz baseline dokumentumot a pontosabb összevetéshez.</p>
+                    <p className="text-[11px] text-[#7B776D]">Válassz összevetési alapdokumentumot a pontosabb összevetéshez.</p>
                   ) : selectedDocument.kind !== "contract" ? (
                     <p className="text-[11px] text-[#7B776D]">Ehhez a dokumentumtípushoz jelenleg metaadat alapú összevetés érhető el.</p>
                   ) : comparisonData ? (
@@ -897,15 +1424,15 @@ const effectiveWorkspaceText = useMemo(() => {
                     <ul className="mt-2 text-[11px] text-[#514D45] space-y-1">
                       <li>Ügy: {selectedDocument.caseNumber} · {selectedDocument.caseTitle}</li>
                       <li>Ügyfél: {selectedDocument.caseClientName || "—"}</li>
-                      <li>Forrás: {selectedDocument.source}</li>
-                      <li>Státusz: {selectedDocument.status}</li>
+                      <li>Forrás: {selectedDocument.source === "GENERATED" ? "Generált" : "Feltöltött"}</li>
+                      <li>Státusz: {toReadableStatus(selectedDocument.status)}</li>
                       <li className="flex items-center gap-2">
                         Verzió: v{selectedDocument.revisionNumber || 1}
                         {selectedDocument.isCurrentRevision && (
-                            <span className="text-[9px] px-1.5 py-0.5 bg-[#d1e8d3] text-[#23472F] font-bold uppercase tracking-wide">Current</span>
+                            <span className="text-[9px] px-1.5 py-0.5 bg-[#d1e8d3] text-[#23472F] font-bold uppercase tracking-wide">Aktuális</span>
                           )}
                           {selectedDocument.isFinalRevision && (
-                            <span className="text-[9px] px-1.5 py-0.5 bg-[#06190d] text-white font-bold uppercase tracking-wide">Final</span>
+                            <span className="text-[9px] px-1.5 py-0.5 bg-[#06190d] text-white font-bold uppercase tracking-wide">Végleges</span>
                           )}
                       </li>
                       <li>Frissítve: {formatDateTime(selectedDocument.updatedAt || selectedDocument.createdAt)}</li>
@@ -918,7 +1445,7 @@ const effectiveWorkspaceText = useMemo(() => {
                       <div className="mt-2 space-y-1">
                         <p className="text-xs text-[#9C9890]">Nincs kiválasztott baseline dokumentum.</p>
                         <p className="text-[11px] text-[#7B776D]">
-                          Szöveg-diff megjelenítéshez válassz egy előző verziót (baseline), majd a blokk-szintű panelen jelennek meg a módosítások.
+                          Szöveg-összevetéshez válassz egy előző verziót, majd a blokk-szintű panelen jelennek meg a módosítások.
                         </p>
                       </div>
                     ) : (
@@ -926,15 +1453,15 @@ const effectiveWorkspaceText = useMemo(() => {
                         <p className="text-sm font-semibold text-[#1F2821] mt-1 break-all">{selectedBaseline.fileName}</p>
                         <ul className="mt-2 text-[11px] text-[#514D45] space-y-1">
                           <li>Ügy: {selectedBaseline.caseNumber} · {selectedBaseline.caseTitle}</li>
-                          <li>Forrás: {selectedBaseline.source}</li>
-                          <li>Státusz: {selectedBaseline.status}</li>
+                          <li>Forrás: {selectedBaseline.source === "GENERATED" ? "Generált" : "Feltöltött"}</li>
+                          <li>Státusz: {toReadableStatus(selectedBaseline.status)}</li>
                           <li className="flex items-center gap-2">
                             <span>Verzió: v{selectedBaseline.revisionNumber || 1}</span>
                             {selectedBaseline.isCurrentRevision && (
-                              <span className="text-[9px] px-1.5 py-0.5 bg-[#d1e8d3] text-[#23472F] font-bold uppercase tracking-wide">Current</span>
+                              <span className="text-[9px] px-1.5 py-0.5 bg-[#d1e8d3] text-[#23472F] font-bold uppercase tracking-wide">Aktuális</span>
                             )}
                             {selectedBaseline.isFinalRevision && (
-                              <span className="text-[9px] px-1.5 py-0.5 bg-[#06190d] text-white font-bold uppercase tracking-wide">Final</span>
+                              <span className="text-[9px] px-1.5 py-0.5 bg-[#06190d] text-white font-bold uppercase tracking-wide">Végleges</span>
                             )}
                           </li>
                           <li>Frissítve: {formatDateTime(selectedBaseline.updatedAt || selectedBaseline.createdAt)}</li>
@@ -952,18 +1479,18 @@ const effectiveWorkspaceText = useMemo(() => {
                 </div>
 
                 <div className="mt-3 p-3 border border-[#EEE7D9] bg-white text-xs text-[#514D45] space-y-1">
-                  <p className="font-semibold text-[#1F2821]">Szöveg-diff állapot</p>
+                  <p className="font-semibold text-[#1F2821]">Szöveg-összevetés állapota</p>
                   {!selectedBaseline ? (
                     <p className="text-[#7B776D]">
-                      Jelenleg csak metaadat összehasonlítás látszik. Szöveg-diffhez válassz baseline dokumentumot.
+                      Jelenleg csak metaadat-összehasonlítás látszik. Szöveg-összevetéshez válassz alapdokumentumot.
                     </p>
                   ) : selectedDocument.kind !== "contract" ? (
                     <p className="text-[#7B776D]">
-                      A felület metaadat összehasonlítást mutat; blokk-szintű szöveg-diff jelenleg csak támogatott szerződés revíziók esetén érhető el.
+                      A felület metaadat-összehasonlítást mutat; blokk-szintű szöveg-összevetés jelenleg csak támogatott szerződésrevíziók esetén érhető el.
                     </p>
                   ) : comparisonData ? (
                     <p>
-                      Szöveg-diff betöltve. Módosított blokkok:{" "}
+                      Szöveg-összevetés betöltve. Módosított blokkok:{" "}
                       <span className="font-semibold">{comparisonData.summary.modified}</span>.
                     </p>
                   ) : (
@@ -974,20 +1501,17 @@ const effectiveWorkspaceText = useMemo(() => {
                 </div>
               </section>
 
-              <section className="border border-[#DDD7CA] bg-white p-4">
-                <h3 className="text-sm font-semibold text-[#1F2821] mb-2">Verzió- és lineage panel</h3>
+                <section className="border border-[#DDD7CA] bg-white p-4">
+                <h3 className="text-sm font-semibold text-[#1F2821] mb-2">Verziók és előzmények</h3>
                 {lineage.length === 0 ? (
-                  <p className="text-xs text-[#9C9890]">Nincs elérhető lineage adat.</p>
+                  <p className="text-xs text-[#9C9890]">Nincs elérhető előzményadat.</p>
                 ) : (
                   <div className="space-y-2">
                     {lineage.map((doc) => (
                       <div key={`${doc.kind}-${doc.id}`} className="p-2 border border-[#EEE7D9] flex items-center justify-between gap-3">
                         <div>
                           <p className="text-xs font-semibold text-[#1F2821]">{doc.fileName}</p>
-                          <p className="text-[10px] text-[#7B776D]">v{doc.revisionNumber || 1} · {doc.status} · {doc.source} · {formatDateTime(doc.updatedAt || doc.createdAt)}</p>
-                          <p className="text-[10px] text-[#9C9890]">
-                            {doc.kind === "contract" && doc.threadId ? `threadId: ${doc.threadId}` : "fallback lineage kulcs"}
-                          </p>
+                          <p className="text-[10px] text-[#7B776D]">v{doc.revisionNumber || 1} · {toReadableStatus(doc.status)} · {doc.source === "GENERATED" ? "Generált" : "Feltöltött"} · {formatDateTime(doc.updatedAt || doc.createdAt)}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           {doc.isCurrentRevision && (
@@ -998,7 +1522,7 @@ const effectiveWorkspaceText = useMemo(() => {
                           )}
                           {doc.id !== selectedDocument.id && (
                             <button onClick={() => setSelectedBaselineId(doc.id)} className="px-2 py-1 text-[10px] border border-[#DDD7CA] hover:bg-[#FBF9F3]">
-                              Alapdokumentum
+                              Összevetési alap
                             </button>
                           )}
                           <Link href={`/cases/${doc.caseId}/documents`} className="px-2 py-1 text-[10px] border border-[#DDD7CA] hover:bg-[#FBF9F3]">Dokumentumok</Link>
@@ -1058,7 +1582,7 @@ const effectiveWorkspaceText = useMemo(() => {
                 )}
 
                 {selectedDocument?.kind !== "contract" ? (
-                  <p className="text-xs text-[#9C9890]">Blokk-szintű compare jelenleg csak ADASVETEL szerződés revíziókra támogatott.</p>
+                  <p className="text-xs text-[#9C9890]">Blokk-szintű összevetés jelenleg csak támogatott szerződésrevíziókra érhető el.</p>
                 ) : comparisonLoading ? (
                   <p className="text-xs text-[#7B776D]">Összehasonlítás betöltése...</p>
                 ) : comparisonError ? (
@@ -1070,7 +1594,7 @@ const effectiveWorkspaceText = useMemo(() => {
                     <div className="mb-3 p-3 border border-[#EEE7D9] bg-[#FBF9F3] text-xs text-[#514D45]">
                       <p>
                         Forráskijelölés: <span className="font-semibold">{comparisonData.sourceSelection}</span> ·
-                        Biztonság: <span className="font-semibold">{comparisonData.confidence}</span>
+                        Biztonság: <span className="font-semibold">{toReadableStatus(comparisonData.confidence)}</span>
                       </p>
                       <p className="text-[11px] text-[#7B776D] mt-1">{comparisonData.confidenceReason}</p>
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -1100,8 +1624,8 @@ const effectiveWorkspaceText = useMemo(() => {
                         return (
                           <div key={block.id} className="border border-[#EEE7D9]">
                             <div className="px-3 py-2 border-b border-[#EEE7D9] flex items-center justify-between">
-                              <span className={`text-[10px] uppercase font-bold px-2 py-0.5 ${statusClass}`}>{block.status}</span>
-                              <span className="text-[10px] text-[#7B776D]">Match: {block.matchStrategy}</span>
+                              <span className={`text-[10px] uppercase font-bold px-2 py-0.5 ${statusClass}`}>{toReadableStatus(block.status)}</span>
+                              <span className="text-[10px] text-[#7B776D]">Illesztés: {toReadableStatus(block.matchStrategy)}</span>
                             </div>
                             <div className="grid md:grid-cols-2">
                               <div className="p-3 border-r border-[#EEE7D9] bg-[#FBF9F3]">
@@ -1177,162 +1701,175 @@ const effectiveWorkspaceText = useMemo(() => {
                   </>
                 )}
               </section>
-            </>
+              </div>
+            </div>
           )}
         </div>
       </main>
 
-      <aside className="w-80 bg-white overflow-y-auto">
+      <aside className="w-full shrink-0 bg-white xl:w-80 xl:overflow-y-auto">
         <div className="p-4 space-y-4">
-<h2 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Jobb oldali kontextus</h2>
+          <h2 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Munkafolyamat</h2>
 
-              {!selectedDocument ? (
-                <p className="text-xs text-[#9C9890]">Nincs kiválasztott dokumentum.</p>
-              ) : (
-                <>
-                  {/* Munkafolyamat állapota */}
-                  <div className={`border border-[#EEE7D9] p-3 bg-[#F6F2E8] space-y-2`}>
-                    <p className="text-[10px] uppercase tracking-widest text-[#514D45] font-bold">Munkafolyamat állapota</p>
-                    <div className="space-y-1">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[11px] text-[#7B776D]">Dokumentum</span>
-                        <span className="text-[11px] font-semibold text-[#1F2821]">
-                          {selectedDocument.fileName || selectedDocument.title || "Nincs kiválasztva"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-[11px] text-[#7B776D]">Szöveg a promptokhoz</span>
-                        <span className={`text-[11px] font-semibold ${effectiveWorkspaceText ? "text-[#23472F]" : "text-[#9C9890]"}`}>
-                          {effectiveWorkspaceText ? "Elérhető" : isLoadingAnonymousText ? "Betöltés..." : "Anonimizálás szükséges"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-[11px] text-[#7B776D]">AI elemzés</span>
-                        <span className="text-[11px] font-semibold text-[#9C9890]">Beilleszthető / menthető</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-[11px] text-[#7B776D]">Külső AI hívás</span>
-                        <span className="text-[11px] font-semibold text-[#9C9890]">Nincs — csak prompt másolás</span>
-                      </div>
-                    </div>
+          {!selectedDocument ? (
+            <p className="text-xs text-[#9C9890]">Nincs kiválasztott dokumentum.</p>
+          ) : (
+            <>
+              <section className="rounded-[8px] border border-[#DDD7CA] bg-[#F6F2E8] p-3 space-y-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#514D45]">Munkafolyamat állapota</p>
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-[11px] text-[#7B776D]">Dokumentum</span>
+                    <span className="text-right text-[11px] font-semibold text-[#1F2821]">{getWorkspaceDocumentTitle()}</span>
                   </div>
-
-                  {/* Workspace helper */}
-                  <div className="border border-[#DDD7CA] bg-[#FBF9F3] p-3">
-                    <p className="text-[11px] text-[#514D45]">
-                      Ez a workspace nem hív külső AI-t. A promptok külső AI eszközbe másolhatók, az elkészült jogi elemzés pedig itt illeszthető vissza ügyvédi review előkészítéséhez.
-                    </p>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[11px] text-[#7B776D]">Típus</span>
+                    <AdminBadge tone={selectedDocument.kind === "contract" ? "green" : "gold"}>{getWorkspaceDocumentKindLabel()}</AdminBadge>
                   </div>
-
-                  {/* Anonymous text loading status */}
-                  {isLoadingAnonymousText ? (
-                    <p className="text-[10px] text-[#9C9890]">Anonimizált szöveg keresése...</p>
-                  ) : latestAnonymousText ? (
-                    <p className="text-[10px] text-[#819684]">Legutóbbi anonimizált szöveg betöltve a promptokhoz.</p>
-                  ) : null}
-
-                  {/* Empty-text warning + next-step CTA */}
-                  {Boolean(!effectiveWorkspaceText) && (
-                    <div className="border border-[#EEE7D9] bg-[#FEF9EC] p-3">
-                      <p className="text-[11px] font-bold text-[#7A5A1F] mb-1">Nincs még anonimizált munkaszöveg</p>
-                      <p className="text-[11px] text-[#7A5A1F] mb-3">
-                        A prompt panel akkor lesz igazán használható, ha a dokumentum anonimizált szövege már rendelkezésre áll. Indíts anonimizálást a Dokumentumtárban, majd térj vissza ide a jogi elemzéshez.
-                      </p>
-                      <Link
-                        href={`/cases/${encodeURIComponent(selectedDocument.caseId)}/documents?documentId=${encodeURIComponent(selectedDocument.id)}`}
-                        className="block w-full px-3 py-2 text-xs font-bold uppercase tracking-widest bg-[#C9A227] text-white hover:bg-[#b8931f] text-center transition-colors"
-                      >
-                        Anonimizálás indítása
-                      </Link>
-                      <p className="text-[9px] text-[#9C9890] mt-2">
-                        Az anonimizálás után a workspace automatikusan a legutóbbi anonimizált szöveget használja a promptokhoz.
-                      </p>
-                    </div>
-                  )}
-                  {!effectiveWorkspaceText && (
-                    <div className="border border-[#EEE7D9] bg-[#F6F2E8] p-3">
-                      <p className="text-[10px] text-[#7B776D]">
-                        Prompt-vázak továbbra is másolhatók, de teljes dokumentumszöveg nélkül csak sablonként használhatók.
-                      </p>
-                    </div>
-                  )}
-
-                  <AIPromptPanel
-                    caseId={selectedDocument.caseId}
-                    documentId={selectedDocument.id}
-                    documentTitle={selectedDocument.fileName || selectedDocument.title}
-                    anonymizedText={effectiveWorkspaceText}
-                  />
-
-                  <LegalAnalysisIntakePanel
-                    caseId={selectedDocument.caseId}
-                    documentId={selectedDocument.id}
-                    documentSourceType="DOCUMENT"
-                    documentTitle={selectedDocument.fileName || selectedDocument.title}
-                  />
-
-                  {/* Recent activity */}
-                  <div className="border border-[#DDD7CA] p-3 space-y-2">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Recent activity</p>
-                    {timelineEvents.length === 0 ? (
-                      <p className="text-xs text-[#9C9890]">Nincs kapcsolt aktivitás.</p>
-                    ) : (
-                      timelineEvents.map((event) => (
-                        <div key={event.id} className="border border-[#EEE7D9] p-2">
-                          <p className="text-xs font-semibold text-[#1F2821]">{event.description}</p>
-                          <p className="text-[10px] text-[#7B776D]">{formatDateTime(event.createdAt)}</p>
-                        </div>
-                      ))
-                    )}
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[11px] text-[#7B776D]">Anonimizált szöveg</span>
+                    <AdminStatusPill tone={effectiveWorkspaceText ? "green" : isLoadingAnonymousText ? "blue" : "amber"}>
+                      {effectiveWorkspaceText ? "Elérhető" : isLoadingAnonymousText ? "Betöltés..." : "Anonimizálás szükséges"}
+                    </AdminStatusPill>
                   </div>
-
-                  {/* Linked case */}
-                  <div className="border border-[#DDD7CA] p-3 space-y-1">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Linked case</p>
-                    <p className="text-sm font-semibold text-[#1F2821]">{selectedDocument.caseNumber}</p>
-                    <p className="text-xs text-[#514D45]">{selectedDocument.caseTitle}</p>
-                    <p className="text-[11px] text-[#7B776D]">Ügyfél: {selectedDocument.caseClientName || "—"}</p>
-                    <p className="text-[11px] text-[#7B776D]">Case státusz: {caseSummaries[selectedDocument.caseId]?.case.status || "—"}</p>
-                    <Link href={`/cases/${selectedDocument.caseId}`} className="block mt-2 px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Ügy megnyitása</Link>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[11px] text-[#7B776D]">Jogi elemzés</span>
+                    <span className="text-right text-[11px] font-semibold text-[#7B776D]">Beilleszthető / menthető</span>
                   </div>
-
-                  {/* Review context */}
-                  <div className="border border-[#DDD7CA] p-3 space-y-1">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Review context</p>
-                    <p className="text-xs text-[#514D45]">Dokumentum státusz: {selectedDocument.status}</p>
-                    <p className="text-xs text-[#514D45]">Review-jellegű feladatok az ügyön: {reviewTaskCount}</p>
-                    {selectedDocument.kind === "contract" ? (
-                      <Link href={`/cases/${selectedDocument.caseId}/review/${selectedDocument.id}`} className="block mt-2 px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">
-                        Review megnyitása
-                      </Link>
-                    ) : (
-                      <p className="text-[11px] text-[#9C9890] mt-1">Ehhez a rekordhoz közvetlen review route nem áll rendelkezésre.</p>
-                    )}
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[11px] text-[#7B776D]">Külső AI hívás</span>
+                    <span className="text-right text-[11px] font-semibold text-[#7B776D]">Nincs — csak prompt másolás</span>
                   </div>
+                </div>
+                {anonymousTextError ? (
+                  <p className="rounded-[5px] border border-[#F2E4BD] bg-[#FAEFCF] p-2 text-[10px] text-[#7A5A1F]">
+                    Az anonimizált szöveg betöltése nem sikerült. A Dokumentumtárban újra megnyitható az anonimizálás.
+                  </p>
+                ) : null}
+              </section>
 
-                  {/* Kapcsolódó műveletek */}
-                  <div className="border border-[#DDD7CA] p-3 space-y-2">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Kapcsolódó műveletek</p>
-                    <button
-                      onClick={() => handleDownload(selectedDocument)}
-                      className="w-full px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
-                    >
-                      Aktuális dokumentum letöltése
-                    </button>
-                    {selectedBaseline && (
-                      <button
-                        onClick={() => handleDownload(selectedBaseline)}
-                        className="w-full px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
-                      >
-                        Alapdokumentum letöltése
-                      </button>
-                    )}
-                    <Link href={`/cases/${selectedDocument.caseId}/documents`} className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">
-                      Dokumentumok megnyitása
+              <section className="rounded-[8px] border border-[#DDD7CA] bg-white p-3 space-y-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Anonimizálás</p>
+                {isLoadingAnonymousText && !effectiveWorkspaceText ? (
+                  <p className="rounded-[5px] border border-[#D6DEEC] bg-[#EAEFF6] p-3 text-xs font-semibold text-[#2D4A7C]">Anonimizált munkaszöveg betöltése...</p>
+                ) : effectiveWorkspaceText ? (
+                  <div className="rounded-[5px] border border-[#A6C0AF] bg-[#E2EDE5] p-3 space-y-2">
+                    <p className="text-xs font-bold text-[#23472F]">Anonimizált munkaszöveg elérhető</p>
+                    <p className="text-[11px] leading-5 text-[#23472F]">A promptok és a jogi elemzés már a legutóbbi elérhető anonimizált munkaszövegre épülhetnek.</p>
+                    {latestAnonymousDocumentId ? <p className="text-[10px] text-[#4A6B4A]">Munkaszöveg azonosító: {latestAnonymousDocumentId.slice(0, 8)}</p> : null}
+                    <Link href={getDocumentLedgerHref()} className="block rounded-[5px] border border-[#A6C0AF] bg-white px-3 py-2 text-center text-xs font-semibold text-[#23472F] hover:bg-[#F6F2E8]">
+                      Újra megnyitás a Dokumentumtárban
                     </Link>
                   </div>
-                </>
-              )}
+                ) : (
+                  <div className="rounded-[5px] border border-[#F2E4BD] bg-[#FAEFCF] p-3 space-y-2">
+                    <p className="text-xs font-bold text-[#7A5A1F]">Nincs még anonimizált munkaszöveg</p>
+                    <p className="text-[11px] leading-5 text-[#7A5A1F]">A prompt panel akkor lesz igazán használható, ha a dokumentum anonimizált szövege már rendelkezésre áll.</p>
+                    <Link href={getDocumentLedgerHref()} className="block rounded-[5px] border border-[#8E6A1B] bg-[#B58A2A] px-3 py-2 text-center text-xs font-semibold text-white hover:bg-[#8E6A1B]">
+                      Anonimizálás indítása
+                    </Link>
+                    <p className="text-[10px] text-[#7A5A1F]">Az anonimizálás után a workspace automatikusan a legutóbbi anonimizált szöveget használja.</p>
+                  </div>
+                )}
+              </section>
+
+              <section className="rounded-[8px] border border-[#D6DEEC] bg-[#F8FAFD] p-3 space-y-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#2D4A7C]">Külső AI promptok</p>
+                  <p className="mt-1 text-[11px] text-[#2D4A7C]">Adminiculum nem hív külső AI-t. A promptok vágólapra másolhatók.</p>
+                </div>
+                {!effectiveWorkspaceText ? (
+                  <p className="rounded-[5px] border border-[#DDD7CA] bg-white p-2 text-[10px] text-[#7B776D]">
+                    Prompt-vázak továbbra is másolhatók, de teljes dokumentumszöveg nélkül csak sablonként használhatók.
+                  </p>
+                ) : null}
+                <AIPromptPanel
+                  caseId={selectedDocument.caseId}
+                  documentId={selectedDocument.id}
+                  documentTitle={selectedDocument.fileName || selectedDocument.title}
+                  anonymizedText={effectiveWorkspaceText}
+                />
+              </section>
+
+              <section className="rounded-[8px] border border-[#DDD7CA] bg-white p-3 space-y-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Jogi elemzés</p>
+                  <p className="mt-1 text-[11px] leading-5 text-[#7B776D]">A külső AI által készített elemzés itt illeszthető vissza és menthető ügyvédi review előkészítéséhez.</p>
+                  <p className="mt-1 text-[10px] text-[#9C9890]">Az elemzés ügyvédi felülvizsgálatot igényel; nem minősül végleges jogi állásfoglalásnak.</p>
+                </div>
+                <LegalAnalysisIntakePanel
+                  caseId={selectedDocument.caseId}
+                  documentId={selectedDocument.id}
+                  documentSourceType="DOCUMENT"
+                  documentTitle={selectedDocument.fileName || selectedDocument.title}
+                />
+              </section>
+
+              <section className="rounded-[8px] border border-[#DDD7CA] bg-white p-3 space-y-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Ügyvédi leadási csomag</p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3"><span className="text-[11px] text-[#7B776D]">Eredeti dokumentum</span><AdminBadge tone="green">Kapcsolva</AdminBadge></div>
+                  <div className="flex items-center justify-between gap-3"><span className="text-[11px] text-[#7B776D]">Anonimizált szöveg</span><AdminBadge tone={effectiveWorkspaceText ? "green" : "amber"}>{effectiveWorkspaceText ? "Kapcsolva" : "Hiányzik"}</AdminBadge></div>
+                  <div className="flex items-center justify-between gap-3"><span className="text-[11px] text-[#7B776D]">Jogi elemzés</span><span className="text-right text-[11px] font-semibold text-[#7B776D]">Külön menthető a panelen</span></div>
+                  <div className="flex items-center justify-between gap-3"><span className="text-[11px] text-[#7B776D]">Módosított dokumentum</span><AdminBadge tone={editorDraft.trim() ? "green" : "neutral"}>{editorDraft.trim() ? "Helyi munkapéldány" : "Külön mentés szükséges"}</AdminBadge></div>
+                  <div className="flex items-center justify-between gap-3"><span className="text-[11px] text-[#7B776D]">Előkészítő összefoglaló</span><span className="text-right text-[11px] font-semibold text-[#7B776D]">Leadási csomagban kezelhető</span></div>
+                </div>
+                <Link href={getDocumentLedgerHref()} className="block rounded-[5px] border border-[#DDD7CA] px-3 py-2 text-center text-xs font-semibold text-[#1F2821] hover:bg-[#FBF9F3]">
+                  Leadási csomag kezelése
+                </Link>
+                <p className="text-[10px] leading-5 text-[#7B776D]">A leadási csomag létrehozása és beküldése a Dokumentumtárban kezelhető. Itt csak az előkészítő állapot látható.</p>
+              </section>
+
+              <section className="rounded-[8px] border border-[#DDD7CA] bg-white p-3 space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Ügytörténet</p>
+                {timelineEvents.length === 0 ? (
+                  <p className="text-xs text-[#9C9890]">Nincs kapcsolt aktivitás.</p>
+                ) : (
+                  timelineEvents.map((event) => (
+                    <div key={event.id} className="rounded-[5px] border border-[#EEE7D9] p-2">
+                      <p className="text-xs font-semibold text-[#1F2821]">{event.description}</p>
+                      <p className="text-[10px] text-[#7B776D]">{formatDateTime(event.createdAt)}</p>
+                    </div>
+                  ))
+                )}
+              </section>
+
+              <section className="rounded-[8px] border border-[#DDD7CA] bg-white p-3 space-y-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Kapcsolódó információk</p>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-[#1F2821]">{selectedDocument.caseNumber}</p>
+                  <p className="text-xs text-[#514D45]">{selectedDocument.caseTitle}</p>
+                  <p className="text-[11px] text-[#7B776D]">Ügyfél: {selectedDocument.caseClientName || "—"}</p>
+                  <p className="text-[11px] text-[#7B776D]">Ügy státusz: {caseSummaries[selectedDocument.caseId]?.case.status || "—"}</p>
+                  <p className="text-[11px] text-[#7B776D]">Review-jellegű feladatok: {reviewTaskCount}</p>
+                </div>
+                <Link href={`/cases/${selectedDocument.caseId}`} className="block rounded-[5px] border border-[#DDD7CA] px-3 py-2 text-center text-xs font-semibold hover:bg-[#FBF9F3]">Ügy megnyitása</Link>
+                {selectedDocument.kind === "contract" ? (
+                  <Link href={`/cases/${selectedDocument.caseId}/review/${selectedDocument.id}`} className="block rounded-[5px] border border-[#DDD7CA] px-3 py-2 text-center text-xs font-semibold hover:bg-[#FBF9F3]">
+                    Review megnyitása
+                  </Link>
+                ) : null}
+                <details className="rounded-[5px] border border-[#EEE7D9] bg-[#FBF9F3] p-2">
+                  <summary className="cursor-pointer text-[11px] font-semibold text-[#514D45]">Technikai részletek</summary>
+                  <div className="mt-2 space-y-2">
+                    <button onClick={() => handleDownload(selectedDocument)} className="w-full rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-xs hover:bg-[#FBF9F3]">
+                      Aktuális dokumentum letöltése
+                    </button>
+                    {selectedBaseline ? (
+                      <button onClick={() => handleDownload(selectedBaseline)} className="w-full rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-xs hover:bg-[#FBF9F3]">
+                        Alapdokumentum letöltése
+                      </button>
+                    ) : null}
+                    <Link href={getDocumentLedgerHref()} className="block rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-center text-xs hover:bg-[#FBF9F3]">
+                      Dokumentumok megnyitása
+                    </Link>
+                    <p className="text-[10px] text-[#7B776D]">Összevetési alap: {selectedBaseline ? selectedBaseline.fileName : "nincs"}</p>
+                    <p className="text-[10px] text-[#7B776D]">Blokk-összevetés: {selectedDocument.kind === "contract" && !!comparisonData ? "elérhető" : "nem elérhető"}</p>
+                  </div>
+                </details>
+              </section>
+            </>
+          )}
         </div>
       </aside>
     </div>

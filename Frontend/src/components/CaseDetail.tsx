@@ -404,22 +404,36 @@ export function CaseDetail({ params }: CaseDetailProps) {
   };
 
   const mapTimelineToStoryEvents = (events: TimelineEventItem[]): CaseStoryEvent[] => {
+    const humanizeTimelineEvent = (event: TimelineEventItem) => {
+      const raw = String(event.typeLabel || event.type || '').trim();
+      const normalized = raw.toUpperCase();
+      const labels: Record<string, string> = {
+        CASE_CREATED: 'Ügy létrehozva',
+        DOCUMENT_UPLOADED: 'Dokumentum feltöltve',
+        DOCUMENT_ANONYMIZED_FOR_AI: 'Anonimizálás elkészült',
+        DOCUMENT_ANONYMIZED: 'Anonimizálás elkészült',
+        CONTRACT_GENERATED: 'Szerződés generálva',
+      };
+      if (event.description?.trim() && !event.description.toLowerCase().startsWith('workflow event:')) {
+        return event.description.trim();
+      }
+      return labels[normalized] || 'Esemény rögzítve';
+    };
+
     return events
       .filter((event) => !!event.createdAt)
       .map((event) => {
-        const title = event.description?.trim()
-          ? event.description
-          : `Workflow event: ${event.typeLabel || event.type}`;
+        const title = humanizeTimelineEvent(event);
         return {
           id: `timeline:${event.id}`,
           dedupeKey: `timeline|${event.id}`,
           type: 'timeline' as const,
           title,
           timestamp: event.createdAt,
-          description: event.user?.name ? `Recorded by ${event.user.name}` : undefined,
-          sourceLabel: 'Case timeline',
+          description: event.user?.name ? `Rögzítette: ${event.user.name}` : undefined,
+          sourceLabel: 'Ügytörténet',
           link: `/cases/${canonicalCaseId}`,
-          linkLabel: 'Open case workspace',
+          linkLabel: 'Ügy megnyitása',
           sourcePriority: 1,
         };
       });
@@ -433,12 +447,12 @@ export function CaseDetail({ params }: CaseDetailProps) {
         id: `document:${doc.id}:added`,
         dedupeKey: `document-added|${doc.id}|${createdTs}`,
         type: 'document',
-        title: `Document added: ${doc.name}`,
+        title: `Dokumentum hozzáadva: ${doc.name}`,
         timestamp: createdTs,
-        description: doc.type ? `Type: ${doc.type}` : undefined,
-        sourceLabel: 'Documents',
+        description: doc.type ? `Típus: ${doc.type}` : undefined,
+        sourceLabel: 'Dokumentumok',
         link: `/cases/${canonicalCaseId}/documents`,
-        linkLabel: 'Open documents',
+        linkLabel: 'Dokumentumok megnyitása',
         sourcePriority: 3,
       });
 
@@ -447,12 +461,12 @@ export function CaseDetail({ params }: CaseDetailProps) {
           id: `document:${doc.id}:updated`,
           dedupeKey: `document-updated|${doc.id}|${doc.updatedAt}`,
           type: 'document',
-          title: `Document updated: ${doc.name}`,
+          title: `Dokumentum frissítve: ${doc.name}`,
           timestamp: doc.updatedAt,
-          description: doc.type ? `Type: ${doc.type}` : undefined,
-          sourceLabel: 'Documents',
+          description: doc.type ? `Típus: ${doc.type}` : undefined,
+          sourceLabel: 'Dokumentumok',
           link: `/cases/${canonicalCaseId}/documents`,
-          linkLabel: 'Open documents',
+          linkLabel: 'Dokumentumok megnyitása',
           sourcePriority: 3,
         });
       }
@@ -474,11 +488,11 @@ export function CaseDetail({ params }: CaseDetailProps) {
         id: `generation:${item.id}`,
         dedupeKey: `generation|${item.id}|${item.generatedAt}`,
         type: 'generation' as const,
-        title: `Generated document: ${item.title || item.fileName}${item.parentRevisionId ? ' (Szerkesztett verzió)' : ''}`,
+        title: `Szerződés generálva: ${item.title || item.fileName}${item.parentRevisionId ? ' (Szerkesztett verzió)' : ''}`,
         timestamp: item.generatedAt,
-        sourceLabel: 'Generation',
+        sourceLabel: 'Generálás',
         link: `/cases/${canonicalCaseId}/review/${item.id}`,
-        linkLabel: 'Open review',
+        linkLabel: 'Review megnyitása',
         sourcePriority: 2,
       }));
   };

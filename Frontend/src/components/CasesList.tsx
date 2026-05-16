@@ -2,23 +2,31 @@
 
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { createCase, type CreateCaseData, type CreateCaseResponse, getCases, type CaseListItem, getUsers, addCaseCollaborator, type User, getClients, type Client } from "@/lib/api";
+import {
+  addCaseCollaborator,
+  createCase,
+  createClient,
+  getCases,
+  getClients,
+  getUsers,
+  type CaseListItem,
+  type Client,
+  type CreateCaseData,
+  type CreateClientData,
+  type User,
+} from "@/lib/api";
+import { AdminBadge, AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 
-// Client color palette - deterministic mapping per clientName
 const CLIENT_COLOR_PALETTE = [
-  { bg: "#2D6A4F", border: "#1B4332", label: "dark-green" },
-  { bg: "#1D3557", border: "#0D1B2A", label: "dark-blue" },
-  { bg: "#9B2226", border: "#6D1618", label: "dark-red" },
-  { bg: "#5C4D3C", border: "#3D3229", label: "brown" },
-  { bg: "#4A1942", border: "#2E0F2B", label: "dark-purple" },
-  { bg: "#1B4332", border: "#0F2922", label: "forest" },
-  { bg: "#2C3E50", border: "#1A252F", label: "dark-slate" },
-  { bg: "#6B3E26", border: "#4A2B1A", label: "dark-brown" },
+  { bg: "#1F4A33", border: "#173824", label: "legal-green" },
+  { bg: "#2D4A7C", border: "#1D3557", label: "blue" },
+  { bg: "#8B2A2A", border: "#6D1618", label: "burgundy" },
+  { bg: "#B58A2A", border: "#8E6A1B", label: "gold" },
+  { bg: "#4A6B4A", border: "#3A4B33", label: "sage" },
 ];
 
 const getClientColor = (clientName?: string | null): { bg: string; border: string; label: string } => {
   if (!clientName) return CLIENT_COLOR_PALETTE[0];
-  // Deterministic index based on clientName string - same name always gets same color
   let hash = 0;
   for (let i = 0; i < clientName.length; i++) {
     hash = clientName.charCodeAt(i) + ((hash << 5) - hash);
@@ -27,28 +35,105 @@ const getClientColor = (clientName?: string | null): { bg: string; border: strin
   return CLIENT_COLOR_PALETTE[Math.abs(hash) % CLIENT_COLOR_PALETTE.length];
 };
 
-const statusChip: Record<string, string> = {
-  OPEN: "bg-[#E8F0E8] text-[#065F46] border-[#9EE7C7]",
-  ON_HOLD: "bg-[#FEF3C7] text-[#92400E] border-[#FCD34D]",
-  CLOSED: "bg-[#E5E7EB] text-[#374151] border-[#CBD5F5]",
-  DRAFT: "bg-[#EAF0E7] text-[#2C4A35] border-[#BFD1C3]",
-  "IN REVIEW": "bg-[#F6F1E3] text-[#67572A] border-[#DCCEA0]",
-  APPROVED: "bg-[#E2EDE5] text-[#23472F] border-[#A6C0AF]",
-  CLIENT_INPUT: "bg-[#EFE9DC] text-[#6B675D] border-[#D7D0C3]",
-  ARCHIVED: "bg-[#F3F4F6] text-[#64748B] border-[#E5E7EB]",
+const statusLabel: Record<string, string> = {
+  OPEN: "Nyitott",
+  ON_HOLD: "Függőben",
+  CLOSED: "Lezárt",
+  DRAFT: "Piszkozat",
+  ARCHIVED: "Archivált",
 };
 
 const matterTypes = [
-  { value: "REAL_ESTATE", label: "Real Estate" },
-  { value: "CORPORATE", label: "Corporate" },
-  { value: "LITIGATION", label: "Litigation" },
-  { value: "EMPLOYMENT", label: "Employment" },
-  { value: "CONTRACT", label: "Contract" },
-  { value: "MERGERS_ACQUISITIONS", label: "M&A" },
-  { value: "IP", label: "IP" },
+  { value: "REAL_ESTATE", label: "Ingatlanjog" },
+  { value: "CORPORATE", label: "Társasági jog" },
+  { value: "CONTRACT", label: "Szerződés" },
+  { value: "LITIGATION", label: "Peres ügy" },
+  { value: "EMPLOYMENT", label: "Munkajog" },
+  { value: "IP", label: "Szellemi tulajdon" },
   { value: "COMPLIANCE", label: "Compliance" },
-  { value: "OTHER", label: "Other" },
+  { value: "MERGERS_ACQUISITIONS", label: "M&A / tranzakció" },
+  { value: "OTHER", label: "Egyéb" },
+  { value: "CUSTOM", label: "Saját ügytípus megadása" },
 ];
+
+const clientRoles = [
+  "Megbízó",
+  "Ellenérdekű fél",
+  "Eladó",
+  "Vevő",
+  "Bérbeadó",
+  "Bérlő",
+  "Felperes",
+  "Alperes",
+  "Ajándékozó",
+  "Megajándékozott",
+  "Munkáltató",
+  "Munkavállaló",
+  "Vállalkozó",
+  "Megrendelő",
+  "Megbízott",
+  "Alvállalkozó",
+  "Zálogkötelezett",
+  "Társtulajdonos",
+  "Egyéb / saját szerep",
+];
+
+const participantAllowlist = [
+  { name: "Dr. Hubay Gyula", role: "PARTNER" },
+  { name: "Dr. Trufly Csanád", role: "LAWYER" },
+  { name: "Dr. Szűcs Amanda", role: "ügyvédjelölt" },
+  { name: "Dr. Sommer Anna", role: "ügyvédjelölt" },
+  { name: "Dr. Hubay Gyula Máté", role: "ügyvédjelölt" },
+];
+
+const normalizePersonName = (value?: string | null) =>
+  String(value || "")
+    .toLocaleLowerCase("hu-HU")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+type ClientMode = "existing" | "new";
+type DeadlineMode = "none" | "date" | "days" | "hours" | "minutes";
+
+const defaultCaseData: CreateCaseData = {
+  clientName: "",
+  matterType: "",
+  priority: "MEDIUM",
+  description: "",
+  clientRole: "",
+  deadline: "",
+};
+
+const defaultNewClient: CreateClientData = {
+  name: "",
+  contactPerson: "",
+  email: "",
+  phone: "",
+  taxNumber: "",
+  companyRegistrationNumber: "",
+  address: "",
+};
+
+function toInputDateTimeLocal(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatMatterType(value?: string | null) {
+  const found = matterTypes.find((item) => item.value === value);
+  return found?.label || value?.replace(/_/g, " ").toLocaleLowerCase("hu-HU") || "Nincs megadva";
+}
+
+function formatDeadlinePreview(value?: string) {
+  if (!value) return "Nincs határidő";
+  try {
+    return new Date(value).toLocaleString("hu-HU", { dateStyle: "long", timeStyle: "short" });
+  } catch {
+    return value;
+  }
+}
 
 export function CasesList() {
   const router = useRouter();
@@ -56,14 +141,17 @@ export function CasesList() {
   const [clientName, setClientName] = useState("");
   const [riskLevel, setRiskLevel] = useState("all");
   const [showNewCaseModal, setShowNewCaseModal] = useState(false);
-  const [newCaseData, setNewCaseData] = useState<CreateCaseData>({
-    clientName: "",
-    matterType: "",
-    priority: "MEDIUM",
-    description: "",
-    clientRole: "",
-    deadline: "",
-  });
+  const [newCaseData, setNewCaseData] = useState<CreateCaseData>(defaultCaseData);
+  const [customMatterType, setCustomMatterType] = useState("");
+  const [customClientRole, setCustomClientRole] = useState("");
+  const [clientMode, setClientMode] = useState<ClientMode>("existing");
+  const [newClientData, setNewClientData] = useState<CreateClientData>(defaultNewClient);
+  const [clientType, setClientType] = useState<"Magánszemély" | "Cég">("Cég");
+  const [isSavingClient, setIsSavingClient] = useState(false);
+  const [clientMessage, setClientMessage] = useState<string | null>(null);
+  const [deadlineMode, setDeadlineMode] = useState<DeadlineMode>("none");
+  const [relativeDeadlineValue, setRelativeDeadlineValue] = useState("3");
+  const [reminder, setReminder] = useState("Nincs emlékeztető");
   const [selectedCollaboratorIds, setSelectedCollaboratorIds] = useState<string[]>([]);
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [availableClients, setAvailableClients] = useState<Client[]>([]);
@@ -73,48 +161,135 @@ export function CasesList() {
   const [isLoadingCases, setIsLoadingCases] = useState(true);
   const [caseLoadError, setCaseLoadError] = useState<string | null>(null);
 
+  const selectedClient = useMemo(
+    () => availableClients.find((client) => client.id === newCaseData.clientId) || null,
+    [availableClients, newCaseData.clientId],
+  );
+
+  const visibleParticipants = useMemo(() => {
+    const allowedNames = new Set(participantAllowlist.map((person) => normalizePersonName(person.name)));
+    const matched = availableUsers.filter((user) => {
+      const values = [user.name, user.email].map(normalizePersonName);
+      return values.some((value) => Array.from(allowedNames).some((allowed) => value === allowed || value.includes(allowed)));
+    });
+    if (matched.length > 0) return matched;
+    return participantAllowlist.map((person, index) => ({
+      id: `local-participant-${index}`,
+      name: person.name,
+      email: "",
+      role: person.role,
+    } as User));
+  }, [availableUsers]);
+
+  const selectableParticipantIds = useMemo(
+    () => new Set(visibleParticipants.filter((user) => !String(user.id).startsWith("local-participant-")).map((user) => user.id)),
+    [visibleParticipants],
+  );
+
+  const effectiveMatterType = newCaseData.matterType === "CUSTOM" ? customMatterType.trim() : newCaseData.matterType;
+  const effectiveClientRole = newCaseData.clientRole === "Egyéb / saját szerep" ? customClientRole.trim() : newCaseData.clientRole;
 
   const handleCreateCase = async () => {
-    if ((!newCaseData.clientName.trim() && !newCaseData.clientId) || !newCaseData.matterType) {
-      setCreateError("Client (existing or new name) and matter type are required");
+    const clientOk = clientMode === "existing" ? Boolean(newCaseData.clientId || newCaseData.clientName.trim()) : Boolean(newClientData.name.trim() || newCaseData.clientName.trim());
+    if (!clientOk) {
+      setCreateError("Ügyfél kiválasztása vagy megadása kötelező.");
+      return;
+    }
+    if (!newCaseData.description?.trim()) {
+      setCreateError("Az ügy megnevezése kötelező.");
+      return;
+    }
+    if (!effectiveMatterType) {
+      setCreateError("Az ügy típusa kötelező.");
       return;
     }
     setIsCreating(true);
     setCreateError(null);
     try {
-      const result = await createCase(newCaseData);
-      // Attach selected collaborators after case is created
+      let clientId = newCaseData.clientId;
+      let caseClientName = newCaseData.clientName.trim();
+      if (clientMode === "new" && newClientData.name.trim()) {
+        clientId = undefined;
+        caseClientName = newClientData.name.trim();
+      }
+      const payloadMatterType = newCaseData.matterType === "CUSTOM" ? "OTHER" : newCaseData.matterType;
+      const payloadDescription = newCaseData.matterType === "CUSTOM" && customMatterType.trim()
+        ? `${newCaseData.description?.trim() || ""} — ügytípus: ${customMatterType.trim()}`
+        : newCaseData.description;
+      const result = await createCase({
+        ...newCaseData,
+        clientId,
+        clientName: caseClientName || selectedClient?.name || newClientData.name.trim(),
+        matterType: payloadMatterType || "OTHER",
+        description: payloadDescription,
+        clientRole: effectiveClientRole,
+      });
       for (const userId of selectedCollaboratorIds) {
+        if (!selectableParticipantIds.has(userId)) continue;
         try {
-          await addCaseCollaborator(result.id, userId, 'COLLABORATOR');
+          await addCaseCollaborator(result.id, userId, "COLLABORATOR");
         } catch (collabErr) {
           console.warn(`Failed to add collaborator ${userId}:`, collabErr);
         }
       }
       setShowNewCaseModal(false);
-      setNewCaseData({ clientName: "", clientId: "", matterType: "", priority: "MEDIUM", description: "", clientRole: "", deadline: "" });
+      setNewCaseData(defaultCaseData);
+      setNewClientData(defaultNewClient);
+      setCustomMatterType("");
+      setCustomClientRole("");
       setSelectedCollaboratorIds([]);
-      // Navigate using result.id (CUID) - the backend getCaseById queries by id, not caseNumber
-      router.push(`/cases/${result.id}`);
+      setClientMode("existing");
+      router.push(`/cases/${result.id}/documents`);
     } catch (err) {
       console.error("Failed to create case:", err);
-      setCreateError(err instanceof Error ? err.message : "Failed to create case");
+      setCreateError(err instanceof Error ? err.message : "Az ügy létrehozása sikertelen.");
     } finally {
       setIsCreating(false);
     }
   };
 
-  const deriveRiskLevel = useCallback((priority?: string) => {
-    if (!priority) return "Medium";
-    const normalized = priority.toLowerCase();
-    if (normalized.includes("high") || normalized.includes("urgent")) return "High";
-    if (normalized.includes("low")) return "Low";
-    return "Medium";
-  }, []);
+  const handleSaveClientOnly = async () => {
+    if (!newClientData.name.trim()) {
+      setClientMessage("Az ügyfél neve kötelező.");
+      return;
+    }
+    setIsSavingClient(true);
+    setClientMessage(null);
+    try {
+      const created = await createClient({ ...newClientData, name: newClientData.name.trim() });
+      setAvailableClients((prev) => [created, ...prev.filter((client) => client.id !== created.id)]);
+      setNewCaseData((prev) => ({ ...prev, clientId: created.id, clientName: created.name }));
+      setClientMode("existing");
+      setClientMessage("Az új ügyfél mentve és kiválasztva.");
+    } catch (err) {
+      setClientMessage(err instanceof Error ? err.message : "Az ügyfél mentése sikertelen.");
+    } finally {
+      setIsSavingClient(false);
+    }
+  };
 
-  const chipClassForStatus = useCallback((status?: string) => {
-    const normalized = status?.toUpperCase() ?? "";
-    return statusChip[normalized] || "bg-[#EFE9DC] text-[#6B675D] border-[#D7D0C3]";
+  const updateDeadline = (mode: DeadlineMode, rawValue = relativeDeadlineValue) => {
+    setDeadlineMode(mode);
+    if (mode === "none") {
+      setNewCaseData((prev) => ({ ...prev, deadline: "" }));
+      return;
+    }
+    if (mode === "date") {
+      const next = newCaseData.deadline || toInputDateTimeLocal(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000));
+      setNewCaseData((prev) => ({ ...prev, deadline: next }));
+      return;
+    }
+    const amount = Math.max(1, Number.parseInt(rawValue || "1", 10) || 1);
+    const multiplier = mode === "days" ? 24 * 60 * 60 * 1000 : mode === "hours" ? 60 * 60 * 1000 : 60 * 1000;
+    setNewCaseData((prev) => ({ ...prev, deadline: toInputDateTimeLocal(new Date(Date.now() + amount * multiplier)) }));
+  };
+
+  const deriveRiskLevel = useCallback((priority?: string) => {
+    if (!priority) return "Közepes";
+    const normalized = priority.toLowerCase();
+    if (normalized.includes("high") || normalized.includes("urgent")) return "Magas";
+    if (normalized.includes("low")) return "Alacsony";
+    return "Közepes";
   }, []);
 
   const loadCases = useCallback(async () => {
@@ -125,7 +300,7 @@ export function CasesList() {
       setBackendCases(response.data);
     } catch (err) {
       console.error("Failed to load cases:", err);
-      setCaseLoadError(err instanceof Error ? err.message : "Failed to load cases");
+      setCaseLoadError(err instanceof Error ? err.message : "Az ügylista betöltése sikertelen.");
     } finally {
       setIsLoadingCases(false);
     }
@@ -135,7 +310,6 @@ export function CasesList() {
     loadCases();
   }, [loadCases]);
 
-  // Load available users when the new case modal opens
   useEffect(() => {
     if (showNewCaseModal) {
       getUsers()
@@ -159,70 +333,53 @@ export function CasesList() {
 
   return (
     <section className="space-y-4">
-      <div className="bg-white border border-[#DDD7CA] p-4">
-        <h2 className="text-sm font-semibold text-[#1F2821]">Kanonikus ügylista</h2>
-        <p className="text-xs text-[#7B776D] mt-1">
-          Ez a központi ügyfelület: innen lehet ügyet keresni, szűrni, megnyitni és új ügyet indítani.
-        </p>
+      <div className="border border-[rgba(22,32,26,0.10)] bg-white p-5">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">Ügyeim</p>
+        <h2 className="mt-1 font-serif text-3xl font-medium text-[#16201A]">Kanonikus ügylista</h2>
+        <p className="mt-1 text-sm text-[#3D4842]">Innen indítható az ügyközpontú dokumentum-munkafolyamat.</p>
       </div>
 
-      <div className="bg-white border border-[#DDD7CA] p-4 flex flex-wrap items-end gap-3">
-        <label className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D]">
+      <div className="flex flex-wrap items-end gap-3 border border-[rgba(22,32,26,0.10)] bg-white p-4">
+        <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">
           Szakterület
-          <select value={practiceArea} onChange={(e) => setPracticeArea(e.target.value)} className="mt-2 h-9 w-44 block border border-[#DDD7CA] bg-[#FAF8F2] px-2 text-xs text-[#1F2821]">
-            <option value="all">All</option>
-            {matterTypes.map((type) => (
-              <option key={type.value} value={type.value}>
-                {type.label}
-              </option>
+          <select value={practiceArea} onChange={(e) => setPracticeArea(e.target.value)} className="mt-2 block h-10 w-48 border border-[rgba(22,32,26,0.20)] bg-[#FBF6E7] px-2 text-xs text-[#16201A]">
+            <option value="all">Mind</option>
+            {matterTypes.filter((type) => type.value !== "CUSTOM").map((type) => (
+              <option key={type.value} value={type.value}>{type.label}</option>
             ))}
           </select>
         </label>
-        <label className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D]">
+        <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">
           Ügyfél neve
-          <input value={clientName} onChange={(e) => setClientName(e.target.value)} className="mt-2 h-9 w-48 block border border-[#DDD7CA] bg-[#FAF8F2] px-2 text-xs text-[#1F2821]" placeholder="Search client" />
+          <input value={clientName} onChange={(e) => setClientName(e.target.value)} className="mt-2 block h-10 w-52 border border-[rgba(22,32,26,0.20)] bg-[#FBF6E7] px-2 text-xs text-[#16201A]" placeholder="Ügyfél keresése" />
         </label>
-        <label className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D]">
+        <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">
           Kockázati szint
-          <select value={riskLevel} onChange={(e) => setRiskLevel(e.target.value)} className="mt-2 h-9 w-40 block border border-[#DDD7CA] bg-[#FAF8F2] px-2 text-xs text-[#1F2821]">
-            <option value="all">All</option>
-            <option value="Low">Low</option>
-            <option value="Medium">Medium</option>
-            <option value="High">High</option>
+          <select value={riskLevel} onChange={(e) => setRiskLevel(e.target.value)} className="mt-2 block h-10 w-44 border border-[rgba(22,32,26,0.20)] bg-[#FBF6E7] px-2 text-xs text-[#16201A]">
+            <option value="all">Mind</option>
+            <option value="Alacsony">Alacsony</option>
+            <option value="Közepes">Közepes</option>
+            <option value="Magas">Magas</option>
           </select>
         </label>
-        <button
-          className="ml-auto h-9 px-4 border border-[#1A2E21] text-[#1A2E21] text-[10px] uppercase tracking-[0.28em]"
-          onClick={() => {
-            setPracticeArea("all");
-            setClientName("");
-            setRiskLevel("all");
-          }}
-        >
-          Reset Filters
-        </button>
-        <button
-          onClick={() => setShowNewCaseModal(true)}
-          className="h-9 px-4 bg-[#1A2E21] text-white text-[10px] uppercase tracking-[0.28em] hover:bg-[#2A3E31] transition-colors"
-        >
-          + New Case
-        </button>
+        <AdminButton className="ml-auto" variant="neutral" onClick={() => { setPracticeArea("all"); setClientName(""); setRiskLevel("all"); }}>Szűrők törlése</AdminButton>
+        <AdminButton variant="primary" onClick={() => setShowNewCaseModal(true)}>Új ügy létrehozása</AdminButton>
       </div>
 
-      <div className="bg-white border border-[#DDD7CA] overflow-hidden">
+      <div className="overflow-hidden border border-[rgba(22,32,26,0.10)] bg-white">
         {isLoadingCases ? (
-          <div className="py-12 text-center text-xs text-[#7B776D]">Loading cases from backend...</div>
+          <div className="py-12 text-center text-xs text-[#7A8479]">Ügyek betöltése...</div>
         ) : caseLoadError ? (
-          <div className="p-6 text-center text-xs text-[#A63D40] border-b border-[#DDD7CA]">
+          <div className="border-b border-[rgba(22,32,26,0.10)] p-6 text-center text-xs text-[#8B2A2A]">
             <p>{caseLoadError}</p>
-            <button onClick={loadCases} className="mt-3 text-[#C9A227] underline">Retry</button>
+            <button onClick={loadCases} className="mt-3 text-[#B58A2A] underline">Újrapróbálkozás</button>
           </div>
         ) : (
           <table className="w-full text-left">
-            <thead className="bg-[#F6F2E8] border-b border-[#DDD7CA]">
-              <tr className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D]">
-                <th className="px-4 py-3">Case #</th>
-                <th className="px-4 py-3">Client</th>
+            <thead className="border-b border-[rgba(22,32,26,0.10)] bg-[#F7F0D9]">
+              <tr className="text-[10px] uppercase tracking-[0.18em] text-[#7A8479]">
+                <th className="px-4 py-3">Ügyszám</th>
+                <th className="px-4 py-3">Ügyfél</th>
                 <th className="px-4 py-3">Ügy címe</th>
                 <th className="px-4 py-3">Szakterület</th>
                 <th className="px-4 py-3">Státusz</th>
@@ -233,254 +390,144 @@ export function CasesList() {
             </thead>
             <tbody>
               {filteredCases.map((item) => (
-                <tr
-                  key={item.id}
-                  className="border-b border-[#ECE6DA] last:border-b-0 hover:bg-[#FBF9F3] cursor-pointer"
-                  onClick={() => router.push(`/cases/${item.id}`)}
-                >
-                  <td className="px-4 py-4 text-xs text-[#1F2821] font-semibold">{item.caseNumber}</td>
+                <tr key={item.id} className="cursor-pointer border-b border-[#EFE7CF] last:border-b-0 hover:bg-[#FBF6E7]" onClick={() => router.push(`/cases/${item.id}/documents`)}>
+                  <td className="px-4 py-4 text-xs font-semibold text-[#16201A]">{item.caseNumber}</td>
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-2">
-                      <span
-                        className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: item.clientColor || getClientColor(item.clientName).bg }}
-                        title={`Ügyfélszín: ${item.clientColor ? item.clientColor : getClientColor(item.clientName).label}`}
-                      />
-                      <span className="text-sm text-[#1F2821]">{item.clientName || "—"}</span>
+                      <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: item.clientColor || getClientColor(item.clientName).bg }} />
+                      <span className="text-sm text-[#16201A]">{item.clientName || "Nincs megadva"}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-sm text-[#514D45]">{item.title}</td>
-                  <td className="px-4 py-4 text-sm text-[#514D45] capitalize">{item.matterType?.toLowerCase().replace(/_/g, " ") || "—"}</td>
-                  <td className="px-4 py-4">
-                    <span className={`inline-flex px-2 py-1 text-[10px] uppercase tracking-[0.24em] border ${chipClassForStatus(item.status)}`}>
-                      {item.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4">
-                    {item.assignedLawyer ? (
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-[#514D45]">{item.assignedLawyer.name}</span>
-                        {(item.collaboratorCount ?? 0) > 0 && (
-                          <span className="inline-flex items-center justify-center w-4 h-4 text-[9px] font-medium bg-[#8B5CF6] text-white rounded-full" title={`${item.collaboratorCount} résztvevő`}>
-                            +{item.collaboratorCount}
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-[10px] text-[#9C9890] italic">Nincs hozzárendelve</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className="text-[10px] uppercase tracking-[0.24em] text-[#6B675F]">
-                      {deriveRiskLevel(item.priority)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => router.push(`/cases/${item.id}`)}
-                      className="text-[10px] uppercase tracking-[0.24em] border border-[#DDD7CA] px-3 py-1 text-[#514D45] hover:text-[#1A2E21]"
-                    >
-                      Megnyitás
-                    </button>
-                  </td>
+                  <td className="px-4 py-4 text-sm text-[#3D4842]">{item.title}</td>
+                  <td className="px-4 py-4 text-sm text-[#3D4842]">{formatMatterType(item.matterType)}</td>
+                  <td className="px-4 py-4"><AdminStatusPill tone={item.status === "OPEN" ? "green" : "neutral"}>{statusLabel[item.status] || item.status}</AdminStatusPill></td>
+                  <td className="px-4 py-4 text-xs text-[#3D4842]">{item.assignedLawyer?.name || "Nincs hozzárendelve"}</td>
+                  <td className="px-4 py-4"><AdminBadge tone={deriveRiskLevel(item.priority) === "Magas" ? "amber" : "neutral"}>{deriveRiskLevel(item.priority)}</AdminBadge></td>
+                  <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}><AdminButton size="sm" onClick={() => router.push(`/cases/${item.id}/documents`)}>Dokumentumtár</AdminButton></td>
                 </tr>
               ))}
               {filteredCases.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-xs text-[#7B776D]">
-                    <p>Nincs találat a beállított szűrőkre.</p>
-                    <p className="mt-1 text-[11px] text-[#9C9890]">Az ügyek új ügy létrehozásával vagy meglévő ügyadatok alapján jelennek meg itt.</p>
-                  </td>
-                </tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-xs text-[#7A8479]">Nincs találat a beállított szűrőkre.</td></tr>
               )}
             </tbody>
           </table>
         )}
       </div>
 
-      <div className="bg-white border border-[#DDD7CA] p-4 flex flex-wrap gap-3 items-center justify-between">
-        <p className="text-xs text-[#6C685F]">Megjelenítve: {filteredCases.length} / {backendCases.length} ügy</p>
-        <span className="text-[10px] uppercase tracking-[0.24em] text-[#6C685F]">Az ARCHIVED státusz archivált ügyet jelez</span>
+      <div className="flex flex-wrap items-center justify-between gap-3 border border-[rgba(22,32,26,0.10)] bg-white p-4">
+        <p className="text-xs text-[#7A8479]">Megjelenítve: {filteredCases.length} / {backendCases.length} ügy</p>
+        <span className="text-[10px] uppercase tracking-[0.14em] text-[#7A8479]">Az új ügy létrehozása után a Dokumentumtár nyílik meg</span>
       </div>
 
-      {/* New Case Modal */}
       {showNewCaseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-lg shadow-2xl border border-[#e4e2dd]">
-            <div className="bg-[#06190d] px-6 py-4 flex justify-between items-center">
-              <div>
-                <h2 className="text-lg font-['Newsreader'] font-bold text-white">New Case</h2>
-                <p className="text-xs text-white/60 mt-1">Create a new case to get started</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#16201A]/70 p-4 backdrop-blur-sm">
+          <div className="max-h-[calc(100vh-48px)] w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b-[3px] border-[#B58A2A] bg-[#1F4A33] px-7 py-5 text-[#F4EFDB]">
+              <div className="flex items-center gap-4">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[#B58A2A] font-serif text-xl text-[#B58A2A]">A</div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#B58A2A]">Adminiculum</p>
+                  <h2 className="font-serif text-2xl font-medium">Új ügy létrehozása</h2>
+                </div>
               </div>
-              <button
-                onClick={() => setShowNewCaseModal(false)}
-                className="text-white/60 hover:text-white transition-colors"
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
+              <button onClick={() => setShowNewCaseModal(false)} className="rounded-full border border-white/20 px-3 py-1 text-sm text-white/80 hover:text-white">Bezárás</button>
             </div>
-            <div className="p-6">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[10px] uppercase tracking-widest text-[#434843] mb-2">Meglévő ügyfél (opcionális)</label>
-                  <select
-                    value={newCaseData.clientId || ""}
-                    onChange={(e) => {
-                      const nextClientId = e.target.value;
-                      const linkedClient = availableClients.find((client) => client.id === nextClientId);
-                      setNewCaseData({
-                        ...newCaseData,
-                        clientId: nextClientId || undefined,
-                        clientName: linkedClient?.name || newCaseData.clientName,
-                      });
-                    }}
-                    className="w-full p-3 border border-[#DDD7CA] text-sm text-[#1F2821] focus:outline-none focus:border-[#06190d]"
-                  >
-                    <option value="">Nincs kiválasztva</option>
-                    {availableClients.map((client) => (
-                      <option key={client.id} value={client.id}>{client.name}</option>
-                    ))}
-                  </select>
+
+            <div className="max-h-[calc(100vh-190px)] overflow-y-auto px-7">
+              <section className="border-b border-[rgba(22,32,26,0.10)] py-5">
+                <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">1</span><h3 className="font-serif text-xl font-medium">Ügyfél</h3><span className="text-[11px] font-semibold text-[#8B2A2A]">kötelező</span></div>
+                <div className="mb-4 inline-flex rounded-md border border-[rgba(22,32,26,0.20)] bg-[#F7F0D9] p-1">
+                  <button onClick={() => setClientMode("existing")} className={`rounded px-4 py-1.5 text-xs font-semibold ${clientMode === "existing" ? "bg-[#1F4A33] text-[#F4EFDB]" : "text-[#3D4842]"}`}>Meglévő ügyfél</button>
+                  <button onClick={() => setClientMode("new")} className={`rounded px-4 py-1.5 text-xs font-semibold ${clientMode === "new" ? "bg-[#1F4A33] text-[#F4EFDB]" : "text-[#3D4842]"}`}>Új ügyfél hozzáadása</button>
                 </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-widest text-[#434843] mb-2">Ügyfél neve *</label>
-                  <input
-                    type="text"
-                    value={newCaseData.clientName}
-                    onChange={(e) => setNewCaseData({ ...newCaseData, clientName: e.target.value, clientId: undefined })}
-                    placeholder="Enter client name"
-                    className="w-full p-3 border border-[#DDD7CA] text-sm text-[#1F2821] placeholder-[#9C9890] focus:outline-none focus:border-[#06190d]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-widest text-[#434843] mb-2">Matter Type *</label>
-                  <select
-                    value={newCaseData.matterType}
-                    onChange={(e) => setNewCaseData({ ...newCaseData, matterType: e.target.value })}
-                    className="w-full p-3 border border-[#DDD7CA] text-sm text-[#1F2821] focus:outline-none focus:border-[#06190d]"
-                  >
-                    <option value="">Select matter type</option>
-                    {matterTypes.map((type) => (
-                      <option key={type.value} value={type.value}>{type.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-widest text-[#434843] mb-2">Priority</label>
-                  <select
-                    value={newCaseData.priority}
-                    onChange={(e) => setNewCaseData({ ...newCaseData, priority: e.target.value })}
-                    className="w-full p-3 border border-[#DDD7CA] text-sm text-[#1F2821] focus:outline-none focus:border-[#06190d]"
-                  >
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                    <option value="URGENT">Urgent</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-widest text-[#434843] mb-2">Ügyfél szerepe</label>
-                  <select
-                    value={newCaseData.clientRole}
-                    onChange={(e) => setNewCaseData({ ...newCaseData, clientRole: e.target.value })}
-                    className="w-full p-3 border border-[#DDD7CA] text-sm text-[#1F2821] focus:outline-none focus:border-[#06190d]"
-                  >
-                    <option value="">Nincs megadva</option>
-                    <option value="megbízó">Megbízó</option>
-                    <option value="ellenérdekű fél">Ellenérdekű fél</option>
-                    <option value="partner">Partner</option>
-                    <option value="other">Egyéb</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-widest text-[#434843] mb-2">Határidő</label>
-                  <input
-                    type="date"
-                    value={newCaseData.deadline || ""}
-                    onChange={(e) => setNewCaseData({ ...newCaseData, deadline: e.target.value })}
-                    className="w-full p-3 border border-[#DDD7CA] text-sm text-[#1F2821] focus:outline-none focus:border-[#06190d]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-widest text-[#434843] mb-2">Résztvevők (opcionális)</label>
-                  <div className="border border-[#DDD7CA] text-sm text-[#1F2821] max-h-28 overflow-y-auto">
-                    {availableUsers.length === 0 ? (
-                      <div className="p-2 text-xs text-[#9C9890]">Felhasználók betöltése...</div>
-                    ) : (
-                      availableUsers.map((user) => (
-                        <label
-                          key={user.id}
-                          className="flex items-center gap-2 px-3 py-2 hover:bg-[#FBF9F3] cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedCollaboratorIds.includes(user.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedCollaboratorIds([...selectedCollaboratorIds, user.id]);
-                              } else {
-                                setSelectedCollaboratorIds(selectedCollaboratorIds.filter((id) => id !== user.id));
-                              }
-                            }}
-                            className="accent-[#06190d]"
-                          />
-                          <span className="text-xs text-[#1F2821]">{user.name || user.email}</span>
-                          <span className="text-[10px] text-[#7B776D]">({user.role})</span>
-                        </label>
-                      ))
-                    )}
+                {clientMode === "existing" ? (
+                  <>
+                    <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Ügyfél keresése</label>
+                    <select
+                      value={newCaseData.clientId || ""}
+                      onChange={(e) => {
+                        const nextClientId = e.target.value;
+                        const linkedClient = availableClients.find((client) => client.id === nextClientId);
+                        setNewCaseData({ ...newCaseData, clientId: nextClientId || undefined, clientName: linkedClient?.name || "" });
+                      }}
+                      className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] bg-white px-3 py-3 text-sm text-[#16201A] outline-none focus:border-[#1F4A33]"
+                    >
+                      <option value="">Válassz meglévő ügyfelet</option>
+                      {availableClients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
+                    </select>
+                    {selectedClient ? (
+                      <article className="mt-4 grid grid-cols-[48px_1fr] gap-4 rounded-lg border border-[rgba(22,32,26,0.10)] border-l-4 border-l-[#1F4A33] bg-[#FBF6E7] p-4">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#1F4A33] font-serif text-xl text-[#F4EFDB]">{selectedClient.name.slice(0, 1).toUpperCase()}</div>
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2"><h4 className="font-serif text-xl font-medium">{selectedClient.name}</h4><AdminBadge tone="green">{selectedClient.taxNumber || selectedClient.companyRegistrationNumber ? "Cég" : "Ügyfél"}</AdminBadge></div>
+                          <div className="mt-2 grid grid-cols-1 gap-1 text-xs text-[#3D4842] md:grid-cols-2">
+                            <p>Kapcsolattartó: <b>{selectedClient.contactPerson || selectedClient.authorizedRepresentative || "Nincs megadva"}</b></p>
+                            <p>Email: <b>{selectedClient.email || "Nincs megadva"}</b></p>
+                            <p>Telefon: <b>{selectedClient.phone || "Nincs megadva"}</b></p>
+                            <p>Dokumentumstílus: <b>Nincs megadva</b></p>
+                          </div>
+                        </div>
+                      </article>
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <label className="md:col-span-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Név<input value={newClientData.name} onChange={(e) => { setNewClientData({ ...newClientData, name: e.target.value }); setNewCaseData((prev) => ({ ...prev, clientName: e.target.value, clientId: undefined })); }} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
+                    <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Típus<select value={clientType} onChange={(e) => setClientType(e.target.value as "Magánszemély" | "Cég")} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal"><option>Magánszemély</option><option>Cég</option></select></label>
+                    <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Kapcsolattartó<input value={newClientData.contactPerson || ""} onChange={(e) => setNewClientData({ ...newClientData, contactPerson: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
+                    <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Email<input value={newClientData.email || ""} onChange={(e) => setNewClientData({ ...newClientData, email: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
+                    <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Telefon<input value={newClientData.phone || ""} onChange={(e) => setNewClientData({ ...newClientData, phone: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
+                    {clientType === "Cég" ? <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Adószám<input value={newClientData.taxNumber || ""} onChange={(e) => setNewClientData({ ...newClientData, taxNumber: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label> : null}
+                    {clientType === "Cég" ? <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Cégjegyzékszám / nyilvántartási szám<input value={newClientData.companyRegistrationNumber || ""} onChange={(e) => setNewClientData({ ...newClientData, companyRegistrationNumber: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label> : null}
+                    <label className="md:col-span-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Székhely / cím<input value={newClientData.address || ""} onChange={(e) => setNewClientData({ ...newClientData, address: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" placeholder="pl. 1051 Budapest, ..." /></label>
+                    <div className="md:col-span-2 flex flex-wrap items-center gap-3"><AdminButton variant="neutral" onClick={() => { setNewCaseData((prev) => ({ ...prev, clientName: newClientData.name.trim(), clientId: undefined })); setClientMessage("Helyi ügyféladatok használatban ehhez az ügyhöz."); }} disabled={!newClientData.name.trim()}>Helyi ügyféladatok használata</AdminButton><AdminButton variant="muted" onClick={handleSaveClientOnly} disabled={isSavingClient}>{isSavingClient ? "Ügyfél mentése..." : "Ügyfél mentése adatbázisba"}</AdminButton>{clientMessage ? <p className="text-xs text-[#7A8479]">{clientMessage}</p> : null}</div>
                   </div>
-                  {selectedCollaboratorIds.length > 0 && (
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {selectedCollaboratorIds.map((id) => {
-                        const user = availableUsers.find((u) => u.id === id);
-                        return (
-                          <span
-                            key={id}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#8B5CF6] text-white text-[10px] rounded-full"
-                          >
-                            {user?.name || id}
-                            <button
-                              onClick={() => setSelectedCollaboratorIds(selectedCollaboratorIds.filter((cid) => cid !== id))}
-                              className="hover:text-white/70 ml-1"
-                            >
-                              ×
-                            </button>
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-widest text-[#434843] mb-2">Description</label>
-                  <textarea
-                    value={newCaseData.description}
-                    onChange={(e) => setNewCaseData({ ...newCaseData, description: e.target.value })}
-                    placeholder="Brief case description (optional)"
-                    rows={3}
-                    className="w-full p-3 border border-[#DDD7CA] text-sm text-[#1F2821] placeholder-[#9C9890] focus:outline-none focus:border-[#06190d] resize-none"
-                  />
-                </div>
-                {createError && (
-                  <div className="p-3 bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a] text-xs">{createError}</div>
                 )}
-              </div>
+              </section>
+
+              <section className="border-b border-[rgba(22,32,26,0.10)] py-5">
+                <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">2</span><h3 className="font-serif text-xl font-medium">Ügy típusa</h3><span className="text-[11px] font-semibold text-[#8B2A2A]">kötelező</span></div>
+                <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Ügy megnevezése<input value={newCaseData.description || ""} onChange={(e) => setNewCaseData({ ...newCaseData, description: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" placeholder="pl. Meggyes utca 12. — ajándékozási szerződés" /></label>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {matterTypes.map((type) => <button key={type.value} onClick={() => setNewCaseData({ ...newCaseData, matterType: type.value })} className={`rounded-full border px-3 py-1.5 text-xs ${newCaseData.matterType === type.value ? "border-[#173824] bg-[#1F4A33] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{type.label}</button>)}
+                </div>
+                {newCaseData.matterType === "CUSTOM" ? <input value={customMatterType} onChange={(e) => setCustomMatterType(e.target.value)} className="mt-3 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm" placeholder="Saját ügytípus" /> : null}
+              </section>
+
+              <section className="border-b border-[rgba(22,32,26,0.10)] py-5">
+                <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">3</span><h3 className="font-serif text-xl font-medium">Ügyfél szerepe</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
+                <div className="flex flex-wrap gap-2">{clientRoles.map((role) => <button key={role} onClick={() => setNewCaseData({ ...newCaseData, clientRole: role })} className={`rounded-full border px-3 py-1.5 text-xs ${newCaseData.clientRole === role ? "border-[#173824] bg-[#1F4A33] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{role}</button>)}</div>
+                {newCaseData.clientRole === "Egyéb / saját szerep" ? <input value={customClientRole} onChange={(e) => setCustomClientRole(e.target.value)} className="mt-3 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm" placeholder="pl. társtulajdonos" /> : null}
+              </section>
+
+              <section className="border-b border-[rgba(22,32,26,0.10)] py-5">
+                <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">4</span><h3 className="font-serif text-xl font-medium">Határidő</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-5">{[{ id: "none", label: "Nincs határidő" }, { id: "date", label: "Pontos dátum" }, { id: "days", label: "X nap múlva" }, { id: "hours", label: "X óra múlva" }, { id: "minutes", label: "X perc múlva" }].map((mode) => <button key={mode.id} onClick={() => updateDeadline(mode.id as DeadlineMode)} className={`rounded border p-3 text-left text-xs font-semibold ${deadlineMode === mode.id ? "border-[#173824] bg-[#1F4A33] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{mode.label}</button>)}</div>
+                {deadlineMode === "date" ? <input type="datetime-local" value={newCaseData.deadline || ""} onChange={(e) => setNewCaseData({ ...newCaseData, deadline: e.target.value })} className="mt-3 rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm" /> : null}
+                {["days", "hours", "minutes"].includes(deadlineMode) ? <input type="number" min={1} value={relativeDeadlineValue} onChange={(e) => { setRelativeDeadlineValue(e.target.value); updateDeadline(deadlineMode, e.target.value); }} className="mt-3 w-32 rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm" /> : null}
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs"><span className="text-[#7A8479]">Emlékeztető:</span>{["Nincs emlékeztető", "1 órával előtte", "1 nappal előtte", "3 nappal előtte", "1 héttel előtte"].map((item) => <button key={item} onClick={() => setReminder(item)} className={`rounded-full border px-3 py-1 ${reminder === item ? "border-[#173824] bg-[#1F4A33] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white"}`}>{item}</button>)}</div>
+                <div className="mt-3 rounded-md border border-[#C5D3C8] bg-[#E2E8DA] p-3 text-sm text-[#1F4A33]">Határidő: <b>{formatDeadlinePreview(newCaseData.deadline)}</b>{reminder !== "Nincs emlékeztető" ? ` — emlékeztető: ${reminder}` : ""}</div>
+              </section>
+
+              <section className="py-5">
+                <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">5</span><h3 className="font-serif text-xl font-medium">Résztvevők</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
+                <div className="flex flex-wrap gap-2">
+                  {visibleParticipants.map((user) => {
+                    const active = selectedCollaboratorIds.includes(user.id);
+                    const isLocalFallback = String(user.id).startsWith("local-participant-");
+                    return <button key={user.id} onClick={() => { if (!isLocalFallback) setSelectedCollaboratorIds(active ? selectedCollaboratorIds.filter((id) => id !== user.id) : [...selectedCollaboratorIds, user.id]); }} disabled={isLocalFallback} className={`rounded-full border px-3 py-1.5 text-xs ${active ? "border-[#1F4A33] bg-[#E2E8DA] text-[#1F4A33]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"} ${isLocalFallback ? "opacity-70" : ""}`}>{user.name || user.email} <span className="text-[#7A8479]">· {user.role}{isLocalFallback ? " · helyi névlista" : ""}</span></button>;
+                  })}
+                  {visibleParticipants.length === 0 ? <span className="text-xs text-[#7A8479]">Felhasználók betöltése vagy nem elérhetők.</span> : null}
+                </div>
+                <p className="mt-2 text-xs text-[#7A8479]">Résztvevőket később is hozzáadhatsz az ügy oldaláról.</p>
+              </section>
+
+              {createError ? <div className="mb-4 rounded border border-[#F2DAD6] bg-[#F2DAD6] p-3 text-xs font-semibold text-[#8B2A2A]">{createError}</div> : null}
             </div>
-            <div className="px-6 py-4 border-t border-[#e4e2dd] flex justify-end gap-3">
-              <button
-                onClick={() => setShowNewCaseModal(false)}
-                className="px-4 py-2 text-xs font-bold uppercase tracking-widest border border-[#c3c8c1]/20 text-[#434843] hover:bg-[#f5f3ee]"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateCase}
-                disabled={isCreating}
-                className="px-6 py-2 text-xs font-bold uppercase tracking-widest bg-[#06190d] text-white hover:opacity-90 disabled:opacity-50"
-              >
-                {isCreating ? "Creating..." : "Create Case"}
-              </button>
+
+            <div className="flex items-center justify-between gap-4 border-t border-[rgba(22,32,26,0.10)] bg-[#F7F0D9] px-7 py-4">
+              <p className="text-[11.5px] text-[#7A8479]">Az ügy létrehozása után a Dokumentumtárba lépünk, ahol feltöltheted az első iratot.</p>
+              <div className="flex gap-2"><AdminButton variant="ghost" onClick={() => setShowNewCaseModal(false)}>Mégse</AdminButton><AdminButton variant="primary" size="lg" onClick={handleCreateCase} disabled={isCreating}>{isCreating ? "Létrehozás..." : "Ügy létrehozása"}</AdminButton></div>
             </div>
           </div>
         </div>
