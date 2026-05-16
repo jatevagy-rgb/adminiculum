@@ -1,22 +1,7 @@
 "use client";
 
 import { useState } from "react";
-
-type PromptKind =
-  | "quickRisk"
-  | "fullLegal"
-  | "missingData"
-  | "clauseEdits"
-  | "counterpartyArguments"
-  | "formatting"
-  | "partnerVerification";
-
-type PromptOption = {
-  id: PromptKind;
-  label: string;
-  description: string;
-  instruction: string;
-};
+import { LEGAL_PROMPT_CATALOG, LegalPromptTemplate } from "./legalPromptCatalog";
 
 type AIPromptPanelProps = {
   caseId?: string;
@@ -26,280 +11,180 @@ type AIPromptPanelProps = {
   className?: string;
 };
 
-const promptOptions: PromptOption[] = [
-  {
-    id: "quickRisk",
-    label: "Gyors kockázatelemzés",
-    description: "2-4 oldalas, táblázatos kockázati áttekintés.",
-    instruction: `Készíts gyors, ügyvédi felülvizsgálatra alkalmas jogi kockázatelemzést legfeljebb 2-4 oldalban. A válasz szerkezete pontosan ez legyen, és semmi mást ne tartalmazzon a megadott struktúrán kívül:
+const CATEGORY_LABELS: Record<string, string> = {
+  analysis: "Elemzés",
+  risk: "Kockázat",
+  modification: "Módosítás",
+  handoff: "Leadás",
+  communication: "Kommunikáció",
+  formatting: "Formázás",
+  review: "Review",
+  episode: "Epizód",
+};
 
-# Gyors jogi kockázatelemzés
-
-## 1. Rövid összefoglaló
-- Szerződés típusa:
-- Felek szerepe:
-- Szerződés tárgya:
-- Legfontosabb kockázat egy mondatban:
-
-## 2. Kockázati táblázat
-| # | Probléma | Kockázat szintje | Miért gond? | Javasolt javítás | Ügyvédi döntési pont |
-|---|---|---|---|---|---|---|
-
-## 3. Hiányzó / ellenőrizendő adatok
-| Hiányzó adat/irat | Miért szükséges? | Ki tudja megadni? | Sürgősség |
-|---|---|---|---|---|
-
-## 4. Javasolt következő lépések
-Numbered list, maximum 6 elem.
-
-Csak anyagi (jogi relevanciájú) problémákat szerepeltess. Kockázati szintek: Alacsony / Közepes / Magas / Kritikus.`,
-  },
-  {
-    id: "fullLegal",
-    label: "Teljes jogi elemzés",
-    description: "Tények, jogi kérdések, kockázati mátrix, alkupontok.",
-    instruction: `Készíts teljes, ügyvédi felülvizsgálatra alkalmas jogi elemzést. A válasz szerkezete pontosan ez legyen, és semmi mást ne tartalmazzon:
-
-# Teljes jogi elemzés ügyvédi review-hoz
-
-## 1. Vezetői összefoglaló
-Maximum 8 bullet point, gyakorlati és tömör.
-
-## 2. Tényállás és dokumentum kontextus
-| Elem | Megállapítás | Bizonytalanság / hiány |
-|---|---|---|
-
-## 3. Fő jogi kérdések
-| Jogi kérdés | Relevancia | Kockázat | Ellenőrizendő tény |
-|---|---|---|---|---|
-
-## 4. Kockázati mátrix
-| # | Kockázat | Szint | Érintett rendelkezés | Hatás | Javasolt kezelés |
-|---|---|---|---|---|---|---|
-
-## 5. Hiányzó iratok/adatok
-| Irat/adat | Kritikus? | Miért kell? | Beszerzés forrása |
-|---|---|---|---|---|
-
-## 6. Várható ellenoldali érvek és válaszok
-| Várható ellenoldali érv | Erősség | Lehetséges válasz | Tárgyalási javaslat |
-|---|---|---|---|---|
-
-## 7. Javasolt szerződésmódosítások
-| Eredeti probléma | Javasolt módosítás iránya | Konkrét beilleszthető szöveg | Indoklás |
-|---|---|---|---|---|
-
-## 8. Beilleszthető szövegblokkok
-Csak akkor javasolj szöveget, ha a tények elegendők. Ha hiányzó tény van, ezt írd: „Szöveg nem javasolható a következő hiányzó tény miatt: …"
-
-## 9. Ügyvédi döntési pontok
-Numbered list.
-
-## 10. Figyelmeztetés
-„Ez az elemzés ügyvédi felülvizsgálatot igényel; nem minősül végleges jogi állásfoglalásnak."`,
-  },
-  {
-    id: "missingData",
-    label: "Hiányzó adatok és iratok",
-    description: "Kritikus, ajánlott és opcionális hiányok listája.",
-    instruction: `Készíts hiányzó adat- és iratlistát ügyvédi munkához. A válasz szerkezete pontosan ez legyen:
-
-# Hiányzó adatok és iratok listája
-
-## 1. Kritikus hiányok
-| Hiányzó adat/irat | Miért kritikus? | Milyen döntést akadályoz? | Kihez kell fordulni? |
-|---|---|---|---|---|
-
-## 2. Ajánlott ellenőrzések
-| Ellenőrzés | Cél | Forrás | Határidő / prioritás |
-|---|---|---|---|---|
-
-## 3. Opcionális kiegészítések
-| Kiegészítés | Haszna | Mikor szükséges? |
-|---|---|---|
-
-## 4. Kérdéslista az ügyfélnek
-Numbered, gyakorlati kérdések.
-
-Ne találj ki nem szereplő adatot.`,
-  },
-  {
-    id: "clauseEdits",
-    label: "Módosítási javaslatok",
-    description: "Konkrét klauzula-javítások indokolással.",
-    instruction: `Tegyél konkrét szerződésmódosítási javaslatokat ügyvédi review-hoz. Minden javaslat az alábbi táblázatban legyen:
-
-# Szerződésmódosítási javaslatok
-
-## Javaslat [sorszám]
-
-| Mező | Tartalom |
-|---|---|
-| Eredeti probléma | … |
-| Érintett rendelkezés | … |
-| Javasolt új szöveg | … |
-| Indoklás | … |
-| Kockázati hatás | … |
-| Ügyvédi review megjegyzés | … |
-
-Több javaslat esetén ismételd a táblát minden javaslathoz. Őrizd meg a jogi szerkesztési stílust. Ha a tényállás hiányos, ne írj fiktív klauzulát; helyettesítsd a „Javasolt új szöveg" mezőt a megjegyzéssel: „Hiányzó tény: … — szövegezéshez további információ szükséges." Ha kétnyelvű vagy kéthasábos szerkesztés lehet szükséges, adj hozzá egy külön megjegyzést: „Kétnyelvű vagy kéthasábos szerkesztés esetén külön formázási review szükséges."`,
-  },
-  {
-    id: "counterpartyArguments",
-    label: "Ellenoldali érvek",
-    description: "Várható ellenérvek és válaszstratégia.",
-    instruction: `Azonosítsd a várható ellenoldali érveket, kifogásokat és alkupozíciókat. A válasz szerkezete pontosan ez legyen:
-
-# Ellenoldali érvek és válaszstratégia
-
-| # | Várható ellenoldali érv | Erősség | Miért várható? | Javasolt válasz | Tárgyalási javaslat |
-|---|---|---|---|---|---|---|
-
-## Legjobb alkuirány
-Bullet points, rövid és gyakorlati.
-
-## Nem javasolt engedmények
-Bullet points.
-
-A válasz legyen tárgyalás-előkészítő, ne végleges állásfoglalás. Ha valamely érv csak feltételezés, azt „(feltételezés)" megjegyzéssel jelöld.`,
-  },
-  {
-    id: "formatting",
-    label: "Formázás / helyesírás",
-    description: "Nyelvi, formai és konzisztencia-ellenőrzés.",
-    instruction: `Végezz helyesírási, nyelvhelyességi, formázási, számozási, hivatkozási és stílusbeli konzisztencia-ellenőrzést. A válasz szerkezete pontosan ez legyen:
-
-# Formázási és nyelvi review
-
-## 1. Javítandó hibák
-| Hiba típusa | Hely / rész | Javasolt javítás | Megjegyzés |
-|---|---|---|---|---|
-
-## 2. Számozás és hivatkozások
-| Probléma | Javasolt javítás |
-|---|---|
-| Hivatkozás hibás | Javított hivatkozás |
-| Számozás hiányzik | Javasolt számozás |
-
-## 3. Stílus és koherencia
-Bullet points.
-
-Ne tegyél érdemi jogi változtatást. Ha egy mondat jogi jelentéskockázatot hordoz, jelöld meg: „jogi review szükséges".`,
-  },
-  {
-    id: "partnerVerification",
-    label: "Partnerellenőrzési összefoglaló vázlat",
-    description: "Checklist-vázlat fél- és cégellenőrzéshez.",
-    instruction: `Készíts partnerellenőrzési összefoglaló vázlatot checklist táblázat formában. A válasz szerkezete pontosan ez legyen:
-
-# Partnerellenőrzési összefoglaló vázlat
-
-## 1. Ellenőrzési státusz
-„Nem ellenőrzött — a dokumentumban szereplő adatok alapján csak checklist készült."
-
-## 2. Checklist
-| Ellenőrzési pont | Szükséges adat/bizonyíték | Státusz | Megjegyzés |
-|---|---|---|---|
-| Adószám | | nem ellenőrzött | |
-| EU VAT szám / közösségi adószám | | nem ellenőrzött | |
-| Megbízható adózói lista | | nem ellenőrzött | |
-| ÁFA-bevallást elmulasztók listája | | nem ellenőrzött | |
-| Adótartozás / végrehajtási lista | | nem ellenőrzött | |
-| Cégjegyzék | | nem ellenőrzött | |
-| Köztartozásmentes adózói adatbázis | | nem ellenőrzött | |
-| Csatolt bizonyíték zip | | nem ellenőrzött | |
-
-## 3. Hiányzó bizonyítékok
-Bullet points.
-
-## 4. Ügyvédi döntési pontok
-Bullet points.
-
-Ne állítsd, hogy bármely nyilvántartásban tényleges ellenőrzés történt, ha nincs megadott bizonyíték.`,
-  },
-];
-
-function buildPrompt(option: PromptOption, props: AIPromptPanelProps): string {
-  const text = props.anonymizedText?.trim();
-  const documentBlock = text
-    ? `=== ANONIMIZÁLT DOKUMENTUMSZÖVEG ===\n${text}`
-    : "=== ANONIMIZÁLT DOKUMENTUMSZÖVEG ===\nIlleszd be ide az anonimizált dokumentumszöveget. A jelenlegi felület csak prompt-vázat készít, mert nincs elérhető anonimizált szöveg ebben a nézetben.";
-
-  return [
-    "Adminiculum szerződés-workspace prompt",
-    "",
-    `Ügy azonosító: ${props.caseId || "nem ismert"}`,
-    `Dokumentum azonosító: ${props.documentId || "nem ismert"}`,
-    `Dokumentum címe: ${props.documentTitle || "nem ismert"}`,
-    "",
-    "Magyar nyelven válaszolj.",
-    "A dokumentumszöveg anonimizált.",
-    "Őrizd meg változatlanul a placeholder tokeneket: [ÜGYFÉL], [MEGBÍZÓ], [ELLENÉRDEKŰ FÉL], [CÍM_1], [AZONOSÍTÓ_1].",
-    "Ne találj ki hiányzó tényeket.",
-    "A feltételezéseket külön jelöld.",
-    "Ügyvédi felülvizsgálatra alkalmas munkaterméket készíts.",
-    "Ne adj végleges jogi tanácsot.",
-    "Ne hivatkozz külső adatbázis-ellenőrzésre, ha adatot/bizonyítékot nem kaptál.",
-    "",
-    "Feladat:",
-    option.instruction,
-    "",
-    documentBlock,
-  ].join("\n");
-}
+const P0_CATEGORIES = ["analysis", "risk"] as const;
+const P1_CATEGORIES = ["modification", "handoff", "communication", "formatting", "review"] as const;
 
 export function AIPromptPanel(props: AIPromptPanelProps) {
-  const [copiedId, setCopiedId] = useState<PromptKind | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [episodesOpen, setEpisodesOpen] = useState(false);
+  const [p1Open, setP1Open] = useState(false);
+  const [search, setSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState<string>("all");
   const hasText = Boolean(props.anonymizedText?.trim());
 
-  const handleCopy = async (option: PromptOption) => {
+  const p0Templates = LEGAL_PROMPT_CATALOG.filter((t) =>
+    P0_CATEGORIES.includes(t.category as typeof P0_CATEGORIES[number])
+  );
+  const p1Templates = LEGAL_PROMPT_CATALOG.filter((t) =>
+    P1_CATEGORIES.includes(t.category as typeof P1_CATEGORIES[number])
+  );
+  const episodeTemplates = LEGAL_PROMPT_CATALOG.filter((t) => t.category === "episode");
+
+  const allCatalogTemplates = [...p0Templates, ...p1Templates, ...episodeTemplates];
+
+  const filteredTemplates = allCatalogTemplates.filter((t) => {
+    const matchesSearch =
+      search.trim() === "" ||
+      t.label.toLowerCase().includes(search.toLowerCase()) ||
+      t.description.toLowerCase().includes(search.toLowerCase());
+    const matchesFilter =
+      activeFilter === "all" ||
+      (activeFilter === "fo" && P0_CATEGORIES.includes(t.category as typeof P0_CATEGORIES[number])) ||
+      (activeFilter === "tovabbi" && P1_CATEGORIES.includes(t.category as typeof P1_CATEGORIES[number])) ||
+      (activeFilter === "halado" && t.category === "episode");
+    return matchesSearch && matchesFilter;
+  });
+
+  const filteredP0 = filteredTemplates.filter((t) =>
+    P0_CATEGORIES.includes(t.category as typeof P0_CATEGORIES[number])
+  );
+  const filteredP1 = filteredTemplates.filter((t) =>
+    P1_CATEGORIES.includes(t.category as typeof P1_CATEGORIES[number])
+  );
+  const filteredEpisodes = filteredTemplates.filter((t) => t.category === "episode");
+
+  const handleCopy = async (template: LegalPromptTemplate) => {
     try {
-      await navigator.clipboard.writeText(buildPrompt(option, props));
-      setCopiedId(option.id);
+      const { buildLegalPrompt } = await import("./legalPromptCatalog");
+      await navigator.clipboard.writeText(buildLegalPrompt(template, props));
+      setCopiedId(template.id);
       setTimeout(() => setCopiedId(null), 1800);
     } catch {
       setCopiedId(null);
     }
   };
 
+  const renderCard = (template: LegalPromptTemplate) => (
+    <button
+      key={template.id}
+      onClick={() => handleCopy(template)}
+      className="w-full text-left border border-[#EEE7D9] p-2 hover:bg-[#FBF9F3] transition-colors rounded"
+    >
+      <span className="block text-[11px] font-semibold text-[#1F2821] leading-snug">
+        {copiedId === template.id ? "Vágólapra másolva: " : ""}{template.label}
+      </span>
+      <div className="flex items-center gap-1.5 mt-0.5">
+        <span className="text-[9px] px-1.5 py-0.5 rounded border border-[#DDD7CA] bg-white text-[#7B776D]">
+          {CATEGORY_LABELS[template.category] ?? template.category}
+        </span>
+        <span className="text-[10px] text-[#7B776D]">
+          {template.requiresDocumentText && hasText ? "Dokumentumszöveggel" : "Csak prompt-váz"}
+        </span>
+      </div>
+    </button>
+  );
+
   return (
-    <aside className={`border border-[#DDD7CA] bg-white p-4 ${props.className || ""}`}>
-      <div className="mb-4">
-        <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Prompt panel</p>
-        <h3 className="mt-1 text-sm font-semibold text-[#1F2821]">Külső AI promptok</h3>
-        <p className="mt-2 text-[11px] text-[#514D45]">
-          Adminiculum nem hív külső AI-t és nem ment elemzést. A gombok csak vágólapra másolható munkapromptokat készítenek.
+    <aside className={`border border-[#DDD7CA] bg-white flex flex-col ${props.className || ""}`}>
+      <div className="p-3 border-b border-[#EEE7D9]">
+        <p className="text-[9px] uppercase tracking-[0.2em] text-[#7B776D]">Prompt panel</p>
+        <h3 className="mt-0.5 text-xs font-semibold text-[#1F2821]">Külső AI promptok</h3>
+        <p className="mt-1 text-[10px] text-[#514D45] leading-snug">
+          Adminiculum nem hív külső AI-t; a promptok vágólapra másolhatók.
         </p>
-        <p className="mt-2 text-[10px] text-[#7B776D]">
-          {hasText
-            ? "A prompt a jelenleg látható anonimizált / munkaszöveget is tartalmazza."
-            : "Ebben a nézetben nincs teljes anonimizált szöveg; a prompt-váz kéri a szöveg beillesztését."}
-        </p>
+        {hasText && (
+          <p className="mt-1 text-[10px] text-[#7B776D]">
+            A prompt a jelenleg látható szöveget is tartalmazza.
+          </p>
+        )}
       </div>
 
-      <div className="space-y-2">
-        {promptOptions.map((option) => (
-          <button
-            key={option.id}
-            onClick={() => handleCopy(option)}
-            className="w-full text-left border border-[#EEE7D9] p-3 hover:bg-[#FBF9F3] transition-colors"
-          >
-            <span className="block text-xs font-semibold text-[#1F2821]">
-              {copiedId === option.id ? "Vágólapra másolva: " : ""}{option.label}
-            </span>
-            <span className="mt-1 block text-[10px] text-[#7B776D]">{option.description}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-4 border border-[#EEE7D9] bg-[#FBF9F3] p-3">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-semibold text-[#1F2821]">Partnerellenőrzés</p>
-          <span className="text-[10px] px-2 py-0.5 border border-[#DDD7CA] bg-white text-[#7B776D]">Nincs rögzítve</span>
+      <div className="p-3 border-b border-[#EEE7D9] space-y-2">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Prompt keresése..."
+          className="w-full text-[11px] border border-[#DDD7CA] rounded p-1.5 placeholder:text-[#B0AA9E] text-[#1F2821] focus:outline-none focus:border-[#B5A99A]"
+        />
+        <div className="flex gap-1 flex-wrap">
+          {[
+            { key: "all", label: "Mind" },
+            { key: "fo", label: "Fő" },
+            { key: "tovabbi", label: "További" },
+            { key: "halado", label: "Haladó" },
+          ].map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setActiveFilter(f.key)}
+              className={`text-[9px] px-2 py-0.5 rounded border transition-colors ${
+                activeFilter === f.key
+                  ? "bg-[#1F2821] text-white border-[#1F2821]"
+                  : "bg-white text-[#7B776D] border-[#DDD7CA] hover:border-[#B5A99A]"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
-        <p className="mt-2 text-[10px] text-[#7B776D]">
-          A részletes ellenőrzési zip és checklist külön workflow-ban lesz kezelve.
-        </p>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3 space-y-4">
+        {filteredP0.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-[#7B776D]">
+              Fő munkairatok
+            </p>
+            {filteredP0.map(renderCard)}
+          </div>
+        )}
+
+        {filteredP1.length > 0 && (
+          <div className="space-y-1">
+            <button
+              onClick={() => setP1Open((v) => !v)}
+              className="w-full flex items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.15em] text-[#7B776D] hover:text-[#1F2821] transition-colors"
+            >
+              <span>{p1Open ? "▾" : "▸"}</span>
+              <span>További munkairatok</span>
+              <span className="text-[10px] normal-case font-normal tracking-wide ml-1">
+                ({p1Templates.length})
+              </span>
+            </button>
+            {p1Open && filteredP1.map(renderCard)}
+          </div>
+        )}
+
+        {filteredEpisodes.length > 0 && (
+          <div className="space-y-1">
+            <button
+              onClick={() => setEpisodesOpen((v) => !v)}
+              className="w-full flex items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.15em] text-[#7B776D] hover:text-[#1F2821] transition-colors"
+            >
+              <span>{episodesOpen ? "▾" : "▸"}</span>
+              <span>Haladó elemzési epizódok</span>
+              <span className="text-[10px] normal-case font-normal tracking-wide ml-1">
+                ({episodeTemplates.length})
+              </span>
+            </button>
+            {episodesOpen && filteredEpisodes.map(renderCard)}
+          </div>
+        )}
+
+        {filteredP0.length === 0 && filteredP1.length === 0 && filteredEpisodes.length === 0 && (
+          <p className="text-[10px] text-[#7B776D] text-center py-4">Nincs találat.</p>
+        )}
       </div>
     </aside>
   );

@@ -63,8 +63,14 @@ type BlockNoteDraft = {
   note: string;
 };
 
-type WorkspaceToolType = 'clause' | 'prompt' | 'template';
-type WorkspaceToolFilter = 'all' | 'clause' | 'prompt' | 'template';
+type WorkspaceToolMode =
+  | "klauzulak"
+  | "ai-promptok"
+  | "sablonok"
+  | "anonimizalas"
+  | "rehidratalas"
+  | "megjegyzesek"
+  | "javitasok";
 
 type WorkspaceClauseItem = {
   id: string;
@@ -251,8 +257,8 @@ function DocumentsComparePageContent() {
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [hasPreviousOnly] = useState(false);
   const [recentOnly] = useState(false);
+const [toolMode, setToolMode] = useState<WorkspaceToolMode>("klauzulak");
   const [toolSearch, setToolSearch] = useState("");
-  const [toolFilter, setToolFilter] = useState<WorkspaceToolFilter>("all");
   const [expandedToolId, setExpandedToolId] = useState<string | null>(null);
   const [editorDraft, setEditorDraft] = useState("");
   const [editorTouched, setEditorTouched] = useState(false);
@@ -739,33 +745,31 @@ function DocumentsComparePageContent() {
     return paragraphCount > 80;
   }, [activeDraftText]);
 
-  const normalizedToolSearch = useMemo(() => toolSearch.trim().toLowerCase(), [toolSearch]);
-
-  const filteredClauseTools = useMemo(() => {
-    if (toolFilter !== "all" && toolFilter !== "clause") return [];
+const filteredClauseTools = useMemo(() => {
+    if (toolMode !== "klauzulak") return [];
     return workspaceClauseCatalogue.filter((tool) => {
-      if (!normalizedToolSearch) return true;
+      const text = toolSearch.trim().toLowerCase();
+      if (!text) return true;
       return (
-        tool.title.toLowerCase().includes(normalizedToolSearch) ||
-        tool.description.toLowerCase().includes(normalizedToolSearch) ||
-        tool.tags.some((tag) => tag.toLowerCase().includes(normalizedToolSearch))
+        tool.title.toLowerCase().includes(text) ||
+        tool.description.toLowerCase().includes(text) ||
+        tool.tags.some((tag) => tag.toLowerCase().includes(text))
       );
     });
-  }, [normalizedToolSearch, toolFilter]);
+  }, [toolSearch, toolMode]);
 
   const filteredPromptTools = useMemo(() => {
-    if (toolFilter !== "all" && toolFilter !== "prompt") return [];
+    if (toolMode !== "ai-promptok") return [];
     return workspacePromptTools.filter((tool) => {
-      if (!normalizedToolSearch) return true;
+      const text = toolSearch.trim().toLowerCase();
+      if (!text) return true;
       return (
-        tool.title.toLowerCase().includes(normalizedToolSearch) ||
-        tool.description.toLowerCase().includes(normalizedToolSearch) ||
-        tool.tags.some((tag) => tag.toLowerCase().includes(normalizedToolSearch))
+        tool.title.toLowerCase().includes(text) ||
+        tool.description.toLowerCase().includes(text) ||
+        tool.tags.some((tag) => tag.toLowerCase().includes(text))
       );
     });
-  }, [normalizedToolSearch, toolFilter]);
-
-  const showTemplatePlaceholder = toolFilter === "all" || toolFilter === "template";
+  }, [toolSearch, toolMode]);
 
   useEffect(() => {
     if (!editorTouched) {
@@ -1056,39 +1060,56 @@ function DocumentsComparePageContent() {
             <div className="py-12 text-center text-xs text-[#7B776D] border border-dashed border-[#DDD7CA]">Válassz dokumentumot a munkapéldány előkészítéséhez.</div>
           ) : (
             <div className="grid gap-4 2xl:grid-cols-[300px_minmax(720px,1fr)] xl:grid-cols-[280px_minmax(0,1fr)]">
-              <aside className="min-w-0 space-y-4 rounded-[8px] border border-[#DDD7CA] bg-white p-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+<aside className="min-w-0 space-y-3 rounded-[8px] border border-[#DDD7CA] bg-white p-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
                 <div>
-                  <h2 className="font-serif text-2xl font-medium text-[#1F2821]">Eszközök</h2>
-                  <p className="mt-1 text-xs text-[#7B776D]">Klauzulák, AI promptok és sablonok egy helyen.</p>
+                  <h2 className="font-serif text-xl font-medium text-[#1F2821]">Eszközök</h2>
+                </div>
+
+                <div className="flex flex-wrap gap-1">
+                  {(
+                    [
+                      { key: "klauzulak", label: "Klauzulák" },
+                      { key: "ai-promptok", label: "AI promptok" },
+                      { key: "sablonok", label: "Sablonok" },
+                      { key: "anonimizalas", label: "Anonimizálás" },
+                      { key: "rehidratalas", label: "Rehidratálás" },
+                      { key: "megjegyzesek", label: "Megjegyzések" },
+                      { key: "javitasok", label: "Javítások" },
+                    ] as { key: WorkspaceToolMode; label: string }[]
+                  ).map((mode) => (
+                    <button
+                      key={mode.key}
+                      type="button"
+                      onClick={() => {
+                        setToolMode(mode.key);
+                        focusToolSearch();
+                      }}
+                      className={`rounded-[4px] border px-2 py-1 text-[10px] font-semibold transition-colors ${
+                        toolMode === mode.key
+                          ? "border-[#1F4A33] bg-[#E2E8DA] text-[#1F4A33]"
+                          : "border-[#DDD7CA] bg-white text-[#7B776D] hover:bg-[#FBF9F3]"
+                      }`}
+                    >
+                      {mode.label}
+                    </button>
+                  ))}
                 </div>
 
                 <input
                   ref={toolSearchRef}
                   value={toolSearch}
                   onChange={(e) => setToolSearch(e.target.value)}
-                  placeholder="Keress klauzulát vagy promptot…"
+                  placeholder={
+                    toolMode === "klauzulak"
+                      ? "Keress klauzulát…"
+                      : toolMode === "ai-promptok"
+                      ? "Keress promptot…"
+                      : toolMode === "sablonok"
+                      ? "Keress sablont…"
+                      : "Keresés…"
+                  }
                   className="w-full rounded-[5px] border border-[#DDD7CA] bg-[#FBF9F3] px-3 py-2 text-xs text-[#1F2821]"
                 />
-
-                <div className="flex flex-wrap gap-2">
-                  {(["all", "clause", "prompt", "template"] as WorkspaceToolFilter[]).map((filter) => (
-                    <button
-                      key={filter}
-                      type="button"
-                      onClick={() => {
-                        setToolFilter(filter);
-                        focusToolSearch();
-                      }}
-                      className={`rounded-[4px] border px-2.5 py-1 text-[11px] font-semibold ${
-                        toolFilter === filter
-                          ? "border-[#1F4A33] bg-[#E2E8DA] text-[#1F4A33]"
-                          : "border-[#DDD7CA] bg-white text-[#514D45] hover:bg-[#FBF9F3]"
-                      }`}
-                    >
-                      {filter === "all" ? "Mind" : filter === "clause" ? "Klauzulák" : filter === "prompt" ? "AI promptok" : "Sablonok"}
-                    </button>
-                  ))}
-                </div>
 
                 {editorNotice ? (
                   <div className="flex items-start justify-between gap-3 rounded-[5px] border border-[#A6C0AF] bg-[#E2EDE5] p-3 text-[11px] text-[#23472F]">
@@ -1099,7 +1120,7 @@ function DocumentsComparePageContent() {
                   </div>
                 ) : null}
 
-                {(toolFilter === "all" || toolFilter === "clause") ? (
+                {toolMode === "klauzulak" ? (
                   <section className="space-y-2">
                     <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Klauzulák</h3>
                     {filteredClauseTools.length === 0 ? (
@@ -1137,16 +1158,34 @@ function DocumentsComparePageContent() {
                   </section>
                 ) : null}
 
-                {(toolFilter === "all" || toolFilter === "prompt") ? (
-                  <section className="space-y-2">
+                {toolMode === "ai-promptok" ? (
+                  <section className="space-y-3">
                     <div>
                       <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">AI promptok</h3>
-                      <p className="mt-1 text-[11px] text-[#7B776D]">Adminiculum nem hív külső AI-t. A promptokat vágólapra másolhatod.</p>
+                      <p className="mt-1 text-[10px] text-[#7B776D]">Adminiculum nem hív külső AI-t; a promptok vágólapra másolhatók.</p>
                     </div>
-                    {filteredPromptTools.length === 0 ? (
-                      <p className="rounded-[5px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] p-3 text-xs text-[#9C9890]">Nincs találat a promptok között.</p>
-                    ) : (
-                      <div className="space-y-2">
+
+                    <AIPromptPanel
+                      caseId={selectedDocument.caseId}
+                      documentId={selectedDocument.id}
+                      documentTitle={selectedDocument.fileName || selectedDocument.title}
+                      anonymizedText={effectiveWorkspaceText}
+                    />
+
+                    <div className="border-t border-[#EEE7D9] pt-3">
+                      <h4 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D] mb-2">AI válasz visszaillesztése</h4>
+                      <p className="text-[10px] text-[#7B776D] mb-2">Az elemzés ügyvédi felülvizsgálatot igényel; nem minősül végleges jogi állásfoglalásnak.</p>
+                      <LegalAnalysisIntakePanel
+                        caseId={selectedDocument.caseId}
+                        documentId={selectedDocument.id}
+                        documentSourceType="DOCUMENT"
+                        documentTitle={selectedDocument.fileName || selectedDocument.title}
+                      />
+                    </div>
+
+                    {filteredPromptTools.length > 0 ? (
+                      <div className="border-t border-[#EEE7D9] pt-3 space-y-2">
+                        <h4 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">AI válasz visszaillesztése</h4>
                         {filteredPromptTools.map((tool) => (
                           <div key={tool.id} className="rounded-[6px] border border-[#D6DEEC] bg-white p-3">
                             <div className="space-y-1">
@@ -1158,18 +1197,7 @@ function DocumentsComparePageContent() {
                               </div>
                               <p className="text-[11px] text-[#7B776D]">{tool.description}</p>
                             </div>
-                            {expandedToolId === tool.id ? (
-                              <div className="mt-3 space-y-1 rounded-[5px] border border-[#D6DEEC] bg-[#EAEFF6] p-3 text-[11px] text-[#2D4A7C]">
-                                <p>Magyar nyelven válaszolj.</p>
-                                <p>Ne találj ki hiányzó tényeket.</p>
-                                <p>Ügyvédi felülvizsgálatra alkalmas munkaterméket készíts.</p>
-                                {!effectiveWorkspaceText ? <p>A dokumentumszöveget külön kell beilleszteni.</p> : null}
-                              </div>
-                            ) : null}
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              <AdminButton size="xs" variant="ai" onClick={() => setExpandedToolId(expandedToolId === tool.id ? null : tool.id)}>
-                                Megnéz
-                              </AdminButton>
+                            <div className="mt-2 flex flex-wrap gap-2">
                               <AdminButton size="xs" variant="gold" onClick={() => handleCopyPromptTool(tool.title)}>
                                 Másolás
                               </AdminButton>
@@ -1177,11 +1205,11 @@ function DocumentsComparePageContent() {
                           </div>
                         ))}
                       </div>
-                    )}
+                    ) : null}
                   </section>
                 ) : null}
 
-                {showTemplatePlaceholder ? (
+                {toolMode === "sablonok" ? (
                   <section className="space-y-2">
                     <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Ügyfél-specifikus sablonok</h3>
                     <div className="rounded-[6px] border border-dashed border-[#DDD7CA] bg-[#F6F2E8] p-3">
@@ -1193,6 +1221,104 @@ function DocumentsComparePageContent() {
                       <p className="mt-3 text-[10px] leading-relaxed text-[#7B776D]">
                         Szerveroldali klauzulatár külön patchben lesz bekötve.
                       </p>
+                    </div>
+                  </section>
+                ) : null}
+
+                {toolMode === "anonimizalas" ? (
+                  <section className="space-y-2">
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Anonimizálás</h3>
+                    {isLoadingAnonymousText && !effectiveWorkspaceText ? (
+                      <div className="rounded-[5px] border border-[#D6DEEC] bg-[#EAEFF6] p-3">
+                        <p className="text-xs font-semibold text-[#2D4A7C]">Anonimizált munkaszöveg betöltése…</p>
+                      </div>
+                    ) : effectiveWorkspaceText ? (
+                      <div className="rounded-[5px] border border-[#A6C0AF] bg-[#E2EDE5] p-3 space-y-2">
+                        <p className="text-xs font-bold text-[#23472F]">Anonimizált munkaszöveg elérhető</p>
+                        <p className="text-[11px] leading-5 text-[#23472F]">A promptok és a jogi elemzés már a legutóbbi elérhető anonimizált munkaszövegre épülhetnek.</p>
+                        {latestAnonymousDocumentId ? <p className="text-[10px] text-[#4A6B4A]">Munkaszöveg azonosító: {latestAnonymousDocumentId.slice(0, 8)}</p> : null}
+                        <Link href={getDocumentLedgerHref()} className="block rounded-[5px] border border-[#A6C0AF] bg-white px-3 py-2 text-center text-xs font-semibold text-[#23472F] hover:bg-[#F6F2E8]">
+                          Újra megnyitás a Dokumentumtárban
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="rounded-[5px] border border-[#F2E4BD] bg-[#FAEFCF] p-3 space-y-2">
+                        <p className="text-xs font-bold text-[#7A5A1F]">Anonimizálás szükséges az AI elemzéshez</p>
+                        <p className="text-[11px] leading-5 text-[#7A5A1F]">A szerződés-workspace megnyitható anonimizálás nélkül is, de az AI promptok és jogi elemzés anonimizált munkaszövegre épülnek.</p>
+                        <Link href={getDocumentLedgerHref()} className="block rounded-[5px] border border-[#8E6A1B] bg-[#B58A2A] px-3 py-2 text-center text-xs font-semibold text-white hover:bg-[#8E6A1B]">
+                          Anonimizálás indítása
+                        </Link>
+                      </div>
+                    )}
+                    {anonymousTextError ? (
+                      <p className="rounded-[5px] border border-[#F2E4BD] bg-[#FAEFCF] p-2 text-[10px] text-[#7A5A1F]">
+                        Az anonimizált szöveg betöltése nem sikerült. A Dokumentumtárban újra megnyitható az anonimizálás.
+                      </p>
+                    ) : null}
+                  </section>
+                ) : null}
+
+                {toolMode === "rehidratalas" ? (
+                  <section className="space-y-2">
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Rehidratálás</h3>
+                    <div className="rounded-[6px] border border-dashed border-[#DDD7CA] bg-[#F6F2E8] p-3">
+                      <p className="text-xs font-semibold text-[#1F2821]">Rehidratálás későbbi patchben</p>
+                      <p className="mt-1 text-[11px] text-[#7B776D]">Az AI válaszból készített módosított dokumentum visszaépítése külön munkafolyamatban történik.</p>
+                      <p className="mt-2 text-[10px] text-[#9C9890]">Rehidratálási művelet a Dokumentumtárban vagy külön modalban érhető el.</p>
+                    </div>
+                  </section>
+                ) : null}
+
+                {toolMode === "megjegyzesek" ? (
+                  <section className="space-y-3">
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Helyi megjegyzések</h3>
+                    <textarea
+                      ref={localCommentRef}
+                      value={localCommentDraft}
+                      onChange={(event) => setLocalCommentDraft(event.target.value)}
+                      placeholder="Írj előkészítő megjegyzést az ügyvédnek…"
+                      rows={3}
+                      className="w-full resize-y rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-xs text-[#1F2821] outline-none focus:border-[#1F4A33]"
+                    />
+                    <div className="flex gap-2">
+                      <AdminButton size="sm" variant="primary" onClick={handleAddLocalComment}>
+                        Megjegyzés hozzáadása
+                      </AdminButton>
+                    </div>
+                    <div className="space-y-2">
+                      {localComments.length > 0 ? (
+                        localComments.map((comment, index) => (
+                          <div key={`${index}-${comment.slice(0, 16)}`} className="rounded-[5px] border border-[#DDD7CA] bg-white p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Megjegyzés #{index + 1}</p>
+                            <p className="mt-1 whitespace-pre-wrap text-xs leading-6 text-[#1F2821]">{comment}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="rounded-[5px] border border-dashed border-[#DDD7CA] bg-white p-3 text-xs text-[#9C9890]">Még nincs helyi megjegyzés.</p>
+                      )}
+                    </div>
+                  </section>
+                ) : null}
+
+                {toolMode === "javitasok" ? (
+                  <section className="space-y-2">
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Javítási mód</h3>
+                    <div className="rounded-[6px] border border-dashed border-[#DDD7CA] bg-[#F6F2E8] p-3">
+                      <p className="text-xs font-semibold text-[#1F2821]">Javítási mód</p>
+                      <p className="mt-1 text-[11px] text-[#7B776D]">A javítási mód későbbi patchben kapcsolódik szerveroldali dokumentumszerkesztéshez. Itt egyelőre helyi munkanézeti jelölések használhatók.</p>
+                      <div className="mt-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-block rounded bg-[#d9ecff] px-2 py-0.5 text-[10px] text-[#143d66] underline">beszúrt szöveg</span>
+                          <span className="text-[10px] text-[#7B776D]">← beszúrt</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-block rounded bg-[#ffe0de] px-2 py-0.5 text-[10px] text-[#7a1e1e] line-through">törölt szöveg</span>
+                          <span className="text-[10px] text-[#7B776D]">← törölt</span>
+                        </div>
+                      </div>
+                      <AdminButton size="xs" variant="muted" disabled className="mt-3">
+                        Valódi track changes később
+                      </AdminButton>
                     </div>
                   </section>
                 ) : null}
@@ -1241,7 +1367,7 @@ function DocumentsComparePageContent() {
                     </div>
                   ) : null}
 
-                  <div className="bg-[#EFE7CF] px-3 py-5 sm:px-6 lg:px-8">
+<div className="bg-[#EFE7CF] px-3 py-5 sm:px-6 lg:px-8">
                     <div className="mx-auto flex w-full max-w-[1120px] items-start gap-4">
                     <div className="min-h-[760px] flex-1 border border-[rgba(22,32,26,0.14)] bg-white px-6 py-8 shadow-[0_18px_50px_rgba(22,32,26,0.14)] sm:px-10 lg:px-16">
                       <div className="border-b border-[#EEE7D9] pb-4">
@@ -1289,50 +1415,6 @@ function DocumentsComparePageContent() {
                         </div>
                       )}
                     </div>
-                    <aside className="hidden w-56 shrink-0 space-y-3 lg:block">
-                      <div className="rounded-[6px] border border-[#F2E4BD] bg-[#FFFCEB] p-3 text-[11px] text-[#3D4842] shadow-sm">
-                        <p className="font-semibold text-[#16201A]">Review megjegyzés</p>
-                        <p className="mt-1">A helyi megjegyzések ügyvédi review előkészítésére szolgálnak.</p>
-                      </div>
-                      {localComments.slice(-3).map((comment, index) => (
-                        <div key={`margin-${index}-${comment.slice(0, 12)}`} className="rounded-[6px] border border-[#F2E4BD] bg-[#FFFCEB] p-3 text-[11px] text-[#3D4842] shadow-sm">
-                          <p className="font-semibold text-[#16201A]">Helyi megjegyzés</p>
-                          <p className="mt-1 line-clamp-4">{comment}</p>
-                        </div>
-                      ))}
-                    </aside>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-[#EEE7D9] bg-[#FBF9F3] p-4">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
-                        <h3 className="text-sm font-semibold text-[#1F2821]">Helyi megjegyzések</h3>
-                        <p className="mt-1 text-[11px] text-[#7B776D]">Ezek a megjegyzések ebben a v1 munkanézetben helyiek; szerveroldali mentésük külön patch lesz.</p>
-                      </div>
-                      <AdminButton size="sm" variant="primary" onClick={handleAddLocalComment}>
-                        Megjegyzés hozzáadása
-                      </AdminButton>
-                    </div>
-                    <textarea
-                      ref={localCommentRef}
-                      value={localCommentDraft}
-                      onChange={(event) => setLocalCommentDraft(event.target.value)}
-                      placeholder="Írj előkészítő megjegyzést az ügyvédnek…"
-                      rows={3}
-                      className="mt-3 w-full resize-y rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-sm text-[#1F2821] outline-none focus:border-[#1F4A33]"
-                    />
-                    <div className="mt-3 space-y-2">
-                      {localComments.length > 0 ? (
-                        localComments.map((comment, index) => (
-                          <div key={`${index}-${comment.slice(0, 16)}`} className="rounded-[5px] border border-[#DDD7CA] bg-white p-3">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Megjegyzés #{index + 1}</p>
-                            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[#1F2821]">{comment}</p>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="rounded-[5px] border border-dashed border-[#DDD7CA] bg-white p-3 text-xs text-[#9C9890]">Még nincs helyi megjegyzés.</p>
-                      )}
                     </div>
                   </div>
                 </section>
@@ -1707,169 +1789,43 @@ function DocumentsComparePageContent() {
         </div>
       </main>
 
-      <aside className="w-full shrink-0 bg-white xl:w-80 xl:overflow-y-auto">
-        <div className="p-4 space-y-4">
-          <h2 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Munkafolyamat</h2>
-
-          {!selectedDocument ? (
-            <p className="text-xs text-[#9C9890]">Nincs kiválasztott dokumentum.</p>
-          ) : (
-            <>
-              <section className="rounded-[8px] border border-[#DDD7CA] bg-[#F6F2E8] p-3 space-y-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#514D45]">Munkafolyamat állapota</p>
-                <div className="space-y-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-[11px] text-[#7B776D]">Dokumentum</span>
-                    <span className="text-right text-[11px] font-semibold text-[#1F2821]">{getWorkspaceDocumentTitle()}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-[11px] text-[#7B776D]">Típus</span>
-                    <AdminBadge tone={selectedDocument.kind === "contract" ? "green" : "gold"}>{getWorkspaceDocumentKindLabel()}</AdminBadge>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-[11px] text-[#7B776D]">Anonimizált szöveg</span>
-                    <AdminStatusPill tone={effectiveWorkspaceText ? "green" : isLoadingAnonymousText ? "blue" : "amber"}>
-                      {effectiveWorkspaceText ? "Elérhető" : isLoadingAnonymousText ? "Betöltés..." : "Anonimizálás szükséges"}
-                    </AdminStatusPill>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-[11px] text-[#7B776D]">Jogi elemzés</span>
-                    <span className="text-right text-[11px] font-semibold text-[#7B776D]">Beilleszthető / menthető</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-[11px] text-[#7B776D]">Külső AI hívás</span>
-                    <span className="text-right text-[11px] font-semibold text-[#7B776D]">Nincs — csak prompt másolás</span>
-                  </div>
-                </div>
-                {anonymousTextError ? (
-                  <p className="rounded-[5px] border border-[#F2E4BD] bg-[#FAEFCF] p-2 text-[10px] text-[#7A5A1F]">
-                    Az anonimizált szöveg betöltése nem sikerült. A Dokumentumtárban újra megnyitható az anonimizálás.
-                  </p>
-                ) : null}
-              </section>
-
-              <section className="rounded-[8px] border border-[#DDD7CA] bg-white p-3 space-y-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Anonimizálás</p>
-                {isLoadingAnonymousText && !effectiveWorkspaceText ? (
-                  <p className="rounded-[5px] border border-[#D6DEEC] bg-[#EAEFF6] p-3 text-xs font-semibold text-[#2D4A7C]">Anonimizált munkaszöveg betöltése...</p>
-                ) : effectiveWorkspaceText ? (
-                  <div className="rounded-[5px] border border-[#A6C0AF] bg-[#E2EDE5] p-3 space-y-2">
-                    <p className="text-xs font-bold text-[#23472F]">Anonimizált munkaszöveg elérhető</p>
-                    <p className="text-[11px] leading-5 text-[#23472F]">A promptok és a jogi elemzés már a legutóbbi elérhető anonimizált munkaszövegre épülhetnek.</p>
-                    {latestAnonymousDocumentId ? <p className="text-[10px] text-[#4A6B4A]">Munkaszöveg azonosító: {latestAnonymousDocumentId.slice(0, 8)}</p> : null}
-                    <Link href={getDocumentLedgerHref()} className="block rounded-[5px] border border-[#A6C0AF] bg-white px-3 py-2 text-center text-xs font-semibold text-[#23472F] hover:bg-[#F6F2E8]">
-                      Újra megnyitás a Dokumentumtárban
-                    </Link>
-                  </div>
-                ) : (
-                  <div className="rounded-[5px] border border-[#F2E4BD] bg-[#FAEFCF] p-3 space-y-2">
-                    <p className="text-xs font-bold text-[#7A5A1F]">Nincs még anonimizált munkaszöveg</p>
-                    <p className="text-[11px] leading-5 text-[#7A5A1F]">A prompt panel akkor lesz igazán használható, ha a dokumentum anonimizált szövege már rendelkezésre áll.</p>
-                    <Link href={getDocumentLedgerHref()} className="block rounded-[5px] border border-[#8E6A1B] bg-[#B58A2A] px-3 py-2 text-center text-xs font-semibold text-white hover:bg-[#8E6A1B]">
-                      Anonimizálás indítása
-                    </Link>
-                    <p className="text-[10px] text-[#7A5A1F]">Az anonimizálás után a workspace automatikusan a legutóbbi anonimizált szöveget használja.</p>
-                  </div>
-                )}
-              </section>
-
-              <section className="rounded-[8px] border border-[#D6DEEC] bg-[#F8FAFD] p-3 space-y-3">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#2D4A7C]">Külső AI promptok</p>
-                  <p className="mt-1 text-[11px] text-[#2D4A7C]">Adminiculum nem hív külső AI-t. A promptok vágólapra másolhatók.</p>
-                </div>
-                {!effectiveWorkspaceText ? (
-                  <p className="rounded-[5px] border border-[#DDD7CA] bg-white p-2 text-[10px] text-[#7B776D]">
-                    Prompt-vázak továbbra is másolhatók, de teljes dokumentumszöveg nélkül csak sablonként használhatók.
-                  </p>
-                ) : null}
-                <AIPromptPanel
-                  caseId={selectedDocument.caseId}
-                  documentId={selectedDocument.id}
-                  documentTitle={selectedDocument.fileName || selectedDocument.title}
-                  anonymizedText={effectiveWorkspaceText}
-                />
-              </section>
-
-              <section className="rounded-[8px] border border-[#DDD7CA] bg-white p-3 space-y-3">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Jogi elemzés</p>
-                  <p className="mt-1 text-[11px] leading-5 text-[#7B776D]">A külső AI által készített elemzés itt illeszthető vissza és menthető ügyvédi review előkészítéséhez.</p>
-                  <p className="mt-1 text-[10px] text-[#9C9890]">Az elemzés ügyvédi felülvizsgálatot igényel; nem minősül végleges jogi állásfoglalásnak.</p>
-                </div>
-                <LegalAnalysisIntakePanel
-                  caseId={selectedDocument.caseId}
-                  documentId={selectedDocument.id}
-                  documentSourceType="DOCUMENT"
-                  documentTitle={selectedDocument.fileName || selectedDocument.title}
-                />
-              </section>
-
-              <section className="rounded-[8px] border border-[#DDD7CA] bg-white p-3 space-y-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Ügyvédi leadási csomag</p>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3"><span className="text-[11px] text-[#7B776D]">Eredeti dokumentum</span><AdminBadge tone="green">Kapcsolva</AdminBadge></div>
-                  <div className="flex items-center justify-between gap-3"><span className="text-[11px] text-[#7B776D]">Anonimizált szöveg</span><AdminBadge tone={effectiveWorkspaceText ? "green" : "amber"}>{effectiveWorkspaceText ? "Kapcsolva" : "Hiányzik"}</AdminBadge></div>
-                  <div className="flex items-center justify-between gap-3"><span className="text-[11px] text-[#7B776D]">Jogi elemzés</span><span className="text-right text-[11px] font-semibold text-[#7B776D]">Külön menthető a panelen</span></div>
-                  <div className="flex items-center justify-between gap-3"><span className="text-[11px] text-[#7B776D]">Módosított dokumentum</span><AdminBadge tone={editorDraft.trim() ? "green" : "neutral"}>{editorDraft.trim() ? "Helyi munkapéldány" : "Külön mentés szükséges"}</AdminBadge></div>
-                  <div className="flex items-center justify-between gap-3"><span className="text-[11px] text-[#7B776D]">Előkészítő összefoglaló</span><span className="text-right text-[11px] font-semibold text-[#7B776D]">Leadási csomagban kezelhető</span></div>
-                </div>
-                <Link href={getDocumentLedgerHref()} className="block rounded-[5px] border border-[#DDD7CA] px-3 py-2 text-center text-xs font-semibold text-[#1F2821] hover:bg-[#FBF9F3]">
-                  Leadási csomag kezelése
-                </Link>
-                <p className="text-[10px] leading-5 text-[#7B776D]">A leadási csomag létrehozása és beküldése a Dokumentumtárban kezelhető. Itt csak az előkészítő állapot látható.</p>
-              </section>
-
-              <section className="rounded-[8px] border border-[#DDD7CA] bg-white p-3 space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Ügytörténet</p>
-                {timelineEvents.length === 0 ? (
-                  <p className="text-xs text-[#9C9890]">Nincs kapcsolt aktivitás.</p>
-                ) : (
-                  timelineEvents.map((event) => (
-                    <div key={event.id} className="rounded-[5px] border border-[#EEE7D9] p-2">
-                      <p className="text-xs font-semibold text-[#1F2821]">{event.description}</p>
-                      <p className="text-[10px] text-[#7B776D]">{formatDateTime(event.createdAt)}</p>
-                    </div>
-                  ))
-                )}
-              </section>
-
-              <section className="rounded-[8px] border border-[#DDD7CA] bg-white p-3 space-y-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Kapcsolódó információk</p>
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold text-[#1F2821]">{selectedDocument.caseNumber}</p>
-                  <p className="text-xs text-[#514D45]">{selectedDocument.caseTitle}</p>
-                  <p className="text-[11px] text-[#7B776D]">Ügyfél: {selectedDocument.caseClientName || "—"}</p>
-                  <p className="text-[11px] text-[#7B776D]">Ügy státusz: {caseSummaries[selectedDocument.caseId]?.case.status || "—"}</p>
-                  <p className="text-[11px] text-[#7B776D]">Review-jellegű feladatok: {reviewTaskCount}</p>
-                </div>
-                <Link href={`/cases/${selectedDocument.caseId}`} className="block rounded-[5px] border border-[#DDD7CA] px-3 py-2 text-center text-xs font-semibold hover:bg-[#FBF9F3]">Ügy megnyitása</Link>
-                {selectedDocument.kind === "contract" ? (
-                  <Link href={`/cases/${selectedDocument.caseId}/review/${selectedDocument.id}`} className="block rounded-[5px] border border-[#DDD7CA] px-3 py-2 text-center text-xs font-semibold hover:bg-[#FBF9F3]">
-                    Review megnyitása
-                  </Link>
-                ) : null}
-                <details className="rounded-[5px] border border-[#EEE7D9] bg-[#FBF9F3] p-2">
-                  <summary className="cursor-pointer text-[11px] font-semibold text-[#514D45]">Technikai részletek</summary>
-                  <div className="mt-2 space-y-2">
-                    <button onClick={() => handleDownload(selectedDocument)} className="w-full rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-xs hover:bg-[#FBF9F3]">
-                      Aktuális dokumentum letöltése
-                    </button>
-                    {selectedBaseline ? (
-                      <button onClick={() => handleDownload(selectedBaseline)} className="w-full rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-xs hover:bg-[#FBF9F3]">
-                        Alapdokumentum letöltése
-                      </button>
-                    ) : null}
-                    <Link href={getDocumentLedgerHref()} className="block rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-center text-xs hover:bg-[#FBF9F3]">
-                      Dokumentumok megnyitása
-                    </Link>
-                    <p className="text-[10px] text-[#7B776D]">Összevetési alap: {selectedBaseline ? selectedBaseline.fileName : "nincs"}</p>
-                    <p className="text-[10px] text-[#7B776D]">Blokk-összevetés: {selectedDocument.kind === "contract" && !!comparisonData ? "elérhető" : "nem elérhető"}</p>
-                  </div>
-                </details>
-              </section>
-            </>
-          )}
+<aside className="w-56 shrink-0 bg-white hidden xl:block xl:overflow-y-auto border-l border-[#DDD7CA]">
+        <div className="p-4 space-y-3">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-[#7B776D]">Dokumentum információ</p>
+          <div className="space-y-1">
+            <p className="text-[10px] text-[#7B776D]">Dokumentum</p>
+            <p className="text-[11px] font-semibold text-[#1F2821] truncate">{getWorkspaceDocumentTitle()}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] text-[#7B776D]">Típus</p>
+            <AdminBadge tone={selectedDocument?.kind === "contract" ? "green" : "gold"}>{getWorkspaceDocumentKindLabel()}</AdminBadge>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] text-[#7B776D]">Anonimizált szöveg</p>
+            <AdminStatusPill tone={effectiveWorkspaceText ? "green" : isLoadingAnonymousText ? "blue" : "amber"}>
+              {effectiveWorkspaceText ? "Elérhető" : isLoadingAnonymousText ? "Betöltés..." : "Anonimizálás szükséges"}
+            </AdminStatusPill>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] text-[#7B776D]">Ügy</p>
+            <p className="text-[11px] font-semibold text-[#1F2821]">{selectedDocument?.caseNumber}</p>
+          </div>
+          <details className="rounded-[5px] border border-[#EEE7D9] bg-[#FBF9F3] p-2">
+            <summary className="cursor-pointer text-[10px] font-semibold text-[#514D45]">Technikai részletek</summary>
+            <div className="mt-2 space-y-2">
+              <button onClick={() => handleDownload(selectedDocument)} className="w-full rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-[10px] hover:bg-[#FBF9F3]">
+                Dokumentum letöltése
+              </button>
+              {selectedBaseline ? (
+                <button onClick={() => handleDownload(selectedBaseline)} className="w-full rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-[10px] hover:bg-[#FBF9F3]">
+                  Alapdokumentum letöltése
+                </button>
+              ) : null}
+              <Link href={getDocumentLedgerHref()} className="block rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-center text-[10px] hover:bg-[#FBF9F3]">
+                Dokumentumtár
+              </Link>
+            </div>
+          </details>
         </div>
       </aside>
     </div>

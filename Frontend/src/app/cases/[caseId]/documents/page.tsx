@@ -1021,31 +1021,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <div className="flex flex-wrap gap-2 text-[11px]"><AdminStatusPill tone="green">Generált</AdminStatusPill><AdminStatusPill tone="gold">Review</AdminStatusPill><AdminStatusPill tone="neutral">Módosítás</AdminStatusPill><AdminStatusPill tone="neutral">Ügyvédi leadás</AdminStatusPill></div>
                       <div className="rounded-[8px] border border-[#B58A2A]/30 bg-[#FAEFCF] p-4"><h3 className="font-serif text-xl font-medium text-[#16201A]">Következő ajánlott lépés</h3><div className="mt-3 flex flex-wrap gap-2"><AdminButton variant="gold" onClick={() => openWorkspace(selectedGeneratedContract.id)}>Szerződés-workspace</AdminButton><AdminButton variant="neutral" onClick={() => handleDownload(selectedGeneratedContract)} disabled={isDownloading === selectedGeneratedContract.id}>{isDownloading === selectedGeneratedContract.id ? "Letöltés..." : "Letöltés"}</AdminButton><AdminButton variant="neutral" onClick={() => handleReview(selectedGeneratedContract.id)}>Review megnyitása</AdminButton><AdminButton variant="neutral" onClick={() => handleSharePointUpload(selectedGeneratedContract)} disabled={isUploadingToSP === selectedGeneratedContract.id || Boolean(selectedGeneratedContract.spItemId)}>{selectedGeneratedContract.spItemId ? "SharePoint szinkronizálva" : isUploadingToSP === selectedGeneratedContract.id ? "Szinkronizálás..." : "SharePoint mentés"}</AdminButton><AdminButton variant="neutral" onClick={handleCreateHandoffPackage} disabled={isCreatingHandoffPackage}>{isCreatingHandoffPackage ? "Csomag készül..." : "Csomag készítése"}</AdminButton></div><details className="mt-3"><summary className="cursor-pointer text-[11px] font-semibold text-[#7A8479]">Technikai műveletek</summary><div className="mt-2 flex flex-wrap gap-2"><AdminButton size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>Metaadat összevetés</AdminButton>{previousVersionForSelected ? <AdminButton size="sm" variant="muted" onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedGeneratedContract.id)}&baselineId=${encodeURIComponent(previousVersionForSelected.id)}`)}>Verzió-összevetés</AdminButton> : null}</div></details></div>
                     </div>
-                  ) : null}
+) : null}
                 </div>
               </AdminPanel>
 
               <div className="space-y-5">
-                <AdminPanel className="p-4">
-                  <h2 className="font-serif text-2xl font-medium text-[#16201A]">Aktív dokumentum adatai</h2>
-                  {!activeDocument ? (
-                    <div className="mt-4 space-y-2"><p className="text-sm font-semibold text-[#16201A]">Nincs aktív dokumentum</p><p className="text-xs text-[#7A8479]">Válassz iratot balról, vagy tölts fel új dokumentumot.</p></div>
-                  ) : selectedUploadedDocument ? (
-                    <div className="mt-4 space-y-3 text-xs text-[#3D4842]">
-                      <p><b>Típus:</b> {getDocumentKindLabel(selectedUploadedDocument.fileName)}</p>
-                      <p><b>Feltöltve:</b> {formatShortDate(selectedUploadedDocument.createdAt)}</p>
-                      <p><b>Verzió:</b> {selectedUploadedDocument.version ? `v${selectedUploadedDocument.version}` : "v1"}</p>
-                      <p className="rounded bg-[#FBF6E7] p-2 text-[#7A8479]">A fő munkalépések az aktív dokumentum kártyáján érhetők el.</p>
-                    </div>
-                  ) : selectedGeneratedContract ? (
-                    <div className="mt-4 space-y-3 text-xs text-[#3D4842]">
-                      <p><b>Verzió:</b> {selectedGeneratedContract.revisionNumber ? `v${selectedGeneratedContract.revisionNumber}` : "v1"}</p>
-                      <p><b>Létrehozva:</b> {formatShortDate(selectedGeneratedContract.generatedAt)}</p>
-                      <p><b>Státusz:</b> {getContractStatusLabel(selectedGeneratedContract)}</p>
-                      <p className="rounded bg-[#FBF6E7] p-2 text-[#7A8479]">A fő munkalépések az aktív dokumentum kártyáján érhetők el.</p>
-                    </div>
-                  ) : null}
-                </AdminPanel>
                 {caseRecord && <HandoffPackagePanel caseId={caseRecord.id} refreshKey={handoffPanelRefreshKey} />}
                 {handoffPackageMessage && <p className="rounded bg-[#EEF5E7] p-2 text-[12px] font-semibold text-[#23472F]">{handoffPackageMessage}</p>}
                 {handoffPackageError && <p className="rounded bg-[#FFF5F3] p-2 text-[12px] font-semibold text-[#8B2A2A]">{handoffPackageError}</p>}

@@ -209,9 +209,9 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
       aria-label="Ügyvédi leadási csomagok"
     >
       <div className="flex items-center gap-2 mb-4">
-        <span className="material-symbols-outlined text-lg text-[#06190d]">folder_special</span>
+        <span className="material-symbols-outlined text-lg text-[#06190d] hidden">folder_special</span>
         <h3 className="text-xs font-bold uppercase tracking-widest text-[#06190d]">
-          Ügyvédi Leadási Csomagok
+          Ügyvédi leadási csomagok
         </h3>
       </div>
 
