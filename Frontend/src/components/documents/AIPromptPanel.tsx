@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { LEGAL_PROMPT_CATALOG, LegalPromptTemplate } from "./legalPromptCatalog";
+import type { ClientHouseStyleProfile } from "@/lib/api";
 
 type AIPromptPanelProps = {
   caseId?: string;
   documentId?: string;
   documentTitle?: string;
   anonymizedText?: string;
+  clientHouseStyle?: ClientHouseStyleProfile | null;
   className?: string;
 };
 

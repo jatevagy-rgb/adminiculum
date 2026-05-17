@@ -17,6 +17,7 @@ interface CaseListItem {
   caseNumber: string;
   title: string;
   clientName: string;
+  clientId?: string;
   matterType: string;
   status: string;
   priority: string;
@@ -46,6 +47,7 @@ interface CaseSummaryDTO {
     caseNumber: string;
     title: string;
     clientName: string;
+    clientId?: string;
     matterType: string;
     status: string;
     description?: string;
@@ -127,6 +129,7 @@ class CasesService {
       caseNumber: c.caseNumber,
       title: `${c.clientName || 'Unknown Client'} - ${c.matterType || 'Unknown Type'}`,
       clientName: c.clientName || 'Unknown Client',
+      clientId: c.clientId,
       matterType: c.matterType || 'Unknown',
       status: c.status,
       priority: c.priority,
@@ -173,6 +176,7 @@ class CasesService {
       caseNumber: caseData.caseNumber,
       title: `${caseData.clientName || 'Unknown Client'} - ${caseData.matterType || 'Unknown Type'}`,
       clientName: caseData.clientName || 'Unknown Client',
+      clientId: caseData.clientId,
       matterType: caseData.matterType || 'Unknown',
       status: caseData.status,
       description: caseData.description || undefined,
@@ -285,6 +289,7 @@ class CasesService {
         caseNumber: caseData.caseNumber,
         title: `${caseData.clientName || 'Unknown Client'} - ${caseData.matterType || 'Unknown Type'}`,
         clientName: caseData.clientName || 'Unknown Client',
+        clientId: caseData.clientId,
         matterType: caseData.matterType || 'Unknown',
         status: caseData.status,
         description: caseData.description || undefined,
@@ -318,6 +323,21 @@ class CasesService {
         pendingReview: pendingReview.length
       }
     };
+  }
+
+  async getCaseClientHouseStyle(caseId: string): Promise<any | null> {
+    const caseData = await prisma.case.findUnique({
+      where: { id: caseId },
+      select: { id: true, clientId: true }
+    });
+
+    if (!caseData) {
+      throw new Error('Case not found');
+    }
+
+    return prisma.clientHouseStyleProfile.findUnique({
+      where: { clientId: caseData.clientId }
+    });
   }
 
   /**

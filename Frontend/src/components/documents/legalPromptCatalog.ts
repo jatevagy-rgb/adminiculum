@@ -1,5 +1,7 @@
 "use client";
 
+import type { ClientHouseStyleProfile } from "@/lib/api";
+
 export type LegalPromptCategory =
   | "analysis"
   | "risk"
@@ -22,6 +24,42 @@ export interface LegalPromptTemplate {
     caseId?: string;
     anonymizedText?: string;
   }) => string;
+}
+
+export function buildHouseStyleInstructionBlock(profile?: ClientHouseStyleProfile | null): string {
+  if (!profile) return "";
+  const lines = [
+    ["Ügyfél neve", profile.officialName || profile.shortName],
+    ["Rövid név", profile.shortName],
+    ["Székhely / cím", profile.registeredSeat],
+    ["Adószám", profile.taxNumber],
+    ["Cégjegyzékszám / nyilvántartási szám", profile.registrationNumber],
+    ["Kapcsolattartó", profile.contactPerson],
+    ["Kapcsolattartó email", profile.contactEmail],
+    ["Kapcsolattartó telefon", profile.contactPhone],
+    ["Preferált nyelv", profile.preferredLanguage],
+    ["Dokumentum nyelvi mód", profile.documentLanguageMode],
+    ["Betűtípus", profile.fontFamily],
+    ["Betűméret", profile.fontSize],
+    ["Címsorok", profile.headingStyle],
+    ["Számozás", profile.numberingStyle],
+    ["Fejléc", profile.headerRequirements],
+    ["Lábléc", profile.footerRequirements],
+    ["Aláírási blokk", profile.signatureBlock],
+    ["Kétnyelvűségi megjegyzések", profile.bilingualNotes],
+    ["Fordítási követelmények", profile.translationNotes],
+    ["Preferált hangnem", profile.preferredTone],
+    ["Tiltott megfogalmazások", profile.prohibitedWording],
+    ["Újrahasználható prompt instrukciók", profile.reusablePromptInstructions],
+    ["Word formázási instrukciók", profile.wordFormattingInstructions],
+    ["Külső AI instrukciók", profile.externalAiInstructions],
+    ["Belső megjegyzések", profile.notes],
+  ]
+    .filter(([, value]) => Boolean(String(value || "").trim()))
+    .map(([label, value]) => `- ${label}: ${String(value).trim()}`);
+
+  if (lines.length === 0) return "";
+  return ["ÜGYFÉL HOUSE STYLE / FORMÁZÁSI PROFIL:", ...lines].join("\n");
 }
 
 const GLOBAL_RULES = `Feladatod: ügyvédi munkairat előkészítése egy bemásolt vagy feltöltött szerződés alapján.
@@ -59,11 +97,13 @@ function buildHeader(docTitle?: string, caseId?: string): string {
 
 function buildPromptBody(
   template: LegalPromptTemplate,
-  input: { documentTitle?: string; caseId?: string; anonymizedText?: string }
+  input: { documentTitle?: string; caseId?: string; anonymizedText?: string; clientHouseStyle?: ClientHouseStyleProfile | null }
 ): string {
+  const houseStyleBlock = buildHouseStyleInstructionBlock(input.clientHouseStyle);
   return [
     buildHeader(input.documentTitle, input.caseId),
     GLOBAL_RULES,
+    houseStyleBlock ? `\n${houseStyleBlock}` : "",
     "",
     "Feladat:",
     template.buildBody(input),
@@ -781,7 +821,7 @@ Ellenőrizd:
 
 export function buildLegalPrompt(
   template: LegalPromptTemplate,
-  input: { documentTitle?: string; caseId?: string; anonymizedText?: string }
+  input: { documentTitle?: string; caseId?: string; anonymizedText?: string; clientHouseStyle?: ClientHouseStyleProfile | null }
 ): string {
   return buildPromptBody(template, input);
 }

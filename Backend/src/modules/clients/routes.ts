@@ -10,9 +10,120 @@ import { authenticate } from '../../middleware/auth';
 
 const router = Router();
 
+const HOUSE_STYLE_FIELDS = [
+  'officialName',
+  'shortName',
+  'registeredSeat',
+  'taxNumber',
+  'registrationNumber',
+  'contactPerson',
+  'contactEmail',
+  'contactPhone',
+  'preferredLanguage',
+  'documentLanguageMode',
+  'fontFamily',
+  'fontSize',
+  'headingStyle',
+  'numberingStyle',
+  'headerRequirements',
+  'footerRequirements',
+  'signatureBlock',
+  'bilingualNotes',
+  'translationNotes',
+  'preferredTone',
+  'prohibitedWording',
+  'reusablePromptInstructions',
+  'wordFormattingInstructions',
+  'externalAiInstructions',
+  'notes',
+] as const;
+
+function pickHouseStylePayload(body: any): Record<string, string | null> {
+  const data: Record<string, string | null> = {};
+  for (const field of HOUSE_STYLE_FIELDS) {
+    if (body[field] !== undefined) {
+      const value = body[field];
+      data[field] = value === null ? null : String(value).trim();
+    }
+  }
+  return data;
+}
+
 // Ping endpoint for debugging
 router.get('/ping', (_req: Request, res: Response) => {
   res.json({ ok: true, message: 'Clients router working' });
+});
+
+// ============================================================================
+// GET /clients/:clientId/house-style
+// ============================================================================
+router.get('/:clientId/house-style', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const clientId = Array.isArray(req.params.clientId) ? req.params.clientId[0] : req.params.clientId;
+
+    if (!clientId) {
+      res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Client ID is required' });
+      return;
+    }
+
+    const client = await prisma.client.findUnique({
+      where: { id: clientId },
+      select: { id: true }
+    });
+
+    if (!client) {
+      res.status(404).json({ status: 404, code: 'NOT_FOUND', message: 'Client not found' });
+      return;
+    }
+
+    const profile = await prisma.clientHouseStyleProfile.findUnique({
+      where: { clientId }
+    });
+    res.json(profile);
+  } catch (error) {
+    console.error('Get client house style error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// PUT /clients/:clientId/house-style
+// ============================================================================
+router.put('/:clientId/house-style', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const clientId = Array.isArray(req.params.clientId) ? req.params.clientId[0] : req.params.clientId;
+
+    if (!clientId) {
+      res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Client ID is required' });
+      return;
+    }
+
+    const client = await prisma.client.findUnique({
+      where: { id: clientId },
+      select: { id: true }
+    });
+
+    if (!client) {
+      res.status(404).json({ status: 404, code: 'NOT_FOUND', message: 'Client not found' });
+      return;
+    }
+
+    const payload = pickHouseStylePayload(req.body || {});
+
+    const profile = await prisma.clientHouseStyleProfile.upsert({
+      where: { clientId },
+      create: {
+        clientId,
+        ...payload,
+      },
+      update: payload,
+    });
+
+    res.json(profile);
+  } catch (error) {
+    console.error('Update client house style error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
 });
 
 // ============================================================================

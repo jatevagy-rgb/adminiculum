@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminBadge, AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
+import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePanel";
 import { AIPromptPanel } from "@/components/documents/AIPromptPanel";
 import { LegalAnalysisIntakePanel } from "@/components/documents/LegalAnalysisIntakePanel";
+import { buildHouseStyleInstructionBlock } from "@/components/documents/legalPromptCatalog";
 import {
   downloadReviewSummary,
   downloadContract,
@@ -22,6 +24,7 @@ import {
   getReviewNotes,
   saveReviewNotes,
   getAnonymousDocumentsBySource,
+  getCaseClientHouseStyle,
   type BlockReviewStatus,
   type CaseContractListItem,
   type CaseListItem,
@@ -32,6 +35,7 @@ import {
   type ReviewNotesResult,
   type TaskItem,
   type TimelineEvent,
+  type ClientHouseStyleProfile,
 } from "@/lib/api";
 
 type CompareDocument = {
@@ -273,6 +277,9 @@ const [toolMode, setToolMode] = useState<WorkspaceToolMode>("klauzulak");
   const [latestAnonymousDocumentId, setLatestAnonymousDocumentId] = useState<string | null>(null);
   const [isLoadingAnonymousText, setIsLoadingAnonymousText] = useState(false);
   const [anonymousTextError, setAnonymousTextError] = useState<string | null>(null);
+  const [clientHouseStyle, setClientHouseStyle] = useState<ClientHouseStyleProfile | null>(null);
+  const [isLoadingHouseStyle, setIsLoadingHouseStyle] = useState(false);
+  const [houseStyleNotice, setHouseStyleNotice] = useState<string | null>(null);
 
   type ScopedCase = {
     id: string;
@@ -640,6 +647,31 @@ const [toolMode, setToolMode] = useState<WorkspaceToolMode>("klauzulak");
   }, [comparisonData, reviewNotesData, selectedDocument]);
 
   useEffect(() => {
+    if (!selectedDocument?.caseId) {
+      setClientHouseStyle(null);
+      setIsLoadingHouseStyle(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingHouseStyle(true);
+    getCaseClientHouseStyle(selectedDocument.caseId)
+      .then((profile) => {
+        if (!cancelled) setClientHouseStyle(profile);
+      })
+      .catch(() => {
+        if (!cancelled) setClientHouseStyle(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingHouseStyle(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDocument?.caseId]);
+
+  useEffect(() => {
     const loadTimeline = async () => {
       if (!selectedDocument?.id) {
         setTimelineEvents([]);
@@ -779,6 +811,8 @@ const filteredClauseTools = useMemo(() => {
 
   const getWorkspaceDocumentTitle = () => selectedDocument?.fileName || selectedDocument?.title || "Nincs kiválasztott dokumentum";
 
+  const selectedCaseClientId = selectedDocument ? caseSummaries[selectedDocument.caseId]?.case?.clientId : undefined;
+
   const getWorkspaceDocumentKindLabel = () => {
     if (selectedDocument?.kind === "document") return "Feltöltött dokumentum";
     if (selectedDocument?.kind === "contract") return "Generált dokumentum";
@@ -861,6 +895,20 @@ const filteredClauseTools = useMemo(() => {
       );
     } catch {
       setEditorNotice("Nem sikerült a prompt másolása.");
+    }
+  };
+
+  const handleCopyHouseStyleInstructions = async () => {
+    const block = buildHouseStyleInstructionBlock(clientHouseStyle);
+    if (!block) {
+      setHouseStyleNotice("Ehhez az ügyfélhez még nincs másolható house style profil.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(block);
+      setHouseStyleNotice("House style instrukciók vágólapra másolva.");
+    } catch {
+      setHouseStyleNotice("Nem sikerült a house style instrukciók másolása.");
     }
   };
 
@@ -1170,6 +1218,7 @@ const filteredClauseTools = useMemo(() => {
                       documentId={selectedDocument.id}
                       documentTitle={selectedDocument.fileName || selectedDocument.title}
                       anonymizedText={effectiveWorkspaceText}
+                      clientHouseStyle={clientHouseStyle}
                     />
 
                     <div className="border-t border-[#EEE7D9] pt-3">
@@ -1212,16 +1261,46 @@ const filteredClauseTools = useMemo(() => {
                 {toolMode === "sablonok" ? (
                   <section className="space-y-2">
                     <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Ügyfél-specifikus sablonok</h3>
-                    <div className="rounded-[6px] border border-dashed border-[#DDD7CA] bg-[#F6F2E8] p-3">
-                      <h4 className="text-sm font-semibold text-[#1F2821]">Nincs még ügyfélprofil</h4>
-                      <p className="mt-1 text-[11px] text-[#7B776D]">Ehhez az ügyfélhez még nincs dokumentumstílus- vagy promptprofil beállítva.</p>
-                      <AdminButton size="xs" variant="muted" disabled className="mt-3">
-                        Sablonprofil később
-                      </AdminButton>
-                      <p className="mt-3 text-[10px] leading-relaxed text-[#7B776D]">
-                        Szerveroldali klauzulatár külön patchben lesz bekötve.
-                      </p>
+                    <div className="rounded-[6px] border border-[#DDD7CA] bg-[#F6F2E8] p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="text-sm font-semibold text-[#1F2821]">House style profil</h4>
+                          <p className="mt-1 text-[11px] text-[#7B776D]">
+                            {isLoadingHouseStyle
+                              ? "House style profil betöltése..."
+                              : clientHouseStyle
+                                ? "Az ügyfél house style profilja elérhető a promptokhoz és előkészítő instrukciókhoz."
+                                : "Ehhez az ügyfélhez még nincs house style profil."}
+                          </p>
+                        </div>
+                        <AdminStatusPill tone={clientHouseStyle ? "green" : "neutral"}>{clientHouseStyle ? "Profil van" : "Nincs profil"}</AdminStatusPill>
+                      </div>
+                      {clientHouseStyle ? (
+                        <div className="mt-3 rounded border border-[#EEE7D9] bg-white p-2 text-[11px] text-[#3D4842]">
+                          {[clientHouseStyle.preferredLanguage, clientHouseStyle.documentLanguageMode, clientHouseStyle.fontFamily, clientHouseStyle.headingStyle].filter(Boolean).join(" · ") || "A profil elérhető, de még kevés formázási adatot tartalmaz."}
+                        </div>
+                      ) : null}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <AdminButton size="xs" variant="gold" onClick={handleCopyHouseStyleInstructions} disabled={!clientHouseStyle}>House style instrukció másolása</AdminButton>
+                      </div>
+                      {houseStyleNotice ? <p className="mt-2 text-[10px] font-semibold text-[#23472F]">{houseStyleNotice}</p> : null}
                     </div>
+                    {selectedCaseClientId ? (
+                      <ClientHouseStylePanel
+                        compact
+                        clientId={selectedCaseClientId}
+                        clientName={selectedDocument.caseClientName}
+                        onSaved={() => {
+                          if (selectedDocument?.caseId) {
+                            getCaseClientHouseStyle(selectedDocument.caseId).then(setClientHouseStyle).catch(() => setClientHouseStyle(null));
+                          }
+                        }}
+                      />
+                    ) : (
+                      <p className="rounded border border-dashed border-[#DDD7CA] bg-white p-3 text-[11px] text-[#7B776D]">
+                        Az ügyfél azonosítója nem érhető el, ezért a profil szerkesztése itt nem nyitható meg.
+                      </p>
+                    )}
                   </section>
                 ) : null}
 

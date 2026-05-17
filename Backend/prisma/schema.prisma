@@ -101,8 +101,53 @@ model Client {
   matters         Matter[]            // All matters for this client
   workgroups      ClientWorkgroup[]   // Client workgroups for workload tracking
   redactorProfile ClientRedactionProfile? // One-to-one relation for anonymization
+  houseStyleProfile ClientHouseStyleProfile? // One-to-one relation for document house style
 
   @@map("clients")
+}
+
+model ClientHouseStyleProfile {
+  id                 String   @id @default(uuid())
+  clientId           String   @unique
+
+  officialName        String?
+  shortName           String?
+  registeredSeat      String?
+  taxNumber           String?
+  registrationNumber  String?
+  contactPerson       String?
+  contactEmail        String?
+  contactPhone        String?
+
+  preferredLanguage    String?
+  documentLanguageMode String?
+
+  fontFamily          String?
+  fontSize            String?
+  headingStyle        String?
+  numberingStyle      String?
+
+  headerRequirements  String?
+  footerRequirements  String?
+  signatureBlock      String?
+
+  bilingualNotes      String?
+  translationNotes    String?
+  preferredTone       String?
+  prohibitedWording   String?
+
+  reusablePromptInstructions String?
+  wordFormattingInstructions String?
+  externalAiInstructions     String?
+
+  notes              String?
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  client             Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("client_house_style_profiles")
 }
 
 // ============================================================================

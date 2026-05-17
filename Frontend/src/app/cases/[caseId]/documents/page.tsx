@@ -19,15 +19,18 @@ import {
   createCommunication,
   createCaseHandoffPackage,
   getAnonymousDocumentsBySource,
+  getCaseClientHouseStyle,
   listDocumentLegalAnalyses,
   type CaseContractListItem,
   type DocumentItem,
   type TimelineEventItem,
   type CommunicationItem,
+  type ClientHouseStyleProfile,
 } from "@/lib/api";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { HandoffPackagePanel } from "@/components/handoff/HandoffPackagePanel";
+import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePanel";
 import { AdminBadge, AdminButton, AdminDocumentRow, AdminPanel, AdminStatusPill } from "@/components/adminiculum/ui";
 import { useUiPack } from "@/lib/uiPack";
 
@@ -213,6 +216,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [uploadedDocuments, setUploadedDocuments] = useState<DocumentItem[]>([]);
   const [caseRecord, setCaseRecord] = useState<{
     id: string;
+    clientId?: string;
     caseNumber: string;
     title: string;
     clientName: string;
@@ -250,6 +254,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [handoffPackageMessage, setHandoffPackageMessage] = useState<string | null>(null);
   const [handoffPackageError, setHandoffPackageError] = useState<string | null>(null);
   const [handoffPanelRefreshKey, setHandoffPanelRefreshKey] = useState(0);
+  const [clientHouseStyle, setClientHouseStyle] = useState<ClientHouseStyleProfile | null>(null);
+  const [isLoadingHouseStyle, setIsLoadingHouseStyle] = useState(false);
+  const [showHouseStylePanel, setShowHouseStylePanel] = useState(false);
 
   const searchParams = useSearchParams();
   const requestedDocumentId = searchParams?.get("documentId") ?? null;
@@ -270,6 +277,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
         if (record) {
           setCaseRecord({
             id: record.id,
+            clientId: record.clientId,
             caseNumber: record.caseNumber,
             title: record.title,
             clientName: record.clientName,
@@ -340,6 +348,28 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       loadData();
     }
   }, [caseRecord?.id, loadData]);
+
+  useEffect(() => {
+    if (!caseRecord?.id) {
+      setClientHouseStyle(null);
+      return;
+    }
+    let cancelled = false;
+    setIsLoadingHouseStyle(true);
+    getCaseClientHouseStyle(caseRecord.id)
+      .then((profile) => {
+        if (!cancelled) setClientHouseStyle(profile);
+      })
+      .catch(() => {
+        if (!cancelled) setClientHouseStyle(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingHouseStyle(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [caseRecord?.id]);
 
   const handleDownload = async (contract: CaseContractListItem) => {
     setIsDownloading(contract.id);
@@ -1026,6 +1056,38 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
               </AdminPanel>
 
               <div className="space-y-5">
+                <AdminPanel className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Ügyfélprofil / house style</p>
+                      <p className="mt-1 text-xs text-[#3D4842]">
+                        {isLoadingHouseStyle
+                          ? "Profil betöltése..."
+                          : clientHouseStyle
+                            ? "House style profil elérhető."
+                            : "Ehhez az ügyfélhez még nincs house style profil."}
+                      </p>
+                    </div>
+                    <AdminStatusPill tone={clientHouseStyle ? "green" : "neutral"}>{clientHouseStyle ? "Van" : "Nincs"}</AdminStatusPill>
+                  </div>
+                  {clientHouseStyle ? (
+                    <p className="mt-3 rounded bg-[#FBF6E7] p-2 text-[11px] text-[#3D4842]">
+                      {[clientHouseStyle.preferredLanguage, clientHouseStyle.documentLanguageMode, clientHouseStyle.fontFamily].filter(Boolean).join(" · ") || "A profil elérhető, de még kevés formázási adatot tartalmaz."}
+                    </p>
+                  ) : null}
+                  <AdminButton className="mt-3" size="sm" variant="muted" onClick={() => setShowHouseStylePanel((value) => !value)} disabled={!caseRecord?.clientId}>
+                    {showHouseStylePanel ? "Ügyfélprofil bezárása" : clientHouseStyle ? "Ügyfélprofil szerkesztése" : "Profil létrehozása"}
+                  </AdminButton>
+                  {!caseRecord?.clientId ? <p className="mt-2 text-[10px] text-[#8B2A2A]">Az ügyfél azonosítója nem érhető el.</p> : null}
+                </AdminPanel>
+                {showHouseStylePanel && caseRecord?.clientId ? (
+                  <ClientHouseStylePanel
+                    compact
+                    clientId={caseRecord.clientId}
+                    clientName={caseRecord.clientName}
+                    onSaved={() => getCaseClientHouseStyle(caseRecord.id).then(setClientHouseStyle).catch(() => setClientHouseStyle(null))}
+                  />
+                ) : null}
                 {caseRecord && <HandoffPackagePanel caseId={caseRecord.id} refreshKey={handoffPanelRefreshKey} />}
                 {handoffPackageMessage && <p className="rounded bg-[#EEF5E7] p-2 text-[12px] font-semibold text-[#23472F]">{handoffPackageMessage}</p>}
                 {handoffPackageError && <p className="rounded bg-[#FFF5F3] p-2 text-[12px] font-semibold text-[#8B2A2A]">{handoffPackageError}</p>}

@@ -134,6 +134,25 @@ router.get('/:caseId/summary', authenticate, async (req: Request, res: Response)
 });
 
 // ============================================================================
+// GET /cases/:caseId/client-house-style
+// ============================================================================
+router.get('/:caseId/client-house-style', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const profile = await casesService.getCaseClientHouseStyle(caseId);
+    res.json(profile);
+  } catch (error) {
+    console.error('Get case client house style error:', error);
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    if (message === 'Case not found') {
+      res.status(404).json({ status: 404, code: 'NOT_FOUND', message });
+      return;
+    }
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
 // GET /cases/:caseId
 // ============================================================================
 router.get('/:caseId', authenticate, async (req: Request, res: Response): Promise<void> => {

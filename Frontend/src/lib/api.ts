@@ -404,6 +404,7 @@ export interface CaseSummaryResponse {
     caseNumber: string;
     title: string;
     clientName: string;
+    clientId?: string;
     matterType: string;
     status: string;
     description?: string;
@@ -1055,12 +1056,64 @@ export interface Client {
   color?: string; // Hex color for client identity visualization
 }
 
+export interface ClientHouseStyleProfile {
+  id: string;
+  clientId: string;
+  officialName?: string | null;
+  shortName?: string | null;
+  registeredSeat?: string | null;
+  taxNumber?: string | null;
+  registrationNumber?: string | null;
+  contactPerson?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  preferredLanguage?: string | null;
+  documentLanguageMode?: string | null;
+  fontFamily?: string | null;
+  fontSize?: string | null;
+  headingStyle?: string | null;
+  numberingStyle?: string | null;
+  headerRequirements?: string | null;
+  footerRequirements?: string | null;
+  signatureBlock?: string | null;
+  bilingualNotes?: string | null;
+  translationNotes?: string | null;
+  preferredTone?: string | null;
+  prohibitedWording?: string | null;
+  reusablePromptInstructions?: string | null;
+  wordFormattingInstructions?: string | null;
+  externalAiInstructions?: string | null;
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type UpsertClientHouseStyleProfilePayload = Partial<Omit<ClientHouseStyleProfile, 'id' | 'clientId' | 'createdAt' | 'updatedAt'>>;
+
 export async function getClients(): Promise<{ data: Client[] }> {
   return fetchApi<{ data: Client[] }>('/clients');
 }
 
 export async function getClient(clientId: string): Promise<Client> {
   return fetchApi<Client>(`/clients/${clientId}`);
+}
+
+export async function getClientHouseStyle(clientId: string): Promise<ClientHouseStyleProfile | null> {
+  return fetchApi<ClientHouseStyleProfile | null>(`/clients/${clientId}/house-style`);
+}
+
+export async function upsertClientHouseStyle(
+  clientId: string,
+  data: UpsertClientHouseStyleProfilePayload,
+): Promise<ClientHouseStyleProfile> {
+  return fetchApi<ClientHouseStyleProfile>(`/clients/${clientId}/house-style`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getCaseClientHouseStyle(caseId: string): Promise<ClientHouseStyleProfile | null> {
+  return fetchApi<ClientHouseStyleProfile | null>(`/cases/${caseId}/client-house-style`);
 }
 
 export interface CreateClientData {

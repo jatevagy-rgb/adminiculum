@@ -209,8 +209,10 @@ export function CasesList() {
       let clientId = newCaseData.clientId;
       let caseClientName = newCaseData.clientName.trim();
       if (clientMode === "new" && newClientData.name.trim()) {
-        clientId = undefined;
-        caseClientName = newClientData.name.trim();
+        const createdClient = await createClient({ ...newClientData, name: newClientData.name.trim() });
+        setAvailableClients((prev) => [createdClient, ...prev.filter((client) => client.id !== createdClient.id)]);
+        clientId = createdClient.id;
+        caseClientName = createdClient.name;
       }
       const payloadMatterType = newCaseData.matterType === "CUSTOM" ? "OTHER" : newCaseData.matterType;
       const payloadDescription = newCaseData.matterType === "CUSTOM" && customMatterType.trim()
