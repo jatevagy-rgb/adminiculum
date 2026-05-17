@@ -435,10 +435,11 @@ class CasesService {
     });
 
     // Create case folder in SharePoint
-    // If folder creation fails, throw immediately — no point creating a case with no SharePoint folder
+    // If folder creation fails, log but do NOT fail the case creation.
+    // The case DB record is the source of truth; SharePoint is a convenience layer.
     const folderResult = await driveService.createCaseFolders(caseNumber, params.clientName);
     if (!folderResult) {
-      throw new Error(`SharePoint folder creation failed for case ${caseNumber}. Upload operations will not work.`);
+      console.warn(`[CASES_SERVICE] SharePoint folder creation returned null for case ${caseNumber}. Case created in DB but SharePoint folder is missing.`);
     }
 
     // Create TimelineEvent for case creation

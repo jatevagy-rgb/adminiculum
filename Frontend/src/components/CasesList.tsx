@@ -315,6 +315,29 @@ export function CasesList() {
     setWorkplanSteps((prev) => prev.map((step) => step.id === stepId ? { ...step, ...patch } : step));
   };
 
+  const moveUpStep = (index: number) => {
+    if (index === 0) return;
+    setWorkplanSteps((prev) => {
+      const next = [...prev];
+      [next[index - 1], next[index]] = [next[index], next[index - 1]];
+      return next;
+    });
+  };
+
+  const moveDownStep = (index: number) => {
+    setWorkplanSteps((prev) => {
+      if (index >= prev.length - 1) return prev;
+      const next = [...prev];
+      [next[index], next[index + 1]] = [next[index + 1], next[index]];
+      return next;
+    });
+  };
+
+  const removeWorkplanStep = (stepId: string) => {
+    setWorkplanSteps((prev) => prev.filter((step) => step.id !== stepId));
+    if (workplanSteps.length <= 1) setWorkplanPreset("none");
+  };
+
   const addWorkplanStep = () => {
     setWorkplanSteps((prev) => [...prev, { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, title: "", assigneeUserId: "", dueDate: "", note: "" }]);
     setWorkplanPreset("custom");
@@ -360,12 +383,14 @@ export function CasesList() {
         description: payloadDescription,
         clientRole: effectiveClientRole,
       });
+      let workplanPartialFailure = false;
       for (const userId of selectedCollaboratorIds) {
         if (!selectableParticipantIds.has(userId)) continue;
         try {
           await addCaseCollaborator(result.id, userId, "COLLABORATOR");
         } catch (collabErr) {
           console.warn(`Failed to add collaborator ${userId}:`, collabErr);
+          workplanPartialFailure = true;
         }
       }
       const validWorkplanSteps = workplanSteps.filter((step) => step.title.trim());
@@ -383,6 +408,7 @@ export function CasesList() {
           });
         } catch (taskErr) {
           console.warn(`Failed to create workplan step ${index + 1}:`, taskErr);
+          workplanPartialFailure = true;
         }
       }
       setShowNewCaseModal(false);
@@ -394,10 +420,28 @@ export function CasesList() {
       setWorkplanSteps([]);
       setWorkplanPreset("none");
       setClientMode("existing");
-      router.push(`/cases/${result.id}/documents`);
+      if (workplanPartialFailure) {
+        setCreateError("Az ügy létrejött. Figyelmeztetés: a munkaterv vagy a résztvevők egy része nem mentődött le. Az ügyet a Dokumentumtárban éred el.");
+        setIsCreating(false);
+        setTimeout(() => {
+          setCreateError(null);
+          router.push(`/cases/${result.id}/documents`);
+        }, 4000);
+      } else {
+        router.push(`/cases/${result.id}/documents`);
+      }
     } catch (err) {
       console.error("Failed to create case:", err);
-      setCreateError(err instanceof Error ? err.message : "Az ügy létrehozása sikertelen.");
+      let displayMessage = "Az ügy létrehozása sikertelen.";
+      if (err instanceof Error && err.name === "ApiError") {
+        const apiErr = err as any;
+        displayMessage = (apiErr as any).status === 0
+          ? "A szerver nem érhető el. Kérjük, próbáld később."
+          : (apiErr as any).message || displayMessage;
+      } else if (err instanceof Error) {
+        displayMessage = err.message || displayMessage;
+      }
+      setCreateError(displayMessage);
     } finally {
       setIsCreating(false);
     }
@@ -711,8 +755,8 @@ export function CasesList() {
                 <div className="flex flex-wrap gap-2">
                   {[
                     ["none", "Nincs munkaterv"],
-                    ["simple", "Egyszerű előkészítés + ügyvédi review"],
-                    ["trainee-partner", "Jelölt előkészíti → partner review"],
+                    ["simple", "Egyszerű"],
+                    ["trainee-partner", "Jelölt → partner"],
                     ["three-step", "Jelölt → ügyvéd → partner"],
                     ["custom", "Saját útvonal"],
                   ].map(([value, label]) => (
@@ -720,23 +764,36 @@ export function CasesList() {
                   ))}
                 </div>
                 {workplanSteps.length > 0 ? (
-                  <div className="mt-4 space-y-3">
+                  <div className="mt-4 space-y-2">
                     {workplanSteps.map((step, index) => (
                       <div key={step.id} className="rounded-lg border border-[rgba(22,32,26,0.12)] bg-[#FBF6E7] p-3">
-                        <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">{index + 1}. lépés</div>
-                        <div className="grid gap-2 md:grid-cols-[1fr_220px_160px]">
-                          <input value={step.title} onChange={(e) => updateWorkplanStep(step.id, { title: e.target.value })} placeholder="Feladat" className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-3 py-2 text-xs text-[#16201A]" />
-                          <select value={step.assigneeUserId} onChange={(e) => updateWorkplanStep(step.id, { assigneeUserId: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-3 py-2 text-xs text-[#16201A]">
-                            <option value="">Nincs felelős</option>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1F4A33] text-[10px] font-bold text-[#F4EFDB]">{index + 1}</span>
+                          <input value={step.title} onChange={(e) => updateWorkplanStep(step.id, { title: e.target.value })} placeholder="Feladat megnevezése" className="flex-1 rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]" />
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-[1fr_180px_130px]">
+                          <select value={step.assigneeUserId} onChange={(e) => updateWorkplanStep(step.id, { assigneeUserId: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]">
+                            <option value="">Felelős</option>
                             {visibleParticipants.filter((user) => !String(user.id).startsWith("local-participant-")).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
                           </select>
-                          <input type="date" value={step.dueDate} onChange={(e) => updateWorkplanStep(step.id, { dueDate: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-3 py-2 text-xs text-[#16201A]" />
+                          <input type="date" value={step.dueDate} onChange={(e) => updateWorkplanStep(step.id, { dueDate: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]" />
+                          <div className="flex items-center gap-1">
+                            <button type="button" onClick={() => moveUpStep(index)} disabled={index === 0} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(22,32,26,0.20)] text-[10px] text-[#3D4842] disabled:opacity-30 hover:bg-[#ECE6DA]" title="Felvevés">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path d="M5 15l7-7 7 7"/></svg>
+                            </button>
+                            <button type="button" onClick={() => moveDownStep(index)} disabled={index === workplanSteps.length - 1} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(22,32,26,0.20)] text-[10px] text-[#3D4842] disabled:opacity-30 hover:bg-[#ECE6DA]" title="Leleplezés">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path d="M19 9l-7 7-7-7"/></svg>
+                            </button>
+                            <button type="button" onClick={() => removeWorkplanStep(step.id)} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(181,42,42,0.30)] text-[#8B2A2A] hover:bg-[#FFF0EE]" title="Törlés">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
+                          </div>
                         </div>
-                        <textarea value={step.note} onChange={(e) => updateWorkplanStep(step.id, { note: e.target.value })} rows={2} placeholder="Megjegyzés" className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] bg-white px-3 py-2 text-xs text-[#16201A]" />
+                        <textarea value={step.note} onChange={(e) => updateWorkplanStep(step.id, { note: e.target.value })} rows={1} placeholder="Leírás / megjegyzés" className="mt-2 w-full resize-none rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]" />
                       </div>
                     ))}
                     <AdminButton size="sm" variant="muted" onClick={addWorkplanStep}>+ Lépés hozzáadása</AdminButton>
-                    <p className="text-[11px] text-[#7A8479]">A munkaterv lépései valós ügyfeladatként jönnek létre. Felelős csak akkor kerül mentésre, ha létező backend felhasználót választasz.</p>
+                    <p className="text-[11px] text-[#7A8479]">A lépések valós ügyfeladatként jönnek létre. Felelős csak akkor kerül mentésre, ha létező felhasználót választasz.</p>
                   </div>
                 ) : <p className="mt-3 text-xs text-[#7A8479]">Munkaterv nélkül is létrehozható az ügy.</p>}
               </section>

@@ -18,7 +18,7 @@ const itemClass = (active: boolean) =>
   `w-full rounded px-3 py-2 text-left text-xs font-semibold transition-colors ${
     active
       ? "bg-[#C39A22] text-[#062416]"
-      : "text-[#F4EFDB]/85 hover:bg-[#0B301F] hover:text-[#F4EFDB]"
+      : "text-[#F4EFDB] hover:bg-[#0B301F] hover:text-[#F4EFDB]"
   }`;
 
 export function CaseWorkspaceNav({ caseId, caseNumber, title, clientName, activeTab, activeDocumentId, helperText }: CaseWorkspaceNavProps) {
@@ -28,7 +28,7 @@ export function CaseWorkspaceNav({ caseId, caseNumber, title, clientName, active
     : `/documents/compare?caseId=${encodeURIComponent(caseId)}`;
 
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-[rgba(22,32,26,0.20)] bg-[#082817] text-[#F4EFDB]">
+    <aside className="flex w-56 shrink-0 flex-col border-r border-[rgba(22,32,26,0.20)] bg-[#061f14] text-[#F4EFDB]">
       <div className="border-b border-[#0E3A26] p-4">
         <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-[#C39A22]">Ügy</p>
         <p className="text-[12px] font-semibold leading-tight text-[#F4EFDB]">{title || "Ügy megnevezése nem elérhető"}</p>
@@ -46,7 +46,7 @@ export function CaseWorkspaceNav({ caseId, caseNumber, title, clientName, active
       </nav>
 
       <div className="border-t border-[#0E3A26] p-3">
-        <p className="text-[9px] leading-4 text-[#F4EFDB]/65">{helperText || "Ügyközpontú munkafelület, egységes navigációval."}</p>
+        <p className="text-[9px] leading-4 text-[#F4EFDB]/80">{helperText || "Ügyközpontú munkafelület, egységes navigációval."}</p>
       </div>
     </aside>
   );
