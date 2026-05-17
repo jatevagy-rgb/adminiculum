@@ -794,19 +794,24 @@ const [toolMode, setToolMode] = useState<WorkspaceToolMode>("klauzulak");
   const hasWorkspaceText = Boolean(effectiveWorkspaceText.trim());
   const hasLocalDraftText = Boolean(editorDraft.trim());
   const isDraftDirty = editorTouched && editorDraft !== effectiveWorkspaceText;
-  const editorStatusLabel =
+const editorStatusLabel =
     !hasWorkspaceText && !hasLocalDraftText
       ? "Előkészítő munkanézet"
         : isDraftDirty
         ? "Nem mentett helyi módosítások"
         : "Munkapéldány előkészítve";
+  const isDocumentTextLoading = isLoadingDocumentText || isLoadingAnonymousText;
   const workspaceTextSourceLabel = comparisonData?.blocks?.length
     ? "Generált dokumentum blokk-szövege"
-    : documentText
-      ? "Valós kinyert dokumentumszöveg"
-      : latestAnonymousText
-        ? "Anonimizált szöveg"
-        : "Nincs betöltött dokumentumszöveg";
+    : isDocumentTextLoading
+      ? "Szöveg betöltése…"
+      : documentText
+        ? "Valós kinyert dokumentumszöveg"
+        : latestAnonymousText
+          ? "Anonimizált szöveg"
+          : documentTextReason
+            ? `Nincs kinyert dokumentumszöveg — ${documentTextReason}`
+            : "Nincs betöltött dokumentumszöveg";
 
   const formatDraftForPreview = (value: string) =>
     value
@@ -1115,8 +1120,14 @@ const filteredClauseTools = useMemo(() => {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="max-w-full truncate text-sm font-semibold text-[#1F2821]">{getWorkspaceDocumentTitle()}</span>
                   <AdminBadge tone={selectedDocument?.kind === "contract" ? "green" : "gold"}>{getWorkspaceDocumentKindLabel()}</AdminBadge>
-                  <AdminStatusPill tone={effectiveWorkspaceText ? "green" : isLoadingDocumentText || isLoadingAnonymousText ? "blue" : "amber"}>
-                    {effectiveWorkspaceText ? workspaceTextSourceLabel : isLoadingDocumentText || isLoadingAnonymousText ? "Szöveg betöltése..." : "Előkészítő nézet"}
+<AdminStatusPill tone={isDocumentTextLoading ? "blue" : hasWorkspaceText ? "green" : "amber"}>
+                    {isDocumentTextLoading
+                      ? "Szöveg betöltése…"
+                      : hasWorkspaceText
+                        ? workspaceTextSourceLabel
+                        : documentTextReason
+                          ? `Nincs kinyert szöveg — ${documentTextReason}`
+                          : "Előkészítő nézet"}
                   </AdminStatusPill>
                 </div>
                 <div className="grid gap-2 rounded-[6px] border border-[#DDD7CA] bg-[#FBF6E7] p-3 md:grid-cols-[1fr_180px_180px]">
@@ -1479,12 +1490,12 @@ const filteredClauseTools = useMemo(() => {
               <div className="min-w-0 space-y-4">
                 <section className="overflow-hidden rounded-[8px] border border-[#DDD7CA] bg-white">
                   <div className="flex flex-col gap-3 border-b border-[#EEE7D9] p-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-1">
+<div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="font-serif text-2xl font-medium text-[#1F2821]">Munkapéldány</h2>
+                        <h2 className="font-serif text-2xl font-medium text-[#1F2821]">Szerkeszthető munkapéldány</h2>
                         <AdminStatusPill tone={isDraftDirty ? "amber" : activeDraftText ? "green" : "neutral"}>{editorStatusLabel}</AdminStatusPill>
                       </div>
-                      <p className="text-[11px] text-[#7B776D]">Helyi szerkesztési nézet · forrás: {workspaceTextSourceLabel} · a szerveroldali mentés külön patchben lesz bekötve</p>
+                      <p className="text-[11px] text-[#7B776D]">Helyi szerkesztési nézet · forrás: {workspaceTextSourceLabel} · szerveroldali mentés külön patchben</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <AdminButton size="sm" variant="neutral" onClick={focusToolSearch} title="Bal oldali eszköztárban kereshetsz klauzulát.">
@@ -1519,9 +1530,9 @@ const filteredClauseTools = useMemo(() => {
                     </div>
                   ) : null}
 
-<div className="bg-[#EFE7CF] px-3 py-5 sm:px-6 lg:px-8">
-                    <div className="mx-auto flex w-full max-w-[1120px] items-start gap-4">
-                    <div className="min-h-[760px] flex-1 border border-[rgba(22,32,26,0.14)] bg-white px-6 py-8 shadow-[0_18px_50px_rgba(22,32,26,0.14)] sm:px-10 lg:px-16">
+<div className="bg-[#EFE7CF] px-3 py-5 sm:px-6 lg:px-8 xl:px-12">
+                    <div className="mx-auto flex w-full max-w-[1400px] items-start gap-4">
+                    <div className="min-h-[760px] flex-1 border border-[rgba(22,32,26,0.14)] bg-white px-6 py-8 shadow-[0_18px_50px_rgba(22,32,26,0.14)] sm:px-12 lg:px-20 xl:px-28">
                       <div className="border-b border-[#EEE7D9] pb-4">
                         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Helyi munkapéldány</p>
                         <h3 className="mt-2 break-words font-serif text-2xl font-medium leading-tight text-[#1F2821]">{getWorkspaceDocumentTitle()}</h3>
@@ -1549,23 +1560,27 @@ const filteredClauseTools = useMemo(() => {
                           <p className="mt-3 text-[10px] text-[#9C9890]">Bekezdések: {draftPreviewParagraphs.length}</p>
                         </div>
                       ) : (
-                        <div className="flex min-h-[520px] flex-col items-center justify-center text-center">
-                          <h3 className="font-serif text-2xl font-medium text-[#1F2821]">Szerződésszerkesztő / Munkapéldány</h3>
+<div className="flex min-h-[520px] flex-col items-center justify-center text-center">
+                          <h3 className="font-serif text-2xl font-medium text-[#1F2821]">Szerkeszthető munkapéldány</h3>
                           <p className="mt-3 max-w-xl text-sm leading-6 text-[#7B776D]">
-                            {isLoadingDocumentText || isLoadingAnonymousText
-                              ? "A dokumentumszöveg betöltése folyamatban van."
-                              : documentTextReason || anonymousTextError || "A dokumentum szövege még nincs kinyerve. A teljes szöveges munkapéldány későbbi dokumentumszöveg-betöltés után jelenik meg."}
+                            {isLoadingDocumentText
+                              ? "A dokumentumszöveg betöltése folyamatban."
+                              : documentTextReason
+                              ? `Nincs kinyert dokumentumszöveg — ${documentTextReason}`
+                              : anonymousTextError
+                              ? `Az anonimizált szöveg betöltése nem sikerült. ${anonymousTextError}`
+                              : "A dokumentum szövege még nincs kinyerve. Tölts fel dokumentumot a Dokumentumtárban, hogy a teljes szöveg megjelenjen."}
                           </p>
-                          <div className="mt-6 w-full max-w-lg rounded-[6px] border border-[#EEE7D9] bg-[#FBF6E7] p-4 text-left text-sm leading-7 text-[#3D4842]">
-                            <p className="text-center font-serif text-lg font-semibold uppercase tracking-[0.12em] text-[#16201A]">{getWorkspaceDocumentTitle()}</p>
-                            <p className="mt-4"><span className="rounded bg-[#E2E8DA] px-1 text-[#1F4A33]">[helyi klauzula]</span> Klauzulák a bal oldali eszköztárból helyi munkapéldányként hozzáadhatók; ezek nem helyettesítik a dokumentum valós szövegét.</p>
-                            <p><span className="text-[#8B2A2A] line-through">[törölt szöveg]</span> A piros áthúzás csak vizuális review-jelölés, nem valódi Word változáskövetés.</p>
-                          </div>
-                          <div className="mt-5 flex flex-wrap justify-center gap-2">
-                            <AdminButton variant="neutral" onClick={focusToolSearch}>
-                              Klauzula keresése
-                            </AdminButton>
-                          </div>
+                          {!isLoadingDocumentText && !documentTextReason && !anonymousTextError ? (
+                            <div className="mt-6 flex flex-wrap justify-center gap-2">
+                              <AdminButton variant="neutral" onClick={focusToolSearch}>
+                                Klauzula keresése
+                              </AdminButton>
+                              <Link href={getDocumentLedgerHref()} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-4 py-2 text-[13px] font-semibold leading-none text-[#16201A] transition-colors hover:border-[#16201A] hover:bg-[#FBF6E7]">
+                                Dokumentumtár
+                              </Link>
+                            </div>
+                          ) : null}
                         </div>
                       )}
                     </div>
@@ -1955,10 +1970,23 @@ const filteredClauseTools = useMemo(() => {
             <AdminBadge tone={selectedDocument?.kind === "contract" ? "green" : "gold"}>{getWorkspaceDocumentKindLabel()}</AdminBadge>
           </div>
           <div className="space-y-1">
-            <p className="text-[10px] text-[#7B776D]">Anonimizált szöveg</p>
-            <AdminStatusPill tone={effectiveWorkspaceText ? "green" : isLoadingAnonymousText ? "blue" : "amber"}>
-              {effectiveWorkspaceText ? "Elérhető" : isLoadingAnonymousText ? "Betöltés..." : "Anonimizálás szükséges"}
+            <p className="text-[10px] text-[#7B776D]">Szöveg státusz</p>
+            <AdminStatusPill tone={isDocumentTextLoading ? "blue" : hasWorkspaceText ? "green" : "amber"}>
+              {isDocumentTextLoading
+                ? "Betöltés…"
+                : hasWorkspaceText
+                  ? "Elérhető"
+                  : documentTextReason
+                    ? "Nincs szöveg"
+                    : "Nincs kinyerve"}
             </AdminStatusPill>
+            {!isDocumentTextLoading && !hasWorkspaceText && documentTextReason ? (
+              <p className="text-[10px] text-[#9C9890] mt-0.5">{documentTextReason}</p>
+            ) : null}
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] text-[#7B776D]">Verzió</p>
+            <p className="text-[11px] text-[#1F2821]">v{selectedDocument?.revisionNumber || 1}</p>
           </div>
           <div className="space-y-1">
             <p className="text-[10px] text-[#7B776D]">Ügy</p>
