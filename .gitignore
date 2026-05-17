@@ -135,3 +135,13 @@ $null
 {console.error(e)
 Frontend/String\(t\).trim*
 Frontend/{
+
+# Additional local debug / patch artifacts
+remote_services_patched.js
+repair-report.json
+write-phase3f.ps1
+Adminiculum_LIVE_Structure*.txt
+frontend-patch/
+Backend/check-table.mjs
+Backend/templates/document.xml.extracted
+Backend/templates/isolation-tests/
