@@ -1,0 +1,133 @@
+# ============================================================================
+# DEPENDABOT — Automated Dependency Update Configuration
+# Adminiculum Boxed Product
+#
+# Strategy:
+# - Small, scheduled PRs (weekly) to avoid giant jumping updates
+# - Separate security-critical from routine updates
+# - Groups: production deps, dev deps, optional (contracts, AI)
+# ============================================================================
+version: 2
+updates:
+  # =====================================================================
+  # BACKEND — Production dependencies
+  # Weekly, small PRs, separated from dev deps
+  # =====================================================================
+  - package-ecosystem: "npm"
+    directory: "/Backend"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Budapest"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps(backend)"
+      include: "scope"
+    groups:
+      production-dependencies:
+        dependency-type: "production"
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+    labels:
+      - "dependencies"
+      - "backend"
+
+  # =====================================================================
+  # BACKEND — Development dependencies
+  # Weekly, separate from production to keep PRs focused
+  # =====================================================================
+  - package-ecosystem: "npm"
+    directory: "/Backend"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Budapest"
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "deps(backend-dev)"
+      include: "scope"
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+    labels:
+      - "dependencies"
+      - "backend"
+      - "dev-dependencies"
+
+  # =====================================================================
+  # FRONTEND — Production dependencies (Next.js, React, MSAL)
+  # =====================================================================
+  - package-ecosystem: "npm"
+    directory: "/Frontend"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Budapest"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps(frontend)"
+      include: "scope"
+    groups:
+      production-dependencies:
+        dependency-type: "production"
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+    labels:
+      - "dependencies"
+      - "frontend"
+
+  # =====================================================================
+  # FRONTEND — Development dependencies
+  # =====================================================================
+  - package-ecosystem: "npm"
+    directory: "/Frontend"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Budapest"
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "deps(frontend-dev)"
+      include: "scope"
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+    labels:
+      - "dependencies"
+      - "frontend"
+      - "dev-dependencies"
+
+# ============================================================================
+# OPTIONAL — Feature pack update tracking (manual review recommended)
+# Uncomment when AI/anonymization features are production-ready
+# ============================================================================
+#  - package-ecosystem: "npm"
+#    directory: "/Backend"
+#    target-branch: "main"
+#    schedule:
+#      interval: "monthly"
+#    open-pull-requests-limit: 1
+#    commit-message:
+#      prefix: "deps(ai)"
+#    labels:
+#      - "dependencies"
+#      - "ai-feature-pack"
+#    ignore:
+#      - dependency-name: "openai"
+#      - dependency-name: "@anthropic-ai/sdk"
