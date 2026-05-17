@@ -80,6 +80,9 @@ scripts/create-legalcases-site.js
 scripts/get-sharepoint-ids.js
 scripts/list-all-sites.js
 
+# Secret documentation
+Backend/SECRETS.md
+
 # Large deployment files
 deploy*.zip
 deploy*.tar*
@@ -97,3 +100,38 @@ build-output.txt
 
 # Dev server PIDs
 .dev-pids.json
+
+# Local archive / backup files
+*.zip
+*.7z
+*.tar
+*.tar.gz
+
+# Local logs and exported webapp logs
+webapp-logs*.zip
+webapp_logs*.zip
+
+# Test/build artifacts
+test-results/
+Frontend/test-results/
+Frontend/tmp-*.cjs
+Frontend/docs/
+backend_deploy_staging/
+
+# Temp working directories
+tmp_zip_new/
+tmp_zip_new_check/
+tmp_zip_old/
+zip_temp/
+patch-temp/
+generation-draft-patch/
+gpt-csomag-vs-workstations-audit/
+Frontend_UI_Extraction_Pack_20260423/
+screenshots/
+
+# Malformed accidental shell files
+$null
+{
+{console.error(e)
+Frontend/String\(t\).trim*
+Frontend/{
