@@ -41,6 +41,24 @@ const communicationTypeColors: Record<string, string> = {
   'NOTE': 'bg-[#6B7280] text-white',
 };
 
+const taskStatusLabels: Record<string, string> = {
+  'TODO': 'Teendő',
+  'IN_PROGRESS': 'Folyamatban',
+  'DONE': 'Kész',
+  'COMPLETED': 'Kész',
+  'BLOCKED': 'Blokkolva',
+  'CANCELLED': 'Törölve',
+};
+
+const taskStatusColors: Record<string, string> = {
+  'TODO': 'bg-[#6B7280] text-white',
+  'IN_PROGRESS': 'bg-[#F59E0B] text-white',
+  'DONE': 'bg-[#10B981] text-white',
+  'COMPLETED': 'bg-[#10B981] text-white',
+  'BLOCKED': 'bg-[#DC2626] text-white',
+  'CANCELLED': 'bg-[#9CA3AF] text-white',
+};
+
 export default function CommunicationsPageContent({ params }: CommunicationsPageProps) {
   const resolvedParams = use(params);
   const router = useRouter();
@@ -237,7 +255,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
       });
       
       if (result.success) {
-        setActionResult({ type: 'success', message: `Deadline set: ${new Date(deadlineDate).toLocaleDateString('hu-HU')}` });
+        setActionResult({ type: 'success', message: `Határidő beállítva: ${new Date(deadlineDate).toLocaleDateString('hu-HU')}` });
         setDeadlineDate('');
         setDeadlineDescription('');
         loadCommunicationDetail(selectedComm.id);
@@ -279,16 +297,16 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
       });
       
       if (result.success) {
-        setActionResult({ type: 'success', message: `Attachment linked: ${selectedDoc.fileName}` });
+        setActionResult({ type: 'success', message: `Melléklet hozzáadva: ${selectedDoc.fileName}` });
         setSelectedDocId('');
         setShowAddAttachmentForm(false);
         loadCommunicationDetail(selectedComm.id);
         loadCaseDocuments();
       } else {
-        setActionResult({ type: 'error', message: 'Failed to link attachment' });
+        setActionResult({ type: 'error', message: 'Melléklet csatolása sikertelen.' });
       }
     } catch (err) {
-      setActionResult({ type: 'error', message: 'Failed to link attachment' });
+      setActionResult({ type: 'error', message: 'Melléklet csatolása sikertelen.' });
     } finally {
       setIsLinkingAttachment(false);
     }
@@ -551,6 +569,10 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
           <>
             {/* Message Header */}
             <div className="p-6 border-b border-[#DDD7CA]">
+              <div className="mb-4 pb-4 border-b border-[#DDD7CA]">
+                <h2 className="text-lg font-serif text-[#1F2821]">Ügykommunikáció</h2>
+                <p className="text-[11px] text-[#7B776D] mt-0.5">Belső jegyzetek, résztvevői egyeztetések és utánkövetési pontok.</p>
+              </div>
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
@@ -581,7 +603,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                     {getInitials(selectedComm.senderName)}
                   </div>
                   <div>
-                    <p className="font-medium text-[#1F2821]">{selectedComm.senderName || 'Unknown'}</p>
+                    <p className="font-medium text-[#1F2821]">{selectedComm.senderName || 'Ismeretlen'}</p>
                     {selectedComm.senderEmail && (
                       <p className="text-[10px] text-[#9C9890]">{selectedComm.senderEmail}</p>
                     )}
@@ -756,13 +778,9 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                             <div className="flex items-center justify-between">
                               <p className="text-sm text-[#1F2821] font-medium">{task.title}</p>
                               <span className={`text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded ${
-                                task.status === 'DONE' || task.status === 'COMPLETED' 
-                                  ? 'bg-[#10B981] text-white' 
-                                  : task.status === 'IN_PROGRESS'
-                                  ? 'bg-[#F59E0B] text-white'
-                                  : 'bg-[#6B7280] text-white'
+                                taskStatusColors[task.status] || 'bg-[#6B7280] text-white'
                               }`}>
-                                {task.status}
+                                {taskStatusLabels[task.status] || task.status}
                               </span>
                             </div>
                             {task.description && (
