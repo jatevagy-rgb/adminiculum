@@ -36,6 +36,9 @@ const EMPTY_FORM: UpsertClientHouseStyleProfilePayload = {
   headerRequirements: "",
   footerRequirements: "",
   signatureBlock: "",
+  headerAssetPath: "",
+  headerDescription: "",
+  brandingNotes: "",
   bilingualNotes: "",
   translationNotes: "",
   preferredTone: "",
@@ -79,6 +82,14 @@ const GROUPS: Array<{ title: string; fields: Array<{ key: FieldKey; label: strin
       { key: "headerRequirements", label: "Fejléc követelmények", type: "textarea" },
       { key: "footerRequirements", label: "Lábléc követelmények", type: "textarea" },
       { key: "signatureBlock", label: "Aláírási blokk", type: "textarea" },
+    ],
+  },
+  {
+    title: "Fejléc / arculati minta",
+    fields: [
+      { key: "headerAssetPath", label: "Fejlécminta útvonala" },
+      { key: "headerDescription", label: "Fejlécminta leírása", type: "textarea" },
+      { key: "brandingNotes", label: "Arculati megjegyzések", type: "textarea" },
     ],
   },
   {
@@ -176,6 +187,7 @@ export function ClientHouseStylePanel({ clientId, clientName, compact = false, o
     profile?.documentLanguageMode || null,
     profile?.fontFamily || null,
     profile?.headingStyle || null,
+    profile?.headerAssetPath ? "fejlécminta" : null,
   ].filter(Boolean).join(" · ");
 
   return (
@@ -202,6 +214,21 @@ export function ClientHouseStylePanel({ clientId, clientName, compact = false, o
           <p className="rounded border border-[#EEE7D9] bg-white p-3 text-xs text-[#3D4842]">
             {summary || "Ehhez az ügyfélhez még nincs részletes house style profil."}
           </p>
+          <div className="rounded border border-[#EEE7D9] bg-white p-3">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7B776D]">Fejléc / arculati minta</p>
+            {profile?.headerAssetPath ? (
+              <div className="mt-2 space-y-2">
+                <img src={profile.headerAssetPath} alt={profile.headerDescription || "Ügyfél fejlécminta"} className="max-h-16 max-w-full rounded border border-[#EEE7D9] bg-white object-contain" />
+                <p className="text-[11px] text-[#3D4842]">{profile.headerDescription || profile.headerAssetPath}</p>
+              </div>
+            ) : (
+              <p className="mt-2 text-[11px] text-[#7B776D]">Nincs fejlécminta.</p>
+            )}
+            {profile?.brandingNotes ? <p className="mt-2 whitespace-pre-wrap text-[11px] text-[#3D4842]">{profile.brandingNotes}</p> : null}
+            <p className="mt-2 text-[10px] leading-4 text-[#7B776D]">
+              Ez a fejlécminta jelenleg prompt- és dokumentum-előkészítési referencia. A Word-dokumentumba történő automatikus beillesztés külön export patchben készül el.
+            </p>
+          </div>
           <AdminButton size="sm" variant="neutral" onClick={() => setIsEditing(true)}>Szerkesztés</AdminButton>
         </div>
       ) : null}

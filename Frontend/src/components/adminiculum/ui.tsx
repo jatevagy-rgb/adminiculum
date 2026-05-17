@@ -12,8 +12,8 @@ export const adminUi = {
   ink2: "#3D4842",
   ink3: "#7A8479",
   ink4: "#A6AEA3",
-  green: "#1F4A33",
-  greenHover: "#173824",
+  green: "#082817",
+  greenHover: "#062416",
   greenFg: "#F4EFDB",
   greenSoft: "#E2E8DA",
   gold: "#B58A2A",
@@ -31,7 +31,7 @@ export const adminUi = {
 };
 
 const buttonClasses = {
-  primary: "border-[#173824] bg-[#1F4A33] text-[#F4EFDB] hover:bg-[#173824]",
+  primary: "border-[#062416] bg-[#082817] text-[#F4EFDB] hover:bg-[#062416]",
   gold: "border-[#8E6A1B] bg-[#B58A2A] text-white hover:bg-[#8E6A1B]",
   ai: "border-[#D6DEEC] bg-white text-[#2D4A7C] hover:bg-[#EAEFF6]",
   neutral: "border-[rgba(22,32,26,0.20)] bg-white text-[#16201A] hover:border-[#16201A] hover:bg-[#FBF6E7]",
@@ -64,7 +64,7 @@ export function AdminButton({ variant = "neutral", size = "md", className = "", 
 }
 
 const badgeClasses = {
-  green: "border-[rgba(31,74,51,0.22)] bg-[#E2E8DA] text-[#1F4A33]",
+  green: "border-[rgba(8,40,23,0.22)] bg-[#E2E8DA] text-[#123B27]",
   gold: "border-[rgba(181,138,42,0.25)] bg-[rgba(181,138,42,0.10)] text-[#8E6A1B]",
   amber: "border-[rgba(185,122,15,0.25)] bg-[#FAEFCF] text-[#B97A0F]",
   blue: "border-[rgba(45,74,124,0.18)] bg-[#EAEFF6] text-[#2D4A7C]",
@@ -130,14 +130,14 @@ type AdminDocumentRowProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 export function AdminDocumentRow({ title, meta, fileType = "DOC", active = false, variant = "upload", status, className = "", ...props }: AdminDocumentRowProps) {
-  const iconTone = variant === "handoff" ? "border-[#5D479F] text-[#5D479F]" : variant === "generated" ? "border-[#1F4A33] text-[#1F4A33]" : "border-[#8E6A1B] text-[#8E6A1B]";
+  const iconTone = variant === "handoff" ? "border-[#5D479F] text-[#5D479F]" : variant === "generated" ? "border-[#123B27] text-[#123B27]" : "border-[#8E6A1B] text-[#8E6A1B]";
   return (
     <button
       type="button"
-      className={`relative w-full rounded-[5px] border bg-white p-3 text-left transition-colors hover:border-[rgba(22,32,26,0.20)] ${active ? "border-[#1F4A33] border-l-4 bg-[#FFFCEB]" : "border-[rgba(22,32,26,0.10)]"} ${className}`}
+      className={`relative w-full rounded-[5px] border bg-white p-3 text-left transition-colors hover:border-[rgba(22,32,26,0.20)] ${active ? "border-[#123B27] border-l-4 bg-[#FFFCEB]" : "border-[rgba(22,32,26,0.10)]"} ${className}`}
       {...props}
     >
-      {active ? <span className="absolute right-2 top-2 rounded-[3px] bg-[#1F4A33] px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#F4EFDB]"><span className="text-[#B58A2A]">●</span> Aktív</span> : null}
+      {active ? <span className="absolute right-2 top-2 rounded-[3px] bg-[#082817] px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#F4EFDB]"><span className="text-[#B58A2A]">●</span> Aktív</span> : null}
       <div className="flex items-center gap-2 pr-14">
         <span className={`flex h-[30px] w-6 shrink-0 items-end justify-center rounded-sm border bg-[#FBF6E7] pb-0.5 text-[7.5px] font-bold ${iconTone}`}>{fileType}</span>
         <span className="truncate text-[13px] font-semibold text-[#16201A]">{title}</span>

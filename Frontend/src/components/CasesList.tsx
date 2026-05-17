@@ -86,6 +86,13 @@ const participantAllowlist = [
   { name: "Dr. Hubay Gyula Máté", role: "ügyvédjelölt" },
 ];
 
+const CORE_CLIENTS = [
+  "saubermacher-magyarorszag kft",
+  "saubermacher",
+  "blackbelt technology kft",
+  "blackbelt",
+];
+
 const normalizePersonName = (value?: string | null) =>
   String(value || "")
     .toLocaleLowerCase("hu-HU")
@@ -165,6 +172,19 @@ export function CasesList() {
     () => availableClients.find((client) => client.id === newCaseData.clientId) || null,
     [availableClients, newCaseData.clientId],
   );
+
+  const orderedClients = useMemo(() => {
+    const score = (client: Client) => {
+      const normalized = normalizePersonName(client.name);
+      const index = CORE_CLIENTS.findIndex((name) => normalized.includes(name));
+      return index === -1 ? 100 : index;
+    };
+    return [...availableClients].sort((a, b) => {
+      const scoreDiff = score(a) - score(b);
+      if (scoreDiff !== 0) return scoreDiff;
+      return a.name.localeCompare(b.name, "hu-HU");
+    });
+  }, [availableClients]);
 
   const visibleParticipants = useMemo(() => {
     const allowedNames = new Set(participantAllowlist.map((person) => normalizePersonName(person.name)));
@@ -455,7 +475,10 @@ export function CasesList() {
                       className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] bg-white px-3 py-3 text-sm text-[#16201A] outline-none focus:border-[#1F4A33]"
                     >
                       <option value="">Válassz meglévő ügyfelet</option>
-                      {availableClients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
+                      {orderedClients.map((client) => {
+                        const isCore = CORE_CLIENTS.some((name) => normalizePersonName(client.name).includes(name));
+                        return <option key={client.id} value={client.id}>{client.name}{isCore ? " · kiemelt ügyfél" : ""}</option>;
+                      })}
                     </select>
                     {selectedClient ? (
                       <article className="mt-4 grid grid-cols-[48px_1fr] gap-4 rounded-lg border border-[rgba(22,32,26,0.10)] border-l-4 border-l-[#1F4A33] bg-[#FBF6E7] p-4">
@@ -474,7 +497,8 @@ export function CasesList() {
                   </>
                 ) : (
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <label className="md:col-span-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Név<input value={newClientData.name} onChange={(e) => { setNewClientData({ ...newClientData, name: e.target.value }); setNewCaseData((prev) => ({ ...prev, clientName: e.target.value, clientId: undefined })); }} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
+                    <label className="md:col-span-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Hivatalos név<input value={newClientData.name} onChange={(e) => { setNewClientData({ ...newClientData, name: e.target.value }); setNewCaseData((prev) => ({ ...prev, clientName: e.target.value, clientId: undefined })); }} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
+                    <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Rövid név<input value={newCaseData.clientName} onChange={(e) => setNewCaseData((prev) => ({ ...prev, clientName: e.target.value, clientId: undefined }))} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
                     <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Típus<select value={clientType} onChange={(e) => setClientType(e.target.value as "Magánszemély" | "Cég")} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal"><option>Magánszemély</option><option>Cég</option></select></label>
                     <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Kapcsolattartó<input value={newClientData.contactPerson || ""} onChange={(e) => setNewClientData({ ...newClientData, contactPerson: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
                     <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Email<input value={newClientData.email || ""} onChange={(e) => setNewClientData({ ...newClientData, email: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>

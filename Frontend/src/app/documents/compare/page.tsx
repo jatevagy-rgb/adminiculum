@@ -863,7 +863,7 @@ const filteredClauseTools = useMemo(() => {
     anchor.click();
     globalThis.document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
-    setEditorNotice("Word-kompatibilis export elkészült.");
+    setEditorNotice("Word-előkészítő export elkészült. Ez nem szerveroldali Word-mentés és nem illeszt be automatikus fejlécet.");
   };
 
   const handleAddLocalComment = () => {
@@ -905,7 +905,13 @@ const filteredClauseTools = useMemo(() => {
       return;
     }
     try {
-      await navigator.clipboard.writeText(block);
+      const selectedClientName = selectedDocument?.caseClientName || clientHouseStyle?.officialName || clientHouseStyle?.shortName || "nem ismert ügyfél";
+      await navigator.clipboard.writeText([
+        block,
+        "",
+        `Aktív ügyfél: ${selectedClientName}`,
+        "Figyelmeztetés: a fejléc referencia; automatikus Word-beillesztés csak külön export modul támogatása esetén történhet.",
+      ].join("\n"));
       setHouseStyleNotice("House style instrukciók vágólapra másolva.");
     } catch {
       setHouseStyleNotice("Nem sikerült a house style instrukciók másolása.");
@@ -1087,7 +1093,10 @@ const filteredClauseTools = useMemo(() => {
                   Vissza a Dokumentumtárba
                 </Link>
                 <AdminButton onClick={handleLocalWordCompatibleExport} variant="gold">
-                  Word-kompatibilis export
+                  Word-előkészítő export
+                </AdminButton>
+                <AdminButton disabled variant="muted" title="Nincs külön módosított-verzió mentési API bekötve ebben a patchben.">
+                  Módosított verzió mentése későbbi patchben
                 </AdminButton>
                 <AdminButton
                   onClick={() => globalThis.document.getElementById("version-compare-panel")?.scrollIntoView({ behavior: "smooth", block: "start" })}
@@ -1276,12 +1285,16 @@ const filteredClauseTools = useMemo(() => {
                         <AdminStatusPill tone={clientHouseStyle ? "green" : "neutral"}>{clientHouseStyle ? "Profil van" : "Nincs profil"}</AdminStatusPill>
                       </div>
                       {clientHouseStyle ? (
-                        <div className="mt-3 rounded border border-[#EEE7D9] bg-white p-2 text-[11px] text-[#3D4842]">
-                          {[clientHouseStyle.preferredLanguage, clientHouseStyle.documentLanguageMode, clientHouseStyle.fontFamily, clientHouseStyle.headingStyle].filter(Boolean).join(" · ") || "A profil elérhető, de még kevés formázási adatot tartalmaz."}
+                        <div className="mt-3 space-y-2 rounded border border-[#EEE7D9] bg-white p-2 text-[11px] text-[#3D4842]">
+                          <p>{[clientHouseStyle.preferredLanguage, clientHouseStyle.documentLanguageMode, clientHouseStyle.fontFamily, clientHouseStyle.headingStyle].filter(Boolean).join(" · ") || "A profil elérhető, de még kevés formázási adatot tartalmaz."}</p>
+                          {clientHouseStyle.headerAssetPath ? <img src={clientHouseStyle.headerAssetPath} alt={clientHouseStyle.headerDescription || "Ügyfél fejlécminta"} className="max-h-14 max-w-full rounded border border-[#EEE7D9] bg-white object-contain" /> : <p className="text-[#7B776D]">Nincs fejlécminta.</p>}
+                          {clientHouseStyle.headerDescription ? <p>{clientHouseStyle.headerDescription}</p> : null}
+                          {clientHouseStyle.brandingNotes ? <p className="whitespace-pre-wrap">{clientHouseStyle.brandingNotes}</p> : null}
+                          <p className="text-[10px] text-[#7B776D]">A fejlécminta referencia; automatikus Word-beillesztés külön export patchben készül el.</p>
                         </div>
                       ) : null}
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <AdminButton size="xs" variant="gold" onClick={handleCopyHouseStyleInstructions} disabled={!clientHouseStyle}>House style instrukció másolása</AdminButton>
+                        <AdminButton size="xs" variant="gold" onClick={handleCopyHouseStyleInstructions} disabled={!clientHouseStyle}>House style + fejléc instrukció másolása</AdminButton>
                       </div>
                       {houseStyleNotice ? <p className="mt-2 text-[10px] font-semibold text-[#23472F]">{houseStyleNotice}</p> : null}
                     </div>
@@ -1432,10 +1445,10 @@ const filteredClauseTools = useMemo(() => {
                         Megjegyzés hozzáadása
                       </AdminButton>
                       <AdminButton size="sm" variant="gold" onClick={handleLocalWordCompatibleExport}>
-                        Word-kompatibilis export
+                        Word-előkészítő export
                       </AdminButton>
                       <AdminButton size="sm" variant="muted" disabled title="A szerveroldali szerkesztés mentése külön patchben lesz bekötve.">
-                        Piszkozat mentése
+                        Módosított verzió mentése későbbi patchben
                       </AdminButton>
                     </div>
                   </div>

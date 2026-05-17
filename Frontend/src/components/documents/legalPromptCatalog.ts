@@ -44,6 +44,9 @@ export function buildHouseStyleInstructionBlock(profile?: ClientHouseStyleProfil
     ["Címsorok", profile.headingStyle],
     ["Számozás", profile.numberingStyle],
     ["Fejléc", profile.headerRequirements],
+    ["Fejlécminta útvonala", profile.headerAssetPath],
+    ["Fejlécminta leírása", profile.headerDescription],
+    ["Arculati megjegyzések", profile.brandingNotes],
     ["Lábléc", profile.footerRequirements],
     ["Aláírási blokk", profile.signatureBlock],
     ["Kétnyelvűségi megjegyzések", profile.bilingualNotes],
@@ -59,7 +62,13 @@ export function buildHouseStyleInstructionBlock(profile?: ClientHouseStyleProfil
     .map(([label, value]) => `- ${label}: ${String(value).trim()}`);
 
   if (lines.length === 0) return "";
-  return ["ÜGYFÉL HOUSE STYLE / FORMÁZÁSI PROFIL:", ...lines].join("\n");
+  return [
+    "ÜGYFÉL HOUSE STYLE / FORMÁZÁSI PROFIL:",
+    ...lines,
+    profile.headerAssetPath || profile.headerDescription || profile.brandingNotes
+      ? "- Figyelmeztetés: a fejlécminta jelenleg referencia; automatikus Word-beillesztés csak akkor használható, ha az export modul ezt külön támogatja."
+      : null,
+  ].filter(Boolean).join("\n");
 }
 
 const GLOBAL_RULES = `Feladatod: ügyvédi munkairat előkészítése egy bemásolt vagy feltöltött szerződés alapján.

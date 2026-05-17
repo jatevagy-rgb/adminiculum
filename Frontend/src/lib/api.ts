@@ -1076,6 +1076,9 @@ export interface ClientHouseStyleProfile {
   headerRequirements?: string | null;
   footerRequirements?: string | null;
   signatureBlock?: string | null;
+  headerAssetPath?: string | null;
+  headerDescription?: string | null;
+  brandingNotes?: string | null;
   bilingualNotes?: string | null;
   translationNotes?: string | null;
   preferredTone?: string | null;

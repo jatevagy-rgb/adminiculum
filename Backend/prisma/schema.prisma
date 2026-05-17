@@ -130,6 +130,9 @@ model ClientHouseStyleProfile {
   headerRequirements  String?
   footerRequirements  String?
   signatureBlock      String?
+  headerAssetPath     String?
+  headerDescription   String?
+  brandingNotes       String?
 
   bilingualNotes      String?
   translationNotes    String?
