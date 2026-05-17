@@ -81,7 +81,7 @@ const clientRoles = [
 
 const participantAllowlist = [
   { name: "Dr. Hubay Gyula", role: "PARTNER" },
-  { name: "Dr. Trufly Csanád", role: "LAWYER" },
+  { name: "Dr. Trugly Csanád", role: "LAWYER" },
   { name: "Dr. Szűcs Amanda", role: "ügyvédjelölt" },
   { name: "Dr. Sommer Anna", role: "ügyvédjelölt" },
   { name: "Dr. Hubay Gyula Máté", role: "ügyvédjelölt" },
@@ -299,17 +299,26 @@ export function CasesList() {
       return;
     }
     if (preset === "three-step") {
+      const findId = (namePart: string) => {
+        const found = visibleParticipants.find((u) =>
+          normalizePersonName(u.name).includes(namePart)
+        );
+        return found && !String(found.id).startsWith("local-participant-") ? found.id : "";
+      };
+      const amandaId = findId("szűcs amanda");
+      const csanadId = findId("trugly csanád");
+      const hubayId = findId("hubay gyula") || findId("hubay gyula máté");
       setWorkplanSteps([
-        { id: id(), title: "Előkészítés", assigneeUserId: "", dueDate: "", note: "Amanda előkészíti az iratot és a hiánypontokat." },
-        { id: id(), title: "Ügyvédi review", assigneeUserId: "", dueDate: "", note: "Gyula átnézi a munkapéldányt." },
-        { id: id(), title: "Javítás / véglegesítés", assigneeUserId: "", dueDate: "", note: "Csanád javítja és véglegesíti a kiadási verziót." },
+        { id: id(), title: "Előkészítés", assigneeUserId: amandaId, dueDate: "", note: "Amanda előkészíti az iratot és a hiánypontokat." },
+        { id: id(), title: "Ügyvédi review", assigneeUserId: csanadId, dueDate: "", note: "Csanád átnézi a munkapéldányt." },
+        { id: id(), title: "Partner jóváhagyás", assigneeUserId: hubayId, dueDate: "", note: "Partner átnézés és végső jóváhagyás." },
       ]);
       return;
     }
     if (preset === "custom" && workplanSteps.length === 0) {
       setWorkplanSteps([{ id: id(), title: "Előkészítés", assigneeUserId: "", dueDate: "", note: "" }]);
     }
-  }, [workplanSteps.length]);
+  }, [visibleParticipants, workplanSteps.length]);
 
   const updateWorkplanStep = (stepId: string, patch: Partial<WorkplanStepDraft>) => {
     setWorkplanSteps((prev) => prev.map((step) => step.id === stepId ? { ...step, ...patch } : step));
@@ -765,6 +774,7 @@ export function CasesList() {
                 </div>
                 {workplanSteps.length > 0 ? (
                   <div className="mt-4 space-y-2">
+                    <p className="text-[10px] text-[#9C9890] mb-2">Sorrend a fel/le gombokkal módosítható.</p>
                     {workplanSteps.map((step, index) => (
                       <div key={step.id} className="rounded-lg border border-[rgba(22,32,26,0.12)] bg-[#FBF6E7] p-3">
                         <div className="flex items-center gap-2 mb-2">
@@ -774,17 +784,17 @@ export function CasesList() {
                         <div className="grid gap-2 sm:grid-cols-[1fr_180px_130px]">
                           <select value={step.assigneeUserId} onChange={(e) => updateWorkplanStep(step.id, { assigneeUserId: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]">
                             <option value="">Felelős</option>
-                            {visibleParticipants.filter((user) => !String(user.id).startsWith("local-participant-")).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+                            {visibleParticipants.filter((user) => !String(user.id).startsWith("local-participant-")).map((user) => <option key={user.id} value={user.id}>{user.name}{user.role && user.role !== 'LAWYER' ? ` (${user.role === 'PARTNER' ? 'partner' : user.role === 'TRAINEE' ? 'ügyvédjelölt' : user.role})` : ''}</option>)}
                           </select>
                           <input type="date" value={step.dueDate} onChange={(e) => updateWorkplanStep(step.id, { dueDate: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]" />
                           <div className="flex items-center gap-1">
-                            <button type="button" onClick={() => moveUpStep(index)} disabled={index === 0} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(22,32,26,0.20)] text-[10px] text-[#3D4842] disabled:opacity-30 hover:bg-[#ECE6DA]" title="Felvevés">
+                            <button type="button" onClick={() => moveUpStep(index)} disabled={index === 0} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(22,32,26,0.20)] text-[10px] text-[#3D4842] disabled:opacity-30 hover:bg-[#ECE6DA]" title="Fel">
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path d="M5 15l7-7 7 7"/></svg>
                             </button>
-                            <button type="button" onClick={() => moveDownStep(index)} disabled={index === workplanSteps.length - 1} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(22,32,26,0.20)] text-[10px] text-[#3D4842] disabled:opacity-30 hover:bg-[#ECE6DA]" title="Leleplezés">
+                            <button type="button" onClick={() => moveDownStep(index)} disabled={index === workplanSteps.length - 1} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(22,32,26,0.20)] text-[10px] text-[#3D4842] disabled:opacity-30 hover:bg-[#ECE6DA]" title="Le">
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path d="M19 9l-7 7-7-7"/></svg>
                             </button>
-                            <button type="button" onClick={() => removeWorkplanStep(step.id)} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(181,42,42,0.30)] text-[#8B2A2A] hover:bg-[#FFF0EE]" title="Törlés">
+                            <button type="button" onClick={() => removeWorkplanStep(step.id)} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(181,42,42,0.30)] text-[#8B2A2A] hover:bg-[#FFF0EE]" title="Lépés törlése">
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path d="M6 18L18 6M6 6l12 12"/></svg>
                             </button>
                           </div>

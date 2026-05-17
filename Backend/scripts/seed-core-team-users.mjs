@@ -11,7 +11,7 @@ const CORE_TEAM = [
     skills: ['partner review', 'ügyvédi review', 'munkaterv'],
   },
   {
-    name: 'Dr. Trufly Csanád',
+    name: 'Dr. Trugly Csanád',
     email: 'trufly.csanad@adminiculum.local',
     role: 'LAWYER',
     title: 'ügyvéd',
