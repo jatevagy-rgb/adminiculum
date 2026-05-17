@@ -277,8 +277,12 @@ export interface CreateCaseResponse {
 }
 
 export async function createCase(data: CreateCaseData): Promise<CreateCaseResponse> {
-  // Filter out undefined clientId to avoid sending null/undefined to backend
-  const payload = { ...data };
+  const { clientName, clientId, matterType, description, clientRole, deadline } = data;
+  const payload: Record<string, unknown> = { clientName, matterType };
+  if (clientId) payload.clientId = clientId;
+  if (description) payload.description = description;
+  if (clientRole) payload.clientRole = clientRole;
+  if (deadline) payload.deadline = deadline;
   return fetchApi<CreateCaseResponse>('/cases', {
     method: 'POST',
     body: JSON.stringify(payload),
