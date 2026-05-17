@@ -9,6 +9,7 @@ import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePane
 import { AIPromptPanel } from "@/components/documents/AIPromptPanel";
 import { LegalAnalysisIntakePanel } from "@/components/documents/LegalAnalysisIntakePanel";
 import { buildHouseStyleInstructionBlock } from "@/components/documents/legalPromptCatalog";
+import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import {
   downloadReviewSummary,
   downloadContract,
@@ -25,6 +26,7 @@ import {
   saveReviewNotes,
   getAnonymousDocumentsBySource,
   getCaseClientHouseStyle,
+  getDocumentText,
   type BlockReviewStatus,
   type CaseContractListItem,
   type CaseListItem,
@@ -277,6 +279,9 @@ const [toolMode, setToolMode] = useState<WorkspaceToolMode>("klauzulak");
   const [latestAnonymousDocumentId, setLatestAnonymousDocumentId] = useState<string | null>(null);
   const [isLoadingAnonymousText, setIsLoadingAnonymousText] = useState(false);
   const [anonymousTextError, setAnonymousTextError] = useState<string | null>(null);
+  const [documentText, setDocumentText] = useState("");
+  const [documentTextReason, setDocumentTextReason] = useState<string | null>(null);
+  const [isLoadingDocumentText, setIsLoadingDocumentText] = useState(false);
   const [clientHouseStyle, setClientHouseStyle] = useState<ClientHouseStyleProfile | null>(null);
   const [isLoadingHouseStyle, setIsLoadingHouseStyle] = useState(false);
   const [houseStyleNotice, setHouseStyleNotice] = useState<string | null>(null);
@@ -623,6 +628,38 @@ const [toolMode, setToolMode] = useState<WorkspaceToolMode>("klauzulak");
   }, [selectedDocument]);
 
   useEffect(() => {
+    if (!selectedDocument || selectedDocument.kind !== "document") {
+      setDocumentText("");
+      setDocumentTextReason(null);
+      setIsLoadingDocumentText(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingDocumentText(true);
+    setDocumentTextReason(null);
+    getDocumentText(selectedDocument.id)
+      .then((result) => {
+        if (cancelled) return;
+        setDocumentText(result.text || "");
+        setDocumentTextReason(result.text?.trim() ? null : result.unavailableReason || "A dokumentum szövege még nincs kinyerve.");
+      })
+      .catch((err) => {
+        console.error("Document text load failed:", err);
+        if (!cancelled) {
+          setDocumentText("");
+          setDocumentTextReason("A dokumentum szövegének betöltése nem sikerült.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingDocumentText(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDocument]);
+
+  useEffect(() => {
     if (!comparisonData || !selectedDocument || selectedDocument.kind !== "contract") {
       setBlockNoteDrafts({});
       return;
@@ -743,12 +780,15 @@ const [toolMode, setToolMode] = useState<WorkspaceToolMode>("klauzulak");
         .filter(Boolean)
         .join("\n\n---\n\n");
     }
-    // Fall back to latest anonymized text (available for uploaded documents after anonymization)
+    if (documentText) {
+      return documentText;
+    }
+    // Fall back to latest anonymized text only when no original extracted text is available.
     if (latestAnonymousText) {
       return latestAnonymousText;
     }
     return "";
-  }, [comparisonData, latestAnonymousText]);
+  }, [comparisonData, documentText, latestAnonymousText]);
 
   const activeDraftText = editorDraft || effectiveWorkspaceText || "";
   const hasWorkspaceText = Boolean(effectiveWorkspaceText.trim());
@@ -757,9 +797,16 @@ const [toolMode, setToolMode] = useState<WorkspaceToolMode>("klauzulak");
   const editorStatusLabel =
     !hasWorkspaceText && !hasLocalDraftText
       ? "Előkészítő munkanézet"
-      : isDraftDirty
+        : isDraftDirty
         ? "Nem mentett helyi módosítások"
         : "Munkapéldány előkészítve";
+  const workspaceTextSourceLabel = comparisonData?.blocks?.length
+    ? "Generált dokumentum blokk-szövege"
+    : documentText
+      ? "Valós kinyert dokumentumszöveg"
+      : latestAnonymousText
+        ? "Anonimizált szöveg"
+        : "Nincs betöltött dokumentumszöveg";
 
   const formatDraftForPreview = (value: string) =>
     value
@@ -1040,6 +1087,17 @@ const filteredClauseTools = useMemo(() => {
 
   return (
     <div className="flex-1 flex min-h-0 flex-col bg-[#EFE7CF] xl:flex-row">
+      {selectedDocument ? (
+        <CaseWorkspaceNav
+          caseId={selectedDocument.caseId}
+          caseNumber={selectedDocument.caseNumber}
+          title={selectedDocument.caseTitle}
+          clientName={selectedDocument.caseClientName}
+          activeTab="workspace"
+          activeDocumentId={selectedDocument.id}
+          helperText="A workspace nem ment automatikusan Word-verziót; a mentés külön művelet."
+        />
+      ) : null}
       <main className="min-w-0 flex-1 overflow-y-auto border-b border-[#DDD7CA] xl:border-b-0 xl:border-r">
         <div className="p-6 space-y-4">
           <header className="border border-[#DDD7CA] bg-white p-5 shadow-sm">
@@ -1057,8 +1115,8 @@ const filteredClauseTools = useMemo(() => {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="max-w-full truncate text-sm font-semibold text-[#1F2821]">{getWorkspaceDocumentTitle()}</span>
                   <AdminBadge tone={selectedDocument?.kind === "contract" ? "green" : "gold"}>{getWorkspaceDocumentKindLabel()}</AdminBadge>
-                  <AdminStatusPill tone={effectiveWorkspaceText ? "green" : isLoadingAnonymousText ? "blue" : "amber"}>
-                    {effectiveWorkspaceText ? "Anonimizált szöveg elérhető" : isLoadingAnonymousText ? "Betöltés..." : "Előkészítő nézet"}
+                  <AdminStatusPill tone={effectiveWorkspaceText ? "green" : isLoadingDocumentText || isLoadingAnonymousText ? "blue" : "amber"}>
+                    {effectiveWorkspaceText ? workspaceTextSourceLabel : isLoadingDocumentText || isLoadingAnonymousText ? "Szöveg betöltése..." : "Előkészítő nézet"}
                   </AdminStatusPill>
                 </div>
                 <div className="grid gap-2 rounded-[6px] border border-[#DDD7CA] bg-[#FBF6E7] p-3 md:grid-cols-[1fr_180px_180px]">
@@ -1426,7 +1484,7 @@ const filteredClauseTools = useMemo(() => {
                         <h2 className="font-serif text-2xl font-medium text-[#1F2821]">Munkapéldány</h2>
                         <AdminStatusPill tone={isDraftDirty ? "amber" : activeDraftText ? "green" : "neutral"}>{editorStatusLabel}</AdminStatusPill>
                       </div>
-                      <p className="text-[11px] text-[#7B776D]">Helyi szerkesztési nézet · a szerveroldali mentés külön patchben lesz bekötve</p>
+                      <p className="text-[11px] text-[#7B776D]">Helyi szerkesztési nézet · forrás: {workspaceTextSourceLabel} · a szerveroldali mentés külön patchben lesz bekötve</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <AdminButton size="sm" variant="neutral" onClick={focusToolSearch} title="Bal oldali eszköztárban kereshetsz klauzulát.">
@@ -1482,7 +1540,7 @@ const filteredClauseTools = useMemo(() => {
                               setEditorDraft(event.target.value);
                               setEditorTouched(true);
                             }}
-                            placeholder="Itt jelenik meg az anonimizált munkaszöveg vagy a beszúrt klauzulák helyi munkapéldánya."
+                            placeholder="Itt jelenik meg a valós kinyert dokumentumszöveg, az anonimizált szöveg vagy a helyi munkapéldány."
                             className="min-h-[600px] w-full resize-y border-0 bg-white p-0 font-serif text-[15px] leading-8 text-[#1F2821] outline-none placeholder:text-[#A6AEA3] focus:ring-0"
                           />
                           {isDraftPreviewTruncated ? (
@@ -1494,11 +1552,13 @@ const filteredClauseTools = useMemo(() => {
                         <div className="flex min-h-[520px] flex-col items-center justify-center text-center">
                           <h3 className="font-serif text-2xl font-medium text-[#1F2821]">Szerződésszerkesztő / Munkapéldány</h3>
                           <p className="mt-3 max-w-xl text-sm leading-6 text-[#7B776D]">
-                            A teljes szöveges munkapéldány anonimizálás után, vagy későbbi dokumentumszöveg-betöltés után jelenik meg.
+                            {isLoadingDocumentText || isLoadingAnonymousText
+                              ? "A dokumentumszöveg betöltése folyamatban van."
+                              : documentTextReason || anonymousTextError || "A dokumentum szövege még nincs kinyerve. A teljes szöveges munkapéldány későbbi dokumentumszöveg-betöltés után jelenik meg."}
                           </p>
                           <div className="mt-6 w-full max-w-lg rounded-[6px] border border-[#EEE7D9] bg-[#FBF6E7] p-4 text-left text-sm leading-7 text-[#3D4842]">
                             <p className="text-center font-serif text-lg font-semibold uppercase tracking-[0.12em] text-[#16201A]">{getWorkspaceDocumentTitle()}</p>
-                            <p className="mt-4"><span className="rounded bg-[#E2E8DA] px-1 text-[#1F4A33]">[beszúrt klauzula]</span> Klauzulák a bal oldali eszköztárból helyi munkapéldányként hozzáadhatók.</p>
+                            <p className="mt-4"><span className="rounded bg-[#E2E8DA] px-1 text-[#1F4A33]">[helyi klauzula]</span> Klauzulák a bal oldali eszköztárból helyi munkapéldányként hozzáadhatók; ezek nem helyettesítik a dokumentum valós szövegét.</p>
                             <p><span className="text-[#8B2A2A] line-through">[törölt szöveg]</span> A piros áthúzás csak vizuális review-jelölés, nem valódi Word változáskövetés.</p>
                           </div>
                           <div className="mt-5 flex flex-wrap justify-center gap-2">

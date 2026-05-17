@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator } from "@/lib/api";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
+import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 
 type CaseDocument = {
   id: string;
@@ -322,6 +323,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
   const [isCompleting, setIsCompleting] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const canonicalCaseId = caseRecord?.id || resolvedParams.caseId;
+  const workplanTasks = tasks.filter((task) => String(task.description || '').includes('Munkaterv / review-útvonal'));
 
   const loadBackendData = useCallback(async () => {
     try {
@@ -1016,62 +1018,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
 
   return (
     <div className="flex-1 flex min-h-0 case-detail-surface">
-      <aside className="w-56 border-r border-[#DDD7CA] bg-[#F6F2E8] flex flex-col">
-        <div className="p-4 border-b border-[#DDD7CA]">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-2">Ügy kontextus</p>
-          <p className="text-[11px] text-[#1F2821] font-semibold leading-tight">{displayTitle}</p>
-          <p className="text-[10px] text-[#7B776D] mt-1">{displayCaseNumber}</p>
-          <button
-            onClick={() => router.push(`/cases/${canonicalCaseId}/documents`)}
-            className="mt-3 w-full py-2 text-[10px] uppercase tracking-[0.2em] bg-[#1A2E21] text-white hover:bg-[#0F1F14] flex items-center justify-center gap-2"
-          >
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            Dokumentumok megnyitása
-          </button>
-        </div>
-        <nav className="flex-1 p-2 space-y-1">
-          <div className="px-3 py-2 text-xs font-semibold rounded bg-[#C9A227] text-white">
-            Ügy áttekintés
-          </div>
-          <button
-            onClick={() => router.push(`/cases/${canonicalCaseId}/documents`)}
-            className="w-full text-left px-3 py-2 text-xs text-[#514D45] hover:bg-[#ECE6DA] rounded"
-          >
-            Dokumentumok
-          </button>
-          <button
-            onClick={() => router.push(`/cases/${canonicalCaseId}/generate/assembly`)}
-            className="w-full text-left px-3 py-2 text-xs text-[#514D45] hover:bg-[#ECE6DA] rounded"
-          >
-            Klauzula-építő
-          </button>
-          <button
-            onClick={() => router.push(`/cases/${canonicalCaseId}/communications`)}
-            className="w-full text-left px-3 py-2 text-xs text-[#514D45] hover:bg-[#ECE6DA] rounded"
-          >
-            Kommunikációk
-          </button>
-          <button
-            onClick={() => router.push('/time-entries')}
-            className="w-full text-left px-3 py-2 text-xs text-[#514D45] hover:bg-[#ECE6DA] rounded"
-          >
-            Munkaórák
-          </button>
-        </nav>
-        <div className="p-3 border-t border-[#DDD7CA]">
-          <button 
-            onClick={() => router.push('/cases')}
-            className="w-full text-left px-3 py-2 text-xs text-[#514D45] hover:bg-[#ECE6DA] rounded flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-            </svg>
-            Vissza az ügylistához
-          </button>
-        </div>
-      </aside>
+      <CaseWorkspaceNav caseId={canonicalCaseId} caseNumber={displayCaseNumber} title={displayTitle} clientName={displayClient} activeTab="overview" helperText="Az áttekintő az ügy operatív állapotát mutatja, szintetikus elemzés nélkül." />
 
       <div className="flex-1 flex min-h-0">
         <main className="flex-1 overflow-y-auto">
@@ -1555,6 +1502,26 @@ export function CaseDetail({ params }: CaseDetailProps) {
 
             <div>
               <div className="flex items-center justify-between mb-3">
+                <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D]">Munkaterv</h3>
+                <span className="text-[10px] text-[#9C9890]">{workplanTasks.length}</span>
+              </div>
+              {workplanTasks.length > 0 ? (
+                <div className="space-y-2">
+                  {workplanTasks.slice(0, 5).map((task) => (
+                    <div key={task.id} className="rounded border border-[#DDD7CA] bg-[#FBF6E7] p-3">
+                      <p className="text-xs font-semibold text-[#1F2821]">{task.title}</p>
+                      <p className="mt-1 text-[10px] text-[#7B776D]">Felelős: {task.assignedTo?.name || "Nincs kijelölve"}</p>
+                      <p className="mt-1 text-[10px] text-[#7B776D]">Státusz: {task.status}{task.dueDate ? ` · határidő: ${new Date(task.dueDate).toLocaleDateString('hu-HU')}` : ""}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded border border-dashed border-[#DDD7CA] p-3 text-[11px] text-[#9C9890]">Ehhez az ügyhöz nincs rögzített munkaterv.</p>
+              )}
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-3">
                 <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D]">Ügyfél dokumentumai</h3>
                 <span className="text-[10px] text-[#9C9890]">{documents.length} fájl</span>
               </div>
@@ -1715,7 +1682,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
             {anonymousDocuments.length > 0 ? (
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#8B5CF6]">AI feldolgozás</h3>
+                  <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#8B5CF6]">AI / anonimizálás</h3>
                   <span className="text-[10px] text-[#9C9890]">{anonymousDocuments.length}</span>
                 </div>
                 <div className="space-y-2">
@@ -1771,9 +1738,9 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     </svg>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-[#1F2821]">AI biztonságos átadás</p>
+                    <p className="text-xs font-semibold text-[#1F2821]">Dokumentumspecifikus anonimizálás</p>
                     <p className="text-[10px] text-[#6B655B] mt-1 leading-relaxed">
-                      Még nincs anonimizált dokumentum. Külső AI feldolgozáshoz először anonimizálj egy ügyféldokumentumot.
+                      Még nincs anonimizált dokumentum. A prompt-előkészítés a Dokumentumtárból vagy a workspace-ből indítható valós dokumentum alapján.
                     </p>
                   </div>
                 </div>

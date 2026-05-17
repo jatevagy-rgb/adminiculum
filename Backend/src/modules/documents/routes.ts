@@ -6,6 +6,7 @@
 import { Router, Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import documentsService from './services';
+import { extractText } from './textExtractor';
 import { authenticate } from '../../middleware/auth';
 import { prisma } from '../../prisma/prisma.service';
 
@@ -176,6 +177,68 @@ router.get('/:id', authenticate, async (req: Request, res: Response): Promise<vo
       code: 'INTERNAL_ERROR', 
       message: 'Internal server error' 
     });
+  }
+});
+
+/**
+ * GET /api/v1/documents/:id/text
+ * Extract readable text from the real SharePoint-backed document when available.
+ */
+router.get('/:id/text', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params as { id: string };
+    const document = await prisma.document.findUnique({ where: { id } });
+
+    if (!document) {
+      res.status(404).json({ status: 404, code: 'NOT_FOUND', message: 'Document not found' });
+      return;
+    }
+
+    if (!document.spItemId) {
+      res.json({
+        documentId: id,
+        source: 'UPLOADED',
+        text: '',
+        unavailableReason: 'A dokumentumhoz nincs SharePoint azonosító, ezért a szöveg nem nyerhető ki.',
+      });
+      return;
+    }
+
+    const driveService = (await import('../sharepoint/driveService.js')).default;
+    const fileBuffer = await driveService.downloadDocument(document.spItemId);
+    if (!fileBuffer) {
+      res.json({
+        documentId: id,
+        source: 'UPLOADED',
+        text: '',
+        unavailableReason: 'A dokumentum letöltése SharePointból nem sikerült.',
+      });
+      return;
+    }
+
+    const extraction = await extractText(fileBuffer, document.mimeType || 'application/octet-stream', document.fileName || document.name || undefined);
+    if (!extraction.success || !extraction.text?.trim()) {
+      res.json({
+        documentId: id,
+        source: 'UPLOADED',
+        text: '',
+        format: extraction.format,
+        unavailableReason: extraction.error || 'A dokumentum nem tartalmaz olvasható szöveget.',
+      });
+      return;
+    }
+
+    res.json({
+      documentId: id,
+      source: 'UPLOADED',
+      text: extraction.text,
+      format: extraction.format,
+      pageCount: extraction.pageCount,
+      extractedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Extract document text error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'A dokumentumszöveg kinyerése sikertelen.' });
   }
 });
 

@@ -680,6 +680,20 @@ export async function getDocumentClassification(documentId: string): Promise<Rec
   return fetchApi<Record<string, unknown>>(`/documents/${documentId}/classification`);
 }
 
+export interface DocumentTextResult {
+  documentId: string;
+  source: 'UPLOADED' | 'ANONYMIZED' | 'GENERATED';
+  text: string;
+  format?: string;
+  pageCount?: number;
+  extractedAt?: string;
+  unavailableReason?: string;
+}
+
+export async function getDocumentText(documentId: string): Promise<DocumentTextResult> {
+  return fetchApi<DocumentTextResult>(`/documents/${documentId}/text`);
+}
+
 export type LegalAnalysisStatus =
   | 'DRAFT'
   | 'CANDIDATE_REVIEW'

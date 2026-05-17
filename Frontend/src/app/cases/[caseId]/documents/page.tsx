@@ -31,6 +31,7 @@ import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { HandoffPackagePanel } from "@/components/handoff/HandoffPackagePanel";
 import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePanel";
 import { AdminBadge, AdminButton, AdminDocumentRow, AdminPanel, AdminStatusPill } from "@/components/adminiculum/ui";
+import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import { useUiPack } from "@/lib/uiPack";
 
 // Document Family / Lineage Types
@@ -230,6 +231,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<string | null>(null);
   const [isUploadingToSP, setIsUploadingToSP] = useState<string | null>(null);
   const [isCreatingRevision, setIsCreatingRevision] = useState<string | null>(null);
   const [isFinalizing, setIsFinalizing] = useState<string | null>(null);
@@ -417,9 +419,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     if (!file || !caseRecord?.id) return;
 
     setIsUploading(true);
+    setUploadPhase('Fájl előkészítése...');
     setActionResult(null);
     try {
       const base64 = await fileToBase64(file);
+      setUploadPhase('Feltöltés SharePointba és ügyirathoz kapcsolás...');
       const uploaded = await uploadCaseDocument({
         caseId: caseRecord.id,
         fileName: file.name,
@@ -432,7 +436,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setUploadedDocuments(docs);
       setSelectedLedgerItem({ kind: 'uploaded', item: uploaded });
       setSelectedContract(null);
-      setActionResult({ type: 'success', message: 'Dokumentum feltöltve' });
+      setActionResult({ type: 'success', message: 'Dokumentum feltöltve. Szöveg kinyerése a workspace megnyitásakor történik, ha a fájlformátum támogatott.' });
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -441,6 +445,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setActionResult({ type: 'error', message: 'Dokumentum feltöltése sikertelen. Kérjük, próbáld újra később.' });
     } finally {
       setIsUploading(false);
+      setUploadPhase(null);
     }
   };
 
@@ -774,14 +779,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(documentId)}`);
   };
 
-  const openActiveWorkspace = () => {
-    const activeDocumentId = selectedUploadedDocument?.id || selectedGeneratedContract?.id;
-    const query = activeDocumentId
-      ? `?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(activeDocumentId)}`
-      : `?caseId=${encodeURIComponent(canonicalCaseId)}`;
-    router.push(`/documents/compare${query}`);
-  };
-
   const openUploadedAnonymize = (document: DocumentItem) => {
     const fakeContract: CaseContractListItem = {
       id: document.id,
@@ -817,55 +814,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
   return (
     <div className="flex min-h-0 flex-1 bg-[#EFE7CF] text-[#16201A] documents-surface">
-      {/* LEFT SIDEBAR - Navigation - consistent with Generation/Communications */}
-      <aside className="flex w-56 flex-col border-r border-[rgba(22,32,26,0.20)] bg-[#1F4A33] text-[#F4EFDB]">
-        <div className={`p-4 border-b ${p.border}`}>
-          <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-[#B58A2A]">Ügy</p>
-          <p className="text-[12px] font-semibold leading-tight text-[#F4EFDB]">{displayMatterName || 'Ügy megnevezése nem elérhető'}</p>
-          <p className="mt-1 text-[10px] text-[#F4EFDB]/60">{displayCaseId}</p>
-          <p className="mt-1 text-[10px] text-[#F4EFDB]/60">{displayClient}</p>
-        </div>
-        
-        <nav className="flex-1 p-2 space-y-2">
-          <button
-            onClick={() => router.push(`/cases/${canonicalCaseId}`)}
-            className={`w-full text-left px-3 py-2 text-xs font-semibold rounded transition-colors ${
-              false ? "bg-[#B58A2A] text-[#173824]" : "text-[#F4EFDB]/85 hover:bg-[#173824] hover:text-[#F4EFDB]"
-            }`}
-          >
-            Ügy áttekintő
-          </button>
-          <button
-            className="w-full rounded bg-[#B58A2A] px-3 py-2 text-left text-xs font-semibold text-[#173824] transition-colors"
-          >
-            Dokumentumtár
-          </button>
-          <button
-            onClick={openActiveWorkspace}
-            className="w-full rounded px-3 py-2 text-left text-xs font-semibold text-[#F4EFDB]/85 transition-colors hover:bg-[#173824] hover:text-[#F4EFDB]"
-          >
-            Szerződés-workspace
-          </button>
-          <button
-            onClick={() => router.push(`/cases/${canonicalCaseId}/communications`)}
-            className="w-full rounded px-3 py-2 text-left text-xs font-semibold text-[#F4EFDB]/85 transition-colors hover:bg-[#173824] hover:text-[#F4EFDB]"
-          >
-            Kommunikáció
-          </button>
-          <button
-            onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}`)}
-            className="w-full rounded px-3 py-2 text-left text-xs font-semibold text-[#F4EFDB]/85 transition-colors hover:bg-[#173824] hover:text-[#F4EFDB]"
-          >
-            Verzió-összevetés
-          </button>
-        </nav>
-
-        <div className={`p-3 border-t ${p.border}`}>
-          <p className="text-[9px] leading-4 text-[#F4EFDB]/65">
-            Az aktív dokumentumhoz tartozó műveletek a középső kártyán érhetők el.
-          </p>
-        </div>
-      </aside>
+      <CaseWorkspaceNav caseId={canonicalCaseId} caseNumber={displayCaseId} title={displayMatterName} clientName={displayClient} activeTab="documents" activeDocumentId={activeDocument?.id} helperText="Az aktív dokumentumhoz tartozó műveletek a középső kártyán érhetők el." />
 
       {/* MAIN CONTENT */}
       <div className="flex-1 flex flex-col min-h-0">
@@ -911,6 +860,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 {actionResult.message}
               </div>
             )}
+            {isUploading && uploadPhase ? <div className="rounded-[6px] border border-[#D6DEEC] bg-[#EAEFF6] p-3 text-sm font-semibold text-[#2D4A7C]">{uploadPhase}</div> : null}
           </section>
 
           {isLoading ? (
@@ -999,7 +949,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         {selectedUploadedDocument.folder ? <div className="rounded bg-[#FBF6E7] p-3"><p className="text-[10px] uppercase text-[#7A8479]">Forrás</p><p className="text-sm font-semibold text-[#16201A]">Feltöltött ügyirat</p></div> : null}
                       </div>
                       <div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] p-5"><h3 className="font-serif text-xl font-medium text-[#16201A]">Előkészítő munkanézet</h3><p className="mt-2 text-sm text-[#3D4842]">A feltöltött dokumentum előnézete jelenleg metaadat-alapú. A workspace megnyitható, az AI és jogi elemzés anonimizált szöveggel lesz teljes.</p></div>
-                      <div className="flex flex-wrap gap-2 text-[11px]"><AdminStatusPill tone="green">Feltöltve</AdminStatusPill><AdminStatusPill tone="gold">Anonimizálás</AdminStatusPill><AdminStatusPill tone="neutral">AI elemzés</AdminStatusPill><AdminStatusPill tone="neutral">Szerkesztés</AdminStatusPill><AdminStatusPill tone="neutral">Ügyvédi leadás</AdminStatusPill></div>
+                      <div className="flex flex-wrap gap-2 text-[11px]"><AdminStatusPill tone="green">Feltöltve</AdminStatusPill><AdminStatusPill tone="neutral">Szöveg kinyerésre vár</AdminStatusPill><AdminStatusPill tone="gold">Anonimizálható</AdminStatusPill><AdminStatusPill tone="green">Workspace-ben megnyitható</AdminStatusPill><AdminStatusPill tone="neutral">Ügyvédi leadás</AdminStatusPill></div>
                       <div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-white p-4"><h3 className="font-serif text-xl font-medium text-[#16201A]">Dokumentum műveletek</h3><div className="mt-3 flex flex-wrap gap-2"><AdminButton variant="primary" onClick={() => openWorkspace(selectedUploadedDocument.id)}>Megnyitás workspace-ben</AdminButton><AdminButton variant="gold" onClick={() => openUploadedAnonymize(selectedUploadedDocument)}>Anonimizálás</AdminButton><AdminButton variant="neutral" onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)} disabled={isDownloading === selectedUploadedDocument.id}>{isDownloading === selectedUploadedDocument.id ? "Letöltés..." : "Letöltés"}</AdminButton><AdminButton variant="neutral" onClick={handleCreateHandoffPackage} disabled={isCreatingHandoffPackage}>{isCreatingHandoffPackage ? "Csomag készül..." : "Csomag készítése"}</AdminButton></div><details className="mt-3"><summary className="cursor-pointer text-[11px] font-semibold text-[#7A8479]">Technikai műveletek</summary><AdminButton className="mt-2" size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>Metaadat összevetés</AdminButton></details></div>
                     </div>
                   ) : selectedGeneratedContract ? (

@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   addCaseCollaborator,
   createCase,
   createClient,
+  createTask,
   getCases,
   getClients,
   getUsers,
@@ -122,6 +123,14 @@ const normalizePersonName = (value?: string | null) =>
 type ClientMode = "existing" | "new";
 type DeadlineMode = "none" | "date" | "days" | "hours" | "minutes";
 
+type WorkplanStepDraft = {
+  id: string;
+  title: string;
+  assigneeUserId: string;
+  dueDate: string;
+  note: string;
+};
+
 const defaultCaseData: CreateCaseData = {
   clientName: "",
   matterType: "",
@@ -162,6 +171,7 @@ function formatDeadlinePreview(value?: string) {
 
 export function CasesList() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [practiceArea, setPracticeArea] = useState("all");
   const [clientName, setClientName] = useState("");
   const [riskLevel, setRiskLevel] = useState("all");
@@ -178,6 +188,8 @@ export function CasesList() {
   const [relativeDeadlineValue, setRelativeDeadlineValue] = useState("3");
   const [reminder, setReminder] = useState("Nincs emlékeztető");
   const [selectedCollaboratorIds, setSelectedCollaboratorIds] = useState<string[]>([]);
+  const [workplanSteps, setWorkplanSteps] = useState<WorkplanStepDraft[]>([]);
+  const [workplanPreset, setWorkplanPreset] = useState("none");
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [availableClients, setAvailableClients] = useState<Client[]>([]);
   const [showOtherClients, setShowOtherClients] = useState(false);
@@ -186,6 +198,9 @@ export function CasesList() {
   const [backendCases, setBackendCases] = useState<CaseListItem[]>([]);
   const [isLoadingCases, setIsLoadingCases] = useState(true);
   const [caseLoadError, setCaseLoadError] = useState<string | null>(null);
+  const requestedNewCase = searchParams?.get("newCase") === "1";
+  const requestedClientId = searchParams?.get("clientId") || "";
+  const [initialClientApplied, setInitialClientApplied] = useState(false);
 
   const selectedClient = useMemo(
     () => availableClients.find((client) => client.id === newCaseData.clientId) || null,
@@ -256,6 +271,55 @@ export function CasesList() {
     [visibleParticipants],
   );
 
+  const selectClientForCase = useCallback((client: Client) => {
+    const hydrated = hydrateCoreClient(client);
+    setClientMode("existing");
+    setNewCaseData((prev) => ({ ...prev, clientId: hydrated.id, clientName: hydrated.name }));
+  }, [hydrateCoreClient]);
+
+  const applyWorkplanPreset = useCallback((preset: string) => {
+    setWorkplanPreset(preset);
+    const id = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    if (preset === "none") {
+      setWorkplanSteps([]);
+      return;
+    }
+    if (preset === "simple") {
+      setWorkplanSteps([
+        { id: id(), title: "Előkészítés", assigneeUserId: "", dueDate: "", note: "Iratok és első munkapéldány előkészítése." },
+        { id: id(), title: "Ügyvédi review", assigneeUserId: "", dueDate: "", note: "Tartalmi és kockázati ellenőrzés." },
+      ]);
+      return;
+    }
+    if (preset === "trainee-partner") {
+      setWorkplanSteps([
+        { id: id(), title: "Előkészítés", assigneeUserId: "", dueDate: "", note: "Jelölti előkészítés." },
+        { id: id(), title: "Partner review", assigneeUserId: "", dueDate: "", note: "Partner átnézés és iránymutatás." },
+      ]);
+      return;
+    }
+    if (preset === "three-step") {
+      setWorkplanSteps([
+        { id: id(), title: "Előkészítés", assigneeUserId: "", dueDate: "", note: "Amanda előkészíti az iratot és a hiánypontokat." },
+        { id: id(), title: "Ügyvédi review", assigneeUserId: "", dueDate: "", note: "Gyula átnézi a munkapéldányt." },
+        { id: id(), title: "Javítás / véglegesítés", assigneeUserId: "", dueDate: "", note: "Csanád javítja és véglegesíti a kiadási verziót." },
+      ]);
+      return;
+    }
+    if (preset === "custom" && workplanSteps.length === 0) {
+      setWorkplanSteps([{ id: id(), title: "Előkészítés", assigneeUserId: "", dueDate: "", note: "" }]);
+    }
+  }, [workplanSteps.length]);
+
+  const updateWorkplanStep = (stepId: string, patch: Partial<WorkplanStepDraft>) => {
+    setWorkplanSteps((prev) => prev.map((step) => step.id === stepId ? { ...step, ...patch } : step));
+  };
+
+  const addWorkplanStep = () => {
+    setWorkplanSteps((prev) => [...prev, { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, title: "", assigneeUserId: "", dueDate: "", note: "" }]);
+    setWorkplanPreset("custom");
+  };
+
   const effectiveMatterType = newCaseData.matterType === "CUSTOM" ? customMatterType.trim() : newCaseData.matterType;
   const effectiveClientRole = newCaseData.clientRole === "Egyéb / saját szerep" ? customClientRole.trim() : newCaseData.clientRole;
 
@@ -304,12 +368,31 @@ export function CasesList() {
           console.warn(`Failed to add collaborator ${userId}:`, collabErr);
         }
       }
+      const validWorkplanSteps = workplanSteps.filter((step) => step.title.trim());
+      for (let index = 0; index < validWorkplanSteps.length; index += 1) {
+        const step = validWorkplanSteps[index];
+        try {
+          await createTask({
+            caseId: result.id,
+            title: `${index + 1}. ${step.title.trim()}`,
+            type: index === 0 ? "DRAFT_CONTRACT" : index === validWorkplanSteps.length - 1 ? "APPROVAL" : "REVIEW_CONTRACT",
+            description: ["Munkaterv / review-útvonal", step.note.trim()].filter(Boolean).join(" — "),
+            priority: "MEDIUM",
+            dueDate: step.dueDate || undefined,
+            assignedTo: step.assigneeUserId && selectableParticipantIds.has(step.assigneeUserId) ? step.assigneeUserId : undefined,
+          });
+        } catch (taskErr) {
+          console.warn(`Failed to create workplan step ${index + 1}:`, taskErr);
+        }
+      }
       setShowNewCaseModal(false);
       setNewCaseData(defaultCaseData);
       setNewClientData(defaultNewClient);
       setCustomMatterType("");
       setCustomClientRole("");
       setSelectedCollaboratorIds([]);
+      setWorkplanSteps([]);
+      setWorkplanPreset("none");
       setClientMode("existing");
       router.push(`/cases/${result.id}/documents`);
     } catch (err) {
@@ -392,6 +475,24 @@ export function CasesList() {
         .catch((err) => console.warn("Failed to load clients for case linkage:", err));
     }
   }, [showNewCaseModal]);
+
+  useEffect(() => {
+    if (!requestedNewCase || initialClientApplied) return;
+    setShowNewCaseModal(true);
+    setClientMode("existing");
+    if (!requestedClientId) {
+      setInitialClientApplied(true);
+    }
+  }, [requestedNewCase, requestedClientId, initialClientApplied]);
+
+  useEffect(() => {
+    if (!requestedNewCase || !requestedClientId || initialClientApplied || availableClients.length === 0) return;
+    const client = availableClients.find((item) => item.id === requestedClientId);
+    if (client) {
+      selectClientForCase(client);
+      setInitialClientApplied(true);
+    }
+  }, [requestedNewCase, requestedClientId, initialClientApplied, availableClients, selectClientForCase]);
 
   const filteredCases = useMemo(() => {
     const normalizedQuery = clientName.trim().toLowerCase();
@@ -520,7 +621,11 @@ export function CasesList() {
                       onChange={(e) => {
                         const nextClientId = e.target.value;
                         const linkedClient = availableClients.find((client) => client.id === nextClientId);
-                        setNewCaseData({ ...newCaseData, clientId: nextClientId || undefined, clientName: linkedClient?.name || "" });
+                        if (linkedClient) {
+                          selectClientForCase(linkedClient);
+                        } else {
+                          setNewCaseData({ ...newCaseData, clientId: undefined, clientName: "" });
+                        }
                       }}
                       className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] bg-white px-3 py-3 text-sm text-[#16201A] outline-none focus:border-[#1F4A33]"
                     >
@@ -588,7 +693,7 @@ export function CasesList() {
                 <div className="mt-3 rounded-md border border-[#C5D3C8] bg-[#E2E8DA] p-3 text-sm text-[#1F4A33]">Határidő: <b>{formatDeadlinePreview(newCaseData.deadline)}</b>{reminder !== "Nincs emlékeztető" ? ` — emlékeztető: ${reminder}` : ""}</div>
               </section>
 
-              <section className="py-5">
+              <section className="border-b border-[rgba(22,32,26,0.10)] py-5">
                 <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">5</span><h3 className="font-serif text-xl font-medium">Résztvevők</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
                 <div className="flex flex-wrap gap-2">
                   {visibleParticipants.map((user) => {
@@ -599,6 +704,41 @@ export function CasesList() {
                   {visibleParticipants.length === 0 ? <span className="text-xs text-[#7A8479]">Felhasználók betöltése vagy nem elérhetők.</span> : null}
                 </div>
                 <p className="mt-2 text-xs text-[#7A8479]">Résztvevőket később is hozzáadhatsz az ügy oldaláról.</p>
+              </section>
+
+              <section className="py-5">
+                <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">6</span><h3 className="font-serif text-xl font-medium">Munkaterv / review-útvonal</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    ["none", "Nincs munkaterv"],
+                    ["simple", "Egyszerű előkészítés + ügyvédi review"],
+                    ["trainee-partner", "Jelölt előkészíti → partner review"],
+                    ["three-step", "Jelölt → ügyvéd → partner"],
+                    ["custom", "Saját útvonal"],
+                  ].map(([value, label]) => (
+                    <button key={value} type="button" onClick={() => applyWorkplanPreset(value)} className={`rounded-full border px-3 py-1.5 text-xs ${workplanPreset === value ? "border-[#173824] bg-[#1F4A33] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{label}</button>
+                  ))}
+                </div>
+                {workplanSteps.length > 0 ? (
+                  <div className="mt-4 space-y-3">
+                    {workplanSteps.map((step, index) => (
+                      <div key={step.id} className="rounded-lg border border-[rgba(22,32,26,0.12)] bg-[#FBF6E7] p-3">
+                        <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">{index + 1}. lépés</div>
+                        <div className="grid gap-2 md:grid-cols-[1fr_220px_160px]">
+                          <input value={step.title} onChange={(e) => updateWorkplanStep(step.id, { title: e.target.value })} placeholder="Feladat" className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-3 py-2 text-xs text-[#16201A]" />
+                          <select value={step.assigneeUserId} onChange={(e) => updateWorkplanStep(step.id, { assigneeUserId: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-3 py-2 text-xs text-[#16201A]">
+                            <option value="">Nincs felelős</option>
+                            {visibleParticipants.filter((user) => !String(user.id).startsWith("local-participant-")).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+                          </select>
+                          <input type="date" value={step.dueDate} onChange={(e) => updateWorkplanStep(step.id, { dueDate: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-3 py-2 text-xs text-[#16201A]" />
+                        </div>
+                        <textarea value={step.note} onChange={(e) => updateWorkplanStep(step.id, { note: e.target.value })} rows={2} placeholder="Megjegyzés" className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] bg-white px-3 py-2 text-xs text-[#16201A]" />
+                      </div>
+                    ))}
+                    <AdminButton size="sm" variant="muted" onClick={addWorkplanStep}>+ Lépés hozzáadása</AdminButton>
+                    <p className="text-[11px] text-[#7A8479]">A munkaterv lépései valós ügyfeladatként jönnek létre. Felelős csak akkor kerül mentésre, ha létező backend felhasználót választasz.</p>
+                  </div>
+                ) : <p className="mt-3 text-xs text-[#7A8479]">Munkaterv nélkül is létrehozható az ügy.</p>}
               </section>
 
               {createError ? <div className="mb-4 rounded border border-[#F2DAD6] bg-[#F2DAD6] p-3 text-xs font-semibold text-[#8B2A2A]">{createError}</div> : null}

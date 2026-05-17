@@ -19,6 +19,7 @@ import {
   type DocumentItem,
   type CaseCollaborator,
 } from "@/lib/api";
+import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 
 type CommunicationsPageProps = {
   params: Promise<{ caseId: string }>;
@@ -108,7 +109,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
     } catch (err) {
       console.error('Failed to load communications:', err);
       setCommunications([]);
-      setError('Communications service unavailable. Please try again later.');
+      setError('A kommunikációs szolgáltatás nem érhető el. Próbáld újra később.');
     } finally {
       setIsLoadingList(false);
     }
@@ -122,7 +123,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
       setSelectedComm(detail);
     } catch (err) {
       console.error('Failed to load communication detail:', err);
-      setError('Communication detail unavailable. Please try again later.');
+      setError('A kommunikáció részletei nem érhetők el. Próbáld újra később.');
     } finally {
       setIsLoadingDetail(false);
     }
@@ -181,10 +182,10 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
         loadCommunications();
         loadCommunicationDetail(selectedComm.id);
       } else {
-        setActionResult({ type: 'error', message: 'Failed to link to case' });
+        setActionResult({ type: 'error', message: 'Nem sikerült ügyhöz kapcsolni.' });
       }
     } catch (err) {
-      setActionResult({ type: 'error', message: 'Failed to link to case' });
+      setActionResult({ type: 'error', message: 'Nem sikerült ügyhöz kapcsolni.' });
     } finally {
       setIsLinkingCase(false);
     }
@@ -206,17 +207,17 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
       });
       
       if (result.success) {
-        setActionResult({ type: 'success', message: `Task created: ${result.task.title}` });
+        setActionResult({ type: 'success', message: `Feladat létrehozva: ${result.task.title}` });
         setTaskTitle('');
         setTaskDescription('');
         setTaskDueDate('');
         setTaskPriority('MEDIUM');
         loadCommunicationDetail(selectedComm.id);
       } else {
-        setActionResult({ type: 'error', message: 'Failed to create task' });
+        setActionResult({ type: 'error', message: 'Nem sikerült feladatot létrehozni.' });
       }
     } catch (err) {
-      setActionResult({ type: 'error', message: 'Failed to create task' });
+      setActionResult({ type: 'error', message: 'Nem sikerült feladatot létrehozni.' });
     } finally {
       setIsCreatingTask(false);
     }
@@ -241,10 +242,10 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
         setDeadlineDescription('');
         loadCommunicationDetail(selectedComm.id);
       } else {
-        setActionResult({ type: 'error', message: 'Failed to extract deadline' });
+        setActionResult({ type: 'error', message: 'Nem sikerült határidőt rögzíteni.' });
       }
     } catch (err) {
-      setActionResult({ type: 'error', message: 'Failed to extract deadline' });
+      setActionResult({ type: 'error', message: 'Nem sikerült határidőt rögzíteni.' });
     } finally {
       setIsExtractingDeadline(false);
     }
@@ -382,15 +383,9 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
 
   return (
     <div className="flex-1 flex min-h-0">
+      <CaseWorkspaceNav caseId={caseContextId} caseNumber={caseRecord.caseNumber} title={caseRecord.title} clientName={caseRecord.clientName} activeTab="communications" helperText="Kommunikációs bejegyzések és kapcsolt utánkövetési feladatok." />
       {/* LEFT PANE - Thread List */}
       <aside className="w-80 border-r border-[#DDD7CA] bg-[#F6F2E8] flex flex-col">
-        <div className="p-4 border-b border-[#DDD7CA]">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-2">Ügy kontextus</p>
-          <p className="text-[11px] text-[#1F2821] font-semibold leading-tight">{caseRecord?.title || 'Ügy megnevezése nem elérhető'}</p>
-          <p className="text-[10px] text-[#7B776D] mt-1">{caseRecord?.caseNumber || resolvedParams.caseId}</p>
-          <p className="text-[10px] text-[#7B776D] mt-1">{caseRecord?.clientName || 'Ügyfél nem elérhető'}</p>
-        </div>
-        
         {/* Case Participants Block */}
         <div className="px-4 py-3 border-b border-[#DDD7CA]">
           <div className="flex items-center justify-between mb-2">

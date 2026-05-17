@@ -204,8 +204,8 @@ function ClientsPageContent() {
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
             <Link href={`/clients/${client.id}`} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#16201A] hover:bg-[#FBF6E7]">Dosszié</Link>
-            <Link href={`/clients/${client.id}`} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#16201A] hover:bg-[#FBF6E7]">House style</Link>
-            <Link href="/cases" className="inline-flex items-center justify-center rounded-[5px] border border-[#8E6A1B] bg-[#B58A2A] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#8E6A1B]">Új ügy</Link>
+            <Link href={`/clients/${client.id}#house-style`} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#16201A] hover:bg-[#FBF6E7]">House style</Link>
+            <Link href={`/cases?newCase=1&clientId=${encodeURIComponent(client.id)}`} className="inline-flex items-center justify-center rounded-[5px] border border-[#8E6A1B] bg-[#B58A2A] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#8E6A1B]">Új ügy</Link>
             <AdminButton size="sm" variant="neutral" onClick={() => handleEdit(client)}>Szerkesztés</AdminButton>
           </div>
         </div>
