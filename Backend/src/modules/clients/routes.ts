@@ -135,6 +135,7 @@ router.put('/:clientId/house-style', authenticate, async (req: Request, res: Res
 router.get('/', authenticate, async (req: Request, res: Response): Promise<void> => {
   try {
     const clients = await prisma.client.findMany({
+      include: { houseStyleProfile: true },
       orderBy: { name: 'asc' }
     });
     res.json({ data: clients });

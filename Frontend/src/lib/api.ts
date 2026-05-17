@@ -1054,6 +1054,7 @@ export interface Client {
   authorizedRepresentative?: string;
   contactPerson?: string;
   color?: string; // Hex color for client identity visualization
+  houseStyleProfile?: ClientHouseStyleProfile | null;
 }
 
 export interface ClientHouseStyleProfile {

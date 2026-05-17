@@ -87,11 +87,29 @@ const participantAllowlist = [
 ];
 
 const CORE_CLIENTS = [
-  "saubermacher-magyarorszag kft",
-  "saubermacher",
   "blackbelt technology kft",
   "blackbelt",
+  "saubermacher-magyarorszag kft",
+  "saubermacher",
 ];
+
+const CORE_CLIENT_DEFAULTS: Record<string, Partial<Client>> = {
+  blackbelt: {
+    name: "BlackBelt Technology Kft.",
+    address: "1027 Budapest, Ganz utca 16. 3. em., Magyarország",
+    taxNumber: "24334934-2-41",
+    companyRegistrationNumber: "01-09-356381",
+    phone: "70/9309191",
+    email: "aczifra@t-online.hu",
+    contactPerson: "Sövegjártó Róbert",
+  },
+  saubermacher: {
+    name: "Saubermacher-Magyarország Kft.",
+    address: "1181 Budapest, Zádor u. 5.",
+    taxNumber: "13559212-2-43",
+    companyRegistrationNumber: "03-09-113748",
+  },
+};
 
 const normalizePersonName = (value?: string | null) =>
   String(value || "")
@@ -162,6 +180,7 @@ export function CasesList() {
   const [selectedCollaboratorIds, setSelectedCollaboratorIds] = useState<string[]>([]);
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [availableClients, setAvailableClients] = useState<Client[]>([]);
+  const [showOtherClients, setShowOtherClients] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [backendCases, setBackendCases] = useState<CaseListItem[]>([]);
@@ -173,18 +192,49 @@ export function CasesList() {
     [availableClients, newCaseData.clientId],
   );
 
+  const getCoreClientKey = useCallback((client: Client): "blackbelt" | "saubermacher" | null => {
+    const normalized = normalizePersonName(client.name);
+    if (normalized.includes("blackbelt")) return "blackbelt";
+    if (normalized.includes("saubermacher") || normalized.includes("sauber macher")) return "saubermacher";
+    return null;
+  }, []);
+
+  const hydrateCoreClient = useCallback((client: Client): Client => {
+    const key = getCoreClientKey(client);
+    if (!key) return client;
+    const defaults = CORE_CLIENT_DEFAULTS[key];
+    return {
+      ...client,
+      name: defaults.name || client.name,
+      address: client.address || defaults.address,
+      taxNumber: client.taxNumber || defaults.taxNumber,
+      companyRegistrationNumber: client.companyRegistrationNumber || defaults.companyRegistrationNumber,
+      phone: client.phone || defaults.phone,
+      email: client.email || defaults.email,
+      contactPerson: client.contactPerson || defaults.contactPerson,
+    };
+  }, [getCoreClientKey]);
+
   const orderedClients = useMemo(() => {
     const score = (client: Client) => {
       const normalized = normalizePersonName(client.name);
       const index = CORE_CLIENTS.findIndex((name) => normalized.includes(name));
       return index === -1 ? 100 : index;
     };
-    return [...availableClients].sort((a, b) => {
+    const sorted = [...availableClients].map(hydrateCoreClient).sort((a, b) => {
       const scoreDiff = score(a) - score(b);
       if (scoreDiff !== 0) return scoreDiff;
       return a.name.localeCompare(b.name, "hu-HU");
     });
-  }, [availableClients]);
+    const seenCore = new Set<string>();
+    return sorted.filter((client) => {
+      const key = getCoreClientKey(client);
+      if (!key) return showOtherClients;
+      if (seenCore.has(key)) return showOtherClients;
+      seenCore.add(key);
+      return true;
+    });
+  }, [availableClients, getCoreClientKey, hydrateCoreClient, showOtherClients]);
 
   const visibleParticipants = useMemo(() => {
     const allowedNames = new Set(participantAllowlist.map((person) => normalizePersonName(person.name)));
@@ -476,20 +526,23 @@ export function CasesList() {
                     >
                       <option value="">Válassz meglévő ügyfelet</option>
                       {orderedClients.map((client) => {
-                        const isCore = CORE_CLIENTS.some((name) => normalizePersonName(client.name).includes(name));
+                        const isCore = Boolean(getCoreClientKey(client));
                         return <option key={client.id} value={client.id}>{client.name}{isCore ? " · kiemelt ügyfél" : ""}</option>;
                       })}
                     </select>
+                    <button type="button" onClick={() => setShowOtherClients((value) => !value)} className="mt-2 text-[11px] font-semibold text-[#8E6A1B] underline underline-offset-2">
+                      {showOtherClients ? "Egyéb / teszt ügyfelek elrejtése" : "Egyéb / teszt ügyfelek megjelenítése"}
+                    </button>
                     {selectedClient ? (
                       <article className="mt-4 grid grid-cols-[48px_1fr] gap-4 rounded-lg border border-[rgba(22,32,26,0.10)] border-l-4 border-l-[#1F4A33] bg-[#FBF6E7] p-4">
                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#1F4A33] font-serif text-xl text-[#F4EFDB]">{selectedClient.name.slice(0, 1).toUpperCase()}</div>
                         <div>
-                          <div className="flex flex-wrap items-center gap-2"><h4 className="font-serif text-xl font-medium">{selectedClient.name}</h4><AdminBadge tone="green">{selectedClient.taxNumber || selectedClient.companyRegistrationNumber ? "Cég" : "Ügyfél"}</AdminBadge></div>
+                          <div className="flex flex-wrap items-center gap-2"><h4 className="font-serif text-xl font-medium">{hydrateCoreClient(selectedClient).name}</h4><AdminBadge tone="green">{getCoreClientKey(selectedClient) ? "Kiemelt ügyfél" : selectedClient.taxNumber || selectedClient.companyRegistrationNumber ? "Cég" : "Ügyfél"}</AdminBadge></div>
                           <div className="mt-2 grid grid-cols-1 gap-1 text-xs text-[#3D4842] md:grid-cols-2">
-                            <p>Kapcsolattartó: <b>{selectedClient.contactPerson || selectedClient.authorizedRepresentative || "Nincs megadva"}</b></p>
-                            <p>Email: <b>{selectedClient.email || "Nincs megadva"}</b></p>
-                            <p>Telefon: <b>{selectedClient.phone || "Nincs megadva"}</b></p>
-                            <p>Dokumentumstílus: <b>Nincs megadva</b></p>
+                            <p>Kapcsolattartó: <b>{hydrateCoreClient(selectedClient).contactPerson || selectedClient.authorizedRepresentative || "Nincs megadva"}</b></p>
+                            <p>Email: <b>{hydrateCoreClient(selectedClient).email || "Nincs megadva"}</b></p>
+                            <p>Telefon: <b>{hydrateCoreClient(selectedClient).phone || "Nincs megadva"}</b></p>
+                            <p>Adószám: <b>{hydrateCoreClient(selectedClient).taxNumber || "Nincs megadva"}</b></p>
                           </div>
                         </div>
                       </article>

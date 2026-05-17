@@ -1002,12 +1002,12 @@ export function CaseDetail({ params }: CaseDetailProps) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-lg text-[#6B655B]">Case not found</p>
+          <p className="text-lg text-[#6B655B]">Az ügy nem található</p>
           <button 
             onClick={() => router.push('/cases')}
             className="mt-4 px-4 py-2 bg-[#C9A227] text-white rounded hover:bg-[#B8911F]"
           >
-            Back to Cases
+            Vissza az ügylistához
           </button>
         </div>
       </div>
@@ -1018,7 +1018,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
     <div className="flex-1 flex min-h-0 case-detail-surface">
       <aside className="w-56 border-r border-[#DDD7CA] bg-[#F6F2E8] flex flex-col">
         <div className="p-4 border-b border-[#DDD7CA]">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-2">Case Context</p>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-2">Ügy kontextus</p>
           <p className="text-[11px] text-[#1F2821] font-semibold leading-tight">{displayTitle}</p>
           <p className="text-[10px] text-[#7B776D] mt-1">{displayCaseNumber}</p>
           <button
@@ -1086,7 +1086,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
               <h1 className="text-3xl font-serif text-[#1F2821] leading-tight">{displayTitle}</h1>
               <div className="flex items-center gap-6 mt-4 text-xs text-[#7B776D]">
                 <div>
-                  <span className="uppercase tracking-[0.2em] text-[9px]">Client</span>
+                  <span className="uppercase tracking-[0.2em] text-[9px]">Ügyfél</span>
                   <p className="text-[#1F2821] mt-0.5 font-medium">{displayClient}</p>
                 </div>
                 <div>
@@ -1102,12 +1102,12 @@ export function CaseDetail({ params }: CaseDetailProps) {
                         onClick={() => { setShowAssignDropdown(!showAssignDropdown); loadAvailableUsers(); }}
                         className="text-[#C9A227] text-xs underline hover:text-[#B8911F]"
                       >
-                        + Assign lawyer
+                        + Felelős ügyvéd hozzárendelése
                       </button>
                       {showAssignDropdown && (
                         <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-[#DDD7CA] shadow-lg z-50 max-h-48 overflow-y-auto">
                           {isLoadingUsers ? (
-                            <p className="p-2 text-xs text-[#7B776D]">Loading users...</p>
+                            <p className="p-2 text-xs text-[#7B776D]">Felhasználók betöltése...</p>
                           ) : availableUsers.length > 0 ? (
                             availableUsers.map((user) => (
                               <button
@@ -1121,7 +1121,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                               </button>
                             ))
                           ) : (
-                            <p className="p-2 text-xs text-[#7B776D]">No users available</p>
+                            <p className="p-2 text-xs text-[#7B776D]">Nincs elérhető felhasználó</p>
                           )}
                         </div>
                       )}
@@ -1374,9 +1374,9 @@ export function CaseDetail({ params }: CaseDetailProps) {
 
             <div className="border-t border-[#DDD7CA] pt-8">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xs uppercase tracking-[0.28em] text-[#7B776D]">Case Story</h2>
+                <h2 className="text-xs uppercase tracking-[0.28em] text-[#7B776D]">Ügy története</h2>
                 <div className="flex items-center gap-3">
-                  <p className="text-[10px] text-[#9C9890]">{caseStoryEvents.length} events</p>
+                  <p className="text-[10px] text-[#9C9890]">{caseStoryEvents.length} esemény</p>
                   {!isArchived && (
                     <button
                       onClick={() => setIsAddingNote(true)}
@@ -1415,7 +1415,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                 </div>
               )}
               <p className="text-[11px] text-[#7B776D] mb-4">
-                This timeline shows recorded activity currently available for this case across workflow, documents, generation, tasks, and communications.
+                Ez az idővonal az ügyhöz rögzített munkafolyamat-, dokumentum-, generálási-, feladat- és kommunikációs eseményeket mutatja.
               </p>
               <div className="relative">
                 <div className="absolute left-[18px] top-0 bottom-0 w-px bg-[#DDD7CA]" />
@@ -1457,7 +1457,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                                       onClick={() => router.push(event.link as string)}
                                       className="text-[10px] text-[#C9A227] hover:underline"
                                     >
-                                      {event.linkLabel || 'Open'}
+                                      {event.linkLabel || 'Megnyitás'}
                                     </button>
                                   )}
                                 </div>
@@ -1469,8 +1469,8 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     ))
                   ) : (
                     <div className="text-xs text-[#9C9890] italic space-y-1">
-                      <p>No recorded case activity yet.</p>
-                      <p>Generate or upload documents, update tasks, and log communications to populate the case story.</p>
+                      <p>Még nincs rögzített ügyesemény.</p>
+                      <p>Dokumentum feltöltése, generálás, feladatfrissítés vagy kommunikáció rögzítése után jelennek meg az események.</p>
                     </div>
                   )}
                 </div>
@@ -1494,15 +1494,15 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     </svg>
                   </div>
                   <div className="flex-1">
-                    <p className="text-xs font-semibold text-[#1F2821]">Case Completion</p>
+                    <p className="text-xs font-semibold text-[#1F2821]">Ügy lezárása</p>
                     <p className="text-xs text-[#6B655B] mt-1 leading-relaxed">
-                      Ready to finalize this case? Archive the case to mark it as completed.
+                      Az ügy lezárható. Az archiválás befejezettként jelöli az ügyet.
                     </p>
                     <button
                       onClick={() => setShowCompleteConfirm(true)}
                       className="mt-3 px-4 py-2 bg-[#059669] text-white text-xs font-bold uppercase tracking-widest hover:bg-[#047857] transition-colors"
                     >
-                      Complete & Archive
+                      Lezárás és archiválás
                     </button>
                   </div>
                 </div>
@@ -1519,9 +1519,9 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     </svg>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-[#1F2821]">Archived Case</p>
+                    <p className="text-xs font-semibold text-[#1F2821]">Archivált ügy</p>
                     <p className="text-xs text-[#6B655B] mt-1 leading-relaxed">
-                      This case has been completed and archived. All case data and documents are preserved and accessible in read-only mode. Active work actions are disabled.
+                      Ez az ügy befejezett és archivált. Az ügyadatok és dokumentumok megmaradnak, csak olvasható módban érhetők el. Az aktív műveletek le vannak tiltva.
                     </p>
                   </div>
                 </div>
@@ -1549,14 +1549,14 @@ export function CaseDetail({ params }: CaseDetailProps) {
         <aside className="w-80 border-l border-[#DDD7CA] bg-white overflow-y-auto">
           <div className="p-4 space-y-6">
             <div>
-              <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D] mb-3">Case workspace</h3>
-              <p className="text-xs text-[#9C9890] italic">Operational panels only. No synthetic analytics shown.</p>
+              <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D] mb-3">Ügy munkaterület</h3>
+              <p className="text-xs text-[#9C9890] italic">Csak operatív panelek. Nincs szintetikus elemzés.</p>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D]">Client Documents</h3>
-                <span className="text-[10px] text-[#9C9890]">{documents.length} files</span>
+                <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D]">Ügyfél dokumentumai</h3>
+                <span className="text-[10px] text-[#9C9890]">{documents.length} fájl</span>
               </div>
               {uploadError && (
                 <div className="mb-3 p-2 bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a] text-[10px]">
@@ -1565,7 +1565,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
               )}
               {isUploading && (
                 <div className="mb-3 p-2 bg-[#f0f9ff] border border-[#b8d4f0] text-[#3a6b8b] text-[10px]">
-                  Uploading document...
+                  Dokumentum feltöltése...
                 </div>
               )}
               {displayedDocs.length > 0 ? (
@@ -1602,7 +1602,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                           <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                           </svg>
-                          {isDownloading === doc.id ? '...' : 'Download'}
+                          {isDownloading === doc.id ? '...' : 'Letöltés'}
                         </button>
                         <button
                           onClick={() => handleAnonymizeDocument(doc)}
@@ -1611,7 +1611,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                           <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
                           </svg>
-                          Anonymize
+                          Anonimizálás
                         </button>
                       </div>
                     </div>
@@ -1621,7 +1621,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                       onClick={() => setShowAllDocs(!showAllDocs)}
                       className="w-full py-2 text-[10px] uppercase tracking-[0.2em] text-[#C9A227] hover:underline"
                     >
-                      {showAllDocs ? 'Show Less' : `View All ${documents.length} Documents`}
+                      {showAllDocs ? 'Kevesebb megjelenítése' : `Összes dokumentum (${documents.length})`}
                     </button>
                   )}
                 </div>
@@ -1631,8 +1631,8 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M8 2h7l5 5v13a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 11v6M9 14h6" />
                   </svg>
-                  <p className="text-xs text-[#9C9890]">No client documents yet</p>
-                  <p className="text-[10px] text-[#B0A898] mt-1">Upload a client document to get started</p>
+                  <p className="text-xs text-[#9C9890]">Még nincs ügyféldokumentum.</p>
+                  <p className="text-[10px] text-[#B0A898] mt-1">Tölts fel ügyféldokumentumot a kezdéshez.</p>
                 </div>
               )}
             </div>
@@ -1640,13 +1640,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
             {generatedContracts.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#C9A227]">Generated Contracts</h3>
-                  <button
-                    onClick={() => router.push(`/cases/${canonicalCaseId}/generate?family=sale_purchase`)}
-                    className="text-[10px] text-[#C9A227] hover:underline"
-                  >
-                    Régi adásvételi generátor
-                  </button>
+                  <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#C9A227]">Generált szerződések</h3>
                 </div>
                 <div className="space-y-2">
                   {generatedContracts.map((contract) => (
@@ -1670,7 +1664,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                               )}
                               {contract.revisionNumber && (
                                 <span className="text-[8px] px-1 py-0.5 bg-[#EEE7D9] text-[#514D45] border border-[#DDD7CA] font-bold uppercase tracking-wide">
-                                  Revision {contract.revisionNumber}
+                                  Verzió {contract.revisionNumber}
                                 </span>
                               )}
                             </div>
@@ -1678,7 +1672,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                         </div>
                       </div>
                       <p className="text-[10px] text-[#7B776D] mt-1">
-                        Generated: {new Date(contract.generatedAt).toLocaleString('hu-HU')}
+                        Létrehozva: {new Date(contract.generatedAt).toLocaleString('hu-HU')}
                       </p>
                       <div className="flex gap-2 mt-2">
                         <button
@@ -1686,13 +1680,13 @@ export function CaseDetail({ params }: CaseDetailProps) {
                           disabled={isDownloading === contract.id}
                           className="text-[9px] px-2 py-1 border border-[#DDD7CA] text-[#514D45] rounded hover:bg-[#FBF9F3] disabled:opacity-50"
                         >
-                          {isDownloading === contract.id ? '...' : 'Download'}
+                          {isDownloading === contract.id ? '...' : 'Letöltés'}
                         </button>
                         <button
                           onClick={() => router.push(`/cases/${canonicalCaseId}/review/${contract.id}`)}
                           className="text-[9px] px-2 py-1 bg-[#F59E0B] text-white rounded hover:bg-[#D97706]"
                         >
-                          Review
+                          Review megnyitása
                         </button>
                       </div>
                     </div>
@@ -1715,20 +1709,13 @@ export function CaseDetail({ params }: CaseDetailProps) {
               <p className="mt-2 text-[10px] text-[#7B776D] text-center">
                 A klauzula-rendszer külön patchben lesz bekötve.
               </p>
-              <button
-                onClick={() => !isArchived && router.push(`/cases/${canonicalCaseId}/generate?family=sale_purchase`)}
-                disabled={isArchived}
-                className="mt-2 w-full py-2 text-[10px] uppercase tracking-[0.18em] border border-[#DDD7CA] text-[#514D45] hover:bg-[#FBF9F3] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Régi adásvételi generátor
-              </button>
             </div>
 
             {/* Secure Bridge: AI Response Import */}
             {anonymousDocuments.length > 0 ? (
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#8B5CF6]">AI Processing</h3>
+                  <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#8B5CF6]">AI feldolgozás</h3>
                   <span className="text-[10px] text-[#9C9890]">{anonymousDocuments.length}</span>
                 </div>
                 <div className="space-y-2">
@@ -1744,10 +1731,10 @@ export function CaseDetail({ params }: CaseDetailProps) {
                           </svg>
                           <div className="min-w-0">
                             <p className="text-xs text-[#1F2821] truncate font-medium">
-                              {anonDoc.name || 'Anonymous Document'}
+                              {anonDoc.name || 'Anonimizált dokumentum'}
                             </p>
                             <p className="text-[10px] text-[#9C9890]">
-                              {anonDoc.aiTask || 'Custom'} • {new Date(anonDoc.createdAt).toLocaleDateString('hu-HU')}
+                               {anonDoc.aiTask || 'Egyedi'} • {new Date(anonDoc.createdAt).toLocaleDateString('hu-HU')}
                             </p>
                           </div>
                         </div>
@@ -1768,7 +1755,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                           <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                           </svg>
-                          Import AI Response
+                          AI válasz beillesztése
                         </button>
                       </div>
                     </div>
@@ -1784,9 +1771,9 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     </svg>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-[#1F2821]">AI Secure Bridge</p>
+                    <p className="text-xs font-semibold text-[#1F2821]">AI biztonságos átadás</p>
                     <p className="text-[10px] text-[#6B655B] mt-1 leading-relaxed">
-                      No anonymized documents yet. Anonymize a client document to start external AI processing.
+                      Még nincs anonimizált dokumentum. Külső AI feldolgozáshoz először anonimizálj egy ügyféldokumentumot.
                     </p>
                   </div>
                 </div>
@@ -1794,23 +1781,23 @@ export function CaseDetail({ params }: CaseDetailProps) {
             )}
 
               <div>
-                <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D] mb-3">Internal notes</h3>
+                <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D] mb-3">Belső jegyzetek</h3>
                 <button
                   onClick={() => router.push(`/cases/${canonicalCaseId}/communications`)}
                   className="w-full py-2 text-[10px] uppercase tracking-[0.2em] border border-[#DDD7CA] text-[#514D45] hover:bg-[#FBF9F3]"
                 >
-                  Open notes & communication log
+                  Jegyzetek és kommunikációs napló megnyitása
                 </button>
               </div>
 
               {/* Tasks Panel */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#059669]">Tasks</h3>
+                  <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#059669]">Feladatok</h3>
                   <span className="text-[10px] text-[#9C9890]">{tasks.length}</span>
                 </div>
                 {isLoadingTasks ? (
-                  <div className="py-4 text-center text-[10px] text-[#9C9890]">Loading tasks...</div>
+                  <div className="py-4 text-center text-[10px] text-[#9C9890]">Feladatok betöltése...</div>
                 ) : tasks.length > 0 ? (
                   <div className="space-y-2">
                     {tasks.slice(0, 5).map((task) => (
@@ -1835,12 +1822,12 @@ export function CaseDetail({ params }: CaseDetailProps) {
                                   </span>
                                 )}
                                 {task.dueDate && (
-                                  <span>Due: {new Date(task.dueDate).toLocaleDateString('hu-HU')}</span>
+                                  <span>Határidő: {new Date(task.dueDate).toLocaleDateString('hu-HU')}</span>
                                 )}
                               </p>
                               {task.assignedTo && (
                                 <p className="text-[10px] text-[#7B776D] mt-0.5">
-                                  Assignee: {task.assignedTo.name}
+                                  Felelős: {task.assignedTo.name}
                                 </p>
                               )}
                             </div>
@@ -1863,7 +1850,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                               disabled={actionTaskId === task.id}
                               className="text-[9px] px-2 py-1 bg-[#059669] text-white rounded hover:bg-[#047857] disabled:opacity-50"
                             >
-                              {actionTaskId === task.id ? '...' : 'Start'}
+                              {actionTaskId === task.id ? '...' : 'Indítás'}
                             </button>
                           )}
                           {task.status === 'IN_PROGRESS' && (
@@ -1872,7 +1859,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                               disabled={actionTaskId === task.id}
                               className="text-[9px] px-2 py-1 bg-[#D97706] text-white rounded hover:bg-[#B45309] disabled:opacity-50"
                             >
-                              {actionTaskId === task.id ? '...' : 'Submit'}
+                              {actionTaskId === task.id ? '...' : 'Beküldés'}
                             </button>
                           )}
                           {task.status === 'SUBMITTED' && (
@@ -1882,20 +1869,20 @@ export function CaseDetail({ params }: CaseDetailProps) {
                                 disabled={actionTaskId === task.id}
                                 className="text-[9px] px-2 py-1 bg-[#059669] text-white rounded hover:bg-[#047857] disabled:opacity-50"
                               >
-                                {actionTaskId === task.id ? '...' : '✓ Approve'}
+                                {actionTaskId === task.id ? '...' : 'Jóváhagyás'}
                               </button>
                               <button
                                 onClick={() => handleCompleteTask(task.id, false)}
                                 disabled={actionTaskId === task.id}
                                 className="text-[9px] px-2 py-1 bg-[#DC2626] text-white rounded hover:bg-[#B91C1C] disabled:opacity-50"
                               >
-                                ✗ Reject
+                                Elutasítás
                               </button>
                             </>
                           )}
                           {(task.status === 'TODO' || task.status === 'ASSIGNED' || task.status === 'IN_PROGRESS') && (
                             <span className="text-[9px] px-2 py-1 border border-[#DDD7CA] text-[#9C9890] rounded">
-                              Reassign from task board
+                              Újraosztás a feladattábláról
                             </span>
                           )}
                         </div>
@@ -1903,7 +1890,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     ))}
                     {tasks.length > 5 && (
                       <p className="text-[10px] text-[#9C9890] text-center py-2">
-                        + {tasks.length - 5} more tasks
+                        + {tasks.length - 5} további feladat
                       </p>
                     )}
                   </div>
@@ -1912,7 +1899,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     <svg className="w-8 h-8 mx-auto text-[#9C9890] mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                     </svg>
-                    <p className="text-xs text-[#9C9890]">No tasks for this case</p>
+                    <p className="text-xs text-[#9C9890]">Nincs feladat ehhez az ügyhöz</p>
                   </div>
                 )}
               </div>
@@ -1920,7 +1907,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
               {/* Communication Summary Panel */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#3B82F6]">Communication Summary</h3>
+                  <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#3B82F6]">Kommunikációs összefoglaló</h3>
                   <span className="text-[10px] text-[#9C9890]">{communications.length}</span>
                 </div>
                 {communications.length > 0 ? (
@@ -1930,10 +1917,10 @@ export function CaseDetail({ params }: CaseDetailProps) {
                       const latest = communications[0];
                       const commTypeLabels: Record<string, string> = {
                         'EMAIL': 'Email',
-                        'PHONE': 'Phone',
-                        'MEETING': 'Meeting',
-                        'LETTER': 'Letter',
-                        'NOTE': 'Note',
+                        'PHONE': 'Telefon',
+                        'MEETING': 'Megbeszélés',
+                        'LETTER': 'Levél',
+                        'NOTE': 'Jegyzet',
                       };
                       const commTypeColors: Record<string, string> = {
                         'EMAIL': 'bg-[#3B82F6] text-white',
@@ -1966,7 +1953,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                       const followUpCount = communications.filter(c => c._count?.relatedTasks && c._count.relatedTasks > 0).length;
                       return (
                         <div className="flex items-center justify-between text-[10px]">
-                          <span className="text-[#7B776D]">Follow-up tasks:</span>
+                          <span className="text-[#7B776D]">Utánkövetési feladatok:</span>
                           <span className={followUpCount > 0 ? 'text-[#F59E0B] font-medium' : 'text-[#9C9890]'}>
                             {followUpCount > 0 ? `${followUpCount} kapcsolt feladat` : 'nincs rögzített follow-up'}
                           </span>
@@ -1982,7 +1969,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                       <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5H4.5A2.25 2.25 0 002.25 6.5m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
                       </svg>
-                      Open Communications
+                      Kommunikáció megnyitása
                     </button>
                   </div>
                 ) : (
@@ -1990,29 +1977,29 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     <svg className="w-8 h-8 mx-auto text-[#9C9890] mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5H4.5A2.25 2.25 0 002.25 6.5m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
                     </svg>
-                    <p className="text-[10px] text-[#9C9890] mb-2">No communications logged</p>
+                    <p className="text-[10px] text-[#9C9890] mb-2">Még nincs rögzített kommunikáció</p>
                     <p className="text-[9px] text-[#B0A898]">
-                      This panel summarizes recorded case communications. Communications appear here once logged via the communications workflow.
+                      Ez a panel a rögzített ügykommunikációkat foglalja össze. A bejegyzések a kommunikációs workflow használata után jelennek meg.
                     </p>
                     <button
                       onClick={() => router.push(`/cases/${canonicalCaseId}/communications`)}
                       className="mt-3 w-full py-2 text-[10px] uppercase tracking-[0.2em] border border-[#DDD7CA] text-[#514D45] hover:bg-[#FBF9F3]"
                     >
-                      Go to Communications
+                      Kommunikáció megnyitása
                     </button>
                   </div>
                 )}
                 
                 {/* Scope note */}
                 <p className="text-[9px] text-[#9C9890] mt-2 italic">
-                  Summary of logged communications - not a live inbox.
+                  Rögzített kommunikációk összefoglalója, nem élő postafiók.
                 </p>
               </div>
 
               {/* Workflow Stage Tracker */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#6366F1]">Workflow</h3>
+                  <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#6366F1]">Munkafolyamat</h3>
                   {workflowGraph && (
                     <span className="text-[10px] text-[#9C9890]">{workflowGraph.currentStatus}</span>
                   )}
@@ -2079,56 +2066,56 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     <svg className="w-8 h-8 mx-auto text-[#9C9890] mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.801 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.87.688 2.006 1.649L19 6v-.75a2.25 2.25 0 00-2.25-2.25h-1.5" />
                     </svg>
-                    <p className="text-xs text-[#9C9890]">No workflow data available</p>
+                    <p className="text-xs text-[#9C9890]">Nincs elérhető munkafolyamat-adat</p>
                   </div>
                 )}
               </div>
 
-              {/* Workflow-level context (derived from active case tasks + workflow history comments) */}
+              {/* Munkafolyamat kontextus: aktív ügyfeladatokból és munkafolyamat-előzményekből származtatva. */}
               <div className="mt-4 pt-4 border-t border-[#E5E7EB]">
-                <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#6366F1] mb-3">Workflow Context</h3>
+                <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#6366F1] mb-3">Munkafolyamat kontextus</h3>
                 <div className="space-y-2 p-3 border border-[#E0E7FF] bg-[#F8FAFF] rounded">
                   <div className="flex items-start justify-between gap-3 text-[10px]">
-                    <span className="text-[#7B776D]">Current step</span>
+                    <span className="text-[#7B776D]">Aktuális lépés</span>
                     <span className="text-right text-[#1F2821] font-medium">
-                      {currentWorkflowNode?.label || workflowGraph?.currentStatus || 'Unavailable'}
+                      {currentWorkflowNode?.label || workflowGraph?.currentStatus || 'Nem elérhető'}
                     </span>
                   </div>
 
                   <div className="flex items-start justify-between gap-3 text-[10px]">
-                    <span className="text-[#7B776D]">Assigned to</span>
+                    <span className="text-[#7B776D]">Felelős</span>
                     <span className="text-right text-[#1F2821]">
-                      {primaryWorkflowTask?.assignedTo?.name || 'No assignee yet'}
+                      {primaryWorkflowTask?.assignedTo?.name || 'Még nincs felelős'}
                     </span>
                   </div>
 
                   <div className="flex items-start justify-between gap-3 text-[10px]">
-                    <span className="text-[#7B776D]">Due date</span>
+                    <span className="text-[#7B776D]">Határidő</span>
                     <span className="text-right text-[#1F2821]">
-                      {primaryWorkflowTask?.dueDate ? new Date(primaryWorkflowTask.dueDate).toLocaleDateString('hu-HU') : 'No due date'}
+                      {primaryWorkflowTask?.dueDate ? new Date(primaryWorkflowTask.dueDate).toLocaleDateString('hu-HU') : 'Nincs határidő'}
                     </span>
                   </div>
 
                   <div className="text-[10px]">
-                    <p className="text-[#7B776D] mb-1">Related active task(s)</p>
+                    <p className="text-[#7B776D] mb-1">Kapcsolódó aktív feladatok</p>
                     {prioritizedActiveTasks.length > 0 ? (
                       <div className="space-y-1">
                         {prioritizedActiveTasks.slice(0, 3).map((task) => (
                           <p key={task.id} className="text-[#1F2821] truncate">• {task.title}</p>
                         ))}
                         {prioritizedActiveTasks.length > 3 && (
-                          <p className="text-[#9C9890]">+ {prioritizedActiveTasks.length - 3} more</p>
+                          <p className="text-[#9C9890]">+ {prioritizedActiveTasks.length - 3} további</p>
                         )}
                       </div>
                     ) : (
-                      <p className="text-[#9C9890]">None linked</p>
+                      <p className="text-[#9C9890]">Nincs kapcsolt feladat</p>
                     )}
                   </div>
 
                   <div className="text-[10px]">
-                    <p className="text-[#7B776D] mb-1">Latest workflow reason/comment</p>
+                    <p className="text-[#7B776D] mb-1">Legutóbbi munkafolyamat-indoklás / megjegyzés</p>
                     {isLoadingWorkflowHistory ? (
-                      <p className="text-[#9C9890]">Loading...</p>
+                      <p className="text-[#9C9890]">Betöltés...</p>
                     ) : latestWorkflowComment?.comment ? (
                       <div>
                         <p className="text-[#1F2821] leading-relaxed">{latestWorkflowComment.comment}</p>
@@ -2140,12 +2127,12 @@ export function CaseDetail({ params }: CaseDetailProps) {
                         })()}
                       </div>
                     ) : (
-                      <p className="text-[#9C9890]">No reason/comment recorded</p>
+                      <p className="text-[#9C9890]">Nincs rögzített indoklás vagy megjegyzés</p>
                     )}
                   </div>
                 </div>
                 <p className="text-[9px] text-[#9C9890] mt-2 italic">
-                  Owner and due date are derived from active case tasks; reason/comment is sourced from workflow history.
+                  A felelős és a határidő az aktív ügyfeladatokból, az indoklás vagy megjegyzés a munkafolyamat-előzményekből származik.
                 </p>
               </div>
           </div>

@@ -14,7 +14,6 @@ import {
   uploadGeneratedContractToSharePoint,
   createContractGenerationRevision,
   finalizeContractGeneration,
-  downloadCaseBundle,
   getCommunications,
   createCommunication,
   createCaseHandoffPackage,
@@ -499,35 +498,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     }
   };
 
-  const handleBundleDownload = async () => {
-    const effectiveCaseId = caseRecord?.id || resolvedParams.caseId;
-    try {
-      const blob = await downloadCaseBundle(effectiveCaseId);
-      const url = URL.createObjectURL(blob);
-      const a = globalThis.document.createElement('a');
-      a.href = url;
-      a.download = `case-bundle-${effectiveCaseId}.zip`;
-      globalThis.document.body.appendChild(a);
-      a.click();
-      globalThis.document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      setActionResult({ type: 'success', message: 'Ügycsomag letöltése elindult' });
-    } catch (err) {
-      console.error('Bundle download failed:', err);
-      setActionResult({ type: 'error', message: 'Ügycsomag letöltése sikertelen' });
-    }
-  };
-
   const handleReview = (contractId: string) => {
     router.push(`/cases/${canonicalCaseId}/review/${contractId}`);
   };
 
   const handleGenerate = () => {
     router.push(`/cases/${canonicalCaseId}/generate/assembly`);
-  };
-
-  const handleLegacyGenerate = () => {
-    router.push(`/cases/${canonicalCaseId}/generate?family=sale_purchase`);
   };
 
   const handleAnonymize = (contract: CaseContractListItem) => {
@@ -628,7 +604,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       const response = await getCommunications({ documentId: docId, type: 'NOTE' });
       setDocumentNotes(response.communications);
     } catch {
-      setNoteError('Failed to load notes');
+      setNoteError('A jegyzetek betöltése sikertelen.');
       setDocumentNotes([]);
     } finally {
       setIsLoadingNotes(false);
@@ -643,7 +619,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     try {
       const newNote = await createCommunication({
         type: 'NOTE',
-        subject: newNoteSubject.trim() || '(no subject)',
+        subject: newNoteSubject.trim() || '(nincs tárgy)',
         content: newNoteContent.trim(),
         documentId: selectedGeneratedContract.id,
         caseId: canonicalCaseId,
@@ -653,7 +629,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setNewNoteContent('');
       setIsAddingNote(false);
     } catch {
-      setNoteError('Failed to add note');
+      setNoteError('A jegyzet mentése sikertelen.');
       setIsAddingNote(false);
     }
   };
@@ -824,6 +800,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   };
 
   const activeDocument = selectedUploadedDocument || selectedGeneratedContract;
+  const houseStyleHasContent = Boolean(clientHouseStyle && [
+    clientHouseStyle.officialName,
+    clientHouseStyle.shortName,
+    clientHouseStyle.registeredSeat,
+    clientHouseStyle.preferredLanguage,
+    clientHouseStyle.documentLanguageMode,
+    clientHouseStyle.fontFamily,
+    clientHouseStyle.headingStyle,
+    clientHouseStyle.headerAssetPath,
+  ].some((value) => String(value || '').trim()));
 
   const generatedLedgerItems = [...families.flatMap((family) => family.items), ...standalone];
   const activeTitle = selectedUploadedDocument?.fileName || selectedGeneratedContract?.title || selectedGeneratedContract?.fileName || selectedGeneratedContract?.templateName || null;
@@ -875,23 +861,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
         </nav>
 
         <div className={`p-3 border-t ${p.border}`}>
-          <button
-            onClick={handleGenerate}
-             className="w-full bg-[#B58A2A] py-2 text-xs font-bold uppercase tracking-widest text-[#173824] transition-colors hover:bg-[#D1A83A]"
-          >
-            Szerződés összeállítása
-          </button>
-           <p className="mt-1 text-[9px] text-[#F4EFDB]/65">
-            Külön szerződés-összeállító felület; a dokumentum workspace az aktív iratból nyílik.
-          </p>
-          <button
-            onClick={handleBundleDownload}
-             className="mt-2 w-full border border-[#F4EFDB]/30 py-2 text-xs font-bold uppercase tracking-widest text-[#F4EFDB]/85 transition-colors hover:bg-[#173824] hover:text-[#F4EFDB]"
-          >
-            Csomag letöltése
-          </button>
-           <p className="mt-1 text-[9px] text-[#F4EFDB]/65">
-            Letöltés: az ügy aktuális dokumentumkészlete egy csomagban.
+          <p className="text-[9px] leading-4 text-[#F4EFDB]/65">
+            Az aktív dokumentumhoz tartozó műveletek a középső kártyán érhetők el.
           </p>
         </div>
       </aside>
@@ -1056,29 +1027,33 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         {isLoadingHouseStyle
                           ? "Profil betöltése..."
                           : clientHouseStyle
-                            ? "House style profil elérhető."
+                            ? houseStyleHasContent ? "House style profil elérhető." : "Profil létrehozva, de nincs kitöltve."
                             : "Ehhez az ügyfélhez még nincs house style profil."}
                       </p>
+                      <p className="mt-1 text-xs text-[#3D4842]">{caseRecord?.clientName || "Ügyfél"}</p>
                     </div>
-                    <AdminStatusPill tone={clientHouseStyle ? "green" : "neutral"}>{clientHouseStyle ? "Van" : "Nincs"}</AdminStatusPill>
+                    <AdminStatusPill tone={clientHouseStyle ? "green" : "neutral"}>Profil: {clientHouseStyle ? "Van" : "Nincs"}</AdminStatusPill>
                   </div>
                   {clientHouseStyle ? (
-                    <p className="mt-3 rounded bg-[#FBF6E7] p-2 text-[11px] text-[#3D4842]">
-                      {[clientHouseStyle.preferredLanguage, clientHouseStyle.documentLanguageMode, clientHouseStyle.fontFamily, clientHouseStyle.headerAssetPath ? "fejlécminta" : null].filter(Boolean).join(" · ") || "A profil elérhető, de még kevés formázási adatot tartalmaz."}
-                    </p>
+                    <div className="mt-3 space-y-2 rounded bg-[#FBF6E7] p-2 text-[11px] text-[#3D4842]">
+                      <p>{[clientHouseStyle.preferredLanguage, clientHouseStyle.documentLanguageMode, clientHouseStyle.fontFamily].filter(Boolean).join(" · ") || "Profil létrehozva, de nincs kitöltve."}</p>
+                      <p>Fejlécminta: <b>{clientHouseStyle.headerAssetPath ? "Van" : "Nincs"}</b></p>
+                    </div>
                   ) : null}
                   <AdminButton className="mt-3" size="sm" variant="muted" onClick={() => setShowHouseStylePanel((value) => !value)} disabled={!caseRecord?.clientId}>
-                    {showHouseStylePanel ? "Ügyfélprofil bezárása" : clientHouseStyle ? "Ügyfélprofil szerkesztése" : "Profil létrehozása"}
+                    {showHouseStylePanel ? "Profil bezárása" : clientHouseStyle ? "Profil megnyitása" : "Profil létrehozása"}
                   </AdminButton>
                   {!caseRecord?.clientId ? <p className="mt-2 text-[10px] text-[#8B2A2A]">Az ügyfél azonosítója nem érhető el.</p> : null}
                 </AdminPanel>
                 {showHouseStylePanel && caseRecord?.clientId ? (
-                  <ClientHouseStylePanel
-                    compact
-                    clientId={caseRecord.clientId}
-                    clientName={caseRecord.clientName}
-                    onSaved={() => getCaseClientHouseStyle(caseRecord.id).then(setClientHouseStyle).catch(() => setClientHouseStyle(null))}
-                  />
+                  <div className="max-h-[520px] overflow-y-auto rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-[#FBF9F3]">
+                    <ClientHouseStylePanel
+                      compact
+                      clientId={caseRecord.clientId}
+                      clientName={caseRecord.clientName}
+                      onSaved={() => getCaseClientHouseStyle(caseRecord.id).then(setClientHouseStyle).catch(() => setClientHouseStyle(null))}
+                    />
+                  </div>
                 ) : null}
                 {caseRecord && <HandoffPackagePanel caseId={caseRecord.id} refreshKey={handoffPanelRefreshKey} />}
                 {handoffPackageMessage && <p className="rounded bg-[#EEF5E7] p-2 text-[12px] font-semibold text-[#23472F]">{handoffPackageMessage}</p>}

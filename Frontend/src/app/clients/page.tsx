@@ -1,9 +1,69 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
-import { getClients, createClient, updateClient, deleteClient, type Client, type CreateClientData, type UpdateClientData } from "@/lib/api";
+import { AdminBadge, AdminButton, AdminPanel, AdminStatusPill } from "@/components/adminiculum/ui";
+import { createClient, getClients, updateClient, type Client, type CreateClientData, type UpdateClientData } from "@/lib/api";
+
+const CORE_CLIENT_ORDER = ["blackbelt technology kft", "blackbelt", "saubermacher-magyarorszag kft", "saubermacher"];
+
+const CORE_CLIENT_DEFAULTS: Record<string, Partial<Client>> = {
+  blackbelt: {
+    name: "BlackBelt Technology Kft.",
+    address: "1027 Budapest, Ganz utca 16. 3. em., Magyarország",
+    taxNumber: "24334934-2-41",
+    companyRegistrationNumber: "01-09-356381",
+    phone: "70/9309191",
+    email: "aczifra@t-online.hu",
+    contactPerson: "Sövegjártó Róbert",
+  },
+  saubermacher: {
+    name: "Saubermacher-Magyarország Kft.",
+    address: "1181 Budapest, Zádor u. 5.",
+    taxNumber: "13559212-2-43",
+    companyRegistrationNumber: "03-09-113748",
+  },
+};
+
+function normalize(value?: string | null) {
+  return String(value || "")
+    .toLocaleLowerCase("hu-HU")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function coreKey(client: Client): "blackbelt" | "saubermacher" | null {
+  const value = normalize(`${client.name} ${client.houseStyleProfile?.officialName || ""} ${client.houseStyleProfile?.shortName || ""}`);
+  if (value.includes("blackbelt")) return "blackbelt";
+  if (value.includes("saubermacher") || value.includes("sauber macher")) return "saubermacher";
+  return null;
+}
+
+function coreScore(client: Client) {
+  const key = coreKey(client);
+  if (key === "blackbelt") return 0;
+  if (key === "saubermacher") return 1;
+  return 99;
+}
+
+function mergeCoreDefaults(client: Client): Client {
+  const key = coreKey(client);
+  if (!key) return client;
+  const defaults = CORE_CLIENT_DEFAULTS[key];
+  return {
+    ...client,
+    name: client.name || defaults.name || "",
+    address: client.address || defaults.address,
+    taxNumber: client.taxNumber || defaults.taxNumber,
+    companyRegistrationNumber: client.companyRegistrationNumber || defaults.companyRegistrationNumber,
+    phone: client.phone || defaults.phone,
+    email: client.email || defaults.email,
+    contactPerson: client.contactPerson || defaults.contactPerson,
+  };
+}
 
 export default function ClientsPage() {
   return (
@@ -19,6 +79,7 @@ function ClientsPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [showOtherClients, setShowOtherClients] = useState(false);
   const [formData, setFormData] = useState<CreateClientData>({
     name: "",
     email: "",
@@ -30,17 +91,16 @@ function ClientsPageContent() {
     contactPerson: "",
   });
   const [isSaving, setIsSaving] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const loadClients = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
       const response = await getClients();
-      setClients(response.data || []);
+      setClients((response.data || []).map(mergeCoreDefaults));
     } catch (err) {
-      console.error('Failed to load clients:', err);
-      setError('Failed to load clients');
+      console.error("Failed to load clients:", err);
+      setError("Az ügyfelek betöltése sikertelen.");
     } finally {
       setIsLoading(false);
     }
@@ -50,18 +110,30 @@ function ClientsPageContent() {
     loadClients();
   }, [loadClients]);
 
+  const visibleGroups = useMemo(() => {
+    const sorted = [...clients].sort((a, b) => {
+      const scoreDiff = coreScore(a) - coreScore(b);
+      if (scoreDiff !== 0) return scoreDiff;
+      return a.name.localeCompare(b.name, "hu-HU");
+    });
+    const seenCore = new Set<string>();
+    const primary: Client[] = [];
+    const other: Client[] = [];
+    for (const client of sorted) {
+      const key = coreKey(client);
+      if (key && !seenCore.has(key)) {
+        seenCore.add(key);
+        primary.push(client);
+      } else {
+        other.push(client);
+      }
+    }
+    return { primary, other };
+  }, [clients]);
+
   const handleCreate = () => {
     setEditingClient(null);
-    setFormData({
-      name: "",
-      email: "",
-      phone: "",
-      address: "",
-      taxNumber: "",
-      companyRegistrationNumber: "",
-      authorizedRepresentative: "",
-      contactPerson: "",
-    });
+    setFormData({ name: "", email: "", phone: "", address: "", taxNumber: "", companyRegistrationNumber: "", authorizedRepresentative: "", contactPerson: "" });
     setShowModal(true);
   };
 
@@ -82,23 +154,14 @@ function ClientsPageContent() {
 
   const handleSave = async () => {
     if (!formData.name?.trim()) {
-      alert("Client name is required");
+      alert("Az ügyfél hivatalos neve kötelező.");
       return;
     }
 
     setIsSaving(true);
     try {
       if (editingClient) {
-        const updateData: UpdateClientData = {
-          name: formData.name,
-          email: formData.email || undefined,
-          phone: formData.phone || undefined,
-          address: formData.address || undefined,
-          taxNumber: formData.taxNumber || undefined,
-          companyRegistrationNumber: formData.companyRegistrationNumber || undefined,
-          authorizedRepresentative: formData.authorizedRepresentative || undefined,
-          contactPerson: formData.contactPerson || undefined,
-        };
+        const updateData: UpdateClientData = { ...formData };
         await updateClient(editingClient.id, updateData);
       } else {
         await createClient(formData);
@@ -106,327 +169,123 @@ function ClientsPageContent() {
       setShowModal(false);
       await loadClients();
     } catch (err: unknown) {
-      console.error('Failed to save client:', err);
-      const message = err instanceof Error && err.message
-        ? err.message
-        : 'Failed to save client';
-      alert(`Client save failed: ${message}`);
+      console.error("Failed to save client:", err);
+      const message = err instanceof Error && err.message ? err.message : "Az ügyfél mentése sikertelen.";
+      alert(message);
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleDelete = async (clientId: string) => {
-    try {
-      await deleteClient(clientId);
-      setDeleteConfirm(null);
-      await loadClients();
-    } catch (err: unknown) {
-      console.error('Failed to delete client:', err);
-      const message = err instanceof Error && err.message
-        ? err.message
-        : 'Failed to delete client';
-      alert(`Delete failed: ${message}`);
-    }
+  const renderClientCard = (client: Client, primary: boolean) => {
+    const profile = client.houseStyleProfile;
+    const display = mergeCoreDefaults(client);
+    const hasProfile = Boolean(profile);
+    const hasHeader = Boolean(profile?.headerAssetPath);
+    return (
+      <AdminPanel key={client.id} className="overflow-hidden p-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-serif text-2xl font-medium leading-tight text-[#16201A]">{profile?.officialName || display.name}</h2>
+              {primary ? <AdminBadge tone="gold">Kiemelt ügyfél</AdminBadge> : <AdminBadge tone="neutral">Egyéb / teszt</AdminBadge>}
+            </div>
+            <p className="mt-1 text-sm text-[#3D4842]">Rövid név: <b>{profile?.shortName || (coreKey(client) === "blackbelt" ? "BlackBelt" : coreKey(client) === "saubermacher" ? "Saubermacher" : display.name)}</b></p>
+            <div className="mt-3 grid gap-2 text-xs text-[#3D4842] sm:grid-cols-2">
+              <p>Székhely: <b>{profile?.registeredSeat || display.address || "Nincs megadva"}</b></p>
+              <p>Adószám: <b>{profile?.taxNumber || display.taxNumber || "Nincs megadva"}</b></p>
+              <p>Cégjegyzékszám / nyilvántartási szám: <b>{profile?.registrationNumber || display.companyRegistrationNumber || "Nincs megadva"}</b></p>
+              <p>Kapcsolattartó: <b>{profile?.contactPerson || display.contactPerson || display.authorizedRepresentative || "Nincs megadva"}</b></p>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <AdminStatusPill tone={hasProfile ? "green" : "neutral"}>House style: {hasProfile ? "Van" : "Nincs"}</AdminStatusPill>
+              <AdminStatusPill tone={hasHeader ? "green" : "neutral"}>Fejlécminta: {hasHeader ? "Van" : "Nincs"}</AdminStatusPill>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Link href={`/clients/${client.id}`} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#16201A] hover:bg-[#FBF6E7]">Dosszié</Link>
+            <Link href={`/clients/${client.id}`} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#16201A] hover:bg-[#FBF6E7]">House style</Link>
+            <Link href="/cases" className="inline-flex items-center justify-center rounded-[5px] border border-[#8E6A1B] bg-[#B58A2A] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#8E6A1B]">Új ügy</Link>
+            <AdminButton size="sm" variant="neutral" onClick={() => handleEdit(client)}>Szerkesztés</AdminButton>
+          </div>
+        </div>
+      </AdminPanel>
+    );
   };
 
   return (
-    <div className="flex-1 flex min-h-0">
+    <div className="flex min-h-0 flex-1 bg-[#EFE7CF] text-[#16201A]">
       <main className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto p-8">
-          <div className="flex items-center justify-between mb-8">
+        <div className="mx-auto max-w-5xl space-y-5 p-8">
+          <div className="flex flex-col gap-4 border border-[rgba(22,32,26,0.10)] bg-white p-5 md:flex-row md:items-center md:justify-between">
             <div>
-              <h1 className="text-2xl font-serif text-[#1F2821]">Ügyfélkapcsolatok és intake</h1>
-              <p className="text-xs text-[#7B776D] mt-1">{clients.length} ügyfélrekord · ügyfélből közvetlenül nyitható ügydosszié és ügyindítás</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">Ügyfelek</p>
+              <h1 className="mt-1 font-serif text-4xl font-medium text-[#16201A]">Ügyfelek</h1>
+              <p className="mt-1 text-sm text-[#3D4842]">Ügyfélkapcsolatok, house style profilok és ügyindítás.</p>
             </div>
-            <button
-              onClick={handleCreate}
-              className="px-4 py-2 bg-[#C9A227] text-white text-xs uppercase tracking-[0.2em] hover:bg-[#B8911F] transition-colors rounded flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              New Client
-            </button>
+            <AdminButton variant="primary" onClick={handleCreate}>+ Új ügyfél</AdminButton>
           </div>
 
-          <div className="mb-6 p-3 border border-[#DDD7CA] bg-white">
-            <h2 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-2">Kapcsolt munkafolyamatok</h2>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
-              <Link href="/cases" className="px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Ügylista</Link>
-              <Link href="/tasks" className="px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Feladatok</Link>
-              <Link href="/notifications" className="px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Értesítések</Link>
-              <Link href="/time-entries" className="px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Munkaórák</Link>
-            </div>
-            <p className="text-[11px] text-[#9C9890] mt-2">Tipikus útvonal: ügyfél felvétele → ügyfél dosszié megnyitása → új ügy indítása.</p>
-          </div>
+          <AdminPanel className="p-4">
+            <p className="text-[11px] text-[#3D4842]">A fő ügyindítási lista alapértelmezetten a kiemelt ügyfelekre szűkít: BlackBelt és Saubermacher. Más ügyfelek nem törlődnek.</p>
+          </AdminPanel>
 
-          {error && (
-            <div className="mb-6 p-4 bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a] text-xs rounded">
-              {error}
-            </div>
-          )}
+          {error ? <div className="rounded border border-[#F2DAD6] bg-[#FFF5F3] p-3 text-xs font-semibold text-[#8B2A2A]">{error}</div> : null}
 
           {isLoading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A227] mx-auto mb-4"></div>
-              <p className="text-xs text-[#9C9890]">Loading clients...</p>
-            </div>
-          ) : clients.length === 0 ? (
-            <div className="text-center py-12 border border-dashed border-[#DDD7CA]">
-              <svg className="w-12 h-12 mx-auto text-[#9C9890] mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
-              </svg>
-              <p className="text-xs text-[#9C9890] mb-2">Még nincs ügyfél rögzítve.</p>
-              <p className="text-[11px] text-[#7B776D] mb-4">Az ügyfélfelület akkor válik hasznossá, ha itt felveszed az ügyfelet, majd az ügyfél dossziéból ügyet indítasz.</p>
-              <button
-                onClick={handleCreate}
-                className="px-4 py-2 bg-[#C9A227] text-white text-xs uppercase tracking-[0.2em] hover:bg-[#B8911F] transition-colors rounded"
-              >
-                Első ügyfél felvétele
-              </button>
-            </div>
+            <AdminPanel className="p-10 text-center text-sm text-[#7A8479]">Ügyfelek betöltése...</AdminPanel>
           ) : (
-            <div className="space-y-3">
-              {clients.map((client) => (
-                <div
-                  key={client.id}
-                  className="p-4 border border-[#DDD7CA] bg-white hover:bg-[#FBF9F3] transition-colors rounded"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <Link
-                        href={`/clients/${client.id}`}
-                        className="w-10 h-10 rounded-full bg-[#F6F2E8] flex items-center justify-center text-sm font-medium text-[#6B655B] hover:bg-[#C9A227] hover:text-white transition-colors"
-                      >
-                        {client.name?.charAt(0)?.toUpperCase() || "?"}
-                      </Link>
-                        <div className="min-w-0">
-                          <Link
-                            href={`/clients/${client.id}`}
-                            className="text-sm font-semibold text-[#1F2821] hover:text-[#C9A227] transition-colors"
-                          >
-                            {client.name}
-                          </Link>
-                          <div className="flex flex-wrap items-center gap-4 mt-1">
-                            {client.email && (
-                              <span className="text-xs text-[#7B776D]">{client.email}</span>
-                            )}
-                          {client.phone && (
-                            <span className="text-xs text-[#7B776D]">{client.phone}</span>
-                          )}
-                        </div>
-                          {client.address && (
-                            <p className="text-xs text-[#9C9890] mt-1">{client.address}</p>
-                          )}
+            <>
+              <section className="space-y-3">
+                <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#7A8479]">Kiemelt ügyfelek</h2>
+                {visibleGroups.primary.length > 0 ? visibleGroups.primary.map((client) => renderClientCard(client, true)) : <AdminPanel className="p-4 text-sm text-[#7A8479]">A kiemelt ügyfelek még nincsenek rögzítve. Futtatható a dev seed/upsert script.</AdminPanel>}
+              </section>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 mt-2">
-                            {client.taxNumber && (
-                              <p className="text-[11px] text-[#514D45]">
-                                <span className="text-[#7B776D]">Tax number:</span> {client.taxNumber}
-                              </p>
-                            )}
-                            {client.companyRegistrationNumber && (
-                              <p className="text-[11px] text-[#514D45]">
-                                <span className="text-[#7B776D]">Company reg. no.:</span> {client.companyRegistrationNumber}
-                              </p>
-                            )}
-                            {client.authorizedRepresentative && (
-                              <p className="text-[11px] text-[#514D45]">
-                                <span className="text-[#7B776D]">Authorized representative:</span> {client.authorizedRepresentative}
-                              </p>
-                            )}
-                            {client.contactPerson && (
-                              <p className="text-[11px] text-[#514D45]">
-                                <span className="text-[#7B776D]">Contact person:</span> {client.contactPerson}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    <div className="flex items-center gap-2">
-                      <Link
-                        href={`/clients/${client.id}`}
-                        className="px-3 py-2 text-[10px] uppercase tracking-[0.18em] border border-[#DDD7CA] text-[#514D45] hover:bg-[#FBF9F3] rounded"
-                      >
-                        Dosszié
-                      </Link>
-                      <button
-                        onClick={() => handleEdit(client)}
-                        className="p-2 text-[#7B776D] hover:text-[#C9A227] hover:bg-[#FBF9F3] rounded"
-                        title="Edit client"
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-                        </svg>
-                      </button>
-                      {deleteConfirm === client.id ? (
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => handleDelete(client.id)}
-                            className="p-2 text-white bg-[#DC2626] hover:bg-[#B91C1C] rounded"
-                            title="Confirm delete"
-                          >
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirm(null)}
-                            className="p-2 text-[#7B776D] hover:text-[#514D45] hover:bg-[#ECE6DA] rounded"
-                            title="Cancel"
-                          >
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setDeleteConfirm(client.id)}
-                          className="p-2 text-[#7B776D] hover:text-[#DC2626] hover:bg-[#FEF2F2] rounded"
-                          title="Delete client"
-                        >
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+              <section className="space-y-3">
+                <button type="button" onClick={() => setShowOtherClients((value) => !value)} className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#7A8479] hover:text-[#16201A]">
+                  {showOtherClients ? "▾" : "▸"} Egyéb / teszt ügyfelek ({visibleGroups.other.length})
+                </button>
+                <p className="text-[11px] text-[#7A8479]">Ezek az ügyfelek nincsenek törölve; alapértelmezés szerint nem jelennek meg az ügyindítási listában.</p>
+                {showOtherClients ? <div className="space-y-3">{visibleGroups.other.map((client) => renderClientCard(client, false))}</div> : null}
+              </section>
+            </>
           )}
         </div>
       </main>
 
-      {/* Create/Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div className="p-6 border-b border-[#DDD7CA]">
-              <h2 className="text-lg font-serif text-[#1F2821]">
-                {editingClient ? 'Edit Client' : 'New Client'}
-              </h2>
+      {showModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#16201A]/70 p-4">
+          <div className="max-h-[calc(100vh-48px)] w-full max-w-md overflow-hidden rounded-lg bg-white shadow-xl">
+            <div className="border-b border-[#DDD7CA] bg-[#082817] p-5 text-[#F4EFDB]">
+              <h2 className="font-serif text-2xl font-medium">{editingClient ? "Ügyfél szerkesztése" : "Új ügyfél"}</h2>
             </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs uppercase tracking-[0.2em] text-[#7B776D] mb-2">
-                  Name <span className="text-[#DC2626]">*</span>
+            <div className="max-h-[calc(100vh-190px)] space-y-4 overflow-y-auto p-6">
+              {[
+                ["name", "Hivatalos név", "text"],
+                ["email", "Email", "email"],
+                ["phone", "Telefon", "tel"],
+                ["taxNumber", "Adószám", "text"],
+                ["companyRegistrationNumber", "Cégjegyzékszám / nyilvántartási szám", "text"],
+                ["authorizedRepresentative", "Cégjegyzésre jogosult", "text"],
+                ["contactPerson", "Kapcsolattartó", "text"],
+              ].map(([key, label, type]) => (
+                <label key={key} className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">
+                  {label}{key === "name" ? <span className="text-[#8B2A2A]"> *</span> : null}
+                  <input type={type} value={String(formData[key as keyof CreateClientData] || "")} onChange={(event) => setFormData({ ...formData, [key]: event.target.value })} className="mt-2 w-full rounded border border-[#DDD7CA] px-3 py-2 text-sm normal-case tracking-normal text-[#16201A] focus:outline-none focus:border-[#082817]" />
                 </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm focus:outline-none focus:border-[#C9A227]"
-                  placeholder="Client name"
-                />
-              </div>
-              <div>
-                <label className="block text-xs uppercase tracking-[0.2em] text-[#7B776D] mb-2">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm focus:outline-none focus:border-[#C9A227]"
-                  placeholder="client@example.com"
-                />
-              </div>
-              <div>
-                <label className="block text-xs uppercase tracking-[0.2em] text-[#7B776D] mb-2">
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm focus:outline-none focus:border-[#C9A227]"
-                  placeholder="+36 XX XXX XXXX"
-                />
-              </div>
-              <div>
-                <label className="block text-xs uppercase tracking-[0.2em] text-[#7B776D] mb-2">
-                  Tax Number
-                </label>
-                <input
-                  type="text"
-                  value={formData.taxNumber}
-                  onChange={(e) => setFormData({ ...formData, taxNumber: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm focus:outline-none focus:border-[#C9A227]"
-                  placeholder="Adószám / Tax number"
-                />
-              </div>
-              <div>
-                <label className="block text-xs uppercase tracking-[0.2em] text-[#7B776D] mb-2">
-                  Company Registration Number
-                </label>
-                <input
-                  type="text"
-                  value={formData.companyRegistrationNumber}
-                  onChange={(e) => setFormData({ ...formData, companyRegistrationNumber: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm focus:outline-none focus:border-[#C9A227]"
-                  placeholder="Cégjegyzékszám"
-                />
-              </div>
-              <div>
-                <label className="block text-xs uppercase tracking-[0.2em] text-[#7B776D] mb-2">
-                  Authorized Representative
-                </label>
-                <input
-                  type="text"
-                  value={formData.authorizedRepresentative}
-                  onChange={(e) => setFormData({ ...formData, authorizedRepresentative: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm focus:outline-none focus:border-[#C9A227]"
-                  placeholder="Cégjegyzésre jogosult"
-                />
-              </div>
-              <div>
-                <label className="block text-xs uppercase tracking-[0.2em] text-[#7B776D] mb-2">
-                  Contact Person
-                </label>
-                <input
-                  type="text"
-                  value={formData.contactPerson}
-                  onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm focus:outline-none focus:border-[#C9A227]"
-                  placeholder="Kapcsolattartó"
-                />
-              </div>
-              <div>
-                <label className="block text-xs uppercase tracking-[0.2em] text-[#7B776D] mb-2">
-                  Address
-                </label>
-                <textarea
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm focus:outline-none focus:border-[#C9A227]"
-                  rows={3}
-                  placeholder="Client address"
-                />
-              </div>
+              ))}
+              <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">
+                Székhely / cím
+                <textarea value={formData.address || ""} onChange={(event) => setFormData({ ...formData, address: event.target.value })} rows={3} className="mt-2 w-full rounded border border-[#DDD7CA] px-3 py-2 text-sm normal-case tracking-normal text-[#16201A] focus:outline-none focus:border-[#082817]" />
+              </label>
             </div>
-            <div className="p-6 border-t border-[#DDD7CA] flex justify-end gap-3">
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-xs uppercase tracking-[0.2em] text-[#514D45] border border-[#DDD7CA] hover:bg-[#ECE6DA] transition-colors rounded"
-                disabled={isSaving}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={isSaving || !formData.name?.trim()}
-                className="px-4 py-2 text-xs uppercase tracking-[0.2em] bg-[#C9A227] text-white hover:bg-[#B8911F] transition-colors rounded disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSaving ? 'Saving...' : 'Save'}
-              </button>
+            <div className="flex justify-end gap-3 border-t border-[#DDD7CA] bg-[#F7F0D9] p-4">
+              <AdminButton variant="ghost" onClick={() => setShowModal(false)} disabled={isSaving}>Mégse</AdminButton>
+              <AdminButton variant="primary" onClick={handleSave} disabled={isSaving || !formData.name?.trim()}>{isSaving ? "Mentés..." : "Mentés"}</AdminButton>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

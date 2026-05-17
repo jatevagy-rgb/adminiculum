@@ -1299,16 +1299,18 @@ const filteredClauseTools = useMemo(() => {
                       {houseStyleNotice ? <p className="mt-2 text-[10px] font-semibold text-[#23472F]">{houseStyleNotice}</p> : null}
                     </div>
                     {selectedCaseClientId ? (
-                      <ClientHouseStylePanel
-                        compact
-                        clientId={selectedCaseClientId}
-                        clientName={selectedDocument.caseClientName}
-                        onSaved={() => {
-                          if (selectedDocument?.caseId) {
-                            getCaseClientHouseStyle(selectedDocument.caseId).then(setClientHouseStyle).catch(() => setClientHouseStyle(null));
-                          }
-                        }}
-                      />
+                      <div className="max-h-[420px] overflow-y-auto rounded-[6px] border border-[#DDD7CA] bg-white">
+                        <ClientHouseStylePanel
+                          compact
+                          clientId={selectedCaseClientId}
+                          clientName={selectedDocument.caseClientName}
+                          onSaved={() => {
+                            if (selectedDocument?.caseId) {
+                              getCaseClientHouseStyle(selectedDocument.caseId).then(setClientHouseStyle).catch(() => setClientHouseStyle(null));
+                            }
+                          }}
+                        />
+                      </div>
                     ) : (
                       <p className="rounded border border-dashed border-[#DDD7CA] bg-white p-3 text-[11px] text-[#7B776D]">
                         Az ügyfél azonosítója nem érhető el, ezért a profil szerkesztése itt nem nyitható meg.
