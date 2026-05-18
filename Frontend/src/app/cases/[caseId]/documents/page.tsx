@@ -251,6 +251,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [noteError, setNoteError] = useState<string | null>(null);
   const [isLoadingNotes, setIsLoadingNotes] = useState(false);
 
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const hasLoadedOnceRef = useRef(false);
+
   // Handoff package creation state
   const [isCreatingHandoffPackage, setIsCreatingHandoffPackage] = useState(false);
   const [handoffPackageMessage, setHandoffPackageMessage] = useState<string | null>(null);
@@ -295,11 +299,15 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     fetchCaseRecord();
   }, [resolvedParams.caseId]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (isFirstLoad: boolean) => {
     // Guard: never call API with unresolved caseId (caseNumber string instead of CUID)
     if (!caseRecord?.id) return;
     try {
-      setIsLoading(true);
+      if (isFirstLoad) {
+        setIsInitialLoading(true);
+      } else {
+        setIsRefreshing(true);
+      }
       // Use caseRecord.id (CUID) — NOT resolvedParams.caseId which may be a caseNumber string
       const [contractsData, uploadedDocsData, timelineData] = await Promise.all([
         getCaseContracts(caseRecord.id).catch(() => []),
@@ -313,44 +321,39 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setModifiedWorkingCopies(modified);
       setTimeline(timelineData);
       // Auto-select deep-linked document if requested, otherwise default first-available.
-      const deepLinkedId = requestedDocumentIdRef.current;
-      if (deepLinkedId) {
-        const uploadedMatch = uploadedDocsData.find(doc => doc.id === deepLinkedId);
-        if (uploadedMatch) {
-          setSelectedLedgerItem({ kind: 'uploaded', item: uploadedMatch });
-          setSelectedContract(null);
-          requestedDocumentIdRef.current = null;
-        } else {
-          const contractMatch = contractsData.find(c => c.id === deepLinkedId);
-          if (contractMatch) {
-            setSelectedLedgerItem({ kind: 'generated', item: contractMatch });
-            setSelectedContract(contractMatch);
+      // Only run selection logic on first load to avoid flicker from re-selection on refresh
+      if (!hasLoadedOnceRef.current) {
+        hasLoadedOnceRef.current = true;
+        const deepLinkedId = requestedDocumentIdRef.current;
+        if (deepLinkedId) {
+          const uploadedMatch = uploadedDocsData.find(doc => doc.id === deepLinkedId);
+          if (uploadedMatch) {
+            setSelectedLedgerItem({ kind: 'uploaded', item: uploadedMatch });
+            setSelectedContract(null);
             requestedDocumentIdRef.current = null;
+          } else {
+            const contractMatch = contractsData.find(c => c.id === deepLinkedId);
+            if (contractMatch) {
+              setSelectedLedgerItem({ kind: 'generated', item: contractMatch });
+              setSelectedContract(contractMatch);
+              requestedDocumentIdRef.current = null;
+            }
           }
         }
-      } else if (!selectedLedgerItem) {
-        if (uploadedDocsData.length > 0) {
-          setSelectedLedgerItem({ kind: 'uploaded', item: uploadedDocsData[0] });
-          setSelectedContract(null);
-        } else if (contractsData.length > 0) {
-          setSelectedLedgerItem({ kind: 'generated', item: contractsData[0] });
-          setSelectedContract(contractsData[0]);
-        }
-      }
-      if (contractsData.length > 0 && !selectedContract && !selectedLedgerItem) {
-        setSelectedContract(contractsData[0]);
       }
     } catch (err) {
       console.error('Failed to load data:', err);
     } finally {
-      setIsLoading(false);
+      setIsInitialLoading(false);
+      setIsRefreshing(false);
     }
-  }, [caseRecord?.id, selectedContract, selectedLedgerItem]);
+  }, [caseRecord?.id]);
 
-  // Re-trigger loadData once caseRecord is resolved to CUID
+  // Re-trigger loadData once caseRecord is resolved to CUID — only on mount
   useEffect(() => {
-    if (caseRecord?.id) {
-      loadData();
+    if (caseRecord?.id && !hasLoadedOnceRef.current) {
+      hasLoadedOnceRef.current = true;
+      loadData(true);
     }
   }, [caseRecord?.id, loadData]);
 
@@ -459,7 +462,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       const result = await uploadGeneratedContractToSharePoint(contract.id);
       if (result.success) {
         setActionResult({ type: 'success', message: 'SharePoint szinkronizálás elindult' });
-        loadData(); // Refresh data
+        loadData(false); // Refresh data
       } else {
         setActionResult({ type: 'error', message: 'SharePoint feltöltés sikertelen' });
       }
@@ -477,7 +480,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       const result = await createContractGenerationRevision(contractId);
       if (result.success && result.newContract) {
         setActionResult({ type: 'success', message: `Új verzió létrejött: v${result.newContract.revisionNumber}` });
-        loadData(); // Refresh data
+        loadData(false); // Refresh data
       } else {
         setActionResult({ type: 'error', message: result.error || 'Nem sikerült új verziót létrehozni' });
       }
@@ -495,7 +498,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       const result = await finalizeContractGeneration(contractId);
       if (result.success) {
         setActionResult({ type: 'success', message: 'Dokumentum véglegesként jelölve' });
-        loadData(); // Refresh data
+        loadData(false); // Refresh data
       } else {
         setActionResult({ type: 'error', message: result.error || 'Nem sikerült véglegesíteni' });
       }
@@ -867,7 +870,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
             {isUploading && uploadPhase ? <div className="rounded-[6px] border border-[#D6DEEC] bg-[#EAEFF6] p-3 text-sm font-semibold text-[#2D4A7C]">{uploadPhase}</div> : null}
           </section>
 
-          {isLoading ? (
+          {isRefreshing ? (
+            <div className="rounded-[6px] border border-[#EEE7D9] bg-[#FBF6E7] px-4 py-2 text-xs text-[#7A8479]">Frissítés...</div>
+          ) : null}
+
+          {isInitialLoading ? (
             <AdminPanel className="p-10 text-center text-sm text-[#7A8479]">Dokumentumok betöltése...</AdminPanel>
           ) : (
             <div className="grid grid-cols-1 gap-5 xl:grid-cols-[320px_minmax(0,1fr)_300px]">
@@ -908,11 +915,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         <AdminDocumentRow
                           key={doc.id}
                           title={doc.fileName || "Névtelen dokumentum"}
-                          meta="Szöveges munkapéldány"
+                          meta="Szöveges munkapéldány, nem Word változáskövetés"
                           active={isSelected}
                           variant="generated"
                           onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
-                          status={isSelected ? <AdminBadge tone="green">Aktív</AdminBadge> : <AdminStatusPill tone="gold">Módosított munkapéldány</AdminStatusPill>}
+                          status={isSelected ? <AdminBadge tone="green">Aktív</AdminBadge> : null}
                         />
                       );
                     })}
@@ -1001,7 +1008,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-white p-4">
                         <h3 className="font-serif text-xl font-medium text-[#16201A]">Dokumentum műveletek</h3>
                         <div className="mt-3 flex flex-wrap gap-2"><AdminButton variant="primary" onClick={() => openWorkspace(selectedGeneratedContract.id)}>Megnyitás workspace-ben</AdminButton><AdminButton variant="neutral" onClick={() => handleDownload(selectedGeneratedContract)} disabled={isDownloading === selectedGeneratedContract.id}>{isDownloading === selectedGeneratedContract.id ? "Letöltés..." : "Letöltés"}</AdminButton><AdminButton variant="neutral" onClick={() => handleReview(selectedGeneratedContract.id)}>Review megnyitása</AdminButton><AdminButton variant="neutral" onClick={() => handleSharePointUpload(selectedGeneratedContract)} disabled={isUploadingToSP === selectedGeneratedContract.id || Boolean(selectedGeneratedContract.spItemId)}>{selectedGeneratedContract.spItemId ? "SharePoint szinkronizálva" : isUploadingToSP === selectedGeneratedContract.id ? "Szinkronizálás..." : "SharePoint szinkron"}</AdminButton><AdminButton variant="neutral" onClick={handleCreateHandoffPackage} disabled={isCreatingHandoffPackage}>{isCreatingHandoffPackage ? "Csomag készül..." : "Csomag készítése"}</AdminButton></div>
-                        <details className="mt-3"><summary className="cursor-pointer text-[11px] font-semibold text-[#7A8479]">Technikai műveletek</summary><div className="mt-2 flex flex-wrap gap-2"><AdminButton size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>Metaadat összevetés</AdminButton>{previousVersionForSelected ? <AdminButton size="sm" variant="muted" onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedGeneratedContract.id)}&baselineId=${encodeURIComponent(previousVersionForSelected.id)}`)}>Összevetés előző verzióval</AdminButton> : null}</div></details>
+                        <details className="mt-3"><summary className="cursor-pointer text-[11px] font-semibold text-[#7A8479]">Technikai műveletek</summary><div className="mt-2 flex flex-wrap gap-2"><AdminButton size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>Metaadat összevetés</AdminButton><AdminStatusPill tone="neutral">Verzió-összevetés későbbi patchben</AdminStatusPill></div></details>
                       </div>
                     </div>
 ) : null}
