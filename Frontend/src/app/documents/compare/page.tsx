@@ -804,17 +804,22 @@ const editorStatusLabel =
         ? "Nem mentett helyi módosítások"
         : "Munkapéldány előkészítve";
   const isDocumentTextLoading = isLoadingDocumentText || isLoadingAnonymousText;
+  const isModifiedWorkingCopy =
+    selectedDocument?.source === "UPLOADED" &&
+    documents.some((d) => d.id === selectedDocument.id && d.status === "MODIFIED_WORKING_COPY");
   const workspaceTextSourceLabel = comparisonData?.blocks?.length
     ? "Generált dokumentum blokk-szövege"
     : isDocumentTextLoading
       ? "Szöveg betöltése…"
-      : documentText
-        ? "Valós kinyert dokumentumszöveg"
-        : latestAnonymousText
-          ? "Anonimizált szöveg"
-          : documentTextReason
-            ? `Nincs kinyert dokumentumszöveg — ${documentTextReason}`
-            : "Nincs betöltött dokumentumszöveg";
+      : isModifiedWorkingCopy && documentText
+        ? "Mentett módosított munkapéldány"
+        : documentText
+          ? "Valós kinyert dokumentumszöveg"
+          : latestAnonymousText
+            ? "Anonimizált szöveg"
+            : documentTextReason
+              ? `Nincs kinyert dokumentumszöveg — ${documentTextReason}`
+              : "Nincs betöltött dokumentumszöveg";
 
   const formatDraftForPreview = (value: string) =>
     value
