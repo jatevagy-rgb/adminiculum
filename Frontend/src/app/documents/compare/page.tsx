@@ -998,9 +998,7 @@ const filteredClauseTools = useMemo(() => {
         message: `Módosított munkapéldány mentve.`,
       });
       setEditorTouched(false);
-      setTimeout(() => {
-        router.push(`/cases/${encodeURIComponent(selectedDocument.caseId)}/documents?documentId=${encodeURIComponent(result.id)}`);
-      }, 1200);
+      router.push(`/cases/${encodeURIComponent(selectedDocument.caseId)}/documents?documentId=${encodeURIComponent(result.id)}`);
     } catch (err: any) {
       setWorkspaceSaveState({
         type: "error",
@@ -1119,19 +1117,17 @@ const filteredClauseTools = useMemo(() => {
     });
   };
 
-  return (
+return (
     <div className="flex-1 flex min-h-0 flex-col bg-[#EFE7CF] xl:flex-row">
-      {selectedDocument ? (
-        <CaseWorkspaceNav
-          caseId={selectedDocument.caseId}
-          caseNumber={selectedDocument.caseNumber}
-          title={selectedDocument.caseTitle}
-          clientName={selectedDocument.caseClientName}
-          activeTab="workspace"
-          activeDocumentId={selectedDocument.id}
-          helperText="A workspace nem ment automatikusan Word-verziót; a mentés külön művelet."
-        />
-      ) : null}
+      <CaseWorkspaceNav
+        caseId={selectedDocument?.caseId || requestedCaseId}
+        caseNumber={selectedDocument?.caseNumber}
+        title={selectedDocument?.caseTitle}
+        clientName={selectedDocument?.caseClientName}
+        activeTab="workspace"
+        activeDocumentId={selectedDocument?.id}
+        helperText="A workspace nem ment automatikusan Word-verziót; a mentés külön művelet."
+      />
       <main className="min-w-0 flex-1 overflow-y-auto border-b border-[#DDD7CA] xl:border-b-0 xl:border-r">
         <div className="p-6 space-y-4">
           <header className="border border-[#DDD7CA] bg-white p-5 shadow-sm">
@@ -1215,9 +1211,28 @@ const filteredClauseTools = useMemo(() => {
           {error && <div className="p-3 text-xs bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a]">{error}</div>}
 
               {isLoading ? (
-            <div className="py-12 text-center text-xs text-[#7B776D]">Szerződés-workspace betöltése...</div>
+<div className="py-12 text-center text-xs text-[#7B776D]">Szerződés-workspace betöltése...</div>
           ) : !selectedDocument ? (
-            <div className="py-12 text-center text-xs text-[#7B776D] border border-dashed border-[#DDD7CA]">Válassz dokumentumot a munkapéldány előkészítéséhez.</div>
+            <div className="flex flex-col items-center justify-center gap-6 py-16">
+              <div className="text-center">
+                <h3 className="font-serif text-2xl font-medium text-[#1F2821]">Nincs kiválasztott dokumentum</h3>
+                <p className="mt-2 max-w-sm text-sm text-[#7B776D]">Válassz egy dokumentumot a listából, vagy nyisd meg a Dokumentumtárat.</p>
+              </div>
+              <div className="flex flex-wrap gap-3 justify-center">
+                <a
+                  href={requestedCaseId ? `/cases/${encodeURIComponent(requestedCaseId)}/documents` : '/cases'}
+                  className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-5 py-2.5 text-[13px] font-semibold text-[#16201A] transition-colors hover:border-[#16201A] hover:bg-[#FBF6E7]"
+                >
+                  Vissza a Dokumentumtárba
+                </a>
+                <a
+                  href={requestedCaseId ? `/documents/compare?caseId=${encodeURIComponent(requestedCaseId)}` : '/documents/compare'}
+                  className="inline-flex items-center justify-center rounded-[5px] border border-[#1F4A33] bg-[#1F4A33] px-5 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#2A5C44]"
+                >
+                  Dokumentum kiválasztása
+                </a>
+              </div>
+            </div>
           ) : (
             <div className="grid gap-4 2xl:grid-cols-[300px_minmax(720px,1fr)] xl:grid-cols-[280px_minmax(0,1fr)]">
 <aside className="min-w-0 space-y-3 rounded-[8px] border border-[#DDD7CA] bg-white p-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
