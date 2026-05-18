@@ -41,7 +41,7 @@ Frontend/output/
 # Database dumps / local DB files
 *.dump
 *.sql
-!Backend/prisma/migrations/**/migration.sql
+!Backend/prisma/migrations/**/*.sql
 *.sqlite
 *.sqlite3
 *.db
