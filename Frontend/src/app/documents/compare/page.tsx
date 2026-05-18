@@ -27,6 +27,7 @@ import {
   getAnonymousDocumentsBySource,
   getCaseClientHouseStyle,
   getDocumentText,
+  saveWorkspaceDocumentVersion,
   type BlockReviewStatus,
   type CaseContractListItem,
   type CaseListItem,
@@ -283,8 +284,10 @@ const [toolMode, setToolMode] = useState<WorkspaceToolMode>("klauzulak");
   const [documentTextReason, setDocumentTextReason] = useState<string | null>(null);
   const [isLoadingDocumentText, setIsLoadingDocumentText] = useState(false);
   const [clientHouseStyle, setClientHouseStyle] = useState<ClientHouseStyleProfile | null>(null);
-  const [isLoadingHouseStyle, setIsLoadingHouseStyle] = useState(false);
+const [isLoadingHouseStyle, setIsLoadingHouseStyle] = useState(false);
   const [houseStyleNotice, setHouseStyleNotice] = useState<string | null>(null);
+  const [isSavingWorkspace, setIsSavingWorkspace] = useState(false);
+  const [workspaceSaveState, setWorkspaceSaveState] = useState<{ type: "success" | "error" | null; message: string }>({ type: null, message: "" });
 
   type ScopedCase = {
     id: string;
@@ -982,6 +985,32 @@ const filteredClauseTools = useMemo(() => {
     URL.revokeObjectURL(url);
   };
 
+  const handleSaveWorkspaceVersion = async () => {
+    if (!selectedDocument || !editorDraft.trim()) return;
+    setIsSavingWorkspace(true);
+    setWorkspaceSaveState({ type: null, message: "" });
+    try {
+      const result = await saveWorkspaceDocumentVersion(selectedDocument.id, {
+        text: editorDraft,
+      });
+      setWorkspaceSaveState({
+        type: "success",
+        message: `Módosított munkapéldány mentve.`,
+      });
+      setEditorTouched(false);
+      setTimeout(() => {
+        router.push(`/cases/${encodeURIComponent(selectedDocument.caseId)}/documents?documentId=${encodeURIComponent(result.id)}`);
+      }, 1200);
+    } catch (err: any) {
+      setWorkspaceSaveState({
+        type: "error",
+        message: `Mentés sikertelen: ${err?.message || "Ismeretlen hiba."}`,
+      });
+    } finally {
+      setIsSavingWorkspace(false);
+    }
+  };
+
   const updateBlockDraft = (blockKey: string, patch: Partial<BlockNoteDraft>) => {
     setBlockNoteDrafts((prev) => ({
       ...prev,
@@ -1154,7 +1183,7 @@ const filteredClauseTools = useMemo(() => {
                   </label>
                 </div>
               </div>
-              <div className="flex shrink-0 flex-wrap gap-2">
+<div className="flex shrink-0 flex-wrap gap-2">
                 <Link
                   href={getDocumentLedgerHref()}
                   className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-4 py-2 text-[13px] font-semibold leading-none text-[#16201A] transition-colors hover:border-[#16201A] hover:bg-[#FBF6E7]"
@@ -1164,8 +1193,13 @@ const filteredClauseTools = useMemo(() => {
                 <AdminButton onClick={handleLocalWordCompatibleExport} variant="gold">
                   Word-előkészítő export
                 </AdminButton>
-                <AdminButton disabled variant="muted" title="Nincs külön módosított-verzió mentési API bekötve ebben a patchben.">
-                  Módosított verzió mentése későbbi patchben
+                <AdminButton
+                  disabled={!selectedDocument || !editorDraft.trim() || isSavingWorkspace}
+                  variant="primary"
+                  onClick={handleSaveWorkspaceVersion}
+                  title={!selectedDocument ? "Válassz dokumentumot a mentéshez." : !editorDraft.trim() ? "Nincs mit menteni." : "Munkapéldány mentése a Dokumentumtárba."}
+                >
+                  {isSavingWorkspace ? "Mentés..." : "Módosított verzió mentése"}
                 </AdminButton>
                 <AdminButton
                   onClick={() => globalThis.document.getElementById("version-compare-panel")?.scrollIntoView({ behavior: "smooth", block: "start" })}
@@ -1495,7 +1529,7 @@ const filteredClauseTools = useMemo(() => {
                         <h2 className="font-serif text-2xl font-medium text-[#1F2821]">Szerkeszthető munkapéldány</h2>
                         <AdminStatusPill tone={isDraftDirty ? "amber" : activeDraftText ? "green" : "neutral"}>{editorStatusLabel}</AdminStatusPill>
                       </div>
-                      <p className="text-[11px] text-[#7B776D]">Helyi szerkesztési nézet · forrás: {workspaceTextSourceLabel} · szerveroldali mentés külön patchben</p>
+<p className="text-[11px] text-[#7B776D]">Helyi szerkesztési nézet · forrás: {workspaceTextSourceLabel} · szöveges módosított munkapéldány</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <AdminButton size="sm" variant="neutral" onClick={focusToolSearch} title="Bal oldali eszköztárban kereshetsz klauzulát.">
@@ -1518,19 +1552,35 @@ const filteredClauseTools = useMemo(() => {
                       <AdminButton size="sm" variant="gold" onClick={handleLocalWordCompatibleExport}>
                         Word-előkészítő export
                       </AdminButton>
-                      <AdminButton size="sm" variant="muted" disabled title="A szerveroldali szerkesztés mentése külön patchben lesz bekötve.">
-                        Módosított verzió mentése későbbi patchben
+                      <AdminButton
+                        size="sm"
+                        disabled={!selectedDocument || !editorDraft.trim() || isSavingWorkspace}
+                        variant="primary"
+                        onClick={handleSaveWorkspaceVersion}
+                        title={!selectedDocument ? "Válassz dokumentumot a mentéshez." : !editorDraft.trim() ? "Nincs mit menteni." : "Munkapéldány mentése a Dokumentumtárba."}
+                      >
+                        {isSavingWorkspace ? "Mentés..." : "Módosított verzió mentése"}
                       </AdminButton>
                     </div>
                   </div>
 
-                  {isDraftDirty ? (
+{isDraftDirty ? (
                     <div className="border-b border-[#E6C987] bg-[#FAEFCF] px-4 py-3 text-xs font-semibold text-[#7A5A1F]">
                       A munkapéldány helyi módosításokat tartalmaz. Ezek még nincsenek szerveroldalon mentve.
                     </div>
                   ) : null}
 
-<div className="bg-[#EFE7CF] px-3 py-5 sm:px-6 lg:px-8 xl:px-12">
+                  {workspaceSaveState.type === "success" ? (
+                    <div className="border-b border-[#A6C0AF] bg-[#E2EDE5] px-4 py-3 text-xs font-semibold text-[#23472F]">
+                      {workspaceSaveState.message}
+                    </div>
+                  ) : workspaceSaveState.type === "error" ? (
+                    <div className="border-b border-[#F2DAD6] bg-[#FFF5F3] px-4 py-3 text-xs font-semibold text-[#8B2A2A]">
+                      {workspaceSaveState.message}
+                    </div>
+                  ) : null}
+
+                <div className="bg-[#EFE7CF] px-3 py-5 sm:px-6 lg:px-8 xl:px-12">
                     <div className="mx-auto flex w-full max-w-[1400px] items-start gap-4">
                     <div className="min-h-[760px] flex-1 border border-[rgba(22,32,26,0.14)] bg-white px-6 py-8 shadow-[0_18px_50px_rgba(22,32,26,0.14)] sm:px-12 lg:px-20 xl:px-28">
                       <div className="border-b border-[#EEE7D9] pb-4">

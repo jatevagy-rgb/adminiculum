@@ -1847,6 +1847,33 @@ export async function getDocumentById(documentId: string): Promise<DocumentRevie
   return fetchApi<DocumentReviewData | null>(`/documents/${documentId}`);
 }
 
+export interface SaveWorkspaceVersionResult {
+  id: string;
+  name: string;
+  description: string | null;
+  caseId: string;
+  clientId: string;
+  fileName: string;
+  documentType: string | null;
+  category: string;
+  createdAt: string;
+  updatedAt: string;
+  _workspaceText?: string;
+}
+
+export async function saveWorkspaceDocumentVersion(
+  documentId: string,
+  payload: { text: string; title?: string; note?: string }
+): Promise<SaveWorkspaceVersionResult> {
+  return fetchApi<SaveWorkspaceVersionResult>(
+    `/documents/${documentId}/save-workspace-version`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
 
 // Settings
 export async function getSettings(): Promise<Record<string, unknown>> {

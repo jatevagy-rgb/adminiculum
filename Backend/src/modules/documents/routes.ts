@@ -186,11 +186,21 @@ router.get('/:id', authenticate, async (req: Request, res: Response): Promise<vo
  */
 router.get('/:id/text', authenticate, async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = req.params as { id: string };
+const { id } = req.params as { id: string };
     const document = await prisma.document.findUnique({ where: { id } });
 
     if (!document) {
       res.status(404).json({ status: 404, code: 'NOT_FOUND', message: 'Document not found' });
+      return;
+    }
+
+    if (document.documentType === 'MODIFIED_WORKING_COPY' && document.workspaceText?.trim()) {
+      res.json({
+        documentId: id,
+        source: 'MODIFIED_WORKING_COPY',
+        text: document.workspaceText,
+        extractedAt: document.updatedAt.toISOString(),
+      });
       return;
     }
 
@@ -388,6 +398,86 @@ router.post('/:id/reject', authenticate, async (req: Request, res: Response): Pr
       code: 'INTERNAL_ERROR', 
       message: 'Internal server error' 
     });
+  }
+});
+
+/**
+ * POST /api/v1/documents/:documentId/save-workspace-version
+ * Save the workspace editor's draft text as a new "modified working copy" document.
+ * Does NOT overwrite the original document.
+ */
+router.post('/:id/save-workspace-version', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).user?.userId;
+    const { text, title, note } = req.body as { text?: string; title?: string; note?: string };
+
+    if (!text || typeof text !== 'string' || !text.trim()) {
+      res.status(400).json({
+        status: 400,
+        code: 'VALIDATION_ERROR',
+        message: 'A munkapéldány szövege üres. Nem menthető.'
+      });
+      return;
+    }
+
+    const { id } = req.params as { id: string };
+    const original = await prisma.document.findUnique({ where: { id } });
+
+    if (!original) {
+      res.status(404).json({ status: 404, code: 'NOT_FOUND', message: 'Eredeti dokumentum nem található.' });
+      return;
+    }
+
+    const newName = title?.trim() || `${original.name} — módosított munkapéldány`;
+    const trimmedText = text.trim();
+
+    const newDocument = await prisma.document.create({
+      data: {
+        name: newName,
+        description: note || 'Szöveges módosított munkapéldány. Ügyvédi ellenőrzés szükséges.',
+        mimeType: 'text/plain',
+        category: (original.category as any) || 'INTERNAL_MEMO',
+        caseId: original.caseId,
+        clientId: original.clientId,
+        fileName: newName,
+        documentType: 'MODIFIED_WORKING_COPY',
+        folder: 'DRAFTS',
+        currentVersion: 1,
+        isLatest: true,
+        workspaceText: trimmedText,
+      }
+    });
+
+    await prisma.timelineEvent.create({
+      data: {
+        caseId: original.caseId,
+        userId,
+        documentId: newDocument.id,
+        eventType: 'DOCUMENT_VERSION_CREATED',
+        description: `Módosított munkapéldány létrehozva: ${newName}`,
+        metadata: {
+          sourceDocumentId: original.id,
+          sourceDocumentName: original.name,
+          workspaceVersion: true,
+        }
+      }
+    });
+
+    res.status(201).json({
+      id: newDocument.id,
+      name: newDocument.name,
+      description: newDocument.description,
+      caseId: newDocument.caseId,
+      clientId: newDocument.clientId,
+      fileName: newDocument.fileName,
+      documentType: newDocument.documentType,
+      category: newDocument.category,
+      createdAt: newDocument.createdAt,
+      updatedAt: newDocument.updatedAt,
+    });
+  } catch (error) {
+    console.error('Save workspace version error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Módosított munkapéldány mentése sikertelen.' });
   }
 });
 

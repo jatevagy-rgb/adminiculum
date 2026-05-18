@@ -214,6 +214,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
   const [contracts, setContracts] = useState<CaseContractListItem[]>([]);
   const [uploadedDocuments, setUploadedDocuments] = useState<DocumentItem[]>([]);
+  const [modifiedWorkingCopies, setModifiedWorkingCopies] = useState<DocumentItem[]>([]);
   const [caseRecord, setCaseRecord] = useState<{
     id: string;
     clientId?: string;
@@ -306,7 +307,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
         getCaseTimeline(caseRecord.id).catch(() => []),
       ]);
       setContracts(contractsData);
-      setUploadedDocuments(uploadedDocsData);
+      const modified = uploadedDocsData.filter(doc => doc.documentType === 'MODIFIED_WORKING_COPY');
+      const uploaded = uploadedDocsData.filter(doc => doc.documentType !== 'MODIFIED_WORKING_COPY');
+      setUploadedDocuments(uploaded);
+      setModifiedWorkingCopies(modified);
       setTimeline(timelineData);
       // Auto-select deep-linked document if requested, otherwise default first-available.
       const deepLinkedId = requestedDocumentIdRef.current;
@@ -873,7 +877,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   <p className="mt-1 text-[12px] text-[#7A8479]">Több dokumentum is tárolható, de egyszerre mindig egy aktív munkadokumentumon dolgozol.</p>
                 </div>
                 <div className="space-y-5 p-4">
-                  <section className="space-y-2">
+<section className="space-y-2">
                     <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Feltöltött dokumentumok</h3>
                     {uploadedDocuments.length === 0 ? (
                       <p className="rounded border border-dashed border-[rgba(22,32,26,0.16)] p-3 text-[12px] text-[#7A8479]">Nincs feltöltött dokumentum.</p>
@@ -889,6 +893,27 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           variant="upload"
                           onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
                           status={<><AdminStatusPill tone="gold">Feltöltve</AdminStatusPill>{isSelected ? <AdminBadge tone="green">Aktív</AdminBadge> : null}</>}
+                        />
+                      );
+                    })}
+                  </section>
+
+                  <section className="space-y-2">
+                    <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Módosított munkapéldányok</h3>
+                    {modifiedWorkingCopies.length === 0 ? (
+                      <p className="rounded border border-dashed border-[rgba(22,32,26,0.16)] p-3 text-[12px] text-[#7A8479]">Nincs módosított munkapéldány.</p>
+                    ) : modifiedWorkingCopies.map((doc) => {
+                      const isSelected = selectedLedgerItem?.kind === "uploaded" && selectedLedgerItem.item.id === doc.id;
+                      return (
+                        <AdminDocumentRow
+                          key={doc.id}
+                          title={doc.fileName || "Névtelen dokumentum"}
+                          meta={`${formatShortDate(doc.createdAt)} · Szöveges munkapéldány`}
+                          fileType="TXT"
+                          active={isSelected}
+                          variant="generated"
+                          onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
+                          status={<><AdminStatusPill tone="gold">Módosított munkapéldány</AdminStatusPill>{isSelected ? <AdminBadge tone="green">Aktív</AdminBadge> : null}</>}
                         />
                       );
                     })}
