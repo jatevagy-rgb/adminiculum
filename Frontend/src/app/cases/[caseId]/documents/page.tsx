@@ -887,12 +887,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         <AdminDocumentRow
                           key={doc.id}
                           title={doc.fileName || "Névtelen dokumentum"}
-                          meta={`${formatShortDate(doc.createdAt)} · ${getDocumentKindLabel(doc.fileName)}`}
+                          meta={getDocumentKindLabel(doc.fileName)}
                           fileType={getFileType(doc.fileName)}
                           active={isSelected}
                           variant="upload"
                           onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
-                          status={<><AdminStatusPill tone="gold">Feltöltve</AdminStatusPill>{isSelected ? <AdminBadge tone="green">Aktív</AdminBadge> : null}</>}
+                          status={isSelected ? <AdminBadge tone="green">Aktív</AdminBadge> : null}
                         />
                       );
                     })}
@@ -908,12 +908,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         <AdminDocumentRow
                           key={doc.id}
                           title={doc.fileName || "Névtelen dokumentum"}
-                          meta={`${formatShortDate(doc.createdAt)} · Szöveges munkapéldány`}
-                          fileType="TXT"
+                          meta="Szöveges munkapéldány"
                           active={isSelected}
                           variant="generated"
                           onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
-                          status={<><AdminStatusPill tone="gold">Módosított munkapéldány</AdminStatusPill>{isSelected ? <AdminBadge tone="green">Aktív</AdminBadge> : null}</>}
+                          status={isSelected ? <AdminBadge tone="green">Aktív</AdminBadge> : <AdminStatusPill tone="gold">Módosított munkapéldány</AdminStatusPill>}
                         />
                       );
                     })}
@@ -921,20 +920,20 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
                   <section className="space-y-2">
                     <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Generált / módosított</h3>
-                    {generatedLedgerItems.length === 0 ? (
-                      <p className="rounded border border-dashed border-[rgba(22,32,26,0.16)] p-3 text-[12px] text-[#7A8479]">Nincs generált vagy módosított dokumentum.</p>
+{generatedLedgerItems.length === 0 ? (
+                      <p className="rounded border border-dashed border-[rgba(22,32,26,0.16)] p-3 text-[12px] text-[#7A8479]">Nincs generált dokumentum.</p>
                     ) : generatedLedgerItems.map((contract) => {
                       const isSelected = selectedLedgerItem?.kind === "generated" && selectedLedgerItem.item.id === contract.id;
                       return (
                         <AdminDocumentRow
                           key={contract.id}
                           title={contract.title || contract.fileName || contract.templateName || "Névtelen dokumentum"}
-                          meta={`${formatShortDate(contract.generatedAt)}${contract.revisionNumber ? ` · v${contract.revisionNumber}` : ""}`}
+                          meta={contract.revisionNumber ? `v${contract.revisionNumber}` : "v1"}
                           fileType="DOCX"
                           active={isSelected}
                           variant="generated"
                           onClick={() => { setSelectedLedgerItem({ kind: "generated", item: contract }); setSelectedContract(contract); }}
-                          status={<><AdminStatusPill tone={contract.isFinalRevision ? "green" : "neutral"}>{getContractStatusLabel(contract)}</AdminStatusPill>{isSelected ? <AdminBadge tone="green">Aktív</AdminBadge> : null}</>}
+                          status={isSelected ? <AdminBadge tone="green">Aktív</AdminBadge> : null}
                         />
                       );
                     })}
@@ -964,30 +963,46 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         <AdminButton variant="gold" onClick={handleGenerate}>Szerződés összeállítása</AdminButton>
                       </div>
                     </div>
-                  ) : selectedUploadedDocument ? (
+) : selectedUploadedDocument ? (
+                    selectedUploadedDocument.documentType === 'MODIFIED_WORKING_COPY' ? (
                     <div className="space-y-5">
-                      <div className="flex flex-wrap gap-2"><AdminBadge tone="gold">Feltöltött</AdminBadge><AdminStatusPill tone="green">Feltöltve</AdminStatusPill><AdminBadge tone="green">Aktív</AdminBadge></div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="rounded bg-[#FBF6E7] p-3"><p className="text-[10px] uppercase text-[#7A8479]">Típus</p><p className="text-sm font-semibold text-[#16201A]">{getDocumentKindLabel(selectedUploadedDocument.fileName)}</p></div>
-                        <div className="rounded bg-[#FBF6E7] p-3"><p className="text-[10px] uppercase text-[#7A8479]">Feltöltve</p><p className="text-sm font-semibold text-[#16201A]">{formatShortDate(selectedUploadedDocument.createdAt)}</p></div>
-                        {selectedUploadedDocument.version ? <div className="rounded bg-[#FBF6E7] p-3"><p className="text-[10px] uppercase text-[#7A8479]">Verzió</p><p className="text-sm font-semibold text-[#16201A]">v{selectedUploadedDocument.version}</p></div> : null}
-                        {selectedUploadedDocument.folder ? <div className="rounded bg-[#FBF6E7] p-3"><p className="text-[10px] uppercase text-[#7A8479]">Forrás</p><p className="text-sm font-semibold text-[#16201A]">Feltöltött ügyirat</p></div> : null}
+                      <AdminBadge tone="gold">Módosított munkapéldány</AdminBadge>
+                      <div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] p-4">
+                        <h3 className="font-serif text-base font-medium text-[#16201A]">Aktív munkapéldány</h3>
+                        <p className="mt-1 text-xs text-[#3D4842]">Mentett módosított munkapéldány. Az eredeti feltöltött dokumentum változatlan.</p>
                       </div>
-<div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] p-4"><h3 className="font-serif text-base font-medium text-[#16201A]">Előkészítő munkanézet</h3><p className="mt-1 text-xs text-[#3D4842]">A feltöltött dokumentum a workspace-ben nyitható meg anonimizáláshoz és jogi átnézéshez.</p></div>
-                      <div className="flex flex-wrap gap-2 text-[11px]"><AdminStatusPill tone="green">Feltöltve</AdminStatusPill><AdminStatusPill tone="amber">Workspace</AdminStatusPill><AdminStatusPill tone="neutral">Ügyvédi leadás</AdminStatusPill></div>
-                      <div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-white p-4"><h3 className="font-serif text-xl font-medium text-[#16201A]">Dokumentum műveletek</h3><div className="mt-3 flex flex-wrap gap-2"><AdminButton variant="primary" onClick={() => openWorkspace(selectedUploadedDocument.id)}>Megnyitás workspace-ben</AdminButton><AdminButton variant="gold" onClick={() => openUploadedAnonymize(selectedUploadedDocument)}>Anonimizálás</AdminButton><AdminButton variant="neutral" onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)} disabled={isDownloading === selectedUploadedDocument.id}>{isDownloading === selectedUploadedDocument.id ? "Letöltés..." : "Letöltés"}</AdminButton><AdminButton variant="neutral" onClick={handleCreateHandoffPackage} disabled={isCreatingHandoffPackage}>{isCreatingHandoffPackage ? "Csomag készül..." : "Csomag készítése"}</AdminButton></div><details className="mt-3"><summary className="cursor-pointer text-[11px] font-semibold text-[#7A8479]">Technikai műveletek</summary><AdminButton className="mt-2" size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>Metaadat összevetés</AdminButton></details></div>
+                      <div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-white p-4">
+                        <h3 className="font-serif text-xl font-medium text-[#16201A]">Dokumentum műveletek</h3>
+                        <div className="mt-3 flex flex-wrap gap-2"><AdminButton variant="primary" onClick={() => openWorkspace(selectedUploadedDocument.id)}>Megnyitás workspace-ben</AdminButton><AdminButton variant="neutral" onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)} disabled={isDownloading === selectedUploadedDocument.id}>{isDownloading === selectedUploadedDocument.id ? "Letöltés..." : "Letöltés"}</AdminButton><AdminButton variant="neutral" onClick={handleCreateHandoffPackage} disabled={isCreatingHandoffPackage}>{isCreatingHandoffPackage ? "Csomag készül..." : "Csomag készítése"}</AdminButton></div>
+                        <details className="mt-3"><summary className="cursor-pointer text-[11px] font-semibold text-[#7A8479]">Technikai műveletek</summary><AdminButton className="mt-2" size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>Metaadat összevetés</AdminButton></details>
+                      </div>
                     </div>
-                  ) : selectedGeneratedContract ? (
+                    ) : (
                     <div className="space-y-5">
-                      <div className="flex flex-wrap gap-2"><AdminBadge tone="green">Generált</AdminBadge><AdminStatusPill tone={selectedGeneratedContract.isFinalRevision ? "green" : "neutral"}>{getContractStatusLabel(selectedGeneratedContract)}</AdminStatusPill><AdminBadge tone="green">Aktív</AdminBadge></div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="rounded bg-[#FBF6E7] p-3"><p className="text-[10px] uppercase text-[#7A8479]">Verzió</p><p className="text-sm font-semibold text-[#16201A]">{selectedGeneratedContract.revisionNumber ? `v${selectedGeneratedContract.revisionNumber}` : "v1"}</p></div>
-                        <div className="rounded bg-[#FBF6E7] p-3"><p className="text-[10px] uppercase text-[#7A8479]">Létrehozva</p><p className="text-sm font-semibold text-[#16201A]">{formatShortDate(selectedGeneratedContract.generatedAt)}</p></div>
-                        {selectedGeneratedContract.templateName ? <div className="rounded bg-[#FBF6E7] p-3 sm:col-span-2"><p className="text-[10px] uppercase text-[#7A8479]">Sablon</p><p className="text-sm font-semibold text-[#16201A]">{selectedGeneratedContract.templateName}</p></div> : null}
+                      <AdminBadge tone="gold">{getDocumentKindLabel(selectedUploadedDocument.fileName)}</AdminBadge>
+                      <div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] p-4">
+                        <h3 className="font-serif text-base font-medium text-[#16201A]">Előkészítő munkanézet</h3>
+                        <p className="mt-1 text-xs text-[#3D4842]">A feltöltött dokumentum a workspace-ben nyitható meg anonimizáláshoz és jogi átnézéshez.</p>
                       </div>
-<div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] p-4"><h3 className="font-serif text-base font-medium text-[#16201A]">Előnézet</h3><p className="mt-1 text-xs text-[#3D4842]">A generált dokumentum letöltéssel vagy a workspace felületen ellenőrizhető.</p></div>
-                      <div className="flex flex-wrap gap-2 text-[11px]"><AdminStatusPill tone="green">Generált</AdminStatusPill><AdminStatusPill tone="amber">Review</AdminStatusPill></div>
-                      <div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-white p-4"><h3 className="font-serif text-xl font-medium text-[#16201A]">Dokumentum műveletek</h3><div className="mt-3 flex flex-wrap gap-2"><AdminButton variant="primary" onClick={() => openWorkspace(selectedGeneratedContract.id)}>Megnyitás workspace-ben</AdminButton><AdminButton variant="neutral" onClick={() => handleDownload(selectedGeneratedContract)} disabled={isDownloading === selectedGeneratedContract.id}>{isDownloading === selectedGeneratedContract.id ? "Letöltés..." : "Letöltés"}</AdminButton><AdminButton variant="neutral" onClick={() => handleReview(selectedGeneratedContract.id)}>Review megnyitása</AdminButton><AdminButton variant="neutral" onClick={() => handleSharePointUpload(selectedGeneratedContract)} disabled={isUploadingToSP === selectedGeneratedContract.id || Boolean(selectedGeneratedContract.spItemId)}>{selectedGeneratedContract.spItemId ? "SharePoint szinkronizálva" : isUploadingToSP === selectedGeneratedContract.id ? "Szinkronizálás..." : "SharePoint szinkron"}</AdminButton><AdminButton variant="neutral" onClick={handleCreateHandoffPackage} disabled={isCreatingHandoffPackage}>{isCreatingHandoffPackage ? "Csomag készül..." : "Csomag készítése"}</AdminButton></div><details className="mt-3"><summary className="cursor-pointer text-[11px] font-semibold text-[#7A8479]">Technikai műveletek</summary><div className="mt-2 flex flex-wrap gap-2"><AdminButton size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>Metaadat összevetés</AdminButton>{previousVersionForSelected ? <AdminButton size="sm" variant="muted" onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedGeneratedContract.id)}&baselineId=${encodeURIComponent(previousVersionForSelected.id)}`)}>Összevetés előző verzióval</AdminButton> : null}</div></details></div>
+                      <div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-white p-4">
+                        <h3 className="font-serif text-xl font-medium text-[#16201A]">Dokumentum műveletek</h3>
+                        <div className="mt-3 flex flex-wrap gap-2"><AdminButton variant="primary" onClick={() => openWorkspace(selectedUploadedDocument.id)}>Megnyitás workspace-ben</AdminButton><AdminButton variant="gold" onClick={() => openUploadedAnonymize(selectedUploadedDocument)}>Anonimizálás</AdminButton><AdminButton variant="neutral" onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)} disabled={isDownloading === selectedUploadedDocument.id}>{isDownloading === selectedUploadedDocument.id ? "Letöltés..." : "Letöltés"}</AdminButton><AdminButton variant="neutral" onClick={handleCreateHandoffPackage} disabled={isCreatingHandoffPackage}>{isCreatingHandoffPackage ? "Csomag készül..." : "Csomag készítése"}</AdminButton></div>
+                        <details className="mt-3"><summary className="cursor-pointer text-[11px] font-semibold text-[#7A8479]">Technikai műveletek</summary><AdminButton className="mt-2" size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>Metaadat összevetés</AdminButton></details>
+                      </div>
+                    </div>
+                    )
+) : selectedGeneratedContract ? (
+                    <div className="space-y-5">
+                      <AdminBadge tone="green">Generált</AdminBadge>
+                      <div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] p-4">
+                        <h3 className="font-serif text-base font-medium text-[#16201A]">Előnézet és letöltés</h3>
+                        <p className="mt-1 text-xs text-[#3D4842]">A generált dokumentum a workspace felületen vagy letöltéssel ellenőrizhető.</p>
+                      </div>
+                      <div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-white p-4">
+                        <h3 className="font-serif text-xl font-medium text-[#16201A]">Dokumentum műveletek</h3>
+                        <div className="mt-3 flex flex-wrap gap-2"><AdminButton variant="primary" onClick={() => openWorkspace(selectedGeneratedContract.id)}>Megnyitás workspace-ben</AdminButton><AdminButton variant="neutral" onClick={() => handleDownload(selectedGeneratedContract)} disabled={isDownloading === selectedGeneratedContract.id}>{isDownloading === selectedGeneratedContract.id ? "Letöltés..." : "Letöltés"}</AdminButton><AdminButton variant="neutral" onClick={() => handleReview(selectedGeneratedContract.id)}>Review megnyitása</AdminButton><AdminButton variant="neutral" onClick={() => handleSharePointUpload(selectedGeneratedContract)} disabled={isUploadingToSP === selectedGeneratedContract.id || Boolean(selectedGeneratedContract.spItemId)}>{selectedGeneratedContract.spItemId ? "SharePoint szinkronizálva" : isUploadingToSP === selectedGeneratedContract.id ? "Szinkronizálás..." : "SharePoint szinkron"}</AdminButton><AdminButton variant="neutral" onClick={handleCreateHandoffPackage} disabled={isCreatingHandoffPackage}>{isCreatingHandoffPackage ? "Csomag készül..." : "Csomag készítése"}</AdminButton></div>
+                        <details className="mt-3"><summary className="cursor-pointer text-[11px] font-semibold text-[#7A8479]">Technikai műveletek</summary><div className="mt-2 flex flex-wrap gap-2"><AdminButton size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>Metaadat összevetés</AdminButton>{previousVersionForSelected ? <AdminButton size="sm" variant="muted" onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(selectedGeneratedContract.id)}&baselineId=${encodeURIComponent(previousVersionForSelected.id)}`)}>Összevetés előző verzióval</AdminButton> : null}</div></details>
+                      </div>
                     </div>
 ) : null}
                 </div>
