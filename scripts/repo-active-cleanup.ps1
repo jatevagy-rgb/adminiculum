@@ -78,7 +78,7 @@ function Get-SafeMoveTarget {
     param($ItemPath)
 
     $name = Split-Path $ItemPath -Leaf
-    $isReport = $name -match "^(FINAL_REPORT|DEBUG_PASS|DEBUG_PASS_REPORT|IMPLEMENTATION_REPORT|PATCH_|PATCH_REPORT|PHASE_|BOXED_PRODUCT_PHASE|CASE_ID_FIX|CORRECTION_PASS|.*_VERIFICATION|.*_CORRECTION|.*_HANDOFF|.*_HANDOVER|CREATE_CASE|FEATURE_PACK|FIRST_DEPLOY|STAGING_SMOKE|TENANT_|REHEARSAL|POST_TOPOLOGY|UPLOAD_AND_GENERATE|DEMO_|E2E_|FRONTEND_PACK|ANONYMIZATION_QA|.*_REPORT|CONTRACT_PATCH|CASE_ID_|TIME_ENTRY_|UI3_CLOSEOUT|PROJECT_HANDOFF)"
+    $isReport = $name -match "^(FINAL_REPORT|DEBUG_PASS|DEBUG_PASS_REPORT|IMPLEMENTATION_REPORT|PATCH_|PATCH_REPORT|PHASE_|BOXED_PRODUCT_PHASE|CASE_ID_FIX|CORRECTION_PASS|.*_VERIFICATION|.*_CORRECTION|.*_HANDOFF|.*_HANDOVER|CREATE_CASE|FEATURE_PACK|FIRST_DEPLOY|STAGING_SMOKE|TENANT_|REHEARSAL|POST_TOPOLOGY|UPLOAD_AND_GENERATE|DEMO_|E2_|FRONTEND_PACK|ANONYMIZATION_QA|.*_REPORT|CONTRACT_PATCH|CASE_ID_|TIME_ENTRY_|UI3_CLOSEOUT|PROJECT_HANDOFF)"
     $isTemp = $name -match "^(repair|report|remote_services|write-phase|frontend-patch|backend-redeploy|tmp_zip|patch-temp|generation-draft)" -or $name -match "\.(tmp|bak)$" -or $name -match "^tsc" -or $name -eq "logs" -or $name -eq "tmp" -or $name -eq "plans" -or $name -eq "screenshots" -or $name -eq "Archive" -or $name -eq "generation-draft-patch"
     $isLog = $name -match "^(webapp-logs|webapp_logs)" -or $name -eq "Archive"
     $isDesign = $name -match "^(ADMINICULUM_FRONTEND_UI_INVENTORY|gpt csomag|.*.j.*szerz|Frontend_UI_Extraction|stitch-workstations-fixed-proof|stitch-workstations-implementation-proof|gpt-csomag-vs-workstations-audit)"
@@ -92,23 +92,51 @@ function Get-SafeMoveTarget {
     return $ArchiveRoot + "\other\" + $name
 }
 
-$ignoredOutput = git status --ignored --short 2>&1 | Out-String
+function Remove-QuoteChars {
+    param($Text)
+    return $Text.Trim().Replace('"', '').Replace("'", '').Replace('`', '')
+}
+
+# Use -c core.quotePath=false to get raw unquoted paths from git
+$ignoredOutput = git -c core.quotePath=false status --ignored --short 2>&1 | Out-String
 $lines = $ignoredOutput -split "`n" | Where-Object { $_.Trim() -ne "" }
 
 $toMove = @()
+$skippedInvalid = 0
 
 foreach ($line in $lines) {
     $trimmed = $line.Trim()
     if ($trimmed -eq "") { continue }
 
+    if ($trimmed.Length -lt 3) { continue }
+
     $status = $trimmed.Substring(0, 2)
-    $path = $trimmed.Substring(3).Trim()
+    $rawPath = $trimmed.Substring(3).Trim()
 
     if ($status -ne "!!") { continue }
 
-    $fullPath = Join-Path $RepoRoot $path
+    # Strip any残留 quote or escape characters from git output
+    $path = Remove-QuoteChars $rawPath
 
-    if (-not (Test-Path -LiteralPath $fullPath)) { continue }
+    if ($path -eq "" -or $path -eq $null) { continue }
+
+    # Build full path safely
+    $fullPath = $RepoRoot + "\" + $path
+
+    # Skip if Test-Path fails (invalid chars, too long, etc.)
+    $pathExists = $false
+    try {
+        $pathExists = Test-Path -LiteralPath $fullPath -ErrorAction SilentlyContinue
+    } catch {
+        Write-Host "[SKIP INVALID PATH] " + $path -ForegroundColor DarkRed
+        $skippedInvalid++
+        continue
+    }
+
+    if (-not $pathExists) {
+        continue
+    }
+
     if (Test-Protected $path) {
         Write-Host "[PROTECTED]  " + $path -ForegroundColor DarkGray
         continue
@@ -151,6 +179,11 @@ Print-Category "D) Design/reference" $design "Magenta"
 Print-Category "E) Zip archives" $zips "Green"
 Print-Category "F) Other" $other "DarkGray"
 
+if ($skippedInvalid -gt 0) {
+    Write-Host ("[SKIPPED INVALID PATH count: " + $skippedInvalid + "]") -ForegroundColor DarkRed
+    Write-Host ""
+}
+
 Write-Host "=== Summary ===" -ForegroundColor White
 Write-Host ("Total items to move: " + $toMove.Count) -ForegroundColor White
 Write-Host ""
@@ -188,6 +221,11 @@ if ($Apply) {
 } else {
     Write-Host "Dry-run complete. Run with -Apply to actually move files." -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "To apply:" -ForegroundColor White
-    Write-Host '  powershell -ExecutionPolicy Bypass -File scripts/repo-active-cleanup.ps1 -Apply' -ForegroundColor Gray
+    Write-Host "Usage:" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  DRY-RUN (default -- safe, no files moved):" -ForegroundColor Gray
+    Write-Host "    powershell -ExecutionPolicy Bypass -File scripts/repo-active-cleanup.ps1" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  APPLY (actually moves files to archive directory):" -ForegroundColor Gray
+    Write-Host "    powershell -ExecutionPolicy Bypass -File scripts/repo-active-cleanup.ps1 -Apply" -ForegroundColor DarkGray
 }
