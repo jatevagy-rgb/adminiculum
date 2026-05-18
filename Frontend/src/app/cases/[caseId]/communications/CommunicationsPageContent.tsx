@@ -549,156 +549,122 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
       <main className="flex-1 flex flex-col min-h-0 bg-white">
         {!selectedComm ? (
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
+            <div className="text-center max-w-xs">
               {error && (
-                <div className="mb-4 p-3 bg-[#FEF2F2] border border-[#FECACA] rounded max-w-md">
+                <div className="mb-4 p-3 bg-[#FEF2F2] border border-[#FECACA] rounded">
                   <p className="text-xs text-[#DC2626]">{error}</p>
                 </div>
               )}
               {!error && (
                 <>
-                  <svg className="w-16 h-16 mx-auto text-[#DDD7CA]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5H4.5A2.25 2.25 0 002.25 6.5m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                  </svg>
-                  <p className="text-[#7B776D] mt-4 text-sm">Válassz ügyhöz kapcsolt kommunikációt a részletek és utánkövetési lépések megtekintéséhez.</p>
+                  <div className="w-12 h-12 rounded-full bg-[#F6F2E8] border border-[#DDD7CA] flex items-center justify-center mx-auto mb-3">
+                    <svg className="w-6 h-6 text-[#C9A227]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5H4.5A2.25 2.25 0 002.25 6.5m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                    </svg>
+                  </div>
+                  <p className="text-xs text-[#9C9890]">Még nincs ügykommunikáció. Írj belső jegyzetet vagy rögzíts egyeztetést.</p>
                 </>
               )}
             </div>
           </div>
         ) : (
           <>
-            {/* Message Header */}
-            <div className="p-6 border-b border-[#DDD7CA]">
-              <div className="mb-4 pb-4 border-b border-[#DDD7CA]">
-                <h2 className="text-lg font-serif text-[#1F2821]">Ügykommunikáció</h2>
-                <p className="text-[11px] text-[#7B776D] mt-0.5">Belső jegyzetek, résztvevői egyeztetések és utánkövetési pontok.</p>
-              </div>
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded ${communicationTypeColors[selectedComm.type]}`}>
-                      {communicationTypeLabels[selectedComm.type]}
-                    </span>
-                    {selectedComm.caseId ? (
-                      <span className="text-[9px] text-[#10B981] bg-[#F0FDF4] px-2 py-1 rounded">Ügyhöz kapcsolva</span>
-                    ) : (
-                      <button
-                        onClick={handleLinkToCase}
-                        disabled={isLinkingCase}
-                        className="text-[9px] text-[#3B82F6] bg-[#EFF6FF] px-2 py-1 rounded hover:bg-[#DBEAFE] disabled:opacity-50"
-                      >
-                        {isLinkingCase ? 'Kapcsolás...' : '+ Ügyhöz kapcsolás'}
-                      </button>
-                    )}
-                  </div>
-                  <h1 className="text-xl font-serif text-[#1F2821] leading-tight">
-                    {selectedComm.subject}
-                  </h1>
+            {/* Compact Header */}
+            <div className="px-6 py-4 border-b border-[#DDD7CA] bg-[#FAF8F2]">
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-medium flex-shrink-0 ${communicationTypeColors[selectedComm.type] || 'bg-[#6B7280] text-white'}`}>
+                  {getInitials(selectedComm.senderName)}
                 </div>
-              </div>
-              
-              <div className="flex items-center gap-6 mt-4 text-xs text-[#7B776D]">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-[#C9A227] text-white flex items-center justify-center text-[9px] font-medium">
-                    {getInitials(selectedComm.senderName)}
-                  </div>
-                  <div>
-                    <p className="font-medium text-[#1F2821]">{selectedComm.senderName || 'Ismeretlen'}</p>
-                    {selectedComm.senderEmail && (
-                      <p className="text-[10px] text-[#9C9890]">{selectedComm.senderEmail}</p>
-                    )}
-                  </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-[#1F2821] truncate">
+                    {selectedComm.senderName || 'Ismeretlen'}
+                  </p>
+                  <p className="text-[10px] text-[#9C9890]">{formatDate(selectedComm.createdAt)}</p>
                 </div>
-                {selectedComm.recipientName && (
-                  <>
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                    </svg>
-                    <div className="flex items-center gap-2">
-                      <div>
-                        <p className="font-medium text-[#1F2821]">{selectedComm.recipientName}</p>
-                        {selectedComm.recipientEmail && (
-                          <p className="text-[10px] text-[#9C9890]">{selectedComm.recipientEmail}</p>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-                <span className="ml-auto text-[#9C9890]">{formatDate(selectedComm.createdAt)}</span>
+                <span className={`text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded flex-shrink-0 ${communicationTypeColors[selectedComm.type]}`}>
+                  {communicationTypeLabels[selectedComm.type]}
+                </span>
               </div>
+              <h2 className="text-sm font-serif text-[#1F2821] leading-tight line-clamp-2">
+                {selectedComm.subject}
+              </h2>
             </div>
-            
+
             {/* Action Results */}
             {actionResult && (
-              <div className={`mx-6 mt-4 p-3 border rounded ${
-                actionResult.type === 'success' 
-                  ? 'bg-[#F0FDF4] border-[#10B981]' 
-                  : 'bg-[#FEF2F2] border-[#DC2626]'
+              <div className={`mx-6 mt-3 p-2 text-[10px] rounded ${
+                actionResult.type === 'success'
+                  ? 'bg-[#F0FDF4] text-[#059669]'
+                  : 'bg-[#FEF2F2] text-[#DC2626]'
               }`}>
-                <p className={`text-xs ${actionResult.type === 'success' ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                  {actionResult.message}
-                </p>
+                {actionResult.message}
               </div>
             )}
-            
-            {/* Message Content / Tabs */}
-            <div className="flex-1 overflow-y-auto">
-              <div className="border-b border-[#DDD7CA]">
-                <div className="flex px-6">
-                  <button
-                    onClick={() => setActivePane('messages')}
-                    className={`px-4 py-3 text-xs uppercase tracking-[0.2em] border-b-2 -mb-px ${
-                      activePane === 'messages'
-                        ? 'border-[#C9A227] text-[#C9A227]'
-                        : 'border-transparent text-[#7B776D] hover:text-[#1F2821]'
-                    }`}
-                  >
-                    Üzenet
-                  </button>
-                  <button
-                    onClick={() => setActivePane('attachments')}
-                    className={`px-4 py-3 text-xs uppercase tracking-[0.2em] border-b-2 -mb-px ${
-                      activePane === 'attachments'
-                        ? 'border-[#C9A227] text-[#C9A227]'
-                        : 'border-transparent text-[#7B776D] hover:text-[#1F2821]'
-                    }`}
-                  >
-                    Mellékletek ({selectedComm.attachments?.length || 0})
-                  </button>
-                  <button
-                    onClick={() => setActivePane('tasks')}
-                    className={`px-4 py-3 text-xs uppercase tracking-[0.2em] border-b-2 -mb-px ${
-                      activePane === 'tasks'
-                        ? 'border-[#C9A227] text-[#C9A227]'
-                        : 'border-transparent text-[#7B776D] hover:text-[#1F2821]'
-                    }`}
-                  >
-                    Feladatok ({selectedComm.relatedTasks?.length || 0})
-                  </button>
-                </div>
+
+            {/* Message Content */}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <div className="max-w-[75ch]">
+                {selectedComm.content ? (
+                  <div className="bg-[#F6F2E8] border border-[#DDD7CA] rounded-xl rounded-tl-sm p-4">
+                    <div className="prose prose-sm max-w-none text-[#1F2821] whitespace-pre-wrap text-sm leading-relaxed">
+                      {selectedComm.content}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[#9C9890] text-sm italic">
+                    {selectedComm.summary || 'Nincs elérhető tartalom'}
+                  </p>
+                )}
               </div>
-              
+            </div>
+
+            {/* Tabs */}
+            <div className="border-t border-[#DDD7CA]">
+              <div className="flex px-6">
+                <button
+                  onClick={() => setActivePane('messages')}
+                  className={`px-4 py-3 text-[10px] uppercase tracking-[0.2em] border-b-2 -mb-px ${
+                    activePane === 'messages'
+                      ? 'border-[#C9A227] text-[#C9A227]'
+                      : 'border-transparent text-[#7B776D] hover:text-[#1F2821]'
+                  }`}
+                >
+                  Üzenet
+                </button>
+                <button
+                  onClick={() => setActivePane('attachments')}
+                  className={`px-4 py-3 text-[10px] uppercase tracking-[0.2em] border-b-2 -mb-px ${
+                    activePane === 'attachments'
+                      ? 'border-[#C9A227] text-[#C9A227]'
+                      : 'border-transparent text-[#7B776D] hover:text-[#1F2821]'
+                  }`}
+                >
+                  Mellékletek ({selectedComm.attachments?.length || 0})
+                </button>
+                <button
+                  onClick={() => setActivePane('tasks')}
+                  className={`px-4 py-3 text-[10px] uppercase tracking-[0.2em] border-b-2 -mb-px ${
+                    activePane === 'tasks'
+                      ? 'border-[#C9A227] text-[#C9A227]'
+                      : 'border-transparent text-[#7B776D] hover:text-[#1F2821]'
+                  }`}
+                >
+                  Feladatok ({selectedComm.relatedTasks?.length || 0})
+                </button>
+              </div>
+
               <div className="p-6">
                 {activePane === 'messages' && (
                   <div>
-                    {selectedComm.content ? (
-                      <div className="prose prose-sm max-w-none text-[#1F2821] whitespace-pre-wrap">
-                        {selectedComm.content}
-                      </div>
-                    ) : (
-                      <p className="text-[#9C9890] text-sm italic">
-                        {selectedComm.summary || 'Nincs elérhető tartalom'}
-                      </p>
-                    )}
                     {selectedComm.summary && selectedComm.content && (
-                      <div className="mt-6 p-4 bg-[#F6F2E8] border border-[#DDD7CA]">
+                      <div className="mt-4 p-3 bg-[#F6F2E8] border border-[#DDD7CA]">
                         <h4 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-2">Összefoglaló</h4>
-                        <p className="text-sm text-[#1F2821]">{selectedComm.summary}</p>
+                        <p className="text-xs text-[#1F2821]">{selectedComm.summary}</p>
                       </div>
                     )}
                   </div>
                 )}
-                
+
                 {activePane === 'attachments' && (
                   <div>
                     <div className="flex items-center justify-between mb-4">
@@ -712,8 +678,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                         </button>
                       )}
                     </div>
-                    
-                    {/* Add Attachment Form */}
+
                     {showAddAttachmentForm && (
                       <div className="mb-4 p-3 border border-[#DDD7CA] bg-[#FAF8F2]">
                         <p className="text-[10px] text-[#7B776D] mb-2">Válassz kapcsolandó dokumentumot:</p>
@@ -736,7 +701,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                         </button>
                       </div>
                     )}
-                    
+
                     {selectedComm.attachments && selectedComm.attachments.length > 0 ? (
                       <div className="space-y-2">
                         {selectedComm.attachments.map((att) => (
@@ -763,11 +728,11 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                         ))}
                       </div>
                     ) : (
-                      <p className="text-[#9C9890] text-sm">Nincs melléklet</p>
+                      <p className="text-[#9C9890] text-xs">Nincs melléklet</p>
                     )}
                   </div>
                 )}
-                
+
                 {activePane === 'tasks' && (
                   <div>
                     <h4 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-4">Kapcsolódó feladatok</h4>
@@ -795,7 +760,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                         ))}
                       </div>
                     ) : (
-                      <p className="text-[#9C9890] text-sm">Ehhez a kommunikációhoz nincs létrehozott feladat</p>
+                      <p className="text-[#9C9890] text-xs">Ehhez a kommunikációhoz nincs létrehozott feladat</p>
                     )}
                   </div>
                 )}
@@ -813,9 +778,11 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
         
         <div className="p-4 space-y-6">
           {/* Ügy kontextus */}
-          <div>
-            <h4 className="text-[9px] uppercase tracking-[0.2em] text-[#7B776D] mb-2">Ügy kontextus</h4>
-            <div className="p-3 bg-white border border-[#DDD7CA]">
+          <details className="border border-[#DDD7CA] rounded">
+            <summary className="px-3 py-2 bg-[#F6F2E8] cursor-pointer text-[10px] uppercase tracking-[0.2em] text-[#7B776D] hover:bg-[#ECE6DA]">
+              Ügy kontextus
+            </summary>
+            <div className="p-3 bg-white">
               <p className="text-sm text-[#1F2821] font-medium">{caseRecord?.title || 'Ügy megnevezése nem elérhető'}</p>
               <p className="text-[10px] text-[#7B776D] mt-1">{caseRecord?.caseNumber || resolvedParams.caseId}</p>
               <div className="mt-3 pt-3 border-t border-[#DDD7CA]">
@@ -833,15 +800,17 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                 </div>
               </div>
             </div>
-          </div>
-          
+          </details>
+
           {/* Actions - only show when communication is selected */}
           {selectedComm && (
             <>
               {/* Extract Task */}
-              <div>
-                <h4 className="text-[9px] uppercase tracking-[0.2em] text-[#F59E0B] mb-2">Kapcsolt feladat létrehozása</h4>
-                <div className="space-y-2">
+              <details className="border border-[#DDD7CA] rounded">
+                <summary className="px-3 py-2 bg-[#F6F2E8] cursor-pointer text-[10px] uppercase tracking-[0.2em] text-[#F59E0B] hover:bg-[#ECE6DA]">
+                  Kapcsolt feladat létrehozása
+                </summary>
+                <div className="p-3 space-y-2">
                   <input
                     type="text"
                     value={taskTitle}
@@ -881,12 +850,14 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                     {isCreatingTask ? 'Létrehozás...' : 'Feladat létrehozása'}
                   </button>
                 </div>
-              </div>
-              
+              </details>
+
               {/* Extract Deadline */}
-              <div>
-                <h4 className="text-[9px] uppercase tracking-[0.2em] text-[#DC2626] mb-2">Kapcsolt határidő beállítása</h4>
-                <div className="space-y-2">
+              <details className="border border-[#DDD7CA] rounded">
+                <summary className="px-3 py-2 bg-[#F6F2E8] cursor-pointer text-[10px] uppercase tracking-[0.2em] text-[#DC2626] hover:bg-[#ECE6DA]">
+                  Kapcsolt határidő beállítása
+                </summary>
+                <div className="p-3 space-y-2">
                   <input
                     type="date"
                     value={deadlineDate}
@@ -907,12 +878,14 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                     {isExtractingDeadline ? 'Beállítás...' : 'Határidő beállítása'}
                   </button>
                 </div>
-              </div>
-              
+              </details>
+
               {/* Communication Summary */}
-              <div>
-                <h4 className="text-[9px] uppercase tracking-[0.2em] text-[#7B776D] mb-2">Kommunikációs összefoglaló</h4>
-                <div className="p-3 bg-white border border-[#DDD7CA]">
+              <details className="border border-[#DDD7CA] rounded">
+                <summary className="px-3 py-2 bg-[#F6F2E8] cursor-pointer text-[10px] uppercase tracking-[0.2em] text-[#7B776D] hover:bg-[#ECE6DA]">
+                  Kommunikációs összefoglaló
+                </summary>
+                <div className="p-3 bg-white">
                   <div className="space-y-2 text-[10px]">
                     <div className="flex items-start gap-2">
                       <span className="text-[#7B776D] w-16">Feladó:</span>
@@ -947,7 +920,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                     )}
                   </div>
                 </div>
-              </div>
+              </details>
             </>
           )}
           

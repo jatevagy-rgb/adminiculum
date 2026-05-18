@@ -965,7 +965,7 @@ function TimeEntriesPageContent() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-2 md:p-4 time-entries-surface">
+    <div className="flex-1 p-2 md:p-4 time-entries-surface">
           <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="text-2xl font-serif text-[#1F2821]">Munkaórák</h1>
