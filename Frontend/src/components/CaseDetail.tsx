@@ -1305,7 +1305,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                   <p className="text-[10px] text-[#7B776D] mt-1">{isArchived ? 'Archivált ügy - csak megtekintés' : 'Belső és ügyfélkommunikációk kezelése'}</p>
                 </button>
                 <button
-                  onClick={() => router.push('/time-entries')}
+                  onClick={() => router.push(`/time-entries?caseId=${canonicalCaseId}`)}
                   className={`p-4 border bg-white text-left transition-colors ${isArchived ? 'border-[#E5E7EB] opacity-50' : 'border-[#DDD7CA] hover:bg-[#FBF9F3]'}`}
                 >
                   <div className={`w-8 h-8 rounded flex items-center justify-center mb-3 ${isArchived ? 'bg-[#9CA3AF]' : 'bg-[#8B5CF6]/50'}`}>
@@ -1424,12 +1424,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
               </div>
             </div>
 
-            <div className="mt-12 p-6 bg-[#F6F2E8] border border-[#DDD7CA]">
-              <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D] mb-4">Ügyállapot</h3>
-              <p className="text-xs text-[#6B655B] leading-relaxed">
-                {caseRecord ? `Aktuális ügyállapot: ${caseRecord.status}.` : 'Az ügyállapot jelenleg nem érhető el.'}
-              </p>
-            </div>
+            
 
             {/* Case Completion Actions - only for non-archived cases with assigned lawyer */}
             {!isArchived && assignedLawyer && (
@@ -1475,21 +1470,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
               </div>
             )}
 
-            <div className="mt-6 p-6 bg-[#FFFBEB] border border-[#FDE68A]">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-[#F59E0B] text-white rounded flex items-center justify-center flex-shrink-0">
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-[#1F2821]">Adatforrások</p>
-                  <p className="text-xs text-[#6B655B] mt-1 leading-relaxed">
-                    Ez a nézet a mentett ügy-, dokumentum-, feladat- és idővonal-adatokat jeleníti meg, hogy a következő workflow lépések egy helyről indíthatók legyenek.
-                  </p>
-                </div>
-              </div>
-            </div>
+            
           </div>
         </main>
 
@@ -1972,7 +1953,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                   )}
                 </div>
                 {isLoadingWorkflow ? (
-                  <div className="py-4 text-center text-[10px] text-[#9C9890]">Loading workflow...</div>
+                  <div className="py-4 text-center text-[10px] text-[#9C9890]">Munkafolyamat betöltése...</div>
                 ) : workflowGraph && workflowGraph.nodes.length > 0 ? (
                   <div className="space-y-1">
                     {workflowGraph.nodes.map((node: WorkflowNode, index: number) => (
@@ -2012,7 +1993,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     ))}
                     {workflowGraph.possibleTransitions.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-[#E5E7EB]">
-                        <p className="text-[10px] text-[#9C9890] mb-2">Available actions:</p>
+                        <p className="text-[10px] text-[#9C9890] mb-2">Elérhető műveletek:</p>
                         <div className="flex flex-wrap gap-1">
                           {workflowGraph.possibleTransitions.map((status) => (
                             <button
@@ -2038,9 +2019,10 @@ export function CaseDetail({ params }: CaseDetailProps) {
                 )}
               </div>
 
-              {/* Munkafolyamat kontextus: aktív ügyfeladatokból és munkafolyamat-előzményekből származtatva. */}
-              <div className="mt-4 pt-4 border-t border-[#E5E7EB]">
-                <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#6366F1] mb-3">Munkafolyamat kontextus</h3>
+              <details className="mt-4 pt-4 border-t border-[#E5E7EB]">
+                <summary className="text-[10px] uppercase tracking-[0.28em] text-[#6366F1] cursor-pointer hover:text-[#4F46E5] mb-3 list-none">
+                  Munkafolyamat kontextus ▸
+                </summary>
                 <div className="space-y-2 p-3 border border-[#E0E7FF] bg-[#F8FAFF] rounded">
                   <div className="flex items-start justify-between gap-3 text-[10px]">
                     <span className="text-[#7B776D]">Aktuális lépés</span>
@@ -2101,7 +2083,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                 <p className="text-[9px] text-[#9C9890] mt-2 italic">
                   A felelős és a határidő az aktív ügyfeladatokból, az indoklás vagy megjegyzés a munkafolyamat-előzményekből származik.
                 </p>
-              </div>
+              </details>
           </div>
         </aside>
       </div>
@@ -2150,8 +2132,8 @@ export function CaseDetail({ params }: CaseDetailProps) {
           <div className="bg-white w-full max-w-md shadow-2xl border border-[#e4e2dd]">
             <div className="bg-[#059669] px-6 py-4 flex justify-between items-center">
               <div>
-                <h2 className="text-lg font-['Newsreader'] font-bold text-white">Complete & Archive Case</h2>
-                <p className="text-xs text-white/60 mt-1">This action cannot be undone</p>
+                <h2 className="text-lg font-['Newsreader'] font-bold text-white">Ügy lezárása és archiválása</h2>
+                <p className="text-xs text-white/60 mt-1">Ez a művelet nem vonható vissza</p>
               </div>
               <button
                 onClick={() => setShowCompleteConfirm(false)}
@@ -2162,11 +2144,11 @@ export function CaseDetail({ params }: CaseDetailProps) {
             </div>
             <div className="p-6">
               <p className="text-sm text-[#1F2821] mb-4">
-                Are you sure you want to archive this case? The case data will be preserved but marked as completed.
+                Biztosan archiválni szeretné ezt az ügyet? Az ügy adatai megmaradnak, de befejezettként lesznek jelölve.
               </p>
               <div className="bg-[#FEF3C7] border border-[#FCD34D] p-3 mb-4">
                 <p className="text-xs text-[#92400E]">
-                  <strong>Note:</strong> This will set the case status to ARCHIVED. You can still access all documents and case data.
+                  <strong>Megjegyzés:</strong> Ez az ügy státuszát ARCHIVÁLT-ra állítja. A dokumentumok és az ügy adatai továbbra is elérhetők.
                 </p>
               </div>
               <div className="flex justify-end gap-3">
@@ -2174,14 +2156,14 @@ export function CaseDetail({ params }: CaseDetailProps) {
                   onClick={() => setShowCompleteConfirm(false)}
                   className="px-4 py-2 text-xs font-bold uppercase tracking-widest border border-[#c3c8c1]/20 text-[#434843] hover:bg-[#f5f3ee]"
                 >
-                  Cancel
+                  Mégse
                 </button>
                 <button
                   onClick={handleCompleteCase}
                   disabled={isCompleting}
                   className="px-6 py-2 text-xs font-bold uppercase tracking-widest bg-[#059669] text-white hover:opacity-90 disabled:opacity-50"
                 >
-                  {isCompleting ? 'Archiving...' : 'Archive Case'}
+                  {isCompleting ? 'Archiválás...' : 'Ügy archiválása'}
                 </button>
               </div>
             </div>
