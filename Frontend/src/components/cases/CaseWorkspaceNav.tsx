@@ -42,7 +42,7 @@ export function CaseWorkspaceNav({ caseId, caseNumber, title, clientName, active
         <button type="button" onClick={() => router.push(workspaceHref)} className={itemClass(activeTab === "workspace")}>Szerződés-workspace</button>
         <button type="button" onClick={() => router.push(`/cases/${caseId}/communications`)} className={itemClass(activeTab === "communications")}>Kommunikáció</button>
         <button type="button" onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(caseId)}`)} className={itemClass(activeTab === "versions")}>Verzió-összevetés</button>
-        <button type="button" onClick={() => router.push("/time-entries")} className={itemClass(activeTab === "time")}>Munkaórák</button>
+        <button type="button" onClick={() => router.push(`/time-entries?caseId=${encodeURIComponent(caseId)}`)} className={itemClass(activeTab === "time")}>Munkaórák</button>
       </nav>
 
       <div className="border-t border-[#0E3A26] p-3">
