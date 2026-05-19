@@ -112,6 +112,24 @@ const CORE_CLIENT_DEFAULTS: Record<string, Partial<Client>> = {
   },
 };
 
+const STEP_DEFAULT_TITLES = ["Előkészítés", "Ügyvédi review", "Javítás / véglegesítés"] as const;
+
+const getStepTitle = (index: number, role?: string | null): string => {
+  if (index < STEP_DEFAULT_TITLES.length) return STEP_DEFAULT_TITLES[index];
+  return "Következő munkalépés";
+};
+
+const getRoleLabel = (role?: string | null): string => {
+  if (!role) return "";
+  switch (role.toUpperCase()) {
+    case "PARTNER": return "Partner";
+    case "LAWYER": return "Ügyvéd";
+    case "TRAINEE": return "Ügyvédjelölt";
+    case "LEGAL_ASSISTANT": return "Asszisztens";
+    default: return role;
+  }
+};
+
 const normalizePersonName = (value?: string | null) =>
   String(value || "")
     .toLocaleLowerCase("hu-HU")
@@ -293,8 +311,8 @@ export function CasesList() {
     }
     if (preset === "trainee-partner") {
       setWorkplanSteps([
-        { id: id(), title: "Előkészítés", assigneeUserId: "", dueDate: "", note: "Jelölti előkészítés." },
-        { id: id(), title: "Partner review", assigneeUserId: "", dueDate: "", note: "Partner átnézés és iránymutatás." },
+        { id: id(), title: "Előkészítés", assigneeUserId: "", dueDate: "", note: "Ügyvédjelölt előkészítése." },
+        { id: id(), title: "Partner jóváhagyás", assigneeUserId: "", dueDate: "", note: "Partner átnézés és végső jóváhagyás." },
       ]);
       return;
     }
@@ -349,6 +367,15 @@ export function CasesList() {
 
   const addWorkplanStep = () => {
     setWorkplanSteps((prev) => [...prev, { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, title: "", assigneeUserId: "", dueDate: "", note: "" }]);
+    setWorkplanPreset("custom");
+  };
+
+  const addParticipantToWorkplan = (user: User) => {
+    if (String(user.id).startsWith("local-participant-")) return;
+    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const currentCount = workplanSteps.length;
+    const title = getStepTitle(currentCount);
+    setWorkplanSteps((prev) => [...prev, { id, title, assigneeUserId: user.id, dueDate: "", note: "" }]);
     setWorkplanPreset("custom");
   };
 
@@ -752,7 +779,36 @@ export function CasesList() {
                   {visibleParticipants.map((user) => {
                     const active = selectedCollaboratorIds.includes(user.id);
                     const isLocalFallback = String(user.id).startsWith("local-participant-");
-                    return <button key={user.id} onClick={() => { if (!isLocalFallback) setSelectedCollaboratorIds(active ? selectedCollaboratorIds.filter((id) => id !== user.id) : [...selectedCollaboratorIds, user.id]); }} disabled={isLocalFallback} className={`rounded-full border px-3 py-1.5 text-xs ${active ? "border-[#1F4A33] bg-[#E2E8DA] text-[#1F4A33]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"} ${isLocalFallback ? "opacity-70" : ""}`}>{user.name || user.email} <span className="text-[#7A8479]">· {user.role}{isLocalFallback ? " · helyi névlista" : ""}</span></button>;
+                    const alreadyInWorkplan = workplanSteps.some((step) => step.assigneeUserId === user.id);
+                    return (
+                      <button
+                        key={user.id}
+                        type="button"
+                        title={alreadyInWorkplan ? `${user.name} már az útvonalban` : "Hozzáadás útvonalhoz"}
+                        onClick={() => {
+                          if (isLocalFallback) return;
+                          if (alreadyInWorkplan) return;
+                          addParticipantToWorkplan(user);
+                        }}
+                        disabled={isLocalFallback || alreadyInWorkplan}
+                        className={`rounded-full border px-3 py-1.5 text-xs ${
+                          active
+                            ? "border-[#1F4A33] bg-[#E2E8DA] text-[#1F4A33]"
+                            : alreadyInWorkplan
+                              ? "border-[#4A6B4A] bg-[#D9E3CC] text-[#4A6B4A] cursor-default"
+                              : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842] hover:border-[#173824] hover:bg-[#ECE6DA]"
+                        } ${isLocalFallback ? "opacity-70" : ""}`}
+                      >
+                        {user.name || user.email}
+                        {!isLocalFallback && !alreadyInWorkplan ? (
+                          <span className="ml-1 text-[9px] opacity-60">+ útvonal</span>
+                        ) : alreadyInWorkplan ? (
+                          <span className="ml-1 text-[9px] opacity-60">✓ útvonalban</span>
+                        ) : (
+                          <span className="ml-1 text-[#7A8479]">· {user.role}{isLocalFallback ? " · helyi névlista" : ""}</span>
+                        )}
+                      </button>
+                    );
                   })}
                   {visibleParticipants.length === 0 ? <span className="text-xs text-[#7A8479]">Felhasználók betöltése vagy nem elérhetők.</span> : null}
                 </div>
@@ -763,49 +819,101 @@ export function CasesList() {
                 <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">6</span><h3 className="font-serif text-xl font-medium">Munkaterv / review-útvonal</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    ["none", "Nincs munkaterv"],
+                    ["none", "Nincs"],
                     ["simple", "Egyszerű"],
                     ["trainee-partner", "Jelölt → partner"],
                     ["three-step", "Jelölt → ügyvéd → partner"],
-                    ["custom", "Saját útvonal"],
+                    ["custom", "Saját"],
                   ].map(([value, label]) => (
                     <button key={value} type="button" onClick={() => applyWorkplanPreset(value)} className={`rounded-full border px-3 py-1.5 text-xs ${workplanPreset === value ? "border-[#173824] bg-[#1F4A33] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{label}</button>
                   ))}
                 </div>
                 {workplanSteps.length > 0 ? (
-                  <div className="mt-4 space-y-2">
-                    <p className="text-[10px] text-[#9C9890] mb-2">Sorrend a fel/le gombokkal módosítható.</p>
-                    {workplanSteps.map((step, index) => (
-                      <div key={step.id} className="rounded-lg border border-[rgba(22,32,26,0.12)] bg-[#FBF6E7] p-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1F4A33] text-[10px] font-bold text-[#F4EFDB]">{index + 1}</span>
-                          <input value={step.title} onChange={(e) => updateWorkplanStep(step.id, { title: e.target.value })} placeholder="Feladat megnevezése" className="flex-1 rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]" />
-                        </div>
-                        <div className="grid gap-2 sm:grid-cols-[1fr_180px_130px]">
-                          <select value={step.assigneeUserId} onChange={(e) => updateWorkplanStep(step.id, { assigneeUserId: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]">
-                            <option value="">Felelős</option>
-                            {visibleParticipants.filter((user) => !String(user.id).startsWith("local-participant-")).map((user) => <option key={user.id} value={user.id}>{user.name}{user.role && user.role !== 'LAWYER' ? ` (${user.role === 'PARTNER' ? 'partner' : user.role === 'TRAINEE' ? 'ügyvédjelölt' : user.role})` : ''}</option>)}
-                          </select>
-                          <input type="date" value={step.dueDate} onChange={(e) => updateWorkplanStep(step.id, { dueDate: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]" />
-                          <div className="flex items-center gap-1">
-                            <button type="button" onClick={() => moveUpStep(index)} disabled={index === 0} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(22,32,26,0.20)] text-[10px] text-[#3D4842] disabled:opacity-30 hover:bg-[#ECE6DA]" title="Fel">
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path d="M5 15l7-7 7 7"/></svg>
-                            </button>
-                            <button type="button" onClick={() => moveDownStep(index)} disabled={index === workplanSteps.length - 1} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(22,32,26,0.20)] text-[10px] text-[#3D4842] disabled:opacity-30 hover:bg-[#ECE6DA]" title="Le">
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path d="M19 9l-7 7-7-7"/></svg>
-                            </button>
-                            <button type="button" onClick={() => removeWorkplanStep(step.id)} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(181,42,42,0.30)] text-[#8B2A2A] hover:bg-[#FFF0EE]" title="Lépés törlése">
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path d="M6 18L18 6M6 6l12 12"/></svg>
-                            </button>
-                          </div>
-                        </div>
-                        <textarea value={step.note} onChange={(e) => updateWorkplanStep(step.id, { note: e.target.value })} rows={1} placeholder="Leírás / megjegyzés" className="mt-2 w-full resize-none rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]" />
+                  <div className="mt-4 space-y-3">
+                    {workplanSteps.length > 1 && (
+                      <p className="text-[10px] text-[#9C9890]">⟳ Sorrend módosítása: fogd meg és húzd a lépést, vagy használd a fel/le gombokat.</p>
+                    )}
+                    {workplanSteps.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1 rounded border border-[#C5D3C8] bg-[#E2E8DA] p-2 text-xs">
+                        <span className="text-[#4A6B4A] font-semibold">Útvonal:</span>
+                        {workplanSteps.map((step, idx) => {
+                          const assignee = visibleParticipants.find((u) => u.id === step.assigneeUserId);
+                          const name = assignee ? assignee.name : step.title || "?";
+                          return (
+                            <span key={step.id} className="flex items-center gap-1">
+                              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#1F4A33] text-[9px] font-bold text-[#F4EFDB]">{idx + 1}</span>
+                              <span className="font-medium text-[#1F4A33]">{name}</span>
+                              {idx < workplanSteps.length - 1 && <span className="mx-1 text-[#7A8479]">→</span>}
+                            </span>
+                          );
+                        })}
                       </div>
-                    ))}
+                    )}
+                    <div className="space-y-2">
+                      {workplanSteps.map((step, index) => {
+                        const assignee = visibleParticipants.find((u) => u.id === step.assigneeUserId);
+                        return (
+                          <div
+                            key={step.id}
+                            draggable
+                            onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(index)); e.currentTarget.classList.add("opacity-60"); }}
+                            onDragEnd={(e) => { e.currentTarget.classList.remove("opacity-60"); }}
+                            onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-[#B58A2A]"); }}
+                            onDragLeave={(e) => { e.currentTarget.classList.remove("border-[#B58A2A]"); }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              e.currentTarget.classList.remove("border-[#B58A2A]");
+                              const fromIndex = parseInt(e.dataTransfer.getData("text/plain") || "-1", 10);
+                              if (fromIndex !== -1 && fromIndex !== index) {
+                                setWorkplanSteps((prev) => {
+                                  const next = [...prev];
+                                  const [moved] = next.splice(fromIndex, 1);
+                                  next.splice(index, 0, moved);
+                                  return next;
+                                });
+                              }
+                            }}
+                            className="rounded-lg border border-[rgba(22,32,26,0.12)] bg-[#FBF6E7] p-3 cursor-grab active:cursor-grabbing"
+                          >
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1F4A33] text-[10px] font-bold text-[#F4EFDB]">{index + 1}</span>
+                              <input value={step.title} onChange={(e) => updateWorkplanStep(step.id, { title: e.target.value })} placeholder="Feladat megnevezése" className="flex-1 rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]" />
+                              {assignee && (
+                                <span className="shrink-0 rounded-full border border-[#4A6B4A] bg-[#D9E3CC] px-2 py-0.5 text-[10px] text-[#4A6B4A]">{assignee.name}{assignee.role ? ` · ${getRoleLabel(assignee.role)}` : ''}</span>
+                              )}
+                            </div>
+                            <div className="grid gap-2 sm:grid-cols-[1fr_180px_130px]">
+                              <select value={step.assigneeUserId} onChange={(e) => updateWorkplanStep(step.id, { assigneeUserId: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]">
+                                <option value="">Felelős</option>
+                                {visibleParticipants.filter((user) => !String(user.id).startsWith("local-participant-")).map((user) => <option key={user.id} value={user.id}>{user.name}{user.role && user.role !== 'LAWYER' ? ` (${user.role === 'PARTNER' ? 'partner' : user.role === 'TRAINEE' ? 'ügyvédjelölt' : user.role})` : ''}</option>)}
+                              </select>
+                              <input type="date" value={step.dueDate} onChange={(e) => updateWorkplanStep(step.id, { dueDate: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]" />
+                              <div className="flex items-center gap-1">
+                                <button type="button" onClick={() => moveUpStep(index)} disabled={index === 0} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(22,32,26,0.20)] text-[10px] text-[#3D4842] disabled:opacity-30 hover:bg-[#ECE6DA]" title="Fel">
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path d="M5 15l7-7 7 7"/></svg>
+                                </button>
+                                <button type="button" onClick={() => moveDownStep(index)} disabled={index === workplanSteps.length - 1} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(22,32,26,0.20)] text-[10px] text-[#3D4842] disabled:opacity-30 hover:bg-[#ECE6DA]" title="Le">
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path d="M19 9l-7 7-7-7"/></svg>
+                                </button>
+                                <button type="button" onClick={() => removeWorkplanStep(step.id)} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(181,42,42,0.30)] text-[#8B2A2A] hover:bg-[#FFF0EE]" title="Lépés törlése">
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                                </button>
+                              </div>
+                            </div>
+                            <textarea value={step.note} onChange={(e) => updateWorkplanStep(step.id, { note: e.target.value })} rows={1} placeholder="Leírás / megjegyzés" className="mt-2 w-full resize-none rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]" />
+                          </div>
+                        );
+                      })}
+                    </div>
                     <AdminButton size="sm" variant="muted" onClick={addWorkplanStep}>+ Lépés hozzáadása</AdminButton>
                     <p className="text-[11px] text-[#7A8479]">A lépések valós ügyfeladatként jönnek létre. Felelős csak akkor kerül mentésre, ha létező felhasználót választasz.</p>
                   </div>
-                ) : <p className="mt-3 text-xs text-[#7A8479]">Munkaterv nélkül is létrehozható az ügy.</p>}
+                ) : (
+                  <div className="mt-4 rounded border border-dashed border-[rgba(22,32,26,0.20)] bg-[#FBF6E7] p-5 text-center">
+                    <p className="text-sm font-medium text-[#3D4842]">Építsd fel, ki milyen sorrendben dolgozik az ügyön.</p>
+                    <p className="mt-1 text-xs text-[#7A8479]">Válassz egy sablont vagy adj lépéseket egyénileg. A fenti résztvevők közül egy kattintással is hozzáadhatsz valakit az útvonalhoz.</p>
+                  </div>
+                )}
               </section>
 
               {createError ? <div className="mb-4 rounded border border-[#F2DAD6] bg-[#F2DAD6] p-3 text-xs font-semibold text-[#8B2A2A]">{createError}</div> : null}
