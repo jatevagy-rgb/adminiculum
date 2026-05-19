@@ -38,9 +38,10 @@ import {
   type TimesheetReportInstancePayload,
   type TimesheetReportArtifactPayload,
   type SaveTimesheetReportInstanceInput,
+  getCaseSummary,
 } from "@/lib/api";
 
-const WORK_TYPES = ["TÁRGYALÁS", "TANÁCSADÁS", "IRATELENÉS", "FELÜLVIZSGÁLAT", "KOMMUNIKÁCIÓ", "KUTATÁS", "EGYÉB"];
+const WORK_TYPES = ["TANÁCSADÁS", "IRATELENÉS", "FELÜLVIZSGÁLAT", "KOMMUNIKÁCIÓ", "KUTATÁS", "EGYÉB"];
 
 // Maps Prisma WorkType enum values → Hungarian display labels used in the form
 const WORK_TYPE_LABEL_MAP: Record<string, string> = {
@@ -151,10 +152,15 @@ function TimeEntriesPageContent() {
     billable: true,
   });
 
-  // Optional deep-link context: /time-entries?matterId=...
+  // Optional deep-link context: /time-entries?matterId=... or ?caseId=...
   const searchParams = useSearchParams();
   const deepLinkedMatterId = searchParams?.get("matterId") ?? null;
+  const deepLinkedCaseId = searchParams?.get("caseId") ?? null;
   const [prefilledMatterId, setPrefilledMatterId] = useState<string | null>(null);
+  const [caseResolutionState, setCaseResolutionState] = useState<{
+    status: "idle" | "loading" | "found" | "not_found";
+    caseLabel: string | null;
+  }>({ status: "idle", caseLabel: null });
 
   const loadEntries = useCallback(async () => {
     setIsLoading(true);
@@ -239,17 +245,42 @@ function TimeEntriesPageContent() {
     loadReportArtifacts(selectedReportInstanceId);
   }, [selectedReportInstanceId, loadReportArtifacts]);
 
-  // Once matters are loaded, resolve deep-linked matterId (if any) to a real matter
+  // Once matters are loaded, resolve deep-linked matterId or caseId to a real matter
   useEffect(() => {
-    if (!deepLinkedMatterId) return;
     if (prefilledMatterId) return; // already resolved
     if (!matters.length) return;
 
-    const hasMatch = matters.some((m) => m.id === deepLinkedMatterId);
-    if (hasMatch) {
-      setPrefilledMatterId(deepLinkedMatterId);
+    if (deepLinkedMatterId) {
+      const hasMatch = matters.some((m) => m.id === deepLinkedMatterId);
+      if (hasMatch) {
+        setPrefilledMatterId(deepLinkedMatterId);
+      }
+      return;
     }
-  }, [deepLinkedMatterId, prefilledMatterId, matters]);
+
+    if (deepLinkedCaseId) {
+      // First try: find a time entry already linked to this case
+      const entryWithCase = entries.find((e) => e.matter?.cases?.some((c) => c.id === deepLinkedCaseId));
+      if (entryWithCase?.matterId) {
+        setPrefilledMatterId(entryWithCase.matterId);
+        setCaseResolutionState({ status: "found", caseLabel: null });
+        return;
+      }
+
+      // Second try: fetch case summary to get case label for banner
+      setCaseResolutionState((s) => s.status === "idle" ? { ...s, status: "loading" } : s);
+      getCaseSummary(deepLinkedCaseId)
+        .then((summary) => {
+          const label = summary.case.caseNumber
+            ? `${summary.case.caseNumber} · ${summary.case.title}`
+            : summary.case.title;
+          setCaseResolutionState({ status: "not_found", caseLabel: label });
+        })
+        .catch(() => {
+          setCaseResolutionState({ status: "not_found", caseLabel: null });
+        });
+    }
+  }, [deepLinkedMatterId, deepLinkedCaseId, prefilledMatterId, matters, entries]);
 
   const formatMinutes = (minutes: number) => {
     const h = Math.floor(minutes / 60);
@@ -982,6 +1013,32 @@ function TimeEntriesPageContent() {
             </button>
           </div>
 
+          {deepLinkedCaseId && caseResolutionState.status !== "idle" && (
+            <div className="mb-4 px-4 py-3 border border-[#C9A227] bg-[#FBF9F3] rounded flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] px-2 py-0.5 bg-[#C9A227] text-white uppercase tracking-wide">Ügyhöz kapcsolt</span>
+                {caseResolutionState.status === "loading" ? (
+                  <span className="text-xs text-[#7B776D]">Ügy betöltése...</span>
+                ) : caseResolutionState.caseLabel ? (
+                  <span className="text-xs text-[#1F2821] font-semibold">{caseResolutionState.caseLabel}</span>
+                ) : (
+                  <span className="text-xs text-[#1F2821]">Munkaóra-rögzítés ebben az ügyben</span>
+                )}
+                {caseResolutionState.status === "not_found" && (
+                  <span className="text-[10px] text-[#9C9890] italic">
+                    Az ügyhöz tartozó munkacsomag nem található. Válassz munkacsomagot kézzel.
+                  </span>
+                )}
+              </div>
+              <Link
+                href={`/cases/${deepLinkedCaseId}`}
+                className="px-3 py-1 text-[10px] border border-[#C9A227] text-[#1F2821] hover:bg-white rounded shrink-0"
+              >
+                Vissza az ügyhöz
+              </Link>
+            </div>
+          )}
+
           {error && <div className="mb-6 p-4 bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a] text-xs rounded">{error}</div>}
 
           <div className="mb-6 border border-[#DDD7CA] rounded bg-white p-4 space-y-4">
@@ -1641,6 +1698,29 @@ function TimeEntriesPageContent() {
                   rows={3}
                   placeholder="Röviden írd le az elvégzett munkát..."
                 />
+              </div>
+
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-2">Gyors kategória</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: "Dokumentum átnézése", workType: "FELÜLVIZSGÁLAT" },
+                    { label: "Szerződésmódosítás", workType: "IRATELENÉS" },
+                    { label: "Kommunikáció", workType: "KOMMUNIKÁCIÓ" },
+                    { label: "Partner review", workType: "FELÜLVIZSGÁLAT" },
+                    { label: "Ügyfél egyeztetés", workType: "KOMMUNIKÁCIÓ" },
+                    { label: "Adminisztráció", workType: "EGYÉB" },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setFormData((f) => ({ ...f, workType: preset.workType, description: f.description || preset.label }))}
+                      className="px-2 py-1 text-[10px] border border-[#DDD7CA] rounded bg-white hover:bg-[#FBF9F3] hover:border-[#C9A227] transition-colors"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="flex items-center gap-3">
