@@ -506,12 +506,12 @@ export function CaseDetail({ params }: CaseDetailProps) {
         id: `deadline:${task.id}`,
         dedupeKey: `deadline|${task.id}|${task.dueDate}`,
         type: 'deadline' as const,
-        title: `Task deadline: ${task.title}`,
+        title: `Feladat határidő: ${task.title}`,
         timestamp: task.dueDate as string,
-        description: `Current status: ${task.status}`,
-        sourceLabel: 'Tasks',
+        description: `Státusz: ${task.status}`,
+        sourceLabel: 'Feladatok',
         link: `/cases/${canonicalCaseId}`,
-        linkLabel: 'Open case tasks',
+        linkLabel: 'Ügy megnyitása',
         sourcePriority: 4,
       }));
   };
@@ -1257,8 +1257,8 @@ export function CaseDetail({ params }: CaseDetailProps) {
 
             <div className="mb-8">
               <div className="grid grid-cols-3 gap-3">
-                <button 
-                  onClick={() => router.push(`/cases/${canonicalCaseId}/generate/assembly`)}
+                <button
+                  onClick={() => router.push(`/documents/compare?caseId=${canonicalCaseId}`)}
                   disabled={isArchived}
                   className={`p-4 border bg-white text-left transition-colors ${isArchived ? 'border-[#E5E7EB] opacity-50 cursor-not-allowed' : 'border-[#DDD7CA] hover:bg-[#FBF9F3]'}`}
                 >
@@ -1268,8 +1268,8 @@ export function CaseDetail({ params }: CaseDetailProps) {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 11v6M9 14h6" />
                     </svg>
                   </div>
-                  <p className="text-xs font-semibold text-[#1F2821]">Klauzula-alapú dokumentumépítő</p>
-                  <p className="text-[10px] text-[#7B776D] mt-1">{isArchived ? 'Archivált ügy - csak megtekintés' : 'A klauzula-rendszer külön patchben lesz bekötve.'}</p>
+                  <p className="text-xs font-semibold text-[#1F2821]">Szerződés-workspace</p>
+                  <p className="text-[10px] text-[#7B776D] mt-1">{isArchived ? 'Archivált ügy - csak megtekintés' : 'Klauzulák és munkapéldányok kezelése'}</p>
                 </button>
                 <button 
                   onClick={() => !isArchived && fileInputRef.current?.click()}
@@ -1645,32 +1645,34 @@ export function CaseDetail({ params }: CaseDetailProps) {
 
             <div>
               <button
-                onClick={() => !isArchived && router.push(`/cases/${canonicalCaseId}/generate/assembly`)}
-                disabled={isArchived}
+                onClick={() => router.push(`/documents/compare?caseId=${canonicalCaseId}`)}
                 className={`w-full py-3 text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-colors ${isArchived ? 'bg-[#9CA3AF] text-white cursor-not-allowed' : 'bg-[#C9A227] text-white hover:bg-[#B8911F]'}`}
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.801 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.87.688 2.006 1.649L19 6v-.75a2.25 2.25 0 00-2.25-2.25h-1.5" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 2h7l5 5v13a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 11v6M9 14h6" />
                 </svg>
-                {isArchived ? 'Klauzula-alapú dokumentumépítő (archivált)' : 'Klauzula-alapú dokumentumépítő'}
+                Szerződés-workspace megnyitása
               </button>
               <p className="mt-2 text-[10px] text-[#7B776D] text-center">
-                A klauzula-rendszer külön patchben lesz bekötve.
+                Klauzulák és munkapéldány a Szerződés-workspace-ben kezelhetők.
               </p>
             </div>
 
-            {/* Secure Bridge: AI Response Import */}
-            {anonymousDocuments.length > 0 ? (
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#8B5CF6]">AI / anonimizálás</h3>
-                  <span className="text-[10px] text-[#9C9890]">{anonymousDocuments.length}</span>
-                </div>
+            {/* Secure Bridge: AI Response Import — collapsed, secondary */}
+            <details className="border border-[#8B5CF6]/20 rounded bg-[#f5f3ff]/30">
+              <summary className="flex items-center justify-between mb-3 cursor-pointer hover:opacity-80 p-1">
+                <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#8B5CF6]">AI prompt-előkészítés ▸</h3>
+                {anonymousDocuments.length > 0 && (
+                  <span className="text-[10px] text-[#9C9890]">{anonymousDocuments.length} dokumentum</span>
+                )}
+              </summary>
+              {anonymousDocuments.length > 0 ? (
                 <div className="space-y-2">
                   {anonymousDocuments.map((anonDoc) => (
-                    <div 
+                    <div
                       key={anonDoc.id}
-                      className="p-3 border border-[#8B5CF6]/30 bg-[#f5f3ff] rounded"
+                      className="p-3 border border-[#8B5CF6]/30 bg-white rounded"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -1709,24 +1711,12 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     </div>
                   ))}
                 </div>
-              </div>
-            ) : (
-              <div className="p-4 border border-[#DDD7CA] bg-[#F9FAFB]">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-[#8B5CF6] text-white rounded flex items-center justify-center flex-shrink-0">
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-[#1F2821]">Dokumentumspecifikus anonimizálás</p>
-                    <p className="text-[10px] text-[#6B655B] mt-1 leading-relaxed">
-                      Még nincs anonimizált dokumentum. A prompt-előkészítés a Dokumentumtárból vagy a workspace-ből indítható valós dokumentum alapján.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+              ) : (
+                <p className="text-[10px] text-[#7B776D] leading-relaxed pb-1">
+                  AI promptok és anonimizálás a Dokumentumtárból vagy a Szerződés-workspace-ből indítható.
+                </p>
+              )}
+            </details>
 
               <div>
                 <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D] mb-3">Belső jegyzetek</h3>
