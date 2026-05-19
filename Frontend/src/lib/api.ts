@@ -409,6 +409,7 @@ export interface CaseSummaryResponse {
     title: string;
     clientName: string;
     clientId?: string;
+    matterId?: string;
     matterType: string;
     status: string;
     description?: string;

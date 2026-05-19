@@ -48,6 +48,7 @@ interface CaseSummaryDTO {
     title: string;
     clientName: string;
     clientId?: string;
+    matterId?: string;
     matterType: string;
     status: string;
     description?: string;
@@ -283,13 +284,14 @@ class CasesService {
     const approvedDocs = documents.filter((d: any) => d.folder === 'APPROVED' || d.folder === 'FINAL');
     const pendingReview = documents.filter((d: any) => d.folder === 'REVIEW');
 
-    return {
+return {
       case: {
         id: caseData.id,
         caseNumber: caseData.caseNumber,
         title: `${caseData.clientName || 'Unknown Client'} - ${caseData.matterType || 'Unknown Type'}`,
         clientName: caseData.clientName || 'Unknown Client',
         clientId: caseData.clientId,
+        matterId: caseData.matterId ?? undefined,
         matterType: caseData.matterType || 'Unknown',
         status: caseData.status,
         description: caseData.description || undefined,

@@ -160,7 +160,9 @@ function TimeEntriesPageContent() {
   const [caseResolutionState, setCaseResolutionState] = useState<{
     status: "idle" | "loading" | "found" | "not_found";
     caseLabel: string | null;
-  }>({ status: "idle", caseLabel: null });
+    matterId: string | null;
+    matterLabel: string | null;
+  }>({ status: "idle", caseLabel: null, matterId: null, matterLabel: null });
 
   const loadEntries = useCallback(async () => {
     setIsLoading(true);
@@ -263,21 +265,28 @@ function TimeEntriesPageContent() {
       const entryWithCase = entries.find((e) => e.matter?.cases?.some((c) => c.id === deepLinkedCaseId));
       if (entryWithCase?.matterId) {
         setPrefilledMatterId(entryWithCase.matterId);
-        setCaseResolutionState({ status: "found", caseLabel: null });
+        setCaseResolutionState((s) => ({ ...s, status: "found", matterId: entryWithCase.matterId, matterLabel: null }));
         return;
       }
 
-      // Second try: fetch case summary to get case label for banner
+      // Second try: fetch case summary to get matterId directly
       setCaseResolutionState((s) => s.status === "idle" ? { ...s, status: "loading" } : s);
       getCaseSummary(deepLinkedCaseId)
         .then((summary) => {
-          const label = summary.case.caseNumber
+          const caseLabel = summary.case.caseNumber
             ? `${summary.case.caseNumber} · ${summary.case.title}`
             : summary.case.title;
-          setCaseResolutionState({ status: "not_found", caseLabel: label });
+          const matterId = summary.case.matterId || null;
+          const matterLabel = matterId ? (matters.find((m) => m.id === matterId)?.title || null) : null;
+          if (matterId) {
+            setPrefilledMatterId(matterId);
+            setCaseResolutionState({ status: "found", caseLabel, matterId, matterLabel });
+          } else {
+            setCaseResolutionState({ status: "not_found", caseLabel, matterId: null, matterLabel: null });
+          }
         })
         .catch(() => {
-          setCaseResolutionState({ status: "not_found", caseLabel: null });
+          setCaseResolutionState({ status: "not_found", caseLabel: null, matterId: null, matterLabel: null });
         });
     }
   }, [deepLinkedMatterId, deepLinkedCaseId, prefilledMatterId, matters, entries]);
@@ -1023,6 +1032,9 @@ function TimeEntriesPageContent() {
                   <span className="text-xs text-[#1F2821] font-semibold">{caseResolutionState.caseLabel}</span>
                 ) : (
                   <span className="text-xs text-[#1F2821]">Munkaóra-rögzítés ebben az ügyben</span>
+                )}
+                {caseResolutionState.matterLabel && (
+                  <span className="text-[10px] text-[#7B776D]">· {caseResolutionState.matterLabel}</span>
                 )}
                 {caseResolutionState.status === "not_found" && (
                   <span className="text-[10px] text-[#9C9890] italic">
