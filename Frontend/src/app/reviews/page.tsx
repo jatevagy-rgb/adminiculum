@@ -65,11 +65,11 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
 const getStatusConfig = (status: string) => {
   const upper = status.toUpperCase();
   return STATUS_CONFIG[upper] || STATUS_CONFIG[upper.replace(/-/g, "_")] || {
-    label: status,
+    label: "Ismeretlen állapot",
     color: "text-[#514D45]",
     bg: "bg-[#ECE6DA]",
     border: "border-[#DDD7CA]",
-    badge: status,
+    badge: "Ismeretlen",
   };
 };
 
@@ -141,9 +141,11 @@ const getDocumentTypeLabel = (documentType?: string) => {
   if (!documentType) return null;
   const normalized = documentType.toUpperCase();
   if (normalized === "MODIFIED_WORKING_COPY") return "Módosított munkapéldány";
+  if (normalized === "UPLOADED") return "Feltöltött dokumentum";
   if (normalized === "UPLOADED_ORIGINAL") return "Feltöltött eredeti dokumentum";
+  if (normalized === "GENERATED") return "Generált dokumentum";
   if (normalized === "GENERATED_DOCUMENT") return "Generált dokumentum";
-  return documentType.replaceAll("_", " ");
+  return "Ismeretlen dokumentumtípus";
 };
 
 const daysUntil = (iso?: string) => {
@@ -414,7 +416,8 @@ function ReviewsPageContent() {
       <main className={`flex-1 overflow-y-auto border-r reviews-main ${p.border}`}>
         <div className="max-w-5xl mx-auto p-8">
           <h1 className={`text-2xl font-serif ${p.textDark} mb-1`}>Review sor</h1>
-          <p className={`text-xs ${p.textMuted} mb-4`}>Döntésre váró feladatok és dokumentumok műveleti listája</p>
+          <p className={`text-xs ${p.textMuted} mb-2`}>Ügyvédi review-munkasor: döntésre váró dokumentumok és feladatok.</p>
+          <p className="text-[10px] text-[#7B776D] mb-4">Primary művelet: Review megnyitása. Batch jóváhagyás későbbi patchben.</p>
 
           {/* Queue statistics bar */}
           {!isLoading && queueStats.total > 0 && (
@@ -476,8 +479,6 @@ function ReviewsPageContent() {
               Csak sürgős
             </label>
           </div>
-          <p className="mb-3 text-[11px] text-[#9C9890]">Szűrés későbbi patchben.</p>
-
           {error && <div className="mb-4 p-3 bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a] text-xs">{error}</div>}
 
           {isLoading ? (
@@ -728,7 +729,7 @@ function ReviewsPageContent() {
         <div className="p-4 space-y-4">
           <h2 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Kiválasztott review elem</h2>
           {!selected ? (
-            <p className="text-xs text-[#9C9890]">Nincs kiválasztott tétel.</p>
+            <p className="text-xs text-[#9C9890]">Válassz review tételt a részletekhez.</p>
           ) : (
             <>
               {/* Status and priority badges */}
@@ -877,6 +878,12 @@ function ReviewsPageContent() {
                 <Link href={selected.openHref} className="block px-3 py-2 text-xs border border-[#C9A227] bg-[#FBF9F3] text-center font-semibold hover:bg-[#f5ecd8]">
                   Review megnyitása
                 </Link>
+                <Link href={`/cases/${selected.caseId}/documents`} className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3] text-center">
+                  Dokumentumtár
+                </Link>
+                <Link href={`/cases/${selected.caseId}/handoff`} className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3] text-center">
+                  Leadási csomag
+                </Link>
                 <Link
                   href={
                     selected.source === "task" && selected.taskId
@@ -895,7 +902,7 @@ function ReviewsPageContent() {
                   }
                   className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3] text-center"
                 >
-                  Verzió-összevetés
+                  Szerződés-workspace
                 </Link>
                 <Link href={`/cases/${selected.caseId}`} className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3] text-center">
                   Ügy megnyitása
