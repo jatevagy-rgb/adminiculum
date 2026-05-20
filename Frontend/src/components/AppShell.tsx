@@ -40,7 +40,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
   const titleBySection: Record<string, string> = {
     dashboard: "Műszerfal",
     cases: "Aktív ügyek",
-    "clause-library": "Clause Library",
+    "clause-library": "Záradék könyvtár",
     "case-detail": "Ügy részletei",
     generation: "Dokumentum generálás",
     tasks: "Feladatok",
@@ -60,7 +60,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
   return (
     <div
       data-ui-pack={uiPack}
-      className={`min-h-screen flex app-shell ${isSignalOps ? "bg-[#0B1220] text-[#D6E2F2] ui-pack-signal-ops" : "bg-[#F5F7FB] text-[#1E293B] ui-pack-insight-analytics"}`}
+      className={`min-h-screen flex app-shell ${isSignalOps ? "bg-[#0B1220] text-[#D6E2F2] ui-pack-signal-ops" : "bg-[#EFE7CF] text-[#1F2A24] ui-pack-insight-analytics"}`}
     >
         <Sidebar
           activeItem={section}
@@ -69,7 +69,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
           uiPack={uiPack}
         />
 
-      <div className="flex-1 flex flex-col app-shell-content">
+      <div className={`flex-1 flex flex-col app-shell-content ${isSignalOps ? "" : "bg-[#F4ECDA]"}`}>
         <TopBar
           title={titleBySection[section] || "Műszerfal"}
           onSignOut={onSignOut}
@@ -77,29 +77,29 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
           uiPack={uiPack}
         />
 
-        <main className={`flex-1 overflow-y-auto p-6 app-shell-main ${isSignalOps ? "bg-[#0B1220]" : "bg-[#F5F7FB]"}`}>
-          {children ? (
-            children
-          ) : shouldRenderCasesDefault ? (
-            <CasesList />
-          ) : shouldRenderDashboardDefault ? (
-            <div className="grid lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
-              <Dashboard />
-              <RightPanel />
-            </div>
-          ) : (
-            <div className="text-xs text-[#7B776D]">Nincs elérhető tartalom ebben a szekcióban.</div>
-          )}
+        <main className={`flex-1 overflow-y-auto p-6 app-shell-main ${isSignalOps ? "bg-[#0B1220]" : "bg-[#F4ECDA]"}`}>
+          <div className={`${isSignalOps ? "" : "rounded-lg border border-[#D7CEB8] bg-[#FFFFFF] shadow-[0_1px_0_rgba(31,42,36,0.06)] p-5"}`}>
+            {children ? (
+              children
+            ) : shouldRenderCasesDefault ? (
+              <CasesList />
+            ) : shouldRenderDashboardDefault ? (
+              <div className="grid lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
+                <Dashboard />
+                <RightPanel />
+              </div>
+            ) : (
+              <div className="text-xs text-[#7B776D]">Nincs elérhető tartalom ebben a szekcióban.</div>
+            )}
+          </div>
         </main>
 
-        <footer className={`app-shell-footer border-t px-6 py-4 flex flex-wrap items-center justify-between gap-3 ${isSignalOps ? "border-[#1E293B] bg-[#0F172A]" : "border-[#E2E8F0] bg-white"}`}>
-          <p className={`text-xs ${isSignalOps ? "text-[#94A3B8]" : "text-[#64748B]"}`} style={{ fontFamily: 'var(--font-newsreader)' }}>
-            Adminiculum · Jogi műveleti munkafelület
+        <footer className={`app-shell-footer border-t px-6 py-3 flex items-center justify-between gap-3 ${isSignalOps ? "border-[#1E293B] bg-[#0F172A]" : "border-[#D7CEB8] bg-[#F6F0E1]"}`}>
+          <p className={`text-xs ${isSignalOps ? "text-[#94A3B8]" : "text-[#6E7872]"}`} style={{ fontFamily: 'var(--font-newsreader)' }}>
+            Adminiculum · Jogi munkapad
           </p>
-          <div className={`flex items-center gap-5 text-[10px] uppercase tracking-[0.28em] ${isSignalOps ? "text-[#64748B]" : "text-[#94A3B8]"}`}>
-            <span>System v2</span>
-            <span>Hungary Region</span>
-            <span>{new Date().getFullYear()}</span>
+          <div className={`text-[10px] uppercase tracking-[0.2em] ${isSignalOps ? "text-[#64748B]" : "text-[#8B8477]"}`}>
+            {new Date().getFullYear()}
           </div>
         </footer>
       </div>
