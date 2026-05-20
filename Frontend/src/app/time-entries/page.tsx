@@ -1009,6 +1009,7 @@ function TimeEntriesPageContent() {
           <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="text-2xl font-serif text-[#1F2821]">Munkaórák</h1>
+              <p className="text-sm text-[#514D45] mt-1">Munkaóra-rögzítés és elszámolási munkapad</p>
               <p className="text-xs text-[#7B776D] mt-1">
                 {totals.totalEntries} bejegyzés · {formatMinutes(totals.totalMinutes)} összesen
               </p>
@@ -1018,7 +1019,7 @@ function TimeEntriesPageContent() {
               onClick={handleCreate}
               className="px-4 py-2 bg-[#C9A227] text-white text-xs uppercase tracking-[0.2em] hover:bg-[#B8911F] transition-colors rounded"
             >
-              Új bejegyzés
+              Munkaóra rögzítése
             </button>
           </div>
 
@@ -1053,6 +1054,20 @@ function TimeEntriesPageContent() {
               <p className="mt-2 text-[10px] text-[#7B776D]">
                 Az időrögzítés az ügyhöz kapcsolt munkacsomaghoz történik, ha elérhető.
               </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Link href={`/cases/${deepLinkedCaseId}/documents`} className="px-2 py-1 text-[10px] border border-[#DDD7CA] bg-white text-[#1F2821] rounded hover:bg-[#F6F2E8]">
+                  Dokumentumtár
+                </Link>
+                <Link href={`/cases/${deepLinkedCaseId}/communications`} className="px-2 py-1 text-[10px] border border-[#DDD7CA] bg-white text-[#1F2821] rounded hover:bg-[#F6F2E8]">
+                  Kommunikáció
+                </Link>
+                <Link href={`/documents/compare?caseId=${deepLinkedCaseId}`} className="px-2 py-1 text-[10px] border border-[#DDD7CA] bg-white text-[#1F2821] rounded hover:bg-[#F6F2E8]">
+                  Szerződés-workspace
+                </Link>
+                <Link href={`/cases/${deepLinkedCaseId}/handoff`} className="px-2 py-1 text-[10px] border border-[#DDD7CA] bg-white text-[#1F2821] rounded hover:bg-[#F6F2E8]">
+                  Leadási csomag
+                </Link>
+              </div>
             </div>
           )}
 
@@ -1311,7 +1326,7 @@ function TimeEntriesPageContent() {
                   }}
                   className="px-2 py-1 border border-[#DDD7CA] rounded text-xs"
                 >
-                  <option value="">Matter (opcionális)</option>
+                  <option value="">Munkacsomag (opcionális)</option>
                   {reportMatterOptions.map((item) => (
                     <option key={item.id} value={item.id}>{item.name}</option>
                   ))}
@@ -1321,7 +1336,7 @@ function TimeEntriesPageContent() {
                   onChange={(e) => setAutofillCaseId(e.target.value)}
                   className="px-2 py-1 border border-[#DDD7CA] rounded text-xs"
                 >
-                  <option value="">Case (opcionális)</option>
+                  <option value="">Ügy (opcionális)</option>
                   {reportCaseOptions.map((item) => (
                     <option key={item.id} value={item.id}>{item.label}</option>
                   ))}
@@ -1351,7 +1366,7 @@ function TimeEntriesPageContent() {
                   disabled={isAutofillingRows}
                   className="px-3 py-2 bg-[#1F2821] text-white text-xs rounded disabled:opacity-50"
                 >
-                  {isAutofillingRows ? "Betöltés..." : "Autofill"}
+                  {isAutofillingRows ? "Betöltés..." : "Munkaórák betöltése"}
                 </button>
               </div>
             </div>
@@ -1397,7 +1412,7 @@ function TimeEntriesPageContent() {
             </div>
 
             <div className="flex items-center justify-between">
-              <p className="text-xs text-[#7B776D]">Előkészítő modul: reusable payload + totals</p>
+              <p className="text-xs text-[#7B776D]">Elszámolási előkészítés valós mentett munkaórák alapján</p>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleGenerateReportPayload}
@@ -1429,9 +1444,12 @@ function TimeEntriesPageContent() {
                 <p className="text-[10px] text-[#7B776D] mt-1">
                   Sorok: {generatedReport.totals.rowCount} · Total: {generatedReport.totals.totalHours} óra · Final: {generatedReport.totals.finalHours} óra
                 </p>
-                <pre className="mt-2 text-[10px] text-[#514D45] overflow-auto max-h-48">
-                  {JSON.stringify(generatedReport.exportPayload, null, 2)}
-                </pre>
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-[10px] text-[#7B776D]">Technikai részletek</summary>
+                  <pre className="mt-2 text-[10px] text-[#514D45] overflow-auto max-h-48">
+                    {JSON.stringify(generatedReport.exportPayload, null, 2)}
+                  </pre>
+                </details>
               </div>
             )}
 
@@ -1596,7 +1614,7 @@ function TimeEntriesPageContent() {
                                         <span className="text-xs font-semibold text-[#1F2821]">Időtartam: {formatMinutes(entry.minutes)}</span>
                                         {(entry.billable || WORK_TYPE_LABEL_MAP[entry.workType]) && (
                                           <span className={`text-[10px] uppercase tracking-[0.1em] px-2 py-1 rounded ${entry.billable ? "bg-[#ECFDF5] text-[#059669]" : "bg-[#ECE6DA] text-[#7B776D]"}`}>
-                                            Munkatípus: {WORK_TYPE_LABEL_MAP[entry.workType] ?? entry.workType}
+                                            Munkatípus: {WORK_TYPE_LABEL_MAP[entry.workType] ?? "Egyéb"}
                                           </span>
                                         )}
                                       </div>
