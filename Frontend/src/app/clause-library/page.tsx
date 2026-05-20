@@ -244,7 +244,7 @@ function ClauseLibraryPageContent() {
   );
 
   const truglyProfileName = useMemo(() => {
-    if (!truglyProfileId) return "Not pinned";
+    if (!truglyProfileId) return "Nincs rögzített profil";
     const p = profiles.find((profile) => profile.id === truglyProfileId);
     return p?.lawyerName || "Dr. Trugly";
   }, [profiles, truglyProfileId]);
@@ -345,7 +345,10 @@ function ClauseLibraryPageContent() {
         <div className="p-4 border-b border-[#EEE7D9] space-y-3">
           <div>
             <h1 className="text-xl font-serif text-[#1F2821]">Záradék könyvtár</h1>
-            <p className="text-xs text-[#7B776D]">Önálló záradékkezelő felület · ADÁSVÉTEL · {truglyProfileName}</p>
+            <p className="text-xs text-[#7B776D]">Önálló záradékkezelő felület · Adásvétel munkatípus · {truglyProfileName}</p>
+            <p className="mt-1 text-[11px] text-[#514D45]">
+              Jóváhagyott záradékok kereshető könyvtára. A szerződés-workspace innen tud záradékot beszúrni vagy másolni.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -428,7 +431,8 @@ function ClauseLibraryPageContent() {
               Használati adatok
             </button>
           </div>
-          <p className="text-[11px] text-[#9C9890]">Ezek a műveletek későbbi patchben.</p>
+          <p className="text-[11px] text-[#9C9890]">Előnézet és használati adatok részletes nézete későbbi patchben.</p>
+          <p className="text-[11px] text-[#9C9890]">Nincs automatikus AI záradék-generálás: a könyvtár manuális szerkesztésre épül.</p>
         </div>
 
         {profileWarning && (
@@ -504,6 +508,9 @@ function ClauseLibraryPageContent() {
               <p className="text-xs text-[#7B776D]">Utolsó módosítás: {new Date(selectedClause.updatedAt).toLocaleString("hu-HU")}</p>
             )}
           </div>
+          <p className="text-[11px] text-[#7B776D]">
+            A könyvtár nem teljes szerződés-generátor. A záradékszöveg itt karbantartható, majd workspace-ben használható.
+          </p>
 
           {error && (
             <div className="p-3 border border-[#fca5a5] bg-[#FEF2F2] text-[#8B3A3A] text-xs">{error}</div>
