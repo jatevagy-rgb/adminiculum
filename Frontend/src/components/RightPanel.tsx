@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 type RightPanelProps = {
   deadlines?: Array<{
     id: string;
@@ -14,7 +16,7 @@ export function RightPanel({ deadlines = [] }: RightPanelProps) {
   return (
     <aside className="space-y-5">
       <section className="bg-white border border-[#DDD7CA] p-5">
-        <h3 className="text-[22px] text-[#1A2E21] mb-3" style={{ fontFamily: 'var(--font-newsreader)' }}>Upcoming Deadlines</h3>
+        <h3 className="text-[22px] text-[#1A2E21] mb-3" style={{ fontFamily: 'var(--font-newsreader)' }}>Határidők</h3>
         {deadlines.length > 0 ? (
           <div className="space-y-3">
             {deadlines.map((deadline) => (
@@ -27,15 +29,16 @@ export function RightPanel({ deadlines = [] }: RightPanelProps) {
           </div>
         ) : (
           <div className="border border-dashed border-[#DDD7CA] bg-[#FAF8F2] p-4">
-            <p className="text-xs text-[#5D5A52]">No upcoming deadlines are currently synced.</p>
-            <p className="text-[10px] uppercase tracking-[0.26em] text-[#7B776D] mt-2">
-              Calendar integration ready
-            </p>
+            <p className="text-xs text-[#5D5A52]">Nincs közelgő határidő.</p>
+            <p className="text-[10px] uppercase tracking-[0.26em] text-[#7B776D] mt-2">Részletes határidőnézet későbbi patchben.</p>
           </div>
         )}
-        <button className="w-full mt-4 border border-[#1A2E21] text-[#1A2E21] py-2 text-[10px] uppercase tracking-[0.34em] hover:bg-[#1A2E21] hover:text-white transition-colors">
-          View Full Calendar
-        </button>
+        <Link
+          href="/deadlines"
+          className="w-full mt-4 border border-[#1A2E21] text-[#1A2E21] py-2 text-[10px] uppercase tracking-[0.34em] hover:bg-[#1A2E21] hover:text-white transition-colors inline-flex items-center justify-center"
+        >
+          Megnyitás
+        </Link>
       </section>
     </aside>
   );

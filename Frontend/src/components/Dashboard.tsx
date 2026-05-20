@@ -30,26 +30,7 @@ type NewsFeedResult = {
   articles: NewsArticle[];
   error?: string;
   isLoading: boolean;
-  isFallback?: boolean;
 };
-
-const LEGAL_BASELINE_ARTICLES: NewsArticle[] = [
-  {
-    title: "Hírfolyam ideiglenesen nem elérhető",
-    source: "Adminiculum baseline",
-    date: "Most",
-    description: "A külső jogi feed jelenleg nem tölthető be. A dashboard további moduljai változatlanul működnek.",
-  },
-];
-
-const ECOFIN_BASELINE_ARTICLES: NewsArticle[] = [
-  {
-    title: "Gazdasági feed ideiglenesen nem elérhető",
-    source: "Adminiculum baseline",
-    date: "Most",
-    description: "A külső gazdasági feed jelenleg nem tölthető be. A felület stabil baseline módban fut.",
-  },
-];
 
 const formatRelativeDate = (iso?: string) => {
   if (!iso) return "—";
@@ -113,22 +94,12 @@ export function Dashboard() {
     const loadLegal = async () => {
       try {
         const result = await getNewsFeed("legal");
-        if (result.articles.length > 0) {
-          setLegalNews({ articles: result.articles, error: result.error, isLoading: false });
-        } else {
-          setLegalNews({
-            articles: LEGAL_BASELINE_ARTICLES,
-            error: result.error || "A hírfolyam jelenleg nem érhető el.",
-            isLoading: false,
-            isFallback: true,
-          });
-        }
+        setLegalNews({ articles: result.articles || [], error: result.error, isLoading: false });
       } catch {
         setLegalNews({
-          articles: LEGAL_BASELINE_ARTICLES,
+          articles: [],
           error: "A hírfolyam jelenleg nem érhető el.",
           isLoading: false,
-          isFallback: true,
         });
       }
     };
@@ -136,22 +107,12 @@ export function Dashboard() {
     const loadEcofin = async () => {
       try {
         const result = await getNewsFeed("ecofin");
-        if (result.articles.length > 0) {
-          setEcofinNews({ articles: result.articles, error: result.error, isLoading: false });
-        } else {
-          setEcofinNews({
-            articles: ECOFIN_BASELINE_ARTICLES,
-            error: result.error || "A hírfolyam jelenleg nem érhető el.",
-            isLoading: false,
-            isFallback: true,
-          });
-        }
+        setEcofinNews({ articles: result.articles || [], error: result.error, isLoading: false });
       } catch {
         setEcofinNews({
-          articles: ECOFIN_BASELINE_ARTICLES,
+          articles: [],
           error: "A hírfolyam jelenleg nem érhető el.",
           isLoading: false,
-          isFallback: true,
         });
       }
     };
@@ -180,45 +141,28 @@ export function Dashboard() {
     return tasks.filter((task) => reviewRegex.test(task.status)).slice(0, 4);
   }, [tasks]);
 
-  const signalStrip = useMemo(
-    () => [
-      {
-        id: "high-priority",
-        label: "High-priority tasks",
-        value: assignedTasks.filter((task) => /urgent|high|asap/i.test(String(task.status))).length,
-        hint: "Végrehajtási nyomás",
-      },
-      {
-        id: "review-pressure",
-        label: "Review pressure",
-        value: pendingReviews.length,
-        hint: "Review backlog",
-      },
-      {
-        id: "external-signal",
-        label: "External signal",
-        value: externalMessages.length,
-        hint: "Ügyfélkommunikáció",
-      },
-      {
-        id: "owned-cases",
-        label: "Owned cases",
-        value: myCases.length,
-        hint: "Aktív portfólió",
-      },
-    ],
-    [assignedTasks, pendingReviews.length, externalMessages.length, myCases.length]
-  );
+  const nextSteps = useMemo(() => {
+    const taskSteps = assignedTasks.slice(0, 3).map((task) => ({
+      id: `task-${task.id}`,
+      title: task.title,
+      href: `/tasks?taskId=${task.id}`,
+      meta: task.case?.caseNumber ? `${task.case.caseNumber} · Feladat` : "Feladat",
+    }));
+    const caseSteps = myCases.slice(0, 2).map((c) => ({
+      id: `case-${c.id}`,
+      title: c.title || c.caseNumber,
+      href: `/cases/${c.id}`,
+      meta: `${c.caseNumber} · Ügy`,
+    }));
+    return [...taskSteps, ...caseSteps].slice(0, 4);
+  }, [assignedTasks, myCases]);
 
-  const insightKpis = useMemo(() => {
-    const s = dashboardStats?.stats;
-    return [
-      { id: "total", label: "Összes ügy", value: s?.totalCases ?? myCases.length },
-      { id: "review", label: "Review alatt", value: s?.inReview ?? pendingReviews.length },
-      { id: "pending", label: "Ügyfélre vár", value: s?.pendingClient ?? 0 },
-      { id: "month", label: "Lezárt (hó)", value: s?.completedThisMonth ?? 0 },
-    ];
-  }, [dashboardStats?.stats, myCases.length, pendingReviews.length]);
+  const upcomingDeadlines = useMemo(() => {
+    return tasks
+      .filter((task) => !!task.dueDate && task.status.toLowerCase() !== "completed")
+      .sort((a, b) => new Date(a.dueDate || "").getTime() - new Date(b.dueDate || "").getTime())
+      .slice(0, 5);
+  }, [tasks]);
 
   const toneTitle = isSignal ? "text-[#F8FAFC]" : "text-[#0F172A]";
   const toneMuted = isSignal ? "text-[#93A8C9]" : "text-[#64748B]";
@@ -293,22 +237,20 @@ export function Dashboard() {
     <Panel uiPack={uiPack} className="dashboard-surface rounded-xl p-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className={`text-[30px] leading-none ${toneTitle}`}>Mai jogi műveletek</h1>
+          <h1 className={`text-[30px] leading-none ${toneTitle}`}>Mai jogi munkapad</h1>
           <p className={`text-xs mt-2 ${toneMuted}`}>
-            {isSignal
-              ? "Operator dashboard: gyors jelzés, prioritás és műveleti fókusz."
-              : "Overview dashboard: KPI és moduláris áttekintő rács jelentés-orientált ritmussal."}
+            Aktív ügyek, review-k, határidők és következő lépések egy helyen.
           </p>
           {currentUser?.name && <p className={`text-[11px] mt-2 ${toneMuted}`}>Bejelentkezve: {currentUser.name}</p>}
         </div>
-        <button
-          onClick={loadData}
-          className={`text-[10px] uppercase tracking-[0.3em] border px-3 py-2 ${
-            isSignal ? "border-[#334155] text-[#E2E8F0] bg-[#0F172A]" : "border-[#CBD5E1] text-[#1E293B] bg-white"
+        <Link
+          href="/cases"
+          className={`text-[10px] uppercase tracking-[0.24em] border px-3 py-2 ${
+            isSignal ? "border-[#334155] text-[#E2E8F0] bg-[#0F172A]" : "border-[#1F3B2D] text-[#1F3B2D] bg-white"
           }`}
         >
-          Refresh
-        </button>
+          Megnyitás
+        </Link>
       </div>
       {error && <div className="mt-4 bg-[#FEF3F2] border border-[#FCCFC7] text-[#8E2A2A] p-3 text-xs rounded-lg">{error}</div>}
     </Panel>
@@ -316,164 +258,115 @@ export function Dashboard() {
 
   const quickActions = (
     <Panel uiPack={uiPack} className="rounded-xl p-4">
-      <SectionBlock title="Gyors útvonalak" subtitle="Workflow jump points">
+      <SectionBlock title="Gyors útvonalak" subtitle="Leggyakoribb műveletek">
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <Link href="/cases" className={`px-3 py-2 border rounded-md ${isSignal ? "border-[#334155] hover:bg-[#16253D]" : "border-[#E2E8F0] hover:bg-[#F8FAFC]"}`}>Ügylista</Link>
-          <Link href="/tasks" className={`px-3 py-2 border rounded-md ${isSignal ? "border-[#334155] hover:bg-[#16253D]" : "border-[#E2E8F0] hover:bg-[#F8FAFC]"}`}>Feladatok</Link>
+          <Link href="/cases" className={`px-3 py-2 border rounded-md ${isSignal ? "border-[#334155] hover:bg-[#16253D]" : "border-[#E2E8F0] hover:bg-[#F8FAFC]"}`}>Ügyek</Link>
+          <Link href="/cases?newCase=1" className={`px-3 py-2 border rounded-md ${isSignal ? "border-[#334155] hover:bg-[#16253D]" : "border-[#E2E8F0] hover:bg-[#F8FAFC]"}`}>Új ügy</Link>
           <Link href="/reviews" className={`px-3 py-2 border rounded-md ${isSignal ? "border-[#334155] hover:bg-[#16253D]" : "border-[#E2E8F0] hover:bg-[#F8FAFC]"}`}>Review sor</Link>
           <Link href="/notifications" className={`px-3 py-2 border rounded-md ${isSignal ? "border-[#334155] hover:bg-[#16253D]" : "border-[#E2E8F0] hover:bg-[#F8FAFC]"}`}>Értesítések</Link>
+          <Link href="/time-entries" className={`px-3 py-2 border rounded-md ${isSignal ? "border-[#334155] hover:bg-[#16253D]" : "border-[#E2E8F0] hover:bg-[#F8FAFC]"}`}>Munkaórák</Link>
+          <Link href="/clause-library" className={`px-3 py-2 border rounded-md ${isSignal ? "border-[#334155] hover:bg-[#16253D]" : "border-[#E2E8F0] hover:bg-[#F8FAFC]"}`}>Záradék könyvtár</Link>
         </div>
       </SectionBlock>
     </Panel>
   );
 
-  if (isSignal) {
-    return (
-      <div className="dashboard-surface space-y-4">
-        {headerPanel}
-
-        <Panel uiPack={uiPack} className="rounded-xl p-4">
-          <SectionBlock title="Signal strip" subtitle="Azonnali operatív állapotkép">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              {signalStrip.map((s) => (
-                <Card key={s.id} uiPack={uiPack} emphasis="primary">
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-[#93A8C9]">{s.label}</p>
-                  <p className="text-3xl text-white mt-2">{s.value}</p>
-                  <p className="text-[11px] text-[#93A8C9] mt-1">{s.hint}</p>
-                </Card>
-              ))}
-            </div>
-          </SectionBlock>
-        </Panel>
-
-        <Panel uiPack={uiPack} className="rounded-xl p-4">
-          <SectionBlock title="Legal + Ecofin feed" subtitle="Piaci és jogi kontextus">
-            <div className="grid gap-4 xl:grid-cols-2">
-              <div className="space-y-2">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-[#93A8C9] mb-2">Jogi signal</p>
-                {(legalNews.articles.length ? legalNews.articles : LEGAL_BASELINE_ARTICLES).slice(0, 3).map(renderNewsRow)}
-              </div>
-              <div className="space-y-2">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-[#93A8C9] mb-2">Ecofin signal</p>
-                {(ecofinNews.articles.length ? ecofinNews.articles : ECOFIN_BASELINE_ARTICLES).slice(0, 3).map(renderNewsRow)}
-              </div>
-            </div>
-          </SectionBlock>
-        </Panel>
-
-        <WorkspaceLayout
-          uiPack={uiPack}
-          right={
-            <div className="p-4 space-y-4">
-              {quickActions}
-            </div>
-          }
-        >
-          <div className="space-y-4">
-            <div className="grid gap-4 xl:grid-cols-2">
-              <Panel uiPack={uiPack} className="rounded-xl p-4">
-                <SectionBlock title="Task control" subtitle="Aktív feladatvégrehajtás">
-                  {loading ? <p className={`text-xs ${toneMuted}`}>Loading tasks...</p> : assignedTasks.length ? <div className="space-y-2">{assignedTasks.map(renderTaskRow)}</div> : <p className={`text-xs ${toneMuted}`}>Nincs aktív feladat.</p>}
-                </SectionBlock>
-              </Panel>
-              <Panel uiPack={uiPack} className="rounded-xl p-4">
-                <SectionBlock title="Review control" subtitle="Approval workflow nyomás">
-                  {loading ? <p className={`text-xs ${toneMuted}`}>Checking review queue...</p> : pendingReviews.length ? <div className="space-y-2">{pendingReviews.map(renderTaskRow)}</div> : <p className={`text-xs ${toneMuted}`}>Nincs reviewra váró tétel.</p>}
-                </SectionBlock>
-              </Panel>
-            </div>
-
-            <div className="grid gap-4 xl:grid-cols-2">
-              <Panel uiPack={uiPack} className="rounded-xl p-4">
-                <SectionBlock title="Case radar" subtitle="Saját ügy-portfólió">
-                  {loading ? <p className={`text-xs ${toneMuted}`}>Loading your cases...</p> : myCases.length ? <div className="space-y-2">{myCases.slice(0, 5).map(renderCaseRow)}</div> : <p className={`text-xs ${toneMuted}`}>Nincs hozzád rendelt ügy.</p>}
-                </SectionBlock>
-              </Panel>
-              <Panel uiPack={uiPack} className="rounded-xl p-4">
-                <SectionBlock title="Message signal" subtitle="Külső + belső kommunikáció">
-                  {loading ? (
-                    <p className={`text-xs ${toneMuted}`}>Refreshing communications...</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {externalMessages.slice(0, 2).map(renderMessageRow)}
-                      {internalNotes.slice(0, 2).map(renderMessageRow)}
-                    </div>
-                  )}
-                </SectionBlock>
-              </Panel>
-            </div>
-          </div>
-        </WorkspaceLayout>
-      </div>
-    );
-  }
-
   return (
     <div className="dashboard-surface space-y-4">
       {headerPanel}
 
-      <Panel uiPack={uiPack} className="rounded-xl p-4">
-        <SectionBlock title="Legal + Ecofin feed" subtitle="Piaci és jogi kontextus">
-          <div className="grid gap-4 xl:grid-cols-2">
-            <div className="space-y-2">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-[#64748B] mb-2">Jogi signal</p>
-              {(legalNews.articles.length ? legalNews.articles : LEGAL_BASELINE_ARTICLES).slice(0, 3).map(renderNewsRow)}
-            </div>
-            <div className="space-y-2">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-[#64748B] mb-2">Ecofin signal</p>
-              {(ecofinNews.articles.length ? ecofinNews.articles : ECOFIN_BASELINE_ARTICLES).slice(0, 3).map(renderNewsRow)}
-            </div>
+      <WorkspaceLayout
+        uiPack={uiPack}
+        right={
+          <div className="p-4 space-y-4">
+            {quickActions}
           </div>
-        </SectionBlock>
-      </Panel>
-
-      <Panel uiPack={uiPack} className="rounded-xl p-4">
-        <SectionBlock title="KPI áttekintés" subtitle="Napi összkép és státusz-metrikák">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {insightKpis.map((kpi) => (
-              <Card key={kpi.id} uiPack={uiPack} emphasis="primary">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-[#64748B]">{kpi.label}</p>
-                <p className="text-3xl text-[#0F172A] mt-2">{kpi.value}</p>
-              </Card>
-            ))}
-          </div>
-        </SectionBlock>
-      </Panel>
-
-      <WorkspaceLayout uiPack={uiPack}>
+        }
+      >
         <div className="space-y-4">
-          {quickActions}
-          <div className="grid gap-4 xl:grid-cols-3">
+          <div className="grid gap-4 xl:grid-cols-2">
             <Panel uiPack={uiPack} className="rounded-xl p-4">
-              <SectionBlock title="Külső üzenetek" subtitle="Ügyfélkommunikáció">
-                {loading ? <p className={`text-xs ${toneMuted}`}>Loading external messages...</p> : externalMessages.length ? <div className="space-y-2">{externalMessages.map(renderMessageRow)}</div> : <p className={`text-xs ${toneMuted}`}>Nincs új külső üzenet.</p>}
+              <SectionBlock title="Következő lépések" subtitle="Mai fókuszpontok">
+                {loading ? (
+                  <p className={`text-xs ${toneMuted}`}>Betöltés...</p>
+                ) : nextSteps.length ? (
+                  <div className="space-y-2">
+                    {nextSteps.map((step) => (
+                      <Card key={step.id} uiPack={uiPack} className={rowCardTone}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className={`text-sm font-semibold ${toneTitle}`}>{step.title}</p>
+                            <p className={`text-[11px] mt-1 ${toneMuted}`}>{step.meta}</p>
+                          </div>
+                          <Link href={step.href} className="text-[#38BDF8] text-xs hover:underline">
+                            Megnyitás
+                          </Link>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={`text-xs ${toneMuted}`}>Nincs kijelölt következő lépés.</p>
+                )}
               </SectionBlock>
             </Panel>
 
             <Panel uiPack={uiPack} className="rounded-xl p-4">
-              <SectionBlock title="Belső jegyzetek" subtitle="Csapatfrissítések">
-                {loading ? <p className={`text-xs ${toneMuted}`}>Refreshing internal notes...</p> : internalNotes.length ? <div className="space-y-2">{internalNotes.map(renderMessageRow)}</div> : <p className={`text-xs ${toneMuted}`}>Nincs friss belső jegyzet.</p>}
+              <SectionBlock title="Review alatt / rám vár" subtitle="Saját review teendők">
+                {loading ? <p className={`text-xs ${toneMuted}`}>Betöltés...</p> : pendingReviews.length ? <div className="space-y-2">{pendingReviews.map(renderTaskRow)}</div> : <p className={`text-xs ${toneMuted}`}>Nincs review-ra váró dokumentum.</p>}
+              </SectionBlock>
+            </Panel>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <Panel uiPack={uiPack} className="rounded-xl p-4">
+              <SectionBlock title="Határidők" subtitle="Közelgő teendők">
+                {loading ? (
+                  <p className={`text-xs ${toneMuted}`}>Betöltés...</p>
+                ) : upcomingDeadlines.length ? (
+                  <div className="space-y-2">
+                    {upcomingDeadlines.map(renderTaskRow)}
+                  </div>
+                ) : (
+                  <p className={`text-xs ${toneMuted}`}>Nincs közelgő határidő.</p>
+                )}
               </SectionBlock>
             </Panel>
 
             <Panel uiPack={uiPack} className="rounded-xl p-4">
-              <SectionBlock title="Feladatok" subtitle="Aktív teendők">
-                {loading ? <p className={`text-xs ${toneMuted}`}>Loading tasks...</p> : assignedTasks.length ? <div className="space-y-2">{assignedTasks.map(renderTaskRow)}</div> : <p className={`text-xs ${toneMuted}`}>Nincs aktív feladat.</p>}
+              <SectionBlock title="Aktív ügyek" subtitle="Saját portfólió">
+                {loading ? <p className={`text-xs ${toneMuted}`}>Betöltés...</p> : myCases.length ? <div className="space-y-2">{myCases.slice(0, 5).map(renderCaseRow)}</div> : <p className={`text-xs ${toneMuted}`}>Nincs hozzád rendelt ügy.</p>}
+              </SectionBlock>
+            </Panel>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <Panel uiPack={uiPack} className="rounded-xl p-4">
+              <SectionBlock title="Kommunikáció" subtitle="Külső és belső üzenetek">
+                {loading ? (
+                  <p className={`text-xs ${toneMuted}`}>Betöltés...</p>
+                ) : externalMessages.length || internalNotes.length ? (
+                  <div className="space-y-2">
+                    {externalMessages.slice(0, 2).map(renderMessageRow)}
+                    {internalNotes.slice(0, 2).map(renderMessageRow)}
+                  </div>
+                ) : (
+                  <p className={`text-xs ${toneMuted}`}>Nincs friss kommunikáció.</p>
+                )}
               </SectionBlock>
             </Panel>
 
             <Panel uiPack={uiPack} className="rounded-xl p-4">
-              <SectionBlock title="Review sor" subtitle="Approval workflow">
-                {loading ? <p className={`text-xs ${toneMuted}`}>Checking review queue...</p> : pendingReviews.length ? <div className="space-y-2">{pendingReviews.map(renderTaskRow)}</div> : <p className={`text-xs ${toneMuted}`}>Nincs reviewra váró tétel.</p>}
+              <SectionBlock title="Irodai hírek / Piaci jelzések" subtitle="Másodlagos információs blokk">
+                <div className="grid gap-2">
+                  {legalNews.articles.slice(0, 2).map(renderNewsRow)}
+                  {ecofinNews.articles.slice(0, 2).map(renderNewsRow)}
+                  {!legalNews.articles.length && !ecofinNews.articles.length && (
+                    <p className={`text-xs ${toneMuted}`}>Nincs elérhető hírjelzés.</p>
+                  )}
+                </div>
               </SectionBlock>
             </Panel>
-
-            <Panel uiPack={uiPack} className="rounded-xl p-4">
-              <SectionBlock title="Saját ügyeim" subtitle="Felelősségi portfólió">
-                {loading ? <p className={`text-xs ${toneMuted}`}>Loading your cases...</p> : myCases.length ? <div className="space-y-2">{myCases.slice(0, 4).map(renderCaseRow)}</div> : <p className={`text-xs ${toneMuted}`}>Nincs hozzád rendelt ügy.</p>}
-              </SectionBlock>
-            </Panel>
-
           </div>
         </div>
       </WorkspaceLayout>
