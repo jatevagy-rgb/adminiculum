@@ -46,6 +46,33 @@ const CATEGORY_OPTIONS: ClauseCategory[] = [
   "SPECIAL",
 ];
 
+const CLAUSE_KIND_LABELS: Record<ClauseKind, string> = {
+  REQUIRED: "Kötelező",
+  RECOMMENDED: "Ajánlott",
+  OPTIONAL: "Opcionális",
+  SPECIAL: "Speciális",
+};
+
+const REPRESENTED_SIDE_LABELS: Record<RepresentedSide, string> = {
+  EITHER: "Mindkét oldal",
+  ELOADO: "Eladó",
+  VEVO: "Vevő",
+  NEUTRAL: "Semleges",
+};
+
+const CATEGORY_LABELS: Record<ClauseCategory, string> = {
+  PARTY: "Felek",
+  PROPERTY: "Ingatlan",
+  OWNERSHIP_PROOF: "Tulajdonjog igazolás",
+  TITLE: "Jogcím",
+  WARRANTIES: "Szavatosság",
+  PRICE: "Vételár",
+  FINANCING: "Finanszírozás",
+  POSSESSION: "Birtokbaadás",
+  CLOSING: "Zárás",
+  SPECIAL: "Egyéb",
+};
+
 function emptyForm(): ClauseFormState {
   return {
     id: null,
@@ -106,7 +133,18 @@ function makeApiErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
-  return "Unknown error";
+  return "Ismeretlen hiba";
+}
+
+function formatLastUsed(value: unknown): string {
+  if (typeof value !== "string" || !value) return "—";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return "—";
+  return dt.toLocaleDateString("hu-HU");
+}
+
+function getUsageCount(value: unknown): string {
+  return typeof value === "number" ? String(value) : "—";
 }
 
 export default function ClauseLibraryPage() {
@@ -154,10 +192,10 @@ function ClauseLibraryPageContent() {
           setProfileWarning(null);
         } else {
           setTruglyProfileId(undefined);
-          setProfileWarning("Dr. Trugly profile was not found. Falling back to broad clause listing.");
+          setProfileWarning("Dr. Trugly profil nem található. Általános záradéklista betöltve.");
         }
       } catch (err) {
-        setProfileWarning(`Profile lookup failed: ${makeApiErrorMessage(err)}`);
+        setProfileWarning(`A profil betöltése sikertelen: ${makeApiErrorMessage(err)}`);
       }
     };
 
@@ -190,7 +228,7 @@ function ClauseLibraryPageContent() {
         }
       }
     } catch (err) {
-      setError(`Clause loading failed: ${makeApiErrorMessage(err)}`);
+      setError("A záradékok betöltése sikertelen.");
     } finally {
       setIsLoading(false);
     }
@@ -235,7 +273,7 @@ function ClauseLibraryPageContent() {
       const keywords = normalizeKeywords(form.keywordsText);
 
       if (!form.title.trim() || !form.slug.trim() || !form.body.trim()) {
-        throw new Error("title, slug, and body are required");
+        throw new Error("A név, az azonosító és a szöveg kötelező.");
       }
 
       if (form.id) {
@@ -252,7 +290,7 @@ function ClauseLibraryPageContent() {
           triggerConditions,
           isActive: form.isActive,
         });
-        setSuccess("Clause updated.");
+        setSuccess("A záradék mentése sikeres.");
         await loadClauses();
         setSelectedClauseId(updated.id);
         setForm(mapClauseToForm(updated));
@@ -271,13 +309,13 @@ function ClauseLibraryPageContent() {
           triggerConditions,
           lawyerProfileId: truglyProfileId,
         });
-        setSuccess("Clause created.");
+        setSuccess("Az új záradék létrehozva.");
         await loadClauses();
         setSelectedClauseId(created.id);
         setForm(mapClauseToForm(created));
       }
     } catch (err) {
-      setError(`Save failed: ${makeApiErrorMessage(err)}`);
+      setError(`Mentési hiba: ${makeApiErrorMessage(err)}`);
     } finally {
       setIsSaving(false);
     }
@@ -290,12 +328,12 @@ function ClauseLibraryPageContent() {
     setSuccess(null);
     try {
       const updated = await updateClauseLibraryClause(form.id, { isActive: !form.isActive });
-      setSuccess(updated.isActive ? "Clause activated." : "Clause deactivated.");
+      setSuccess(updated.isActive ? "A záradék aktív." : "A záradék archivált.");
       await loadClauses();
       setSelectedClauseId(updated.id);
       setForm(mapClauseToForm(updated));
     } catch (err) {
-      setError(`Activation toggle failed: ${makeApiErrorMessage(err)}`);
+      setError(`Állapotváltás sikertelen: ${makeApiErrorMessage(err)}`);
     } finally {
       setIsSaving(false);
     }
@@ -306,15 +344,24 @@ function ClauseLibraryPageContent() {
       <aside className="w-[34rem] border-r border-[#DDD7CA] bg-white min-h-0 flex flex-col">
         <div className="p-4 border-b border-[#EEE7D9] space-y-3">
           <div>
-            <h1 className="text-xl font-serif text-[#1F2821]">Clause Library Admin</h1>
-            <p className="text-xs text-[#7B776D]">Scope: ADASVETEL + {truglyProfileName}</p>
+            <h1 className="text-xl font-serif text-[#1F2821]">Záradék könyvtár</h1>
+            <p className="text-xs text-[#7B776D]">Önálló záradékkezelő felület · ADÁSVÉTEL · {truglyProfileName}</p>
           </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {["Mind", "Adásvétel", "Bérlet", "Munkajog", "Társasági jog", "Compliance", "Egyéb"].map((label) => (
+              <span key={label} className="px-2 py-1 text-[10px] border border-[#DDD7CA] bg-[#F6F2E8] text-[#7B776D] text-center">
+                {label}
+              </span>
+            ))}
+          </div>
+          <p className="text-[11px] text-[#9C9890]">Munkaterület szerinti szűrés későbbi patchben.</p>
 
           <div className="grid grid-cols-2 gap-2">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search title / summary / keyword"
+              placeholder="Keresés névre, összefoglalóra vagy címkére"
               className="col-span-2 px-2 py-2 border border-[#DDD7CA] bg-white text-xs"
             />
             <select
@@ -322,9 +369,9 @@ function ClauseLibraryPageContent() {
               onChange={(e) => setFilterClauseKind(e.target.value as "ALL" | ClauseKind)}
               className="px-2 py-2 border border-[#DDD7CA] bg-white text-xs"
             >
-              <option value="ALL">All kinds</option>
+              <option value="ALL">Minden típus</option>
               {CLAUSE_KIND_OPTIONS.map((kind) => (
-                <option key={kind} value={kind}>{kind}</option>
+                <option key={kind} value={kind}>{CLAUSE_KIND_LABELS[kind]}</option>
               ))}
             </select>
             <select
@@ -332,9 +379,9 @@ function ClauseLibraryPageContent() {
               onChange={(e) => setFilterRepresentedSide(e.target.value as "ALL" | RepresentedSide)}
               className="px-2 py-2 border border-[#DDD7CA] bg-white text-xs"
             >
-              <option value="ALL">All sides</option>
+              <option value="ALL">Minden oldal</option>
               {REPRESENTED_SIDE_OPTIONS.map((side) => (
-                <option key={side} value={side}>{side}</option>
+                <option key={side} value={side}>{REPRESENTED_SIDE_LABELS[side]}</option>
               ))}
             </select>
             <select
@@ -342,9 +389,9 @@ function ClauseLibraryPageContent() {
               onChange={(e) => setFilterCategory(e.target.value as "ALL" | ClauseCategory)}
               className="px-2 py-2 border border-[#DDD7CA] bg-white text-xs"
             >
-              <option value="ALL">All categories</option>
+              <option value="ALL">Minden kategória</option>
               {CATEGORY_OPTIONS.map((category) => (
-                <option key={category} value={category}>{category}</option>
+                <option key={category} value={category}>{CATEGORY_LABELS[category]}</option>
               ))}
             </select>
             <label className="px-2 py-2 border border-[#DDD7CA] bg-[#F6F2E8] text-xs text-[#514D45] flex items-center gap-2">
@@ -353,7 +400,7 @@ function ClauseLibraryPageContent() {
                 checked={includeInactive}
                 onChange={(e) => setIncludeInactive(e.target.checked)}
               />
-              Include inactive
+              Archiváltak mutatása
             </label>
           </div>
 
@@ -363,16 +410,25 @@ function ClauseLibraryPageContent() {
               onClick={() => void loadClauses()}
               className="px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
             >
-              Refresh
+              Frissítés
             </button>
             <button
               type="button"
               onClick={startCreate}
               className="px-3 py-2 text-xs border border-[#C9A227] text-[#8B6B3A] bg-[#FBF9F3] hover:bg-[#f5ecd8]"
             >
-              New clause
+              + Új záradék
             </button>
           </div>
+          <div className="flex gap-2">
+            <button type="button" disabled className="px-3 py-2 text-xs border border-[#DDD7CA] text-[#9C9890] bg-[#F8F6EF]">
+              Előnézet
+            </button>
+            <button type="button" disabled className="px-3 py-2 text-xs border border-[#DDD7CA] text-[#9C9890] bg-[#F8F6EF]">
+              Használati adatok
+            </button>
+          </div>
+          <p className="text-[11px] text-[#9C9890]">Ezek a műveletek későbbi patchben.</p>
         </div>
 
         {profileWarning && (
@@ -383,9 +439,9 @@ function ClauseLibraryPageContent() {
 
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {isLoading ? (
-            <p className="text-xs text-[#7B776D]">Loading clauses...</p>
+            <p className="text-xs text-[#7B776D]">Záradékok betöltése…</p>
           ) : clauses.length === 0 ? (
-            <p className="text-xs text-[#7B776D]">No clauses found for current filters.</p>
+            <p className="text-xs text-[#7B776D]">Még nincs záradék a könyvtárban.</p>
           ) : (
             clauses.map((clause) => (
               <button
@@ -407,14 +463,30 @@ function ClauseLibraryPageContent() {
                         : "bg-[#FEF2F2] text-[#DC2626] border-[#fca5a5]"
                     }`}
                   >
-                    {clause.isActive ? "ACTIVE" : "INACTIVE"}
+                    {clause.isActive ? "Aktív" : "Archivált"}
                   </span>
                 </div>
-                <p className="text-[11px] text-[#7B776D] mt-1">{clause.slug}</p>
+                <p className="text-[11px] text-[#7B776D] mt-1">Azonosító: {clause.slug}</p>
                 <div className="mt-1.5 flex flex-wrap gap-1">
-                  <span className="text-[10px] px-1.5 py-0.5 bg-[#ECE6DA] text-[#514D45]">{clause.clauseKind}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 bg-[#ECE6DA] text-[#514D45]">{clause.representedSide}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 bg-[#ECE6DA] text-[#514D45]">{clause.category}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-[#ECE6DA] text-[#514D45]">{CLAUSE_KIND_LABELS[clause.clauseKind]}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-[#ECE6DA] text-[#514D45]">{REPRESENTED_SIDE_LABELS[clause.representedSide]}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-[#ECE6DA] text-[#514D45]">{CATEGORY_LABELS[clause.category]}</span>
+                </div>
+                <div className="mt-2 text-[10px] text-[#7B776D] grid grid-cols-2 gap-x-2 gap-y-1">
+                  <span>Kategória: {CATEGORY_LABELS[clause.category]}</span>
+                  <span>Státusz: {clause.isActive ? "Aktív" : "Archivált"}</span>
+                  <span>Utolsó használat: {formatLastUsed((clause as unknown as Record<string, unknown>).lastUsedAt)}</span>
+                  <span>Használat: {getUsageCount((clause as unknown as Record<string, unknown>).usageCount)}</span>
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {(clause.keywords || []).slice(0, 4).map((keyword) => (
+                    <span key={`${clause.id}-${keyword}`} className="text-[10px] px-1.5 py-0.5 bg-[#F6F2E8] text-[#514D45] border border-[#DDD7CA]">
+                      {keyword}
+                    </span>
+                  ))}
+                  {(!clause.keywords || clause.keywords.length === 0) && (
+                    <span className="text-[10px] text-[#9C9890]">Címkék: —</span>
+                  )}
                 </div>
               </button>
             ))
@@ -426,10 +498,10 @@ function ClauseLibraryPageContent() {
         <div className="max-w-5xl space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-[#1F2821]">
-              {form.id ? "Edit Clause" : "Create Clause"}
+              {form.id ? "Záradék szerkesztése" : "Új záradék létrehozása"}
             </h2>
             {selectedClause && (
-              <p className="text-xs text-[#7B776D]">Updated: {new Date(selectedClause.updatedAt).toLocaleString("hu-HU")}</p>
+              <p className="text-xs text-[#7B776D]">Utolsó módosítás: {new Date(selectedClause.updatedAt).toLocaleString("hu-HU")}</p>
             )}
           </div>
 
@@ -442,7 +514,7 @@ function ClauseLibraryPageContent() {
 
           <div className="grid grid-cols-2 gap-3">
             <label className="text-xs text-[#514D45] space-y-1 col-span-2">
-              <span>Title *</span>
+              <span>Záradék neve *</span>
               <input
                 value={form.title}
                 onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
@@ -451,7 +523,7 @@ function ClauseLibraryPageContent() {
             </label>
 
             <label className="text-xs text-[#514D45] space-y-1 col-span-2">
-              <span>Slug *</span>
+              <span>Azonosító *</span>
               <input
                 value={form.slug}
                 onChange={(e) => setForm((prev) => ({ ...prev, slug: e.target.value }))}
@@ -460,7 +532,7 @@ function ClauseLibraryPageContent() {
             </label>
 
             <label className="text-xs text-[#514D45] space-y-1 col-span-2">
-              <span>Summary</span>
+              <span>Rövid összefoglaló</span>
               <input
                 value={form.summary}
                 onChange={(e) => setForm((prev) => ({ ...prev, summary: e.target.value }))}
@@ -469,46 +541,46 @@ function ClauseLibraryPageContent() {
             </label>
 
             <label className="text-xs text-[#514D45] space-y-1">
-              <span>Clause kind</span>
+              <span>Záradék típusa</span>
               <select
                 value={form.clauseKind}
                 onChange={(e) => setForm((prev) => ({ ...prev, clauseKind: e.target.value as ClauseKind }))}
                 className="w-full px-2 py-2 border border-[#DDD7CA] bg-white"
               >
                 {CLAUSE_KIND_OPTIONS.map((kind) => (
-                  <option key={kind} value={kind}>{kind}</option>
+                  <option key={kind} value={kind}>{CLAUSE_KIND_LABELS[kind]}</option>
                 ))}
               </select>
             </label>
 
             <label className="text-xs text-[#514D45] space-y-1">
-              <span>Represented side</span>
+              <span>Képviselt oldal</span>
               <select
                 value={form.representedSide}
                 onChange={(e) => setForm((prev) => ({ ...prev, representedSide: e.target.value as RepresentedSide }))}
                 className="w-full px-2 py-2 border border-[#DDD7CA] bg-white"
               >
                 {REPRESENTED_SIDE_OPTIONS.map((side) => (
-                  <option key={side} value={side}>{side}</option>
+                  <option key={side} value={side}>{REPRESENTED_SIDE_LABELS[side]}</option>
                 ))}
               </select>
             </label>
 
             <label className="text-xs text-[#514D45] space-y-1">
-              <span>Category</span>
+              <span>Kategória</span>
               <select
                 value={form.category}
                 onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value as ClauseCategory }))}
                 className="w-full px-2 py-2 border border-[#DDD7CA] bg-white"
               >
                 {CATEGORY_OPTIONS.map((category) => (
-                  <option key={category} value={category}>{category}</option>
+                  <option key={category} value={category}>{CATEGORY_LABELS[category]}</option>
                 ))}
               </select>
             </label>
 
             <label className="text-xs text-[#514D45] space-y-1">
-              <span>Sort order</span>
+              <span>Rendezési sorrend</span>
               <input
                 type="number"
                 value={form.sortOrder}
@@ -518,7 +590,7 @@ function ClauseLibraryPageContent() {
             </label>
 
             <label className="text-xs text-[#514D45] space-y-1 col-span-2">
-              <span>Keywords (comma-separated)</span>
+              <span>Címkék (vesszővel elválasztva)</span>
               <input
                 value={form.keywordsText}
                 onChange={(e) => setForm((prev) => ({ ...prev, keywordsText: e.target.value }))}
@@ -527,7 +599,7 @@ function ClauseLibraryPageContent() {
             </label>
 
             <label className="text-xs text-[#514D45] space-y-1 col-span-2">
-              <span>Body *</span>
+              <span>Záradékszöveg *</span>
               <textarea
                 value={form.body}
                 onChange={(e) => setForm((prev) => ({ ...prev, body: e.target.value }))}
@@ -537,7 +609,7 @@ function ClauseLibraryPageContent() {
             </label>
 
             <label className="text-xs text-[#514D45] space-y-1 col-span-2">
-              <span>Trigger conditions (JSON array)</span>
+              <span>Trigger feltételek (JSON tömb)</span>
               <textarea
                 value={form.triggerConditionsText}
                 onChange={(e) => setForm((prev) => ({ ...prev, triggerConditionsText: e.target.value }))}
@@ -545,7 +617,7 @@ function ClauseLibraryPageContent() {
                 className="w-full px-2 py-2 border border-[#DDD7CA] bg-white font-mono text-[11px]"
               />
               <p className="text-[11px] text-[#7B776D]">
-                Example: [{`{"field":"financing_mode","operator":"eq","value":"loan"}`}] 
+                Példa: [{`{"field":"financing_mode","operator":"eq","value":"loan"}`}]
               </p>
             </label>
 
@@ -555,7 +627,7 @@ function ClauseLibraryPageContent() {
                 checked={form.isActive}
                 onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
               />
-              Clause active
+              Aktív záradék
             </label>
           </div>
 
@@ -566,7 +638,7 @@ function ClauseLibraryPageContent() {
               disabled={isSaving}
               className="px-4 py-2 text-xs bg-[#C9A227] text-white hover:bg-[#B8911F] disabled:opacity-60"
             >
-              {isSaving ? "Saving..." : form.id ? "Save changes" : "Create clause"}
+              {isSaving ? "Mentés..." : form.id ? "Szerkesztés mentése" : "Záradék létrehozása"}
             </button>
 
             {form.id && (
@@ -576,7 +648,7 @@ function ClauseLibraryPageContent() {
                 disabled={isSaving}
                 className="px-4 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3] disabled:opacity-60"
               >
-                {form.isActive ? "Deactivate" : "Activate"}
+                {form.isActive ? "Archiválás" : "Aktiválás"}
               </button>
             )}
 
@@ -585,7 +657,7 @@ function ClauseLibraryPageContent() {
               onClick={startCreate}
               className="px-4 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
             >
-              Reset / New
+              Szerkesztés
             </button>
           </div>
         </div>
