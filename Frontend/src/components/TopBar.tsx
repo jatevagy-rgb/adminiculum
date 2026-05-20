@@ -64,7 +64,7 @@ export function TopBar({ title, onSignOut, profileName, uiPack = "legal_ops_atel
             <span className={`text-[10px] uppercase tracking-[0.25em] ${isSignal ? "text-[#CBD5E1]" : "text-[#4F5A50]"}`}>{profileName}</span>
           </div>
           <button onClick={onSignOut} className={`h-10 px-3 border text-[10px] uppercase tracking-[0.25em] ${isSignal ? "border-[#334155] bg-[#111827] text-[#CBD5E1] hover:text-[#67E8F9]" : "border-[#DDD7CA] bg-white text-[#4F5A50] hover:text-[#8F3D32]"}`}>
-            Sign Out
+            Kilépés
           </button>
         </div>
       </div>

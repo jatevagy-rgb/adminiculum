@@ -87,18 +87,18 @@ const routeMap: Record<string, string> = {
 const navGroups: Array<{ id: string; label: string; items: string[] }> = [
   {
     id: "operations",
-    label: "Operations",
+    label: "Napi munka",
     items: ["dashboard", "tasks", "notifications", "reviews"],
   },
   {
     id: "matters",
-    label: "Matters",
+    label: "Ügyek és dokumentumok",
     items: ["cases", "clause-library", "clients", "documents-compare"],
   },
   {
     id: "resources",
-    label: "Resources",
-    items: ["time-entries", "timesheet-presets", "calendar", "settings"],
+    label: "Iroda",
+    items: ["time-entries", "calendar", "settings"],
   },
 ];
 
@@ -118,6 +118,19 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
   const isCalendarActive = activeItem === "calendar";
   const isClientsActive = activeItem === "clients";
   const navById = new Map(navItems.map((item) => [item.id, item]));
+  const navLabelMap: Record<string, string> = {
+    dashboard: "Műszerfal",
+    tasks: "Feladatok",
+    notifications: "Értesítések",
+    reviews: "Review sor",
+    cases: "Ügyek",
+    "clause-library": "Záradék könyvtár",
+    clients: "Ügyfelek",
+    "documents-compare": "Verzió-összevetés",
+    "time-entries": "Munkaórák",
+    calendar: "Határidők",
+    settings: "Beállítások",
+  };
   const initials = profileName
     ? profileName
         .split(' ')
@@ -222,7 +235,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
                   <span className={isActive ? (isSignal ? 'text-[#22D3EE]' : 'text-[#C9A227]') : 'text-inherit'}>{iconFor(nav.icon)}</span>
                   {!collapsed && (
                     <>
-                      <span>{nav.label}</span>
+                      <span>{navLabelMap[nav.id] || nav.label}</span>
                       {nav.id === "notifications" && unreadNotifications > 0 ? (
                         <span className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-semibold ${isSignal ? "bg-[#22D3EE] text-[#0B1220]" : "bg-[#C9A227] text-[#2D2A26]"}`}>
                           {unreadNotifications}
