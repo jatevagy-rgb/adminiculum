@@ -1067,9 +1067,9 @@ const filteredClauseTools = useMemo(() => {
       });
 
       setReviewNotesData(saved);
-      setBlockNotesSaveState({ type: "success", message: "Block review notes saved." });
+      setBlockNotesSaveState({ type: "success", message: "Blokk-review jegyzetek mentve." });
     } catch {
-      setBlockNotesSaveState({ type: "error", message: "Failed to save block review notes." });
+      setBlockNotesSaveState({ type: "error", message: "A blokk-review jegyzetek mentése sikertelen." });
     } finally {
       setBlockNotesSaving(false);
     }
@@ -1091,9 +1091,9 @@ const filteredClauseTools = useMemo(() => {
       anchor.click();
       globalThis.document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
-      setBlockNotesSaveState({ type: "success", message: "Review summary exported." });
+      setBlockNotesSaveState({ type: "success", message: "Review összefoglaló exportálva." });
     } catch {
-      setBlockNotesSaveState({ type: "error", message: "Failed to export review summary." });
+      setBlockNotesSaveState({ type: "error", message: "A review összefoglaló exportálása sikertelen." });
     } finally {
       setReviewSummaryDownloading(false);
     }
