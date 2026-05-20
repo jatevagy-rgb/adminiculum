@@ -65,6 +65,25 @@ function mergeCoreDefaults(client: Client): Client {
   };
 }
 
+function houseStyleFillStatus(profile: Client["houseStyleProfile"]): "none" | "partial" | "filled" {
+  if (!profile) return "none";
+  const fields = [
+    profile.officialName,
+    profile.shortName,
+    profile.registeredSeat,
+    profile.taxNumber,
+    profile.registrationNumber,
+    profile.contactPerson,
+    profile.preferredLanguage,
+    profile.documentLanguageMode,
+    profile.fontFamily,
+    profile.headerAssetPath,
+    profile.externalAiInstructions,
+  ];
+  const filledCount = fields.filter((value) => typeof value === "string" && value.trim().length > 0).length;
+  return filledCount >= 4 ? "filled" : "partial";
+}
+
 export default function ClientsPage() {
   return (
     <AuthenticatedApp section="clients">
@@ -180,7 +199,8 @@ function ClientsPageContent() {
   const renderClientCard = (client: Client, primary: boolean) => {
     const profile = client.houseStyleProfile;
     const display = mergeCoreDefaults(client);
-    const hasProfile = Boolean(profile);
+    const fillStatus = houseStyleFillStatus(profile);
+    const hasProfile = fillStatus !== "none";
     const hasHeader = Boolean(profile?.headerAssetPath);
     return (
       <AdminPanel key={client.id} className="overflow-hidden p-4">
@@ -188,7 +208,7 @@ function ClientsPageContent() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-serif text-2xl font-medium leading-tight text-[#16201A]">{profile?.officialName || display.name}</h2>
-              {primary ? <AdminBadge tone="gold">Kiemelt ügyfél</AdminBadge> : <AdminBadge tone="neutral">Egyéb / teszt</AdminBadge>}
+              {primary ? <AdminBadge tone="gold">Alap ügyfél</AdminBadge> : <AdminBadge tone="neutral">Egyéb ügyfél</AdminBadge>}
             </div>
             <p className="mt-1 text-sm text-[#3D4842]">Rövid név: <b>{profile?.shortName || (coreKey(client) === "blackbelt" ? "BlackBelt" : coreKey(client) === "saubermacher" ? "Saubermacher" : display.name)}</b></p>
             <div className="mt-3 grid gap-2 text-xs text-[#3D4842] sm:grid-cols-2">
@@ -198,14 +218,16 @@ function ClientsPageContent() {
               <p>Kapcsolattartó: <b>{profile?.contactPerson || display.contactPerson || display.authorizedRepresentative || "Nincs megadva"}</b></p>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <AdminStatusPill tone={hasProfile ? "green" : "neutral"}>House style: {hasProfile ? "Van" : "Nincs"}</AdminStatusPill>
+              <AdminStatusPill tone={fillStatus === "filled" ? "green" : fillStatus === "partial" ? "gold" : "neutral"}>
+                {fillStatus === "filled" ? "House style kitöltve" : fillStatus === "partial" ? "House style részleges" : "Nincs house style profil"}
+              </AdminStatusPill>
               <AdminStatusPill tone={hasHeader ? "green" : "neutral"}>Fejlécminta: {hasHeader ? "Van" : "Nincs"}</AdminStatusPill>
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
-            <Link href={`/clients/${client.id}`} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#16201A] hover:bg-[#FBF6E7]">Dosszié</Link>
+            <Link href={`/clients/${client.id}`} className="inline-flex items-center justify-center rounded-[5px] border border-[#173824] bg-[#1F4A33] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#173824]">Ügyfél dosszié</Link>
             <Link href={`/clients/${client.id}#house-style`} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#16201A] hover:bg-[#FBF6E7]">House style</Link>
-            <Link href={`/cases?newCase=1&clientId=${encodeURIComponent(client.id)}`} className="inline-flex items-center justify-center rounded-[5px] border border-[#8E6A1B] bg-[#B58A2A] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#8E6A1B]">Új ügy</Link>
+            <Link href={`/cases?newCase=1&clientId=${encodeURIComponent(client.id)}`} className="inline-flex items-center justify-center rounded-[5px] border border-[#8E6A1B] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#16201A] hover:bg-[#FBF6E7]">+ Új ügy</Link>
             <AdminButton size="sm" variant="neutral" onClick={() => handleEdit(client)}>Szerkesztés</AdminButton>
           </div>
         </div>
@@ -233,12 +255,12 @@ function ClientsPageContent() {
           {error ? <div className="rounded border border-[#F2DAD6] bg-[#FFF5F3] p-3 text-xs font-semibold text-[#8B2A2A]">{error}</div> : null}
 
           {isLoading ? (
-            <AdminPanel className="p-10 text-center text-sm text-[#7A8479]">Ügyfelek betöltése...</AdminPanel>
+            <AdminPanel className="p-10 text-center text-sm text-[#7A8479]">Ügyfelek betöltése…</AdminPanel>
           ) : (
             <>
               <section className="space-y-3">
                 <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#7A8479]">Kiemelt ügyfelek</h2>
-                {visibleGroups.primary.length > 0 ? visibleGroups.primary.map((client) => renderClientCard(client, true)) : <AdminPanel className="p-4 text-sm text-[#7A8479]">A kiemelt ügyfelek még nincsenek rögzítve. Futtatható a dev seed/upsert script.</AdminPanel>}
+                {visibleGroups.primary.length > 0 ? visibleGroups.primary.map((client) => renderClientCard(client, true)) : <AdminPanel className="p-4 text-sm text-[#7A8479]">Még nincs ügyfél.</AdminPanel>}
               </section>
 
               <section className="space-y-3">
