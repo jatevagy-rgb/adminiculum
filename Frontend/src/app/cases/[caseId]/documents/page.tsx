@@ -877,14 +877,14 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
           {isInitialLoading ? (
             <AdminPanel className="p-10 text-center text-sm text-[#7A8479]">Dokumentumok betöltése...</AdminPanel>
           ) : (
-            <div className="grid grid-cols-1 gap-5 xl:grid-cols-[320px_minmax(0,1fr)_300px]">
-              <AdminPanel className="overflow-hidden">
-                <div className="border-b border-[rgba(22,32,26,0.10)] p-4">
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-[340px_minmax(0,1fr)_320px]">
+              <AdminPanel className="overflow-hidden border-[rgba(22,32,26,0.16)] bg-[#F7F0D9]">
+                <div className="border-b border-[rgba(22,32,26,0.14)] bg-[#FBF6E7] p-4">
                   <h2 className="font-serif text-2xl font-medium text-[#16201A]">Iratok</h2>
                   <p className="mt-1 text-[12px] text-[#7A8479]">Több dokumentum is tárolható, de egyszerre mindig egy aktív munkadokumentumon dolgozol.</p>
                 </div>
                 <div className="space-y-5 p-4">
-<section className="space-y-2">
+<section className="space-y-2 rounded-[8px] border border-[rgba(22,32,26,0.12)] bg-white p-3">
                     <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Feltöltött dokumentumok</h3>
                     {uploadedDocuments.length === 0 ? (
                       <p className="rounded border border-dashed border-[rgba(22,32,26,0.16)] p-3 text-[12px] text-[#7A8479]">Nincs feltöltött dokumentum.</p>
@@ -899,13 +899,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           active={isSelected}
                           variant="upload"
                           onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
-                          status={isSelected ? <AdminBadge tone="green">Aktív</AdminBadge> : null}
+                          status={isSelected ? <AdminBadge tone="gold">Aktív</AdminBadge> : null}
                         />
                       );
                     })}
                   </section>
 
-                  <section className="space-y-2">
+                  <section className="space-y-2 rounded-[8px] border border-[rgba(22,32,26,0.12)] bg-white p-3">
                     <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Módosított munkapéldányok</h3>
                     {modifiedWorkingCopies.length === 0 ? (
                       <p className="rounded border border-dashed border-[rgba(22,32,26,0.16)] p-3 text-[12px] text-[#7A8479]">Nincs módosított munkapéldány.</p>
@@ -919,13 +919,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           active={isSelected}
                           variant="generated"
                           onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
-                          status={isSelected ? <AdminBadge tone="green">Aktív</AdminBadge> : null}
+                          status={isSelected ? <AdminBadge tone="gold">Aktív</AdminBadge> : null}
                         />
                       );
                     })}
                   </section>
 
-                  <section className="space-y-2">
+                  <section className="space-y-2 rounded-[8px] border border-[rgba(22,32,26,0.12)] bg-white p-3">
                     <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Generált / módosított</h3>
 {generatedLedgerItems.length === 0 ? (
                       <p className="rounded border border-dashed border-[rgba(22,32,26,0.16)] p-3 text-[12px] text-[#7A8479]">Nincs generált dokumentum.</p>
@@ -940,7 +940,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           active={isSelected}
                           variant="generated"
                           onClick={() => { setSelectedLedgerItem({ kind: "generated", item: contract }); setSelectedContract(contract); }}
-                          status={isSelected ? <AdminBadge tone="green">Aktív</AdminBadge> : null}
+                          status={isSelected ? <AdminBadge tone="gold">Aktív</AdminBadge> : null}
                         />
                       );
                     })}
@@ -955,9 +955,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 </div>
               </AdminPanel>
 
-              <AdminPanel className="min-w-0 overflow-hidden">
-                <div className="border-b border-[rgba(22,32,26,0.10)] p-5">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Aktív dokumentum</p>
+              <AdminPanel className="min-w-0 overflow-hidden border-[rgba(22,32,26,0.16)] bg-[#FBF6E7]">
+                <div className="border-b border-[rgba(22,32,26,0.14)] bg-white p-5">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#1F4A33]">Aktív dokumentum</p>
                   <h2 className="mt-1 font-serif text-3xl font-medium text-[#16201A]">{activeTitle || "Nincs még munkadokumentum"}</h2>
                 </div>
                 <div className="p-5">
@@ -974,7 +974,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     selectedUploadedDocument.documentType === 'MODIFIED_WORKING_COPY' ? (
                     <div className="space-y-5">
                       <AdminBadge tone="gold">Módosított munkapéldány</AdminBadge>
-                      <div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] p-4">
+                      <div className="rounded-[10px] border border-[rgba(22,32,26,0.16)] bg-white p-4">
                         <h3 className="font-serif text-base font-medium text-[#16201A]">Aktív munkapéldány</h3>
                         <p className="mt-1 text-xs text-[#3D4842]">Szöveges munkapéldány, nem Word változáskövetés. Az eredeti dokumentum változatlan.</p>
                       </div>
@@ -987,7 +987,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     ) : (
                     <div className="space-y-5">
                       <AdminBadge tone="gold">{getDocumentKindLabel(selectedUploadedDocument.fileName)}</AdminBadge>
-                      <div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] p-4">
+                      <div className="rounded-[10px] border border-[rgba(22,32,26,0.16)] bg-white p-4">
                         <h3 className="font-serif text-base font-medium text-[#16201A]">Aktív dokumentum</h3>
                         <p className="mt-1 text-xs text-[#3D4842]">Eredeti feltöltött dokumentum.</p>
                       </div>
@@ -1001,7 +1001,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 ) : selectedGeneratedContract ? (
                     <div className="space-y-5">
                       <AdminBadge tone="green">{getDocumentKindLabel(selectedGeneratedContract.fileName)}</AdminBadge>
-                      <div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] p-4">
+                      <div className="rounded-[10px] border border-[rgba(22,32,26,0.16)] bg-white p-4">
                         <h3 className="font-serif text-base font-medium text-[#16201A]">Aktív generált dokumentum</h3>
                         <p className="mt-1 text-xs text-[#3D4842]">Generált vagy módosított dokumentum.</p>
                       </div>
@@ -1016,7 +1016,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
               </AdminPanel>
 
               <div className="space-y-5">
-                <AdminPanel className="p-4">
+                <AdminPanel className="border-[rgba(22,32,26,0.14)] bg-[#FBF6E7] p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Ügyfélprofil / house style</p>
@@ -1043,7 +1043,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   {!caseRecord?.clientId ? <p className="mt-2 text-[10px] text-[#8B2A2A]">Az ügyfél azonosítója nem érhető el.</p> : null}
                 </AdminPanel>
                 {showHouseStylePanel && caseRecord?.clientId ? (
-                  <div className="max-h-[520px] overflow-y-auto rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-[#FBF9F3]">
+                  <div className="max-h-[520px] overflow-y-auto rounded-[8px] border border-[rgba(22,32,26,0.14)] bg-[#FBF9F3]">
                     <ClientHouseStylePanel
                       compact
                       clientId={caseRecord.clientId}
