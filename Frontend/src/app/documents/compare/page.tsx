@@ -1145,10 +1145,10 @@ return (
       />
       <main className="min-w-0 flex-1 overflow-y-auto border-b border-[#DDD7CA] xl:border-b-0 xl:border-r">
         <div className="p-6 space-y-4">
-          <header className="border border-[#DDD7CA] bg-white p-5 shadow-sm">
+          <header className="rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-5 shadow-sm">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0 space-y-3">
-                <div className="rounded-[6px] border border-[#E6DDC7] bg-[#FBF6E7] p-3">
+                <div className="rounded-[8px] border border-[#D8CFB6] bg-white p-3">
                   <div className="flex flex-wrap items-center gap-2">
                     {activeCaseId ? (
                       <>
@@ -1195,7 +1195,7 @@ return (
                           : "Előkészítő nézet"}
                   </AdminStatusPill>
                 </div>
-                <div className="grid gap-2 rounded-[6px] border border-[#DDD7CA] bg-[#FBF6E7] p-3 md:grid-cols-[1fr_180px_180px]">
+                <div className="grid gap-2 rounded-[8px] border border-[#D8CFB6] bg-[#F7F0D9] p-3 md:grid-cols-[1fr_180px_180px]">
                   <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
                     Dokumentum kiválasztása
                     <select value={selectedDocument?.id || ""} onChange={(e) => handleWorkspaceDocumentChange(e.target.value)} className="mt-2 w-full rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[#1F2821]">
@@ -1275,7 +1275,7 @@ return (
             </div>
           ) : (
             <div className="grid gap-4 2xl:grid-cols-[300px_minmax(720px,1fr)] xl:grid-cols-[280px_minmax(0,1fr)]">
-<aside className="min-w-0 space-y-3 rounded-[8px] border border-[#DDD7CA] bg-white p-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+<aside className="min-w-0 space-y-3 rounded-[10px] border border-[#D8CFB6] bg-[#F7F0D9] p-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
                 <div>
                   <h2 className="font-serif text-xl font-medium text-[#1F2821]">Eszközök</h2>
                 </div>
@@ -1301,7 +1301,7 @@ return (
                       }}
                       className={`rounded-[4px] border px-2 py-1 text-[10px] font-semibold transition-colors ${
                         toolMode === mode.key
-                          ? "border-[#1F4A33] bg-[#E2E8DA] text-[#1F4A33]"
+                          ? "border-[#1F4A33] bg-[#1F4A33] text-[#F4EFDB]"
                           : "border-[#DDD7CA] bg-white text-[#7B776D] hover:bg-[#FBF9F3]"
                       }`}
                     >
@@ -1323,7 +1323,7 @@ return (
                       ? "Keress sablont…"
                       : "Keresés…"
                   }
-                  className="w-full rounded-[5px] border border-[#DDD7CA] bg-[#FBF9F3] px-3 py-2 text-xs text-[#1F2821]"
+                  className="w-full rounded-[6px] border border-[#DDD7CA] bg-white px-3 py-2 text-xs text-[#1F2821]"
                 />
 
                 {editorNotice ? (
@@ -1577,14 +1577,14 @@ return (
               </aside>
 
               <div className="min-w-0 space-y-4">
-                <section className="overflow-hidden rounded-[8px] border border-[#DDD7CA] bg-white">
+                <section className="overflow-hidden rounded-[10px] border border-[#D8CFB6] bg-white">
                   <div className="flex flex-col gap-3 border-b border-[#EEE7D9] p-4 lg:flex-row lg:items-start lg:justify-between">
 <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="font-serif text-2xl font-medium text-[#1F2821]">Szerkeszthető munkapéldány</h2>
                         <AdminStatusPill tone={isDraftDirty ? "amber" : activeDraftText ? "green" : "neutral"}>{editorStatusLabel}</AdminStatusPill>
                       </div>
-<p className="text-[11px] text-[#7B776D]">Helyi szerkesztési nézet · forrás: {workspaceTextSourceLabel} · szöveges módosított munkapéldány</p>
+<p className="text-[11px] text-[#7B776D]">Helyi szerkesztési nézet. Nem Word változáskövetés. Forrás: {workspaceTextSourceLabel}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <AdminButton size="sm" variant="neutral" onClick={focusToolSearch} title="Bal oldali eszköztárban kereshetsz klauzulát.">
@@ -1689,6 +1689,22 @@ return (
                         </div>
                       )}
                     </div>
+                    <aside className="hidden w-[290px] shrink-0 space-y-2 rounded-[8px] border border-[#D8CFB6] bg-[#FBF6E7] p-3 xl:block">
+                      <h3 className="font-serif text-lg font-medium text-[#1F2821]">Dokumentum adatai</h3>
+                      <div className="space-y-1 text-[11px] text-[#514D45]">
+                        <p><span className="font-semibold text-[#1F2821]">Név:</span> {getWorkspaceDocumentTitle()}</p>
+                        <p><span className="font-semibold text-[#1F2821]">Szövegstátusz:</span> {workspaceTextSourceLabel}</p>
+                        <p><span className="font-semibold text-[#1F2821]">Verzió:</span> v{selectedDocument.revisionNumber || 1}</p>
+                      </div>
+                      <details className="rounded-[6px] border border-[#DDD7CA] bg-white p-2">
+                        <summary className="cursor-pointer text-[11px] font-semibold text-[#1F2821]">Technikai részletek</summary>
+                        <div className="mt-2 space-y-1 text-[10px] text-[#7B776D]">
+                          <p>Dokumentum ID: {selectedDocument.id}</p>
+                          <p>Ügy ID: {selectedDocument.caseId}</p>
+                          <p>Forrás: {selectedDocument.source === "GENERATED" ? "Generált" : "Feltöltött"}</p>
+                        </div>
+                      </details>
+                    </aside>
                     </div>
                   </div>
                 </section>
