@@ -16,8 +16,8 @@ type HandoffPackagePanelProps = {
 const STATUS_LABELS: Record<LawyerHandoffStatus, string> = {
   DRAFT: "Piszkozat",
   PREPARED: "Előkészítve",
-  SUBMITTED: "Ügyvédi review-ra beküldve",
-  IN_REVIEW: "Ügyvédi review alatt",
+  SUBMITTED: "Beküldve",
+  IN_REVIEW: "Review alatt",
   APPROVED: "Jóváhagyva",
   REJECTED: "Visszaküldve",
   ARCHIVED: "Archiválva",
@@ -211,12 +211,16 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
       <div className="flex items-center gap-2 mb-4">
         <span className="material-symbols-outlined text-lg text-[#06190d] hidden">folder_special</span>
         <h3 className="text-xs font-bold uppercase tracking-widest text-[#06190d]">
-          Ügyvédi leadási csomagok
+          Leadási csomag
         </h3>
       </div>
+      <p className="text-[10px] text-[#514D45] mb-2">Ügyvédi review-ra előkészített belső munkacsomag.</p>
+      <p className="text-[9px] text-[#7B776D] mb-3 italic">
+        Ez a csomag előkészítő munkairat. Ügyvédi jóváhagyás nélkül nem minősül végleges jogi állásfoglalásnak.
+      </p>
 
       {isLoading && (
-        <p className="text-[10px] text-[#7B776D] italic py-2">Betöltés...</p>
+        <p className="text-[10px] text-[#7B776D] italic py-2">Leadási csomag betöltése…</p>
       )}
 
       {error && (
@@ -227,7 +231,7 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
         <div className="text-center py-6 border border-[#EEE7D9] bg-[#F6F2E8]">
           <span className="material-symbols-outlined text-2xl text-[#c3c8c1]">inbox</span>
           <p className="text-[11px] text-[#514D45] mt-2">
-            Még nincs ügyvédi leadási csomag ehhez az ügyhöz.
+            Még nincs leadási csomag ehhez az ügyhöz.
           </p>
         </div>
       )}
@@ -278,7 +282,7 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
                       )}
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[9px] text-[#514D45]">Generált / módosított dokumentum</span>
+                      <span className="text-[9px] text-[#514D45]">Módosított munkapéldány</span>
                       {pkg.generatedContractId ? (
                         <span className="text-[9px] text-[#23472F] font-bold">Kapcsolva</span>
                       ) : (
@@ -294,7 +298,7 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
                       )}
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[9px] text-[#514D45]">Review jegyzetek</span>
+                      <span className="text-[9px] text-[#514D45]">Ügyvédi review jegyzetek</span>
                       {pkg.reviewNotesId ? (
                         <span className="text-[9px] text-[#23472F] font-bold">Kapcsolva</span>
                       ) : (
@@ -407,6 +411,13 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
                         </button>
                       )}
                     </div>
+                    <details className="mt-1">
+                      <summary className="text-[9px] text-[#7B776D] cursor-pointer">További műveletek</summary>
+                      <div className="mt-1 space-y-1">
+                        <p className="text-[9px] text-[#7B776D]">Export későbbi patchben.</p>
+                        <p className="text-[9px] text-[#7B776D]">Jóváhagyási workflow későbbi patchben.</p>
+                      </div>
+                    </details>
                     {canPkgSubmit && !pkg.preparerSummary?.trim() && (
                       <p className="text-[9px] text-[#ba1a1a] mt-1">Beküldés előtt add meg az előkészítő összefoglalót.</p>
                     )}
@@ -422,7 +433,7 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
       )}
 
       <p className="text-[8px] text-[#7B776D] mt-3 italic border-t border-[#EEE7D9] pt-2">
-        Ez a csomag előkészítő munkairat. Ügyvédi jóváhagyás nélkül nem minősül végleges jogi állásfoglalásnak.
+        A panel belső előkészítést támogat, nem helyettesíti a végleges ügyvédi jóváhagyási folyamatot.
       </p>
     </section>
   );
