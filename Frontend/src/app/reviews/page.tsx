@@ -44,14 +44,16 @@ type QueueItem = {
 
 // Status label and styling mapping
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; border: string; badge?: string }> = {
-  IN_REVIEW: { label: "Áttekintés alatt", color: "text-[#8B6B3A]", bg: "bg-[#fef3e2]", border: "border-[#f5d89a]", badge: "Folyamatban" },
-  REVIEW_NEEDED: { label: "Review szükséges", color: "text-[#8B6B3A]", bg: "bg-[#fef3e2]", border: "border-[#f5d89a]", badge: "Folyamatban" },
-  REVIEW_SUBMITTED: { label: "Review beküldve", color: "text-[#8B6B3A]", bg: "bg-[#fef3e2]", border: "border-[#f5d89a]", badge: "Folyamatban" },
-  SUBMITTED: { label: "Beküldve", color: "text-[#8B6B3A]", bg: "bg-[#fef3e2]", border: "border-[#f5d89a]", badge: "Folyamatban" },
+  IN_REVIEW: { label: "Review alatt", color: "text-[#8B6B3A]", bg: "bg-[#fef3e2]", border: "border-[#f5d89a]", badge: "Folyamatban" },
+  REVIEW_NEEDED: { label: "Review alatt", color: "text-[#8B6B3A]", bg: "bg-[#fef3e2]", border: "border-[#f5d89a]", badge: "Folyamatban" },
+  REVIEW_SUBMITTED: { label: "Review alatt", color: "text-[#8B6B3A]", bg: "bg-[#fef3e2]", border: "border-[#f5d89a]", badge: "Folyamatban" },
+  SUBMITTED: { label: "Review alatt", color: "text-[#8B6B3A]", bg: "bg-[#fef3e2]", border: "border-[#f5d89a]", badge: "Folyamatban" },
   APPROVED: { label: "Jóváhagyva", color: "text-[#059669]", bg: "bg-[#ECFDF5]", border: "border-[#a7f3d0]", badge: "Kész" },
-  REJECTED: { label: "Elutasítva", color: "text-[#DC2626]", bg: "bg-[#FEF2F2]", border: "border-[#fca5a5]", badge: "Vissza" },
+  REJECTED: { label: "Visszaküldve", color: "text-[#DC2626]", bg: "bg-[#FEF2F2]", border: "border-[#fca5a5]", badge: "Vissza" },
   GENERATED: { label: "Generálva", color: "text-[#514D45]", bg: "bg-[#ECE6DA]", border: "border-[#DDD7CA]", badge: "Generálva" },
   PENDING: { label: "Függőben", color: "text-[#7B776D]", bg: "bg-[#F6F2E8]", border: "border-[#DDD7CA]", badge: "Függőben" },
+  DRAFT: { label: "Piszkozat", color: "text-[#7B776D]", bg: "bg-[#F6F2E8]", border: "border-[#DDD7CA]", badge: "Piszkozat" },
+  FINALIZED: { label: "Véglegesítve", color: "text-[#059669]", bg: "bg-[#ECFDF5]", border: "border-[#a7f3d0]", badge: "Kész" },
   IN_PROGRESS: { label: "Folyamatban", color: "text-[#2563EB]", bg: "bg-[#EFF6FF]", border: "border-[#bfdbfe]", badge: "Folyamatban" },
   TODO: { label: "Teendő", color: "text-[#514D45]", bg: "bg-[#ECE6DA]", border: "border-[#DDD7CA]", badge: "Teendő" },
   DONE: { label: "Kész", color: "text-[#059669]", bg: "bg-[#ECFDF5]", border: "border-[#a7f3d0]", badge: "Kész" },
@@ -133,6 +135,15 @@ const formatDateShort = (v?: string) => {
   } catch {
     return v;
   }
+};
+
+const getDocumentTypeLabel = (documentType?: string) => {
+  if (!documentType) return null;
+  const normalized = documentType.toUpperCase();
+  if (normalized === "MODIFIED_WORKING_COPY") return "Módosított munkapéldány";
+  if (normalized === "UPLOADED_ORIGINAL") return "Feltöltött eredeti dokumentum";
+  if (normalized === "GENERATED_DOCUMENT") return "Generált dokumentum";
+  return documentType.replaceAll("_", " ");
 };
 
 const daysUntil = (iso?: string) => {
@@ -465,19 +476,16 @@ function ReviewsPageContent() {
               Csak sürgős
             </label>
           </div>
+          <p className="mb-3 text-[11px] text-[#9C9890]">Szűrés későbbi patchben.</p>
 
           {error && <div className="mb-4 p-3 bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a] text-xs">{error}</div>}
 
           {isLoading ? (
-            <div className="py-12 text-center text-xs text-[#7B776D]">Review sor betöltése...</div>
+            <div className="py-12 text-center text-xs text-[#7B776D]">Review sor betöltése…</div>
           ) : filtered.length === 0 ? (
             <div className="py-12 text-center text-xs text-[#7B776D] border border-dashed border-[#DDD7CA]">
-              <p>Nincs review tétel a jelenlegi szűrés mellett.</p>
-              <p className="mt-2 text-[11px] text-[#9C9890]">A review sor akkor töltődik, ha feladat vagy dokumentum review státuszba kerül.</p>
-              <div className="mt-3 flex justify-center gap-2">
-                <Link href="/cases" className="px-3 py-2 border border-[#DDD7CA] hover:bg-[#FBF9F3]">Ügyek megnyitása</Link>
-                <Link href="/tasks" className="px-3 py-2 border border-[#DDD7CA] hover:bg-[#FBF9F3]">Feladatok megnyitása</Link>
-              </div>
+              <p>Nincs review-ra váró dokumentum.</p>
+              <p className="mt-2 text-[11px] text-[#9C9890]">Szűrés későbbi patchben.</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -508,7 +516,7 @@ function ReviewsPageContent() {
                                 </span>
                                 {item.documentType && (
                                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#EEE7D9] text-[#514D45] border border-[#DDD7CA]">
-                                    {item.documentType}
+                                    {getDocumentTypeLabel(item.documentType)}
                                   </span>
                                 )}
                                 {item.version && (
@@ -531,10 +539,16 @@ function ReviewsPageContent() {
                                   </span>
                                 )}
                                 {item.dueDate && (
-                                  <span className={`text-[10px] ${(daysUntil(item.dueDate) ?? 99) <= 1 ? "text-[#DC2626] font-medium" : "text-[#9C9890]"}`}>
+                                  <span className={`text-[10px] ${
+                                    (daysUntil(item.dueDate) ?? 99) < 0
+                                      ? "text-[#DC2626] font-medium"
+                                      : (daysUntil(item.dueDate) ?? 99) === 0
+                                      ? "text-[#8B6B3A] font-medium"
+                                      : "text-[#166534] font-medium"
+                                  }`}>
                                     Határidő: {formatDateShort(item.dueDate)}
-                                    {(daysUntil(item.dueDate) ?? 99) <= 0 && " (lejárt)"}
-                                    {(daysUntil(item.dueDate) ?? 99) <= 1 && (daysUntil(item.dueDate) ?? 99) > 0 && " (ma)"}
+                                    {(daysUntil(item.dueDate) ?? 99) < 0 && " (lejárt)"}
+                                    {(daysUntil(item.dueDate) ?? 99) === 0 && " (ma esedékes)"}
                                   </span>
                                 )}
                                 {item.daysWaiting !== null && item.daysWaiting !== undefined && (
@@ -552,7 +566,7 @@ function ReviewsPageContent() {
                               <span className="text-[10px] text-[#9C9890]">{formatDate(item.timestamp)}</span>
                               <div className="mt-1">
                                 <Link href={item.openHref} onClick={(e) => e.stopPropagation()} className="inline-block px-2 py-1 text-[10px] bg-[#C9A227] text-white hover:bg-[#B8911F] rounded">
-                                  {item.nextActionLabel}
+                                  Review megnyitása
                                 </Link>
                               </div>
                             </div>
@@ -590,7 +604,7 @@ function ReviewsPageContent() {
                                 </span>
                                 {item.documentType && (
                                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#EEE7D9] text-[#514D45] border border-[#DDD7CA]">
-                                    {item.documentType}
+                                    {getDocumentTypeLabel(item.documentType)}
                                   </span>
                                 )}
                                 {item.version && (
@@ -610,7 +624,7 @@ function ReviewsPageContent() {
                               <span className="text-[10px] text-[#9C9890]">{formatDate(item.timestamp)}</span>
                               <div className="mt-1">
                                 <Link href={item.openHref} onClick={(e) => e.stopPropagation()} className="inline-block px-2 py-1 text-[10px] border border-[#C9A227] text-[#C9A227] hover:bg-[#FBF9F3] rounded">
-                                  {item.nextActionLabel}
+                                  Review megnyitása
                                 </Link>
                               </div>
                             </div>
@@ -657,7 +671,7 @@ function ReviewsPageContent() {
                               <span className="text-[10px] text-[#9C9890]">{formatDate(item.timestamp)}</span>
                               <div className="mt-1">
                                 <Link href={item.openHref} onClick={(e) => e.stopPropagation()} className="inline-block px-2 py-1 text-[10px] border border-[#DC2626] text-[#DC2626] hover:bg-white rounded">
-                                  Megnyitás
+                                  Review megnyitása
                                 </Link>
                               </div>
                             </div>
@@ -751,14 +765,21 @@ function ReviewsPageContent() {
                 <p className="text-xs text-[#514D45]">{selected.caseNumber} · {selected.caseTitle}</p>
                 {selected.documentType && (
                   <p className="text-[11px] text-[#7B776D]">
-                    Típus: <span className="font-medium text-[#514D45]">{selected.documentType}</span>
+                    Típus: <span className="font-medium text-[#514D45]">{getDocumentTypeLabel(selected.documentType)}</span>
                     {selected.version && ` · v${selected.version}`}
                   </p>
                 )}
                 {selected.dueDate && (
-                  <p className={`text-[11px] ${(daysUntil(selected.dueDate) ?? 99) <= 1 ? "text-[#DC2626] font-medium" : "text-[#7B776D]"}`}>
+                  <p className={`text-[11px] ${
+                    (daysUntil(selected.dueDate) ?? 99) < 0
+                      ? "text-[#DC2626] font-medium"
+                      : (daysUntil(selected.dueDate) ?? 99) === 0
+                      ? "text-[#8B6B3A] font-medium"
+                      : "text-[#166534] font-medium"
+                  }`}>
                     Határidő: {formatDateShort(selected.dueDate)}
-                    {(daysUntil(selected.dueDate) ?? 99) <= 0 && " (lejárt)"}
+                    {(daysUntil(selected.dueDate) ?? 99) < 0 && " (lejárt)"}
+                    {(daysUntil(selected.dueDate) ?? 99) === 0 && " (ma esedékes)"}
                   </p>
                 )}
                 <p className="text-[11px] text-[#7B776D]">Létrehozva: {formatDate(selected.timestamp)}</p>
@@ -854,7 +875,7 @@ function ReviewsPageContent() {
               {/* Action next hint */}
               <div className="space-y-1">
                 <Link href={selected.openHref} className="block px-3 py-2 text-xs border border-[#C9A227] bg-[#FBF9F3] text-center font-semibold hover:bg-[#f5ecd8]">
-                  {selected.nextActionLabel}
+                  Review megnyitása
                 </Link>
                 <Link
                   href={
