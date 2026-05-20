@@ -622,10 +622,6 @@ export function CaseDetail({ params }: CaseDetailProps) {
 
   const caseStoryEvents = dedupeAndSortStoryEvents([
     ...mapTimelineToStoryEvents(timelineEvents),
-    ...mapDocumentsToStoryEvents(documents),
-    ...mapContractsToStoryEvents(generatedContracts),
-    ...mapTasksToStoryEvents(tasks),
-    ...mapCommunicationsToStoryEvents(communications, documentTitleMap),
   ]);
 
   const eventTypeChip: Record<CaseStoryEventType, string> = {
@@ -1066,9 +1062,9 @@ export function CaseDetail({ params }: CaseDetailProps) {
       <div className="flex-1 flex min-h-0">
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto p-8">
-            <div className="mb-8">
+            <div className="mb-8 rounded-[10px] border border-[rgba(22,32,26,0.14)] bg-white p-5 shadow-[0_4px_14px_rgba(22,32,26,0.06)]">
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-[9px] uppercase tracking-[0.35em] text-[#7B776D] px-2 py-1 bg-[#ECE6DA]">Ügy munkaterület</span>
+                <span className="text-[9px] uppercase tracking-[0.35em] text-[#1F4A33] px-2 py-1 bg-[#F2E4BD]">Ügy munkaterület</span>
                 <span className={`text-[9px] uppercase tracking-[0.35em] px-2 py-1 border ${statusChip[caseRecord?.status || 'Draft'] || 'bg-[#EFE9DC] text-[#6B675D] border-[#D7D0C3]'}`}>
                   {caseRecord?.status || 'Unavailable'}
                 </span>
@@ -1405,7 +1401,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                 </div>
               )}
               <p className="text-[11px] text-[#7B776D] mb-4">
-                Ez az idővonal az ügyhöz rögzített munkafolyamat-, dokumentum-, generálási-, feladat- és kommunikációs eseményeket mutatja.
+                Ez az idővonal kizárólag a már megtörtént, rögzített ügyeseményeket mutatja.
               </p>
               <div className="relative">
                 <div className="absolute left-[18px] top-0 bottom-0 w-px bg-[#DDD7CA]" />
@@ -1519,6 +1515,56 @@ export function CaseDetail({ params }: CaseDetailProps) {
 
         <aside className="w-80 border-l border-[#DDD7CA] bg-white overflow-y-auto">
           <div className="p-4 space-y-6">
+            <div className="rounded-[8px] border border-[#173824] bg-[#1F4A33] p-4 text-[#F4EFDB]">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-[#C9A227] font-semibold">Következő lépés</p>
+              {!isArchived && generatedContracts.length > 0 ? (
+                <>
+                  <h3 className="mt-1 font-serif text-xl">Szerződés-workspace megnyitása</h3>
+                  <p className="mt-1 text-[11px] text-[#F4EFDB]/80">A módosított dokumentumok és klauzulák kezelése a workspace-ben folytatható.</p>
+                  <button
+                    onClick={() => router.push(`/documents/compare?caseId=${canonicalCaseId}`)}
+                    className="mt-3 w-full rounded-[5px] border border-[#8E6A1B] bg-[#B58A2A] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#8E6A1B]"
+                  >
+                    Szerződés-workspace megnyitása
+                  </button>
+                </>
+              ) : !isArchived && documents.length > 0 ? (
+                <>
+                  <h3 className="mt-1 font-serif text-xl">Dokumentumtár megnyitása</h3>
+                  <p className="mt-1 text-[11px] text-[#F4EFDB]/80">Feltöltött iratból anonimizálás, munkapéldány és leadási csomag indítható.</p>
+                  <button
+                    onClick={() => router.push(`/cases/${canonicalCaseId}/documents`)}
+                    className="mt-3 w-full rounded-[5px] border border-[#8E6A1B] bg-[#B58A2A] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#8E6A1B]"
+                  >
+                    Dokumentumtár megnyitása
+                  </button>
+                </>
+              ) : !isArchived ? (
+                <>
+                  <h3 className="mt-1 font-serif text-xl">Dokumentum feltöltése</h3>
+                  <p className="mt-1 text-[11px] text-[#F4EFDB]/80">Az ügykezelés első lépése egy munkadokumentum feltöltése.</p>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="mt-3 w-full rounded-[5px] border border-[#8E6A1B] bg-[#B58A2A] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#8E6A1B]"
+                  >
+                    Dokumentum feltöltése
+                  </button>
+                </>
+              ) : (
+                <>
+                  <h3 className="mt-1 font-serif text-xl">Archivált ügy</h3>
+                  <p className="mt-1 text-[11px] text-[#F4EFDB]/80">Az ügy lezárt. További aktív lépések későbbi patchben.</p>
+                  <button
+                    type="button"
+                    disabled
+                    className="mt-3 w-full rounded-[5px] border border-[#C3B48C] px-3 py-2 text-[11px] font-semibold text-[#F4EFDB]/70"
+                  >
+                    Későbbi patchben
+                  </button>
+                </>
+              )}
+            </div>
+
             <div>
               <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D] mb-3">Ügy munkaterület</h3>
               <p className="text-xs text-[#9C9890] italic">Csak operatív panelek. Nincs szintetikus elemzés.</p>
