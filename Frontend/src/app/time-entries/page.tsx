@@ -1023,9 +1023,10 @@ function TimeEntriesPageContent() {
           </div>
 
           {deepLinkedCaseId && caseResolutionState.status !== "idle" && (
-            <div className="mb-4 px-4 py-3 border border-[#C9A227] bg-[#FBF9F3] rounded flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] px-2 py-0.5 bg-[#C9A227] text-white uppercase tracking-wide">Ügyhöz kapcsolt</span>
+            <div className="mb-4 rounded border border-[#C9A227] bg-[#FBF9F3] px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] px-2 py-0.5 bg-[#C9A227] text-white uppercase tracking-wide">Ügyhöz kapcsolt munkaóra</span>
                 {caseResolutionState.status === "loading" ? (
                   <span className="text-xs text-[#7B776D]">Ügy betöltése...</span>
                 ) : caseResolutionState.caseLabel ? (
@@ -1034,20 +1035,24 @@ function TimeEntriesPageContent() {
                   <span className="text-xs text-[#1F2821]">Munkaóra-rögzítés ebben az ügyben</span>
                 )}
                 {caseResolutionState.matterLabel && (
-                  <span className="text-[10px] text-[#7B776D]">· {caseResolutionState.matterLabel}</span>
+                  <span className="text-[10px] text-[#7B776D]">· Munkacsomag: {caseResolutionState.matterLabel}</span>
                 )}
                 {caseResolutionState.status === "not_found" && (
                   <span className="text-[10px] text-[#9C9890] italic">
                     Az ügyhöz tartozó munkacsomag nem található. Válassz munkacsomagot kézzel.
                   </span>
                 )}
+                </div>
+                <Link
+                  href={`/cases/${deepLinkedCaseId}`}
+                  className="px-3 py-1 text-[10px] border border-[#C9A227] text-[#1F2821] hover:bg-white rounded shrink-0"
+                >
+                  ← Vissza az ügyhöz
+                </Link>
               </div>
-              <Link
-                href={`/cases/${deepLinkedCaseId}`}
-                className="px-3 py-1 text-[10px] border border-[#C9A227] text-[#1F2821] hover:bg-white rounded shrink-0"
-              >
-                Vissza az ügyhöz
-              </Link>
+              <p className="mt-2 text-[10px] text-[#7B776D]">
+                Az időrögzítés az ügyhöz kapcsolt munkacsomaghoz történik, ha elérhető.
+              </p>
             </div>
           )}
 
@@ -1055,8 +1060,8 @@ function TimeEntriesPageContent() {
 
           <div className="mb-6 border border-[#DDD7CA] rounded bg-white p-4 space-y-4">
             <div>
-              <h2 className="text-sm font-semibold text-[#1F2821]">Munkaóra-kimutatás sablon alap</h2>
-              <p className="text-[10px] text-[#7B776D] mt-1">Template inventory + row-based report payload generation (v1)</p>
+              <h2 className="text-sm font-semibold text-[#1F2821]">Munkaóra-kimutatás</h2>
+              <p className="text-[10px] text-[#7B776D] mt-1">Elszámolási export későbbi patchben.</p>
             </div>
 
             <div className="border border-[#EEE7D9] rounded p-3 bg-[#FBF9F3] space-y-3">
@@ -1194,7 +1199,7 @@ function TimeEntriesPageContent() {
                 />
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Matter / Ügy</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Munkacsomag / ügy</label>
                 <input
                   value={reportMatterName}
                   onChange={(e) => setReportMatterName(e.target.value)}
@@ -1203,7 +1208,7 @@ function TimeEntriesPageContent() {
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Case / hivatkozás</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Ügyhivatkozás</label>
                 <input
                   value={reportCaseReference}
                   onChange={(e) => setReportCaseReference(e.target.value)}
@@ -1282,7 +1287,7 @@ function TimeEntriesPageContent() {
             </div>
 
             <div className="border border-[#EEE7D9] rounded p-3 bg-[#FBF9F3] space-y-3">
-              <p className="text-xs font-semibold text-[#1F2821]">Automatikus sorbetöltés mentett munkaórákból</p>
+              <p className="text-xs font-semibold text-[#1F2821]">Automatikus sorfeltöltés mentett munkaórákból</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <select
                   value={autofillClientId}
@@ -1346,7 +1351,7 @@ function TimeEntriesPageContent() {
                   disabled={isAutofillingRows}
                   className="px-3 py-2 bg-[#1F2821] text-white text-xs rounded disabled:opacity-50"
                 >
-                  {isAutofillingRows ? "Betöltés..." : "Sorok auto-fill"}
+                  {isAutofillingRows ? "Betöltés..." : "Autofill"}
                 </button>
               </div>
             </div>
@@ -1399,21 +1404,21 @@ function TimeEntriesPageContent() {
                   disabled={isGeneratingReport}
                   className="px-3 py-2 bg-[#1F2821] text-white text-xs rounded disabled:opacity-50"
                 >
-                  {isGeneratingReport ? "Generálás..." : "Payload generálás"}
+                  {isGeneratingReport ? "Generálás..." : "Riport generálása"}
                 </button>
                 <button
                   onClick={handleRenderReportOutput}
                   disabled={isGeneratingReport}
                   className="px-3 py-2 bg-[#8B7A56] text-white text-xs rounded disabled:opacity-50"
                 >
-                  {isGeneratingReport ? "Render..." : "Output render (TXT)"}
+                  {isGeneratingReport ? "Generálás..." : "Előnézet generálása"}
                 </button>
                 <button
                   onClick={handleRenderReportDocxOutput}
                   disabled={isGeneratingReport}
                   className="px-3 py-2 bg-[#C9A227] text-white text-xs rounded disabled:opacity-50"
                 >
-                  {isGeneratingReport ? "Render..." : "Output render (DOCX)"}
+                  {isGeneratingReport ? "Generálás..." : "DOCX letöltése"}
                 </button>
               </div>
             </div>
@@ -1433,7 +1438,7 @@ function TimeEntriesPageContent() {
             {renderedReport?.renderedOutput && (
               <div className="bg-[#F6F2E8] border border-[#DDD7CA] rounded p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-[#1F2821]">Output-ready template render</p>
+                  <p className="text-xs font-semibold text-[#1F2821]">Generált kimutatás</p>
                   <button onClick={handleDownloadRenderedOutput} className="px-2 py-1 text-[10px] border border-[#DDD7CA] rounded bg-white">
                     Letöltés ({renderedReport.renderedOutput.fileName})
                   </button>
@@ -1446,7 +1451,7 @@ function TimeEntriesPageContent() {
                     {renderedReport.renderedOutput.content}
                   </pre>
                 ) : (
-                  <p className="mt-2 text-[10px] text-[#514D45]">DOCX binary output generated (preview not shown inline).</p>
+                  <p className="mt-2 text-[10px] text-[#514D45]">DOCX állomány elkészült, előnézet itt nem jelenik meg.</p>
                 )}
               </div>
             )}
@@ -1588,20 +1593,19 @@ function TimeEntriesPageContent() {
                                   <div className="flex items-start justify-between gap-3">
                                     <div className="flex-1">
                                       <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-xs font-semibold text-[#1F2821]">{formatMinutes(entry.minutes)}</span>
-                                        <span className="text-[10px] uppercase tracking-[0.1em] px-2 py-1 bg-[#ECE6DA] text-[#7B776D] rounded">
-                                          {entry.workType}
-                                        </span>
+                                        <span className="text-xs font-semibold text-[#1F2821]">Időtartam: {formatMinutes(entry.minutes)}</span>
                                         {(entry.billable || WORK_TYPE_LABEL_MAP[entry.workType]) && (
                                           <span className={`text-[10px] uppercase tracking-[0.1em] px-2 py-1 rounded ${entry.billable ? "bg-[#ECFDF5] text-[#059669]" : "bg-[#ECE6DA] text-[#7B776D]"}`}>
-                                            {WORK_TYPE_LABEL_MAP[entry.workType] ?? entry.workType}
+                                            Munkatípus: {WORK_TYPE_LABEL_MAP[entry.workType] ?? entry.workType}
                                           </span>
                                         )}
                                       </div>
-                                      <p className="text-xs text-[#514D45]">{entry.description}</p>
+                                      <p className="text-xs text-[#514D45]"><span className="font-semibold text-[#1F2821]">Leírás:</span> {entry.description}</p>
                                       <div className="flex items-center gap-4 mt-2">
                                         {entry.department && <span className="text-[10px] text-[#7B776D]">{entry.department.name}</span>}
-                                        <span className="text-[10px] text-[#9C9890]">{formatDate(entry.workDate)}</span>
+                                        <span className="text-[10px] text-[#9C9890]">Dátum: {formatDate(entry.workDate)}</span>
+                                        <span className="text-[10px] text-[#7B776D]">{entry.billable ? "Számlázható" : "Nem számlázható"}</span>
+                                        <span className="text-[10px] text-[#7B776D]">Munkacsomag: {caseGroup.caseTitle}</span>
                                         {caseGroup.caseId && (
                                           <Link href={`/cases/${caseGroup.caseId}`} className="text-[10px] text-[#C9A227] hover:underline">
                                             Ugrás az ügyre
@@ -1687,7 +1691,7 @@ function TimeEntriesPageContent() {
               </div>
 
               <div>
-                <label className="block text-xs uppercase tracking-[0.2em] text-[#7B776D] mb-2">Munka típusa</label>
+                <label className="block text-xs uppercase tracking-[0.2em] text-[#7B776D] mb-2">Munkatípus</label>
                 <select
                   value={formData.workType}
                   onChange={(e) => setFormData({ ...formData, workType: e.target.value })}
@@ -1714,6 +1718,7 @@ function TimeEntriesPageContent() {
 
               <div>
                 <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-2">Gyors kategória</p>
+                <p className="text-[10px] text-[#9C9890] mb-2">A kiválasztás csak a mezőket tölti ki, mentés nem történik automatikusan.</p>
                 <div className="flex flex-wrap gap-2">
                   {[
                     { label: "Dokumentum átnézése", workType: "FELÜLVIZSGÁLAT" },
@@ -1749,7 +1754,7 @@ function TimeEntriesPageContent() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs uppercase tracking-[0.2em] text-[#7B776D] mb-2">Perc</label>
+                  <label className="block text-xs uppercase tracking-[0.2em] text-[#7B776D] mb-2">Időtartam (perc)</label>
                   <input
                     type="number"
                     value={formData.minutes}
