@@ -674,7 +674,7 @@ export function CasesList() {
 
       {showNewCaseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#16201A]/70 p-4 backdrop-blur-sm">
-          <div className="max-h-[calc(100vh-48px)] w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-2xl">
+          <div className="max-h-[calc(100vh-44px)] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b-[3px] border-[#B58A2A] bg-[#1F4A33] px-7 py-5 text-[#F4EFDB]">
               <div className="flex items-center gap-4">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[#B58A2A] font-serif text-xl text-[#B58A2A]">A</div>
@@ -686,9 +686,13 @@ export function CasesList() {
               <button onClick={() => setShowNewCaseModal(false)} className="rounded-full border border-white/20 px-3 py-1 text-sm text-white/80 hover:text-white">Bezárás</button>
             </div>
 
-            <div className="max-h-[calc(100vh-190px)] overflow-y-auto px-7">
-              <section className="border-b border-[rgba(22,32,26,0.10)] py-5">
+            <div className="max-h-[calc(100vh-190px)] overflow-y-auto px-7 pb-6">
+              <div className="mt-4 rounded-lg border border-[rgba(181,138,42,0.28)] bg-[#F7F0D9] px-4 py-3 text-xs text-[#4D5A53]">
+                Ügyindítási munkafolyamat: töltsd ki a kötelező mezőket, majd állítsd be a résztvevőket és a munkatervet.
+              </div>
+              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] px-5 py-5">
                 <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">1</span><h3 className="font-serif text-xl font-medium">Ügyfél</h3><span className="text-[11px] font-semibold text-[#8B2A2A]">kötelező</span></div>
+                <p className="mb-4 text-xs text-[#7A8479]">Válassz meglévő ügyfelet, vagy rögzíts új ügyféladatot az ügyindításhoz.</p>
                 <div className="mb-4 inline-flex rounded-md border border-[rgba(22,32,26,0.20)] bg-[#F7F0D9] p-1">
                   <button onClick={() => setClientMode("existing")} className={`rounded px-4 py-1.5 text-xs font-semibold ${clientMode === "existing" ? "bg-[#1F4A33] text-[#F4EFDB]" : "text-[#3D4842]"}`}>Meglévő ügyfél</button>
                   <button onClick={() => setClientMode("new")} className={`rounded px-4 py-1.5 text-xs font-semibold ${clientMode === "new" ? "bg-[#1F4A33] text-[#F4EFDB]" : "text-[#3D4842]"}`}>Új ügyfél hozzáadása</button>
@@ -749,8 +753,9 @@ export function CasesList() {
                 )}
               </section>
 
-              <section className="border-b border-[rgba(22,32,26,0.10)] py-5">
+              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] px-5 py-5">
                 <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">2</span><h3 className="font-serif text-xl font-medium">Ügy típusa</h3><span className="text-[11px] font-semibold text-[#8B2A2A]">kötelező</span></div>
+                <p className="mb-4 text-xs text-[#7A8479]">Nevezd meg röviden az ügyet, majd jelöld ki a legjobb ügytípus kategóriát.</p>
                 <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Ügy megnevezése<input value={newCaseData.description || ""} onChange={(e) => setNewCaseData({ ...newCaseData, description: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" placeholder="pl. Meggyes utca 12. — ajándékozási szerződés" /></label>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {matterTypes.map((type) => <button key={type.value} onClick={() => setNewCaseData({ ...newCaseData, matterType: type.value })} className={`rounded-full border px-3 py-1.5 text-xs ${newCaseData.matterType === type.value ? "border-[#173824] bg-[#1F4A33] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{type.label}</button>)}
@@ -758,14 +763,16 @@ export function CasesList() {
                 {newCaseData.matterType === "CUSTOM" ? <input value={customMatterType} onChange={(e) => setCustomMatterType(e.target.value)} className="mt-3 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm" placeholder="Saját ügytípus" /> : null}
               </section>
 
-              <section className="border-b border-[rgba(22,32,26,0.10)] py-5">
+              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] px-5 py-5">
                 <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">3</span><h3 className="font-serif text-xl font-medium">Ügyfél szerepe</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
+                <p className="mb-4 text-xs text-[#7A8479]">Állítsd be, milyen minőségben képviseled az ügyfelet ebben az ügyben.</p>
                 <div className="flex flex-wrap gap-2">{clientRoles.map((role) => <button key={role} onClick={() => setNewCaseData({ ...newCaseData, clientRole: role })} className={`rounded-full border px-3 py-1.5 text-xs ${newCaseData.clientRole === role ? "border-[#173824] bg-[#1F4A33] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{role}</button>)}</div>
                 {newCaseData.clientRole === "Egyéb / saját szerep" ? <input value={customClientRole} onChange={(e) => setCustomClientRole(e.target.value)} className="mt-3 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm" placeholder="pl. társtulajdonos" /> : null}
               </section>
 
-              <section className="border-b border-[rgba(22,32,26,0.10)] py-5">
+              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] px-5 py-5">
                 <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">4</span><h3 className="font-serif text-xl font-medium">Határidő</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
+                <p className="mb-4 text-xs text-[#7A8479]">Rögzíts pontos határidőt vagy relatív időablakot, ha az ügy menete ezt igényli.</p>
                 <div className="grid grid-cols-2 gap-2 md:grid-cols-5">{[{ id: "none", label: "Nincs határidő" }, { id: "date", label: "Pontos dátum" }, { id: "days", label: "X nap múlva" }, { id: "hours", label: "X óra múlva" }, { id: "minutes", label: "X perc múlva" }].map((mode) => <button key={mode.id} onClick={() => updateDeadline(mode.id as DeadlineMode)} className={`rounded border p-3 text-left text-xs font-semibold ${deadlineMode === mode.id ? "border-[#173824] bg-[#1F4A33] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{mode.label}</button>)}</div>
                 {deadlineMode === "date" ? <input type="datetime-local" value={newCaseData.deadline || ""} onChange={(e) => setNewCaseData({ ...newCaseData, deadline: e.target.value })} className="mt-3 rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm" /> : null}
                 {["days", "hours", "minutes"].includes(deadlineMode) ? <input type="number" min={1} value={relativeDeadlineValue} onChange={(e) => { setRelativeDeadlineValue(e.target.value); updateDeadline(deadlineMode, e.target.value); }} className="mt-3 w-32 rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm" /> : null}
@@ -773,8 +780,9 @@ export function CasesList() {
                 <div className="mt-3 rounded-md border border-[#C5D3C8] bg-[#E2E8DA] p-3 text-sm text-[#1F4A33]">Határidő: <b>{formatDeadlinePreview(newCaseData.deadline)}</b>{reminder !== "Nincs emlékeztető" ? ` — emlékeztető: ${reminder}` : ""}</div>
               </section>
 
-              <section className="border-b border-[rgba(22,32,26,0.10)] py-5">
+              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] px-5 py-5">
                 <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">5</span><h3 className="font-serif text-xl font-medium">Résztvevők</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
+                <p className="mb-4 text-xs text-[#7A8479]">Válaszd ki, kik dolgoznak együtt az ügyön és kik kerüljenek be a review-útvonalba.</p>
                 <div className="flex flex-wrap gap-2">
                   {visibleParticipants.map((user) => {
                     const active = selectedCollaboratorIds.includes(user.id);
@@ -815,11 +823,12 @@ export function CasesList() {
                 <p className="mt-2 text-xs text-[#7A8479]">Résztvevőket később is hozzáadhatsz az ügy oldaláról.</p>
               </section>
 
-              <section className="py-5">
+              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] px-5 py-5">
                 <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">6</span><h3 className="font-serif text-xl font-medium">Munkaterv / review-útvonal</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
+                <p className="mb-4 text-xs text-[#7A8479]">Építsd fel, ki milyen sorrendben dolgozik az ügyön.</p>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    ["none", "Nincs"],
+                    ["none", "Nincs munkaterv"],
                     ["simple", "Egyszerű"],
                     ["trainee-partner", "Jelölt → partner"],
                     ["three-step", "Jelölt → ügyvéd → partner"],
@@ -909,7 +918,7 @@ export function CasesList() {
                     <p className="text-[11px] text-[#7A8479]">A lépések valós ügyfeladatként jönnek létre. Felelős csak akkor kerül mentésre, ha létező felhasználót választasz.</p>
                   </div>
                 ) : (
-                  <div className="mt-4 rounded border border-dashed border-[rgba(22,32,26,0.20)] bg-[#FBF6E7] p-5 text-center">
+                  <div className="mt-4 rounded border border-dashed border-[rgba(22,32,26,0.20)] bg-[#FFFBEF] p-5 text-center">
                     <p className="text-sm font-medium text-[#3D4842]">Építsd fel, ki milyen sorrendben dolgozik az ügyön.</p>
                     <p className="mt-1 text-xs text-[#7A8479]">Válassz egy sablont vagy adj lépéseket egyénileg. A fenti résztvevők közül egy kattintással is hozzáadhatsz valakit az útvonalhoz.</p>
                   </div>
