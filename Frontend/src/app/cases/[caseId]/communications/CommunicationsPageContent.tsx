@@ -26,11 +26,11 @@ type CommunicationsPageProps = {
 };
 
 const communicationTypeLabels: Record<string, string> = {
-  'EMAIL': 'Email',
-  'PHONE': 'Phone',
+  'EMAIL': 'Ügyfélkommunikáció',
+  'PHONE': 'Telefon',
   'MEETING': 'Meeting',
-  'LETTER': 'Letter',
-  'NOTE': 'Note',
+  'LETTER': 'Levél',
+  'NOTE': 'Belső jegyzet',
 };
 
 const communicationTypeColors: Record<string, string> = {
@@ -58,6 +58,10 @@ const taskStatusColors: Record<string, string> = {
   'BLOCKED': 'bg-[#DC2626] text-white',
   'CANCELLED': 'bg-[#9CA3AF] text-white',
 };
+const COMMUNICATION_LOAD_ERROR = 'A kommunikáció betöltése sikertelen.';
+const COMMUNICATION_LOADING_LABEL = 'Kommunikáció betöltése…';
+const COMMUNICATION_EMPTY_LABEL = 'Még nincs ügykommunikáció. Írj belső jegyzetet vagy rögzíts egyeztetést.';
+const COMMUNICATION_UNSELECTED_LABEL = 'Válassz kommunikációt a részletek és utánkövetési lépések megtekintéséhez.';
 
 export default function CommunicationsPageContent({ params }: CommunicationsPageProps) {
   const resolvedParams = use(params);
@@ -127,7 +131,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
     } catch (err) {
       console.error('Failed to load communications:', err);
       setCommunications([]);
-      setError('A kommunikációs szolgáltatás nem érhető el. Próbáld újra később.');
+      setError(COMMUNICATION_LOAD_ERROR);
     } finally {
       setIsLoadingList(false);
     }
@@ -141,7 +145,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
       setSelectedComm(detail);
     } catch (err) {
       console.error('Failed to load communication detail:', err);
-      setError('A kommunikáció részletei nem érhetők el. Próbáld újra később.');
+      setError(COMMUNICATION_LOAD_ERROR);
     } finally {
       setIsLoadingDetail(false);
     }
@@ -402,7 +406,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
   return (
     <div className="flex-1 flex min-h-0">
       <CaseWorkspaceNav caseId={caseContextId} caseNumber={caseRecord.caseNumber} title={caseRecord.title} clientName={caseRecord.clientName} activeTab="communications" helperText="Kommunikációs bejegyzések és kapcsolt utánkövetési feladatok." />
-      {/* LEFT PANE - Thread List */}
+      {/* LEFT PANE - Communication ledger */}
       <aside className="w-80 border-r border-[#DDD7CA] bg-[#F6F2E8] flex flex-col">
         {/* Case Participants Block */}
         <div className="px-4 py-3 border-b border-[#DDD7CA]">
@@ -437,8 +441,9 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
         </div>
         
         <div className="p-3 border-b border-[#DDD7CA]">
-          <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D]">Belső ügy napló</h3>
-          <p className="text-[9px] text-[#9C9890] mt-0.5">Belső workspace a résztvevők számára</p>
+          <h2 className="text-[11px] uppercase tracking-[0.24em] text-[#1F4A33]">Ügykommunikáció</h2>
+          <h3 className="mt-1 text-[10px] uppercase tracking-[0.22em] text-[#7B776D]">Kommunikációs napló</h3>
+          <p className="text-[9px] text-[#9C9890] mt-0.5">Belső ügykommunikációs feed</p>
         </div>
         
         {/* Quick note input - chat-like internal note creation */}
@@ -455,13 +460,13 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
               type="text"
               value={quickNoteSubject}
               onChange={(e) => setQuickNoteSubject(e.target.value)}
-              placeholder="Workspace frissítés címe..."
+              placeholder="Belső jegyzet címe..."
               className="w-full px-2 py-1.5 text-[11px] border border-[#DDD7CA] bg-white text-[#1F2821] placeholder-[#9C9890]"
             />
             <textarea
               value={quickNoteContent}
               onChange={(e) => setQuickNoteContent(e.target.value)}
-              placeholder="Belső workspace frissítés a résztvevőknek..."
+              placeholder="Belső ügykommunikációs jegyzet..."
               rows={2}
               className="w-full px-2 py-1.5 text-[11px] border border-[#DDD7CA] bg-white text-[#1F2821] resize-none placeholder-[#9C9890]"
             />
@@ -470,7 +475,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
               disabled={!quickNoteSubject.trim() || !quickNoteContent.trim() || isCreatingNote}
               className="w-full py-1.5 text-[10px] uppercase tracking-[0.1em] bg-[#8B5CF6] text-white hover:bg-[#7C3AED] disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {isCreatingNote ? 'Mentés...' : 'Workspace frissítés'}
+              {isCreatingNote ? 'Mentés...' : 'Jegyzet mentése'}
             </button>
           </div>
         </div>
@@ -482,10 +487,10 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
             </div>
           )}
           {isLoadingList ? (
-            <div className="p-4 text-center text-[#7B776D] text-xs">Betöltés...</div>
+            <div className="p-4 text-center text-[#7B776D] text-xs">{COMMUNICATION_LOADING_LABEL}</div>
           ) : communications.length === 0 ? (
             <div className="p-4 text-center text-[#7B776D] text-xs">
-              Még nincs rögzített kommunikáció. A résztvevők által rögzített frissítések itt jelennek meg.
+              {COMMUNICATION_EMPTY_LABEL}
             </div>
           ) : (
             <div className="divide-y divide-[#DDD7CA]">
@@ -545,7 +550,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
         </div>
       </aside>
 
-      {/* CENTER PANE - Message Reader */}
+      {/* CENTER PANE - Selected communication */}
       <main className="flex-1 flex flex-col min-h-0 bg-white">
         {!selectedComm ? (
           <div className="flex-1 flex items-center justify-center">
@@ -562,7 +567,9 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                       <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5H4.5A2.25 2.25 0 002.25 6.5m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
                     </svg>
                   </div>
-                  <p className="text-xs text-[#9C9890]">Még nincs ügykommunikáció. Írj belső jegyzetet vagy rögzíts egyeztetést.</p>
+                  <p className="text-xs text-[#9C9890]">
+                    {communications.length === 0 ? COMMUNICATION_EMPTY_LABEL : COMMUNICATION_UNSELECTED_LABEL}
+                  </p>
                 </>
               )}
             </div>
@@ -639,7 +646,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                       : 'border-transparent text-[#7B776D] hover:text-[#1F2821]'
                   }`}
                 >
-                  Mellékletek ({selectedComm.attachments?.length || 0})
+                  Kapcsolódó dokumentumok ({selectedComm.attachments?.length || 0})
                 </button>
                 <button
                   onClick={() => setActivePane('tasks')}
@@ -668,7 +675,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                 {activePane === 'attachments' && (
                   <div>
                     <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Mellékletek</h4>
+                      <h4 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Kapcsolódó dokumentumok</h4>
                       {selectedComm && caseDocuments.length > 0 && (
                         <button
                           onClick={() => setShowAddAttachmentForm(!showAddAttachmentForm)}
@@ -771,7 +778,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
       </main>
 
       {/* RIGHT PANE - Kommunikációs utánkövetés */}
-      <aside className="w-80 border-l border-[#DDD7CA] bg-[#F6F2E8] flex flex-col overflow-y-auto">
+      <aside className="w-72 border-l border-[#DDD7CA] bg-[#F6F2E8] flex flex-col overflow-y-auto">
         <div className="p-4 border-b border-[#DDD7CA]">
           <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D]">Kommunikációs utánkövetés</h3>
         </div>
@@ -808,7 +815,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
               {/* Extract Task */}
               <details className="border border-[#DDD7CA] rounded">
                 <summary className="px-3 py-2 bg-[#F6F2E8] cursor-pointer text-[10px] uppercase tracking-[0.2em] text-[#F59E0B] hover:bg-[#ECE6DA]">
-                  Kapcsolt feladat létrehozása
+                  Kapcsolt feladat
                 </summary>
                 <div className="p-3 space-y-2">
                   <input
@@ -847,7 +854,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                     disabled={!taskTitle.trim() || isCreatingTask}
                     className="w-full py-2 text-xs uppercase tracking-[0.2em] bg-[#F59E0B] text-white hover:bg-[#D97706] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isCreatingTask ? 'Létrehozás...' : 'Feladat létrehozása'}
+                    {isCreatingTask ? 'Létrehozás...' : 'Feladat kinyerése'}
                   </button>
                 </div>
               </details>
@@ -855,7 +862,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
               {/* Extract Deadline */}
               <details className="border border-[#DDD7CA] rounded">
                 <summary className="px-3 py-2 bg-[#F6F2E8] cursor-pointer text-[10px] uppercase tracking-[0.2em] text-[#DC2626] hover:bg-[#ECE6DA]">
-                  Kapcsolt határidő beállítása
+                  Kapcsolt határidő
                 </summary>
                 <div className="p-3 space-y-2">
                   <input
@@ -926,7 +933,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
           
           {!selectedComm && (
             <div className="text-center text-[#9C9890] text-xs py-8">
-              Válassz kommunikációt a kapcsolt utánkövetési műveletek, feladatok és határidők megtekintéséhez.
+              {COMMUNICATION_UNSELECTED_LABEL}
             </div>
           )}
           
