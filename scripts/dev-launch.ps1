@@ -92,6 +92,8 @@ Write-LaunchLine "Logs: $runDir"
 if (-not (Test-Path $backendDir)) { throw "Backend directory not found: $backendDir" }
 if (-not (Test-Path $frontendDir)) { throw "Frontend directory not found: $frontendDir" }
 
+# Canonical local ports:
+# Frontend: 3000, Backend: 3001 (Backend/.env.example + Backend/src/index.ts default).
 $backendPort = 3001
 $frontendPort = 3000
 $backendPid = $null
