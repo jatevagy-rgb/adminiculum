@@ -515,7 +515,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   };
 
   const handleGenerate = () => {
-    router.push(`/cases/${canonicalCaseId}/generate/assembly`);
+    router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}`);
   };
 
   const handleAnonymize = (contract: CaseContractListItem) => {
@@ -858,7 +858,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 <AdminButton variant="primary" onClick={() => fileInputRef.current?.click()} disabled={!caseRecord?.id || isUploading}>
                   {isUploading ? "Feltöltés..." : "Dokumentum feltöltése"}
                 </AdminButton>
-                <AdminButton variant="gold" onClick={handleGenerate}>Szerződés összeállítása</AdminButton>
+                <AdminButton variant="gold" onClick={handleGenerate}>Szerződés-workspace</AdminButton>
               </div>
             </div>
             <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleFileUpload} className="hidden" />
@@ -971,7 +971,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <p className="mx-auto mt-2 max-w-md text-sm text-[#3D4842]">Kezdéshez tölts fel egy dokumentumot, vagy hozz létre szerződést sablonból.</p>
                       <div className="mt-5 flex flex-wrap justify-center gap-2">
                         <AdminButton variant="primary" onClick={() => fileInputRef.current?.click()} disabled={!caseRecord?.id || isUploading}>Dokumentum feltöltése</AdminButton>
-                        <AdminButton variant="gold" onClick={handleGenerate}>Szerződés összeállítása</AdminButton>
+                        <AdminButton variant="gold" onClick={handleGenerate}>Szerződés-workspace</AdminButton>
                       </div>
                     </div>
 ) : selectedUploadedDocument ? (
