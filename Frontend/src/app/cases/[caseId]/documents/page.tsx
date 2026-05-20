@@ -756,11 +756,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
         return 'Jóváhagyott';
       case 'IN_REVIEW':
       case 'SUBMITTED':
-        return 'Review-on';
+        return 'Review alatt';
       case 'REJECTED':
         return 'Visszaküldve';
       case 'GENERATED':
-        return 'Generált';
+        return 'Piszkozat';
       default:
         return 'Piszkozat';
     }
@@ -884,8 +884,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   <p className="mt-1 text-[12px] text-[#7A8479]">Több dokumentum is tárolható, de egyszerre mindig egy aktív munkadokumentumon dolgozol.</p>
                 </div>
                 <div className="space-y-5 p-4">
-<section className="space-y-2 rounded-[8px] border border-[rgba(22,32,26,0.12)] bg-white p-3">
-                    <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Feltöltött dokumentumok</h3>
+                  <section className="space-y-2 rounded-[8px] border border-[rgba(22,32,26,0.12)] bg-white p-3">
+                    <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Feltöltött dokumentumok ({uploadedDocuments.length})</h3>
                     {uploadedDocuments.length === 0 ? (
                       <p className="rounded border border-dashed border-[rgba(22,32,26,0.16)] p-3 text-[12px] text-[#7A8479]">Nincs feltöltött dokumentum.</p>
                     ) : uploadedDocuments.map((doc) => {
@@ -899,14 +899,18 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           active={isSelected}
                           variant="upload"
                           onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
-                          status={isSelected ? <AdminBadge tone="gold">Aktív</AdminBadge> : null}
+                          status={
+                            <div className="flex items-center gap-1">
+                              <AdminBadge tone={isSelected ? "gold" : "neutral"}>{isSelected ? "Aktív" : "Feltöltve"}</AdminBadge>
+                            </div>
+                          }
                         />
                       );
                     })}
                   </section>
 
                   <section className="space-y-2 rounded-[8px] border border-[rgba(22,32,26,0.12)] bg-white p-3">
-                    <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Módosított munkapéldányok</h3>
+                    <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Módosított munkapéldányok ({modifiedWorkingCopies.length})</h3>
                     {modifiedWorkingCopies.length === 0 ? (
                       <p className="rounded border border-dashed border-[rgba(22,32,26,0.16)] p-3 text-[12px] text-[#7A8479]">Nincs módosított munkapéldány.</p>
                     ) : modifiedWorkingCopies.map((doc) => {
@@ -919,14 +923,14 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           active={isSelected}
                           variant="generated"
                           onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
-                          status={isSelected ? <AdminBadge tone="gold">Aktív</AdminBadge> : null}
+                          status={<AdminBadge tone={isSelected ? "gold" : "green"}>{isSelected ? "Aktív" : "Munkapéldány"}</AdminBadge>}
                         />
                       );
                     })}
                   </section>
 
                   <section className="space-y-2 rounded-[8px] border border-[rgba(22,32,26,0.12)] bg-white p-3">
-                    <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Generált / módosított</h3>
+                    <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Generált / módosított ({generatedLedgerItems.length})</h3>
 {generatedLedgerItems.length === 0 ? (
                       <p className="rounded border border-dashed border-[rgba(22,32,26,0.16)] p-3 text-[12px] text-[#7A8479]">Nincs generált dokumentum.</p>
                     ) : generatedLedgerItems.map((contract) => {
@@ -940,7 +944,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           active={isSelected}
                           variant="generated"
                           onClick={() => { setSelectedLedgerItem({ kind: "generated", item: contract }); setSelectedContract(contract); }}
-                          status={isSelected ? <AdminBadge tone="gold">Aktív</AdminBadge> : null}
+                          status={<AdminBadge tone={isSelected ? "gold" : "neutral"}>{isSelected ? "Aktív" : getContractStatusLabel(contract)}</AdminBadge>}
                         />
                       );
                     })}
@@ -1016,6 +1020,31 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
               </AdminPanel>
 
               <div className="space-y-5">
+                <AdminPanel className="border-[rgba(22,32,26,0.14)] bg-[#FBF6E7] p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Akciók</p>
+                  <div className="mt-3 space-y-2">
+                    <AdminButton className="w-full justify-start" variant="primary" onClick={() => activeDocument ? openWorkspace(activeDocument.id) : router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}`)}>
+                      Szerződés-workspace
+                    </AdminButton>
+                    <AdminButton className="w-full justify-start" variant="neutral" onClick={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/handoff`)}>
+                      Leadási csomag megnyitása
+                    </AdminButton>
+                    <AdminButton className="w-full justify-start" variant="neutral" onClick={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/communications`)}>
+                      Kommunikáció
+                    </AdminButton>
+                    <details className="pt-1">
+                      <summary className="cursor-pointer text-[11px] font-semibold text-[#7A8479]">Haladó / technikai</summary>
+                      <div className="mt-2 space-y-2">
+                        <AdminButton className="w-full justify-start" size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>
+                          Metaadat összevetés
+                        </AdminButton>
+                        <AdminButton className="w-full justify-start" size="sm" variant="muted" onClick={() => router.push(`/reviews`)}>
+                          Review sor
+                        </AdminButton>
+                      </div>
+                    </details>
+                  </div>
+                </AdminPanel>
                 <AdminPanel className="border-[rgba(22,32,26,0.14)] bg-[#FBF6E7] p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
