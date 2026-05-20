@@ -208,7 +208,7 @@ function ClientsPageContent() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-serif text-2xl font-medium leading-tight text-[#16201A]">{profile?.officialName || display.name}</h2>
-              {primary ? <AdminBadge tone="gold">Alap ügyfél</AdminBadge> : <AdminBadge tone="neutral">Egyéb ügyfél</AdminBadge>}
+              {primary ? <AdminBadge tone="gold">Alap ügyfél</AdminBadge> : <AdminBadge tone="neutral">Ügyfél</AdminBadge>}
             </div>
             <p className="mt-1 text-sm text-[#3D4842]">Rövid név: <b>{profile?.shortName || (coreKey(client) === "blackbelt" ? "BlackBelt" : coreKey(client) === "saubermacher" ? "Saubermacher" : display.name)}</b></p>
             <div className="mt-3 grid gap-2 text-xs text-[#3D4842] sm:grid-cols-2">
@@ -223,6 +223,9 @@ function ClientsPageContent() {
               </AdminStatusPill>
               <AdminStatusPill tone={hasHeader ? "green" : "neutral"}>Fejlécminta: {hasHeader ? "Van" : "Nincs"}</AdminStatusPill>
             </div>
+            <p className="mt-3 text-[11px] leading-5 text-[#514D45]">
+              A house style profil dokumentumformátumot, fejléc/arculati elvárásokat és ügyfél-specifikus instrukciókat ad a prompt-copy workflow-hoz.
+            </p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
             <Link href={`/clients/${client.id}`} className="inline-flex items-center justify-center rounded-[5px] border border-[#173824] bg-[#1F4A33] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#173824]">Ügyfél dosszié</Link>
@@ -249,8 +252,27 @@ function ClientsPageContent() {
           </div>
 
           <AdminPanel className="p-4">
-            <p className="text-[11px] text-[#3D4842]">A fő ügyindítási lista alapértelmezetten a kiemelt ügyfelekre szűkít: BlackBelt és Saubermacher. Más ügyfelek nem törlődnek.</p>
+            <p className="text-[11px] text-[#3D4842]">
+              A fő ügyindítási lista alapértelmezetten a kiemelt ügyfelekre szűkít: BlackBelt és Saubermacher. Más ügyfelek nem törlődnek.
+            </p>
           </AdminPanel>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <AdminPanel className="p-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7A8479]">House style termékérték</p>
+              <ul className="mt-2 space-y-1 text-[11px] text-[#3D4842]">
+                <li>Dokumentumstílus, címsor- és számozási szabályok ügyfelenként.</li>
+                <li>Fejléc / branding minta és kétnyelvűségi elvárások kezelése.</li>
+                <li>Ügyfél-specifikus nyelvi és fordítási irányok követése.</li>
+              </ul>
+            </AdminPanel>
+            <AdminPanel className="p-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7A8479]">Külső AI workflow</p>
+              <p className="mt-2 text-[11px] leading-5 text-[#3D4842]">
+                Az Adminiculum nem futtat automatikusan külső AI-t. A house style panel instrukciós kontextust ad, amit a felhasználó promptként másolhat át.
+              </p>
+            </AdminPanel>
+          </div>
 
           {error ? <div className="rounded border border-[#F2DAD6] bg-[#FFF5F3] p-3 text-xs font-semibold text-[#8B2A2A]">{error}</div> : null}
 
