@@ -45,6 +45,41 @@ const formatDate = (iso?: string) => {
   return new Date(iso).toLocaleDateString("hu-HU", { dateStyle: "short" });
 };
 
+const mapStatusLabel = (status?: string) => {
+  if (!status) return "Ismeretlen állapot";
+  const normalized = status.trim().toUpperCase();
+  switch (normalized) {
+    case "TODO":
+    case "ASSIGNED":
+    case "PENDING":
+      return "Teendő";
+    case "IN_PROGRESS":
+      return "Folyamatban";
+    case "SUBMITTED":
+    case "REVIEW_NEEDED":
+      return "Review alatt";
+    case "COMPLETED":
+    case "APPROVED":
+    case "FINALIZED":
+      return "Kész";
+    case "REJECTED":
+      return "Visszaküldve";
+    case "BLOCKED":
+      return "Blokkolva";
+    case "CANCELLED":
+      return "Törölve";
+    case "ACTIVE":
+    case "OPEN":
+      return "Aktív";
+    case "ARCHIVED":
+      return "Archivált";
+    case "DRAFT":
+      return "Piszkozat";
+    default:
+      return "Ismeretlen állapot";
+  }
+};
+
 export function Dashboard() {
   const [uiPack] = useUiPack();
   const isSignal = uiPack === "signal_tiles_console";
@@ -174,10 +209,10 @@ export function Dashboard() {
   const renderMessageRow = (item: CommunicationItem) => (
     <Card key={item.id} uiPack={uiPack} className={rowCardTone}>
       <p className={`text-[10px] uppercase tracking-[0.22em] ${toneMuted}`}>{formatRelativeDate(item.createdAt)}</p>
-      <h3 className={`text-sm font-semibold mt-1 ${toneTitle}`}>{item.subject || "(No subject)"}</h3>
-      <p className={`text-xs mt-2 line-clamp-3 ${toneMuted}`}>{item.summary || item.content || "No preview available."}</p>
+      <h3 className={`text-sm font-semibold mt-1 ${toneTitle}`}>{item.subject || "Nincs tárgy"}</h3>
+      <p className={`text-xs mt-2 line-clamp-3 ${toneMuted}`}>{item.summary || item.content || "Nincs előnézet."}</p>
       <div className="text-xs mt-2 flex items-center justify-between">
-        <span className={toneMuted}>{item.senderName || item.recipientName || "External"}</span>
+        <span className={toneMuted}>{item.senderName || item.recipientName || "Külső kommunikáció"}</span>
         {item.case && (
           <Link href={`/cases/${item.case.id}`} className="text-[#38BDF8] hover:underline">
             {item.case.caseNumber}
@@ -193,12 +228,14 @@ export function Dashboard() {
         <h3 className={`text-sm font-semibold ${toneTitle}`}>
           <Link href={`/tasks?taskId=${task.id}`} className="hover:text-[#38BDF8]">{task.title}</Link>
         </h3>
-        <span className={`text-[10px] uppercase tracking-[0.22em] ${toneMuted}`}>{task.status}</span>
+        <span className="inline-flex items-center rounded-full border border-[#D8CDB6] bg-[#FAF5EA] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#5A4A2A]">
+          {mapStatusLabel(task.status)}
+        </span>
       </div>
-      <p className={`text-xs mt-2 line-clamp-3 ${toneMuted}`}>{task.description || "No description provided."}</p>
+      <p className={`text-xs mt-2 line-clamp-3 ${toneMuted}`}>{task.description || "Nincs leírás."}</p>
       {task.dueDate && (
         <p className={`text-[10px] uppercase tracking-[0.22em] mt-2 ${toneMuted}`}>
-          Due {new Date(task.dueDate).toLocaleDateString("hu-HU", { dateStyle: "short" })}
+          Határidő {new Date(task.dueDate).toLocaleDateString("hu-HU", { dateStyle: "short" })}
         </p>
       )}
     </Card>
@@ -210,10 +247,12 @@ export function Dashboard() {
         <h3 className={`text-sm font-semibold ${toneTitle}`}>
           <Link href={`/cases/${c.id}`} className="hover:text-[#38BDF8]">{c.caseNumber}</Link>
         </h3>
-        <span className={`text-[10px] uppercase tracking-[0.2em] ${toneMuted}`}>{c.status}</span>
+        <span className="inline-flex items-center rounded-full border border-[#D8CDB6] bg-[#FAF5EA] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#5A4A2A]">
+          {mapStatusLabel(c.status)}
+        </span>
       </div>
       <p className={`text-xs mt-1 ${toneMuted}`}>{c.clientName} • {c.matterType}</p>
-      <p className={`text-[10px] uppercase tracking-[0.2em] mt-2 ${toneMuted}`}>Updated {formatDate(c.updatedAt)}</p>
+      <p className={`text-[10px] uppercase tracking-[0.2em] mt-2 ${toneMuted}`}>Frissítve {formatDate(c.updatedAt)}</p>
     </Card>
   );
 
