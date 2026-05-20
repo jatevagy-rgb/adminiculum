@@ -1,8 +1,13 @@
 // Simple API utility for Adminiculum frontend
 
-// Use environment variable for API base URL, fallback to relative path (for same-origin/API proxy)
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_BASE_URL 
-  ? `${process.env.NEXT_PUBLIC_BACKEND_BASE_URL}/api/v1`
+// Use canonical env var for backend base URL, keep legacy fallback for compatibility.
+// Values should be host roots (e.g. http://localhost:3001), API_BASE appends /api/v1.
+const backendBaseUrl =
+  process.env.NEXT_PUBLIC_BACKEND_BASE_URL ||
+  process.env.NEXT_PUBLIC_API_BASE_URL;
+
+const API_BASE = backendBaseUrl
+  ? `${backendBaseUrl.replace(/\/+$/, '')}/api/v1`
   : '/api/v1';
 
 interface FetchOptions extends RequestInit {

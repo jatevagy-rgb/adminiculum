@@ -129,7 +129,8 @@ function handleOpenApiJson(_req: Request, res: Response): void {
 startupConfigHealth = evaluateStartupConfigHealth();
 
 const app = express();
-const PORT = parseInt(process.env.PORT || '3000', 10);
+// Local default aligns with dev launcher expectations (scripts/dev-launch.ps1).
+const PORT = parseInt(process.env.PORT || '3001', 10);
 const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production';
 const configuredAllowedOrigins = parseCsvEnv(process.env.CORS_ALLOWED_ORIGINS);
 const frontendUrl = process.env.FRONTEND_URL?.trim();
