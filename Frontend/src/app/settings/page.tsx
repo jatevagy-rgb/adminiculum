@@ -84,14 +84,19 @@ function SettingsPageContent() {
               <span className={`text-[10px] px-2 py-1 ${p.bgAlt} ${p.textMuted}`}>UI pack</span>
             </div>
             <p className={`text-xs ${p.textMuted} mb-4`}>
-              A kiválasztás böngésző-local beállításként tárolódik, és nem szinkronizálódik fiókszinten.
+              A UI pack böngésző-local megjelenési beállítás. Nem módosít ügyeket, dokumentumokat vagy jogosultságokat.
             </p>
             <p className={`text-xs ${p.textMuted} mb-4`}>
-              UI pack váltás későbbi patchben.
+              Böngészőben mentve.
             </p>
             <div className="space-y-3">
               {UI_PACKS.filter((pack) => pack.id === "legal_ops_atelier" || pack.id === "signal_tiles_console").map((pack) => {
                 const selected = pack.id === uiPack;
+                const title = pack.id === "legal_ops_atelier" ? "Adminiculum default" : "Signal Tiles Console";
+                const helper =
+                  pack.id === "legal_ops_atelier"
+                    ? "Design bible alapirány: cream felület, dark legal green navigáció, muted gold kiemelések."
+                    : "Kísérleti sötét műveleti nézet. Nem a fő production design.";
                 return (
                   <button
                     key={pack.id}
@@ -107,7 +112,7 @@ function SettingsPageContent() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <p className={`text-sm font-semibold ${p.textDark}`}>
-                            {pack.id === "legal_ops_atelier" ? "Adminiculum default" : "Signal Tiles Console"}
+                            {title}
                           </p>
                           {selected && (
                             <span className={`text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded-full ${p.badge}`}>
@@ -115,12 +120,22 @@ function SettingsPageContent() {
                             </span>
                           )}
                         </div>
-                        <p className={`text-[11px] ${p.textMuted}`}>{pack.description}</p>
+                        <p className={`text-[11px] ${p.textMuted}`}>{helper}</p>
                       </div>
                     </div>
                   </button>
                 );
               })}
+            </div>
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setUiPack("legal_ops_atelier")}
+                disabled={uiPack === "legal_ops_atelier"}
+                className={`px-3 py-2 text-xs border ${p.border} ${p.textDark} ${p.bgSection} disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                Alapértelmezett visszaállítása
+              </button>
             </div>
           </section>
 

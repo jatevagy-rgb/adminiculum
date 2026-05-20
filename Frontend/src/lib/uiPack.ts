@@ -5,13 +5,13 @@ import { useCallback, useEffect, useState } from "react";
 export const UI_PACKS = [
   {
     id: "signal_tiles_console",
-    label: "Signal Ops Console",
-    description: "Dark, workflow-first operations console with contextual rails.",
+    label: "Signal Tiles Console",
+    description: "Kísérleti sötét műveleti nézet. Nem a fő production design.",
   },
   {
     id: "legal_ops_atelier",
-    label: "Legal Ops Atelier",
-    description: "Light, analytics-first workspace with modular metric cards.",
+    label: "Adminiculum default",
+    description: "Design bible alapirány: cream felület, dark legal green navigáció, muted gold kiemelések.",
   },
 ] as const;
 
@@ -19,7 +19,7 @@ export type UiPackId = (typeof UI_PACKS)[number]["id"];
 
 const UI_PACK_STORAGE_KEY = "adminiculum_ui_pack";
 const UI_PACK_CHANGE_EVENT = "adminiculum:ui-pack-changed";
-const DEFAULT_UI_PACK: UiPackId = "signal_tiles_console";
+const DEFAULT_UI_PACK: UiPackId = "legal_ops_atelier";
 
 const LEGACY_PACK_MAP: Record<string, UiPackId> = {
   legal_ops_atelier: "legal_ops_atelier",
