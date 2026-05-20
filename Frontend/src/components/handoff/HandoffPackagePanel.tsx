@@ -23,14 +23,6 @@ const STATUS_LABELS: Record<LawyerHandoffStatus, string> = {
   ARCHIVED: "Archiválva",
 };
 
-const REFERENCE_BADGES: Record<string, string> = {
-  sourceDocumentId: "Eredeti dokumentum",
-  anonymizedDocumentId: "Anonimizált szöveg",
-  generatedContractId: "Módosított / generált dokumentum",
-  legalAnalysisId: "Jogi elemzés",
-  reviewNotesId: "Review jegyzetek",
-};
-
 function getStatusColor(status: LawyerHandoffStatus): string {
   switch (status) {
     case "APPROVED":
@@ -51,14 +43,8 @@ function getStatusColor(status: LawyerHandoffStatus): string {
   }
 }
 
-function hasAnyLinkedContent(pkg: LawyerHandoffPackageRecord): boolean {
-  return !!(
-    pkg.sourceDocumentId ||
-    pkg.anonymizedDocumentId ||
-    pkg.generatedContractId ||
-    pkg.legalAnalysisId ||
-    pkg.reviewNotesId
-  );
+function getStatusLabel(status: LawyerHandoffStatus): string {
+  return STATUS_LABELS[status] ?? "Ismeretlen állapot";
 }
 
 function getMissingItems(pkg: LawyerHandoffPackageRecord): string[] {
@@ -257,7 +243,7 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
                   <span
                     className={`text-[8px] px-1.5 py-0.5 font-bold uppercase tracking-widest shrink-0 ${getStatusColor(pkg.status)}`}
                   >
-                    {STATUS_LABELS[pkg.status] ?? pkg.status}
+                    {getStatusLabel(pkg.status)}
                   </span>
                 </div>
 
@@ -304,6 +290,10 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
                       ) : (
                         <span className="text-[9px] text-[#7B776D]">Nincs csatolva</span>
                       )}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] text-[#514D45]">Kommunikációs összefoglaló</span>
+                      <span className="text-[9px] text-[#7B776D]">Későbbi patchben</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-[9px] text-[#514D45]">Előkészítő összefoglaló</span>
@@ -416,6 +406,15 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
                       <div className="mt-1 space-y-1">
                         <p className="text-[9px] text-[#7B776D]">Export későbbi patchben.</p>
                         <p className="text-[9px] text-[#7B776D]">Jóváhagyási workflow későbbi patchben.</p>
+                      </div>
+                    </details>
+                    <details className="mt-1">
+                      <summary className="text-[9px] text-[#7B776D] cursor-pointer">Technikai részletek</summary>
+                      <div className="mt-1 space-y-1 text-[9px] text-[#7B776D]">
+                        <p>Csomag azonosító: {pkg.id}</p>
+                        <p>Státusz kód: {pkg.status}</p>
+                        <p>Létrehozva: {pkg.createdAt || "—"}</p>
+                        <p>Frissítve: {pkg.updatedAt || "—"}</p>
                       </div>
                     </details>
                     {canPkgSubmit && !pkg.preparerSummary?.trim() && (

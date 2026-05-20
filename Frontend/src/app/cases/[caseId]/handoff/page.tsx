@@ -91,6 +91,24 @@ function CaseHandoffPageContent({ params }: CaseHandoffPageProps) {
             >
               ← Vissza a Dokumentumtárba
             </Link>
+            <Link
+              href={`/documents/compare?caseId=${encodeURIComponent(caseId)}`}
+              className="rounded border border-[#D8CDB6] bg-[#FAF5EA] px-3 py-1.5 text-xs font-semibold text-[#1F3B2D] hover:bg-[#F2E8D6]"
+            >
+              Szerződés-workspace
+            </Link>
+            <Link
+              href={`/cases/${encodeURIComponent(caseId)}/communications`}
+              className="rounded border border-[#D8CDB6] bg-[#FAF5EA] px-3 py-1.5 text-xs font-semibold text-[#1F3B2D] hover:bg-[#F2E8D6]"
+            >
+              Kommunikáció
+            </Link>
+            <Link
+              href={`/time-entries?caseId=${encodeURIComponent(caseId)}`}
+              className="rounded border border-[#D8CDB6] bg-[#FAF5EA] px-3 py-1.5 text-xs font-semibold text-[#1F3B2D] hover:bg-[#F2E8D6]"
+            >
+              Munkaórák
+            </Link>
           </div>
 
           <header className="mb-6 rounded-xl border border-[#D8CDB6] bg-[#FFFDF7] p-5">
