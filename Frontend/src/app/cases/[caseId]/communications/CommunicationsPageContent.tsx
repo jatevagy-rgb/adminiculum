@@ -46,6 +46,7 @@ const taskStatusLabels: Record<string, string> = {
   'IN_PROGRESS': 'Folyamatban',
   'DONE': 'Kész',
   'COMPLETED': 'Kész',
+  'SUBMITTED': 'Beküldve',
   'BLOCKED': 'Blokkolva',
   'CANCELLED': 'Törölve',
 };
@@ -55,8 +56,28 @@ const taskStatusColors: Record<string, string> = {
   'IN_PROGRESS': 'bg-[#F59E0B] text-white',
   'DONE': 'bg-[#10B981] text-white',
   'COMPLETED': 'bg-[#10B981] text-white',
+  'SUBMITTED': 'bg-[#3B82F6] text-white',
   'BLOCKED': 'bg-[#DC2626] text-white',
   'CANCELLED': 'bg-[#9CA3AF] text-white',
+};
+
+const caseStatusLabels: Record<string, string> = {
+  'DRAFT': 'Piszkozat',
+  'ACTIVE': 'Aktív',
+  'IN_REVIEW': 'Review alatt',
+  'SUBMITTED': 'Beküldve',
+  'APPROVED': 'Jóváhagyva',
+  'ARCHIVED': 'Archivált',
+};
+
+const getCaseStatusLabel = (status?: string | null) => {
+  const key = String(status || '').toUpperCase();
+  return caseStatusLabels[key] || 'Ismeretlen állapot';
+};
+
+const getTaskStatusLabel = (status?: string | null) => {
+  const key = String(status || '').toUpperCase();
+  return taskStatusLabels[key] || 'Ismeretlen állapot';
 };
 const COMMUNICATION_LOAD_ERROR = 'A kommunikáció betöltése sikertelen.';
 const COMMUNICATION_LOADING_LABEL = 'Kommunikáció betöltése…';
@@ -595,6 +616,9 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
               <h2 className="text-sm font-serif text-[#1F2821] leading-tight line-clamp-2">
                 {selectedComm.subject}
               </h2>
+              <p className="mt-2 text-[10px] text-[#7B776D]">
+                Belső ügykommunikációs napló, nem élő chat.
+              </p>
             </div>
 
             {/* Action Results */}
@@ -752,7 +776,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                               <span className={`text-[9px] uppercase tracking-[0.1em] px-2 py-1 rounded ${
                                 taskStatusColors[task.status] || 'bg-[#6B7280] text-white'
                               }`}>
-                                {taskStatusLabels[task.status] || task.status}
+                                {getTaskStatusLabel(task.status)}
                               </span>
                             </div>
                             {task.description && (
@@ -803,7 +827,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                 </div>
                 <div className="flex justify-between text-[10px] mt-1">
                   <span className="text-[#7B776D]">Státusz</span>
-                  <span className="text-[#1F2821]">{caseRecord?.status || 'Ismeretlen'}</span>
+                  <span className="text-[#1F2821]">{getCaseStatusLabel(caseRecord?.status)}</span>
                 </div>
               </div>
             </div>
@@ -926,6 +950,15 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                       </div>
                     )}
                   </div>
+                  {!selectedComm.caseId ? (
+                    <button
+                      onClick={handleLinkToCase}
+                      disabled={isLinkingCase}
+                      className="mt-3 w-full py-2 text-xs uppercase tracking-[0.2em] border border-[#DDD7CA] text-[#1F2821] hover:bg-[#F6F2E8] disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isLinkingCase ? 'Kapcsolás...' : 'Kapcsolás az ügyhöz'}
+                    </button>
+                  ) : null}
                 </div>
               </details>
             </>
@@ -939,6 +972,26 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
           
           {/* Navigation */}
           <div className="pt-4 border-t border-[#DDD7CA]">
+            <div className="space-y-2 mb-2">
+              <button
+                onClick={() => router.push(`/cases/${caseContextId}/documents`)}
+                className="w-full py-2 text-xs uppercase tracking-[0.2em] border border-[#DDD7CA] text-[#7B776D] hover:bg-[#ECE6DA]"
+              >
+                Dokumentumtár
+              </button>
+              <button
+                onClick={() => router.push(`/documents/compare?caseId=${caseContextId}`)}
+                className="w-full py-2 text-xs uppercase tracking-[0.2em] border border-[#DDD7CA] text-[#7B776D] hover:bg-[#ECE6DA]"
+              >
+                Szerződés-workspace
+              </button>
+              <button
+                onClick={() => router.push(`/cases/${caseContextId}/handoff`)}
+                className="w-full py-2 text-xs uppercase tracking-[0.2em] border border-[#DDD7CA] text-[#7B776D] hover:bg-[#ECE6DA]"
+              >
+                Leadási csomag
+              </button>
+            </div>
             <button
               onClick={() => router.push(`/cases/${caseContextId}`)}
               className="w-full py-2 text-xs uppercase tracking-[0.2em] border border-[#DDD7CA] text-[#7B776D] hover:bg-[#ECE6DA]"
