@@ -1148,6 +1148,12 @@ return (
           <header className="rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-5 shadow-sm">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0 space-y-3">
+                <div className="inline-flex items-center gap-2 rounded-[5px] border border-[#1F4A33] bg-[#1F4A33] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#F4EFDB]">
+                  Workspace
+                  <span className="rounded-[3px] border border-[#B58A2A] bg-[rgba(181,138,42,0.18)] px-1.5 py-0.5 text-[9px] text-[#F2E4BD]">
+                    jogi munkapéldány
+                  </span>
+                </div>
                 <div className="rounded-[8px] border border-[#D8CFB6] bg-white p-3">
                   <div className="flex flex-wrap items-center gap-2">
                     {activeCaseId ? (
@@ -1219,7 +1225,7 @@ return (
                   </label>
                 </div>
               </div>
-<div className="flex shrink-0 flex-wrap gap-2">
+                <div className="flex shrink-0 flex-wrap gap-2">
                 <Link
                   href={getDocumentLedgerHref()}
                   className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-4 py-2 text-[13px] font-semibold leading-none text-[#16201A] transition-colors hover:border-[#16201A] hover:bg-[#FBF6E7]"
@@ -1229,6 +1235,14 @@ return (
                 <AdminButton onClick={handleLocalWordCompatibleExport} variant="gold">
                   Word-előkészítő export
                 </AdminButton>
+                {activeCaseId ? (
+                  <Link
+                    href={`/cases/${encodeURIComponent(activeCaseId)}/handoff`}
+                    className="inline-flex items-center justify-center rounded-[5px] border border-[#DDD7CA] bg-white px-4 py-2 text-[13px] font-semibold leading-none text-[#16201A] transition-colors hover:border-[#16201A] hover:bg-[#FBF6E7]"
+                  >
+                    Leadási csomag
+                  </Link>
+                ) : null}
                 <AdminButton
                   disabled={!selectedDocument || !editorDraft.trim() || isSavingWorkspace}
                   variant="primary"
@@ -1696,6 +1710,14 @@ return (
                         <p><span className="font-semibold text-[#1F2821]">Szövegstátusz:</span> {workspaceTextSourceLabel}</p>
                         <p><span className="font-semibold text-[#1F2821]">Verzió:</span> v{selectedDocument.revisionNumber || 1}</p>
                       </div>
+                      {activeCaseId ? (
+                        <Link
+                          href={`/cases/${encodeURIComponent(activeCaseId)}/handoff`}
+                          className="block rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-center text-[11px] font-semibold text-[#16201A] hover:bg-[#FBF9F3]"
+                        >
+                          Leadási csomag megnyitása
+                        </Link>
+                      ) : null}
                       <details className="rounded-[6px] border border-[#DDD7CA] bg-white p-2">
                         <summary className="cursor-pointer text-[11px] font-semibold text-[#1F2821]">Technikai részletek</summary>
                         <div className="mt-2 space-y-1 text-[10px] text-[#7B776D]">
@@ -2041,9 +2063,9 @@ return (
                                   onChange={(e) => updateBlockDraft(blockKey, { status: e.target.value as BlockReviewStatus })}
                                   className="w-full border border-[#DDD7CA] bg-white px-2 py-1 text-xs"
                                 >
-                                  <option value="OK">OK</option>
-                                  <option value="REVIEW_NEEDED">REVIEW_NEEDED</option>
-                                  <option value="RISK_ISSUE">RISK_ISSUE</option>
+                                  <option value="OK">Rendben</option>
+                                  <option value="REVIEW_NEEDED">Review szükséges</option>
+                                  <option value="RISK_ISSUE">Kockázati kérdés</option>
                                 </select>
                               </div>
                               <div className="grid md:grid-cols-[180px_1fr] gap-2 items-center">
