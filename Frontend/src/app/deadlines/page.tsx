@@ -123,6 +123,28 @@ const sourceBadge: Record<DeadlineSourceType, { label: string; bg: string; text:
   "case-level":    { label: "Ügy határidő",   bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
 };
 
+const statusLabel: Record<string, string> = {
+  TODO: "Teendő",
+  ASSIGNED: "Teendő",
+  PENDING: "Teendő",
+  IN_PROGRESS: "Folyamatban",
+  SUBMITTED: "Beküldve",
+  IN_REVIEW: "Review alatt",
+  REVIEW_NEEDED: "Review alatt",
+  REVIEW_SUBMITTED: "Beküldve",
+  COMPLETED: "Kész",
+  DONE: "Kész",
+  APPROVED: "Jóváhagyva",
+  FINALIZED: "Kész",
+  REJECTED: "Visszaküldve",
+  DECLINED: "Visszaküldve",
+  BLOCKED: "Blokkolva",
+  CANCELLED: "Törölve",
+  ARCHIVED: "Archivált",
+  OPEN: "Nyitott",
+  ACTIVE: "Aktív",
+};
+
 export default function DeadlinesPage() {
   return (
     <AuthenticatedApp section="calendar">
@@ -234,7 +256,7 @@ function DeadlinesBoardContent() {
               caseTitle: c.title || "Ügy",
               clientName: c.clientName,
               status: c.status || "OPEN",
-              description: `Ügy állapota: ${c.status || "OPEN"}`,
+              description: `Ügy állapota: ${statusLabel[String(c.status || "").toUpperCase()] || "Ismeretlen állapot"}`,
               link: `/cases/${c.id}`,
               linkLabel: "Ügy megnyitása",
               secondaryLink: undefined,
@@ -275,9 +297,9 @@ function DeadlinesBoardContent() {
   return (
     <div className={`flex-1 overflow-y-auto deadlines-surface ${p.bg}`}>
       <div className="max-w-6xl mx-auto p-8">
-        <h1 className={`text-2xl font-serif ${p.textDark}`}>Határidők</h1>
+        <h1 className={`text-2xl font-serif ${p.textDark}`}>Feladatok és határidők</h1>
         <p className={`text-xs ${p.textMuted} mt-1`}>
-          Rögzített határidős tételek feladatokból és ügyhatáridő rekordokból. Ez nem teljes naptárrendszer, hanem operatív due-date board.
+          Rögzített határidős tételek feladatokból és ügyhatáridő rekordokból. Operatív munkasor, nem teljes naptárszinkron.
         </p>
 
         <div className="mt-5 grid md:grid-cols-4 gap-2 text-[11px]">
@@ -306,7 +328,7 @@ function DeadlinesBoardContent() {
         )}
 
         {isLoading ? (
-          <div className="py-12 text-center text-xs text-[#7B776D]">Határidő board betöltése...</div>
+          <div className="py-12 text-center text-xs text-[#7B776D]">Határidők betöltése…</div>
         ) : items.length === 0 ? (
           <div className="mt-6 p-6 border border-dashed border-[#DDD7CA] bg-[#FAF8F2]">
             <p className="text-sm text-[#514D45]">Nincs rögzített határidős tétel.</p>
@@ -352,7 +374,9 @@ function DeadlinesBoardContent() {
                           <div className="text-right">
                             <p className={`text-[10px] uppercase tracking-[0.15em] ${p.textMuted}`}>{dueLabel(item)}</p>
                             <p className={`text-[11px] ${p.textDark} mt-1`}>{formatDueDate(item.dueDate)}</p>
-                            <p className={`text-[10px] ${p.textMuted} mt-1`}>Státusz: {item.status}</p>
+                            <p className={`text-[10px] ${p.textMuted} mt-1`}>
+                              Státusz: {statusLabel[String(item.status || "").toUpperCase()] || "Ismeretlen állapot"}
+                            </p>
                           </div>
                         </div>
 
@@ -361,6 +385,10 @@ function DeadlinesBoardContent() {
                           {item.secondaryLink && item.secondaryLinkLabel && (
                             <Link href={item.secondaryLink} className={`px-3 py-1.5 text-[11px] border ${p.border} ${p.bgCard} ${p.bgHover}`}>{item.secondaryLinkLabel}</Link>
                           )}
+                          <Link href={`/cases/${item.caseId}/documents`} className={`px-3 py-1.5 text-[11px] border ${p.border} ${p.bgCard} ${p.bgHover}`}>Dokumentumtár</Link>
+                          <Link href={`/documents/compare?caseId=${encodeURIComponent(item.caseId)}`} className={`px-3 py-1.5 text-[11px] border ${p.border} ${p.bgCard} ${p.bgHover}`}>Szerződés-workspace</Link>
+                          <Link href={`/cases/${item.caseId}/communications`} className={`px-3 py-1.5 text-[11px] border ${p.border} ${p.bgCard} ${p.bgHover}`}>Kommunikáció</Link>
+                          <Link href={`/cases/${item.caseId}/handoff`} className={`px-3 py-1.5 text-[11px] border ${p.border} ${p.bgCard} ${p.bgHover}`}>Leadási csomag</Link>
                         </div>
                       </article>
                     ))}

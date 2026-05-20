@@ -58,10 +58,49 @@ const priorityChip: Record<string, string> = {
 
 const statusChip: Record<string, string> = {
   TODO: "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]",
+  ASSIGNED: "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]",
+  PENDING: "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]",
   IN_PROGRESS: "bg-[#DBEAFE] text-[#1D4ED8] border-[#93C5FD]",
   IN_REVIEW: "bg-[#FEF3C7] text-[#92400E] border-[#FCD34D]",
+  SUBMITTED: "bg-[#FEF3C7] text-[#92400E] border-[#FCD34D]",
+  REVIEW_NEEDED: "bg-[#FEF3C7] text-[#92400E] border-[#FCD34D]",
+  REVIEW_SUBMITTED: "bg-[#FEF3C7] text-[#92400E] border-[#FCD34D]",
   DONE: "bg-[#E2EDE5] text-[#23472F] border-[#A6C0AF]",
+  COMPLETED: "bg-[#E2EDE5] text-[#23472F] border-[#A6C0AF]",
+  APPROVED: "bg-[#E2EDE5] text-[#23472F] border-[#A6C0AF]",
+  FINALIZED: "bg-[#E2EDE5] text-[#23472F] border-[#A6C0AF]",
+  REJECTED: "bg-[#FEE2E2] text-[#991B1B] border-[#FCA5A5]",
+  DECLINED: "bg-[#FEE2E2] text-[#991B1B] border-[#FCA5A5]",
   BLOCKED: "bg-[#FEE2E2] text-[#991B1B] border-[#FCA5A5]",
+  CANCELLED: "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]",
+  ARCHIVED: "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]",
+};
+
+const statusLabel: Record<string, string> = {
+  TODO: "Teendő",
+  ASSIGNED: "Teendő",
+  PENDING: "Teendő",
+  IN_PROGRESS: "Folyamatban",
+  IN_REVIEW: "Review alatt",
+  SUBMITTED: "Beküldve",
+  REVIEW_NEEDED: "Review alatt",
+  REVIEW_SUBMITTED: "Beküldve",
+  DONE: "Kész",
+  COMPLETED: "Kész",
+  APPROVED: "Jóváhagyva",
+  FINALIZED: "Kész",
+  REJECTED: "Visszaküldve",
+  DECLINED: "Visszaküldve",
+  BLOCKED: "Blokkolva",
+  CANCELLED: "Törölve",
+  ARCHIVED: "Archivált",
+};
+
+const priorityLabel: Record<string, string> = {
+  URGENT: "Magas",
+  HIGH: "Magas",
+  MEDIUM: "Közepes",
+  LOW: "Alacsony",
 };
 
 export default function TasksPage() {
@@ -277,6 +316,23 @@ function TasksPageContent() {
     }
   };
 
+  const getDueBadge = (dueDate?: string | null) => {
+    if (!dueDate) return null;
+    const due = new Date(dueDate);
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    if (due.getTime() < todayStart.getTime()) {
+      return { label: "lejárt", className: "text-[#B91C1C]" };
+    }
+    if (due.getTime() >= todayStart.getTime() && due.getTime() < tomorrowStart.getTime()) {
+      return { label: "ma esedékes", className: "text-[#B45309]" };
+    }
+    return { label: "határidős", className: "text-[#2C4A35]" };
+  };
+
   const handleReassign = async (taskId: string, newAssigneeId: string) => {
     if (!newAssigneeId) return;
     setIsActionLoading(taskId + "reassign");
@@ -329,9 +385,12 @@ function TasksPageContent() {
         <div className="max-w-5xl mx-auto p-8">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-2xl font-serif text-[#1F2821]">Feladati főkönyv</h1>
+              <h1 className="text-2xl font-serif text-[#1F2821]">Feladatok és határidők</h1>
               <p className="text-xs text-[#7B776D] mt-1">{filteredTasks.length} feladat a szűrés szerint</p>
-              <p className="text-[10px] text-[#9C9890] mt-1">Alapnézet: nyitott (nem lezárt) feladatok, saját feladatokkal kiegészítve.</p>
+              <p className="text-[10px] text-[#9C9890] mt-1">Operatív munkasor: teendők, review alatti elemek és határidős feladatok.</p>
+              {deepLinkedTaskId && (
+                <p className="text-[10px] text-[#8B7355] mt-1">Deep-linkelt feladat nézet aktív.</p>
+              )}
             </div>
             <button
               onClick={() => setShowCreateModal(true)}
@@ -379,7 +438,7 @@ function TasksPageContent() {
                       <td className="px-4 py-3 text-xs text-[#514D45]">{task.case.caseNumber}</td>
                       <td className="px-4 py-3">
                         <span className={`text-[10px] uppercase px-2 py-1 border ${priorityChip[task.priority] || priorityChip.MEDIUM}`}>
-                          {task.priority}
+                          {priorityLabel[String(task.priority || "").toUpperCase()] || "Közepes"}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-xs text-[#514D45]">
@@ -387,7 +446,9 @@ function TasksPageContent() {
                       </td>
                       <td className="px-4 py-3 text-xs text-[#514D45]">{task.assignedTo?.name || "Nincs hozzárendelve"}</td>
                       <td className="px-4 py-3">
-                        <span className={`text-[10px] uppercase px-2 py-1 border ${statusChip[task.status] || statusChip.TODO}`}>{task.status}</span>
+                        <span className={`text-[10px] uppercase px-2 py-1 border ${statusChip[String(task.status || "").toUpperCase()] || statusChip.TODO}`}>
+                          {statusLabel[String(task.status || "").toUpperCase()] || "Ismeretlen állapot"}
+                        </span>
                       </td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         {task.status === "TODO" && (
@@ -396,7 +457,7 @@ function TasksPageContent() {
                             disabled={isActionLoading === task.id + "start"}
                             className="text-[10px] px-2 py-1 bg-[#1A2E21] text-white"
                           >
-                            Start
+                            Indítás
                           </button>
                         )}
                         {task.status === "IN_PROGRESS" && (
@@ -405,7 +466,7 @@ function TasksPageContent() {
                             disabled={isActionLoading === task.id + "submit"}
                             className="text-[10px] px-2 py-1 bg-[#B45309] text-white"
                           >
-                            Submit
+                            Beküldés
                           </button>
                         )}
                         {task.status === "IN_REVIEW" && (
@@ -446,10 +507,16 @@ function TasksPageContent() {
               <div className="space-y-2">
                 <p className="text-sm font-semibold text-[#1F2821]">{selectedTask.title}</p>
                 <p className="text-xs text-[#514D45]">{selectedTask.description || "Nincs részletes leírás"}</p>
-                <p className="text-[11px] text-[#7B776D]">Prioritás: {selectedTask.priority}</p>
-                <p className="text-[11px] text-[#7B776D]">
-                  Határidő: {selectedTask.dueDate ? new Date(selectedTask.dueDate).toLocaleDateString("hu-HU") : "Nincs határidő"}
-                </p>
+                        <p className="text-[11px] text-[#7B776D]">Prioritás: {priorityLabel[String(selectedTask.priority || "").toUpperCase()] || "Közepes"}</p>
+                        <p className="text-[11px] text-[#7B776D]">Státusz: {statusLabel[String(selectedTask.status || "").toUpperCase()] || "Ismeretlen állapot"}</p>
+                        <p className="text-[11px] text-[#7B776D]">
+                          Határidő: {selectedTask.dueDate ? new Date(selectedTask.dueDate).toLocaleDateString("hu-HU") : "Nincs határidő"}
+                        </p>
+                        {(() => {
+                          const dueBadge = getDueBadge(selectedTask.dueDate);
+                          if (!dueBadge) return null;
+                          return <p className={`text-[11px] font-semibold ${dueBadge.className}`}>{dueBadge.label}</p>;
+                        })()}
                 <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mt-3">
                   Átadás
                   <select
@@ -531,7 +598,30 @@ function TasksPageContent() {
             <div className="space-y-1">
               <Link href="/reviews" className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Review sor</Link>
               <Link href="/notifications" className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Értesítések</Link>
-              <Link href="/documents/compare" className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Dokumentum összevetés</Link>
+              <Link
+                href={selectedTask ? `/documents/compare?caseId=${encodeURIComponent(selectedTask.case.id)}` : "/documents/compare"}
+                className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
+              >
+                Szerződés-workspace
+              </Link>
+              <Link
+                href={selectedTask ? `/cases/${selectedTask.case.id}/documents` : "/cases"}
+                className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
+              >
+                Dokumentumtár
+              </Link>
+              <Link
+                href={selectedTask ? `/cases/${selectedTask.case.id}/communications` : "/cases"}
+                className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
+              >
+                Kommunikáció
+              </Link>
+              <Link
+                href={selectedTask ? `/cases/${selectedTask.case.id}/handoff` : "/cases"}
+                className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
+              >
+                Leadási csomag
+              </Link>
               <Link href="/time-entries" className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Munkaórák</Link>
             </div>
           </div>
