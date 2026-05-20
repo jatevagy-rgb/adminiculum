@@ -34,6 +34,17 @@ const formatDateTime = (iso: string) => {
   }
 };
 
+const resolveLinkContextLabel = (link?: string | null): string => {
+  if (!link) return "Kapcsolódó elem nem elérhető";
+  if (/^\/cases\/[^/]+\/documents/.test(link)) return "Kapcsolódó dokumentum";
+  if (/^\/cases\/[^/]+\/handoff/.test(link)) return "Kapcsolódó leadási csomag";
+  if (/^\/cases\/[^/]+$/.test(link)) return "Kapcsolódó ügy";
+  if (/^\/documents\/compare/.test(link)) return "Kapcsolódó workspace";
+  if (/^\/reviews/.test(link)) return "Kapcsolódó review";
+  if (/^\/time-entries/.test(link)) return "Kapcsolódó munkaóra";
+  return "Kapcsolódó elem";
+};
+
 export default function NotificationsPage() {
   return (
     <AuthenticatedApp section="notifications">
@@ -125,7 +136,7 @@ function NotificationsPageContent() {
             <h1 className="text-2xl text-[#1F3B2D]" style={{ fontFamily: "var(--font-newsreader)" }}>
               Értesítések
             </h1>
-            <p className="mt-1 text-sm text-[#5D6B62]">In-app értesítési központ dedikált értesítési adatokkal.</p>
+            <p className="mt-1 text-sm text-[#5D6B62]">Munkajelzések ügyekhez, dokumentumokhoz és review feladatokhoz.</p>
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full border border-[#D8CDB6] bg-[#FAF5EA] px-3 py-1 text-xs font-semibold text-[#5A4A2A]">
@@ -147,7 +158,7 @@ function NotificationsPageContent() {
         ) : error ? (
           <p className="py-8 text-sm text-[#8F3D32]">{error}</p>
         ) : sortedNotifications.length === 0 ? (
-          <p className="py-8 text-sm text-[#5D6B62]">Nincs új értesítés</p>
+          <p className="py-8 text-sm text-[#5D6B62]">Nincs új értesítés.</p>
         ) : (
           <ul className="mt-4 space-y-3">
             {sortedNotifications.map((item) => (
@@ -173,6 +184,7 @@ function NotificationsPageContent() {
                     </div>
                     <p className="text-sm font-semibold text-[#1F3B2D]">{item.title}</p>
                     <p className="text-sm text-[#4F5A50]">{item.message}</p>
+                    <p className="text-[11px] text-[#7C807A]">{resolveLinkContextLabel(item.link)}</p>
                     <p className="text-xs text-[#7C807A]">{formatDateTime(item.createdAt)}</p>
                   </div>
 
