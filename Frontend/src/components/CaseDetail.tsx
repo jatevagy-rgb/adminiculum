@@ -52,6 +52,49 @@ const docStatusBadge: Record<string, string> = {
   'Review Needed': 'bg-[#FEF2F2] text-[#DC2626] border-[#FECACA]',
   'Archived': 'bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]',
 };
+
+const TASK_STATUS_LABELS: Record<string, string> = {
+  TODO: "Teendő",
+  ASSIGNED: "Teendő",
+  PENDING: "Teendő",
+  IN_PROGRESS: "Folyamatban",
+  SUBMITTED: "Beküldve",
+  COMPLETED: "Kész",
+  APPROVED: "Kész",
+  REJECTED: "Elutasítva",
+  DECLINED: "Elutasítva",
+  BLOCKED: "Blokkolva",
+  CANCELLED: "Törölve",
+};
+
+const TASK_PRIORITY_LABELS: Record<string, string> = {
+  HIGH: "Magas",
+  MEDIUM: "Közepes",
+  LOW: "Alacsony",
+};
+
+const getTaskStatusLabel = (status?: string | null): string => {
+  const key = String(status || "").toUpperCase();
+  return TASK_STATUS_LABELS[key] || status || "Ismeretlen";
+};
+
+const getTaskPriorityLabel = (priority?: string | null): string => {
+  const key = String(priority || "").toUpperCase();
+  return TASK_PRIORITY_LABELS[key] || priority || "Nincs";
+};
+
+const getTaskDueDateTone = (dueDate?: string | null): string => {
+  if (!dueDate) return "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]";
+  const due = new Date(dueDate);
+  if (Number.isNaN(due.getTime())) return "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]";
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const tomorrowStart = todayStart + 24 * 60 * 60 * 1000;
+  const dueTs = due.getTime();
+  if (dueTs < todayStart) return "bg-[#FEF2F2] text-[#8b3a3a] border-[#d4b8b8]";
+  if (dueTs < tomorrowStart) return "bg-[#fff8e1] text-[#8a6a00] border-[#f9c74f]";
+  return "bg-[#E2EDE5] text-[#23472F] border-[#A6C0AF]";
+};
 export function CaseDetail({ params }: CaseDetailProps) {
   const resolvedParams = use(params);
   const router = useRouter();
@@ -1492,12 +1535,24 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     <div key={task.id} className="rounded border border-[#DDD7CA] bg-[#FBF6E7] p-3">
                       <p className="text-xs font-semibold text-[#1F2821]">{task.title}</p>
                       <p className="mt-1 text-[10px] text-[#7B776D]">Felelős: {task.assignedTo?.name || "Nincs kijelölve"}</p>
-                      <p className="mt-1 text-[10px] text-[#7B776D]">Státusz: {task.status}{task.dueDate ? ` · határidő: ${new Date(task.dueDate).toLocaleDateString('hu-HU')}` : ""}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <span className="text-[9px] px-1.5 py-0.5 rounded border bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]">
+                          Státusz: {getTaskStatusLabel(task.status)}
+                        </span>
+                        {task.dueDate ? (
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded border ${getTaskDueDateTone(task.dueDate)}`}>
+                            Határidő: {new Date(task.dueDate).toLocaleDateString('hu-HU')}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="rounded border border-dashed border-[#DDD7CA] p-3 text-[11px] text-[#9C9890]">Ehhez az ügyhöz nincs rögzített munkaterv.</p>
+                <div className="rounded border border-dashed border-[#DDD7CA] p-3">
+                  <p className="text-[11px] text-[#9C9890]">Még nincs munkaterv rögzítve.</p>
+                  <p className="mt-1 text-[10px] text-[#9C9890]">Új ügy létrehozásakor vagy későbbi patchben adható hozzá.</p>
+                </div>
               )}
             </div>
 
@@ -1750,17 +1805,19 @@ export function CaseDetail({ params }: CaseDetailProps) {
                             </svg>
                             <div className="min-w-0">
                               <p className="text-xs text-[#1F2821] truncate font-medium">{task.title}</p>
-                              <p className="text-[10px] text-[#9C9890]">
+                              <p className="text-[10px] text-[#9C9890] mt-0.5">
                                 {task.priority && (
                                   <span className={`inline-block mr-2 ${
                                     task.priority === 'HIGH' ? 'text-[#DC2626]' :
                                     task.priority === 'MEDIUM' ? 'text-[#D97706]' : 'text-[#059669]'
                                   }`}>
-                                    {task.priority}
+                                    Prioritás: {getTaskPriorityLabel(task.priority)}
                                   </span>
                                 )}
                                 {task.dueDate && (
-                                  <span>Határidő: {new Date(task.dueDate).toLocaleDateString('hu-HU')}</span>
+                                  <span className={`inline-block px-1.5 py-0.5 rounded border ${getTaskDueDateTone(task.dueDate)}`}>
+                                    Határidő: {new Date(task.dueDate).toLocaleDateString('hu-HU')}
+                                  </span>
                                 )}
                               </p>
                               {task.assignedTo && (
@@ -1777,7 +1834,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                             task.status === 'SUBMITTED' ? 'bg-[#EDE9FE] text-[#5B21B6] border-[#C4B5FD]' :
                             'bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]'
                           }`}>
-                            {task.status}
+                            {getTaskStatusLabel(task.status)}
                           </span>
                         </div>
                         <div className="mt-2 flex items-center gap-2 flex-wrap">
@@ -1819,9 +1876,12 @@ export function CaseDetail({ params }: CaseDetailProps) {
                             </>
                           )}
                           {(task.status === 'TODO' || task.status === 'ASSIGNED' || task.status === 'IN_PROGRESS') && (
-                            <span className="text-[9px] px-2 py-1 border border-[#DDD7CA] text-[#9C9890] rounded">
-                              Újraosztás a feladattábláról
-                            </span>
+                            <details className="text-[9px] text-[#9C9890]">
+                              <summary className="cursor-pointer">További műveletek</summary>
+                              <p className="mt-1 px-2 py-1 border border-[#DDD7CA] rounded">
+                                Újraosztás és határidő módosítása a feladattábláról érhető el.
+                              </p>
+                            </details>
                           )}
                         </div>
                       </div>
@@ -1837,7 +1897,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     <svg className="w-8 h-8 mx-auto text-[#9C9890] mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                     </svg>
-                    <p className="text-xs text-[#9C9890]">Nincs feladat ehhez az ügyhöz</p>
+                    <p className="text-xs text-[#9C9890]">Még nincs nyitott feladat ehhez az ügyhöz.</p>
                   </div>
                 )}
               </div>
