@@ -3408,4 +3408,67 @@ export async function reviewHandoffPackage(
   );
 }
 
+// ============================================================================
+// Notifications
+// ============================================================================
+
+export type NotificationType =
+  | 'TASK_ASSIGNED'
+  | 'TASK_DUE_SOON'
+  | 'TASK_OVERDUE'
+  | 'CASE_ASSIGNED'
+  | 'CASE_STATUS_CHANGED'
+  | 'DOCUMENT_UPLOADED'
+  | 'DOCUMENT_APPROVED'
+  | 'COMMENT_ADDED'
+  | 'REVIEW_REQUESTED'
+  | 'REVIEW_COMPLETED'
+  | 'TIME_LOGGED'
+  | 'SYSTEM';
+
+export interface NotificationItem {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  link?: string | null;
+  isRead: boolean;
+  userId: string;
+  createdAt: string;
+}
+
+export interface NotificationsResponse {
+  notifications: NotificationItem[];
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+  };
+}
+
+export async function getNotifications(limit = 50, offset = 0): Promise<NotificationsResponse> {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  params.set('offset', String(offset));
+  return fetchApi<NotificationsResponse>(`/notifications?${params.toString()}`);
+}
+
+export async function getUnreadNotificationsCount(): Promise<{ unreadCount: number }> {
+  return fetchApi<{ unreadCount: number }>('/notifications/unread-count');
+}
+
+export async function markNotificationRead(notificationId: string): Promise<NotificationItem> {
+  return fetchApi<NotificationItem>(`/notifications/${encodeURIComponent(notificationId)}/read`, {
+    method: 'PATCH',
+    body: JSON.stringify({}),
+  });
+}
+
+export async function markAllNotificationsRead(): Promise<{ updatedCount: number }> {
+  return fetchApi<{ updatedCount: number }>('/notifications/read-all', {
+    method: 'PATCH',
+    body: JSON.stringify({}),
+  });
+}
+
 export { fetchApi, ApiError };

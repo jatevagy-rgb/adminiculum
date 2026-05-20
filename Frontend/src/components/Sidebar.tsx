@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { navItems } from "@/lib/mockData";
 import { useRouter } from "next/navigation";
 import type { UiPackId } from "@/lib/uiPack";
+import { getUnreadNotificationsCount } from "@/lib/api";
 
 type SidebarProps = {
   activeItem: string;
@@ -104,6 +105,7 @@ const navGroups: Array<{ id: string; label: string; items: string[] }> = [
 export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_ops_atelier" }: SidebarProps) {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const isSignal = uiPack === "signal_tiles_console";
   const isCaseActive = activeItem === "cases" || activeItem === "case-detail" || activeItem === "generation";
   const isClauseLibraryActive = activeItem === "clause-library";
@@ -134,6 +136,24 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
     } catch {
       // ignore
     }
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadUnread = async () => {
+      try {
+        const result = await getUnreadNotificationsCount();
+        if (mounted) {
+          setUnreadNotifications(result.unreadCount);
+        }
+      } catch {
+        // ignore notification badge failures in sidebar
+      }
+    };
+    void loadUnread();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const toggleCollapsed = () => {
@@ -200,7 +220,16 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
                   title={nav.label}
                 >
                   <span className={isActive ? (isSignal ? 'text-[#22D3EE]' : 'text-[#C9A227]') : 'text-inherit'}>{iconFor(nav.icon)}</span>
-                  {!collapsed && nav.label}
+                  {!collapsed && (
+                    <>
+                      <span>{nav.label}</span>
+                      {nav.id === "notifications" && unreadNotifications > 0 ? (
+                        <span className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-semibold ${isSignal ? "bg-[#22D3EE] text-[#0B1220]" : "bg-[#C9A227] text-[#2D2A26]"}`}>
+                          {unreadNotifications}
+                        </span>
+                      ) : null}
+                    </>
+                  )}
                 </button>
               );
             })}
