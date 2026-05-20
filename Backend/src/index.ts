@@ -262,6 +262,12 @@ app.use('/api/v1/timesheet-reports', timesheetReportRoutes);
 import handoffPackagesRoutes from './modules/handoff-packages/routes';
 app.use('/api/v1', handoffPackagesRoutes);
 
+import notificationsRoutes from './modules/notifications/routes';
+app.use('/api/v1/notifications', notificationsRoutes);
+
+import sharepointRoutes from './modules/sharepoint/routes';
+app.use('/api/v1/sharepoint', sharepointRoutes);
+
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ message: 'Endpoint not found' });
 });
