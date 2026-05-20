@@ -820,6 +820,16 @@ const editorStatusLabel =
             : documentTextReason
               ? `Nincs kinyert dokumentumszöveg — ${documentTextReason}`
               : "Nincs betöltött dokumentumszöveg";
+  const activeCaseId = selectedDocument?.caseId || requestedCaseId;
+  const workspaceBacklinkStatusLabel = isDocumentTextLoading
+    ? "Szöveg betöltése…"
+    : documentText
+      ? isModifiedWorkingCopy
+        ? "Mentett módosított munkapéldány"
+        : "Valós kinyert dokumentumszöveg"
+      : "Nincs kinyert dokumentumszöveg";
+  const workspaceBacklinkStatusTone: "green" | "gold" | "blue" =
+    isDocumentTextLoading ? "blue" : documentText ? "green" : "gold";
 
   const formatDraftForPreview = (value: string) =>
     value
@@ -1138,6 +1148,31 @@ return (
           <header className="border border-[#DDD7CA] bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0 space-y-3">
+                <div className="rounded-[6px] border border-[#E6DDC7] bg-[#FBF6E7] p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {activeCaseId ? (
+                      <>
+                        <Link
+                          href={`/cases/${encodeURIComponent(activeCaseId)}`}
+                          className="inline-flex items-center justify-center rounded-[5px] border border-[#1F4A33] bg-[#1F4A33] px-3 py-1.5 text-[11px] font-semibold leading-none text-white transition-colors hover:bg-[#2A5C44]"
+                        >
+                          ← Vissza az ügyhöz
+                        </Link>
+                        <Link
+                          href={`/cases/${encodeURIComponent(activeCaseId)}/documents`}
+                          className="inline-flex items-center justify-center rounded-[5px] border border-[#C8B98A] bg-white px-3 py-1.5 text-[11px] font-semibold leading-none text-[#16201A] transition-colors hover:bg-[#F6F2E8]"
+                        >
+                          ← Vissza a Dokumentumtárba
+                        </Link>
+                      </>
+                    ) : null}
+                    <span className="max-w-full truncate text-xs font-semibold text-[#1F2821]">{getWorkspaceDocumentTitle()}</span>
+                    <AdminStatusPill tone={workspaceBacklinkStatusTone}>{workspaceBacklinkStatusLabel}</AdminStatusPill>
+                  </div>
+                  {isModifiedWorkingCopy ? (
+                    <p className="mt-2 text-[11px] text-[#3D4842]">Szöveges munkapéldány. Nem Word változáskövetés.</p>
+                  ) : null}
+                </div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7B776D]">
                   Ügyeim › {selectedDocument?.caseClientName || selectedDocument?.caseTitle || "Ügy"} › Szerződés-workspace
                 </p>
