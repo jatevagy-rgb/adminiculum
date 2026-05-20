@@ -73,6 +73,33 @@ const TASK_PRIORITY_LABELS: Record<string, string> = {
   LOW: "Alacsony",
 };
 
+const CASE_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Piszkozat",
+  ACTIVE: "Aktív",
+  IN_REVIEW: "Review alatt",
+  SUBMITTED: "Beküldve",
+  APPROVED: "Jóváhagyva",
+  ARCHIVED: "Archivált",
+};
+
+const WORKFLOW_STATUS_LABELS: Record<string, string> = {
+  TODO: "Teendő",
+  ASSIGNED: "Teendő",
+  PENDING: "Teendő",
+  IN_PROGRESS: "Folyamatban",
+  SUBMITTED: "Beküldve",
+  REVIEW_NEEDED: "Review alatt",
+  COMPLETED: "Kész",
+  APPROVED: "Jóváhagyva",
+  FINALIZED: "Véglegesítve",
+  REJECTED: "Visszaküldve",
+  BLOCKED: "Blokkolva",
+  CANCELLED: "Törölve",
+  ACTIVE: "Aktív",
+  ARCHIVED: "Archivált",
+  DRAFT: "Piszkozat",
+};
+
 const getTaskStatusLabel = (status?: string | null): string => {
   const key = String(status || "").toUpperCase();
   return TASK_STATUS_LABELS[key] || status || "Ismeretlen";
@@ -81,6 +108,16 @@ const getTaskStatusLabel = (status?: string | null): string => {
 const getTaskPriorityLabel = (priority?: string | null): string => {
   const key = String(priority || "").toUpperCase();
   return TASK_PRIORITY_LABELS[key] || priority || "Nincs";
+};
+
+const getCaseStatusLabel = (status?: string | null): string => {
+  const key = String(status || "").toUpperCase();
+  return CASE_STATUS_LABELS[key] || "Ismeretlen állapot";
+};
+
+const getWorkflowStatusLabel = (status?: string | null): string => {
+  const key = String(status || "").toUpperCase();
+  return WORKFLOW_STATUS_LABELS[key] || "Ismeretlen állapot";
 };
 
 const getTaskDueDateTone = (dueDate?: string | null): string => {
@@ -990,10 +1027,10 @@ export function CaseDetail({ params }: CaseDetailProps) {
   const hasMoreDocs = documents.length > 3;
 
   const displayCaseNumber = caseRecord?.caseNumber || resolvedParams.caseId;
-  const displayTitle = (caseRecord?.title && caseRecord.title !== 'null - null' && caseRecord.title !== 'null' && caseRecord.title !== 'undefined - undefined') ? caseRecord.title : 'Case title unavailable';
-  const displayClient = caseRecord?.clientName && caseRecord.clientName !== 'null' && caseRecord.clientName !== 'undefined' ? caseRecord.clientName : 'Client unavailable';
-  const displayMatterType = caseRecord?.matterType || 'Matter type unavailable';
-  const displayRiskLevel = 'Unavailable';
+  const displayTitle = (caseRecord?.title && caseRecord.title !== 'null - null' && caseRecord.title !== 'null' && caseRecord.title !== 'undefined - undefined') ? caseRecord.title : 'Nincs megadott ügycím';
+  const displayClient = caseRecord?.clientName && caseRecord.clientName !== 'null' && caseRecord.clientName !== 'undefined' ? caseRecord.clientName : 'Nincs megadott ügyfél';
+  const displayMatterType = caseRecord?.matterType || 'Nincs megadott ügytípus';
+  const displayRiskLevel = 'Nem elérhető';
 
   // Workflow context (truthful derivation from existing task/history data)
   const activeWorkflowTasks = tasks.filter(
@@ -1066,7 +1103,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-[9px] uppercase tracking-[0.35em] text-[#1F4A33] px-2 py-1 bg-[#F2E4BD]">Ügy munkaterület</span>
                 <span className={`text-[9px] uppercase tracking-[0.35em] px-2 py-1 border ${statusChip[caseRecord?.status || 'Draft'] || 'bg-[#EFE9DC] text-[#6B675D] border-[#D7D0C3]'}`}>
-                  {caseRecord?.status || 'Unavailable'}
+                  {getCaseStatusLabel(caseRecord?.status)}
                 </span>
               </div>
               <h1 className="text-3xl font-serif text-[#1F2821] leading-tight">{displayTitle}</h1>
@@ -1354,6 +1391,19 @@ export function CaseDetail({ params }: CaseDetailProps) {
                   </div>
                   <p className="text-xs font-semibold text-[#1F2821]">Munkaórák</p>
                   <p className="text-[10px] text-[#7B776D] mt-1">{isArchived ? 'Archivált ügy - csak megtekintés' : 'Rögzített munkaórák megnyitása'}</p>
+                </button>
+                <button
+                  onClick={() => router.push(`/cases/${canonicalCaseId}/handoff`)}
+                  className={`p-4 border bg-white text-left transition-colors ${isArchived ? 'border-[#E5E7EB] opacity-50' : 'border-[#DDD7CA] hover:bg-[#FBF9F3]'}`}
+                >
+                  <div className={`w-8 h-8 rounded flex items-center justify-center mb-3 ${isArchived ? 'bg-[#9CA3AF]' : 'bg-[#1F4A33]'}`}>
+                    <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 3.75v1.5m-9-1.5v1.5m-3 3h15M4.5 19.5h15a.75.75 0 00.75-.75V8.25a.75.75 0 00-.75-.75h-15a.75.75 0 00-.75.75v10.5c0 .414.336.75.75.75z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 14.25l2.25 2.25L15 12.75" />
+                    </svg>
+                  </div>
+                  <p className="text-xs font-semibold text-[#1F2821]">Leadási csomag</p>
+                  <p className="text-[10px] text-[#7B776D] mt-1">{isArchived ? 'Archivált ügy - csak megtekintés' : 'Ügyvédi review-ra előkészített csomagok'}</p>
                 </button>
               </div>
             </div>
@@ -1983,9 +2033,9 @@ export function CaseDetail({ params }: CaseDetailProps) {
                               {latest.createdAt ? new Date(latest.createdAt).toLocaleDateString('hu-HU') : ''}
                             </span>
                           </div>
-                          <p className="text-xs text-[#1F2821] font-medium truncate">{latest.subject || 'No subject'}</p>
+                          <p className="text-xs text-[#1F2821] font-medium truncate">{latest.subject || 'Nincs tárgy'}</p>
                           <p className="text-[10px] text-[#7B776D] mt-1">
-                            {latest.senderName || 'Unknown sender'}
+                            {latest.senderName || 'Ismeretlen feladó'}
                           </p>
                         </div>
                       );
@@ -2045,7 +2095,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#6366F1]">Munkafolyamat</h3>
                   {workflowGraph && (
-                    <span className="text-[10px] text-[#9C9890]">{workflowGraph.currentStatus}</span>
+                    <span className="text-[10px] text-[#9C9890]">{getWorkflowStatusLabel(workflowGraph.currentStatus)}</span>
                   )}
                 </div>
                 {isLoadingWorkflow ? (
@@ -2098,7 +2148,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                               disabled={isTransitioning || isArchived}
                               className="text-[9px] px-2 py-1 bg-[#6366F1] text-white rounded hover:bg-[#4F46E5] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
-                              {isTransitioning ? '...' : status}
+                              {isTransitioning ? '...' : getWorkflowStatusLabel(status)}
                             </button>
                           ))}
                         </div>
@@ -2123,7 +2173,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                   <div className="flex items-start justify-between gap-3 text-[10px]">
                     <span className="text-[#7B776D]">Aktuális lépés</span>
                     <span className="text-right text-[#1F2821] font-medium">
-                      {currentWorkflowNode?.label || workflowGraph?.currentStatus || 'Nem elérhető'}
+                      {currentWorkflowNode?.label || getWorkflowStatusLabel(workflowGraph?.currentStatus) || 'Nem elérhető'}
                     </span>
                   </div>
 
