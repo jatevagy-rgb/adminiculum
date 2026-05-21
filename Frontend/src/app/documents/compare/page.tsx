@@ -289,6 +289,7 @@ const [isLoadingHouseStyle, setIsLoadingHouseStyle] = useState(false);
   const [houseStyleNotice, setHouseStyleNotice] = useState<string | null>(null);
   const [isSavingWorkspace, setIsSavingWorkspace] = useState(false);
   const [workspaceSaveState, setWorkspaceSaveState] = useState<{ type: "success" | "error" | null; message: string }>({ type: null, message: "" });
+  const [workspaceViewMode, setWorkspaceViewMode] = useState<"edit" | "compare">("edit");
 
   type ScopedCase = {
     id: string;
@@ -889,6 +890,10 @@ const filteredClauseTools = useMemo(() => {
     }
   }, [effectiveWorkspaceText, editorTouched]);
 
+  useEffect(() => {
+    setWorkspaceViewMode("edit");
+  }, [selectedDocumentId]);
+
   const getWorkspaceDocumentTitle = () => selectedDocument?.fileName || selectedDocument?.title || "Nincs kiválasztott dokumentum";
 
   const selectedCaseClientId = selectedDocument ? caseSummaries[selectedDocument.caseId]?.case?.clientId : undefined;
@@ -911,6 +916,15 @@ const filteredClauseTools = useMemo(() => {
 
   const focusToolSearch = () => {
     toolSearchRef.current?.focus();
+  };
+
+  const activateCompareMode = () => {
+    setWorkspaceViewMode("compare");
+    if (!selectedBaseline) {
+      setEditorNotice("Nincs összevetési alap. Válassz korábbi verziót vagy ments egy módosított munkapéldányt.");
+      return;
+    }
+    globalThis.document.getElementById("version-compare-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const insertClauseIntoDraft = (clauseText: string) => {
@@ -1146,7 +1160,7 @@ const filteredClauseTools = useMemo(() => {
 
       if (segment.type === 'insert' && mode === 'target') {
         return (
-          <span key={`${segment.type}-${index}`} className="bg-[#d9ecff] text-[#143d66] underline">
+          <span key={`${segment.type}-${index}`} className="bg-[#dff1df] text-[#1e6a34] underline">
             {segment.text}
           </span>
         );
@@ -1273,14 +1287,36 @@ return (
                   {isSavingWorkspace ? "Mentés..." : "Módosított verzió mentése"}
                 </AdminButton>
                 <AdminButton
-                  onClick={() => globalThis.document.getElementById("version-compare-panel")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                  variant="muted"
-                  title="Az összevetés a lenti összevetési panelen érhető el."
-                  disabled={!selectedBaseline}
+                  onClick={activateCompareMode}
+                  variant={workspaceViewMode === "compare" ? "primary" : "muted"}
+                  title="Adminiculumon belüli szöveg-összevetés. Nem Word változáskövetés."
                 >
-                  {selectedBaseline ? "Verziók összevetése" : "Nincs összevetési alap"}
+                  {workspaceViewMode === "compare" ? "Összevetés mód aktív" : "Verziók összevetése"}
                 </AdminButton>
               </div>
+            </div>
+            <div className="mt-3 grid gap-2 rounded-[8px] border border-[#D8CFB6] bg-white p-3 md:grid-cols-[1fr_auto]">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#514D45]">
+                <span className="font-semibold text-[#1F2821]">Dokumentum:</span>
+                <span className="truncate max-w-[320px]">{getWorkspaceDocumentTitle()}</span>
+                <span>• {getWorkspaceDocumentKindLabel()}</span>
+                <span>• {workspaceBacklinkStatusLabel}</span>
+                <span>• v{selectedDocument?.revisionNumber || 1}</span>
+                <span>• {selectedDocument?.caseNumber || "Nincs ügyazonosító"}</span>
+              </div>
+              <details className="rounded-[5px] border border-[#EEE7D9] bg-[#FBF9F3] px-2 py-1">
+                <summary className="cursor-pointer text-[10px] font-semibold text-[#514D45]">Technikai részletek</summary>
+                <div className="mt-2 space-y-2">
+                  <button onClick={() => selectedDocument && handleDownload(selectedDocument)} className="w-full rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-[10px] hover:bg-[#FBF9F3]">
+                    Dokumentum letöltése
+                  </button>
+                  {selectedBaseline ? (
+                    <button onClick={() => handleDownload(selectedBaseline)} className="w-full rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-[10px] hover:bg-[#FBF9F3]">
+                      Alapdokumentum letöltése
+                    </button>
+                  ) : null}
+                </div>
+              </details>
             </div>
           </header>
 
@@ -1673,8 +1709,8 @@ return (
                   ) : null}
 
                 <div className="bg-[#F3EBD4] px-3 py-5 sm:px-6 lg:px-8 xl:px-12">
-                    <div className="mx-auto flex w-full max-w-[1400px] items-start gap-4">
-                    <div className="min-h-[760px] flex-1 border border-[rgba(22,32,26,0.14)] bg-white px-6 py-8 shadow-[0_18px_50px_rgba(22,32,26,0.14)] sm:px-12 lg:px-20 xl:px-28">
+                    <div className="mx-auto w-full max-w-[1680px]">
+                    <div className="min-h-[760px] border border-[rgba(22,32,26,0.14)] bg-white px-6 py-8 shadow-[0_18px_50px_rgba(22,32,26,0.14)] sm:px-12 lg:px-20 xl:px-32">
                       <div className="border-b border-[#EEE7D9] pb-4">
                         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Helyi munkapéldány</p>
                         <h3 className="mt-2 break-words font-serif text-2xl font-medium leading-tight text-[#1F2821]">{getWorkspaceDocumentTitle()}</h3>
@@ -1694,7 +1730,7 @@ return (
                               setEditorTouched(true);
                             }}
                             placeholder="Itt jelenik meg a valós kinyert dokumentumszöveg, az anonimizált szöveg vagy a helyi munkapéldány."
-                            className="min-h-[600px] w-full resize-y border-0 bg-white p-0 font-serif text-[15px] leading-8 text-[#1F2821] outline-none placeholder:text-[#A6AEA3] focus:ring-0"
+                            className="min-h-[680px] w-full resize-y border-0 bg-white p-0 font-serif text-[17px] leading-9 text-[#1F2821] outline-none placeholder:text-[#A6AEA3] focus:ring-0"
                           />
                           {isDraftPreviewTruncated ? (
                             <p className="mt-3 text-[11px] text-[#7B776D]">A hosszú dokumentum előnézete rövidítve jelenik meg.</p>
@@ -1726,39 +1762,15 @@ return (
                         </div>
                       )}
                     </div>
-                    <aside className="hidden w-[290px] shrink-0 space-y-2 rounded-[8px] border border-[#D8CFB6] bg-[#FBF6E7] p-3 xl:block">
-                      <h3 className="font-serif text-lg font-medium text-[#1F2821]">Dokumentum adatai</h3>
-                      <div className="space-y-1 text-[11px] text-[#514D45]">
-                        <p><span className="font-semibold text-[#1F2821]">Név:</span> {getWorkspaceDocumentTitle()}</p>
-                        <p><span className="font-semibold text-[#1F2821]">Szövegstátusz:</span> {workspaceTextSourceLabel}</p>
-                        <p><span className="font-semibold text-[#1F2821]">Verzió:</span> v{selectedDocument.revisionNumber || 1}</p>
-                      </div>
-                      {activeCaseId ? (
-                        <Link
-                          href={`/cases/${encodeURIComponent(activeCaseId)}/handoff`}
-                          className="block rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-center text-[11px] font-semibold text-[#16201A] hover:bg-[#FBF9F3]"
-                        >
-                          Leadási csomag megnyitása
-                        </Link>
-                      ) : null}
-                      <details className="rounded-[6px] border border-[#DDD7CA] bg-white p-2">
-                        <summary className="cursor-pointer text-[11px] font-semibold text-[#1F2821]">Technikai részletek</summary>
-                        <div className="mt-2 space-y-1 text-[10px] text-[#7B776D]">
-                          <p>Dokumentum ID: {selectedDocument.id}</p>
-                          <p>Ügy ID: {selectedDocument.caseId}</p>
-                          <p>Forrás: {selectedDocument.source === "GENERATED" ? "Generált" : "Feltöltött"}</p>
-                        </div>
-                      </details>
-                    </aside>
-                    </div>
                   </div>
+                </div>
                 </section>
 
-                <section id="version-compare-panel" className="scroll-mt-4 rounded-[10px] border border-[#D8CFB6] bg-white p-4">
+                <section id="version-compare-panel" className={`scroll-mt-4 rounded-[10px] border bg-white p-4 ${workspaceViewMode === "compare" ? "border-[#B58A2A] ring-2 ring-[#F2E4BD]" : "border-[#D8CFB6]"}`}>
                 <div className="flex items-center justify-between gap-4 mb-3">
                   <div>
                     <h2 className="text-sm font-semibold text-[#1F2821]">Verziók és összevetés</h2>
-                    <p className="mt-1 text-[11px] text-[#7B776D]">A fő szerkesztőtől elkülönített ellenőrző blokk.</p>
+                    <p className="mt-1 text-[11px] text-[#7B776D]">Ez Adminiculumon belüli szöveg-összevetés, nem Word változáskövetés.</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -1860,9 +1872,9 @@ return (
                     <p className="text-[10px] uppercase text-[#7B776D]">Összevetési alapdokumentum</p>
                     {!selectedBaseline ? (
                       <div className="mt-2 space-y-1">
-                        <p className="text-xs text-[#9C9890]">Nincs kiválasztott baseline dokumentum.</p>
+                        <p className="text-xs text-[#9C9890]">Nincs összevetési alap.</p>
                         <p className="text-[11px] text-[#7B776D]">
-                          Szöveg-összevetéshez válassz egy előző verziót, majd a blokk-szintű panelen jelennek meg a módosítások.
+                          Válassz korábbi verziót vagy ments egy módosított munkapéldányt.
                         </p>
                       </div>
                     ) : (
@@ -2035,7 +2047,7 @@ return (
                             : block.status === "modified"
                               ? "bg-[#fff1c2] text-[#6a4b00]"
                               : block.status === "added"
-                                ? "bg-[#d9ecff] text-[#143d66]"
+                                ? "bg-[#dff1df] text-[#1e6a34]"
                                 : "bg-[#ffe0de] text-[#7a1e1e]";
 
                         return (
@@ -2124,66 +2136,6 @@ return (
         </div>
       </main>
 
-<aside className="hidden w-64 shrink-0 border-l border-[#D8CFB6] bg-[#FBF6E7] xl:block xl:overflow-y-auto">
-        <div className="space-y-3 p-4">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-[#7B776D]">Dokumentum információ</p>
-          <div className="space-y-1">
-            <p className="text-[10px] text-[#7B776D]">Dokumentum</p>
-            <p className="text-[11px] font-semibold text-[#1F2821] truncate">{getWorkspaceDocumentTitle()}</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[10px] text-[#7B776D]">Típus</p>
-            <AdminBadge tone={selectedDocument?.kind === "contract" ? "green" : "gold"}>{getWorkspaceDocumentKindLabel()}</AdminBadge>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[10px] text-[#7B776D]">Szöveg státusz</p>
-            <AdminStatusPill tone={isDocumentTextLoading ? "blue" : hasWorkspaceText ? "green" : "amber"}>
-              {isDocumentTextLoading
-                ? "Betöltés…"
-                : hasWorkspaceText
-                  ? "Elérhető"
-                  : documentTextReason
-                    ? "Nincs szöveg"
-                    : "Nincs kinyerve"}
-            </AdminStatusPill>
-            {!isDocumentTextLoading && !hasWorkspaceText && documentTextReason ? (
-              <p className="text-[10px] text-[#9C9890] mt-0.5">{documentTextReason}</p>
-            ) : null}
-          </div>
-          <div className="space-y-1">
-            <p className="text-[10px] text-[#7B776D]">Verzió</p>
-            <p className="text-[11px] text-[#1F2821]">v{selectedDocument?.revisionNumber || 1}</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[10px] text-[#7B776D]">Ügy</p>
-            <p className="text-[11px] font-semibold text-[#1F2821]">{selectedDocument?.caseNumber}</p>
-          </div>
-          {activeCaseId ? (
-            <Link
-              href={`/cases/${encodeURIComponent(activeCaseId)}/handoff`}
-              className="block rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-center text-[11px] font-semibold text-[#16201A] hover:bg-[#F6F2E8]"
-            >
-              Leadási csomag
-            </Link>
-          ) : null}
-          <details className="rounded-[5px] border border-[#EEE7D9] bg-[#FBF9F3] p-2">
-            <summary className="cursor-pointer text-[10px] font-semibold text-[#514D45]">Technikai részletek</summary>
-            <div className="mt-2 space-y-2">
-              <button onClick={() => handleDownload(selectedDocument)} className="w-full rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-[10px] hover:bg-[#FBF9F3]">
-                Dokumentum letöltése
-              </button>
-              {selectedBaseline ? (
-                <button onClick={() => handleDownload(selectedBaseline)} className="w-full rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-[10px] hover:bg-[#FBF9F3]">
-                  Alapdokumentum letöltése
-                </button>
-              ) : null}
-              <Link href={getDocumentLedgerHref()} className="block rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-center text-[10px] hover:bg-[#FBF9F3]">
-                Dokumentumtár
-              </Link>
-            </div>
-          </details>
-        </div>
-      </aside>
     </div>
   );
 }
