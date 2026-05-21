@@ -1143,7 +1143,7 @@ const filteredClauseTools = useMemo(() => {
   };
 
 return (
-    <div className="flex-1 flex min-h-0 flex-col bg-[#EFE7CF] xl:flex-row">
+    <div className="flex min-h-0 flex-1 flex-col bg-[#F3EBD4] xl:flex-row">
       <CaseWorkspaceNav
         caseId={selectedDocument?.caseId || requestedCaseId}
         caseNumber={selectedDocument?.caseNumber}
@@ -1153,10 +1153,10 @@ return (
         activeDocumentId={selectedDocument?.id}
         helperText="A workspace nem ment automatikusan Word-verziót; a mentés külön művelet."
       />
-      <main className="min-w-0 flex-1 overflow-y-auto border-b border-[#DDD7CA] xl:border-b-0 xl:border-r">
-        <div className="p-6 space-y-4">
-          <header className="rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-5 shadow-sm">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <main className="min-w-0 flex-1 overflow-y-auto border-b border-[#D7CCB0] xl:border-b-0 xl:border-r">
+        <div className="space-y-4 p-4 xl:p-5">
+          <header className="rounded-[10px] border border-[#CFC29D] bg-[#FBF6E7] p-4 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0 space-y-3">
                 <div className="inline-flex items-center gap-2 rounded-[5px] border border-[#1F4A33] bg-[#1F4A33] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#F4EFDB]">
                   Workspace
@@ -1189,13 +1189,10 @@ return (
                     <p className="mt-2 text-[11px] text-[#3D4842]">Szöveges munkapéldány. Nem Word változáskövetés.</p>
                   ) : null}
                 </div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7B776D]">
-                  Ügyeim › {selectedDocument?.caseClientName || selectedDocument?.caseTitle || "Ügy"} › Szerződés-workspace
-                </p>
                 <div>
-                  <h1 className="font-serif text-3xl font-medium leading-tight text-[#1F2821]">Szerződés-workspace</h1>
-                  <p className="mt-1 max-w-3xl text-sm text-[#7B776D]">
-                    Itt készíthető elő a dokumentum átnézése, anonimizálása, AI elemzése és ügyvédi review-ja.
+                  <h1 className="font-serif text-[30px] font-medium leading-tight text-[#1F2821]">Szerződés-workspace</h1>
+                  <p className="mt-1 max-w-3xl text-[13px] text-[#6D6A62]">
+                    Jogi munkapéldány szerkesztése, prompt-copy előkészítés és review-támogatás egy helyen.
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -1211,7 +1208,7 @@ return (
                           : "Előkészítő nézet"}
                   </AdminStatusPill>
                 </div>
-                <div className="grid gap-2 rounded-[8px] border border-[#D8CFB6] bg-[#F7F0D9] p-3 md:grid-cols-[1fr_180px_180px]">
+                <div className="grid gap-2 rounded-[8px] border border-[#D8CFB6] bg-[#F7F0D9] p-3 md:grid-cols-[1fr_170px_170px]">
                   <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
                     Dokumentum kiválasztása
                     <select value={selectedDocument?.id || ""} onChange={(e) => handleWorkspaceDocumentChange(e.target.value)} className="mt-2 w-full rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[#1F2821]">
@@ -1235,7 +1232,7 @@ return (
                   </label>
                 </div>
               </div>
-                <div className="flex shrink-0 flex-wrap gap-2">
+                <div className="flex shrink-0 flex-wrap items-start gap-2 lg:max-w-[340px]">
                 <Link
                   href={getDocumentLedgerHref()}
                   className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-4 py-2 text-[13px] font-semibold leading-none text-[#16201A] transition-colors hover:border-[#16201A] hover:bg-[#FBF6E7]"
@@ -1265,8 +1262,9 @@ return (
                   onClick={() => globalThis.document.getElementById("version-compare-panel")?.scrollIntoView({ behavior: "smooth", block: "start" })}
                   variant="muted"
                   title="Az összevetés a lenti összevetési panelen érhető el."
+                  disabled={!selectedBaseline}
                 >
-                  Verziók összevetése
+                  {selectedBaseline ? "Verziók összevetése" : "Nincs összevetési alap"}
                 </AdminButton>
               </div>
             </div>
@@ -1298,10 +1296,11 @@ return (
               </div>
             </div>
           ) : (
-            <div className="grid gap-4 2xl:grid-cols-[300px_minmax(720px,1fr)] xl:grid-cols-[280px_minmax(0,1fr)]">
-<aside className="min-w-0 space-y-3 rounded-[10px] border border-[#D8CFB6] bg-[#F7F0D9] p-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+            <div className="grid gap-4 2xl:grid-cols-[320px_minmax(720px,1fr)] xl:grid-cols-[300px_minmax(0,1fr)]">
+<aside className="min-w-0 space-y-3 rounded-[10px] border border-[#123624] bg-[#173824] p-4 text-[#F4EFDB] xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
                 <div>
-                  <h2 className="font-serif text-xl font-medium text-[#1F2821]">Eszközök</h2>
+                  <h2 className="font-serif text-xl font-medium text-[#F4EFDB]">Eszközök</h2>
+                  <p className="mt-1 text-[11px] text-[#DCCFA8]">Klauzulák, promptok és munkafolyamat-eszközök.</p>
                 </div>
 
                 <div className="flex flex-wrap gap-1">
@@ -1325,8 +1324,8 @@ return (
                       }}
                       className={`rounded-[4px] border px-2 py-1 text-[10px] font-semibold transition-colors ${
                         toolMode === mode.key
-                          ? "border-[#1F4A33] bg-[#1F4A33] text-[#F4EFDB]"
-                          : "border-[#DDD7CA] bg-white text-[#7B776D] hover:bg-[#FBF9F3]"
+                          ? "border-[#B58A2A] bg-[#B58A2A] text-[#1A1A14]"
+                          : "border-[#355E49] bg-[#1F4A33] text-[#E8DFC3] hover:bg-[#28563D]"
                       }`}
                     >
                       {mode.label}
@@ -1347,7 +1346,7 @@ return (
                       ? "Keress sablont…"
                       : "Keresés…"
                   }
-                  className="w-full rounded-[6px] border border-[#DDD7CA] bg-white px-3 py-2 text-xs text-[#1F2821]"
+                  className="w-full rounded-[6px] border border-[#355E49] bg-[#F7F0D9] px-3 py-2 text-xs text-[#1F2821]"
                 />
 
                 {editorNotice ? (
@@ -1361,7 +1360,7 @@ return (
 
                 {toolMode === "klauzulak" ? (
                   <section className="space-y-2">
-                    <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Klauzulák</h3>
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#DCCFA8]">Klauzulák</h3>
                     {filteredClauseTools.length === 0 ? (
                       <p className="rounded-[5px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] p-3 text-xs text-[#9C9890]">Nincs találat a klauzulák között.</p>
                     ) : (
@@ -1608,7 +1607,7 @@ return (
                         <h2 className="font-serif text-2xl font-medium text-[#1F2821]">Szerkeszthető munkapéldány</h2>
                         <AdminStatusPill tone={isDraftDirty ? "amber" : activeDraftText ? "green" : "neutral"}>{editorStatusLabel}</AdminStatusPill>
                       </div>
-<p className="text-[11px] text-[#7B776D]">Helyi szerkesztési nézet. Nem Word változáskövetés. Forrás: {workspaceTextSourceLabel}</p>
+<p className="text-[11px] text-[#6D6A62]">Helyi szerkesztési nézet. Nem Word változáskövetés. Forrás: {workspaceTextSourceLabel}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <AdminButton size="sm" variant="neutral" onClick={focusToolSearch} title="Bal oldali eszköztárban kereshetsz klauzulát.">
@@ -1659,7 +1658,7 @@ return (
                     </div>
                   ) : null}
 
-                <div className="bg-[#EFE7CF] px-3 py-5 sm:px-6 lg:px-8 xl:px-12">
+                <div className="bg-[#F3EBD4] px-3 py-5 sm:px-6 lg:px-8 xl:px-12">
                     <div className="mx-auto flex w-full max-w-[1400px] items-start gap-4">
                     <div className="min-h-[760px] flex-1 border border-[rgba(22,32,26,0.14)] bg-white px-6 py-8 shadow-[0_18px_50px_rgba(22,32,26,0.14)] sm:px-12 lg:px-20 xl:px-28">
                       <div className="border-b border-[#EEE7D9] pb-4">
@@ -1741,11 +1740,11 @@ return (
                   </div>
                 </section>
 
-                <section id="version-compare-panel" className="scroll-mt-4 border border-[#DDD7CA] bg-white p-4">
+                <section id="version-compare-panel" className="scroll-mt-4 rounded-[10px] border border-[#D8CFB6] bg-white p-4">
                 <div className="flex items-center justify-between gap-4 mb-3">
                   <div>
                     <h2 className="text-sm font-semibold text-[#1F2821]">Verziók és összevetés</h2>
-                    <p className="mt-1 text-[11px] text-[#7B776D]">A munkapéldány szerkesztése és az ügyvédi review ettől külön kezelendő.</p>
+                    <p className="mt-1 text-[11px] text-[#7B776D]">A fő szerkesztőtől elkülönített ellenőrző blokk.</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -2111,8 +2110,8 @@ return (
         </div>
       </main>
 
-<aside className="w-56 shrink-0 bg-white hidden xl:block xl:overflow-y-auto border-l border-[#DDD7CA]">
-        <div className="p-4 space-y-3">
+<aside className="hidden w-64 shrink-0 border-l border-[#D8CFB6] bg-[#FBF6E7] xl:block xl:overflow-y-auto">
+        <div className="space-y-3 p-4">
           <p className="text-[10px] uppercase tracking-[0.18em] text-[#7B776D]">Dokumentum információ</p>
           <div className="space-y-1">
             <p className="text-[10px] text-[#7B776D]">Dokumentum</p>
@@ -2145,6 +2144,14 @@ return (
             <p className="text-[10px] text-[#7B776D]">Ügy</p>
             <p className="text-[11px] font-semibold text-[#1F2821]">{selectedDocument?.caseNumber}</p>
           </div>
+          {activeCaseId ? (
+            <Link
+              href={`/cases/${encodeURIComponent(activeCaseId)}/handoff`}
+              className="block rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-center text-[11px] font-semibold text-[#16201A] hover:bg-[#F6F2E8]"
+            >
+              Leadási csomag
+            </Link>
+          ) : null}
           <details className="rounded-[5px] border border-[#EEE7D9] bg-[#FBF9F3] p-2">
             <summary className="cursor-pointer text-[10px] font-semibold text-[#514D45]">Technikai részletek</summary>
             <div className="mt-2 space-y-2">
