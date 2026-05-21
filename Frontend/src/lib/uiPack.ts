@@ -4,14 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 
 export const UI_PACKS = [
   {
-    id: "signal_tiles_console",
-    label: "Signal Tiles Console",
-    description: "Kísérleti sötét műveleti nézet. Nem a fő production design.",
-  },
-  {
     id: "legal_ops_atelier",
     label: "Adminiculum default",
     description: "Design bible alapirány: cream felület, dark legal green navigáció, muted gold kiemelések.",
+  },
+  {
+    id: "signal_tiles_console",
+    label: "Signal Tiles Console",
+    description: "Kísérleti sötét műveleti nézet. Nem a fő production design.",
   },
 ] as const;
 

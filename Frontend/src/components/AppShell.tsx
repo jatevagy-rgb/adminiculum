@@ -56,11 +56,24 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
 
   const shouldRenderCasesDefault = section === "cases" && !children;
   const shouldRenderDashboardDefault = section === "dashboard" && !children;
+  const shellBody = children ? (
+    children
+  ) : shouldRenderCasesDefault ? (
+    <CasesList />
+  ) : shouldRenderDashboardDefault ? (
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <Dashboard />
+      <RightPanel />
+    </div>
+  ) : (
+    <div className="text-xs text-[#7B776D]">Nincs elérhető tartalom ebben a szekcióban.</div>
+  );
+  const shouldFrameBody = !children && !isSignalOps;
 
   return (
     <div
       data-ui-pack={uiPack}
-      className={`min-h-screen flex app-shell ${isSignalOps ? "bg-[#0B1220] text-[#D6E2F2] ui-pack-signal-ops" : "bg-[#EFE7CF] text-[#1F2A24] ui-pack-insight-analytics"}`}
+      className={`min-h-screen flex app-shell ${isSignalOps ? "bg-[#0B1220] text-[#D6E2F2] ui-pack-signal-ops" : "bg-[#D5CBA8] text-[#16201A] ui-pack-insight-analytics"}`}
     >
         <Sidebar
           activeItem={section}
@@ -69,7 +82,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
           uiPack={uiPack}
         />
 
-      <div className={`flex-1 flex flex-col app-shell-content ${isSignalOps ? "" : "bg-[#F4ECDA]"}`}>
+      <div className={`min-w-0 flex-1 flex flex-col app-shell-content ${isSignalOps ? "" : "bg-[#EFE7CF]"}`}>
         <TopBar
           title={titleBySection[section] || "Műszerfal"}
           onSignOut={onSignOut}
@@ -77,24 +90,13 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
           uiPack={uiPack}
         />
 
-        <main className={`flex-1 overflow-y-auto p-6 app-shell-main ${isSignalOps ? "bg-[#0B1220]" : "bg-[#F4ECDA]"}`}>
-          <div className={`${isSignalOps ? "" : "rounded-lg border border-[#D7CEB8] bg-[#FFFFFF] shadow-[0_1px_0_rgba(31,42,36,0.06)] p-5"}`}>
-            {children ? (
-              children
-            ) : shouldRenderCasesDefault ? (
-              <CasesList />
-            ) : shouldRenderDashboardDefault ? (
-              <div className="grid lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
-                <Dashboard />
-                <RightPanel />
-              </div>
-            ) : (
-              <div className="text-xs text-[#7B776D]">Nincs elérhető tartalom ebben a szekcióban.</div>
-            )}
+        <main className={`flex-1 overflow-y-auto app-shell-main ${isSignalOps ? "bg-[#0B1220] p-6" : "bg-[#EFE7CF] p-4"}`}>
+          <div className={`${shouldFrameBody ? "mx-auto max-w-[1480px] border border-[rgba(22,32,26,0.10)] bg-white p-5 shadow-[0_12px_32px_rgba(22,32,26,0.08)]" : "h-full min-h-0"}`}>
+            {shellBody}
           </div>
         </main>
 
-        <footer className={`app-shell-footer border-t px-6 py-3 flex items-center justify-between gap-3 ${isSignalOps ? "border-[#1E293B] bg-[#0F172A]" : "border-[#D7CEB8] bg-[#F6F0E1]"}`}>
+        <footer className={`app-shell-footer border-t px-5 py-2 flex items-center justify-between gap-3 ${isSignalOps ? "border-[#1E293B] bg-[#0F172A]" : "border-[#D5CBA8] bg-[#F7F0D9]"}`}>
           <p className={`text-xs ${isSignalOps ? "text-[#94A3B8]" : "text-[#6E7872]"}`} style={{ fontFamily: 'var(--font-newsreader)' }}>
             Adminiculum · Jogi munkapad
           </p>
