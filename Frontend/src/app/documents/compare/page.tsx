@@ -28,6 +28,7 @@ import {
   getCaseClientHouseStyle,
   getDocumentText,
   saveWorkspaceDocumentVersion,
+  ApiError,
   type BlockReviewStatus,
   type CaseContractListItem,
   type CaseListItem,
@@ -560,9 +561,12 @@ const [isLoadingHouseStyle, setIsLoadingHouseStyle] = useState(false);
         const comparison = await getContractComparison(selectedDocument.id, effectiveBaseline?.id || undefined);
         setComparisonData(comparison);
       } catch (err) {
-        console.error("Contract comparison load failed:", err);
         setComparisonData(null);
-        setComparisonError("A blokk-szintű összehasonlítás nem érhető el ehhez a párhoz.");
+        if (err instanceof ApiError && (err.status === 400 || err.status === 404)) {
+          setComparisonError("Nincs elérhető összevetési alap.");
+        } else {
+          setComparisonError("Blokk-összevetés nem érhető el.");
+        }
       } finally {
         setComparisonLoading(false);
       }
@@ -618,10 +622,13 @@ const [isLoadingHouseStyle, setIsLoadingHouseStyle] = useState(false);
           setLatestAnonymousDocumentId(null);
         }
       } catch (err) {
-        console.error("Anonymous text load failed:", err);
         setLatestAnonymousText("");
         setLatestAnonymousDocumentId(null);
-        setAnonymousTextError("Az anonimizált szöveg betöltése nem sikerült.");
+        if (err instanceof ApiError && (err.status === 404 || err.status === 501)) {
+          setAnonymousTextError(null);
+        } else {
+          setAnonymousTextError("Az anonimizált szöveg betöltése nem sikerült.");
+        }
       } finally {
         setIsLoadingAnonymousText(false);
       }
@@ -648,10 +655,13 @@ const [isLoadingHouseStyle, setIsLoadingHouseStyle] = useState(false);
         setDocumentTextReason(result.text?.trim() ? null : result.unavailableReason || "A dokumentum szövege még nincs kinyerve.");
       })
       .catch((err) => {
-        console.error("Document text load failed:", err);
         if (!cancelled) {
           setDocumentText("");
-          setDocumentTextReason("A dokumentum szövegének betöltése nem sikerült.");
+          if (err instanceof ApiError && err.status === 404) {
+            setDocumentTextReason("Nincs kinyert dokumentumszöveg.");
+          } else {
+            setDocumentTextReason("A dokumentum szövegének betöltése nem sikerült.");
+          }
         }
       })
       .finally(() => {

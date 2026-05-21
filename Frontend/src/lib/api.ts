@@ -12,6 +12,8 @@ const API_BASE = backendBaseUrl
 
 interface FetchOptions extends RequestInit {
   skipAuth?: boolean;
+  suppressErrorStatuses?: number[];
+  suppressErrorLogging?: boolean;
 }
 
 class ApiError extends Error {
@@ -26,7 +28,7 @@ class ApiError extends Error {
 }
 
 async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
-  const { skipAuth, ...fetchOptions } = options;
+  const { skipAuth, suppressErrorStatuses, suppressErrorLogging, ...fetchOptions } = options;
   
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
   const hasBody = fetchOptions.body !== undefined && fetchOptions.body !== null;
@@ -77,11 +79,16 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
       }
     }
     
-    console.error(`[API] Error calling ${url}:`, {
-      status: response.status,
-      message: errorMessage,
-      details: errorDetails
-    });
+    const shouldLogError =
+      !suppressErrorLogging &&
+      !(Array.isArray(suppressErrorStatuses) && suppressErrorStatuses.includes(response.status));
+    if (shouldLogError) {
+      console.error(`[API] Error calling ${url}:`, {
+        status: response.status,
+        message: errorMessage,
+        details: errorDetails
+      });
+    }
     
     throw new ApiError(response.status, errorMessage, endpoint);
   }
@@ -765,7 +772,9 @@ export async function listDocumentLegalAnalyses(
   if (params?.caseId) query.set('caseId', params.caseId);
   if (params?.documentSourceType) query.set('documentSourceType', params.documentSourceType);
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  return fetchApi<LegalAnalysisRecord[]>(`/documents/${encodeURIComponent(documentId)}/legal-analyses${suffix}`);
+  return fetchApi<LegalAnalysisRecord[]>(`/documents/${encodeURIComponent(documentId)}/legal-analyses${suffix}`, {
+    suppressErrorStatuses: [404],
+  });
 }
 
 export async function createDocumentLegalAnalysis(
@@ -1018,7 +1027,10 @@ export async function getCaseAnonymousDocuments(caseId: string): Promise<Anonymo
  */
 export async function getAnonymousDocumentsBySource(sourceDocumentId: string): Promise<AnonymousDocumentItem[]> {
   return fetchApi<AnonymousDocumentItem[]>(
-    `/anonymous-documents/by-source/${encodeURIComponent(sourceDocumentId)}`
+    `/anonymous-documents/by-source/${encodeURIComponent(sourceDocumentId)}`,
+    {
+      suppressErrorStatuses: [404, 501],
+    }
   );
 }
 
