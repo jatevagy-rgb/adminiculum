@@ -787,7 +787,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   };
 
   const openUploadedAnonymize = (document: DocumentItem) => {
-    const fakeContract: CaseContractListItem = {
+    const uploadedDocumentAsContract: CaseContractListItem = {
       id: document.id,
       title: document.fileName || 'Feltöltött dokumentum',
       templateName: '',
@@ -800,7 +800,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       isCurrentRevision: true,
       isFinalRevision: false,
     };
-    setAnonymizeModalContract(fakeContract);
+    setAnonymizeModalContract(uploadedDocumentAsContract);
   };
 
   const activeDocument = selectedUploadedDocument || selectedGeneratedContract;
@@ -818,287 +818,336 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const generatedLedgerItems = [...families.flatMap((family) => family.items), ...standalone];
   const activeTitle = selectedUploadedDocument?.fileName || selectedGeneratedContract?.title || selectedGeneratedContract?.fileName || selectedGeneratedContract?.templateName || null;
   const metaCompareUrl = activeDocument ? `/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(activeDocument.id)}` : `/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}`;
+  const modifiedWorkingCopyCount = modifiedWorkingCopies.length;
+  const generatedDocumentCount = generatedLedgerItems.length;
+  const handoffPackageCountLabel = caseRecord ? 'panel' : '0';
+  const selectedDocumentTypeLabel = selectedUploadedDocument
+    ? selectedUploadedDocument.documentType === 'MODIFIED_WORKING_COPY'
+      ? 'Módosított munkapéldány'
+      : 'Feltöltött dokumentum'
+    : selectedGeneratedContract
+      ? selectedGeneratedContract.isFinalRevision
+        ? 'Végleges dokumentum'
+        : 'Generált / módosított'
+      : 'Nincs aktív dokumentum';
+  const selectedStatusLabel = selectedUploadedDocument
+    ? selectedUploadedDocument.documentType === 'MODIFIED_WORKING_COPY'
+      ? 'Szöveges munkapéldány'
+      : 'Eredeti feltöltött dokumentum'
+    : selectedGeneratedContract
+      ? getContractStatusLabel(selectedGeneratedContract)
+      : 'Válassz dokumentumot';
+  const selectedMetaItems = [
+    selectedUploadedDocument?.version ? `Verzió: ${selectedUploadedDocument.version}` : selectedGeneratedContract?.revisionNumber ? `Verzió: v${selectedGeneratedContract.revisionNumber}` : null,
+    selectedUploadedDocument?.createdAt ? `Dátum: ${formatShortDate(selectedUploadedDocument.createdAt)}` : selectedGeneratedContract?.generatedAt ? `Dátum: ${formatShortDate(selectedGeneratedContract.generatedAt)}` : null,
+    selectedUploadedDocument?.folder ? `Mappa: ${selectedUploadedDocument.folder}` : selectedGeneratedContract?.templateName ? `Sablon: ${selectedGeneratedContract.templateName}` : null,
+    selectedUploadedDocument?.fileName ? `Típus: ${getDocumentKindLabel(selectedUploadedDocument.fileName)}` : selectedGeneratedContract?.fileName ? `Típus: ${getDocumentKindLabel(selectedGeneratedContract.fileName)}` : null,
+  ].filter(Boolean);
+  const canAnonymizeActiveDocument = Boolean(selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY');
 
   return (
     <div className="flex min-h-0 flex-1 bg-[#EFE7CF] text-[#16201A] documents-surface">
-      <CaseWorkspaceNav caseId={canonicalCaseId} caseNumber={displayCaseId} title={displayMatterName} clientName={displayClient} activeTab="documents" activeDocumentId={activeDocument?.id} helperText="Az aktív dokumentumhoz tartozó műveletek a középső kártyán érhetők el." />
+      <CaseWorkspaceNav caseId={canonicalCaseId} caseNumber={displayCaseId} title={displayMatterName} clientName={displayClient} activeTab="documents" activeDocumentId={activeDocument?.id} helperText="Dokumentumtár, workspace és leadási csomag egy ügy-munkaterületen." />
 
-      {/* MAIN CONTENT */}
-      <div className="flex-1 flex flex-col min-h-0">
-        {/* PAGE CONTENT */}
-        <main className="flex-1 overflow-y-auto p-8 flex flex-col gap-8">
-          {/* Action Result */}
-          {actionResult && (
-            <div className={`p-4 border rounded ${
-              actionResult.type === 'success'
-                ? `${p.success} border`
-                : `${p.danger} border`
-            }`}>
-              <p className="text-sm">{actionResult.message}</p>
-            </div>
-          )}
-
-          <section className="space-y-4">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7A8479]">
-                  Ügyeim <span className="mx-1 text-[#B58A2A]">›</span> {displayMatterName || displayClient || displayCaseId} <span className="mx-1 text-[#B58A2A]">›</span> Dokumentumtár
-                </p>
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <h1 className="font-serif text-4xl font-semibold leading-tight text-[#16201A]">Dokumentumtár</h1>
-                  <AdminBadge tone={activeDocument ? "green" : "neutral"} dot>
-                    {totalLedgerDocuments} irat · {activeDocument ? "1 aktív" : "nincs aktív"}
-                  </AdminBadge>
-                </div>
-                <p className="mt-2 max-w-2xl text-sm text-[#3D4842]">
-                  {displayMatterName} {displayClient ? `· ${displayClient}` : ""} {displayCaseId ? `· ${displayCaseId}` : ""}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <AdminButton variant="primary" onClick={() => fileInputRef.current?.click()} disabled={!caseRecord?.id || isUploading}>
-                  {isUploading ? "Feltöltés..." : "Dokumentum feltöltése"}
-                </AdminButton>
-                <AdminButton variant="gold" onClick={handleGenerate}>Szerződés-workspace</AdminButton>
-              </div>
-            </div>
-            <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleFileUpload} className="hidden" />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <main className="flex-1 overflow-y-auto bg-[#EFE7CF] p-4 lg:p-5">
+          <section className="mx-auto flex max-w-[1500px] flex-col gap-4">
             {actionResult && (
-              <div className={`rounded-[6px] border p-3 text-sm ${actionResult.type === "success" ? "border-[#D9E3CC] bg-[#EEF5E7] text-[#23472F]" : "border-[#F2DAD6] bg-[#FFF5F3] text-[#8B2A2A]"}`}>
+              <div className={`rounded-[10px] border p-3 text-sm font-medium ${actionResult.type === "success" ? "border-[#D9E3CC] bg-[#EEF5E7] text-[#23472F]" : "border-[#F2DAD6] bg-[#FFF5F3] text-[#8B2A2A]"}`}>
                 {actionResult.message}
               </div>
             )}
-            {isUploading && uploadPhase ? <div className="rounded-[6px] border border-[#D6DEEC] bg-[#EAEFF6] p-3 text-sm font-semibold text-[#2D4A7C]">{uploadPhase}</div> : null}
-          </section>
 
-          {isRefreshing ? (
-            <div className="rounded-[6px] border border-[#EEE7D9] bg-[#FBF6E7] px-4 py-2 text-xs text-[#7A8479]">Frissítés...</div>
-          ) : null}
-
-          {isInitialLoading ? (
-            <AdminPanel className="p-10 text-center text-sm text-[#7A8479]">Dokumentumok betöltése...</AdminPanel>
-          ) : (
-            <div className="grid grid-cols-1 gap-5 xl:grid-cols-[340px_minmax(0,1fr)_320px]">
-              <AdminPanel className="overflow-hidden border-[rgba(22,32,26,0.16)] bg-[#F7F0D9]">
-                <div className="border-b border-[rgba(22,32,26,0.14)] bg-[#FBF6E7] p-4">
-                  <h2 className="font-serif text-2xl font-medium text-[#16201A]">Iratok</h2>
-                  <p className="mt-1 text-[12px] text-[#7A8479]">Több dokumentum is tárolható, de egyszerre mindig egy aktív munkadokumentumon dolgozol.</p>
-                </div>
-                <div className="space-y-5 p-4">
-                  <section className="space-y-2 rounded-[8px] border border-[rgba(22,32,26,0.12)] bg-white p-3">
-                    <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Feltöltött dokumentumok ({uploadedDocuments.length})</h3>
-                    {uploadedDocuments.length === 0 ? (
-                      <p className="rounded border border-dashed border-[rgba(22,32,26,0.16)] p-3 text-[12px] text-[#7A8479]">Nincs feltöltött dokumentum.</p>
-                    ) : uploadedDocuments.map((doc) => {
-                      const isSelected = selectedLedgerItem?.kind === "uploaded" && selectedLedgerItem.item.id === doc.id;
-                      return (
-                        <AdminDocumentRow
-                          key={doc.id}
-                          title={doc.fileName || "Névtelen dokumentum"}
-                          meta={getDocumentKindLabel(doc.fileName)}
-                          fileType={getFileType(doc.fileName)}
-                          active={isSelected}
-                          variant="upload"
-                          onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
-                          status={
-                            <div className="flex items-center gap-1">
-                              <AdminBadge tone={isSelected ? "gold" : "neutral"}>{isSelected ? "Aktív" : "Feltöltve"}</AdminBadge>
-                            </div>
-                          }
-                        />
-                      );
-                    })}
-                  </section>
-
-                  <section className="space-y-2 rounded-[8px] border border-[rgba(22,32,26,0.12)] bg-white p-3">
-                    <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Módosított munkapéldányok ({modifiedWorkingCopies.length})</h3>
-                    {modifiedWorkingCopies.length === 0 ? (
-                      <p className="rounded border border-dashed border-[rgba(22,32,26,0.16)] p-3 text-[12px] text-[#7A8479]">Nincs módosított munkapéldány.</p>
-                    ) : modifiedWorkingCopies.map((doc) => {
-                      const isSelected = selectedLedgerItem?.kind === "uploaded" && selectedLedgerItem.item.id === doc.id;
-                      return (
-                        <AdminDocumentRow
-                          key={doc.id}
-                          title={doc.fileName || "Névtelen dokumentum"}
-                          meta="Szöveges munkapéldány, nem Word változáskövetés"
-                          active={isSelected}
-                          variant="generated"
-                          onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
-                          status={<AdminBadge tone={isSelected ? "gold" : "green"}>{isSelected ? "Aktív" : "Munkapéldány"}</AdminBadge>}
-                        />
-                      );
-                    })}
-                  </section>
-
-                  <section className="space-y-2 rounded-[8px] border border-[rgba(22,32,26,0.12)] bg-white p-3">
-                    <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Generált / módosított ({generatedLedgerItems.length})</h3>
-{generatedLedgerItems.length === 0 ? (
-                      <p className="rounded border border-dashed border-[rgba(22,32,26,0.16)] p-3 text-[12px] text-[#7A8479]">Nincs generált dokumentum.</p>
-                    ) : generatedLedgerItems.map((contract) => {
-                      const isSelected = selectedLedgerItem?.kind === "generated" && selectedLedgerItem.item.id === contract.id;
-                      return (
-                        <AdminDocumentRow
-                          key={contract.id}
-                          title={contract.title || contract.fileName || contract.templateName || "Névtelen dokumentum"}
-                          meta={contract.revisionNumber ? `v${contract.revisionNumber}` : "v1"}
-                          fileType="DOCX"
-                          active={isSelected}
-                          variant="generated"
-                          onClick={() => { setSelectedLedgerItem({ kind: "generated", item: contract }); setSelectedContract(contract); }}
-                          status={<AdminBadge tone={isSelected ? "gold" : "neutral"}>{isSelected ? "Aktív" : getContractStatusLabel(contract)}</AdminBadge>}
-                        />
-                      );
-                    })}
-                  </section>
-
-                  {totalLedgerDocuments === 0 ? <p className="rounded bg-[#FBF6E7] p-3 text-[12px] font-medium text-[#3D4842]">Nincs még irat az ügyben.</p> : null}
-
-                  <section className="space-y-2">
-                    <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Ügyvédi leadási csomagok</h3>
-                    <p className="rounded border border-dashed border-[rgba(22,32,26,0.16)] p-3 text-[12px] text-[#7A8479]">A leadási csomagok a jobb oldali panelen kezelhetők.</p>
-                  </section>
-                </div>
-              </AdminPanel>
-
-              <AdminPanel className="min-w-0 overflow-hidden border-[rgba(22,32,26,0.16)] bg-[#FBF6E7]">
-                <div className="border-b border-[rgba(22,32,26,0.14)] bg-white p-5">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#1F4A33]">Aktív dokumentum</p>
-                  <h2 className="mt-1 font-serif text-3xl font-medium text-[#16201A]">{activeTitle || "Nincs még munkadokumentum"}</h2>
-                </div>
-                <div className="p-5">
-                  {!activeDocument ? (
-                    <div className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[#FBF6E7] p-8 text-center">
-                      <h3 className="font-serif text-2xl font-medium text-[#16201A]">Nincs még munkadokumentum</h3>
-                      <p className="mx-auto mt-2 max-w-md text-sm text-[#3D4842]">Kezdéshez tölts fel egy dokumentumot, vagy hozz létre szerződést sablonból.</p>
-                      <div className="mt-5 flex flex-wrap justify-center gap-2">
-                        <AdminButton variant="primary" onClick={() => fileInputRef.current?.click()} disabled={!caseRecord?.id || isUploading}>Dokumentum feltöltése</AdminButton>
-                        <AdminButton variant="gold" onClick={handleGenerate}>Szerződés-workspace</AdminButton>
-                      </div>
-                    </div>
-) : selectedUploadedDocument ? (
-                    selectedUploadedDocument.documentType === 'MODIFIED_WORKING_COPY' ? (
-                    <div className="space-y-5">
-                      <AdminBadge tone="gold">Módosított munkapéldány</AdminBadge>
-                      <div className="rounded-[10px] border border-[rgba(22,32,26,0.16)] bg-white p-4">
-                        <h3 className="font-serif text-base font-medium text-[#16201A]">Aktív munkapéldány</h3>
-                        <p className="mt-1 text-xs text-[#3D4842]">Szöveges munkapéldány, nem Word változáskövetés. Az eredeti dokumentum változatlan.</p>
-                      </div>
-                      <div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-white p-4">
-                        <h3 className="font-serif text-xl font-medium text-[#16201A]">Dokumentum műveletek</h3>
-                        <div className="mt-3 flex flex-wrap gap-2"><AdminButton variant="primary" onClick={() => openWorkspace(selectedUploadedDocument.id)}>Megnyitás workspace-ben</AdminButton><AdminButton variant="neutral" onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)} disabled={isDownloading === selectedUploadedDocument.id}>{isDownloading === selectedUploadedDocument.id ? "Letöltés..." : "Letöltés"}</AdminButton></div>
-                        <details className="mt-3"><summary className="cursor-pointer text-[11px] font-semibold text-[#7A8479]">Technikai műveletek</summary><div className="mt-2 space-y-2"><AdminButton className="w-full justify-start" size="sm" variant="muted" onClick={handleCreateHandoffPackage} disabled={isCreatingHandoffPackage}>{isCreatingHandoffPackage ? "Csomag készül..." : "Csomag készítése"}</AdminButton><AdminButton className="w-full justify-start" size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>Metaadat összevetés</AdminButton></div></details>
-                      </div>
-                    </div>
-                    ) : (
-                    <div className="space-y-5">
-                      <AdminBadge tone="gold">{getDocumentKindLabel(selectedUploadedDocument.fileName)}</AdminBadge>
-                      <div className="rounded-[10px] border border-[rgba(22,32,26,0.16)] bg-white p-4">
-                        <h3 className="font-serif text-base font-medium text-[#16201A]">Aktív dokumentum</h3>
-                        <p className="mt-1 text-xs text-[#3D4842]">Eredeti feltöltött dokumentum.</p>
-                      </div>
-                      <div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-white p-4">
-                        <h3 className="font-serif text-xl font-medium text-[#16201A]">Dokumentum műveletek</h3>
-                        <div className="mt-3 flex flex-wrap gap-2"><AdminButton variant="primary" onClick={() => openWorkspace(selectedUploadedDocument.id)}>Megnyitás workspace-ben</AdminButton><AdminButton variant="neutral" onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)} disabled={isDownloading === selectedUploadedDocument.id}>{isDownloading === selectedUploadedDocument.id ? "Letöltés..." : "Letöltés"}</AdminButton></div>
-                        <details className="mt-3"><summary className="cursor-pointer text-[11px] font-semibold text-[#7A8479]">További műveletek</summary><div className="mt-2 space-y-2"><AdminButton className="w-full justify-start" size="sm" variant="muted" onClick={() => openUploadedAnonymize(selectedUploadedDocument)}>Anonimizálás</AdminButton><AdminButton className="w-full justify-start" size="sm" variant="muted" onClick={handleCreateHandoffPackage} disabled={isCreatingHandoffPackage}>{isCreatingHandoffPackage ? "Csomag készül..." : "Csomag készítése"}</AdminButton><AdminButton className="w-full justify-start" size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>Metaadat összevetés</AdminButton></div></details>
-                      </div>
-                    </div>
-                    )
-) : selectedGeneratedContract ? (
-                    <div className="space-y-5">
-                      <AdminBadge tone="green">{getDocumentKindLabel(selectedGeneratedContract.fileName)}</AdminBadge>
-                      <div className="rounded-[10px] border border-[rgba(22,32,26,0.16)] bg-white p-4">
-                        <h3 className="font-serif text-base font-medium text-[#16201A]">Aktív generált dokumentum</h3>
-                        <p className="mt-1 text-xs text-[#3D4842]">Generált vagy módosított dokumentum.</p>
-                      </div>
-                      <div className="rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-white p-4">
-                        <h3 className="font-serif text-xl font-medium text-[#16201A]">Dokumentum műveletek</h3>
-                        <div className="mt-3 flex flex-wrap gap-2"><AdminButton variant="primary" onClick={() => openWorkspace(selectedGeneratedContract.id)}>Megnyitás workspace-ben</AdminButton><AdminButton variant="neutral" onClick={() => handleDownload(selectedGeneratedContract)} disabled={isDownloading === selectedGeneratedContract.id}>{isDownloading === selectedGeneratedContract.id ? "Letöltés..." : "Letöltés"}</AdminButton>{selectedGeneratedContract.spItemId ? <AdminStatusPill tone="green">SharePoint szinkronizálva</AdminStatusPill> : <AdminButton variant="neutral" onClick={() => handleSharePointUpload(selectedGeneratedContract)} disabled={isUploadingToSP === selectedGeneratedContract.id}>{isUploadingToSP === selectedGeneratedContract.id ? "Szinkronizálás..." : "SharePoint szinkron"}</AdminButton>}</div>
-                        <details className="mt-3"><summary className="cursor-pointer text-[11px] font-semibold text-[#7A8479]">További műveletek</summary><div className="mt-2 space-y-2"><AdminButton className="w-full justify-start" size="sm" variant="muted" onClick={() => handleReview(selectedGeneratedContract.id)}>Review megnyitása</AdminButton><AdminButton className="w-full justify-start" size="sm" variant="muted" onClick={handleCreateHandoffPackage} disabled={isCreatingHandoffPackage}>{isCreatingHandoffPackage ? "Csomag készül..." : "Csomag készítése"}</AdminButton><AdminButton className="w-full justify-start" size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>Metaadat összevetés</AdminButton></div></details>
-                      </div>
-                    </div>
-) : null}
-                </div>
-              </AdminPanel>
-
-              <div className="space-y-5">
-                <AdminPanel className="border-[rgba(22,32,26,0.14)] bg-[#FBF6E7] p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Akciók</p>
-                  <div className="mt-3 space-y-2">
-                    <AdminButton className="w-full justify-start" variant="primary" onClick={() => activeDocument ? openWorkspace(activeDocument.id) : router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}`)}>
-                      Szerződés-workspace
-                    </AdminButton>
-                    <AdminButton className="w-full justify-start" variant="neutral" onClick={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/handoff`)}>
-                      Leadási csomag megnyitása
-                    </AdminButton>
-                    <AdminButton className="w-full justify-start" variant="neutral" onClick={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/communications`)}>
-                      Kommunikáció
-                    </AdminButton>
-                    <details className="pt-1">
-                      <summary className="cursor-pointer text-[11px] font-semibold text-[#7A8479]">Haladó / technikai</summary>
-                      <div className="mt-2 space-y-2">
-                        <AdminButton className="w-full justify-start" size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>
-                          Metaadat összevetés
-                        </AdminButton>
-                        <AdminButton className="w-full justify-start" size="sm" variant="muted" onClick={() => router.push(`/reviews`)}>
-                          Review sor
-                        </AdminButton>
-                      </div>
-                    </details>
+            <header className="overflow-hidden rounded-[18px] border border-[rgba(22,32,26,0.14)] bg-[#FBF6E7] shadow-[0_18px_45px_rgba(31,74,51,0.10)]">
+              <div className="flex flex-col gap-5 border-b border-[rgba(22,32,26,0.12)] bg-white px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#1F4A33]">
+                    Ügy munkaterület <span className="mx-2 text-[#B58A2A]">/</span> Dokumentumtár
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <h1 className="font-serif text-4xl font-semibold leading-tight text-[#16201A]">Dokumentumtár</h1>
+                    <span className="rounded-full border border-[#D8C58E] bg-[#F7F0D9] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[#6D5418]">
+                      {totalLedgerDocuments} irat · {activeDocument ? "aktív munkadokumentum" : "nincs aktív"}
+                    </span>
                   </div>
-                </AdminPanel>
-                <AdminPanel className="border-[rgba(22,32,26,0.14)] bg-[#FBF6E7] p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Ügyfélprofil / house style</p>
-                      <p className="mt-1 text-xs text-[#3D4842]">
-                        {isLoadingHouseStyle
-                          ? "Profil betöltése..."
-                          : clientHouseStyle
-                            ? houseStyleHasContent ? "House style profil elérhető." : "Profil létrehozva, de nincs kitöltve."
-                            : "Ehhez az ügyfélhez még nincs house style profil."}
+                  <p className="mt-2 max-w-3xl text-sm text-[#3D4842]">
+                    {displayMatterName} {displayClient ? `· ${displayClient}` : ""} {displayCaseId ? `· ${displayCaseId}` : ""}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <AdminButton variant="primary" onClick={() => fileInputRef.current?.click()} disabled={!caseRecord?.id || isUploading}>
+                    {isUploading ? "Feltöltés..." : "Dokumentum feltöltése"}
+                  </AdminButton>
+                  <AdminButton variant="gold" onClick={handleGenerate}>Szerződés-workspace</AdminButton>
+                </div>
+              </div>
+              <div className="grid gap-3 bg-[#F7F0D9] px-5 py-3 text-[12px] text-[#3D4842] md:grid-cols-3">
+                <p><span className="font-bold text-[#1F4A33]">Aktív dokumentum:</span> {activeTitle || "nincs kiválasztva"}</p>
+                <p><span className="font-bold text-[#1F4A33]">Ügyfélprofil:</span> {clientHouseStyle ? (houseStyleHasContent ? "house style elérhető" : "profil részleges") : "nincs profil"}</p>
+                <p><span className="font-bold text-[#1F4A33]">Leadási csomag:</span> jobb oldali panelen kezelhető</p>
+              </div>
+            </header>
+
+            <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleFileUpload} className="hidden" />
+            {isUploading && uploadPhase ? <div className="rounded-[10px] border border-[#D8C58E] bg-[#FBF6E7] p-3 text-sm font-semibold text-[#6D5418]">{uploadPhase}</div> : null}
+            {isRefreshing ? <div className="rounded-[10px] border border-[#EEE7D9] bg-[#FBF6E7] px-4 py-2 text-xs text-[#7A8479]">Frissítés...</div> : null}
+
+            {isInitialLoading ? (
+              <AdminPanel className="p-10 text-center text-sm text-[#7A8479]">Dokumentumok betöltése...</AdminPanel>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)_360px]">
+                <aside className="overflow-hidden rounded-[18px] border border-[rgba(22,32,26,0.16)] bg-[#F7F0D9] shadow-[0_16px_38px_rgba(31,74,51,0.08)]">
+                  <div className="border-b border-[rgba(22,32,26,0.14)] bg-[#1F4A33] p-5 text-white">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#D8C58E]">Dokumentum ledger</p>
+                    <h2 className="mt-1 font-serif text-3xl font-semibold">Iratok</h2>
+                    <p className="mt-2 text-[12px] leading-relaxed text-[#E9E2C7]">
+                      Több dokumentum is tárolható, de egyszerre mindig egy aktív munkadokumentumon dolgozol.
+                    </p>
+                  </div>
+                  <div className="space-y-4 p-4">
+                    <section className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#1F4A33]">Feltöltött dokumentumok</h3>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#1F4A33]">{uploadedDocuments.length}</span>
+                      </div>
+                      {uploadedDocuments.length === 0 ? (
+                        <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[#FBF6E7] p-3 text-[12px] text-[#7A8479]">Nincs feltöltött dokumentum.</p>
+                      ) : uploadedDocuments.map((doc) => {
+                        const isSelected = selectedLedgerItem?.kind === "uploaded" && selectedLedgerItem.item.id === doc.id;
+                        return (
+                          <AdminDocumentRow
+                            key={doc.id}
+                            title={doc.fileName || "Névtelen dokumentum"}
+                            meta={`${getDocumentKindLabel(doc.fileName)} · ${formatShortDate(doc.createdAt)}`}
+                            fileType={getFileType(doc.fileName)}
+                            active={isSelected}
+                            variant="upload"
+                            onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
+                            status={<AdminBadge tone={isSelected ? "gold" : "neutral"}>{isSelected ? "Aktív" : "Feltöltve"}</AdminBadge>}
+                          />
+                        );
+                      })}
+                    </section>
+
+                    <section className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#1F4A33]">Módosított munkapéldányok</h3>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#1F4A33]">{modifiedWorkingCopyCount}</span>
+                      </div>
+                      {modifiedWorkingCopies.length === 0 ? (
+                        <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[#FBF6E7] p-3 text-[12px] text-[#7A8479]">Nincs módosított munkapéldány.</p>
+                      ) : modifiedWorkingCopies.map((doc) => {
+                        const isSelected = selectedLedgerItem?.kind === "uploaded" && selectedLedgerItem.item.id === doc.id;
+                        return (
+                          <AdminDocumentRow
+                            key={doc.id}
+                            title={doc.fileName || "Névtelen dokumentum"}
+                            meta="Szöveges munkapéldány, nem Word változáskövetés"
+                            active={isSelected}
+                            variant="generated"
+                            onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
+                            status={<AdminBadge tone={isSelected ? "gold" : "green"}>{isSelected ? "Aktív" : "Munkapéldány"}</AdminBadge>}
+                          />
+                        );
+                      })}
+                    </section>
+
+                    <section className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#1F4A33]">Generált / módosított</h3>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#1F4A33]">{generatedDocumentCount}</span>
+                      </div>
+                      {generatedLedgerItems.length === 0 ? (
+                        <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[#FBF6E7] p-3 text-[12px] text-[#7A8479]">Nincs generált dokumentum.</p>
+                      ) : generatedLedgerItems.map((contract) => {
+                        const isSelected = selectedLedgerItem?.kind === "generated" && selectedLedgerItem.item.id === contract.id;
+                        return (
+                          <AdminDocumentRow
+                            key={contract.id}
+                            title={contract.title || contract.fileName || contract.templateName || "Névtelen dokumentum"}
+                            meta={contract.revisionNumber ? `v${contract.revisionNumber}` : "v1"}
+                            fileType="DOCX"
+                            active={isSelected}
+                            variant="generated"
+                            onClick={() => { setSelectedLedgerItem({ kind: "generated", item: contract }); setSelectedContract(contract); }}
+                            status={<AdminBadge tone={isSelected ? "gold" : "neutral"}>{isSelected ? "Aktív" : getContractStatusLabel(contract)}</AdminBadge>}
+                          />
+                        );
+                      })}
+                    </section>
+
+                    <section className="space-y-2 border-t border-[rgba(22,32,26,0.12)] pt-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#1F4A33]">Ügyvédi leadási csomagok</h3>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#1F4A33]">{handoffPackageCountLabel}</span>
+                      </div>
+                      <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[#FBF6E7] p-3 text-[12px] text-[#7A8479]">
+                        A leadási csomagok a jobb oldali ügyvédi csomag panelen kezelhetők.
                       </p>
-                      <p className="mt-1 text-xs text-[#3D4842]">{caseRecord?.clientName || "Ügyfél"}</p>
-                    </div>
-                    <AdminStatusPill tone={clientHouseStyle ? "green" : "neutral"}>Profil: {clientHouseStyle ? "Van" : "Nincs"}</AdminStatusPill>
+                    </section>
                   </div>
-                  {clientHouseStyle ? (
-                    <div className="mt-3 space-y-2 rounded bg-[#FBF6E7] p-2 text-[11px] text-[#3D4842]">
-                      <p>{[clientHouseStyle.preferredLanguage, clientHouseStyle.documentLanguageMode, clientHouseStyle.fontFamily].filter(Boolean).join(" · ") || "Profil létrehozva, de nincs kitöltve."}</p>
-                      <p>Fejlécminta: <b>{clientHouseStyle.headerAssetPath ? "Van" : "Nincs"}</b></p>
+                </aside>
+
+                <section className="min-w-0 overflow-hidden rounded-[22px] border border-[rgba(22,32,26,0.16)] bg-white shadow-[0_20px_55px_rgba(31,74,51,0.10)]">
+                  <div className="flex gap-4 border-b border-[rgba(22,32,26,0.12)] bg-[#FBF6E7] p-5">
+                    <div className="mt-1 h-16 w-1.5 rounded-full bg-[#B58A2A]" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#1F4A33]">Aktív munkadokumentum</p>
+                      <h2 className="mt-2 truncate font-serif text-4xl font-semibold leading-tight text-[#16201A]">{activeTitle || "Nincs még munkadokumentum"}</h2>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <AdminBadge tone={activeDocument ? "gold" : "neutral"}>{selectedDocumentTypeLabel}</AdminBadge>
+                        <AdminBadge tone={activeDocument ? "green" : "neutral"}>{selectedStatusLabel}</AdminBadge>
+                      </div>
+                      {selectedMetaItems.length > 0 ? (
+                        <div className="mt-4 grid gap-2 text-[12px] text-[#3D4842] sm:grid-cols-2">
+                          {selectedMetaItems.map((item) => <span key={String(item)} className="rounded-full border border-[rgba(22,32,26,0.10)] bg-white px-3 py-1">{item}</span>)}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="space-y-5 p-5">
+                    {!activeDocument ? (
+                      <div className="rounded-[18px] border border-dashed border-[rgba(31,74,51,0.24)] bg-[#FBF6E7] p-8 text-center">
+                        <h3 className="font-serif text-3xl font-semibold text-[#16201A]">Nincs még munkadokumentum</h3>
+                        <p className="mx-auto mt-2 max-w-md text-sm text-[#3D4842]">Kezdéshez tölts fel egy dokumentumot, vagy nyisd meg a szerződés-workspace-t az ügyhöz.</p>
+                        <div className="mt-5 flex flex-wrap justify-center gap-2">
+                          <AdminButton variant="primary" onClick={() => fileInputRef.current?.click()} disabled={!caseRecord?.id || isUploading}>Dokumentum feltöltése</AdminButton>
+                          <AdminButton variant="gold" onClick={handleGenerate}>Szerződés-workspace</AdminButton>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="rounded-[16px] border border-[rgba(22,32,26,0.12)] bg-[#FBF6E7] p-4">
+                          <h3 className="font-serif text-xl font-semibold text-[#16201A]">
+                            {selectedUploadedDocument?.documentType === 'MODIFIED_WORKING_COPY' ? 'Aktív munkapéldány' : selectedGeneratedContract ? 'Aktív generált dokumentum' : 'Aktív dokumentum'}
+                          </h3>
+                          <p className="mt-1 text-sm text-[#3D4842]">
+                            {selectedUploadedDocument?.documentType === 'MODIFIED_WORKING_COPY'
+                              ? 'Szöveges munkapéldány, nem Word változáskövetés. Az eredeti dokumentum változatlan.'
+                              : selectedUploadedDocument
+                                ? 'Eredeti feltöltött dokumentum.'
+                                : 'Generált vagy módosított dokumentum.'}
+                          </p>
+                        </div>
+
+                        <div className="rounded-[16px] border border-[rgba(22,32,26,0.12)] bg-white p-4">
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7A8479]">Elsődleges művelet</p>
+                              <h3 className="font-serif text-2xl font-semibold text-[#16201A]">Szerződés-workspace</h3>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <AdminButton variant="primary" onClick={() => activeDocument && openWorkspace(activeDocument.id)}>Megnyitás workspace-ben</AdminButton>
+                              {selectedUploadedDocument ? (
+                                <AdminButton variant="neutral" onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)} disabled={isDownloading === selectedUploadedDocument.id}>{isDownloading === selectedUploadedDocument.id ? "Letöltés..." : "Letöltés"}</AdminButton>
+                              ) : selectedGeneratedContract ? (
+                                <AdminButton variant="neutral" onClick={() => handleDownload(selectedGeneratedContract)} disabled={isDownloading === selectedGeneratedContract.id}>{isDownloading === selectedGeneratedContract.id ? "Letöltés..." : "Letöltés"}</AdminButton>
+                              ) : null}
+                              {canAnonymizeActiveDocument && selectedUploadedDocument ? <AdminButton variant="gold" onClick={() => openUploadedAnonymize(selectedUploadedDocument)}>Anonimizálás</AdminButton> : null}
+                            </div>
+                          </div>
+
+                          <details className="mt-4 rounded-[12px] border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] p-3">
+                            <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-[0.14em] text-[#1F4A33]">Haladó / technikai műveletek</summary>
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                              <AdminButton className="justify-start" size="sm" variant="muted" onClick={handleCreateHandoffPackage} disabled={isCreatingHandoffPackage}>{isCreatingHandoffPackage ? "Csomag készül..." : "Csomag készítése"}</AdminButton>
+                              <AdminButton className="justify-start" size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>Metaadat összevetés</AdminButton>
+                              {selectedGeneratedContract ? <AdminButton className="justify-start" size="sm" variant="muted" onClick={() => handleReview(selectedGeneratedContract.id)}>Review megnyitása</AdminButton> : null}
+                              {selectedGeneratedContract ? (
+                                selectedGeneratedContract.spItemId ? <AdminStatusPill tone="green">SharePoint szinkronizálva</AdminStatusPill> : <AdminButton className="justify-start" size="sm" variant="muted" onClick={() => handleSharePointUpload(selectedGeneratedContract)} disabled={isUploadingToSP === selectedGeneratedContract.id}>{isUploadingToSP === selectedGeneratedContract.id ? "Szinkronizálás..." : "SharePoint szinkron"}</AdminButton>
+                              ) : null}
+                            </div>
+                          </details>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </section>
+
+                <aside className="space-y-4">
+                  <AdminPanel className="overflow-hidden border-[rgba(22,32,26,0.14)] bg-[#FBF6E7]">
+                    <div className="bg-[#1F4A33] p-4 text-white">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#D8C58E]">Akciók</p>
+                      <h2 className="mt-1 font-serif text-2xl font-semibold">Dokumentum műveletek</h2>
+                    </div>
+                    <div className="space-y-2 p-4">
+                      <AdminButton className="w-full justify-start" variant="primary" onClick={() => activeDocument ? openWorkspace(activeDocument.id) : router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}`)}>
+                        Szerződés-workspace
+                      </AdminButton>
+                      <AdminButton className="w-full justify-start" variant="gold" onClick={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/handoff`)}>
+                        Leadási csomag megnyitása
+                      </AdminButton>
+                      <AdminButton className="w-full justify-start" variant="neutral" onClick={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/communications`)}>
+                        Kommunikáció
+                      </AdminButton>
+                      <details className="rounded-[12px] border border-[rgba(22,32,26,0.10)] bg-white p-3">
+                        <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-[0.14em] text-[#1F4A33]">Haladó / technikai</summary>
+                        <div className="mt-3 space-y-2">
+                          <AdminButton className="w-full justify-start" size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>Metaadat összevetés</AdminButton>
+                          <AdminButton className="w-full justify-start" size="sm" variant="muted" onClick={() => router.push(`/reviews`)}>Review sor</AdminButton>
+                        </div>
+                      </details>
+                    </div>
+                  </AdminPanel>
+
+                  <AdminPanel className="border-[rgba(22,32,26,0.14)] bg-[#FBF6E7] p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1F4A33]">Ügyfélprofil / house style</p>
+                        <p className="mt-1 text-xs text-[#3D4842]">
+                          {isLoadingHouseStyle
+                            ? "Profil betöltése..."
+                            : clientHouseStyle
+                              ? houseStyleHasContent ? "House style profil elérhető." : "Profil létrehozva, de nincs kitöltve."
+                              : "Ehhez az ügyfélhez még nincs house style profil."}
+                        </p>
+                        <p className="mt-1 text-xs text-[#3D4842]">{caseRecord?.clientName || "Ügyfél"}</p>
+                      </div>
+                      <AdminStatusPill tone={clientHouseStyle ? "green" : "neutral"}>Profil: {clientHouseStyle ? "Van" : "Nincs"}</AdminStatusPill>
+                    </div>
+                    {clientHouseStyle ? (
+                      <div className="mt-3 space-y-2 rounded bg-white p-2 text-[11px] text-[#3D4842]">
+                        <p>{[clientHouseStyle.preferredLanguage, clientHouseStyle.documentLanguageMode, clientHouseStyle.fontFamily].filter(Boolean).join(" · ") || "Profil létrehozva, de nincs kitöltve."}</p>
+                        <p>Fejlécminta: <b>{clientHouseStyle.headerAssetPath ? "Van" : "Nincs"}</b></p>
+                      </div>
+                    ) : null}
+                    <AdminButton className="mt-3" size="sm" variant="muted" onClick={() => setShowHouseStylePanel((value) => !value)} disabled={!caseRecord?.clientId}>
+                      {showHouseStylePanel ? "Profil bezárása" : clientHouseStyle ? "Profil megnyitása" : "Profil létrehozása"}
+                    </AdminButton>
+                    {!caseRecord?.clientId ? <p className="mt-2 text-[10px] text-[#8B2A2A]">Az ügyfél azonosítója nem érhető el.</p> : null}
+                  </AdminPanel>
+
+                  {showHouseStylePanel && caseRecord?.clientId ? (
+                    <div className="max-h-[520px] overflow-y-auto rounded-[12px] border border-[rgba(22,32,26,0.14)] bg-[#FBF9F3]">
+                      <ClientHouseStylePanel
+                        compact
+                        clientId={caseRecord.clientId}
+                        clientName={caseRecord.clientName}
+                        onSaved={() => getCaseClientHouseStyle(caseRecord.id).then(setClientHouseStyle).catch(() => setClientHouseStyle(null))}
+                      />
                     </div>
                   ) : null}
-                  <AdminButton className="mt-3" size="sm" variant="muted" onClick={() => setShowHouseStylePanel((value) => !value)} disabled={!caseRecord?.clientId}>
-                    {showHouseStylePanel ? "Profil bezárása" : clientHouseStyle ? "Profil megnyitása" : "Profil létrehozása"}
-                  </AdminButton>
-                  {!caseRecord?.clientId ? <p className="mt-2 text-[10px] text-[#8B2A2A]">Az ügyfél azonosítója nem érhető el.</p> : null}
-                </AdminPanel>
-                {showHouseStylePanel && caseRecord?.clientId ? (
-                  <div className="max-h-[520px] overflow-y-auto rounded-[8px] border border-[rgba(22,32,26,0.14)] bg-[#FBF9F3]">
-                    <ClientHouseStylePanel
-                      compact
-                      clientId={caseRecord.clientId}
-                      clientName={caseRecord.clientName}
-                      onSaved={() => getCaseClientHouseStyle(caseRecord.id).then(setClientHouseStyle).catch(() => setClientHouseStyle(null))}
-                    />
-                  </div>
-                ) : null}
-                {caseRecord && <HandoffPackagePanel caseId={caseRecord.id} refreshKey={handoffPanelRefreshKey} />}
-                {handoffPackageMessage && <p className="rounded bg-[#EEF5E7] p-2 text-[12px] font-semibold text-[#23472F]">{handoffPackageMessage}</p>}
-                {handoffPackageError && <p className="rounded bg-[#FFF5F3] p-2 text-[12px] font-semibold text-[#8B2A2A]">{handoffPackageError}</p>}
+                  {caseRecord && <HandoffPackagePanel caseId={caseRecord.id} refreshKey={handoffPanelRefreshKey} />}
+                  {handoffPackageMessage && <p className="rounded bg-[#EEF5E7] p-2 text-[12px] font-semibold text-[#23472F]">{handoffPackageMessage}</p>}
+                  {handoffPackageError && <p className="rounded bg-[#FFF5F3] p-2 text-[12px] font-semibold text-[#8B2A2A]">{handoffPackageError}</p>}
+                </aside>
               </div>
-            </div>
-          )}
+            )}
 
-          <AdminPanel className="p-5">
-            <h2 className="font-serif text-2xl font-medium text-[#16201A]">Ügy története</h2>
-            <div className="mt-4 space-y-3">
-              {timeline.length > 0 ? timeline.slice(0, 8).map((event) => (
-                <div key={event.id} className="border-l-2 border-[#1F4A33] pl-3">
-                  <p className="text-sm font-semibold text-[#16201A]">{humanizeTimelineType(event)}</p>
-                  <p className="text-[12px] text-[#7A8479]">{formatShortDate(event.createdAt)}</p>
-                </div>
-              )) : <p className="text-sm text-[#7A8479]">Még nincs rögzített ügyesemény.</p>}
-            </div>
-          </AdminPanel>        </main>
+            <AdminPanel className="border-[rgba(22,32,26,0.14)] bg-[#FBF6E7] p-5">
+              <h2 className="font-serif text-2xl font-medium text-[#16201A]">Ügy története</h2>
+              <div className="mt-4 space-y-3">
+                {timeline.length > 0 ? timeline.slice(0, 8).map((event) => (
+                  <div key={event.id} className="border-l-2 border-[#B58A2A] pl-3">
+                    <p className="text-sm font-semibold text-[#16201A]">{humanizeTimelineType(event)}</p>
+                    <p className="text-[12px] text-[#7A8479]">{formatShortDate(event.createdAt)}</p>
+                  </div>
+                )) : <p className="text-sm text-[#7A8479]">Még nincs rögzített ügyesemény.</p>}
+              </div>
+            </AdminPanel>
+          </section>
+        </main>
 
       </div>
 
