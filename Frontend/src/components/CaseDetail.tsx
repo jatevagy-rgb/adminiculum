@@ -1076,6 +1076,89 @@ export function CaseDetail({ params }: CaseDetailProps) {
     return groups;
   })();
 
+  const activeDocument = documents[0] || null;
+  const latestCommunication = communications[0] || null;
+  const latestStoryEvents = [...caseStoryEvents]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 8);
+  const openTasks = tasks.filter(
+    (task) => !['COMPLETED', 'APPROVED', 'REJECTED', 'DECLINED', 'CANCELLED', 'ARCHIVED'].includes(String(task.status || '').toUpperCase())
+  );
+  const caseNavItems = [
+    { label: 'Ügy áttekintő', href: `/cases/${canonicalCaseId}`, active: true },
+    { label: 'Dokumentumtár', href: `/cases/${canonicalCaseId}/documents` },
+    { label: 'Szerződés-workspace', href: `/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}` },
+    { label: 'Kommunikáció', href: `/cases/${canonicalCaseId}/communications` },
+    { label: 'Verzió-összevetés', href: `/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}` },
+    { label: 'Munkaórák', href: `/time-entries?caseId=${encodeURIComponent(canonicalCaseId)}` },
+  ];
+  const quickActions = [
+    {
+      title: 'Szerződés-workspace',
+      helper: 'Munkapéldányok, klauzulák és prompt-copy workflow.',
+      action: () => router.push(`/documents/compare?caseId=${canonicalCaseId}`),
+      tone: 'primary',
+    },
+    {
+      title: 'Dokumentumtár',
+      helper: `${documents.length} rögzített dokumentum. Feltöltés és aktív iratkezelés.`,
+      action: () => router.push(`/cases/${canonicalCaseId}/documents`),
+      tone: 'gold',
+    },
+    {
+      title: 'Dokumentum feltöltése',
+      helper: isArchived ? 'Archivált ügy - csak megtekintés.' : 'Ügyféltől érkezett irat csatolása.',
+      action: () => !isArchived && fileInputRef.current?.click(),
+      tone: 'paper',
+      disabled: isArchived,
+    },
+    {
+      title: 'Kommunikáció',
+      helper: 'Belső jegyzetek és ügykommunikációs napló.',
+      action: () => router.push(`/cases/${canonicalCaseId}/communications`),
+      tone: 'paper',
+    },
+    {
+      title: 'Munkaórák',
+      helper: 'Case-aware időrögzítés és munkacsomag kapcsolás.',
+      action: () => router.push(`/time-entries?caseId=${canonicalCaseId}`),
+      tone: 'paper',
+    },
+    {
+      title: 'Leadási csomag',
+      helper: 'Ügyvédi review-ra előkészített belső munkacsomag.',
+      action: () => router.push(`/cases/${canonicalCaseId}/handoff`),
+      tone: 'paper',
+    },
+  ];
+  const nextStep = isArchived
+    ? {
+        title: 'Archivált ügy',
+        helper: 'Az ügy lezárt, aktív workflow-lépés nincs.',
+        label: 'Megtekintés',
+        action: () => router.push(`/cases/${canonicalCaseId}/documents`),
+      }
+    : generatedContracts.length > 0
+      ? {
+          title: 'Szerződés-workspace megnyitása',
+          helper: 'A módosított dokumentumok és klauzulák kezelése a workspace-ben folytatható.',
+          label: 'Workspace',
+          action: () => router.push(`/documents/compare?caseId=${canonicalCaseId}`),
+        }
+      : documents.length > 0
+        ? {
+            title: 'Dokumentumtár megnyitása',
+            helper: 'Feltöltött iratból anonimizálás, munkapéldány és leadási csomag indítható.',
+            label: 'Dokumentumtár',
+            action: () => router.push(`/cases/${canonicalCaseId}/documents`),
+          }
+        : {
+            title: 'Dokumentum feltöltése',
+            helper: 'Az ügykezelés első lépése egy munkadokumentum feltöltése.',
+            label: 'Feltöltés',
+            action: () => fileInputRef.current?.click(),
+          };
+
   if (!caseRecord && timelineEvents.length === 0 && generatedContracts.length === 0 && documents.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -1093,1143 +1176,402 @@ export function CaseDetail({ params }: CaseDetailProps) {
   }
 
   return (
-    <div className="flex-1 flex min-h-0 case-detail-surface">
-      <CaseWorkspaceNav caseId={canonicalCaseId} caseNumber={displayCaseNumber} title={displayTitle} clientName={displayClient} activeTab="overview" helperText="Az áttekintő az ügy operatív állapotát mutatja, szintetikus elemzés nélkül." />
+    <div className="flex-1 min-h-0 overflow-hidden bg-[#D5CBA8]">
+      <div className="mx-auto flex h-full max-w-[1480px] overflow-hidden border-x border-[rgba(22,32,26,0.12)] bg-[#EFE7CF] shadow-[0_24px_60px_rgba(22,32,26,0.16)]">
+        <nav className="w-[232px] shrink-0 border-r border-[#173824] bg-[#1F4A33] p-3 text-[#F4EFDB]" aria-label="Ügy munkaterület navigáció">
+          <div className="mb-5 border-b border-white/10 pb-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#B58A2A]">Aktív ügy</p>
+            <p className="mt-2 font-serif text-[19px] leading-tight">{displayCaseNumber}</p>
+            <p className="mt-1 line-clamp-2 text-[12px] text-[#F4EFDB]/75">{displayTitle}</p>
+            <p className="mt-1 truncate text-[11px] text-[#F4EFDB]/55">{displayClient}</p>
+          </div>
+          <div className="space-y-1">
+            {caseNavItems.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => router.push(item.href)}
+                className={`relative flex w-full items-center justify-between rounded-[5px] px-3 py-2 text-left text-[12px] transition-colors ${
+                  item.active
+                    ? 'bg-[#B58A2A]/20 font-semibold text-[#F4EFDB] before:absolute before:left-[-4px] before:top-2 before:bottom-2 before:w-[3px] before:rounded-r before:bg-[#B58A2A]'
+                    : 'text-[#F4EFDB]/78 hover:bg-white/5 hover:text-[#F4EFDB]'
+                }`}
+              >
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>
+          <div className="mt-auto hidden pt-6 text-[10px] text-[#F4EFDB]/55 xl:block">
+            Ügyvéd munkapad · valós ügyadatokból
+          </div>
+        </nav>
 
-      <div className="flex-1 flex min-h-0">
-        <main className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto p-8">
-            <div className="mb-8 rounded-[10px] border border-[rgba(22,32,26,0.14)] bg-white p-5 shadow-[0_4px_14px_rgba(22,32,26,0.06)]">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-[9px] uppercase tracking-[0.35em] text-[#1F4A33] px-2 py-1 bg-[#F2E4BD]">Ügy munkaterület</span>
-                <span className={`text-[9px] uppercase tracking-[0.35em] px-2 py-1 border ${statusChip[caseRecord?.status || 'Draft'] || 'bg-[#EFE9DC] text-[#6B675D] border-[#D7D0C3]'}`}>
+        <main className="min-w-0 flex-1 overflow-y-auto">
+          <div className="space-y-4 p-5">
+            <section className="border border-[rgba(22,32,26,0.10)] bg-white p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#8E6A1B]">ÜGY MUNKATERÜLET</p>
+                  <h1 className="mt-1 font-serif text-[32px] leading-tight text-[#16201A]">{displayTitle}</h1>
+                  <p className="mt-2 text-[12px] text-[#7A8479]">
+                    {displayCaseNumber} · {displayMatterType}
+                  </p>
+                </div>
+                <span className={`shrink-0 rounded-[3px] border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${statusChip[caseRecord?.status || 'Draft'] || 'border-[#D8CDB6] bg-[#FBF6E7] text-[#3D4842]'}`}>
                   {getCaseStatusLabel(caseRecord?.status)}
                 </span>
               </div>
-              <h1 className="text-3xl font-serif text-[#1F2821] leading-tight">{displayTitle}</h1>
-              <div className="flex items-center gap-6 mt-4 text-xs text-[#7B776D]">
-                <div>
-                  <span className="uppercase tracking-[0.2em] text-[9px]">Ügyfél</span>
-                  <p className="text-[#1F2821] mt-0.5 font-medium">{displayClient}</p>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <div className="border border-[#E5DCBE] bg-[#FBF6E7] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Ügyfél</p>
+                  <p className="mt-1 text-[13px] font-semibold text-[#16201A]">{displayClient}</p>
                 </div>
-                <div>
-                  <span className="uppercase tracking-[0.2em] text-[9px]">Felelős ügyvéd</span>
+                <div className="relative border border-[#E5DCBE] bg-[#FBF6E7] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Felelős ügyvéd</p>
                   {assignedLawyer ? (
-                    <div className="mt-1">
-                      <p className="text-[#1F2821] mt-0.5 font-medium">{assignedLawyer.name}</p>
-                      <p className="text-[10px] text-[#7B776D]">{assignedLawyer.email}</p>
-                    </div>
+                    <>
+                      <p className="mt-1 text-[13px] font-semibold text-[#16201A]">{assignedLawyer.name}</p>
+                      <p className="text-[10px] text-[#7A8479]">{assignedLawyer.email}</p>
+                    </>
                   ) : (
-                    <div className="relative mt-1">
-                      <button
-                        onClick={() => { setShowAssignDropdown(!showAssignDropdown); loadAvailableUsers(); }}
-                        className="text-[#C9A227] text-xs underline hover:text-[#B8911F]"
-                      >
-                        + Felelős ügyvéd hozzárendelése
-                      </button>
-                      {showAssignDropdown && (
-                        <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-[#DDD7CA] shadow-lg z-50 max-h-48 overflow-y-auto">
-                          {isLoadingUsers ? (
-                            <p className="p-2 text-xs text-[#7B776D]">Felhasználók betöltése...</p>
-                          ) : availableUsers.length > 0 ? (
-                            availableUsers.map((user) => (
-                              <button
-                                key={user.id}
-                                onClick={() => handleAssignLawyer(user.id)}
-                                disabled={isAssigning}
-                                className="w-full p-2 text-left text-xs hover:bg-[#FBF9F3] border-b border-[#ECE6DA] last:border-b-0 disabled:opacity-50"
-                              >
-                                <p className="font-medium text-[#1F2821]">{user.name}</p>
-                                <p className="text-[10px] text-[#7B776D]">{user.email}</p>
-                              </button>
-                            ))
-                          ) : (
-                            <p className="p-2 text-xs text-[#7B776D]">Nincs elérhető felhasználó</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                    <button onClick={() => { setShowAssignDropdown(!showAssignDropdown); loadAvailableUsers(); }} className="mt-1 text-[11px] font-semibold text-[#8E6A1B]">
+                      + Felelős ügyvéd hozzárendelése
+                    </button>
                   )}
-                </div>
-                {/* Collaborators Section */}
-                <div>
-                  <span className="uppercase tracking-[0.2em] text-[9px]">Résztvevők</span>
-                  {isLoadingCollaborators ? (
-                    <p className="text-[10px] text-[#9C9890] mt-1">Betöltés...</p>
-                  ) : (
-                    <div className="mt-1">
-                      {collaborators.length > 0 ? (
-                        <div className="space-y-1">
-                          {collaborators.map((collab) => (
-                            <div key={collab.id} className="flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-[#8B5CF6] text-white flex items-center justify-center text-[9px] font-medium flex-shrink-0">
-                                {collab.user?.name?.charAt(0).toUpperCase() || '?'}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[#1F2821] text-xs truncate">{collab.user?.name || 'Ismeretlen'}</p>
-                                <p className="text-[9px] text-[#7B776D] truncate">{collab.user?.email || ''}</p>
-                              </div>
-                              <span className="text-[8px] px-1.5 py-0.5 rounded bg-[#8B5CF6]/10 text-[#8B5CF6] border border-[#8B5CF6]/20 flex-shrink-0">
-                                {collab.role}
-                              </span>
-                              {!isArchived && (
-                                <button
-                                  onClick={() => handleRemoveCollaborator(collab.id)}
-                                  className="text-[#9C9890] hover:text-[#DC2626] flex-shrink-0"
-                                  title="Résztvevő eltávolítása"
-                                >
-                                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-[10px] text-[#9C9890]">Nincs résztvevő</p>
-                      )}
-                      {!isArchived && (
-                        <div className="relative mt-2">
-                          <button
-                            onClick={() => { setShowCollaboratorDropdown(!showCollaboratorDropdown); loadAvailableUsers(); }}
-                            className="text-[#8B5CF6] text-[10px] underline hover:text-[#7C3AED]"
-                          >
-                            + Résztvevő hozzáadása
+                  {showAssignDropdown && (
+                    <div className="absolute left-3 top-full z-50 mt-1 max-h-48 w-64 overflow-y-auto border border-[#DDD7CA] bg-white shadow-lg">
+                      {isLoadingUsers ? (
+                        <p className="p-2 text-xs text-[#7B776D]">Felhasználók betöltése...</p>
+                      ) : availableUsers.length > 0 ? (
+                        availableUsers.map((user) => (
+                          <button key={user.id} onClick={() => handleAssignLawyer(user.id)} disabled={isAssigning} className="w-full border-b border-[#ECE6DA] p-2 text-left text-xs hover:bg-[#FBF9F3] disabled:opacity-50">
+                            <p className="font-medium text-[#1F2821]">{user.name}</p>
+                            <p className="text-[10px] text-[#7B776D]">{user.email}</p>
                           </button>
-                          {showCollaboratorDropdown && (
-                            <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-[#DDD7CA] shadow-lg z-50">
-                              <div className="p-2 border-b border-[#ECE6DA]">
-                                <select
-                                  value={collaboratorRole}
-                                  onChange={(e) => setCollaboratorRole(e.target.value)}
-                                  className="w-full text-[10px] border border-[#DDD7CA] rounded px-2 py-1 bg-white"
-                                >
-                                  <option value="COLLABORATOR">Résztvevő</option>
-                                  <option value="REVIEWER">Ellenőrző</option>
-                                  <option value="ASSISTANT">Asszisztens</option>
-                                </select>
-                              </div>
-                              <div className="max-h-48 overflow-y-auto">
-                                {isLoadingUsers ? (
-                                  <p className="p-2 text-[10px] text-[#7B776D]">Betöltés...</p>
-                                ) : availableUsers.filter(u => u.id !== assignedLawyer?.id && !collaborators.some(c => c.userId === u.id)).length > 0 ? (
-                                  availableUsers
-                                    .filter(u => u.id !== assignedLawyer?.id && !collaborators.some(c => c.userId === u.id))
-                                    .map((user) => (
-                                      <button
-                                        key={user.id}
-                                        onClick={() => handleAddCollaborator(user.id)}
-                                        disabled={isAddingCollaborator}
-                                        className="w-full p-2 text-left text-[10px] hover:bg-[#FBF9F3] border-b border-[#ECE6DA] last:border-b-0 disabled:opacity-50"
-                                      >
-                                        <p className="font-medium text-[#1F2821]">{user.name}</p>
-                                        <p className="text-[9px] text-[#7B776D]">{user.email}</p>
-                                      </button>
-                                    ))
-                                ) : (
-                                  <p className="p-2 text-[10px] text-[#7B776D]">Nincs elérhető felhasználó</p>
-                                )}
-                              </div>
-                            </div>
-                          )}
+                        ))
+                      ) : (
+                        <p className="p-2 text-xs text-[#7B776D]">Nincs elérhető felhasználó</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="border border-[#E5DCBE] bg-[#FBF6E7] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Résztvevők</p>
+                  <p className="mt-1 text-[13px] font-semibold text-[#16201A]">{collaborators.length || 0} résztvevő</p>
+                  {!isArchived && (
+                    <div className="relative">
+                      <button onClick={() => { setShowCollaboratorDropdown(!showCollaboratorDropdown); loadAvailableUsers(); }} className="mt-1 text-[10px] font-semibold text-[#8E6A1B]">+ Résztvevő hozzáadása</button>
+                      {showCollaboratorDropdown && (
+                        <div className="absolute left-0 top-full z-50 mt-1 w-72 border border-[#DDD7CA] bg-white shadow-lg">
+                          <div className="border-b border-[#ECE6DA] p-2">
+                            <select value={collaboratorRole} onChange={(e) => setCollaboratorRole(e.target.value)} className="w-full border border-[#DDD7CA] bg-white px-2 py-1 text-[10px]">
+                              <option value="COLLABORATOR">Résztvevő</option>
+                              <option value="REVIEWER">Ellenőrző</option>
+                              <option value="ASSISTANT">Asszisztens</option>
+                            </select>
+                          </div>
+                          <div className="max-h-48 overflow-y-auto">
+                            {availableUsers
+                              .filter(u => u.id !== assignedLawyer?.id && !collaborators.some(c => c.userId === u.id))
+                              .map((user) => (
+                                <button key={user.id} onClick={() => handleAddCollaborator(user.id)} disabled={isAddingCollaborator} className="w-full border-b border-[#ECE6DA] p-2 text-left text-[10px] hover:bg-[#FBF9F3] disabled:opacity-50">
+                                  <p className="font-medium text-[#1F2821]">{user.name}</p>
+                                  <p className="text-[9px] text-[#7B776D]">{user.email}</p>
+                                </button>
+                              ))}
+                          </div>
                         </div>
                       )}
                     </div>
                   )}
                 </div>
-                <div>
-                  <span className="uppercase tracking-[0.2em] text-[9px]">Szakterület</span>
-                  <p className="text-[#1F2821] mt-0.5">{displayMatterType}</p>
-                </div>
-                <div>
-                  <span className="uppercase tracking-[0.2em] text-[9px]">Határidő</span>
+                <div className="border border-[#E5DCBE] bg-[#FBF6E7] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Határidő</p>
                   {isEditingDeadline ? (
-                    <div className="mt-1 flex items-center gap-2">
-                      <input
-                        type="date"
-                        value={deadlineInput}
-                        onChange={(e) => setDeadlineInput(e.target.value)}
-                        className="text-xs border border-[#DDD7CA] rounded px-2 py-1 bg-white"
-                      />
-                      <button
-                        onClick={handleSaveDeadline}
-                        disabled={isSavingDeadline}
-                        className="text-[9px] px-2 py-1 bg-[#059669] text-white rounded hover:bg-[#047857] disabled:opacity-50"
-                      >
-                        {isSavingDeadline ? '...' : 'Mentés'}
-                      </button>
-                      <button
-                        onClick={handleCancelDeadline}
-                        className="text-[9px] px-2 py-1 border border-[#DDD7CA] text-[#514D45] rounded hover:bg-[#FBF9F3]"
-                      >
-                        Mégse
-                      </button>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <input type="date" value={deadlineInput} onChange={(e) => setDeadlineInput(e.target.value)} className="border border-[#DDD7CA] bg-white px-2 py-1 text-xs" />
+                      <button onClick={handleSaveDeadline} disabled={isSavingDeadline} className="bg-[#1F4A33] px-2 py-1 text-[10px] text-white disabled:opacity-50">{isSavingDeadline ? '...' : 'Mentés'}</button>
+                      <button onClick={handleCancelDeadline} className="border border-[#DDD7CA] px-2 py-1 text-[10px] text-[#514D45]">Mégse</button>
                     </div>
                   ) : (
                     <div className="mt-1 flex items-center gap-2">
-                      <p className={`text-[#1F2821] mt-0.5 font-medium ${caseRecord?.deadline ? 'text-[#DC2626]' : 'text-[#9C9890]'}`}>
-                        {caseRecord?.deadline
-                          ? new Date(caseRecord.deadline).toLocaleDateString('hu-HU')
-                          : 'Nincs megadva'}
-                      </p>
-                      {!isArchived && (
-                        <button
-                          onClick={startEditingDeadline}
-                          className="text-[9px] text-[#C9A227] hover:underline"
-                        >
-                          {caseRecord?.deadline ? 'Módosítás' : '+ Hozzáadás'}
-                        </button>
-                      )}
+                      <p className="text-[13px] font-semibold text-[#16201A]">{caseRecord?.deadline ? new Date(caseRecord.deadline).toLocaleDateString('hu-HU', { dateStyle: 'medium' }) : 'Nincs megadva'}</p>
+                      {!isArchived && <button onClick={startEditingDeadline} className="text-[10px] font-semibold text-[#8E6A1B]">{caseRecord?.deadline ? 'Módosítás' : '+ Hozzáadás'}</button>}
                     </div>
                   )}
                 </div>
-                <div>
-                  <span className="uppercase tracking-[0.2em] text-[9px]">Ügyfél szerepe</span>
+                <div className="border border-[#E5DCBE] bg-[#FBF6E7] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Ügyfél szerepe</p>
                   {isEditingClientRole ? (
-                    <div className="mt-1 flex items-center gap-2">
-                      <select
-                        value={clientRoleInput}
-                        onChange={(e) => setClientRoleInput(e.target.value)}
-                        className="text-xs border border-[#DDD7CA] rounded px-2 py-1 bg-white"
-                      >
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <select value={clientRoleInput} onChange={(e) => setClientRoleInput(e.target.value)} className="border border-[#DDD7CA] bg-white px-2 py-1 text-xs">
                         <option value="">Nincs megadva</option>
                         <option value="MEGBIZÓ">Megbízó</option>
                         <option value="ELLENÉRTDEKŰ FÉL">Ellenérdekű fél</option>
                         <option value="PARTNER">Partner</option>
                         <option value="EGYÉB">Egyéb</option>
                       </select>
-                      <button
-                        onClick={handleSaveClientRole}
-                        className="text-[9px] px-2 py-1 bg-[#059669] text-white rounded hover:bg-[#047857]"
-                      >
-                        Mentés
-                      </button>
-                      <button
-                        onClick={handleCancelClientRole}
-                        className="text-[9px] px-2 py-1 border border-[#DDD7CA] text-[#514D45] rounded hover:bg-[#FBF9F3]"
-                      >
-                        Mégse
-                      </button>
+                      <button onClick={handleSaveClientRole} className="bg-[#1F4A33] px-2 py-1 text-[10px] text-white">Mentés</button>
+                      <button onClick={handleCancelClientRole} className="border border-[#DDD7CA] px-2 py-1 text-[10px] text-[#514D45]">Mégse</button>
                     </div>
                   ) : (
                     <div className="mt-1 flex items-center gap-2">
-                      <p className="text-[#1F2821] mt-0.5">
-                        {caseRecord?.clientRole || 'Nincs megadva'}
-                      </p>
-                      {!isArchived && (
-                        <button
-                          onClick={handleEditClientRole}
-                          className="text-[9px] text-[#C9A227] hover:underline"
-                        >
-                          {caseRecord?.clientRole ? 'Módosítás' : '+ Hozzáadás'}
-                        </button>
-                      )}
+                      <p className="text-[13px] font-semibold text-[#16201A]">{caseRecord?.clientRole || 'Nincs megadva'}</p>
+                      {!isArchived && <button onClick={handleEditClientRole} className="text-[10px] font-semibold text-[#8E6A1B]">{caseRecord?.clientRole ? 'Módosítás' : '+ Hozzáadás'}</button>}
                     </div>
                   )}
                 </div>
-              </div>
-            </div>
-
-            <div className="mb-8">
-              <div className="grid grid-cols-3 gap-3">
-                <button
-                  onClick={() => router.push(`/documents/compare?caseId=${canonicalCaseId}`)}
-                  disabled={isArchived}
-                  className={`p-4 border bg-white text-left transition-colors ${isArchived ? 'border-[#E5E7EB] opacity-50 cursor-not-allowed' : 'border-[#DDD7CA] hover:bg-[#FBF9F3]'}`}
-                >
-                  <div className={`w-8 h-8 rounded flex items-center justify-center mb-3 ${isArchived ? 'bg-[#9CA3AF]' : 'bg-[#C9A227]'}`}>
-                    <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 2h7l5 5v13a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 11v6M9 14h6" />
-                    </svg>
-                  </div>
-                  <p className="text-xs font-semibold text-[#1F2821]">Szerződés-workspace</p>
-                  <p className="text-[10px] text-[#7B776D] mt-1">{isArchived ? 'Archivált ügy - csak megtekintés' : 'Klauzulák és munkapéldányok kezelése'}</p>
-                </button>
-                <button 
-                  onClick={() => !isArchived && fileInputRef.current?.click()}
-                  disabled={isArchived}
-                  className={`p-4 border bg-white text-left transition-colors ${isArchived ? 'border-[#E5E7EB] opacity-50 cursor-not-allowed' : 'border-[#DDD7CA] hover:bg-[#FBF9F3]'}`}
-                >
-                  <div className={`w-8 h-8 rounded flex items-center justify-center mb-3 ${isArchived ? 'bg-[#9CA3AF]' : 'bg-[#3B82F6]'}`}>
-                    <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
-                    </svg>
-                  </div>
-                  <p className="text-xs font-semibold text-[#1F2821]">Dokumentum feltöltése</p>
-                  <p className="text-[10px] text-[#7B776D] mt-1">{isArchived ? 'Archivált ügy - csak megtekintés' : 'Ügyféltől érkezett fájl feltöltése'}</p>
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.doc,.docx,.txt"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  disabled={isArchived}
-                />
-                <button 
-                  onClick={() => router.push(`/cases/${canonicalCaseId}/communications`)}
-                  className={`p-4 border bg-white text-left transition-colors ${isArchived ? 'border-[#E5E7EB] opacity-50' : 'border-[#DDD7CA] hover:bg-[#FBF9F3]'}`}
-                >
-                  <div className={`w-8 h-8 rounded flex items-center justify-center mb-3 ${isArchived ? 'bg-[#9CA3AF]' : 'bg-[#059669]'}`}>
-                    <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5H4.5A2.25 2.25 0 002.25 6.5m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                    </svg>
-                  </div>
-                  <p className="text-xs font-semibold text-[#1F2821]">Kommunikációk megnyitása</p>
-                  <p className="text-[10px] text-[#7B776D] mt-1">{isArchived ? 'Archivált ügy - csak megtekintés' : 'Belső és ügyfélkommunikációk kezelése'}</p>
-                </button>
-                <button
-                  onClick={() => router.push(`/time-entries?caseId=${canonicalCaseId}`)}
-                  className={`p-4 border bg-white text-left transition-colors ${isArchived ? 'border-[#E5E7EB] opacity-50' : 'border-[#DDD7CA] hover:bg-[#FBF9F3]'}`}
-                >
-                  <div className={`w-8 h-8 rounded flex items-center justify-center mb-3 ${isArchived ? 'bg-[#9CA3AF]' : 'bg-[#8B5CF6]/50'}`}>
-                    <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                    </svg>
-                  </div>
-                  <p className="text-xs font-semibold text-[#1F2821]">Munkaórák</p>
-                  <p className="text-[10px] text-[#7B776D] mt-1">{isArchived ? 'Archivált ügy - csak megtekintés' : 'Rögzített munkaórák megnyitása'}</p>
-                </button>
-                <button
-                  onClick={() => router.push(`/cases/${canonicalCaseId}/handoff`)}
-                  className={`p-4 border bg-white text-left transition-colors ${isArchived ? 'border-[#E5E7EB] opacity-50' : 'border-[#DDD7CA] hover:bg-[#FBF9F3]'}`}
-                >
-                  <div className={`w-8 h-8 rounded flex items-center justify-center mb-3 ${isArchived ? 'bg-[#9CA3AF]' : 'bg-[#1F4A33]'}`}>
-                    <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 3.75v1.5m-9-1.5v1.5m-3 3h15M4.5 19.5h15a.75.75 0 00.75-.75V8.25a.75.75 0 00-.75-.75h-15a.75.75 0 00-.75.75v10.5c0 .414.336.75.75.75z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 14.25l2.25 2.25L15 12.75" />
-                    </svg>
-                  </div>
-                  <p className="text-xs font-semibold text-[#1F2821]">Leadási csomag</p>
-                  <p className="text-[10px] text-[#7B776D] mt-1">{isArchived ? 'Archivált ügy - csak megtekintés' : 'Ügyvédi review-ra előkészített csomagok'}</p>
-                </button>
-              </div>
-            </div>
-
-            <div className="border-t border-[#DDD7CA] pt-8">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xs uppercase tracking-[0.28em] text-[#7B776D]">Ügy története</h2>
-                <div className="flex items-center gap-3">
-                  <p className="text-[10px] text-[#9C9890]">{caseStoryEvents.length} esemény</p>
-                  {!isArchived && (
-                    <button
-                      onClick={() => setIsAddingNote(true)}
-                      className="text-[10px] text-[#C9A227] hover:underline"
-                    >
-                      + Belső megjegyzés
-                    </button>
-                  )}
+                <div className="border border-[#E5DCBE] bg-[#FBF6E7] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Szakterület</p>
+                  <p className="mt-1 text-[13px] font-semibold text-[#16201A]">{displayMatterType}</p>
                 </div>
               </div>
-              {isAddingNote && (
-                <div className="mb-4 p-3 bg-[#F6F2E8] border border-[#DDD7CA]">
-                  <p className="text-[10px] text-[#7B776D] mb-2">Új belső megjegyzés</p>
-                  <textarea
-                    value={newNoteContent}
-                    onChange={(e) => setNewNoteContent(e.target.value)}
-                    placeholder="Írja be a megjegyzést..."
-                    rows={3}
-                    className="w-full text-xs border border-[#DDD7CA] bg-white px-3 py-2 resize-none focus:outline-none focus:border-[#C9A227]"
-                  />
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      onClick={handleAddCaseNote}
-                      disabled={!newNoteContent.trim() || isSavingNote}
-                      className="px-3 py-1.5 text-[10px] bg-[#C9A227] text-white disabled:opacity-40 hover:bg-[#B8911F]"
-                    >
-                      {isSavingNote ? 'Mentés...' : 'Mentés'}
-                    </button>
-                    <button
-                      onClick={() => { setIsAddingNote(false); setNewNoteContent(''); }}
-                      className="px-3 py-1.5 text-[10px] text-[#7B776D] border border-[#DDD7CA] hover:bg-[#EDE9DC]"
-                    >
-                      Mégse
-                    </button>
+            </section>
+
+            <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleFileUpload} className="hidden" disabled={isArchived} />
+
+            <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {quickActions.map((action) => (
+                <button
+                  key={action.title}
+                  type="button"
+                  onClick={action.action}
+                  disabled={action.disabled}
+                  className={`border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                    action.tone === 'primary'
+                      ? 'border-[#173824] bg-[#1F4A33] text-[#F4EFDB] hover:bg-[#173824]'
+                      : action.tone === 'gold'
+                        ? 'border-[#8E6A1B] bg-[#B58A2A] text-white hover:bg-[#8E6A1B]'
+                        : 'border-[#E5DCBE] bg-white text-[#16201A] hover:bg-[#FBF6E7]'
+                  }`}
+                >
+                  <p className="text-[12px] font-semibold">{action.title}</p>
+                  <p className={`mt-2 text-[11px] leading-relaxed ${action.tone === 'paper' ? 'text-[#7A8479]' : 'text-current opacity-80'}`}>{action.helper}</p>
+                </button>
+              ))}
+            </section>
+
+            <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+              <div className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="font-serif text-[18px] text-[#16201A]">ÜGY TÖRTÉNETE</h2>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] text-[#7A8479]">{caseStoryEvents.length} esemény</span>
+                    {!isArchived && <button onClick={() => setIsAddingNote(true)} className="text-[10px] font-semibold text-[#8E6A1B]">+ Belső megjegyzés</button>}
                   </div>
                 </div>
-              )}
-              <p className="text-[11px] text-[#7B776D] mb-4">
-                Ez az idővonal kizárólag a már megtörtént, rögzített ügyeseményeket mutatja.
-              </p>
-              <div className="relative">
-                <div className="absolute left-[18px] top-0 bottom-0 w-px bg-[#DDD7CA]" />
-                <div className="space-y-8">
-                  {caseStoryEvents.length > 0 ? (
-                    dayGroupedEvents.map((group) => (
-                      <div key={group.date}>
-                        <div className="flex items-center gap-3 mb-3 mt-6 first:mt-0">
-                          <span className="text-[10px] font-semibold text-[#7B776D] uppercase tracking-wider">{group.label}</span>
-                          <div className="flex-1 h-px bg-[#DDD7CA]" />
-                          <span className="text-[10px] text-[#9C9890]">{group.events.length}</span>
+                {isAddingNote && (
+                  <div className="mb-4 border border-[#E5DCBE] bg-[#FBF6E7] p-3">
+                    <p className="mb-2 text-[10px] text-[#7B776D]">Új belső megjegyzés</p>
+                    <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="Írja be a megjegyzést..." rows={3} className="w-full resize-none border border-[#DDD7CA] bg-white px-3 py-2 text-xs focus:border-[#B58A2A] focus:outline-none" />
+                    <div className="mt-2 flex gap-2">
+                      <button onClick={handleAddCaseNote} disabled={!newNoteContent.trim() || isSavingNote} className="bg-[#B58A2A] px-3 py-1.5 text-[10px] text-white disabled:opacity-40">{isSavingNote ? 'Mentés...' : 'Mentés'}</button>
+                      <button onClick={() => { setIsAddingNote(false); setNewNoteContent(''); }} className="border border-[#DDD7CA] px-3 py-1.5 text-[10px] text-[#7B776D]">Mégse</button>
+                    </div>
+                  </div>
+                )}
+                <p className="mb-4 text-[11px] text-[#7A8479]">Csak megtörtént, rögzített ügyesemények. Jövőbeli lépések a jobb oldali Következő lépés panelben jelennek meg.</p>
+                {latestStoryEvents.length > 0 ? (
+                  <div className="space-y-3 border-l border-[#D9E3CC] pl-4">
+                    {latestStoryEvents.map((event) => (
+                      <div key={event.id} className="relative">
+                        <span className="absolute left-[-21px] top-1 h-3 w-3 rounded-full border border-[#B58A2A] bg-[#FBF6E7]" />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-[13px] font-semibold text-[#16201A]">{event.title}</p>
+                          <span className="border border-[#E5DCBE] bg-[#FBF6E7] px-1.5 py-0.5 text-[9px] text-[#3D4842]">{event.sourceLabel}</span>
                         </div>
-                        <div className="space-y-6">
-                          {group.events.map((event) => (
-                            <div key={event.id} className="flex gap-4 relative transition-all duration-300">
-                              <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${event.isNote ? 'bg-[#92400E]' : eventTypeIconBg[event.type]} text-white`}>
-                                {event.isNote ? (
-                                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-                                  </svg>
-                                ) : getEventIcon(event.type)}
-                              </div>
-                              <div className="flex-1 pt-1">
-                                <div className="flex items-center gap-2 flex-wrap mb-1">
-                                  <p className="text-sm font-semibold text-[#1F2821]">{event.title}</p>
-                                  <span className={`text-[10px] px-1.5 py-0.5 rounded border ${event.isNote ? 'bg-[#FEF3C7] text-[#92400E] border-[#FCD34D]' : eventTypeChip[event.type]}`}>
-                                    {event.sourceLabel}
-                                  </span>
-                                </div>
-                                {event.description && (
-                                  <p className="text-xs text-[#6B655B] leading-relaxed">{event.description}</p>
-                                )}
-                                <div className="flex items-center gap-2 mt-3 flex-wrap">
-                                  <span className="text-[11px] text-[#9C9890]">
-                                    {new Date(event.timestamp).toLocaleString('hu-HU', { hour: '2-digit', minute: '2-digit' })}
-                                  </span>
-                                  {event.link && (
-                                    <button
-                                      onClick={() => router.push(event.link as string)}
-                                      className="text-[10px] text-[#C9A227] hover:underline"
-                                    >
-                                      {event.linkLabel || 'Megnyitás'}
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
+                        {event.description && <p className="mt-1 text-[11px] leading-relaxed text-[#3D4842]">{event.description}</p>}
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="text-[10px] text-[#7A8479]">{new Date(event.timestamp).toLocaleString('hu-HU', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                          {event.link && <button onClick={() => router.push(event.link as string)} className="text-[10px] font-semibold text-[#8E6A1B]">{event.linkLabel || 'Megnyitás'}</button>}
                         </div>
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-xs text-[#9C9890] italic space-y-1">
-                      <p>Még nincs rögzített ügyesemény.</p>
-                      <p>Dokumentum feltöltése, generálás, feladatfrissítés vagy kommunikáció rögzítése után jelennek meg az események.</p>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-4 text-xs text-[#7A8479]">Még nincs rögzített ügyesemény.</div>
+                )}
+              </div>
+
+              <div className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
+                <h3 className="font-serif text-[17px] text-[#16201A]">Aktív dokumentum</h3>
+                {activeDocument ? (
+                  <div className="mt-3 border border-[#E5DCBE] bg-[#FBF6E7] p-3">
+                    <p className="truncate text-[13px] font-semibold text-[#16201A]">{activeDocument.name}</p>
+                    <p className="mt-1 text-[10px] text-[#7A8479]">{activeDocument.type} {activeDocument.version ? `· ${activeDocument.version}` : ''} · {activeDocument.date}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button onClick={() => router.push(`/documents/compare?caseId=${canonicalCaseId}`)} className="bg-[#1F4A33] px-3 py-1.5 text-[10px] font-semibold text-[#F4EFDB]">Workspace</button>
+                      <button onClick={() => handleDocumentClick(activeDocument)} disabled={isDownloading === activeDocument.id} className="border border-[#D8CDB6] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#3D4842]">{isDownloading === activeDocument.id ? '...' : 'Letöltés'}</button>
+                      <button onClick={() => handleAnonymizeDocument(activeDocument)} className="border border-[#D8CDB6] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#3D4842]">Anonimizálás</button>
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-4 text-[11px] text-[#7A8479]">Még nincs aktív dokumentum.</div>
+                )}
               </div>
-            </div>
+            </section>
 
-            
-
-            {/* Case Completion Actions - only for non-archived cases with assigned lawyer */}
             {!isArchived && assignedLawyer && (
-              <div className="mt-6 p-6 bg-[#FEF3C7] border border-[#FCD34D]">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-[#059669] text-white rounded flex items-center justify-center flex-shrink-0">
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs font-semibold text-[#1F2821]">Ügy lezárása</p>
-                    <p className="text-xs text-[#6B655B] mt-1 leading-relaxed">
-                      Az ügy lezárható. Az archiválás befejezettként jelöli az ügyet.
-                    </p>
-                    <button
-                      onClick={() => setShowCompleteConfirm(true)}
-                      className="mt-3 px-4 py-2 bg-[#059669] text-white text-xs font-bold uppercase tracking-widest hover:bg-[#047857] transition-colors"
-                    >
-                      Lezárás és archiválás
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <section className="border border-[#F2E4BD] bg-[#FAEFCF] p-4">
+                <p className="text-[12px] font-semibold text-[#16201A]">Ügy lezárása</p>
+                <p className="mt-1 text-[11px] text-[#3D4842]">Az ügy lezárható. Az archiválás befejezettként jelöli az ügyet.</p>
+                <button onClick={() => setShowCompleteConfirm(true)} className="mt-3 bg-[#1F4A33] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#F4EFDB]">Lezárás és archiválás</button>
+              </section>
             )}
 
-            {/* Archived case indicator */}
             {isArchived && (
-              <div className="mt-6 p-6 bg-[#F3F4F6] border border-[#E5E7EB]">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-[#64748b] text-white rounded flex items-center justify-center flex-shrink-0">
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m6 4.125l2.25 2.25m0 0l2.25 2.25M12 13.875l2.25-2.25M12 13.875l-2.25 2.25M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-[#1F2821]">Archivált ügy</p>
-                    <p className="text-xs text-[#6B655B] mt-1 leading-relaxed">
-                      Ez az ügy befejezett és archivált. Az ügyadatok és dokumentumok megmaradnak, csak olvasható módban érhetők el. Az aktív műveletek le vannak tiltva.
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <section className="border border-[#E5DCBE] bg-[#FBF6E7] p-4">
+                <p className="text-[12px] font-semibold text-[#16201A]">Archivált ügy</p>
+                <p className="mt-1 text-[11px] text-[#3D4842]">Ez az ügy befejezett és archivált. Az aktív műveletek le vannak tiltva.</p>
+              </section>
             )}
-
-            
           </div>
         </main>
 
-        <aside className="w-80 border-l border-[#DDD7CA] bg-white overflow-y-auto">
-          <div className="p-4 space-y-6">
-            <div className="rounded-[8px] border border-[#173824] bg-[#1F4A33] p-4 text-[#F4EFDB]">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-[#C9A227] font-semibold">Következő lépés</p>
-              {!isArchived && generatedContracts.length > 0 ? (
-                <>
-                  <h3 className="mt-1 font-serif text-xl">Szerződés-workspace megnyitása</h3>
-                  <p className="mt-1 text-[11px] text-[#F4EFDB]/80">A módosított dokumentumok és klauzulák kezelése a workspace-ben folytatható.</p>
-                  <button
-                    onClick={() => router.push(`/documents/compare?caseId=${canonicalCaseId}`)}
-                    className="mt-3 w-full rounded-[5px] border border-[#8E6A1B] bg-[#B58A2A] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#8E6A1B]"
-                  >
-                    Szerződés-workspace megnyitása
-                  </button>
-                </>
-              ) : !isArchived && documents.length > 0 ? (
-                <>
-                  <h3 className="mt-1 font-serif text-xl">Dokumentumtár megnyitása</h3>
-                  <p className="mt-1 text-[11px] text-[#F4EFDB]/80">Feltöltött iratból anonimizálás, munkapéldány és leadási csomag indítható.</p>
-                  <button
-                    onClick={() => router.push(`/cases/${canonicalCaseId}/documents`)}
-                    className="mt-3 w-full rounded-[5px] border border-[#8E6A1B] bg-[#B58A2A] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#8E6A1B]"
-                  >
-                    Dokumentumtár megnyitása
-                  </button>
-                </>
-              ) : !isArchived ? (
-                <>
-                  <h3 className="mt-1 font-serif text-xl">Dokumentum feltöltése</h3>
-                  <p className="mt-1 text-[11px] text-[#F4EFDB]/80">Az ügykezelés első lépése egy munkadokumentum feltöltése.</p>
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="mt-3 w-full rounded-[5px] border border-[#8E6A1B] bg-[#B58A2A] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#8E6A1B]"
-                  >
-                    Dokumentum feltöltése
-                  </button>
-                </>
-              ) : (
-                <>
-                  <h3 className="mt-1 font-serif text-xl">Archivált ügy</h3>
-                  <p className="mt-1 text-[11px] text-[#F4EFDB]/80">Az ügy lezárt. További aktív lépések későbbi patchben.</p>
-                  <button
-                    type="button"
-                    disabled
-                    className="mt-3 w-full rounded-[5px] border border-[#C3B48C] px-3 py-2 text-[11px] font-semibold text-[#F4EFDB]/70"
-                  >
-                    Későbbi patchben
-                  </button>
-                </>
-              )}
-            </div>
+        <aside className="w-[352px] shrink-0 overflow-y-auto border-l border-[#D5CBA8] bg-[#F7F0D9] p-4">
+          <div className="space-y-4">
+            <section className="rounded-[8px] border border-[#173824] bg-[#1F4A33] p-4 text-[#F4EFDB] shadow-[0_6px_16px_rgba(31,74,51,0.20)]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#B58A2A]">KÖVETKEZŐ LÉPÉS</p>
+              <h3 className="mt-2 font-serif text-[20px] leading-tight">{nextStep.title}</h3>
+              <p className="mt-2 text-[12px] leading-relaxed text-[#F4EFDB]/78">{nextStep.helper}</p>
+              <button onClick={nextStep.action} className="mt-3 w-full rounded-[5px] border border-[#8E6A1B] bg-[#B58A2A] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#8E6A1B]">{nextStep.label}</button>
+            </section>
 
-            <div>
-              <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D] mb-3">Ügy munkaterület</h3>
-              <p className="text-xs text-[#9C9890] italic">Csak operatív panelek. Nincs szintetikus elemzés.</p>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D]">Munkaterv</h3>
-                <span className="text-[10px] text-[#9C9890]">{workplanTasks.length}</span>
+            <section className="border border-[#E5DCBE] bg-white p-3">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">ÜGY MUNKATERV</h3>
+                <span className="text-[10px] text-[#7A8479]">{workplanTasks.length}</span>
               </div>
               {workplanTasks.length > 0 ? (
                 <div className="space-y-2">
-                  {workplanTasks.slice(0, 5).map((task) => (
-                    <div key={task.id} className="rounded border border-[#DDD7CA] bg-[#FBF6E7] p-3">
-                      <p className="text-xs font-semibold text-[#1F2821]">{task.title}</p>
-                      <p className="mt-1 text-[10px] text-[#7B776D]">Felelős: {task.assignedTo?.name || "Nincs kijelölve"}</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        <span className="text-[9px] px-1.5 py-0.5 rounded border bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]">
-                          Státusz: {getTaskStatusLabel(task.status)}
-                        </span>
-                        {task.dueDate ? (
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded border ${getTaskDueDateTone(task.dueDate)}`}>
-                            Határidő: {new Date(task.dueDate).toLocaleDateString('hu-HU')}
-                          </span>
-                        ) : null}
-                      </div>
+                  {workplanTasks.slice(0, 4).map((task) => (
+                    <div key={task.id} className="border border-[#E5DCBE] bg-[#FBF6E7] p-2">
+                      <p className="text-[12px] font-semibold text-[#16201A]">{task.title}</p>
+                      <p className="mt-1 text-[10px] text-[#7A8479]">Felelős: {task.assignedTo?.name || 'Nincs kijelölve'}</p>
+                      <p className="mt-1 text-[10px] text-[#7A8479]">Státusz: {getTaskStatusLabel(task.status)}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="rounded border border-dashed border-[#DDD7CA] p-3">
-                  <p className="text-[11px] text-[#9C9890]">Még nincs munkaterv rögzítve.</p>
-                  <p className="mt-1 text-[10px] text-[#9C9890]">Új ügy létrehozásakor vagy későbbi patchben adható hozzá.</p>
-                </div>
+                <p className="border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-3 text-[11px] text-[#7A8479]">Még nincs munkaterv rögzítve.</p>
               )}
-            </div>
+            </section>
 
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D]">Ügyfél dokumentumai</h3>
-                <span className="text-[10px] text-[#9C9890]">{documents.length} fájl</span>
+            <section className="border border-[#E5DCBE] bg-white p-3">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">ÜGYFÉL DOKUMENTUMAI</h3>
+                <span className="text-[10px] text-[#7A8479]">{documents.length} fájl</span>
               </div>
-              {uploadError && (
-                <div className="mb-3 p-2 bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a] text-[10px]">
-                  {uploadError}
-                </div>
-              )}
-              {isUploading && (
-                <div className="mb-3 p-2 bg-[#f0f9ff] border border-[#b8d4f0] text-[#3a6b8b] text-[10px]">
-                  Dokumentum feltöltése...
-                </div>
-              )}
+              {uploadError && <div className="mb-2 border border-[#d4b8b8] bg-[#fef2f2] p-2 text-[10px] text-[#8b3a3a]">{uploadError}</div>}
+              {isUploading && <div className="mb-2 border border-[#E5DCBE] bg-[#FBF6E7] p-2 text-[10px] text-[#3D4842]">Dokumentum feltöltése...</div>}
               {displayedDocs.length > 0 ? (
                 <div className="space-y-2">
-                      {displayedDocs.map((doc) => (
-                        <div 
-                          key={doc.id}
-                          className={`p-3 border rounded transition-all ${
-                            highlightedTimelineId && doc.linkedTimelineId === highlightedTimelineId 
-                              ? 'border-[#C9A227] bg-[#FFFBEB]' 
-                              : 'border-[#ECE6DA]'
-                          }`}
-                        >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <svg className="w-4 h-4 text-[#7B776D] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 2h7l5 5v13a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" />
-                          </svg>
-                          <div className="min-w-0">
-                            <p className="text-xs text-[#1F2821] truncate font-medium">{doc.name}</p>
-                            <p className="text-[10px] text-[#9C9890]">{doc.type} {doc.version && `• ${doc.version}`} • {doc.date}</p>
-                          </div>
-                        </div>
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded flex-shrink-0 border ${docStatusBadge[doc.status]}`}>
-                          {doc.status}
-                        </span>
-                      </div>
-                      <div className="mt-2 flex items-center gap-2">
-                        <button
-                          onClick={() => handleDocumentClick(doc)}
-                          disabled={isDownloading === doc.id}
-                          className="text-[9px] px-2 py-1 border border-[#DDD7CA] text-[#514D45] rounded hover:bg-[#FBF9F3] disabled:opacity-50 flex items-center gap-1"
-                        >
-                          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                          </svg>
-                          {isDownloading === doc.id ? '...' : 'Letöltés'}
-                        </button>
-                        <button
-                          onClick={() => handleAnonymizeDocument(doc)}
-                          className="text-[9px] px-2 py-1 border border-[#8B5CF6] text-[#8B5CF6] rounded hover:bg-[#f5f3ff] flex items-center gap-1"
-                        >
-                          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-                          </svg>
-                          Anonimizálás
-                        </button>
-                      </div>
+                  {displayedDocs.map((doc) => (
+                    <div key={doc.id} className={`border p-2 ${highlightedTimelineId && doc.linkedTimelineId === highlightedTimelineId ? 'border-[#B58A2A] bg-[#FAEFCF]' : 'border-[#E5DCBE] bg-[#FBF6E7]'}`}>
+                      <p className="truncate text-[12px] font-semibold text-[#16201A]">{doc.name}</p>
+                      <p className="mt-1 text-[10px] text-[#7A8479]">{doc.type} {doc.version ? `· ${doc.version}` : ''}</p>
                     </div>
                   ))}
-                  {hasMoreDocs && (
-                    <button 
-                      onClick={() => setShowAllDocs(!showAllDocs)}
-                      className="w-full py-2 text-[10px] uppercase tracking-[0.2em] text-[#C9A227] hover:underline"
-                    >
-                      {showAllDocs ? 'Kevesebb megjelenítése' : `Összes dokumentum (${documents.length})`}
-                    </button>
-                  )}
+                  {hasMoreDocs && <button onClick={() => setShowAllDocs(!showAllDocs)} className="w-full border border-[#E5DCBE] py-2 text-[10px] font-semibold text-[#8E6A1B]">{showAllDocs ? 'Kevesebb megjelenítése' : `Összes dokumentum (${documents.length})`}</button>}
                 </div>
               ) : (
-                <div className="text-center py-6 border border-dashed border-[#DDD7CA]">
-                  <svg className="w-8 h-8 mx-auto text-[#9C9890] mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 2h7l5 5v13a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 11v6M9 14h6" />
-                  </svg>
-                  <p className="text-xs text-[#9C9890]">Még nincs ügyféldokumentum.</p>
-                  <p className="text-[10px] text-[#B0A898] mt-1">Tölts fel ügyféldokumentumot a kezdéshez.</p>
-                </div>
+                <p className="border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-3 text-[11px] text-[#7A8479]">Még nincs ügyféldokumentum.</p>
               )}
-            </div>
+            </section>
 
-            {generatedContracts.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#C9A227]">Generált szerződések</h3>
-                </div>
-                <div className="space-y-2">
-                  {generatedContracts.map((contract) => (
-                    <div 
-                      key={contract.id}
-                      className="p-3 border border-[#C9A227] bg-[#FFFBEB] rounded"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <svg className="w-4 h-4 text-[#C9A227] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.801 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.87.688 2.006 1.649L19 6v-.75a2.25 2.25 0 00-2.25-2.25h-1.5" />
-                          </svg>
-                          <div className="min-w-0">
-                            <p className="text-xs text-[#1F2821] truncate font-medium">{contract.title}</p>
-                            <p className="text-[10px] text-[#9C9890]">{contract.fileName}</p>
-                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                              {contract.parentRevisionId && (
-                                <span className="text-[8px] px-1 py-0.5 bg-[#EDE9FE] text-[#5B21B6] border border-[#C4B5FD] font-bold uppercase tracking-wide">
-                                  Szerkesztett verzió
-                                </span>
-                              )}
-                              {contract.revisionNumber && (
-                                <span className="text-[8px] px-1 py-0.5 bg-[#EEE7D9] text-[#514D45] border border-[#DDD7CA] font-bold uppercase tracking-wide">
-                                  Verzió {contract.revisionNumber}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-[#7B776D] mt-1">
-                        Létrehozva: {new Date(contract.generatedAt).toLocaleString('hu-HU')}
-                      </p>
-                      <div className="flex gap-2 mt-2">
-                        <button
-                          onClick={() => handleDownloadContract(contract.id, contract.fileName)}
-                          disabled={isDownloading === contract.id}
-                          className="text-[9px] px-2 py-1 border border-[#DDD7CA] text-[#514D45] rounded hover:bg-[#FBF9F3] disabled:opacity-50"
-                        >
-                          {isDownloading === contract.id ? '...' : 'Letöltés'}
-                        </button>
-                        <button
-                          onClick={() => router.push(`/cases/${canonicalCaseId}/review/${contract.id}`)}
-                          className="text-[9px] px-2 py-1 bg-[#F59E0B] text-white rounded hover:bg-[#D97706]"
-                        >
-                          Review megnyitása
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <section className="border border-[#E5DCBE] bg-white p-3">
+              <h3 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">SZERZŐDÉS-WORKSPACE MEGNYITÁSA</h3>
+              <button onClick={() => router.push(`/documents/compare?caseId=${canonicalCaseId}`)} className="w-full bg-[#1F4A33] px-3 py-2 text-[11px] font-semibold text-[#F4EFDB]">Szerződés-workspace</button>
+              <p className="mt-2 text-[10px] text-[#7A8479]">Klauzulák, prompt-copy és módosított munkapéldányok kezelése.</p>
+            </section>
 
-            <div>
-              <button
-                onClick={() => router.push(`/documents/compare?caseId=${canonicalCaseId}`)}
-                className={`w-full py-3 text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-colors ${isArchived ? 'bg-[#9CA3AF] text-white cursor-not-allowed' : 'bg-[#C9A227] text-white hover:bg-[#B8911F]'}`}
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 2h7l5 5v13a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 11v6M9 14h6" />
-                </svg>
-                Szerződés-workspace megnyitása
-              </button>
-              <p className="mt-2 text-[10px] text-[#7B776D] text-center">
-                Klauzulák és munkapéldány a Szerződés-workspace-ben kezelhetők.
-              </p>
-            </div>
-
-            {/* Secure Bridge: AI Response Import — collapsed, secondary */}
-            <details className="border border-[#8B5CF6]/20 rounded bg-[#f5f3ff]/30">
-              <summary className="flex items-center justify-between mb-3 cursor-pointer hover:opacity-80 p-1">
-                <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#8B5CF6]">AI prompt-előkészítés ▸</h3>
-                {anonymousDocuments.length > 0 && (
-                  <span className="text-[10px] text-[#9C9890]">{anonymousDocuments.length} dokumentum</span>
-                )}
-              </summary>
+            <details className="border border-[#E5DCBE] bg-white p-3">
+              <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">Külső AI promptok</summary>
               {anonymousDocuments.length > 0 ? (
-                <div className="space-y-2">
+                <div className="mt-3 space-y-2">
                   {anonymousDocuments.map((anonDoc) => (
-                    <div
-                      key={anonDoc.id}
-                      className="p-3 border border-[#8B5CF6]/30 bg-white rounded"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <svg className="w-4 h-4 text-[#8B5CF6] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-                          </svg>
-                          <div className="min-w-0">
-                            <p className="text-xs text-[#1F2821] truncate font-medium">
-                              {anonDoc.name || 'Anonimizált dokumentum'}
-                            </p>
-                            <p className="text-[10px] text-[#9C9890]">
-                               {anonDoc.aiTask || 'Egyedi'} • {new Date(anonDoc.createdAt).toLocaleDateString('hu-HU')}
-                            </p>
-                          </div>
-                        </div>
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded flex-shrink-0 border ${
-                          anonDoc.rehydrationStatus === 'COMPLETE' ? 'bg-[#E2EDE5] text-[#23472F] border-[#A6C0AF]' :
-                          anonDoc.rehydrationStatus === 'PARTIAL' ? 'bg-[#fff8e1] text-[#8a6a00] border-[#f9c74f]' :
-                          anonDoc.rehydrationStatus === 'FAILED' ? 'bg-[#fef2f2] text-[#8b3a3a] border-[#d4b8b8]' :
-                          'bg-[#f5f3ff] text-[#8B5CF6] border-[#8B5CF6]/30'
-                        }`}>
-                          {anonDoc.rehydrationStatus || 'AWAITING_AI'}
-                        </span>
-                      </div>
-                      <div className="mt-2 flex items-center gap-2">
-                        <button
-                          onClick={() => handleOpenRehydrate(anonDoc)}
-                          className="text-[9px] px-2 py-1 bg-[#8B5CF6] text-white rounded hover:bg-[#7C3AED] flex items-center gap-1"
-                        >
-                          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                          </svg>
-                          AI válasz beillesztése
-                        </button>
-                      </div>
+                    <div key={anonDoc.id} className="border border-[#E5DCBE] bg-[#FBF6E7] p-2">
+                      <p className="truncate text-[11px] font-semibold text-[#16201A]">{anonDoc.name || 'Anonimizált dokumentum'}</p>
+                      <button onClick={() => handleOpenRehydrate(anonDoc)} className="mt-2 border border-[#D8CDB6] bg-white px-2 py-1 text-[10px] text-[#3D4842]">AI válasz beillesztése</button>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-[10px] text-[#7B776D] leading-relaxed pb-1">
-                  AI promptok és anonimizálás a Dokumentumtárból vagy a Szerződés-workspace-ből indítható.
-                </p>
+                <p className="mt-3 text-[10px] leading-relaxed text-[#7A8479]">Adminiculum nem hív külső AI-t. A promptok másolható munkafolyamatként kezelhetők.</p>
               )}
             </details>
 
-              <div>
-                <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D] mb-3">Belső jegyzetek</h3>
-                <button
-                  onClick={() => router.push(`/cases/${canonicalCaseId}/communications`)}
-                  className="w-full py-2 text-[10px] uppercase tracking-[0.2em] border border-[#DDD7CA] text-[#514D45] hover:bg-[#FBF9F3]"
-                >
-                  Jegyzetek és kommunikációs napló megnyitása
-                </button>
+            <section className="border border-[#E5DCBE] bg-white p-3">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">FELADATOK</h3>
+                <span className="text-[10px] text-[#7A8479]">{openTasks.length}</span>
               </div>
-
-              {/* Tasks Panel */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#059669]">Feladatok</h3>
-                  <span className="text-[10px] text-[#9C9890]">{tasks.length}</span>
-                </div>
-                {isLoadingTasks ? (
-                  <div className="py-4 text-center text-[10px] text-[#9C9890]">Feladatok betöltése...</div>
-                ) : tasks.length > 0 ? (
-                  <div className="space-y-2">
-                    {tasks.slice(0, 5).map((task) => (
-                      <div
-                        key={task.id}
-                        className="p-3 border border-[#059669]/30 bg-[#f0fdf4] rounded"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <svg className="w-4 h-4 text-[#059669] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                            </svg>
-                            <div className="min-w-0">
-                              <p className="text-xs text-[#1F2821] truncate font-medium">{task.title}</p>
-                              <p className="text-[10px] text-[#9C9890] mt-0.5">
-                                {task.priority && (
-                                  <span className={`inline-block mr-2 ${
-                                    task.priority === 'HIGH' ? 'text-[#DC2626]' :
-                                    task.priority === 'MEDIUM' ? 'text-[#D97706]' : 'text-[#059669]'
-                                  }`}>
-                                    Prioritás: {getTaskPriorityLabel(task.priority)}
-                                  </span>
-                                )}
-                                {task.dueDate && (
-                                  <span className={`inline-block px-1.5 py-0.5 rounded border ${getTaskDueDateTone(task.dueDate)}`}>
-                                    Határidő: {new Date(task.dueDate).toLocaleDateString('hu-HU')}
-                                  </span>
-                                )}
-                              </p>
-                              {task.assignedTo && (
-                                <p className="text-[10px] text-[#7B776D] mt-0.5">
-                                  Felelős: {task.assignedTo.name}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded flex-shrink-0 border ${
-                            task.status === 'COMPLETED' || task.status === 'APPROVED' ? 'bg-[#E2EDE5] text-[#23472F] border-[#A6C0AF]' :
-                            task.status === 'REJECTED' || task.status === 'DECLINED' ? 'bg-[#fef2f2] text-[#8b3a3a] border-[#d4b8b8]' :
-                            task.status === 'IN_PROGRESS' ? 'bg-[#FEF3C7] text-[#92400E] border-[#FCD34D]' :
-                            task.status === 'SUBMITTED' ? 'bg-[#EDE9FE] text-[#5B21B6] border-[#C4B5FD]' :
-                            'bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]'
-                          }`}>
-                            {getTaskStatusLabel(task.status)}
-                          </span>
+              {isLoadingTasks ? (
+                <p className="py-3 text-center text-[10px] text-[#7A8479]">Feladatok betöltése...</p>
+              ) : openTasks.length > 0 ? (
+                <div className="space-y-2">
+                  {openTasks.slice(0, 4).map((task) => (
+                    <div key={task.id} className="border border-[#E5DCBE] bg-[#FBF6E7] p-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-[12px] font-semibold text-[#16201A]">{task.title}</p>
+                          <p className="mt-1 text-[10px] text-[#7A8479]">{task.assignedTo?.name || 'Nincs kijelölve'} · {getTaskStatusLabel(task.status)}</p>
                         </div>
-                        <div className="mt-2 flex items-center gap-2 flex-wrap">
-                          {/* Action buttons based on status */}
-                          {(task.status === 'TODO' || task.status === 'ASSIGNED' || task.status === 'PENDING') && (
-                            <button
-                              onClick={() => handleStartTask(task.id)}
-                              disabled={actionTaskId === task.id}
-                              className="text-[9px] px-2 py-1 bg-[#059669] text-white rounded hover:bg-[#047857] disabled:opacity-50"
-                            >
-                              {actionTaskId === task.id ? '...' : 'Indítás'}
-                            </button>
-                          )}
-                          {task.status === 'IN_PROGRESS' && (
-                            <button
-                              onClick={() => handleSubmitTask(task.id)}
-                              disabled={actionTaskId === task.id}
-                              className="text-[9px] px-2 py-1 bg-[#D97706] text-white rounded hover:bg-[#B45309] disabled:opacity-50"
-                            >
-                              {actionTaskId === task.id ? '...' : 'Beküldés'}
-                            </button>
-                          )}
-                          {task.status === 'SUBMITTED' && (
-                            <>
-                              <button
-                                onClick={() => handleCompleteTask(task.id, true)}
-                                disabled={actionTaskId === task.id}
-                                className="text-[9px] px-2 py-1 bg-[#059669] text-white rounded hover:bg-[#047857] disabled:opacity-50"
-                              >
-                                {actionTaskId === task.id ? '...' : 'Jóváhagyás'}
-                              </button>
-                              <button
-                                onClick={() => handleCompleteTask(task.id, false)}
-                                disabled={actionTaskId === task.id}
-                                className="text-[9px] px-2 py-1 bg-[#DC2626] text-white rounded hover:bg-[#B91C1C] disabled:opacity-50"
-                              >
-                                Elutasítás
-                              </button>
-                            </>
-                          )}
-                          {(task.status === 'TODO' || task.status === 'ASSIGNED' || task.status === 'IN_PROGRESS') && (
-                            <details className="text-[9px] text-[#9C9890]">
-                              <summary className="cursor-pointer">További műveletek</summary>
-                              <p className="mt-1 px-2 py-1 border border-[#DDD7CA] rounded">
-                                Újraosztás és határidő módosítása a feladattábláról érhető el.
-                              </p>
-                            </details>
-                          )}
-                        </div>
+                        <span className={`shrink-0 border px-1.5 py-0.5 text-[9px] ${getTaskDueDateTone(task.dueDate)}`}>{task.dueDate ? new Date(task.dueDate).toLocaleDateString('hu-HU') : 'Nincs határidő'}</span>
                       </div>
-                    ))}
-                    {tasks.length > 5 && (
-                      <p className="text-[10px] text-[#9C9890] text-center py-2">
-                        + {tasks.length - 5} további feladat
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-6 border border-dashed border-[#DDD7CA]">
-                    <svg className="w-8 h-8 mx-auto text-[#9C9890] mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                    </svg>
-                    <p className="text-xs text-[#9C9890]">Még nincs nyitott feladat ehhez az ügyhöz.</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Communication Summary Panel */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#3B82F6]">Kommunikációs összefoglaló</h3>
-                  <span className="text-[10px] text-[#9C9890]">{communications.length}</span>
-                </div>
-                {communications.length > 0 ? (
-                  <div className="space-y-2">
-                    {/* Latest Communication */}
-                    {(() => {
-                      const latest = communications[0];
-                      const commTypeLabels: Record<string, string> = {
-                        'EMAIL': 'Email',
-                        'PHONE': 'Telefon',
-                        'MEETING': 'Megbeszélés',
-                        'LETTER': 'Levél',
-                        'NOTE': 'Jegyzet',
-                      };
-                      const commTypeColors: Record<string, string> = {
-                        'EMAIL': 'bg-[#3B82F6] text-white',
-                        'PHONE': 'bg-[#8B5CF6] text-white',
-                        'MEETING': 'bg-[#10B981] text-white',
-                        'LETTER': 'bg-[#F59E0B] text-white',
-                        'NOTE': 'bg-[#6B7280] text-white',
-                      };
-                      return (
-                        <div className="p-3 border border-[#3B82F6]/30 bg-[#EFF6FF] rounded">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded ${commTypeColors[latest.type] || 'bg-[#6B7280] text-white'}`}>
-                              {commTypeLabels[latest.type] || latest.type}
-                            </span>
-                            <span className="text-[9px] text-[#9C9890]">
-                              {latest.createdAt ? new Date(latest.createdAt).toLocaleDateString('hu-HU') : ''}
-                            </span>
-                          </div>
-                          <p className="text-xs text-[#1F2821] font-medium truncate">{latest.subject || 'Nincs tárgy'}</p>
-                          <p className="text-[10px] text-[#7B776D] mt-1">
-                            {latest.senderName || 'Ismeretlen feladó'}
-                          </p>
-                        </div>
-                      );
-                    })()}
-                    
-                    {/* Follow-up indicator */}
-                    {(() => {
-                      // Count communications with related tasks (follow-ups)
-                      const followUpCount = communications.filter(c => c._count?.relatedTasks && c._count.relatedTasks > 0).length;
-                      return (
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className="text-[#7B776D]">Utánkövetési feladatok:</span>
-                          <span className={followUpCount > 0 ? 'text-[#F59E0B] font-medium' : 'text-[#9C9890]'}>
-                            {followUpCount > 0 ? `${followUpCount} kapcsolt feladat` : 'nincs rögzített follow-up'}
-                          </span>
-                        </div>
-                      );
-                    })()}
-                    
-                    {/* Link to full communications */}
-                    <button
-                      onClick={() => router.push(`/cases/${canonicalCaseId}/communications`)}
-                      className="w-full py-2 text-[10px] uppercase tracking-[0.2em] bg-[#3B82F6] text-white hover:bg-[#2563EB] flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5H4.5A2.25 2.25 0 002.25 6.5m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                      </svg>
-                      Kommunikáció megnyitása
-                    </button>
-                  </div>
-                ) : (
-                  <div className="text-center py-4 border border-dashed border-[#DDD7CA]">
-                    <svg className="w-8 h-8 mx-auto text-[#9C9890] mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5H4.5A2.25 2.25 0 002.25 6.5m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                    </svg>
-                    <p className="text-[10px] text-[#9C9890] mb-2">Még nincs rögzített kommunikáció</p>
-                    <p className="text-[9px] text-[#B0A898]">
-                      Ez a panel a rögzített ügykommunikációkat foglalja össze. A bejegyzések a kommunikációs workflow használata után jelennek meg.
-                    </p>
-                    <button
-                      onClick={() => router.push(`/cases/${canonicalCaseId}/communications`)}
-                      className="mt-3 w-full py-2 text-[10px] uppercase tracking-[0.2em] border border-[#DDD7CA] text-[#514D45] hover:bg-[#FBF9F3]"
-                    >
-                      Kommunikáció megnyitása
-                    </button>
-                  </div>
-                )}
-                
-                {/* Scope note */}
-                <p className="text-[9px] text-[#9C9890] mt-2 italic">
-                  Rögzített kommunikációk összefoglalója, nem élő postafiók.
-                </p>
-              </div>
-
-              {/* Workflow Stage Tracker */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#6366F1]">Munkafolyamat</h3>
-                  {workflowGraph && (
-                    <span className="text-[10px] text-[#9C9890]">{getWorkflowStatusLabel(workflowGraph.currentStatus)}</span>
-                  )}
-                </div>
-                {isLoadingWorkflow ? (
-                  <div className="py-4 text-center text-[10px] text-[#9C9890]">Munkafolyamat betöltése...</div>
-                ) : workflowGraph && workflowGraph.nodes.length > 0 ? (
-                  <div className="space-y-1">
-                    {workflowGraph.nodes.map((node: WorkflowNode, index: number) => (
-                      <div key={node.id} className="flex items-center gap-2">
-                        {/* Stage indicator */}
-                        <div className="flex flex-col items-center">
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium ${
-                            node.status === 'completed' ? 'bg-[#059669] text-white' :
-                            node.status === 'current' ? 'bg-[#6366F1] text-white ring-2 ring-[#6366F1]/30' :
-                            'bg-[#F3F4F6] text-[#9C9890]'
-                          }`}>
-                            {node.status === 'completed' ? (
-                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                              </svg>
-                            ) : (
-                              <span>{index + 1}</span>
-                            )}
-                          </div>
-                          {index < workflowGraph.nodes.length - 1 && (
-                            <div className={`w-0.5 h-4 ${
-                              node.status === 'completed' ? 'bg-[#059669]' : 'bg-[#E5E7EB]'
-                            }`} />
-                          )}
-                        </div>
-                        {/* Stage label */}
-                        <div className="flex-1 py-1">
-                          <p className={`text-[11px] ${
-                            node.status === 'current' ? 'font-semibold text-[#1F2821]' :
-                            node.status === 'completed' ? 'text-[#059669]' :
-                            'text-[#9C9890]'
-                          }`}>
-                            {node.label}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                    {workflowGraph.possibleTransitions.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-[#E5E7EB]">
-                        <p className="text-[10px] text-[#9C9890] mb-2">Elérhető műveletek:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {workflowGraph.possibleTransitions.map((status) => (
-                            <button
-                              key={status}
-                              onClick={() => handleWorkflowTransition(status)}
-                              disabled={isTransitioning || isArchived}
-                              className="text-[9px] px-2 py-1 bg-[#6366F1] text-white rounded hover:bg-[#4F46E5] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                              {isTransitioning ? '...' : getWorkflowStatusLabel(status)}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-6 border border-dashed border-[#DDD7CA]">
-                    <svg className="w-8 h-8 mx-auto text-[#9C9890] mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.801 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.87.688 2.006 1.649L19 6v-.75a2.25 2.25 0 00-2.25-2.25h-1.5" />
-                    </svg>
-                    <p className="text-xs text-[#9C9890]">Nincs elérhető munkafolyamat-adat</p>
-                  </div>
-                )}
-              </div>
-
-              <details className="mt-4 pt-4 border-t border-[#E5E7EB]">
-                <summary className="text-[10px] uppercase tracking-[0.28em] text-[#6366F1] cursor-pointer hover:text-[#4F46E5] mb-3 list-none">
-                  Munkafolyamat kontextus ▸
-                </summary>
-                <div className="space-y-2 p-3 border border-[#E0E7FF] bg-[#F8FAFF] rounded">
-                  <div className="flex items-start justify-between gap-3 text-[10px]">
-                    <span className="text-[#7B776D]">Aktuális lépés</span>
-                    <span className="text-right text-[#1F2821] font-medium">
-                      {currentWorkflowNode?.label || getWorkflowStatusLabel(workflowGraph?.currentStatus) || 'Nem elérhető'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-start justify-between gap-3 text-[10px]">
-                    <span className="text-[#7B776D]">Felelős</span>
-                    <span className="text-right text-[#1F2821]">
-                      {primaryWorkflowTask?.assignedTo?.name || 'Még nincs felelős'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-start justify-between gap-3 text-[10px]">
-                    <span className="text-[#7B776D]">Határidő</span>
-                    <span className="text-right text-[#1F2821]">
-                      {primaryWorkflowTask?.dueDate ? new Date(primaryWorkflowTask.dueDate).toLocaleDateString('hu-HU') : 'Nincs határidő'}
-                    </span>
-                  </div>
-
-                  <div className="text-[10px]">
-                    <p className="text-[#7B776D] mb-1">Kapcsolódó aktív feladatok</p>
-                    {prioritizedActiveTasks.length > 0 ? (
-                      <div className="space-y-1">
-                        {prioritizedActiveTasks.slice(0, 3).map((task) => (
-                          <p key={task.id} className="text-[#1F2821] truncate">• {task.title}</p>
-                        ))}
-                        {prioritizedActiveTasks.length > 3 && (
-                          <p className="text-[#9C9890]">+ {prioritizedActiveTasks.length - 3} további</p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {(task.status === 'TODO' || task.status === 'ASSIGNED' || task.status === 'PENDING') && <button onClick={() => handleStartTask(task.id)} disabled={actionTaskId === task.id} className="bg-[#1F4A33] px-2 py-1 text-[9px] text-white disabled:opacity-50">{actionTaskId === task.id ? '...' : 'Indítás'}</button>}
+                        {task.status === 'IN_PROGRESS' && <button onClick={() => handleSubmitTask(task.id)} disabled={actionTaskId === task.id} className="bg-[#B58A2A] px-2 py-1 text-[9px] text-white disabled:opacity-50">{actionTaskId === task.id ? '...' : 'Beküldés'}</button>}
+                        {task.status === 'SUBMITTED' && (
+                          <>
+                            <button onClick={() => handleCompleteTask(task.id, true)} disabled={actionTaskId === task.id} className="bg-[#1F4A33] px-2 py-1 text-[9px] text-white disabled:opacity-50">{actionTaskId === task.id ? '...' : 'Jóváhagyás'}</button>
+                            <button onClick={() => handleCompleteTask(task.id, false)} disabled={actionTaskId === task.id} className="border border-[#8B2A2A] bg-white px-2 py-1 text-[9px] text-[#8B2A2A] disabled:opacity-50">Elutasítás</button>
+                          </>
                         )}
                       </div>
-                    ) : (
-                      <p className="text-[#9C9890]">Nincs kapcsolt feladat</p>
-                    )}
-                  </div>
-
-                  <div className="text-[10px]">
-                    <p className="text-[#7B776D] mb-1">Legutóbbi munkafolyamat-indoklás / megjegyzés</p>
-                    {isLoadingWorkflowHistory ? (
-                      <p className="text-[#9C9890]">Betöltés...</p>
-                    ) : latestWorkflowComment?.comment ? (
-                      <div>
-                        <p className="text-[#1F2821] leading-relaxed">{latestWorkflowComment.comment}</p>
-                        {latestWorkflowComment.userId && (() => {
-                          const actorName = users.find(u => u.id === latestWorkflowComment.userId)?.name;
-                          return actorName ? (
-                            <p className="text-[#9C9890] mt-1">— {actorName}, {new Date(latestWorkflowComment.createdAt).toLocaleString('hu-HU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
-                          ) : null;
-                        })()}
-                      </div>
-                    ) : (
-                      <p className="text-[#9C9890]">Nincs rögzített indoklás vagy megjegyzés</p>
-                    )}
-                  </div>
+                    </div>
+                  ))}
                 </div>
-                <p className="text-[9px] text-[#9C9890] mt-2 italic">
-                  A felelős és a határidő az aktív ügyfeladatokból, az indoklás vagy megjegyzés a munkafolyamat-előzményekből származik.
-                </p>
-              </details>
+              ) : (
+                <p className="border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-3 text-[11px] text-[#7A8479]">Még nincs nyitott feladat ehhez az ügyhöz.</p>
+              )}
+            </section>
+
+            <section className="border border-[#E5DCBE] bg-white p-3">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">BELSŐ JEGYZETEK / KOMMUNIKÁCIÓ</h3>
+                <span className="text-[10px] text-[#7A8479]">{communications.length}</span>
+              </div>
+              {latestCommunication ? (
+                <div className="border border-[#E5DCBE] bg-[#FBF6E7] p-2">
+                  <p className="truncate text-[12px] font-semibold text-[#16201A]">{latestCommunication.subject || 'Nincs tárgy'}</p>
+                  <p className="mt-1 text-[10px] text-[#7A8479]">{latestCommunication.senderName || 'Ismeretlen feladó'} · {latestCommunication.createdAt ? new Date(latestCommunication.createdAt).toLocaleDateString('hu-HU') : ''}</p>
+                </div>
+              ) : (
+                <p className="border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-3 text-[11px] text-[#7A8479]">Még nincs rögzített kommunikáció.</p>
+              )}
+              <button onClick={() => router.push(`/cases/${canonicalCaseId}/communications`)} className="mt-3 w-full border border-[#D8CDB6] bg-white px-3 py-2 text-[10px] font-semibold text-[#3D4842]">Kommunikációs napló</button>
+              <p className="mt-2 text-[9px] text-[#7A8479]">Rögzített kommunikációk összefoglalója, nem élő postafiók.</p>
+            </section>
+
+            <details className="border border-[#E5DCBE] bg-white p-3">
+              <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">Munkafolyamat kontextus</summary>
+              <div className="mt-3 space-y-2 text-[10px] text-[#3D4842]">
+                <p>Aktuális lépés: <b>{currentWorkflowNode?.label || getWorkflowStatusLabel(workflowGraph?.currentStatus) || 'Nem elérhető'}</b></p>
+                <p>Felelős: <b>{primaryWorkflowTask?.assignedTo?.name || 'Még nincs felelős'}</b></p>
+                <p>Határidő: <b>{primaryWorkflowTask?.dueDate ? new Date(primaryWorkflowTask.dueDate).toLocaleDateString('hu-HU') : 'Nincs határidő'}</b></p>
+                {workflowGraph?.possibleTransitions?.length ? (
+                  <div className="flex flex-wrap gap-1 pt-2">
+                    {workflowGraph.possibleTransitions.map((status) => (
+                      <button key={status} onClick={() => handleWorkflowTransition(status)} disabled={isTransitioning || isArchived} className="bg-[#1F4A33] px-2 py-1 text-[9px] text-white disabled:opacity-50">
+                        {isTransitioning ? '...' : getWorkflowStatusLabel(status)}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </details>
           </div>
         </aside>
       </div>
