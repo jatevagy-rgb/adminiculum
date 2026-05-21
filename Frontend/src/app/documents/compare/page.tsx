@@ -999,15 +999,29 @@ const filteredClauseTools = useMemo(() => {
   };
 
   const handleDownload = async (doc: CompareDocument) => {
-    const blob = doc.kind === "contract" ? await downloadContract(doc.id) : await downloadDocument(doc.id);
-    const url = URL.createObjectURL(blob);
-    const anchor = globalThis.document.createElement("a");
-    anchor.href = url;
-    anchor.download = doc.fileName || "document";
-    globalThis.document.body.appendChild(anchor);
-    anchor.click();
-    globalThis.document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
+    try {
+      const blob = doc.kind === "contract" ? await downloadContract(doc.id) : await downloadDocument(doc.id);
+      const url = URL.createObjectURL(blob);
+      const anchor = globalThis.document.createElement("a");
+      anchor.href = url;
+      anchor.download = doc.fileName || "document";
+      globalThis.document.body.appendChild(anchor);
+      anchor.click();
+      globalThis.document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 404) {
+          setEditorNotice("A kért dokumentum letöltése nem érhető el.");
+          return;
+        }
+        if (err.status === 400) {
+          setEditorNotice("A dokumentum letöltése jelenleg nem érhető el ehhez a verzióhoz.");
+          return;
+        }
+      }
+      setEditorNotice("A dokumentum letöltése sikertelen.");
+    }
   };
 
   const handleSaveWorkspaceVersion = async () => {
