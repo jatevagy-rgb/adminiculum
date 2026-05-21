@@ -3,7 +3,6 @@
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { Dashboard } from "./Dashboard";
-import { RightPanel } from "./RightPanel";
 import { CasesList } from "./CasesList";
 import { useUiPack } from "@/lib/uiPack";
 
@@ -61,10 +60,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
   ) : shouldRenderCasesDefault ? (
     <CasesList />
   ) : shouldRenderDashboardDefault ? (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <Dashboard />
-      <RightPanel />
-    </div>
+    <Dashboard />
   ) : (
     <div className="text-xs text-[#7B776D]">Nincs elérhető tartalom ebben a szekcióban.</div>
   );

@@ -7,6 +7,7 @@ import {
   getMyTasks,
   getCases,
   getDashboardStats,
+  getUnreadNotificationsCount,
   getCurrentUser,
   getNewsFeed,
   type CommunicationItem,
@@ -89,6 +90,7 @@ export function Dashboard() {
   const [myCases, setMyCases] = useState<CaseListItem[]>([]);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [unreadNotifications, setUnreadNotifications] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,17 +104,19 @@ export function Dashboard() {
       const user = await getCurrentUser();
       setCurrentUser(user);
 
-      const [communicationPage, myTasks, casesData, stats] = await Promise.all([
+      const [communicationPage, myTasks, casesData, stats, unreadInfo] = await Promise.all([
         getCommunications({ limit: 8 }),
         getMyTasks(),
         getCases(1, 10, user.id),
         getDashboardStats(),
+        getUnreadNotificationsCount().catch(() => null),
       ]);
 
       setCommunications(communicationPage.communications);
       setTasks(myTasks);
       setMyCases(casesData.data);
       setDashboardStats(stats);
+      setUnreadNotifications(unreadInfo?.unreadCount ?? null);
     } catch (err) {
       console.error("Failed to load dashboard data", err);
       setError(err instanceof Error ? err.message : "Háttéradat betöltése sikertelen");
@@ -175,6 +179,8 @@ export function Dashboard() {
     const reviewRegex = /review|approval|pending|waiting/i;
     return tasks.filter((task) => reviewRegex.test(task.status)).slice(0, 4);
   }, [tasks]);
+  const reviewCount = pendingReviews.length;
+  const caseCount = myCases.length;
 
   const activeCase = useMemo(() => myCases[0] ?? null, [myCases]);
   const activeCaseId = activeCase?.id ?? null;
@@ -236,7 +242,7 @@ export function Dashboard() {
 
   const rowCardTone = isSignal
     ? "rounded-md border border-[#243B63] bg-[#16253D] text-[#D6E2F2]"
-    : "rounded-md border border-[#DDD7CA] bg-[#FFFDF7] text-[#1F2A24]";
+    : "rounded-md border border-[#DDD7CA] border-l-4 border-l-[#B58A2A] bg-[#FFFDF7] text-[#1F2A24]";
 
   const renderMessageRow = (item: CommunicationItem) => (
     <Card key={item.id} uiPack={uiPack} className={rowCardTone}>
@@ -309,15 +315,12 @@ export function Dashboard() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className={`text-[30px] leading-none ${toneTitle}`}>Mai jogi munkapad</h1>
-          <p className={`text-xs mt-2 ${toneMuted}`}>
-            Aktív ügyek, review-k, határidők és következő lépések egy helyen.
-          </p>
           {currentUser?.name && <p className={`text-[11px] mt-2 ${toneMuted}`}>Bejelentkezve: {currentUser.name}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/cases" className={`text-[10px] uppercase tracking-[0.2em] border px-3 py-2 ${isSignal ? "border-[#334155] text-[#E2E8F0] bg-[#0F172A]" : "border-[#1F4A33] text-[#1F4A33] bg-white"}`}>Ügyek</Link>
-          <Link href="/reviews" className={`text-[10px] uppercase tracking-[0.2em] border px-3 py-2 ${isSignal ? "border-[#334155] text-[#E2E8F0] bg-[#0F172A]" : "border-[#1F4A33] text-[#1F4A33] bg-white"}`}>Review sor</Link>
-          <Link href="/notifications" className={`text-[10px] uppercase tracking-[0.2em] border px-3 py-2 ${isSignal ? "border-[#334155] text-[#E2E8F0] bg-[#0F172A]" : "border-[#1F4A33] text-[#1F4A33] bg-white"}`}>Értesítések</Link>
+          <Link href="/cases" className={`inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] border px-3 py-2 ${isSignal ? "border-[#334155] text-[#E2E8F0] bg-[#0F172A]" : "border-[#173824] bg-[#1F4A33] text-[#F4EFDB]"}`}>Ügyek{typeof caseCount === "number" ? <span className={`rounded-full px-1.5 py-0.5 text-[9px] ${isSignal ? "bg-[#1E293B] text-[#BFDBFE]" : "bg-[#F7F0D9] text-[#173824]"}`}>{caseCount}</span> : null}</Link>
+          <Link href="/reviews" className={`inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] border px-3 py-2 ${isSignal ? "border-[#334155] text-[#E2E8F0] bg-[#0F172A]" : "border-[#8E6A1B] bg-[#B58A2A] text-[#1F2A24]"}`}>Review sor{typeof reviewCount === "number" ? <span className={`rounded-full px-1.5 py-0.5 text-[9px] ${isSignal ? "bg-[#1E293B] text-[#BFDBFE]" : "bg-[#F7F0D9] text-[#8E6A1B]"}`}>{reviewCount}</span> : null}</Link>
+          <Link href="/notifications" className={`inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] border px-3 py-2 ${isSignal ? "border-[#334155] text-[#E2E8F0] bg-[#0F172A]" : "border-[#4A6B4A] bg-[#E2E8DA] text-[#1F4A33]"}`}>Értesítések{typeof unreadNotifications === "number" ? <span className={`rounded-full px-1.5 py-0.5 text-[9px] ${isSignal ? "bg-[#1E293B] text-[#BFDBFE]" : "bg-white text-[#1F4A33]"}`}>{unreadNotifications}</span> : null}</Link>
         </div>
       </div>
       {error && <div className="mt-4 bg-[#FEF3F2] border border-[#FCCFC7] text-[#8E2A2A] p-3 text-xs rounded-lg">{error}</div>}
@@ -354,7 +357,7 @@ export function Dashboard() {
       >
         <div className="space-y-4">
           <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-            <Panel uiPack={uiPack} className="rounded-xl border border-[#D8CDB6] bg-[#FFFDF7] p-4">
+            <Panel uiPack={uiPack} className="rounded-xl border border-[#D8CDB6] border-l-4 border-l-[#1F4A33] bg-[#FFFDF7] p-4">
               <SectionBlock title="Aktív ügy" subtitle="Aktív munkaterület">
                 {loading ? (
                   <p className={`text-xs ${toneMuted}`}>Betöltés...</p>
@@ -397,7 +400,7 @@ export function Dashboard() {
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <Panel uiPack={uiPack} className="rounded-xl border border-[#D8CDB6] bg-[#FFFDF7] p-4">
+            <Panel uiPack={uiPack} className="rounded-xl border border-[#D8CDB6] border-l-4 border-l-[#B58A2A] bg-[#FFFDF7] p-4">
               <SectionBlock title="Aktív dokumentum" subtitle="Munkapéldány fókusz">
                 {activeCaseId ? (
                   <div className="space-y-3">
@@ -537,11 +540,11 @@ export function Dashboard() {
           </div>
 
           <div className="grid gap-4 xl:grid-cols-1">
-            <Panel uiPack={uiPack} className="rounded-xl border border-[#D8CDB6] bg-[#FFFDF7] p-4">
+            <Panel uiPack={uiPack} className="rounded-xl border border-[#D8CDB6] border-l-4 border-l-[#4A6B4A] bg-[#FFFDF7] p-3">
               <SectionBlock title="Irodai hírek / Piaci jelzések" subtitle="Másodlagos információs blokk">
                 <div className="grid gap-2">
-                  {legalNews.articles.slice(0, 2).map(renderNewsRow)}
-                  {ecofinNews.articles.slice(0, 2).map(renderNewsRow)}
+                  {legalNews.articles.slice(0, 1).map(renderNewsRow)}
+                  {ecofinNews.articles.slice(0, 1).map(renderNewsRow)}
                   {!legalNews.articles.length && !ecofinNews.articles.length && (
                     <p className={`text-xs ${toneMuted}`}>Nincs elérhető hírjelzés.</p>
                   )}

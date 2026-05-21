@@ -586,12 +586,6 @@ export function CasesList() {
 
   return (
     <section className="space-y-4">
-      <div className="border border-[rgba(22,32,26,0.10)] bg-white p-5">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">Ügyeim</p>
-        <h2 className="mt-1 font-serif text-3xl font-medium text-[#16201A]">Kanonikus ügylista</h2>
-        <p className="mt-1 text-sm text-[#3D4842]">Innen indítható az ügyközpontú dokumentum-munkafolyamat.</p>
-      </div>
-
       <div className="flex flex-wrap items-end gap-3 border border-[rgba(22,32,26,0.10)] bg-white p-4">
         <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">
           Szakterület
