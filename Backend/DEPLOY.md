@@ -1,5 +1,7 @@
 # Adminiculum — Database Migration Discipline
 
+> Azure pilot deploy runbook: [`docs/adminiculum-azure-pilot-deploy-runbook.md`](../docs/adminiculum-azure-pilot-deploy-runbook.md)
+
 ## Migration State Model
 
 ### Prisma migration tracking
