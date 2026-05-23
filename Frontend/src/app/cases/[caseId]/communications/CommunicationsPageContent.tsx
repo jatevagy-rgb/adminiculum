@@ -34,11 +34,11 @@ const communicationTypeLabels: Record<string, string> = {
 };
 
 const communicationTypeColors: Record<string, string> = {
-  'EMAIL': 'bg-[#3B82F6] text-white',
-  'PHONE': 'bg-[#8B5CF6] text-white',
-  'MEETING': 'bg-[#10B981] text-white',
-  'LETTER': 'bg-[#F59E0B] text-white',
-  'NOTE': 'bg-[#6B7280] text-white',
+  'EMAIL': 'bg-[#1F4A33] text-[#F7F0D9]',
+  'PHONE': 'bg-[#B58A2A] text-white',
+  'MEETING': 'bg-[#2F5E49] text-[#F7F0D9]',
+  'LETTER': 'bg-[#8A6A2A] text-[#FBF6E7]',
+  'NOTE': 'bg-[#5E6D63] text-[#FBF6E7]',
 };
 
 const taskStatusLabels: Record<string, string> = {
@@ -432,7 +432,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
         {/* Case Participants Block */}
         <div className="px-4 py-3 border-b border-[#DDD7CA]">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-[9px] uppercase tracking-[0.28em] text-[#8B5CF6]">Résztvevők</h3>
+            <h3 className="text-[9px] uppercase tracking-[0.28em] text-[#1F4A33]">Résztvevők</h3>
             {isLoadingCollaborators && (
               <span className="text-[9px] text-[#9C9890]">...</span>
             )}
@@ -441,13 +441,13 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
             <div className="space-y-1.5">
               {collaborators.slice(0, 5).map((collab) => (
                 <div key={collab.id} className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-full bg-[#8B5CF6] text-white flex items-center justify-center text-[8px] font-medium flex-shrink-0">
+                  <div className="w-5 h-5 rounded-full bg-[#1F4A33] text-[#FBF6E7] flex items-center justify-center text-[8px] font-medium flex-shrink-0">
                     {collab.user?.name?.charAt(0).toUpperCase() || '?'}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[10px] text-[#1F2821] truncate">{collab.user?.name || 'Ismeretlen'}</p>
                   </div>
-                  <span className="text-[8px] px-1 py-0.5 rounded bg-[#8B5CF6]/10 text-[#8B5CF6] border border-[#8B5CF6]/20 flex-shrink-0">
+                  <span className="text-[8px] px-1 py-0.5 rounded bg-[#1F4A33]/10 text-[#1F4A33] border border-[#1F4A33]/20 flex-shrink-0">
                     {collab.role === 'LAWYER' ? 'Ügyvéd' : collab.role === 'COLLABORATOR' ? 'Résztvevő' : collab.role === 'REVIEWER' ? 'Ellenőrző' : collab.role === 'ASSISTANT' ? 'Asszisztens' : collab.role}
                   </span>
                 </div>
@@ -494,7 +494,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
             <button
               onClick={handleCreateQuickNote}
               disabled={!quickNoteSubject.trim() || !quickNoteContent.trim() || isCreatingNote}
-              className="w-full py-1.5 text-[10px] uppercase tracking-[0.1em] bg-[#8B5CF6] text-white hover:bg-[#7C3AED] disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full py-1.5 text-[10px] uppercase tracking-[0.1em] bg-[#1F4A33] text-[#FBF6E7] hover:bg-[#173824] disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {isCreatingNote ? 'Mentés...' : 'Jegyzet mentése'}
             </button>
@@ -519,8 +519,8 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                 <button
                   key={comm.id}
                   onClick={() => handleSelectCommunication(comm)}
-                  className={`w-full text-left p-3 hover:bg-[#ECE6DA] transition-colors ${
-                    selectedComm?.id === comm.id ? 'bg-[#ECE6DA]' : ''
+                  className={`w-full text-left p-3 hover:bg-[#ECE6DA] transition-colors border-l-2 ${
+                    selectedComm?.id === comm.id ? 'bg-[#F3E7C6] border-l-[#B58A2A]' : 'border-l-transparent'
                   }`}
                 >
                   <div className="flex items-start gap-2">
@@ -572,10 +572,10 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
       </aside>
 
       {/* CENTER PANE - Selected communication */}
-      <main className="flex-1 flex flex-col min-h-0 bg-white">
+      <main className="flex-1 flex flex-col min-h-0 bg-[#FBF6E7]">
         {!selectedComm ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center max-w-xs">
+          <div className="flex-1 flex items-center justify-center px-6">
+            <div className="text-center max-w-sm bg-white border border-[#DDD7CA] rounded-xl p-6">
               {error && (
                 <div className="mb-4 p-3 bg-[#FEF2F2] border border-[#FECACA] rounded">
                   <p className="text-xs text-[#DC2626]">{error}</p>
@@ -588,9 +588,14 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                       <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5H4.5A2.25 2.25 0 002.25 6.5m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
                     </svg>
                   </div>
-                  <p className="text-xs text-[#9C9890]">
-                    {communications.length === 0 ? COMMUNICATION_EMPTY_LABEL : COMMUNICATION_UNSELECTED_LABEL}
-                  </p>
+                  {communications.length === 0 ? (
+                    <>
+                      <p className="text-sm font-medium text-[#1F2821]">Még nincs ügykommunikáció</p>
+                      <p className="text-xs text-[#7B776D] mt-1">{COMMUNICATION_EMPTY_LABEL}</p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-[#7B776D]">{COMMUNICATION_UNSELECTED_LABEL}</p>
+                  )}
                 </>
               )}
             </div>
@@ -838,7 +843,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
             <>
               {/* Extract Task */}
               <details className="border border-[#DDD7CA] rounded">
-                <summary className="px-3 py-2 bg-[#F6F2E8] cursor-pointer text-[10px] uppercase tracking-[0.2em] text-[#F59E0B] hover:bg-[#ECE6DA]">
+                <summary className="px-3 py-2 bg-[#F6F2E8] cursor-pointer text-[10px] uppercase tracking-[0.2em] text-[#B58A2A] hover:bg-[#ECE6DA]">
                   Kapcsolt feladat
                 </summary>
                 <div className="p-3 space-y-2">
@@ -876,7 +881,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                   <button
                     onClick={handleExtractTask}
                     disabled={!taskTitle.trim() || isCreatingTask}
-                    className="w-full py-2 text-xs uppercase tracking-[0.2em] bg-[#F59E0B] text-white hover:bg-[#D97706] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full py-2 text-xs uppercase tracking-[0.2em] bg-[#B58A2A] text-white hover:bg-[#9C7723] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isCreatingTask ? 'Létrehozás...' : 'Feladat kinyerése'}
                   </button>
@@ -885,7 +890,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
 
               {/* Extract Deadline */}
               <details className="border border-[#DDD7CA] rounded">
-                <summary className="px-3 py-2 bg-[#F6F2E8] cursor-pointer text-[10px] uppercase tracking-[0.2em] text-[#DC2626] hover:bg-[#ECE6DA]">
+                <summary className="px-3 py-2 bg-[#F6F2E8] cursor-pointer text-[10px] uppercase tracking-[0.2em] text-[#7D2F2F] hover:bg-[#ECE6DA]">
                   Kapcsolt határidő
                 </summary>
                 <div className="p-3 space-y-2">
@@ -975,26 +980,26 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
             <div className="space-y-2 mb-2">
               <button
                 onClick={() => router.push(`/cases/${caseContextId}/documents`)}
-                className="w-full py-2 text-xs uppercase tracking-[0.2em] border border-[#DDD7CA] text-[#7B776D] hover:bg-[#ECE6DA]"
+                className="w-full py-2 text-xs uppercase tracking-[0.2em] bg-[#1F4A33] text-[#FBF6E7] border border-[#1F4A33] hover:bg-[#173824]"
               >
                 Dokumentumtár
               </button>
               <button
                 onClick={() => router.push(`/documents/compare?caseId=${caseContextId}`)}
-                className="w-full py-2 text-xs uppercase tracking-[0.2em] border border-[#DDD7CA] text-[#7B776D] hover:bg-[#ECE6DA]"
+                className="w-full py-2 text-xs uppercase tracking-[0.2em] bg-[#B58A2A] text-white border border-[#B58A2A] hover:bg-[#9C7723]"
               >
                 Szerződés-workspace
               </button>
               <button
                 onClick={() => router.push(`/cases/${caseContextId}/handoff`)}
-                className="w-full py-2 text-xs uppercase tracking-[0.2em] border border-[#DDD7CA] text-[#7B776D] hover:bg-[#ECE6DA]"
+                className="w-full py-2 text-xs uppercase tracking-[0.2em] border border-[#DDD7CA] text-[#1F2821] bg-white hover:bg-[#ECE6DA]"
               >
                 Leadási csomag
               </button>
             </div>
             <button
               onClick={() => router.push(`/cases/${caseContextId}`)}
-              className="w-full py-2 text-xs uppercase tracking-[0.2em] border border-[#DDD7CA] text-[#7B776D] hover:bg-[#ECE6DA]"
+              className="w-full py-2 text-xs uppercase tracking-[0.2em] border border-[#DDD7CA] text-[#1F2821] bg-white hover:bg-[#ECE6DA]"
             >
               Vissza az ügyhöz
             </button>
