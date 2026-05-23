@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../../middleware/auth';
-import graphClient from './graphClient';
+import graphClient, { GraphClientError } from './graphClient';
 
 type DiagnosticsError = {
   code: string;
@@ -8,18 +8,26 @@ type DiagnosticsError = {
 };
 
 type SharePointDiagnosticsResponse = {
+  timestamp: string;
+  correlationId: string;
   configured: boolean;
+  missingEnvVars: string[];
   siteResolvable: boolean;
   driveResolvable: boolean;
+  rootFolderResolvable: boolean;
   permissionsSmoke: {
     ok: boolean;
   };
-      metadata: {
-        configSource: {
+  metadata: {
+    configSource: {
       credentialSet: 'SP' | 'AZURE_LEGACY' | 'MIXED' | 'NONE';
       hasSiteUrl: boolean;
       hasSiteId: boolean;
       hasDriveId: boolean;
+    };
+    operation: {
+      siteReference: 'SP_SITE_ID' | 'SHAREPOINT_SITE_URL' | 'NONE';
+      driveReference: 'SP_DRIVE_ID' | 'SITE_DEFAULT_DRIVE' | 'NONE';
     };
   };
   errors: DiagnosticsError[];
@@ -28,6 +36,12 @@ type SharePointDiagnosticsResponse = {
 const router = Router();
 
 function sanitizeError(error: unknown, fallbackCode: string): DiagnosticsError {
+  if (error instanceof GraphClientError) {
+    return {
+      code: error.code || fallbackCode,
+      message: error.message.slice(0, 300),
+    };
+  }
   if (error instanceof Error) {
     return {
       code: fallbackCode,
@@ -38,6 +52,23 @@ function sanitizeError(error: unknown, fallbackCode: string): DiagnosticsError {
     code: fallbackCode,
     message: 'Unknown error',
   };
+}
+
+function getMissingSharePointEnvVars(): string[] {
+  const missing: string[] = [];
+  if (!process.env.SP_CLIENT_ID && !process.env.AZURE_CLIENT_ID) {
+    missing.push('SP_CLIENT_ID');
+  }
+  if (!process.env.SP_CLIENT_SECRET && !process.env.AZURE_CLIENT_SECRET) {
+    missing.push('SP_CLIENT_SECRET');
+  }
+  if (!process.env.SP_TENANT_ID && !process.env.AZURE_TENANT_ID) {
+    missing.push('SP_TENANT_ID');
+  }
+  if (!process.env.SP_SITE_ID && !process.env.SHAREPOINT_SITE_ID && !process.env.SHAREPOINT_SITE_URL && !process.env.SP_SITE_URL) {
+    missing.push('SP_SITE_ID_OR_SHAREPOINT_SITE_URL');
+  }
+  return missing;
 }
 
 function detectCredentialSet(): 'SP' | 'AZURE_LEGACY' | 'MIXED' | 'NONE' {
@@ -74,21 +105,33 @@ async function resolveSiteIdFromUrl(siteUrl: string): Promise<string> {
 }
 
 router.get('/diagnostics', authenticate, async (_req: Request, res: Response): Promise<void> => {
+  const requestIdHeader = _req.headers['x-request-id'];
+  const correlationId =
+    (typeof requestIdHeader === 'string' && requestIdHeader.trim()) ||
+    `spdiag-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const timestamp = new Date().toISOString();
   const config = graphClient.getConfig();
   const siteUrl = process.env.SHAREPOINT_SITE_URL || process.env.SP_SITE_URL || '';
   const configured = graphClient.isConfigured();
+  const missingEnvVars = getMissingSharePointEnvVars();
   const errors: DiagnosticsError[] = [];
 
   let siteResolvable = false;
   let driveResolvable = false;
+  let rootFolderResolvable = false;
   let permissionsSmokeOk = false;
   let resolvedSiteId = '';
+  let resolvedDriveId = '';
 
   if (!configured) {
     res.status(200).json({
+      timestamp,
+      correlationId,
       configured,
+      missingEnvVars,
       siteResolvable,
       driveResolvable,
+      rootFolderResolvable,
       permissionsSmoke: { ok: permissionsSmokeOk },
       metadata: {
         configSource: {
@@ -96,6 +139,10 @@ router.get('/diagnostics', authenticate, async (_req: Request, res: Response): P
           hasSiteUrl: Boolean(siteUrl),
           hasSiteId: Boolean(config.siteId),
           hasDriveId: Boolean(config.driveId),
+        },
+        operation: {
+          siteReference: config.siteId ? 'SP_SITE_ID' : siteUrl ? 'SHAREPOINT_SITE_URL' : 'NONE',
+          driveReference: config.driveId ? 'SP_DRIVE_ID' : 'NONE',
         },
       },
       errors: [{ code: 'NOT_CONFIGURED', message: 'SharePoint credential configuration is incomplete.' }],
@@ -133,10 +180,12 @@ router.get('/diagnostics', authenticate, async (_req: Request, res: Response): P
   try {
     if (config.driveId) {
       const drive = await graphClient.get<{ id?: string }>(`/drives/${config.driveId}`);
-      driveResolvable = Boolean(drive?.id);
+      resolvedDriveId = drive?.id || '';
+      driveResolvable = Boolean(resolvedDriveId);
     } else if (resolvedSiteId) {
       const drive = await graphClient.get<{ id?: string }>(`/sites/${resolvedSiteId}/drive`);
-      driveResolvable = Boolean(drive?.id);
+      resolvedDriveId = drive?.id || '';
+      driveResolvable = Boolean(resolvedDriveId);
     } else {
       errors.push({
         code: 'DRIVE_REFERENCE_MISSING',
@@ -147,10 +196,28 @@ router.get('/diagnostics', authenticate, async (_req: Request, res: Response): P
     errors.push(sanitizeError(error, 'DRIVE_RESOLUTION_FAILED'));
   }
 
+  try {
+    if (resolvedDriveId) {
+      const root = await graphClient.get<{ id?: string }>(`/drives/${resolvedDriveId}/root`);
+      rootFolderResolvable = Boolean(root?.id);
+    } else {
+      errors.push({
+        code: 'ROOT_FOLDER_REFERENCE_MISSING',
+        message: 'Root folder cannot be resolved without a drive reference.',
+      });
+    }
+  } catch (error) {
+    errors.push(sanitizeError(error, 'ROOT_FOLDER_RESOLUTION_FAILED'));
+  }
+
   res.status(200).json({
+    timestamp,
+    correlationId,
     configured,
+    missingEnvVars,
     siteResolvable,
     driveResolvable,
+    rootFolderResolvable,
     permissionsSmoke: {
       ok: permissionsSmokeOk,
     },
@@ -160,6 +227,10 @@ router.get('/diagnostics', authenticate, async (_req: Request, res: Response): P
         hasSiteUrl: Boolean(siteUrl),
         hasSiteId: Boolean(config.siteId),
         hasDriveId: Boolean(config.driveId),
+      },
+      operation: {
+        siteReference: config.siteId ? 'SP_SITE_ID' : siteUrl ? 'SHAREPOINT_SITE_URL' : 'NONE',
+        driveReference: config.driveId ? 'SP_DRIVE_ID' : resolvedSiteId ? 'SITE_DEFAULT_DRIVE' : 'NONE',
       },
     },
     errors,

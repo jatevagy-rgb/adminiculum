@@ -6,7 +6,7 @@
  * and folder operations through Microsoft Graph API.
  */
 
-import graphClient from './graphClient';
+import graphClient, { GraphClientError } from './graphClient';
 import {
   SharePointItem,
   SharePointVersion,
@@ -25,10 +25,30 @@ const SITE_URL = process.env.SHAREPOINT_SITE_URL || process.env.SP_SITE_URL || '
 class DriveService {
   private siteId: string = '';
 
+  private toSafeErrorMessage(operation: string, error: unknown): string {
+    if (error instanceof GraphClientError) {
+      const statusPart = error.status ? ` (${error.status})` : '';
+      return `${operation} failed${statusPart}: ${error.message}`;
+    }
+    if (error instanceof Error) {
+      return `${operation} failed: ${error.message}`;
+    }
+    return `${operation} failed: Unknown error`;
+  }
+
+  private ensureConfiguredOrThrow(operation: string): void {
+    if (!graphClient.isConfigured()) {
+      throw new Error(
+        `SharePoint nincs konfigurálva ehhez a környezethez. (${operation})`
+      );
+    }
+  }
+
   private async getSiteId(): Promise<string> {
+    this.ensureConfiguredOrThrow('site-resolution');
     if (!this.siteId) {
       if (!SITE_URL) {
-        throw new Error('SHAREPOINT_SITE_URL is not configured');
+        throw new Error('SHAREPOINT_SITE_URL/SP_SITE_URL nincs beállítva.');
       }
 
       const parsed = new URL(SITE_URL);
@@ -55,7 +75,7 @@ class DriveService {
 
       if (!this.siteId) {
         throw new Error(
-          `Unable to resolve SharePoint site id from SHAREPOINT_SITE_URL=${SITE_URL}. Tried endpoints: ${candidates.join(', ')}. Last error: ${
+          `Unable to resolve SharePoint site id from configured site URL. Tried endpoints: ${candidates.join(', ')}. Last error: ${
             lastError instanceof Error ? lastError.message : String(lastError)
           }`
         );
@@ -84,10 +104,9 @@ class DriveService {
         version: response.file?.versions?.current?.id || '1',
       };
     } catch (error) {
-      console.error('Error uploading document:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: this.toSafeErrorMessage('sharepoint-upload', error),
       };
     }
   }
@@ -95,15 +114,55 @@ class DriveService {
   /**
    * Download document from SharePoint
    */
-  async downloadDocument(documentId: string): Promise<Buffer | null> {
+  async downloadDocumentResult(
+    documentId: string
+  ): Promise<{ success: true; content: Buffer } | { success: false; error: string; code: string; status?: number }> {
     try {
       const siteId = await this.getSiteId();
-      const response = await graphClient.get<any>(`/sites/${siteId}/drive/items/${documentId}/content`, { siteId });
-      return Buffer.from(response);
+      const response = await graphClient.get<Buffer>(
+        `/sites/${siteId}/drive/items/${documentId}/content`,
+        { siteId, asBinary: true }
+      );
+      return { success: true, content: response };
     } catch (error) {
-      console.error('Error downloading document:', error);
-      return null;
+      if (error instanceof GraphClientError) {
+        const code = error.code || 'SHAREPOINT_DOWNLOAD_FAILED';
+        const status = error.status;
+        if (status === 404) {
+          return {
+            success: false,
+            code: 'SHAREPOINT_FILE_NOT_FOUND',
+            status,
+            error: 'A SharePoint fájl nem található.',
+          };
+        }
+        if (status === 401 || status === 403) {
+          return {
+            success: false,
+            code: 'SHAREPOINT_PERMISSION_DENIED',
+            status,
+            error: 'A SharePoint hozzáférés nem engedélyezett ehhez a művelethez.',
+          };
+        }
+        return {
+          success: false,
+          code,
+          status,
+          error: this.toSafeErrorMessage('sharepoint-download', error),
+        };
+      }
+
+      return {
+        success: false,
+        code: 'SHAREPOINT_DOWNLOAD_FAILED',
+        error: this.toSafeErrorMessage('sharepoint-download', error),
+      };
     }
+  }
+
+  async downloadDocument(documentId: string): Promise<Buffer | null> {
+    const result = await this.downloadDocumentResult(documentId);
+    return result.success ? result.content : null;
   }
 
   /**
@@ -115,7 +174,7 @@ class DriveService {
       const response = await graphClient.get<any>(`/sites/${siteId}/drive/items/${documentId}`, { siteId });
       return response;
     } catch (error) {
-      console.error('Error getting document:', error);
+      console.error(this.toSafeErrorMessage('sharepoint-metadata', error));
       return null;
     }
   }
@@ -137,7 +196,7 @@ class DriveService {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: this.toSafeErrorMessage('sharepoint-version-upload', error),
       };
     }
   }
@@ -152,7 +211,7 @@ class DriveService {
 
       return true;
     } catch (error) {
-      console.error('Error checking out document:', error);
+      console.error(this.toSafeErrorMessage('sharepoint-checkout', error));
       return false;
     }
   }
@@ -167,7 +226,7 @@ class DriveService {
 
       return true;
     } catch (error) {
-      console.error('Error checking in document:', error);
+      console.error(this.toSafeErrorMessage('sharepoint-checkin', error));
       return false;
     }
   }
@@ -181,7 +240,7 @@ class DriveService {
       const response = await graphClient.get<any>(`/sites/${siteId}/drive/items/${documentId}/versions`, { siteId });
       return response.value || [];
     } catch (error) {
-      console.error('Error getting versions:', error);
+      console.error(this.toSafeErrorMessage('sharepoint-versions', error));
       return [];
     }
   }
@@ -259,7 +318,7 @@ class DriveService {
         path: `/Cases/${caseFolderName}`,
       };
     } catch (error) {
-      console.error('Error creating case folders:', error);
+      console.error(this.toSafeErrorMessage('sharepoint-create-folders', error));
       return null;
     }
   }
@@ -299,7 +358,7 @@ class DriveService {
 
       return response;
     } catch (error) {
-      console.error('Error moving file:', error);
+      console.error(this.toSafeErrorMessage('sharepoint-move', error));
       return null;
     }
   }
@@ -347,7 +406,7 @@ class DriveService {
       );
       return response.value || [];
     } catch (error) {
-      console.error('Error searching documents:', error);
+      console.error(this.toSafeErrorMessage('sharepoint-search', error));
       return [];
     }
   }
@@ -365,7 +424,7 @@ class DriveService {
       );
       return response.value || [];
     } catch (error) {
-      console.error('Error getting case documents:', error);
+      console.error(this.toSafeErrorMessage('sharepoint-list-case-docs', error));
       return [];
     }
   }
@@ -383,7 +442,7 @@ class DriveService {
       );
       return true;
     } catch (error) {
-      console.error('Error deleting document:', error);
+      console.error(this.toSafeErrorMessage('sharepoint-delete', error));
       return false;
     }
   }

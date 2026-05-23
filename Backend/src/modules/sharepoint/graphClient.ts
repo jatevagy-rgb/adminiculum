@@ -9,6 +9,13 @@ interface TokenResponse {
   token_type: string;
 }
 
+type GraphClientRequestOptions = {
+  siteId?: string;
+  driveId?: string;
+  asBinary?: boolean;
+  headers?: Record<string, string>;
+};
+
 interface SharePointConfig {
   clientId: string;
   clientSecret: string;
@@ -16,6 +23,30 @@ interface SharePointConfig {
   redirectUri: string;
   siteId: string;
   driveId: string;
+}
+
+export class GraphClientError extends Error {
+  status?: number;
+  code?: string;
+  operation: string;
+  endpoint: string;
+  retryable: boolean;
+
+  constructor(params: {
+    message: string;
+    operation: string;
+    endpoint: string;
+    status?: number;
+    code?: string;
+  }) {
+    super(params.message);
+    this.name = 'GraphClientError';
+    this.operation = params.operation;
+    this.endpoint = params.endpoint;
+    this.status = params.status;
+    this.code = params.code;
+    this.retryable = [429, 502, 503, 504].includes(params.status || 0);
+  }
 }
 
 class GraphClientService {
@@ -56,7 +87,13 @@ class GraphClientService {
     });
 
     if (!response.ok) {
-      throw new Error(`Token request failed: ${response.status}`);
+      throw new GraphClientError({
+        operation: 'token',
+        endpoint: tokenUrl,
+        status: response.status,
+        code: 'TOKEN_REQUEST_FAILED',
+        message: `Token request failed (${response.status})`,
+      });
     }
 
     const data = await response.json() as TokenResponse;
@@ -66,80 +103,131 @@ class GraphClientService {
     return this.accessToken;
   }
 
-  async get<T = any>(endpoint: string, options?: Record<string, any>): Promise<T> {
-    const token = await this.getAccessToken();
+  private resolveUrl(endpoint: string, options?: GraphClientRequestOptions): string {
     let url = endpoint;
-
     if (options?.siteId) url = url.replace('{siteId}', options.siteId);
     if (options?.driveId) url = url.replace('{driveId}', options.driveId);
+    return `https://graph.microsoft.com/v1.0${url}`;
+  }
 
-    const response = await fetch(`https://graph.microsoft.com/v1.0${url}`, {
+  private async handleErrorResponse(
+    response: Response,
+    operation: string,
+    endpoint: string
+  ): Promise<never> {
+    let code = 'GRAPH_REQUEST_FAILED';
+    let message = `${operation.toUpperCase()} request failed (${response.status})`;
+
+    try {
+      const payload = await response.json();
+      const graphError = (payload as any)?.error;
+      if (graphError?.code) code = String(graphError.code);
+      if (graphError?.message) message = String(graphError.message).slice(0, 400);
+    } catch {
+      try {
+        const raw = await response.text();
+        if (raw) message = raw.slice(0, 400);
+      } catch {
+        // ignore
+      }
+    }
+
+    throw new GraphClientError({
+      operation,
+      endpoint,
+      status: response.status,
+      code,
+      message,
+    });
+  }
+
+  async get<T = any>(endpoint: string, options?: GraphClientRequestOptions): Promise<T> {
+    const token = await this.getAccessToken();
+    const url = this.resolveUrl(endpoint, options);
+
+    const response = await fetch(url, {
       method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: options?.asBinary ? '*/*' : 'application/json',
+        ...(options?.headers || {}),
+      },
     });
 
     if (!response.ok) {
-      throw new Error(`Graph API GET failed: ${response.status}`);
+      await this.handleErrorResponse(response, 'get', endpoint);
+    }
+
+    if (options?.asBinary) {
+      const bytes = await response.arrayBuffer();
+      return Buffer.from(bytes) as T;
     }
 
     return (await response.json()) as T;
   }
 
-  async post<T = any>(endpoint: string, body: unknown, options?: Record<string, any>): Promise<T> {
+  async post<T = any>(endpoint: string, body: unknown, options?: GraphClientRequestOptions): Promise<T> {
     const token = await this.getAccessToken();
-    let url = endpoint;
+    const url = this.resolveUrl(endpoint, options);
 
-    if (options?.siteId) url = url.replace('{siteId}', options.siteId);
-    if (options?.driveId) url = url.replace('{driveId}', options.driveId);
-
-    const response = await fetch(`https://graph.microsoft.com/v1.0${url}`, {
+    const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...(options?.headers || {}),
+      },
       body: JSON.stringify(body),
     });
 
     if (!response.ok) {
-      throw new Error(`Graph API POST failed: ${response.status}`);
+      await this.handleErrorResponse(response, 'post', endpoint);
     }
 
     return (await response.json()) as T;
   }
 
-  async put<T = any>(endpoint: string, body: unknown, options?: Record<string, any>): Promise<T> {
+  async put<T = any>(endpoint: string, body: unknown, options?: GraphClientRequestOptions): Promise<T> {
     const token = await this.getAccessToken();
-    let url = endpoint;
+    const url = this.resolveUrl(endpoint, options);
+    const isBinaryBody = Buffer.isBuffer(body);
 
-    if (options?.siteId) url = url.replace('{siteId}', options.siteId);
-    if (options?.driveId) url = url.replace('{driveId}', options.driveId);
-
-    const response = await fetch(`https://graph.microsoft.com/v1.0${url}`, {
+    const response = await fetch(url, {
       method: 'PUT',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+        ...(isBinaryBody ? { 'Content-Type': 'application/octet-stream' } : { 'Content-Type': 'application/json' }),
+        ...(options?.headers || {}),
+      },
+      body: isBinaryBody ? (body as Buffer) : JSON.stringify(body),
     });
 
     if (!response.ok) {
-      throw new Error(`Graph API PUT failed: ${response.status}`);
+      await this.handleErrorResponse(response, 'put', endpoint);
     }
 
     return (await response.json()) as T;
   }
 
-  async patch<T = any>(endpoint: string, body: unknown, options?: Record<string, any>): Promise<T> {
+  async patch<T = any>(endpoint: string, body: unknown, options?: GraphClientRequestOptions): Promise<T> {
     const token = await this.getAccessToken();
-    let url = endpoint;
+    const url = this.resolveUrl(endpoint, options);
 
-    if (options?.siteId) url = url.replace('{siteId}', options.siteId);
-    if (options?.driveId) url = url.replace('{driveId}', options.driveId);
-
-    const response = await fetch(`https://graph.microsoft.com/v1.0${url}`, {
+    const response = await fetch(url, {
       method: 'PATCH',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...(options?.headers || {}),
+      },
       body: JSON.stringify(body),
     });
 
     if (!response.ok) {
-      throw new Error(`Graph API PATCH failed: ${response.status}`);
+      await this.handleErrorResponse(response, 'patch', endpoint);
     }
 
     return (await response.json()) as T;

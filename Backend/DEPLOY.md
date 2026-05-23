@@ -214,3 +214,54 @@ Legacy aliases may remain for transition, but canonical names above should be us
 4. Frontend login and dashboard load:
    - API calls resolve against the configured backend base URL
    - no CORS errors in browser console
+
+---
+
+## SharePoint Setup + Runtime Hardening
+
+### Required Graph permissions (Application)
+- `Sites.ReadWrite.All`
+- `Files.ReadWrite.All`
+- `User.Read.All` (optional in some flows but recommended for diagnostics consistency)
+- Admin consent must be granted.
+
+### SharePoint env checklist
+- `SP_TENANT_ID`
+- `SP_CLIENT_ID`
+- `SP_CLIENT_SECRET`
+- `SP_SITE_ID` or `SHAREPOINT_SITE_URL`
+- optional: `SP_DRIVE_ID`
+
+### Diagnostics endpoint interpretation
+- Route: `GET /api/v1/sharepoint/diagnostics` (authenticated)
+- Key fields:
+  - `configured`
+  - `missingEnvVars`
+  - `siteResolvable`
+  - `driveResolvable`
+  - `rootFolderResolvable`
+  - `permissionsSmoke.ok`
+  - `correlationId`
+  - `timestamp`
+- Response is secret-safe: no client secret/token/raw authorization dump.
+
+### Typical failure modes
+- `TOKEN_REQUEST_FAILED`:
+  - invalid client secret, wrong tenant, or app registration mismatch.
+- `SITE_REFERENCE_MISSING` / `SITE_RESOLUTION_FAILED`:
+  - missing `SP_SITE_ID` and missing/invalid `SHAREPOINT_SITE_URL`.
+- `DRIVE_REFERENCE_MISSING` / `DRIVE_RESOLUTION_FAILED`:
+  - invalid `SP_DRIVE_ID` or site default drive cannot be resolved.
+- `SHAREPOINT_PERMISSION_DENIED`:
+  - insufficient Graph permissions or missing admin consent.
+- `SHAREPOINT_FILE_NOT_FOUND`:
+  - document has stale `spItemId` or item was moved/deleted.
+
+### SharePoint smoke after deployment
+1. `GET /api/v1/sharepoint/diagnostics` returns `configured=true`.
+2. Upload document through `/api/v1/documents`:
+   - verify DB record + SharePoint item linkage.
+3. Download document through `/api/v1/documents/:id/download`:
+   - verify binary file opens, filename headers are correct.
+4. Failure-path test:
+   - simulate missing/invalid SharePoint config in staging and verify structured error (no fake success).

@@ -67,7 +67,20 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
       return;
     }
 
-    const fileContentBuffer = Buffer.from(req.body.fileContent as string, 'base64');
+    let fileContentBuffer: Buffer;
+    try {
+      fileContentBuffer = Buffer.from(req.body.fileContent as string, 'base64');
+      if (!fileContentBuffer.length) {
+        throw new Error('Empty decoded buffer');
+      }
+    } catch {
+      res.status(400).json({
+        status: 400,
+        code: 'INVALID_FILE_CONTENT',
+        message: 'A feltöltött fájl tartalma sérült vagy nem base64 formátumú.',
+      });
+      return;
+    }
     
     const result = await documentsService.createDocument({
       caseId,
@@ -271,7 +284,20 @@ router.post('/:id/version', authenticate, async (req: Request, res: Response): P
     }
 
     const { id } = req.params as { id: string };
-    const fileBuffer = Buffer.from(fileContent as string, 'base64');
+    let fileBuffer: Buffer;
+    try {
+      fileBuffer = Buffer.from(fileContent as string, 'base64');
+      if (!fileBuffer.length) {
+        throw new Error('Empty decoded buffer');
+      }
+    } catch {
+      res.status(400).json({
+        status: 400,
+        code: 'INVALID_FILE_CONTENT',
+        message: 'A verziófájl tartalma sérült vagy nem base64 formátumú.',
+      });
+      return;
+    }
     const result = await documentsService.uploadNewVersion(
       id,
       fileBuffer,
@@ -514,13 +540,16 @@ router.get('/:id/download', authenticate, async (req: Request, res: Response): P
 
     // Download from SharePoint
     const driveService = (await import('../sharepoint/driveService.js')).default;
-    const fileBuffer = await driveService.downloadDocument(document.spItemId);
+    const downloadResult = await driveService.downloadDocumentResult(document.spItemId);
 
-    if (!fileBuffer) {
-      res.status(500).json({ 
-        status: 500, 
-        code: 'DOWNLOAD_FAILED', 
-        message: 'Failed to download from SharePoint' 
+    if (downloadResult.success === false) {
+      const mappedStatus =
+        downloadResult.status ||
+        (downloadResult.code === 'SHAREPOINT_FILE_NOT_FOUND' ? 404 : 502);
+      res.status(mappedStatus).json({
+        status: mappedStatus,
+        code: downloadResult.code,
+        message: downloadResult.error,
       });
       return;
     }
@@ -528,11 +557,15 @@ router.get('/:id/download', authenticate, async (req: Request, res: Response): P
     // Return file with appropriate headers
     const fileName = document.fileName || document.name || 'document.txt';
     const mimeType = document.mimeType || 'application/octet-stream';
+    const encodedFileName = encodeURIComponent(fileName);
     
     res.setHeader('Content-Type', mimeType);
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.setHeader('Content-Length', fileBuffer.length);
-    res.send(fileBuffer);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${fileName.replace(/"/g, "'")}"; filename*=UTF-8''${encodedFileName}`
+    );
+    res.setHeader('Content-Length', downloadResult.content.length);
+    res.send(downloadResult.content);
   } catch (error) {
     console.error('Download document error:', error);
     res.status(500).json({ 

@@ -265,6 +265,9 @@ class DocumentsService {
       if (!document) {
         throw new Error('Document not found');
       }
+      if (!document.spItemId) {
+        throw new Error('SharePoint item ID is missing for this document');
+      }
 
       // Upload new version to SharePoint
       const uploadResult = await driveService.uploadNewVersion(
@@ -319,7 +322,10 @@ class DocumentsService {
         }
       };
     } catch (error) {
-      console.error('Error uploading new version:', error);
+      console.error(
+        'Error uploading new version:',
+        error instanceof Error ? error.message : error
+      );
       return null;
     }
   }
@@ -335,6 +341,9 @@ class DocumentsService {
 
       if (!document) {
         throw new Error('Document not found');
+      }
+      if (!document.spItemId) {
+        throw new Error('SharePoint item ID is missing for this document');
       }
 
       // Update document folder to REVIEW
@@ -389,6 +398,9 @@ class DocumentsService {
 
       if (!document) {
         throw new Error('Document not found');
+      }
+      if (!document.spItemId) {
+        throw new Error('SharePoint item ID is missing for this document');
       }
 
       // Update document folder to APPROVED
