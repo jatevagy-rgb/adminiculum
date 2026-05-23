@@ -227,3 +227,32 @@ Local/CI verifikáció:
 5. `git diff --check`
 6. staging deploy + smoke
 7. pilot deploy + smoke
+
+## 10. GitHub CI preflight quality gate
+
+Workflow:
+- `.github/workflows/preflight.yml`
+- Trigger: `push`, `pull_request`
+
+Mit ellenőriz:
+1. Backend:
+- `npm ci`
+- `npx prisma generate`
+- `npx prisma validate`
+- `npx tsc --noEmit`
+- `npm run build`
+
+2. Frontend:
+- `npm ci`
+- `npx tsc --noEmit`
+- `npm run build`
+
+Mit NEM csinál:
+- nem deployol Azure-ra
+- nem futtat `prisma migrate deploy`
+- nem használ production secretet
+- nem módosít adatbázist
+
+CI env policy:
+- csak dummy/non-secret env értékek
+- production URL/tenant/client secret nincs beégetve
