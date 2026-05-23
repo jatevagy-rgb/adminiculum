@@ -299,7 +299,7 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
         {[
           { label: "Case Overview", href: `/cases/${canonicalCaseId}` },
           { label: "Document Ledger", href: `/cases/${canonicalCaseId}/documents` },
-          { label: "Generate", href: `/cases/${canonicalCaseId}/generate` },
+          { label: "Workspace", href: `/documents/compare?caseId=${canonicalCaseId}` },
           { label: "Verzió-összevetés", href: `/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(resolvedParams.documentId)}` },
         ].map((item) => (
           <button key={item.href} onClick={() => router.push(item.href)} className={`w-full text-left px-3 py-2 text-[11px] font-medium rounded transition-colors ${pal.textDark} ${pal.bgHover}`}>{item.label}</button>
