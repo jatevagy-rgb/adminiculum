@@ -234,7 +234,7 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
             return (
               <div
                 key={pkg.id}
-                className="border border-[#DDD7CA] bg-white p-3"
+                className="border border-[#DDD7CA] bg-white p-3 rounded-lg"
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <p className="text-xs font-bold text-[#06190d]">
@@ -245,6 +245,12 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
                   >
                     {getStatusLabel(pkg.status)}
                   </span>
+                </div>
+
+                <div className="mb-2 flex flex-wrap items-center gap-3 text-[9px] text-[#7B776D]">
+                  <span className="px-1.5 py-0.5 rounded bg-[#F6F2E8] border border-[#EEE7D9]">Azonosító: {pkg.id.slice(0, 8)}</span>
+                  <span>Létrehozva: {pkg.createdAt ? new Date(pkg.createdAt).toLocaleDateString("hu-HU") : "—"}</span>
+                  <span>Frissítve: {pkg.updatedAt ? new Date(pkg.updatedAt).toLocaleDateString("hu-HU") : "—"}</span>
                 </div>
 
                 {/* Csomag tartalma */}
@@ -347,6 +353,10 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
 
                 {editingPackageId === pkg.id ? (
                   <div className="border-t border-[#EEE7D9] pt-2">
+                    <p className="text-[10px] font-semibold text-[#1F2821] mb-1">Előkészítő összefoglaló</p>
+                    <p className="text-[9px] text-[#7B776D] mb-2">
+                      Ide kerüljön, mit kell az ügyvédnek ellenőriznie, milyen döntési pontok vannak, és mi nem használható fel jóváhagyás nélkül.
+                    </p>
                     <textarea
                       value={summaryDraft}
                       onChange={(e) => setSummaryDraft(e.target.value)}
@@ -358,7 +368,7 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
                       <button
                         onClick={() => handleSaveSummary(pkg.id)}
                         disabled={isSavingSummary}
-                        className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#06190d] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#1F4A33] text-[#FBF6E7] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {isSavingSummary ? "Mentés..." : "Mentés"}
                       </button>
@@ -379,6 +389,10 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
                   </div>
                 ) : (
                   <div className="border-t border-[#EEE7D9] pt-2">
+                    <p className="text-[10px] font-semibold text-[#1F2821] mb-1">Előkészítő összefoglaló</p>
+                    <p className="text-[9px] text-[#7B776D] mb-2">
+                      Ide kerüljön, mit kell az ügyvédnek ellenőriznie, milyen döntési pontok vannak, és mi nem használható fel jóváhagyás nélkül.
+                    </p>
                     {pkg.preparerSummary ? (
                       <p className="text-[10px] text-[#514D45] whitespace-pre-wrap">{pkg.preparerSummary}</p>
                     ) : (
@@ -395,7 +409,7 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
                         <button
                           onClick={() => handleSubmitForReview(pkg.id)}
                           disabled={submittingPackageId === pkg.id || submitDisabled}
-                          className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#23472F] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#B58A2A] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                           {submittingPackageId === pkg.id ? "Beküldés..." : "Beküldés ügyvédi review-ra"}
                         </button>
@@ -412,7 +426,7 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
                       <summary className="text-[9px] text-[#7B776D] cursor-pointer">Technikai részletek</summary>
                       <div className="mt-1 space-y-1 text-[9px] text-[#7B776D]">
                         <p>Csomag azonosító: {pkg.id}</p>
-                        <p>Státusz kód: {pkg.status}</p>
+                        <p>Státusz: {getStatusLabel(pkg.status)}</p>
                         <p>Létrehozva: {pkg.createdAt || "—"}</p>
                         <p>Frissítve: {pkg.updatedAt || "—"}</p>
                       </div>

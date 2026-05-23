@@ -416,8 +416,8 @@ function ReviewsPageContent() {
       <main className={`flex-1 overflow-y-auto border-r reviews-main ${p.border}`}>
         <div className="max-w-5xl mx-auto p-8">
           <h1 className={`text-2xl font-serif ${p.textDark} mb-1`}>Review sor</h1>
-          <p className={`text-xs ${p.textMuted} mb-2`}>Ügyvédi review-munkasor: döntésre váró dokumentumok és feladatok.</p>
-          <p className="text-[10px] text-[#7B776D] mb-4">Primary művelet: Review megnyitása. Batch jóváhagyás későbbi patchben.</p>
+          <p className={`text-xs ${p.textMuted} mb-2`}>Jóváhagyásra vagy visszaküldésre váró munkapéldányok és feladatok.</p>
+          <p className="text-[10px] text-[#7B776D] mb-4">Dokumentumtár → Szerződés-workspace → Leadási csomag → Review sor. Batch jóváhagyás későbbi patchben.</p>
 
           {/* Queue statistics bar */}
           {!isLoading && queueStats.total > 0 && (
@@ -566,7 +566,7 @@ function ReviewsPageContent() {
                             <div className="text-right flex-shrink-0">
                               <span className="text-[10px] text-[#9C9890]">{formatDate(item.timestamp)}</span>
                               <div className="mt-1">
-                                <Link href={item.openHref} onClick={(e) => e.stopPropagation()} className="inline-block px-2 py-1 text-[10px] bg-[#C9A227] text-white hover:bg-[#B8911F] rounded">
+                                <Link href={item.openHref} onClick={(e) => e.stopPropagation()} className="inline-block px-2 py-1 text-[10px] bg-[#1F4A33] text-[#FBF6E7] hover:bg-[#173824] rounded">
                                   Review megnyitása
                                 </Link>
                               </div>
@@ -875,13 +875,13 @@ function ReviewsPageContent() {
 
               {/* Action next hint */}
               <div className="space-y-1">
-                <Link href={selected.openHref} className="block px-3 py-2 text-xs border border-[#C9A227] bg-[#FBF9F3] text-center font-semibold hover:bg-[#f5ecd8]">
+                <Link href={selected.openHref} className="block px-3 py-2 text-xs border border-[#1F4A33] bg-[#1F4A33] text-[#FBF6E7] text-center font-semibold hover:bg-[#173824]">
                   Review megnyitása
                 </Link>
                 <Link href={`/cases/${selected.caseId}/documents`} className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3] text-center">
                   Dokumentumtár
                 </Link>
-                <Link href={`/cases/${selected.caseId}/handoff`} className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3] text-center">
+                <Link href={`/cases/${selected.caseId}/handoff`} className="block px-3 py-2 text-xs border border-[#B58A2A] bg-[#FBF4E2] text-[#7B5E2E] hover:bg-[#f5ecd8] text-center">
                   Leadási csomag
                 </Link>
                 <Link

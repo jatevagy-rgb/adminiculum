@@ -109,17 +109,27 @@ function CaseHandoffPageContent({ params }: CaseHandoffPageProps) {
             >
               Munkaórák
             </Link>
+            <Link
+              href="/reviews"
+              className="rounded border border-[#B58A2A] bg-[#B58A2A] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#9C7723]"
+            >
+              Review sor
+            </Link>
           </div>
 
           <header className="mb-6 rounded-xl border border-[#D8CDB6] bg-[#FFFDF7] p-5">
+            <p className="text-[10px] uppercase tracking-[0.24em] text-[#7B776D]">Output workflow</p>
             <h1 className="text-2xl text-[#1F3B2D]" style={{ fontFamily: "var(--font-newsreader)" }}>
               Leadási csomag
             </h1>
             <p className="mt-2 text-sm text-[#4F5A50]">
               Ügyvédi review-ra előkészített belső munkacsomag.
             </p>
-            <p className="mt-2 text-xs text-[#7B5E2E]">
+            <p className="mt-2 rounded border border-[#E2D3B0] bg-[#FBF4E2] px-3 py-2 text-xs text-[#7B5E2E]">
               Ez a csomag előkészítő munkairat. Ügyvédi jóváhagyás nélkül nem minősül végleges jogi állásfoglalásnak.
+            </p>
+            <p className="mt-2 text-[10px] text-[#7B776D]">
+              Dokumentumtár → Szerződés-workspace → Leadási csomag → Review sor
             </p>
             {isLoading ? (
               <p className="mt-3 text-xs text-[#6E736D]">Ügyadatok betöltése…</p>
