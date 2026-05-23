@@ -78,9 +78,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Typecheck
-        run: npx tsc --noEmit
-
-      - name: Build
+      - name: Build (generates Next .next/types)
         run: npm run build
 
+      - name: Typecheck (run after build for .next/types)
+        run: npx tsc --noEmit

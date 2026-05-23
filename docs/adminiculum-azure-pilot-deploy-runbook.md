@@ -244,8 +244,8 @@ Mit ellenőriz:
 
 2. Frontend:
 - `npm ci`
-- `npx tsc --noEmit`
 - `npm run build`
+- `npx tsc --noEmit` (build után, mert `.next/types` ekkor stabil)
 
 Mit NEM csinál:
 - nem deployol Azure-ra
