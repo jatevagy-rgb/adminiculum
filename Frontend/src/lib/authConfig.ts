@@ -3,14 +3,26 @@ import { Configuration, LogLevel } from "@azure/msal-browser";
 // Auth configuration — all values must be provided explicitly per deployment.
 // No hardcoded production defaults — each deployment (local/container) must provide its own values.
 // These are non-secrets but must be deployment-specific.
-const clientId = process.env.NEXT_PUBLIC_ENTRA_CLIENT_ID || '';
+const clientId =
+  process.env.NEXT_PUBLIC_ENTRA_CLIENT_ID ||
+  process.env.NEXT_PUBLIC_AZURE_CLIENT_ID ||
+  '';
 const authority =
   process.env.NEXT_PUBLIC_ENTRA_AUTHORITY ||
-  `https://login.microsoftonline.com/${process.env.NEXT_PUBLIC_ENTRA_TENANT_ID || ''}`;
+  `https://login.microsoftonline.com/${
+    process.env.NEXT_PUBLIC_ENTRA_TENANT_ID ||
+    process.env.NEXT_PUBLIC_AZURE_TENANT_ID ||
+    ''
+  }`;
 
-const redirectUri = process.env.NEXT_PUBLIC_ENTRA_REDIRECT_URI || '';
+const redirectUri =
+  process.env.NEXT_PUBLIC_ENTRA_REDIRECT_URI ||
+  process.env.NEXT_PUBLIC_AZURE_REDIRECT_URI ||
+  '';
 const postLogoutRedirectUri =
-  process.env.NEXT_PUBLIC_ENTRA_POST_LOGOUT_REDIRECT_URI || '';
+  process.env.NEXT_PUBLIC_ENTRA_POST_LOGOUT_REDIRECT_URI ||
+  process.env.NEXT_PUBLIC_AZURE_POST_LOGOUT_REDIRECT_URI ||
+  '';
 
 export const adminiculumApiScope =
   process.env.NEXT_PUBLIC_ADMINICULUM_API_SCOPE || '';

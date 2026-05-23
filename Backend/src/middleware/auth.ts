@@ -1,111 +1,172 @@
-/**
- * Authentication Middleware
- * JWT verification and role-based access control
- * Supports both custom JWT and Azure AD tokens (hybrid auth for Power Apps)
- */
-
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import jwksClient from 'jwks-rsa';
 import { jwtConfig } from '../config/jwt';
 
-// Role types matching Prisma schema
-type Role = 'LAWYER' | 'COLLAB_LAWYER' | 'TRAINEE' | 'LEGAL_ASSISTANT' | 'ADMIN';
+type Role =
+  | 'LAWYER'
+  | 'COLLAB_LAWYER'
+  | 'TRAINEE'
+  | 'LEGAL_ASSISTANT'
+  | 'ADMIN'
+  | 'PARTNER'
+  | 'CLIENT'
+  | 'EXTERNAL_REVIEWER';
 
-interface JwtPayload {
+interface AuthenticatedUser {
   userId: string;
   email: string;
   role: Role;
+  name?: string;
+  azureObjectId?: string;
+  authProvider: 'azure-ad' | 'local-jwt';
 }
 
-// Azure AD configuration — tenant ID must be provided explicitly per deployment.
-// No hardcoded production defaults — each deployment (dev/staging/prod) must provide its own values.
-// These are non-secrets (tenant IDs are public) but must be deployment-specific.
+interface LocalJwtPayload {
+  userId?: string;
+  email?: string;
+  role?: string;
+  name?: string;
+}
+
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const IS_PRODUCTION = NODE_ENV === 'production';
 const AZURE_AD_TENANT_ID = process.env.AZURE_AD_TENANT_ID || '';
-const AZURE_AD_AUDIENCE = (process.env.AZURE_AD_AUDIENCE || '').split(',').map((entry) => entry.trim()).filter(Boolean);
-const DEFAULT_AUDIENCES = [
-  'api://82b50ec7-3e89-48aa-af74-4831e1c651cd',
-  '82b50ec7-3e89-48aa-af74-4831e1c651cd',
-  'api://96872568-58a6-4ea5-8711-2d2c4ec7e16e',
-  '96872568-58a6-4ea5-8711-2d2c4ec7e16e'
-];
+const AZURE_AD_AUDIENCES = String(process.env.AZURE_AD_AUDIENCE || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+const AZURE_AD_CONFIGURED =
+  AZURE_AD_TENANT_ID.length > 0 && AZURE_AD_AUDIENCES.length > 0;
 
-const azureClient = jwksClient({
-  jwksUri: `https://login.microsoftonline.com/${AZURE_AD_TENANT_ID}/discovery/v2.0/keys`,
-  cache: false,  // Disable cache for debugging
-  rateLimit: false,
-});
+let startupWarningPrinted = false;
+if (IS_PRODUCTION && !AZURE_AD_CONFIGURED && !startupWarningPrinted) {
+  console.warn(
+    '[Auth] Production mode without complete AZURE_AD_TENANT_ID/AZURE_AD_AUDIENCE configuration.'
+  );
+  startupWarningPrinted = true;
+}
 
-function getAzureSigningKey(header: jwt.JwtHeader, callback: jwt.SigningKeyCallback): void {
-  console.log('Looking for signing key with kid:', header.kid);
-  azureClient.getSigningKey(header.kid, (err, key) => {
+let cachedAzureClient: ReturnType<typeof jwksClient> | null = null;
+function getAzureClient() {
+  if (!AZURE_AD_TENANT_ID) {
+    return null;
+  }
+  if (!cachedAzureClient) {
+    cachedAzureClient = jwksClient({
+      jwksUri: `https://login.microsoftonline.com/${AZURE_AD_TENANT_ID}/discovery/v2.0/keys`,
+      cache: true,
+      rateLimit: true,
+    });
+  }
+  return cachedAzureClient;
+}
+
+class AuthConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AuthConfigError';
+  }
+}
+
+function normalizeRole(role: unknown): Role {
+  const candidate = String(role || '').trim().toUpperCase();
+  const allowed: Role[] = [
+    'LAWYER',
+    'COLLAB_LAWYER',
+    'TRAINEE',
+    'LEGAL_ASSISTANT',
+    'ADMIN',
+    'PARTNER',
+    'CLIENT',
+    'EXTERNAL_REVIEWER',
+  ];
+  return allowed.includes(candidate as Role) ? (candidate as Role) : 'LAWYER';
+}
+
+function getAzureSigningKey(
+  header: jwt.JwtHeader,
+  callback: jwt.SigningKeyCallback
+): void {
+  const client = getAzureClient();
+  if (!client || !header.kid) {
+    callback(new Error('Azure AD signing key configuration is unavailable.'));
+    return;
+  }
+
+  client.getSigningKey(header.kid, (err, key) => {
     if (err) {
-      console.error('JWKS getSigningKey error:', err.message);
-      console.error('Error details:', JSON.stringify(err));
       callback(err);
       return;
     }
-    const signingKey = key?.getPublicKey();
-    console.log('Found signing key:', signingKey ? 'YES' : 'NO');
-    callback(null, signingKey);
+    callback(null, key?.getPublicKey());
   });
 }
 
-async function verifyAzureAdToken(token: string): Promise<JwtPayload> {
+function mapAzureClaimsToUser(payload: Record<string, unknown>): AuthenticatedUser {
+  const rawEmail =
+    payload.email ||
+    payload.preferred_username ||
+    payload.upn ||
+    payload.unique_name;
+
+  const rawRole = Array.isArray(payload.roles)
+    ? payload.roles[0]
+    : payload.role;
+
+  return {
+    userId: String(payload.oid || payload.sub || ''),
+    azureObjectId: typeof payload.oid === 'string' ? payload.oid : undefined,
+    email: typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '',
+    name: typeof payload.name === 'string' ? payload.name : undefined,
+    role: normalizeRole(rawRole),
+    authProvider: 'azure-ad',
+  };
+}
+
+async function verifyAzureAdToken(token: string): Promise<AuthenticatedUser> {
+  if (!AZURE_AD_CONFIGURED) {
+    throw new AuthConfigError(
+      'AZURE_AD_TENANT_ID and AZURE_AD_AUDIENCE must be configured for Azure AD token validation.'
+    );
+  }
+
   return new Promise((resolve, reject) => {
-    jwt.verify(token, getAzureSigningKey, {
-      audience: (AZURE_AD_AUDIENCE.length ? AZURE_AD_AUDIENCE : DEFAULT_AUDIENCES) as [string, ...string[]],
-      issuer: [
-        `https://login.microsoftonline.com/${AZURE_AD_TENANT_ID}/v2.0`,
-        `https://sts.windows.net/${AZURE_AD_TENANT_ID}/`,
-      ],
-      algorithms: ['RS256'],
-    }, (err, decoded) => {
-      if (err) {
-        reject(err);
-        return;
+    jwt.verify(
+      token,
+      getAzureSigningKey,
+      {
+        audience: AZURE_AD_AUDIENCES as [string, ...string[]],
+        issuer: [
+          `https://login.microsoftonline.com/${AZURE_AD_TENANT_ID}/v2.0`,
+          `https://sts.windows.net/${AZURE_AD_TENANT_ID}/`,
+        ],
+        algorithms: ['RS256'],
+      },
+      (err, decoded) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(mapAzureClaimsToUser((decoded as Record<string, unknown>) || {}));
       }
-      // Transform Azure AD claims to our JwtPayload format
-      const azureAdPayload = decoded as any;
-      const rawEmail =
-        azureAdPayload.email ||
-        azureAdPayload.preferred_username ||
-        azureAdPayload.upn ||
-        azureAdPayload.unique_name;
-
-      const resolvedRole = Array.isArray(azureAdPayload.role)
-        ? azureAdPayload.role[0]
-        : azureAdPayload.role;
-
-      resolve({
-        userId: azureAdPayload.oid || azureAdPayload.sub,
-        email: typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '',
-        role: (resolvedRole as Role) || 'LAWYER', // Default role for Azure AD users
-      });
-    });
+    );
   });
 }
 
-interface JwtPayload {
-  userId: string;
-  email: string;
-  role: Role;
-}
-
-// Extend Express Request
 declare global {
   namespace Express {
     interface Request {
-      user?: JwtPayload;
+      user?: AuthenticatedUser;
     }
   }
 }
 
-/**
- * Verify JWT token and attach user to request
- * Supports both Azure AD tokens (for Power Apps) and custom JWT tokens
- */
-export const authenticate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const authenticate = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -113,37 +174,46 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     return;
   }
 
-  const token = authHeader.split(' ')[1];
-
-  // Try Azure AD token first (for Power Apps)
-  try {
-    console.log('Attempting Azure AD token validation...');
-    // Decode token first to see what's in it
-    const decoded = jwt.decode(token, { complete: true });
-    console.log('Token header:', JSON.stringify(decoded?.header));
-    console.log('Token payload:', JSON.stringify(decoded?.payload));
-    
-    const azureUser = await verifyAzureAdToken(token);
-    console.log('✅ Azure AD token validated successfully:', azureUser.email);
-    req.user = azureUser;
-    (req as any).azureAdToken = true;
-    next();
+  const token = authHeader.slice('Bearer '.length).trim();
+  if (!token) {
+    res.status(401).json({ error: 'Invalid token' });
     return;
-  } catch (azureError: any) {
-    console.log('Azure AD token validation failed:', azureError.message);
-    console.log('Error details:', JSON.stringify(azureError));
   }
 
-  // Fall back to custom JWT
-  console.log('Trying custom JWT validation with secret:', jwtConfig.secret ? 'SET' : 'NOT SET');
+  let azureError: unknown = null;
   try {
-    const decoded = jwt.verify(token, jwtConfig.secret) as JwtPayload;
-    console.log('✅ Custom JWT validated successfully:', decoded.email);
-    req.user = decoded;
-    (req as any).customJwt = true;
+    const azureUser = await verifyAzureAdToken(token);
+    if (!azureUser.userId) {
+      throw new Error('Token does not contain a valid user identifier.');
+    }
+    req.user = azureUser;
     next();
-  } catch (error: any) {
-    console.error('❌ Custom JWT validation failed:', error.message);
+    return;
+  } catch (error) {
+    azureError = error;
+  }
+
+  try {
+    const decoded = jwt.verify(token, jwtConfig.secret) as LocalJwtPayload;
+    req.user = {
+      userId: String(decoded.userId || ''),
+      email: String(decoded.email || '').trim().toLowerCase(),
+      name: typeof decoded.name === 'string' ? decoded.name : undefined,
+      role: normalizeRole(decoded.role),
+      authProvider: 'local-jwt',
+    };
+
+    if (!req.user.userId) {
+      throw new Error('JWT does not contain userId.');
+    }
+    next();
+  } catch {
+    if (IS_PRODUCTION && azureError instanceof AuthConfigError) {
+      res.status(500).json({
+        error: 'Authentication is not configured correctly. Missing Azure AD configuration.',
+      });
+      return;
+    }
     res.status(401).json({ error: 'Invalid token' });
   }
 };
@@ -175,7 +245,10 @@ export const ROLES: Record<string, Role> = {
   COLLAB_LAWYER: 'COLLAB_LAWYER',
   TRAINEE: 'TRAINEE',
   LEGAL_ASSISTANT: 'LEGAL_ASSISTANT',
-  ADMIN: 'ADMIN'
+  ADMIN: 'ADMIN',
+  PARTNER: 'PARTNER',
+  CLIENT: 'CLIENT',
+  EXTERNAL_REVIEWER: 'EXTERNAL_REVIEWER',
 };
 
 /**
@@ -186,7 +259,10 @@ const ROLE_HIERARCHY: Record<Role, number> = {
   COLLAB_LAWYER: 3,
   TRAINEE: 2,
   LEGAL_ASSISTANT: 1,
-  ADMIN: 5
+  ADMIN: 5,
+  PARTNER: 5,
+  CLIENT: 0,
+  EXTERNAL_REVIEWER: 1,
 };
 
 /**
@@ -230,5 +306,8 @@ export const ROLE_NAMES: Record<Role, string> = {
   COLLAB_LAWYER: 'Együttműködő ügyvéd',
   TRAINEE: 'Ügyvédjelölt',
   LEGAL_ASSISTANT: 'Jogi asszisztens',
-  ADMIN: 'Adminisztrátor'
+  ADMIN: 'Adminisztrátor',
+  PARTNER: 'Partner',
+  CLIENT: 'Ügyfél',
+  EXTERNAL_REVIEWER: 'Külső reviewer',
 };
