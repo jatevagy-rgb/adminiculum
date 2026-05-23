@@ -16,7 +16,11 @@ type StartupConfigHealthStatus = {
   checkedAt: string;
   status: 'healthy' | 'degraded';
   missing: string[];
-  matchedCredentialSet: 'SP_CLIENT_PAIR' | 'LEGACY_SHAREPOINT_PAIR' | 'AZURE_APP_TRIPLET' | null;
+  matchedCredentialSet:
+    | 'SP_CLIENT_TRIPLET'
+    | 'LEGACY_SHAREPOINT_PAIR'
+    | 'AZURE_APP_TRIPLET_LEGACY'
+    | null;
 };
 
 let startupConfigHealth: StartupConfigHealthStatus | null = null;
@@ -47,10 +51,13 @@ function evaluateStartupConfigHealth(): StartupConfigHealthStatus {
     name: StartupConfigHealthStatus['matchedCredentialSet'];
     keys: string[];
   }> = [
-    { name: 'SP_CLIENT_PAIR', keys: ['SP_CLIENT_ID', 'SP_CLIENT_SECRET'] },
+    {
+      name: 'SP_CLIENT_TRIPLET',
+      keys: ['SP_CLIENT_ID', 'SP_CLIENT_SECRET', 'SP_TENANT_ID'],
+    },
     { name: 'LEGACY_SHAREPOINT_PAIR', keys: ['SHAREPOINT_CLIENT_ID', 'SHAREPOINT_SECRET'] },
     {
-      name: 'AZURE_APP_TRIPLET',
+      name: 'AZURE_APP_TRIPLET_LEGACY',
       keys: ['AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'AZURE_TENANT_ID'],
     },
   ];
@@ -133,7 +140,17 @@ const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production';
 const configuredAllowedOrigins = parseCsvEnv(process.env.CORS_ALLOWED_ORIGINS);
+const frontendOrigin = process.env.FRONTEND_ORIGIN?.trim();
 const frontendUrl = process.env.FRONTEND_URL?.trim();
+const productionAllowedOrigins = configuredAllowedOrigins.length
+  ? configuredAllowedOrigins
+  : [frontendOrigin, frontendUrl].filter((entry): entry is string => Boolean(entry));
+
+if (isProduction && productionAllowedOrigins.length === 0) {
+  console.warn(
+    '[Startup Validation] Production CORS allowlist is empty. Configure CORS_ALLOWED_ORIGINS or FRONTEND_ORIGIN/FRONTEND_URL.'
+  );
+}
 
 // Middleware
 app.use(helmet());
@@ -153,7 +170,7 @@ app.use(cors({
       return callback(null, true);
     }
 
-    if (configuredAllowedOrigins.includes(origin)) {
+    if (productionAllowedOrigins.includes(origin)) {
       return callback(null, true);
     }
 
@@ -292,6 +309,13 @@ app.listen(PORT, '0.0.0.0', () => {
     console.warn(
       `[Startup Validation] DEGRADED missing=${startupConfigHealth.missing.join(' | ')}`,
     );
+  }
+  if (isProduction) {
+    console.log(
+      `[Startup Validation] CORS allowlist entries=${productionAllowedOrigins.length}`,
+    );
+  } else {
+    console.log('[Startup Validation] CORS mode=development (localhost origins allowed)');
   }
 
   console.log(`🚀 Adminiculum API V2 running on http://localhost:${PORT}`);

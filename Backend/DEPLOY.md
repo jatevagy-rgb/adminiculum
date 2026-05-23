@@ -152,3 +152,65 @@ In automated deploy pipelines:
 - If status is not "up to date", run `npm run db:deploy`
 - Always run `npm run db:generate` after schema changes
 - The app process should be restarted after both steps above
+
+---
+
+## Env Canonicalization Checklist (Azure-ready)
+
+### Backend canonical envs
+- Core:
+  - `PORT`
+  - `DATABASE_URL`
+  - `JWT_SECRET`
+  - `JWT_REFRESH_SECRET`
+- Auth:
+  - `AZURE_AD_TENANT_ID`
+  - `AZURE_AD_AUDIENCE`
+- CORS:
+  - `CORS_ALLOWED_ORIGINS` (comma-separated explicit origins)
+  - optional fallback: `FRONTEND_ORIGIN`, `FRONTEND_URL`
+- SharePoint:
+  - `SP_TENANT_ID`
+  - `SP_CLIENT_ID`
+  - `SP_CLIENT_SECRET`
+  - `SP_SITE_ID` and/or `SHAREPOINT_SITE_URL`
+  - `SP_DRIVE_ID`
+
+### Frontend canonical envs
+- `NEXT_PUBLIC_BACKEND_BASE_URL` (host only, no `/api/v1`)
+- `NEXT_PUBLIC_ENTRA_TENANT_ID`
+- `NEXT_PUBLIC_ENTRA_CLIENT_ID`
+- `NEXT_PUBLIC_ADMINICULUM_API_SCOPE`
+
+Legacy aliases may remain for transition, but canonical names above should be used in staging/production App Service settings.
+
+---
+
+## Production CORS Policy
+
+- Do not use wildcard origins in production when authenticated requests are enabled.
+- Set:
+  - `CORS_ALLOWED_ORIGINS=https://<frontend-staging-domain>,https://<frontend-prod-domain>`
+- Backend allows localhost origins only in non-production mode.
+- Verify at startup logs:
+  - production should show non-zero CORS allowlist count.
+
+---
+
+## Azure App Service Notes
+
+- Deploy backend and frontend as separate services.
+- Backend must expose `PORT` from App Service runtime.
+- Frontend must point to backend via `NEXT_PUBLIC_BACKEND_BASE_URL`.
+- Keep secrets only in Azure App Settings/Key Vault, never in repo files.
+
+---
+
+## Post-deploy Smoke
+
+1. `GET /health` → healthy/degraded response (JSON present)
+2. `GET /api/v1/auth/me` (with valid bearer) → user context
+3. `GET /api/v1/sharepoint/diagnostics` (with valid bearer) → structured, secret-safe diagnostics
+4. Frontend login and dashboard load:
+   - API calls resolve against the configured backend base URL
+   - no CORS errors in browser console

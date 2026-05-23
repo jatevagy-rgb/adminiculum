@@ -6,8 +6,12 @@ const backendBaseUrl =
   process.env.NEXT_PUBLIC_BACKEND_BASE_URL ||
   process.env.NEXT_PUBLIC_API_BASE_URL;
 
-const API_BASE = backendBaseUrl
-  ? `${backendBaseUrl.replace(/\/+$/, '')}/api/v1`
+const normalizedBackendBaseUrl = backendBaseUrl
+  ? backendBaseUrl.replace(/\/+$/, '').replace(/\/api\/v1$/i, '')
+  : '';
+
+const API_BASE = normalizedBackendBaseUrl
+  ? `${normalizedBackendBaseUrl}/api/v1`
   : '/api/v1';
 
 interface FetchOptions extends RequestInit {

@@ -18,8 +18,9 @@ import {
   SPFolderToWorkflow,
 } from './types';
 
-// Get SharePoint site URL from environment
-const SITE_URL = process.env.SHAREPOINT_SITE_URL || '';
+// Canonical: SHAREPOINT_SITE_URL
+// Legacy compatibility: SP_SITE_URL
+const SITE_URL = process.env.SHAREPOINT_SITE_URL || process.env.SP_SITE_URL || '';
 
 class DriveService {
   private siteId: string = '';

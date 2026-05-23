@@ -14,9 +14,9 @@ type SharePointDiagnosticsResponse = {
   permissionsSmoke: {
     ok: boolean;
   };
-  metadata: {
-    configSource: {
-      credentialSet: 'SP' | 'AZURE' | 'MIXED' | 'NONE';
+      metadata: {
+        configSource: {
+      credentialSet: 'SP' | 'AZURE_LEGACY' | 'MIXED' | 'NONE';
       hasSiteUrl: boolean;
       hasSiteId: boolean;
       hasDriveId: boolean;
@@ -40,13 +40,13 @@ function sanitizeError(error: unknown, fallbackCode: string): DiagnosticsError {
   };
 }
 
-function detectCredentialSet(): 'SP' | 'AZURE' | 'MIXED' | 'NONE' {
+function detectCredentialSet(): 'SP' | 'AZURE_LEGACY' | 'MIXED' | 'NONE' {
   const hasSp = Boolean(process.env.SP_CLIENT_ID && process.env.SP_CLIENT_SECRET && process.env.SP_TENANT_ID);
   const hasAzure = Boolean(process.env.AZURE_CLIENT_ID && process.env.AZURE_CLIENT_SECRET && process.env.AZURE_TENANT_ID);
 
   if (hasSp && hasAzure) return 'MIXED';
   if (hasSp) return 'SP';
-  if (hasAzure) return 'AZURE';
+  if (hasAzure) return 'AZURE_LEGACY';
   return 'NONE';
 }
 
@@ -75,7 +75,7 @@ async function resolveSiteIdFromUrl(siteUrl: string): Promise<string> {
 
 router.get('/diagnostics', authenticate, async (_req: Request, res: Response): Promise<void> => {
   const config = graphClient.getConfig();
-  const siteUrl = process.env.SHAREPOINT_SITE_URL || '';
+  const siteUrl = process.env.SHAREPOINT_SITE_URL || process.env.SP_SITE_URL || '';
   const configured = graphClient.isConfigured();
   const errors: DiagnosticsError[] = [];
 
@@ -123,7 +123,7 @@ router.get('/diagnostics', authenticate, async (_req: Request, res: Response): P
     } else {
       errors.push({
         code: 'SITE_REFERENCE_MISSING',
-        message: 'Neither SP_SITE_ID/SHAREPOINT_SITE_ID nor SHAREPOINT_SITE_URL is configured.',
+        message: 'Neither SP_SITE_ID/SHAREPOINT_SITE_ID nor SHAREPOINT_SITE_URL/SP_SITE_URL is configured.',
       });
     }
   } catch (error) {

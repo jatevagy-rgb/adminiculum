@@ -25,7 +25,8 @@ class GraphClientService {
 
   constructor() {
     this.config = {
-      // Support both AZURE_* and SP_* environment variable prefixes
+      // Canonical env naming: SP_*
+      // Legacy compatibility fallback: AZURE_* and SHAREPOINT_*
       clientId: process.env.SP_CLIENT_ID || process.env.AZURE_CLIENT_ID || '',
       clientSecret: process.env.SP_CLIENT_SECRET || process.env.AZURE_CLIENT_SECRET || '',
       tenantId: process.env.SP_TENANT_ID || process.env.AZURE_TENANT_ID || '',
