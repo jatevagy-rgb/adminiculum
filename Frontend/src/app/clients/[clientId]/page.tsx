@@ -19,6 +19,7 @@ import {
   type CommunicationItem,
   type User,
 } from "@/lib/api";
+import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePanel";
 
 type DossierDocument = DocumentItem & { caseNumber: string; caseId: string };
 
@@ -414,6 +415,18 @@ export default function ClientDetailPage() {
               <Link href={`/clients/${clientId}/workgroups`} className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Munkacsoportok</Link>
             </div>
           </div>
+
+          <section id="house-style" className="pt-2 border-t border-[#EEE7D9] scroll-mt-24">
+            <div className="rounded border border-[#DCCCA6] bg-[#FBF4E2] p-3">
+              <h3 className="text-[10px] uppercase tracking-[0.2em] text-[#1F4A33] mb-1">House style</h3>
+              <p className="text-[10px] text-[#514D45]">
+                Ügyfél-specifikus dokumentumstílus és külső AI prompt-copy instrukciós kontextus.
+              </p>
+            </div>
+            <div className="mt-3">
+              <ClientHouseStylePanel clientId={clientId} clientName={client.name} />
+            </div>
+          </section>
         </div>
       </aside>
 
