@@ -33,39 +33,91 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
       if (endDate) where.workDate.lte = new Date(endDate as string);
     }
 
-    const entries = await prisma.timeEntry.findMany({
-      where,
-      include: {
-        matter: {
-          select: {
-            id: true,
-            title: true,
-            clientId: true,
-            client: {
-              select: { id: true, name: true }
-            },
-            cases: {
+    const loadEntries = async (withCases: boolean) => {
+      if (withCases) {
+        return prisma.timeEntry.findMany({
+          where,
+          include: {
+            matter: {
               select: {
                 id: true,
-                caseNumber: true,
                 title: true,
                 clientId: true,
-                clientName: true,
-                updatedAt: true,
-              },
-              orderBy: { updatedAt: 'desc' }
+                client: {
+                  select: { id: true, name: true }
+                },
+                cases: {
+                  select: {
+                    id: true,
+                    caseNumber: true,
+                    title: true,
+                    clientId: true,
+                    clientName: true,
+                    updatedAt: true,
+                  },
+                  orderBy: { updatedAt: 'desc' }
+                }
+              }
+            },
+            user: {
+              select: { id: true, name: true }
+            },
+            department: {
+              select: { id: true, name: true }
             }
+          },
+          orderBy: { workDate: 'desc' }
+        });
+      }
+
+      // Fallback for partial staging schema drift where Matter.cases relation is unavailable.
+      return prisma.timeEntry.findMany({
+        where,
+        include: {
+          matter: {
+            select: {
+              id: true,
+              title: true,
+              clientId: true,
+              client: {
+                select: { id: true, name: true }
+              },
+            }
+          },
+          user: {
+            select: { id: true, name: true }
+          },
+          department: {
+            select: { id: true, name: true }
           }
         },
-        user: {
-          select: { id: true, name: true }
-        },
-        department: {
-          select: { id: true, name: true }
-        }
-      },
-      orderBy: { workDate: 'desc' }
-    });
+        orderBy: { workDate: 'desc' }
+      });
+    };
+
+    let entries: any[];
+    try {
+      entries = await loadEntries(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : '';
+      const relationDrift =
+        message.includes('cases') ||
+        message.includes('unknown field') ||
+        message.includes('unknown arg');
+      if (!relationDrift) {
+        throw error;
+      }
+      const fallbackEntries = await loadEntries(false);
+      entries = fallbackEntries.map((entry: any) => ({
+        ...entry,
+        matter: entry.matter
+          ? {
+              ...entry.matter,
+              cases: [],
+            }
+          : entry.matter,
+      }));
+    }
 
     res.json(entries);
   } catch (error) {

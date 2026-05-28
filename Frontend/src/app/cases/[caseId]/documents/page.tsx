@@ -17,6 +17,7 @@ import {
   getCommunications,
   createCommunication,
   createCaseHandoffPackage,
+  ApiError,
   getAnonymousDocumentsBySource,
   getCaseClientHouseStyle,
   listDocumentLegalAnalyses,
@@ -449,7 +450,18 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       }
     } catch (err) {
       console.error('Upload failed:', err);
-      setActionResult({ type: 'error', message: 'Dokumentum feltöltése sikertelen. Kérjük, próbáld újra később.' });
+      const fallback = 'Dokumentum feltöltése sikertelen. Kérjük, próbáld újra később.';
+      if (err instanceof ApiError) {
+        if (err.status === 502) {
+          setActionResult({ type: 'error', message: 'Dokumentum feltöltése sikertelen: SharePoint kapcsolat vagy jogosultság hiba.' });
+        } else if (err.status === 400 || err.status === 404 || err.status === 409) {
+          setActionResult({ type: 'error', message: `Dokumentum feltöltése sikertelen: ${err.message}` });
+        } else {
+          setActionResult({ type: 'error', message: fallback });
+        }
+      } else {
+        setActionResult({ type: 'error', message: fallback });
+      }
     } finally {
       setIsUploading(false);
       setUploadPhase(null);

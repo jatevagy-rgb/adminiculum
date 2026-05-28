@@ -311,6 +311,17 @@ const TEMPLATE_DEFAULT_PRESETS: TimesheetReportPreset[] = [
 ];
 
 class TimesheetReportService {
+  private isRepoUnavailableError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    return (
+      message.includes('timesheet') ||
+      message.includes('unknown field') ||
+      message.includes('unknown arg') ||
+      message.includes('does not exist') ||
+      message.includes('does not contain a definition')
+    );
+  }
+
   private getInstanceRepo(): any {
     return (prisma as any).timesheetReportInstance;
   }
@@ -321,6 +332,24 @@ class TimesheetReportService {
 
   private getPresetRepo(): any {
     return (prisma as any).timesheetPreset;
+  }
+
+  private hasInstanceRepo(): boolean {
+    return Boolean(this.getInstanceRepo());
+  }
+
+  private hasArtifactRepo(): boolean {
+    return Boolean(this.getArtifactRepo());
+  }
+
+  private hasPresetRepo(): boolean {
+    return Boolean(this.getPresetRepo());
+  }
+
+  private requireRepo(flag: boolean, feature: string): void {
+    if (!flag) {
+      throw new Error(`${feature} is not available in the current environment.`);
+    }
   }
 
   private templateIdToFamily(templateId: string | undefined): TimesheetTemplateFamily | undefined {
@@ -373,22 +402,42 @@ class TimesheetReportService {
   }
 
   async listArtifacts(instanceId: string, limit = 30): Promise<TimesheetReportArtifactPayload[]> {
-    const items = await this.getArtifactRepo().findMany({
-      where: { reportInstanceId: instanceId },
-      orderBy: { createdAt: 'desc' },
-      take: Math.max(1, Math.min(limit, 200)),
-    });
-    return items.map((item: any) => this.toArtifactPayload(item));
+    if (!this.hasArtifactRepo()) {
+      return [];
+    }
+    try {
+      const items = await this.getArtifactRepo().findMany({
+        where: { reportInstanceId: instanceId },
+        orderBy: { createdAt: 'desc' },
+        take: Math.max(1, Math.min(limit, 200)),
+      });
+      return items.map((item: any) => this.toArtifactPayload(item));
+    } catch (error) {
+      if (this.isRepoUnavailableError(error)) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   async getArtifact(instanceId: string, artifactId: string): Promise<TimesheetReportArtifactPayload | null> {
-    const item = await this.getArtifactRepo().findFirst({
-      where: {
-        id: artifactId,
-        reportInstanceId: instanceId,
-      },
-    });
-    return item ? this.toArtifactPayload(item) : null;
+    if (!this.hasArtifactRepo()) {
+      return null;
+    }
+    try {
+      const item = await this.getArtifactRepo().findFirst({
+        where: {
+          id: artifactId,
+          reportInstanceId: instanceId,
+        },
+      });
+      return item ? this.toArtifactPayload(item) : null;
+    } catch (error) {
+      if (this.isRepoUnavailableError(error)) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   private toInstancePayload(record: any): TimesheetReportInstancePayload {
@@ -456,19 +505,40 @@ class TimesheetReportService {
   }
 
   async listInstances(limit = 30): Promise<TimesheetReportInstancePayload[]> {
-    const items = await this.getInstanceRepo().findMany({
-      orderBy: { updatedAt: 'desc' },
-      take: Math.max(1, Math.min(limit, 200)),
-    });
-    return items.map((item) => this.toInstancePayload(item));
+    if (!this.hasInstanceRepo()) {
+      return [];
+    }
+    try {
+      const items = await this.getInstanceRepo().findMany({
+        orderBy: { updatedAt: 'desc' },
+        take: Math.max(1, Math.min(limit, 200)),
+      });
+      return items.map((item) => this.toInstancePayload(item));
+    } catch (error) {
+      if (this.isRepoUnavailableError(error)) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   async getInstance(id: string): Promise<TimesheetReportInstancePayload | null> {
-    const item = await this.getInstanceRepo().findUnique({ where: { id } });
-    return item ? this.toInstancePayload(item) : null;
+    if (!this.hasInstanceRepo()) {
+      return null;
+    }
+    try {
+      const item = await this.getInstanceRepo().findUnique({ where: { id } });
+      return item ? this.toInstancePayload(item) : null;
+    } catch (error) {
+      if (this.isRepoUnavailableError(error)) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async createInstance(input: SaveTimesheetReportInstanceInput): Promise<TimesheetReportInstancePayload> {
+    this.requireRepo(this.hasInstanceRepo(), 'Timesheet report instances');
     const generated = this.generate({
       templateId: input.templateId,
       reportPeriod: input.reportPeriod,
@@ -514,6 +584,7 @@ class TimesheetReportService {
   }
 
   async updateInstance(id: string, input: SaveTimesheetReportInstanceInput): Promise<TimesheetReportInstancePayload | null> {
+    this.requireRepo(this.hasInstanceRepo(), 'Timesheet report instances');
     const existing = await this.getInstanceRepo().findUnique({ where: { id } });
     if (!existing) return null;
 
@@ -570,6 +641,7 @@ class TimesheetReportService {
       content: string;
     };
   }) | null> {
+    this.requireRepo(this.hasArtifactRepo(), 'Timesheet report artifacts');
     const instance = await this.getInstance(id);
     if (!instance) return null;
     const rendered = this.render(this.toGenerateInputFromInstance(instance));
@@ -596,6 +668,7 @@ class TimesheetReportService {
       contentBase64: string;
     };
   }) | null> {
+    this.requireRepo(this.hasArtifactRepo(), 'Timesheet report artifacts');
     const instance = await this.getInstance(id);
     if (!instance) return null;
     const rendered = await this.renderDocx(this.toGenerateInputFromInstance(instance));
@@ -623,10 +696,26 @@ class TimesheetReportService {
   }
 
   async listPresets(): Promise<TimesheetReportPreset[]> {
-    const records = await this.getPresetRepo().findMany({
-      where: { isActive: true },
-      orderBy: [{ layer: 'asc' }, { updatedAt: 'desc' }],
-    });
+    if (!this.hasPresetRepo()) {
+      return TEMPLATE_DEFAULT_PRESETS.map((preset) => ({
+        ...preset,
+        templateFamily: this.templateIdToFamily(preset.templateId),
+        layer: 'TEMPLATE_DEFAULT' as const,
+        isActive: true,
+      }));
+    }
+    let records: any[] = [];
+    try {
+      records = await this.getPresetRepo().findMany({
+        where: { isActive: true },
+        orderBy: [{ layer: 'asc' }, { updatedAt: 'desc' }],
+      });
+    } catch (error) {
+      if (!this.isRepoUnavailableError(error)) {
+        throw error;
+      }
+      records = [];
+    }
 
     const dbPresets = records.map((record: any) => this.toPresetPayload(record));
     const byFamily = new Set(dbPresets.filter((preset) => preset.layer === 'TEMPLATE_DEFAULT').map((preset) => preset.templateFamily));
@@ -644,7 +733,16 @@ class TimesheetReportService {
   }
 
   async getPreset(id: string): Promise<TimesheetReportPreset | null> {
-    const record = await this.getPresetRepo().findUnique({ where: { id } });
+    let record: any = null;
+    if (this.hasPresetRepo()) {
+      try {
+        record = await this.getPresetRepo().findUnique({ where: { id } });
+      } catch (error) {
+        if (!this.isRepoUnavailableError(error)) {
+          throw error;
+        }
+      }
+    }
     if (!record) {
       const fallback = TEMPLATE_DEFAULT_PRESETS.find((preset) => preset.id === id);
       return fallback
@@ -660,6 +758,7 @@ class TimesheetReportService {
   }
 
   async createPreset(input: UpsertTimesheetPresetInput): Promise<TimesheetReportPreset> {
+    this.requireRepo(this.hasPresetRepo(), 'Timesheet presets');
     const created = await this.getPresetRepo().create({
       data: {
         name: input.name,
@@ -680,6 +779,7 @@ class TimesheetReportService {
   }
 
   async updatePreset(id: string, input: Partial<UpsertTimesheetPresetInput>): Promise<TimesheetReportPreset | null> {
+    this.requireRepo(this.hasPresetRepo(), 'Timesheet presets');
     const existing = await this.getPresetRepo().findUnique({ where: { id } });
     if (!existing) return null;
 
@@ -721,14 +821,23 @@ class TimesheetReportService {
     const templateFamily = this.templateIdToFamily(input.templateId) || 'HU_DETAILED_MONTHLY';
     const templateId = this.templateFamilyToTemplateId(templateFamily);
 
-    const records = await this.getPresetRepo().findMany({
-      where: {
-        isActive: true,
-        templateFamily,
-      },
-      orderBy: [{ updatedAt: 'desc' }],
-    });
-    const dbPresets = records.map((record: any) => this.toPresetPayload(record));
+    let dbPresets: TimesheetReportPreset[] = [];
+    if (this.hasPresetRepo()) {
+      try {
+        const records = await this.getPresetRepo().findMany({
+          where: {
+            isActive: true,
+            templateFamily,
+          },
+          orderBy: [{ updatedAt: 'desc' }],
+        });
+        dbPresets = records.map((record: any) => this.toPresetPayload(record));
+      } catch (error) {
+        if (!this.isRepoUnavailableError(error)) {
+          throw error;
+        }
+      }
+    }
 
     const selected = input.presetId
       ? dbPresets.find((preset) => preset.id === input.presetId) || TEMPLATE_DEFAULT_PRESETS.find((preset) => preset.id === input.presetId)

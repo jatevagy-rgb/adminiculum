@@ -99,6 +99,7 @@ function TimeEntriesPageContent() {
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadWarning, setLoadWarning] = useState<string | null>(null);
 
   const [showModal, setShowModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
@@ -167,15 +168,36 @@ function TimeEntriesPageContent() {
   const loadEntries = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    setLoadWarning(null);
     try {
-      const [entriesData, mattersData, clientsData] = await Promise.all([
+      const [entriesResult, mattersResult, clientsResult] = await Promise.allSettled([
         getTimeEntries(),
         getMatters(),
         getClients(),
       ]);
-      setEntries(entriesData);
-      setMatters(mattersData);
-      setClients(clientsData.data || []);
+
+      const nextWarnings: string[] = [];
+
+      if (entriesResult.status !== "fulfilled") {
+        throw entriesResult.reason;
+      }
+      setEntries(entriesResult.value);
+
+      if (mattersResult.status === "fulfilled") {
+        setMatters(mattersResult.value);
+      } else {
+        setMatters([]);
+        nextWarnings.push("A munkacsomag adatok betöltése részlegesen sikertelen.");
+      }
+
+      if (clientsResult.status === "fulfilled") {
+        setClients(clientsResult.value.data || []);
+      } else {
+        setClients([]);
+        nextWarnings.push("Az ügyfél adatok átmenetileg nem érhetők el.");
+      }
+
+      setLoadWarning(nextWarnings[0] || null);
     } catch (err) {
       console.error("Failed to load work hours:", err);
       setError("Nem sikerült betölteni a munkaórákat.");
@@ -1076,6 +1098,7 @@ function TimeEntriesPageContent() {
           )}
 
           {error && <div className="mb-6 p-4 bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a] text-xs rounded">{error}</div>}
+          {!error && loadWarning && <div className="mb-6 p-4 bg-[#FBF6E7] border border-[#E8DFC9] text-[#5F675F] text-xs rounded">{loadWarning}</div>}
 
           <div className="mb-6 border border-[#DDD7CA] rounded-xl bg-white p-4 space-y-4">
             <div>

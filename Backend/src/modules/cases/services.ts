@@ -337,9 +337,26 @@ return {
       throw new Error('Case not found');
     }
 
-    return prisma.clientHouseStyleProfile.findUnique({
-      where: { clientId: caseData.clientId }
-    });
+    if (!caseData.clientId) {
+      return null;
+    }
+
+    try {
+      return await prisma.clientHouseStyleProfile.findUnique({
+        where: { clientId: caseData.clientId }
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : '';
+      const relationDrift =
+        message.includes('clienthousestyleprofile') ||
+        message.includes('unknown field') ||
+        message.includes('unknown arg') ||
+        message.includes('does not exist');
+      if (relationDrift) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   /**

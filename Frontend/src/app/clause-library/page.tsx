@@ -165,6 +165,7 @@ function ClauseLibraryPageContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [featureDisabledMessage, setFeatureDisabledMessage] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [filterClauseKind, setFilterClauseKind] = useState<"ALL" | ClauseKind>("ALL");
@@ -205,6 +206,7 @@ function ClauseLibraryPageContent() {
   const loadClauses = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    setFeatureDisabledMessage(null);
     try {
       const list = await getClauseLibraryClauses({
         contractType: "ADASVETEL",
@@ -228,7 +230,14 @@ function ClauseLibraryPageContent() {
         }
       }
     } catch (err) {
-      setError("A záradékok betöltése sikertelen.");
+      if (err instanceof ApiError && err.status === 501) {
+        setFeatureDisabledMessage("A záradékkönyvtár jelenleg nincs bekapcsolva.");
+        setClauses([]);
+        setSelectedClauseId(null);
+        setForm(emptyForm());
+      } else {
+        setError("A záradékok betöltése sikertelen.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -242,6 +251,7 @@ function ClauseLibraryPageContent() {
     () => clauses.find((item) => item.id === selectedClauseId) || null,
     [clauses, selectedClauseId]
   );
+  const isFeatureDisabled = Boolean(featureDisabledMessage);
 
   const truglyProfileName = useMemo(() => {
     if (!truglyProfileId) return "Nincs rögzített profil";
@@ -418,6 +428,7 @@ function ClauseLibraryPageContent() {
             <button
               type="button"
               onClick={startCreate}
+              disabled={isFeatureDisabled}
               className="px-3 py-2 text-xs border border-[#C9A227] text-[#8B6B3A] bg-[#FBF9F3] hover:bg-[#f5ecd8]"
             >
               + Új záradék
@@ -514,6 +525,11 @@ function ClauseLibraryPageContent() {
 
           {error && (
             <div className="p-3 border border-[#fca5a5] bg-[#FEF2F2] text-[#8B3A3A] text-xs">{error}</div>
+          )}
+          {featureDisabledMessage && (
+            <div className="p-3 border border-[#E8DFC9] bg-[#FBF6E7] text-[#514D45] text-xs">
+              {featureDisabledMessage}
+            </div>
           )}
           {success && (
             <div className="p-3 border border-[#a7f3d0] bg-[#ECFDF5] text-[#059669] text-xs">{success}</div>
@@ -642,7 +658,7 @@ function ClauseLibraryPageContent() {
             <button
               type="button"
               onClick={onSave}
-              disabled={isSaving}
+              disabled={isSaving || isFeatureDisabled}
               className="px-4 py-2 text-xs bg-[#C9A227] text-white hover:bg-[#B8911F] disabled:opacity-60"
             >
               {isSaving ? "Mentés..." : form.id ? "Szerkesztés mentése" : "Záradék létrehozása"}
@@ -652,7 +668,7 @@ function ClauseLibraryPageContent() {
               <button
                 type="button"
                 onClick={toggleActive}
-                disabled={isSaving}
+                disabled={isSaving || isFeatureDisabled}
                 className="px-4 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3] disabled:opacity-60"
               >
                 {form.isActive ? "Archiválás" : "Aktiválás"}

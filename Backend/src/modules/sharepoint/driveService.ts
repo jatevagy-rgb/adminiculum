@@ -47,6 +47,12 @@ class DriveService {
   private async getSiteId(): Promise<string> {
     this.ensureConfiguredOrThrow('site-resolution');
     if (!this.siteId) {
+      const configuredSiteId = graphClient.getConfig().siteId?.trim();
+      if (configuredSiteId) {
+        this.siteId = configuredSiteId;
+        return this.siteId;
+      }
+
       if (!SITE_URL) {
         throw new Error('SHAREPOINT_SITE_URL/SP_SITE_URL nincs beállítva.');
       }

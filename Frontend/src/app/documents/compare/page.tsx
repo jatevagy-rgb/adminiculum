@@ -1328,7 +1328,7 @@ return (
             <div className="flex flex-col items-center justify-center gap-6 py-16">
               <div className="text-center">
                 <h3 className="font-serif text-2xl font-medium text-[#1F2821]">Nincs kiválasztott dokumentum</h3>
-                <p className="mt-2 max-w-sm text-sm text-[#7B776D]">Válassz egy dokumentumot a listából, vagy nyisd meg a Dokumentumtárat.</p>
+                <p className="mt-2 max-w-sm text-sm text-[#7B776D]">A workspace használatához válassz meglévő dokumentumot, vagy tölts fel újat a Dokumentumtárban.</p>
               </div>
               <div className="flex flex-wrap gap-3 justify-center">
                 <a
@@ -1342,6 +1342,12 @@ return (
                   className="inline-flex items-center justify-center rounded-[5px] border border-[#1F4A33] bg-[#1F4A33] px-5 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#2A5C44]"
                 >
                   Dokumentum kiválasztása
+                </a>
+                <a
+                  href={requestedCaseId ? `/cases/${encodeURIComponent(requestedCaseId)}/documents` : '/cases'}
+                  className="inline-flex items-center justify-center rounded-[5px] border border-[#B58A2A] bg-[#FBF6E7] px-5 py-2.5 text-[13px] font-semibold text-[#6C5120] transition-colors hover:bg-[#F2E7C4]"
+                >
+                  Dokumentum feltöltése
                 </a>
               </div>
             </div>

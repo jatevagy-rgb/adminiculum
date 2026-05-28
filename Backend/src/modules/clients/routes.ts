@@ -134,10 +134,33 @@ router.put('/:clientId/house-style', authenticate, async (req: Request, res: Res
 // ============================================================================
 router.get('/', authenticate, async (req: Request, res: Response): Promise<void> => {
   try {
-    const clients = await prisma.client.findMany({
-      include: { houseStyleProfile: true },
-      orderBy: { name: 'asc' }
-    });
+    let clients: any[] = [];
+    try {
+      clients = await prisma.client.findMany({
+        include: { houseStyleProfile: true },
+        orderBy: { name: 'asc' }
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : '';
+      const relationDrift =
+        message.includes('housestyleprofile') ||
+        message.includes('unknown field') ||
+        message.includes('unknown arg') ||
+        message.includes('does not exist');
+      if (!relationDrift) {
+        throw error;
+      }
+
+      // Staging fallback: if house-style relation is temporarily unavailable, keep
+      // the client list query functional and expose null profile in response shape.
+      const baseClients = await prisma.client.findMany({
+        orderBy: { name: 'asc' }
+      });
+      clients = baseClients.map((client) => ({
+        ...client,
+        houseStyleProfile: null,
+      }));
+    }
     res.json({ data: clients });
   } catch (error) {
     console.error('Get clients error:', error);

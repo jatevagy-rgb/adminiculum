@@ -81,17 +81,53 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
       where.documentId = String(documentId);
     }
 
-    const communications = await prisma.communication.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: parseInt(String(limit), 10),
-      skip: parseInt(String(offset), 10),
-      include: {
-        _count: {
-          select: { attachments: true, relatedTasks: true }
-        }
+    const take = parseInt(String(limit), 10);
+    const skip = parseInt(String(offset), 10);
+
+    const loadCommunications = async (withExtendedCount: boolean) => {
+      if (withExtendedCount) {
+        return prisma.communication.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          take,
+          skip,
+          include: {
+            _count: {
+              select: { attachments: true, relatedTasks: true }
+            }
+          }
+        });
       }
-    });
+
+      // Fallback for staging schema drift: keep communications list available even if
+      // a relation used by _count is temporarily missing.
+      return prisma.communication.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip,
+        include: {
+          _count: {
+            select: { attachments: true }
+          }
+        }
+      });
+    };
+
+    let communications: any[];
+    try {
+      communications = await loadCommunications(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : '';
+      const relationCountDrift =
+        message.includes('relatedtasks') ||
+        message.includes('unknown field') ||
+        message.includes('unknown arg');
+      if (!relationCountDrift) {
+        throw error;
+      }
+      communications = await loadCommunications(false);
+    }
 
     const total = await prisma.communication.count({ where });
 
@@ -99,8 +135,8 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
       communications,
       pagination: {
         total,
-        limit: parseInt(String(limit), 10),
-        offset: parseInt(String(offset), 10)
+        limit: take,
+        offset: skip
       }
     });
   } catch (error) {

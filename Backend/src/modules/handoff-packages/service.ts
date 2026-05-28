@@ -158,16 +158,66 @@ async function createTimelineEvent(params: {
 }
 
 class HandoffPackagesService {
+  private getRepo(): any | null {
+    return (prisma as any).lawyerHandoffPackage || null;
+  }
+
+  private isRepoUnavailableError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    return (
+      message.includes('lawyerhandoffpackage') ||
+      message.includes('unknown field') ||
+      message.includes('unknown arg') ||
+      message.includes('does not exist') ||
+      message.includes('does not contain a definition')
+    );
+  }
+
+  private assertRepoAvailable(): any {
+    const repo = this.getRepo();
+    if (!repo) {
+      throw new HandoffPackageServiceError(
+        501,
+        'HANDOFF_FEATURE_UNAVAILABLE',
+        'Handoff package feature is not available in this environment.'
+      );
+    }
+    return repo;
+  }
+
   async listHandoffPackages(caseId: string): Promise<LawyerHandoffPackageResult[]> {
-    const records = await prisma.lawyerHandoffPackage.findMany({
-      where: { caseId },
-      orderBy: { updatedAt: 'desc' },
-    });
-    return records.map(toResult);
+    const repo = this.getRepo();
+    if (!repo) {
+      return [];
+    }
+    try {
+      const records = await repo.findMany({
+        where: { caseId },
+        orderBy: { updatedAt: 'desc' },
+      });
+      return records.map(toResult);
+    } catch (error) {
+      if (this.isRepoUnavailableError(error)) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   async getHandoffPackage(id: string): Promise<LawyerHandoffPackageResult | null> {
-    const record = await prisma.lawyerHandoffPackage.findUnique({ where: { id } });
+    const repo = this.getRepo();
+    if (!repo) {
+      return null;
+    }
+    let record: any;
+    try {
+      record = await repo.findUnique({ where: { id } });
+    } catch (error) {
+      if (this.isRepoUnavailableError(error)) {
+        return null;
+      }
+      throw error;
+    }
     return record ? toResult(record) : null;
   }
 
@@ -219,7 +269,8 @@ class HandoffPackagesService {
 
     const packageType = params.packageType ? assertPackageType(params.packageType) : 'STANDARD';
 
-    const record = await prisma.lawyerHandoffPackage.create({
+    const repo = this.assertRepoAvailable();
+    const record = await repo.create({
       data: {
         caseId,
         packageType,
@@ -250,7 +301,8 @@ class HandoffPackagesService {
   }
 
   async updateHandoffPackage(id: string, params: UpdateHandoffPackageParams): Promise<LawyerHandoffPackageResult> {
-    const existing = await prisma.lawyerHandoffPackage.findUnique({ where: { id } });
+    const repo = this.assertRepoAvailable();
+    const existing = await repo.findUnique({ where: { id } });
     if (!existing) {
       throw new HandoffPackageServiceError(404, 'HANDOFF_PACKAGE_NOT_FOUND', 'Handoff package not found');
     }
@@ -289,7 +341,7 @@ class HandoffPackagesService {
       }
     }
 
-    const record = await prisma.lawyerHandoffPackage.update({
+    const record = await repo.update({
       where: { id },
       data: updateData,
     });
@@ -299,7 +351,8 @@ class HandoffPackagesService {
   }
 
   async reviewHandoffPackage(id: string, params: ReviewHandoffPackageParams): Promise<LawyerHandoffPackageResult> {
-    const existing = await prisma.lawyerHandoffPackage.findUnique({ where: { id } });
+    const repo = this.assertRepoAvailable();
+    const existing = await repo.findUnique({ where: { id } });
     if (!existing) {
       throw new HandoffPackageServiceError(404, 'HANDOFF_PACKAGE_NOT_FOUND', 'Handoff package not found');
     }
@@ -307,7 +360,7 @@ class HandoffPackagesService {
     const decision = assertDecision(params.decision);
     const newStatus: LawyerHandoffStatus = decision === 'APPROVED' ? 'APPROVED' : 'REJECTED';
 
-    const record = await prisma.lawyerHandoffPackage.update({
+    const record = await repo.update({
       where: { id },
       data: {
         status: newStatus,

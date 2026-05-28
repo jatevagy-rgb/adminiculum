@@ -93,6 +93,7 @@ export function Dashboard() {
   const [unreadNotifications, setUnreadNotifications] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   const [legalNews, setLegalNews] = useState<NewsFeedResult>({ articles: [], isLoading: true });
   const [ecofinNews, setEcofinNews] = useState<NewsFeedResult>({ articles: [], isLoading: true });
@@ -100,23 +101,55 @@ export function Dashboard() {
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setWarnings([]);
     try {
       const user = await getCurrentUser();
       setCurrentUser(user);
 
       const [communicationPage, myTasks, casesData, stats, unreadInfo] = await Promise.all([
-        getCommunications({ limit: 8 }),
-        getMyTasks(),
-        getCases(1, 10, user.id),
-        getDashboardStats(),
+        getCommunications({ limit: 8 }).catch(() => null),
+        getMyTasks().catch(() => null),
+        getCases(1, 10, user.id).catch(() => null),
+        getDashboardStats().catch(() => null),
         getUnreadNotificationsCount().catch(() => null),
       ]);
 
-      setCommunications(communicationPage.communications);
-      setTasks(myTasks);
-      setMyCases(casesData.data);
-      setDashboardStats(stats);
+      const nextWarnings: string[] = [];
+
+      if (communicationPage) {
+        setCommunications(communicationPage.communications || []);
+      } else {
+        setCommunications([]);
+        nextWarnings.push("A kommunikációs adatok most nem érhetők el.");
+      }
+
+      if (myTasks) {
+        setTasks(myTasks);
+      } else {
+        setTasks([]);
+        nextWarnings.push("A feladatlista betöltése részlegesen sikertelen.");
+      }
+
+      if (casesData) {
+        setMyCases(casesData.data || []);
+      } else {
+        setMyCases([]);
+        nextWarnings.push("Az ügylista most nem érhető el.");
+      }
+
+      if (stats) {
+        setDashboardStats(stats);
+      } else {
+        setDashboardStats(null);
+        nextWarnings.push("A dashboard statisztikák átmenetileg nem érhetők el.");
+      }
+
       setUnreadNotifications(unreadInfo?.unreadCount ?? null);
+      setWarnings(nextWarnings);
+
+      if (!myTasks && !casesData && !stats) {
+        setError("A fő dashboard adatok betöltése sikertelen.");
+      }
     } catch (err) {
       console.error("Failed to load dashboard data", err);
       setError(err instanceof Error ? err.message : "Háttéradat betöltése sikertelen");
@@ -324,6 +357,11 @@ export function Dashboard() {
         </div>
       </div>
       {error && <div className="mt-4 bg-[#FEF3F2] border border-[#FCCFC7] text-[#8E2A2A] p-3 text-xs rounded-lg">{error}</div>}
+      {!error && warnings.length > 0 && (
+        <div className="mt-4 rounded-lg border border-[#E8DFC9] bg-[#FBF6E7] p-3 text-xs text-[#5F675F]">
+          {warnings[0]}
+        </div>
+      )}
     </Panel>
   );
 
