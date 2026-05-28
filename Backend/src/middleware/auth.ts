@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import jwksClient from 'jwks-rsa';
 import { jwtConfig } from '../config/jwt';
+import { prisma } from '../prisma/prisma.service';
 
 type Role =
   | 'LAWYER'
@@ -19,6 +20,7 @@ interface AuthenticatedUser {
   role: Role;
   name?: string;
   azureObjectId?: string;
+  entraOid?: string;
   authProvider: 'azure-ad' | 'local-jwt';
 }
 
@@ -154,6 +156,50 @@ async function verifyAzureAdToken(token: string): Promise<AuthenticatedUser> {
   });
 }
 
+type DbUserForAuth = {
+  id: string;
+  email: string;
+  role: string;
+  status?: string | null;
+  isActive?: boolean | null;
+};
+
+function normalizeLoginIdentifier(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function assertDbUserIsActive(user: DbUserForAuth): boolean {
+  const status = typeof user.status === 'string' ? user.status.toUpperCase() : '';
+  if (status && status !== 'ACTIVE') {
+    return false;
+  }
+  if (user.isActive === false) {
+    return false;
+  }
+  return true;
+}
+
+async function resolveDbUserByLoginIdentifier(identifier: string): Promise<DbUserForAuth | null> {
+  if (!identifier) {
+    return null;
+  }
+  return prisma.user.findFirst({
+    where: {
+      email: {
+        equals: identifier,
+        mode: 'insensitive',
+      },
+    },
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      status: true,
+      isActive: true,
+    },
+  });
+}
+
 declare global {
   namespace Express {
     interface Request {
@@ -183,10 +229,36 @@ export const authenticate = async (
   let azureError: unknown = null;
   try {
     const azureUser = await verifyAzureAdToken(token);
-    if (!azureUser.userId) {
-      throw new Error('Token does not contain a valid user identifier.');
+    const loginIdentifier = normalizeLoginIdentifier(azureUser.email);
+    if (!loginIdentifier) {
+      res.status(401).json({ error: 'Token does not contain a usable login identifier.' });
+      return;
     }
-    req.user = azureUser;
+
+    const dbUser = await resolveDbUserByLoginIdentifier(loginIdentifier);
+    if (!dbUser) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    if (!assertDbUserIsActive(dbUser)) {
+      res.status(403).json({ error: 'User account is not active' });
+      return;
+    }
+
+    req.user = {
+      userId: dbUser.id,
+      email: dbUser.email.toLowerCase(),
+      role: normalizeRole(dbUser.role),
+      name: azureUser.name,
+      azureObjectId: azureUser.azureObjectId,
+      entraOid: azureUser.azureObjectId,
+      authProvider: 'azure-ad',
+    };
+    (req as any).azureAdToken = true;
+    (req as any).authClaims = {
+      oid: azureUser.azureObjectId,
+      loginIdentifier,
+    };
     next();
     return;
   } catch (error) {
