@@ -35,9 +35,9 @@ function SettingsPageContent() {
     textDark: isSignalTiles ? "text-[#F1F5F9]" : "text-[#1F2821]",
     border: isSignalTiles ? "border-[#1E3A5F]" : "border-[#DDD7CA]",
     borderLight: isSignalTiles ? "border-[#1E3A5F]" : "border-[#E8E2D6]",
-    badge: isSignalTiles ? "bg-[#1E3A5F] text-[#67E8F9]" : "bg-[#E8E2D6] text-[#7B776D]",
-    accent: isSignalTiles ? "text-cyan-400" : "text-[#8B7355]",
-    accentBg: isSignalTiles ? "bg-cyan-400/10" : "bg-[#F6F2E8]",
+    badge: isSignalTiles ? "bg-[#1E3A5F] text-[#D8C58E]" : "bg-[#E8E2D6] text-[#7B776D]",
+    accent: isSignalTiles ? "text-[#D8C58E]" : "text-[#8B7355]",
+    accentBg: isSignalTiles ? "bg-[#1E3A5F]/40" : "bg-[#F6F2E8]",
     success: isSignalTiles ? "text-emerald-400" : "text-emerald-700",
     warning: isSignalTiles ? "text-amber-400" : "text-amber-700",
     danger: isSignalTiles ? "text-red-400" : "text-red-700",
@@ -46,7 +46,31 @@ function SettingsPageContent() {
   
   return (
     <div className={`flex-1 overflow-y-auto settings-surface ${p.bg}`}>
-      <div className="max-w-4xl mx-auto p-8">
+      <div className="mx-auto grid max-w-6xl gap-6 p-8 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <aside className={`${p.bgCard} border ${p.border} rounded p-4 lg:sticky lg:top-6 lg:self-start`}>
+          <p className={`text-[10px] font-bold uppercase tracking-[0.18em] ${p.textMuted}`}>Beállítások navigáció</p>
+          <nav className="mt-4 space-y-2 text-xs">
+            {[
+              ["#profile", "Profil"],
+              ["#appearance", "Megjelenés"],
+              ["#house-style", "House style"],
+              ["#integrations", "Integrációk"],
+              ["#security", "Adatkezelés"],
+            ].map(([href, label]) => (
+              <a key={href} href={href} className={`block rounded border ${p.borderLight} ${p.bgSection} px-3 py-2 ${p.text} hover:border-[#B58A2A]`}>
+                {label}
+              </a>
+            ))}
+          </nav>
+          <div className={`mt-4 rounded border ${p.borderLight} ${p.bgSection} p-3`}>
+            <p className={`text-[11px] font-semibold ${p.textDark}`}>Aktív UI pack</p>
+            <p className={`mt-1 text-[11px] ${p.textMuted}`}>
+              {uiPack === "legal_ops_atelier" ? "Adminiculum production design" : "Kísérleti, nem production default"}
+            </p>
+          </div>
+        </aside>
+
+        <main>
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-3">
             <span className={`text-[9px] uppercase tracking-[0.35em] ${p.textMuted} px-2 py-1 ${p.bgAlt}`}>Beállítások</span>
@@ -59,7 +83,7 @@ function SettingsPageContent() {
           </p>
         </div>
         <div className="grid gap-6">
-          <section className={`${p.bgCard} border ${p.border} rounded p-6`}>
+          <section id="profile" className={`${p.bgCard} border ${p.border} rounded p-6 scroll-mt-6`}>
             <h2 className={`text-lg font-semibold ${p.textDark} mb-3`}>Profil</h2>
             <div className="grid md:grid-cols-3 gap-3 text-xs">
               <div className={`border ${p.borderLight} p-3`}>
@@ -78,7 +102,7 @@ function SettingsPageContent() {
             <p className={`text-xs ${p.textMuted} mt-3`}>A felhasználói adatok kezelése későbbi patchben.</p>
           </section>
 
-          <section className={`${p.bgCard} border ${p.border} rounded p-6`}>
+          <section id="appearance" className={`${p.bgCard} border ${p.border} rounded p-6 scroll-mt-6`}>
             <div className="flex items-center justify-between gap-2 mb-3">
               <h2 className={`text-lg font-semibold ${p.textDark}`}>Megjelenés</h2>
               <span className={`text-[10px] px-2 py-1 ${p.bgAlt} ${p.textMuted}`}>UI pack</span>
@@ -104,7 +128,7 @@ function SettingsPageContent() {
                     onClick={() => setUiPack(pack.id)}
                     className={`settings-ui-pack-option w-full text-left border rounded-lg p-4 transition-all ${
                       selected
-                        ? `${p.accent} border-cyan-400/50 ${p.accentBg} shadow-sm`
+                        ? `${p.accent} border-[#B58A2A] ${p.accentBg} shadow-sm`
                         : `${p.border} ${p.bgCard} ${p.bgHover}`
                     }`}
                   >
@@ -139,17 +163,17 @@ function SettingsPageContent() {
             </div>
           </section>
 
-          <section className={`${p.bgCard} border ${p.border} rounded p-6`}>
+          <section id="house-style" className={`${p.bgCard} border ${p.border} rounded p-6 scroll-mt-6`}>
             <h2 className={`text-lg font-semibold ${p.textDark} mb-2`}>Ügyfélprofil / house style alapértelmezések</h2>
             <p className={`text-xs ${p.textMuted} mb-4`}>
-              Az ügyfél-specifikus house style profilok az Ügyfelek oldalon kezelhetők.
+              Az ügyfél-specifikus house style profilok az Ügyfelek oldalon kezelhetők. Ezek adják majd a külső AI promptok dokumentumstílus-, fejléc-, kétnyelvűségi és formázási kontextusát.
             </p>
             <Link href="/clients" className="inline-block px-3 py-2 text-xs border border-[#C9A227] text-[#8B6B3A] bg-[#FBF9F3] hover:bg-[#f5ecd8]">
               Ügyfelek megnyitása
             </Link>
           </section>
 
-          <section className={`${p.bgCard} border ${p.border} rounded p-6`}>
+          <section id="integrations" className={`${p.bgCard} border ${p.border} rounded p-6 scroll-mt-6`}>
             <h2 className={`text-lg font-semibold ${p.textDark} mb-2`}>Integrációk</h2>
             <div className="grid md:grid-cols-2 gap-3 text-xs">
               <div className={`border ${p.borderLight} p-3`}>
@@ -163,7 +187,7 @@ function SettingsPageContent() {
             </div>
           </section>
 
-          <section className={`${p.bgCard} border ${p.border} rounded p-6`}>
+          <section id="security" className={`${p.bgCard} border ${p.border} rounded p-6 scroll-mt-6`}>
             <h2 className={`text-lg font-semibold ${p.textDark} mb-2`}>Adatkezelés / biztonság</h2>
             <p className={`text-xs ${p.textMuted} mb-2`}>
               Külső AI promptok másolhatók, de Adminiculum nem hív automatikusan külső AI-t.
@@ -185,6 +209,7 @@ function SettingsPageContent() {
             </div>
           </section>
         </div>
+        </main>
       </div>
     </div>
   );

@@ -353,7 +353,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   // Re-trigger loadData once caseRecord is resolved to CUID — only on mount
   useEffect(() => {
     if (caseRecord?.id && !hasLoadedOnceRef.current) {
-      hasLoadedOnceRef.current = true;
       loadData(true);
     }
   }, [caseRecord?.id, loadData]);
@@ -441,8 +440,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
         folder: 'CLIENT_INPUT',
       });
       const docs = await getCaseDocuments(caseRecord.id).catch(() => [uploaded]);
-      setUploadedDocuments(docs);
-      setSelectedLedgerItem({ kind: 'uploaded', item: uploaded });
+      const modified = docs.filter(doc => doc.documentType === 'MODIFIED_WORKING_COPY');
+      const uploadedOnly = docs.filter(doc => doc.documentType !== 'MODIFIED_WORKING_COPY');
+      const selectedUploaded = docs.find((doc) => doc.id === uploaded.id) || uploaded;
+      setUploadedDocuments(uploadedOnly);
+      setModifiedWorkingCopies(modified);
+      setSelectedLedgerItem({ kind: 'uploaded', item: selectedUploaded });
       setSelectedContract(null);
       setActionResult({ type: 'success', message: 'Dokumentum feltöltve. Szöveg kinyerése a workspace megnyitásakor történik, ha a fájlformátum támogatott.' });
       if (fileInputRef.current) {

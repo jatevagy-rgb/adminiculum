@@ -1357,7 +1357,7 @@ return (
                   Vissza a Dokumentumtárba
                 </a>
                 <a
-                  href={requestedCaseId ? `/documents/compare?caseId=${encodeURIComponent(requestedCaseId)}` : '/documents/compare'}
+                  href={requestedCaseId ? `/cases/${encodeURIComponent(requestedCaseId)}/documents` : '/cases'}
                   className="inline-flex items-center justify-center rounded-[5px] border border-[#1F4A33] bg-[#1F4A33] px-5 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#2A5C44]"
                 >
                   Dokumentum kiválasztása
@@ -1605,6 +1605,27 @@ return (
                         Az anonimizált szöveg betöltése nem sikerült. A Dokumentumtárban újra megnyitható az anonimizálás.
                       </p>
                     ) : null}
+                  </section>
+                ) : null}
+
+                {toolMode === "sablonok" ? (
+                  <section className="space-y-2">
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Jogi elemzés munkatermék</h3>
+                    <div className="rounded-[6px] border border-[#DCCFA8] bg-[#FBF6E7] p-3">
+                      <p className="text-xs font-semibold text-[#1F2821]">Külső AI-ból visszahozott elemzés előkészítése</p>
+                      <p className="mt-1 text-[11px] leading-5 text-[#7B776D]">
+                        A cél, hogy az eredeti dokumentum, a módosított munkapéldány és az ügyvédi review-ra szánt jogi elemzés egymás mellett kezelhető legyen.
+                      </p>
+                      <ul className="mt-2 space-y-1 text-[10px] leading-4 text-[#514D45]">
+                        <li>• Forrás/workspace snapshot és tényállás-evidence mapping.</li>
+                        <li>• Jogi érvrendszer, kockázati pontok és ellenérvek.</li>
+                        <li>• Újrahasználható kereseti / beadvány szövegblokkok.</li>
+                        <li>• Figyelmeztetés: ügyvédi review nélkül nem használható.</li>
+                      </ul>
+                      <AdminButton size="xs" variant="muted" disabled className="mt-3">
+                        Elemzési dokumentumtípus mentése későbbi backend patchben
+                      </AdminButton>
+                    </div>
                   </section>
                 ) : null}
 
