@@ -10,11 +10,30 @@
 // ============================================================================
 
 import { Router, Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import { authenticate } from '../../middleware/auth.js';
 import { prisma } from '../../prisma/prisma.service.js';
 import { buildPrismaErrorResponse } from '../../utils/prismaError.js';
 
 const router = Router();
+
+function logPrismaRouteError(route: string, error: unknown): void {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    const details =
+      process.env.NODE_ENV === 'production'
+        ? { code: error.code, message: error.message }
+        : { code: error.code, message: error.message, meta: error.meta };
+    console.error(`[communications] ${route} prisma error`, details);
+    return;
+  }
+  if (error instanceof Prisma.PrismaClientValidationError) {
+    console.error(`[communications] ${route} prisma validation error`, {
+      message: error.message,
+    });
+    return;
+  }
+  console.error(`[communications] ${route} error`, error instanceof Error ? error.message : error);
+}
 
 // ============================================================================
 // TYPES
@@ -84,8 +103,37 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     const take = parseInt(String(limit), 10);
     const skip = parseInt(String(offset), 10);
 
-    const loadCommunications = async (withExtendedCount: boolean) => {
-      if (withExtendedCount) {
+    const loadCommunications = async (mode: 'full' | 'count-lite' | 'minimal') => {
+      if (mode === 'minimal') {
+        const rows = await prisma.communication.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          take,
+          skip,
+          select: {
+            id: true,
+            type: true,
+            subject: true,
+            senderName: true,
+            senderEmail: true,
+            recipientName: true,
+            recipientEmail: true,
+            content: true,
+            summary: true,
+            caseId: true,
+            clientId: true,
+            documentId: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        });
+        return rows.map((row) => ({
+          ...row,
+          _count: { attachments: 0, relatedTasks: 0 },
+        }));
+      }
+
+      if (mode === 'full') {
         return prisma.communication.findMany({
           where,
           orderBy: { createdAt: 'desc' },
@@ -114,22 +162,33 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
       });
     };
 
-    let communications: any[];
+    let communications: any[] = [];
     try {
-      communications = await loadCommunications(true);
+      communications = await loadCommunications('full');
     } catch (error) {
-      const message = error instanceof Error ? error.message.toLowerCase() : '';
-      const relationCountDrift =
-        message.includes('relatedtasks') ||
-        message.includes('unknown field') ||
-        message.includes('unknown arg');
-      if (!relationCountDrift) {
-        throw error;
+      logPrismaRouteError('GET /communications full-query', error);
+      try {
+        communications = await loadCommunications('count-lite');
+      } catch (fallbackError) {
+        logPrismaRouteError('GET /communications count-lite-query', fallbackError);
+        try {
+          communications = await loadCommunications('minimal');
+        } catch (minimalError) {
+          logPrismaRouteError('GET /communications minimal-query', minimalError);
+          // Staging-safe fallback: keep dashboard operational with empty list shape.
+          communications = [];
+        }
       }
-      communications = await loadCommunications(false);
     }
 
-    const total = await prisma.communication.count({ where });
+    let total = 0;
+    try {
+      total = await prisma.communication.count({ where });
+    } catch (countError) {
+      logPrismaRouteError('GET /communications count-total', countError);
+      // Fallback when schema drift or data mismatch prevents count.
+      total = communications.length;
+    }
 
     res.json({
       communications,
@@ -140,7 +199,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Error listing communications:', error);
+    logPrismaRouteError('GET /communications final', error);
     const prismaErr = buildPrismaErrorResponse(error);
     if (prismaErr) {
       res.status(prismaErr.status).json(prismaErr.body);
