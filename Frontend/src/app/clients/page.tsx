@@ -6,7 +6,7 @@ import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminBadge, AdminButton, AdminPanel, AdminStatusPill } from "@/components/adminiculum/ui";
 import { createClient, getClients, updateClient, type Client, type CreateClientData, type UpdateClientData } from "@/lib/api";
 
-const CORE_CLIENT_ORDER = ["blackbelt technology kft", "blackbelt", "saubermacher-magyarorszag kft", "saubermacher"];
+const CORE_CLIENT_ORDER = ["blackbelt technology kft", "blackbelt", "saubermacher-magyarorszag kft", "saubermacher", "balintfy es tarsai ugyvedi iroda", "balintfy"];
 
 const CORE_CLIENT_DEFAULTS: Record<string, Partial<Client>> = {
   blackbelt: {
@@ -24,6 +24,11 @@ const CORE_CLIENT_DEFAULTS: Record<string, Partial<Client>> = {
     taxNumber: "13559212-2-43",
     companyRegistrationNumber: "03-09-113748",
   },
+  balintfy: {
+    name: "Bálintfy és Társai Ügyvédi Iroda",
+    address: "1051 Budapest",
+    contactPerson: "dr. HUBAY Gyula Máté",
+  },
 };
 
 function normalize(value?: string | null) {
@@ -35,10 +40,11 @@ function normalize(value?: string | null) {
     .trim();
 }
 
-function coreKey(client: Client): "blackbelt" | "saubermacher" | null {
+function coreKey(client: Client): "blackbelt" | "saubermacher" | "balintfy" | null {
   const value = normalize(`${client.name} ${client.houseStyleProfile?.officialName || ""} ${client.houseStyleProfile?.shortName || ""}`);
   if (value.includes("blackbelt")) return "blackbelt";
   if (value.includes("saubermacher") || value.includes("sauber macher")) return "saubermacher";
+  if (value.includes("balintfy")) return "balintfy";
   return null;
 }
 
@@ -46,6 +52,7 @@ function coreScore(client: Client) {
   const key = coreKey(client);
   if (key === "blackbelt") return 0;
   if (key === "saubermacher") return 1;
+  if (key === "balintfy") return 2;
   return 99;
 }
 
@@ -210,7 +217,7 @@ function ClientsPageContent() {
               <h2 className="font-serif text-2xl font-medium leading-tight text-[#16201A]">{profile?.officialName || display.name}</h2>
               {primary ? <AdminBadge tone="gold">Alap ügyfél</AdminBadge> : <AdminBadge tone="neutral">Ügyfél</AdminBadge>}
             </div>
-            <p className="mt-1 text-sm text-[#3D4842]">Rövid név: <b>{profile?.shortName || (coreKey(client) === "blackbelt" ? "BlackBelt" : coreKey(client) === "saubermacher" ? "Saubermacher" : display.name)}</b></p>
+            <p className="mt-1 text-sm text-[#3D4842]">Rövid név: <b>{profile?.shortName || (coreKey(client) === "blackbelt" ? "BlackBelt" : coreKey(client) === "saubermacher" ? "Saubermacher" : coreKey(client) === "balintfy" ? "Bálintfy" : display.name)}</b></p>
             <div className="mt-3 grid gap-2 text-xs text-[#3D4842] sm:grid-cols-2">
               <p>Székhely: <b>{profile?.registeredSeat || display.address || "Nincs megadva"}</b></p>
               <p>Adószám: <b>{profile?.taxNumber || display.taxNumber || "Nincs megadva"}</b></p>
@@ -253,7 +260,7 @@ function ClientsPageContent() {
 
           <AdminPanel className="p-4">
             <p className="text-[11px] text-[#3D4842]">
-              A fő ügyindítási lista alapértelmezetten a kiemelt ügyfelekre szűkít: BlackBelt és Saubermacher. Más ügyfelek nem törlődnek.
+              A fő ügyindítási lista alapértelmezetten a kiemelt pilot ügyfelekre szűkít: BlackBelt, Saubermacher és Bálintfy. Más ügyfelek nem törlődnek.
             </p>
           </AdminPanel>
 

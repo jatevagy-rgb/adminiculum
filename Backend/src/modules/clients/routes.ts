@@ -147,53 +147,67 @@ router.put('/:clientId/house-style', authenticate, async (req: Request, res: Res
 // ============================================================================
 router.get('/', authenticate, async (req: Request, res: Response): Promise<void> => {
   try {
-    let clients: any[] = [];
+    let baseClients: any[] = [];
     try {
-      clients = await prisma.client.findMany({
-        include: { houseStyleProfile: true },
-        orderBy: { name: 'asc' }
+      baseClients = await prisma.client.findMany({
+        orderBy: { name: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          address: true,
+        },
       });
     } catch (error) {
-      logPrismaRouteError('GET /clients primary-query', error);
-      const message = error instanceof Error ? error.message.toLowerCase() : '';
-      const relationDrift =
-        message.includes('housestyleprofile') ||
-        message.includes('unknown field') ||
-        message.includes('unknown arg') ||
-        message.includes('does not exist');
-      const schemaDrift =
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        (error.code === 'P2022' || error.code === 'P2021');
-      if (!relationDrift && !schemaDrift) {
-        throw error;
-      }
-
-      // Staging fallback: if relation/column drift occurs, query a minimal stable shape.
-      let baseClients: any[] = [];
-      try {
-        baseClients = await prisma.client.findMany({
-          orderBy: { name: 'asc' },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
-            address: true,
-          },
-        });
-      } catch (fallbackError) {
-        logPrismaRouteError('GET /clients fallback-query', fallbackError);
-        baseClients = [];
-      }
-      clients = baseClients.map((client) => ({
-        ...client,
-        houseStyleProfile: null,
-        taxNumber: null,
-        companyRegistrationNumber: null,
-        authorizedRepresentative: null,
-        contactPerson: null,
-      }));
+      logPrismaRouteError('GET /clients base-query', error);
+      throw error;
     }
+
+    const clients = baseClients.map((client) => ({
+      ...client,
+      houseStyleProfile: null,
+      taxNumber: null,
+      companyRegistrationNumber: null,
+      authorizedRepresentative: null,
+      contactPerson: null,
+    }));
+
+    const clientIndex = new Map(clients.map((client) => [client.id, client]));
+
+    try {
+      const enrichedClients = await prisma.client.findMany({
+        where: { id: { in: clients.map((client) => client.id) } },
+        select: {
+          id: true,
+          taxNumber: true,
+          companyRegistrationNumber: true,
+          authorizedRepresentative: true,
+          contactPerson: true,
+        },
+      });
+      for (const enriched of enrichedClients) {
+        const target = clientIndex.get(enriched.id);
+        if (target) Object.assign(target, enriched);
+      }
+    } catch (error) {
+      // Optional identity fields may be missing on older staging DBs. Keep the client list usable.
+      logPrismaRouteError('GET /clients optional-identity-fields', error);
+    }
+
+    try {
+      const profiles = await prisma.clientHouseStyleProfile.findMany({
+        where: { clientId: { in: clients.map((client) => client.id) } },
+      });
+      for (const profile of profiles) {
+        const target = clientIndex.get(profile.clientId);
+        if (target) target.houseStyleProfile = profile;
+      }
+    } catch (error) {
+      // House style is optional for pilot browsing; a relation/table drift should not break /clients.
+      logPrismaRouteError('GET /clients optional-house-style', error);
+    }
+
     res.json({ data: clients });
   } catch (error) {
     logPrismaRouteError('GET /clients final', error);

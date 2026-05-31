@@ -35,6 +35,35 @@ const CORE_TEAM = [
 
 const CORE_EMAILS = new Set(CORE_TEAM.map((user) => user.email));
 
+const isStalePilotTestUser = (user) => {
+  const value = `${user.name || ''} ${user.email || ''}`
+    .toLocaleLowerCase('hu-HU')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  return (
+    value.includes('autotest') ||
+    value.includes('admin user') ||
+    value.includes('azure ad user') ||
+    value.includes('bundle verify') ||
+    value.includes('cases debug') ||
+    value.includes('dash debug') ||
+    value.includes('debug cases') ||
+    value.includes('debug verify') ||
+    value.includes('debugcases') ||
+    value.includes('edit mode tester') ||
+    value.includes('l3 final') ||
+    value.includes('l3 pilot') ||
+    value.includes('patch') ||
+    value.includes('shape login') ||
+    value.includes('teszt ugyved') ||
+    value.includes('test attorney') ||
+    value.includes('test user') ||
+    value.includes('@adminiculum.local') ||
+    value.includes('@local.test') ||
+    value.includes('@example.com')
+  );
+};
+
 async function main() {
   for (const user of CORE_TEAM) {
     const saved = await prisma.user.upsert({
@@ -62,12 +91,25 @@ async function main() {
 
   const users = await prisma.user.findMany({ orderBy: { email: 'asc' } });
   const nonCore = users.filter((user) => !CORE_EMAILS.has(user.email));
+  const staleTestUsers = nonCore.filter(isStalePilotTestUser);
+  for (const user of staleTestUsers) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        status: 'INACTIVE',
+        isActive: false,
+      },
+    });
+    console.log(`deactivated stale pilot test user: ${user.name} <${user.email}>`);
+  }
+
   if (nonCore.length === 0) {
     console.log('non-core/debug users: none');
   } else {
     console.log('non-core/debug users present, not deleted:');
     for (const user of nonCore) {
-      console.log(`- ${user.name} <${user.email}> (${user.role}, ${user.status})`);
+      const state = staleTestUsers.some((stale) => stale.id === user.id) ? 'INACTIVE after this seed' : user.status;
+      console.log(`- ${user.name} <${user.email}> (${user.role}, ${state})`);
     }
   }
 }

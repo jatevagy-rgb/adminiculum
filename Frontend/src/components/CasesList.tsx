@@ -100,6 +100,8 @@ const CORE_CLIENTS = [
   "blackbelt",
   "saubermacher-magyarorszag kft",
   "saubermacher",
+  "balintfy es tarsai ugyvedi iroda",
+  "balintfy",
 ];
 
 const CORE_CLIENT_DEFAULTS: Record<string, Partial<Client>> = {
@@ -117,6 +119,11 @@ const CORE_CLIENT_DEFAULTS: Record<string, Partial<Client>> = {
     address: "1181 Budapest, Zádor u. 5.",
     taxNumber: "13559212-2-43",
     companyRegistrationNumber: "03-09-113748",
+  },
+  balintfy: {
+    name: "Bálintfy és Társai Ügyvédi Iroda",
+    address: "1051 Budapest",
+    contactPerson: "dr. HUBAY Gyula Máté",
   },
 };
 
@@ -233,10 +240,11 @@ export function CasesList() {
     [availableClients, newCaseData.clientId],
   );
 
-  const getCoreClientKey = useCallback((client: Client): "blackbelt" | "saubermacher" | null => {
+  const getCoreClientKey = useCallback((client: Client): "blackbelt" | "saubermacher" | "balintfy" | null => {
     const normalized = normalizePersonName(client.name);
     if (normalized.includes("blackbelt")) return "blackbelt";
     if (normalized.includes("saubermacher") || normalized.includes("sauber macher")) return "saubermacher";
+    if (normalized.includes("balintfy")) return "balintfy";
     return null;
   }, []);
 
@@ -279,7 +287,8 @@ export function CasesList() {
 
   const visibleParticipants = useMemo(() => {
     const eligibleUsers = availableUsers.filter((user) =>
-      INTERNAL_PARTICIPANT_ROLES.has(String(user.role || "").toUpperCase())
+      INTERNAL_PARTICIPANT_ROLES.has(String(user.role || "").toUpperCase()) &&
+      PILOT_PARTICIPANT_EMAILS.includes(String(user.email || "").toLowerCase())
     );
     if (eligibleUsers.length === 0) return [];
     return [...eligibleUsers].sort((left, right) => {
@@ -392,9 +401,9 @@ export function CasesList() {
   const effectiveClientRole = newCaseData.clientRole === "Egyéb / saját szerep" ? customClientRole.trim() : newCaseData.clientRole;
 
   const handleCreateCase = async () => {
-    const clientOk = clientMode === "existing" ? Boolean(newCaseData.clientId || newCaseData.clientName.trim()) : Boolean(newClientData.name.trim() || newCaseData.clientName.trim());
+    const clientOk = clientMode === "existing" ? Boolean(newCaseData.clientId) : Boolean(newClientData.name.trim());
     if (!clientOk) {
-      setCreateError("Ügyfél kiválasztása vagy megadása kötelező.");
+      setCreateError(clientMode === "existing" ? "Válassz ki egy mentett ügyfelet az ügy létrehozásához." : "Az új ügyfél hivatalos neve kötelező.");
       return;
     }
     if (!newCaseData.description?.trim()) {
@@ -751,7 +760,7 @@ export function CasesList() {
                     {clientType === "Cég" ? <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Adószám<input value={newClientData.taxNumber || ""} onChange={(e) => setNewClientData({ ...newClientData, taxNumber: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label> : null}
                     {clientType === "Cég" ? <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Cégjegyzékszám / nyilvántartási szám<input value={newClientData.companyRegistrationNumber || ""} onChange={(e) => setNewClientData({ ...newClientData, companyRegistrationNumber: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label> : null}
                     <label className="md:col-span-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Székhely / cím<input value={newClientData.address || ""} onChange={(e) => setNewClientData({ ...newClientData, address: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" placeholder="pl. 1051 Budapest, ..." /></label>
-                    <div className="md:col-span-2 flex flex-wrap items-center gap-3"><AdminButton variant="neutral" onClick={() => { setNewCaseData((prev) => ({ ...prev, clientName: newClientData.name.trim(), clientId: undefined })); setClientMessage("Helyi ügyféladatok használatban ehhez az ügyhöz."); }} disabled={!newClientData.name.trim()}>Helyi ügyféladatok használata</AdminButton><AdminButton variant="muted" onClick={handleSaveClientOnly} disabled={isSavingClient}>{isSavingClient ? "Ügyfél mentése..." : "Ügyfél mentése adatbázisba"}</AdminButton>{clientMessage ? <p className="text-xs text-[#7A8479]">{clientMessage}</p> : null}</div>
+                    <div className="md:col-span-2 flex flex-wrap items-center gap-3"><AdminButton variant="muted" onClick={handleSaveClientOnly} disabled={isSavingClient || !newClientData.name.trim()}>{isSavingClient ? "Ügyfél mentése..." : "Ügyfél mentése adatbázisba"}</AdminButton><p className="text-xs text-[#7A8479]">Az ügy létrehozásakor az új ügyfél mentett adatbázis-rekordként kapcsolódik az ügyhöz.</p>{clientMessage ? <p className="text-xs text-[#7A8479]">{clientMessage}</p> : null}</div>
                   </div>
                 )}
               </section>

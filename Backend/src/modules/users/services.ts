@@ -11,6 +11,12 @@ import type { UserStatus } from '@prisma/client';
 type Role = 'LAWYER' | 'COLLAB_LAWYER' | 'TRAINEE' | 'LEGAL_ASSISTANT' | 'ADMIN' | 'PARTNER';
 
 const INTERNAL_PILOT_ROLES: Role[] = ['ADMIN', 'PARTNER', 'LAWYER', 'COLLAB_LAWYER', 'TRAINEE', 'LEGAL_ASSISTANT'];
+const PILOT_TEAM_EMAILS = [
+  'hubay.gyula@balintfy.onmicrosoft.com',
+  'csanad@trugly.eu',
+  'sommer.anna@balintfy.onmicrosoft.com',
+  'szucs.amanda@balintfy.onmicrosoft.com',
+];
 
 interface UserListItem {
   id: string;
@@ -71,11 +77,16 @@ class UsersService {
     role?: Role;
     status?: string;
   }): Promise<{ data: UserListItem[] }> {
-    const users = await prisma.user.findMany({
+    const baseWhere = {
+      isActive: true,
+      status: (params?.status || 'ACTIVE') as UserStatus,
+      role: params?.role ? params.role : { in: INTERNAL_PILOT_ROLES },
+    };
+
+    const pilotUsers = await prisma.user.findMany({
       where: {
-        isActive: true,
-        status: (params?.status || 'ACTIVE') as UserStatus,
-        role: params?.role ? params.role : { in: INTERNAL_PILOT_ROLES },
+        ...baseWhere,
+        email: { in: PILOT_TEAM_EMAILS },
       },
       orderBy: { name: 'asc' },
       select: {
@@ -87,6 +98,25 @@ class UsersService {
         createdAt: true
       }
     });
+
+    const users = pilotUsers.length > 0
+      ? pilotUsers.sort((left, right) => {
+          const leftIndex = PILOT_TEAM_EMAILS.indexOf(String(left.email || '').toLowerCase());
+          const rightIndex = PILOT_TEAM_EMAILS.indexOf(String(right.email || '').toLowerCase());
+          return leftIndex - rightIndex;
+        })
+      : await prisma.user.findMany({
+          where: baseWhere,
+          orderBy: { name: 'asc' },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            status: true,
+            createdAt: true
+          }
+        });
 
     const data = users.map((u: any) => ({
       id: u.id,
