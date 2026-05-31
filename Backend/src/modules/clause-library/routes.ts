@@ -44,6 +44,22 @@ function requireEnabled(req: Request, res: Response, next: () => void) {
   next();
 }
 
+// Root status endpoint for staging smoke checks.
+router.get('/', authenticate, (_req: Request, res: Response) => {
+  if (!isClauseLibraryEnabled) {
+    res.status(200).json({
+      enabled: false,
+      message: 'Clause Library feature is disabled. Set ENABLE_CLAUSE_LIBRARY=true to enable.',
+    });
+    return;
+  }
+
+  res.status(200).json({
+    enabled: true,
+    message: 'Clause Library feature is enabled. Use subroutes for data operations.',
+  });
+});
+
 // ============================================================================
 // CLAUSE ROUTES
 // ============================================================================

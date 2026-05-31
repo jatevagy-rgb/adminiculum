@@ -17,6 +17,8 @@
     "db:bootstrap": "prisma db push",
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx prisma/seed.ts",
+    "seed:pilot:users": "node scripts/seed-core-team-users.mjs",
+    "seed:pilot:clients": "node scripts/seed-core-clients-house-style.mjs",
     "seed:test-user": "set DOTENV_CONFIG_PATH=.env.test&& node -r dotenv/config ./node_modules/tsx/dist/cli.mjs scripts/seedTestUser.ts",
     "seed:escalation-default": "node scripts/seed-escalation-default-rule.js",
     "test": "set DOTENV_CONFIG_PATH=.env.test&& node -r dotenv/config ./node_modules/jest/bin/jest.js",

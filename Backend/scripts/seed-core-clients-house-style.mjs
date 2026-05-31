@@ -46,6 +46,20 @@ const CORE_CLIENTS = [
       brandingNotes: 'magyar formális jogi irat; munkáltatói oldali, kockázatérzékeny megfogalmazás; Mt.-hivatkozások munkajogi iratoknál; Bosch / hulladékgazdálkodási ügyeknél EN-HU párhuzamos, tükrözött szerkezet.',
     },
   },
+  {
+    name: 'Bálintfy és Társai Ügyvédi Iroda',
+    email: 'info@balintfy.hu',
+    address: 'Budapest, Magyarország',
+    contactPerson: 'Belső iroda',
+    authorizedRepresentative: 'Bálintfy és Társai Ügyvédi Iroda',
+    profile: {
+      officialName: 'Bálintfy és Társai Ügyvédi Iroda',
+      shortName: 'Bálintfy',
+      preferredLanguage: 'HU',
+      documentLanguageMode: 'HU_ONLY',
+      brandingNotes: 'belső irodai referenciaügyfél pilot tesztekhez; visszafogott jogi irodai hang, világos review- és döntési pontok.',
+    },
+  },
 ];
 
 const normalize = (value) => String(value || '')
@@ -57,7 +71,7 @@ const normalize = (value) => String(value || '')
 
 const isCoreClient = (client) => {
   const value = normalize(`${client.name} ${client.company || ''}`);
-  return value.includes('blackbelt') || value.includes('saubermacher') || value.includes('sauber macher');
+  return value.includes('blackbelt') || value.includes('saubermacher') || value.includes('sauber macher') || value.includes('balintfy');
 };
 
 async function upsertClientWithProfile(core) {

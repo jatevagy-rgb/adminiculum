@@ -85,6 +85,12 @@ interface CreateCaseInput {
   deadline?: string | null;
 }
 
+type ActiveUserRecord = {
+  id: string;
+  status: string;
+  isActive: boolean;
+};
+
 class CasesService {
   /**
    * Get all cases with pagination
@@ -385,53 +391,40 @@ return {
       }
     }
 
-    if (!resolvedClientName) {
-      resolvedClientName = 'Unknown Client';
+    if (!resolvedClientName && !resolvedClientId) {
+      throw new Error('Client name or clientId is required');
     }
 
     // Generate title from resolved clientName + matterType
     const title = `${resolvedClientName} - ${matterType}`;
 
-    // FIX: Auth middleware sets userId = Azure AD OID, but User table uses local CUIDs.
-    // Upsert the Azure AD user as a local record so the FK constraint succeeds.
-    let resolvedCreatedById = 'system';
-    if (params.createdById) {
-      const existingUser = await prisma.user.findUnique({ where: { id: params.createdById } });
-      if (existingUser) {
-        resolvedCreatedById = existingUser.id;
-      } else {
-        try {
-          const newUser = await prisma.user.create({
-            data: {
-              id: params.createdById,
-              email: `azure-${params.createdById}@local`,
-              name: 'Azure AD User',
-              role: 'LAWYER',
-              status: 'ACTIVE'
-            }
-          });
-          resolvedCreatedById = newUser.id;
-        } catch {
-          resolvedCreatedById = 'system';
-        }
-      }
+    if (!params.createdById) {
+      throw new Error('Authenticated user is required for case creation');
     }
 
-    // FIX: Case schema requires clientId FK. Use or create a placeholder default client.
+    const existingUser = await prisma.user.findUnique({
+      where: { id: params.createdById },
+      select: { id: true, status: true, isActive: true },
+    }) as ActiveUserRecord | null;
+    if (!existingUser) {
+      throw new Error('Authenticated user not found');
+    }
+    if (existingUser.status !== 'ACTIVE' || existingUser.isActive === false) {
+      throw new Error('Authenticated user is inactive');
+    }
+    const resolvedCreatedById = existingUser.id;
+
+    // Case schema requires clientId FK. If no valid client is provided, fail with a clear
+    // validation error instead of attempting a synthetic fallback that can cause 500s.
     const clientIdFromParams = resolvedClientId;
     let clientId = clientIdFromParams;
     if (!clientId) {
-      let defaultClient = await prisma.client.findFirst({ where: { name: 'Default Client' } });
-      if (!defaultClient) {
-        try {
-          defaultClient = await prisma.client.create({
-            data: { name: 'Default Client', email: 'default@placeholder.local' }
-          });
-        } catch {
-          // last resort
-        }
-      }
-      clientId = defaultClient?.id || 'system';
+      throw new Error('Client is required for case creation');
+    }
+
+    if (!resolvedClientName) {
+      const linkedClient = await prisma.client.findUnique({ where: { id: clientId } });
+      resolvedClientName = linkedClient?.name || 'Unknown Client';
     }
 
     const newCase = await prisma.case.create({
@@ -456,7 +449,7 @@ return {
     // Create case folder in SharePoint
     // If folder creation fails, log but do NOT fail the case creation.
     // The case DB record is the source of truth; SharePoint is a convenience layer.
-    const folderResult = await driveService.createCaseFolders(caseNumber, params.clientName);
+    const folderResult = await driveService.createCaseFolders(caseNumber, resolvedClientName);
     if (!folderResult) {
       console.warn(`[CASES_SERVICE] SharePoint folder creation returned null for case ${caseNumber}. Case created in DB but SharePoint folder is missing.`);
     }

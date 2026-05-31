@@ -15,7 +15,9 @@ const router = Router();
 // ============================================================================
 router.get('/', authenticate, async (req: Request, res: Response): Promise<void> => {
   try {
-    const result = await usersService.getUsers();
+    const role = typeof req.query.role === 'string' ? (req.query.role as any) : undefined;
+    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const result = await usersService.getUsers({ role, status });
     res.json(result);
   } catch (error) {
     console.error('Get users error:', error);

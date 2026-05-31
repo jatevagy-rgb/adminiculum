@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { InteractionRequiredAuthError, InteractionStatus } from "@azure/msal-browser";
 import { useMsal } from "@azure/msal-react";
 import { adminiculumApiScope, backendBaseUrl, loginRequest } from "@/lib/authConfig";
+import { clearAuthToken, setAuthToken } from "@/lib/api";
 import { LoginScreen } from "@/components/LoginScreen";
 import { AppShell } from "@/components/AppShell";
 
@@ -150,7 +151,7 @@ export function AuthenticatedApp({ section = "dashboard", children }: Authentica
         throw new Error("Local dev login did not return accessToken");
       }
 
-      localStorage.setItem("auth_token", loginData.accessToken);
+      setAuthToken(loginData.accessToken);
       const profileData = await callAuthMe(loginData.accessToken);
 
       if (!profileData) {
@@ -197,7 +198,7 @@ export function AuthenticatedApp({ section = "dashboard", children }: Authentica
     clearCachedProfile();
 
     if (!account) {
-      localStorage.removeItem("auth_token");
+      clearAuthToken();
       return;
     }
 
@@ -231,7 +232,7 @@ export function AuthenticatedApp({ section = "dashboard", children }: Authentica
         scopes: [adminiculumApiScope],
       });
 
-      localStorage.setItem("auth_token", tokenResponse.accessToken);
+      setAuthToken(tokenResponse.accessToken);
       const profileData = await callAuthMe(tokenResponse.accessToken);
 
       if (!profileData) {
@@ -282,7 +283,7 @@ export function AuthenticatedApp({ section = "dashboard", children }: Authentica
           } catch {
             if (!mounted) return;
 
-            localStorage.removeItem("auth_token");
+            clearAuthToken();
             clearCachedProfile();
             setProfile(null);
 
@@ -299,7 +300,7 @@ export function AuthenticatedApp({ section = "dashboard", children }: Authentica
       }
 
       clearCachedProfile();
-      localStorage.removeItem("auth_token");
+      clearAuthToken();
       setProfile(null);
       setAuthState("idle");
       return;

@@ -79,13 +79,21 @@ const clientRoles = [
   "Egyéb / saját szerep",
 ];
 
-const participantAllowlist = [
-  { name: "Dr. Hubay Gyula", role: "PARTNER" },
-  { name: "Dr. Trugly Csanád", role: "LAWYER" },
-  { name: "Dr. Szűcs Amanda", role: "ügyvédjelölt" },
-  { name: "Dr. Sommer Anna", role: "ügyvédjelölt" },
-  { name: "Dr. Hubay Gyula Máté", role: "ügyvédjelölt" },
+const PILOT_PARTICIPANT_EMAILS = [
+  "hubay.gyula@balintfy.onmicrosoft.com",
+  "csanad@trugly.eu",
+  "sommer.anna@balintfy.onmicrosoft.com",
+  "szucs.amanda@balintfy.onmicrosoft.com",
 ];
+
+const INTERNAL_PARTICIPANT_ROLES = new Set([
+  "ADMIN",
+  "PARTNER",
+  "LAWYER",
+  "COLLAB_LAWYER",
+  "TRAINEE",
+  "LEGAL_ASSISTANT",
+]);
 
 const CORE_CLIENTS = [
   "blackbelt technology kft",
@@ -270,22 +278,24 @@ export function CasesList() {
   }, [availableClients, getCoreClientKey, hydrateCoreClient, showOtherClients]);
 
   const visibleParticipants = useMemo(() => {
-    const allowedNames = new Set(participantAllowlist.map((person) => normalizePersonName(person.name)));
-    const matched = availableUsers.filter((user) => {
-      const values = [user.name, user.email].map(normalizePersonName);
-      return values.some((value) => Array.from(allowedNames).some((allowed) => value === allowed || value.includes(allowed)));
+    const eligibleUsers = availableUsers.filter((user) =>
+      INTERNAL_PARTICIPANT_ROLES.has(String(user.role || "").toUpperCase())
+    );
+    if (eligibleUsers.length === 0) return [];
+    return [...eligibleUsers].sort((left, right) => {
+      const leftPriority = PILOT_PARTICIPANT_EMAILS.indexOf(String(left.email || "").toLowerCase());
+      const rightPriority = PILOT_PARTICIPANT_EMAILS.indexOf(String(right.email || "").toLowerCase());
+      const normalizedLeftPriority = leftPriority === -1 ? Number.MAX_SAFE_INTEGER : leftPriority;
+      const normalizedRightPriority = rightPriority === -1 ? Number.MAX_SAFE_INTEGER : rightPriority;
+      if (normalizedLeftPriority !== normalizedRightPriority) {
+        return normalizedLeftPriority - normalizedRightPriority;
+      }
+      return String(left.name || left.email).localeCompare(String(right.name || right.email), "hu-HU");
     });
-    if (matched.length > 0) return matched;
-    return participantAllowlist.map((person, index) => ({
-      id: `local-participant-${index}`,
-      name: person.name,
-      email: "",
-      role: person.role,
-    } as User));
   }, [availableUsers]);
 
   const selectableParticipantIds = useMemo(
-    () => new Set(visibleParticipants.filter((user) => !String(user.id).startsWith("local-participant-")).map((user) => user.id)),
+    () => new Set(visibleParticipants.map((user) => user.id)),
     [visibleParticipants],
   );
 
@@ -321,7 +331,7 @@ export function CasesList() {
         const found = visibleParticipants.find((u) =>
           normalizePersonName(u.name).includes(namePart)
         );
-        return found && !String(found.id).startsWith("local-participant-") ? found.id : "";
+        return found ? found.id : "";
       };
       const amandaId = findId("szűcs amanda");
       const csanadId = findId("trugly csanád");
@@ -371,7 +381,6 @@ export function CasesList() {
   };
 
   const addParticipantToWorkplan = (user: User) => {
-    if (String(user.id).startsWith("local-participant-")) return;
     const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const currentCount = workplanSteps.length;
     const title = getStepTitle(currentCount);
@@ -780,7 +789,6 @@ export function CasesList() {
                 <div className="flex flex-wrap gap-2">
                   {visibleParticipants.map((user) => {
                     const active = selectedCollaboratorIds.includes(user.id);
-                    const isLocalFallback = String(user.id).startsWith("local-participant-");
                     const alreadyInWorkplan = workplanSteps.some((step) => step.assigneeUserId === user.id);
                     return (
                       <button
@@ -788,31 +796,30 @@ export function CasesList() {
                         type="button"
                         title={alreadyInWorkplan ? `${user.name} már az útvonalban` : "Hozzáadás útvonalhoz"}
                         onClick={() => {
-                          if (isLocalFallback) return;
                           if (alreadyInWorkplan) return;
                           addParticipantToWorkplan(user);
                         }}
-                        disabled={isLocalFallback || alreadyInWorkplan}
+                        disabled={alreadyInWorkplan}
                         className={`rounded-full border px-3 py-1.5 text-xs ${
                           active
                             ? "border-[#1F4A33] bg-[#E2E8DA] text-[#1F4A33]"
                             : alreadyInWorkplan
                               ? "border-[#4A6B4A] bg-[#D9E3CC] text-[#4A6B4A] cursor-default"
                               : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842] hover:border-[#173824] hover:bg-[#ECE6DA]"
-                        } ${isLocalFallback ? "opacity-70" : ""}`}
+                        }`}
                       >
                         {user.name || user.email}
-                        {!isLocalFallback && !alreadyInWorkplan ? (
+                        {!alreadyInWorkplan ? (
                           <span className="ml-1 text-[9px] opacity-60">+ útvonal</span>
                         ) : alreadyInWorkplan ? (
                           <span className="ml-1 text-[9px] opacity-60">✓ útvonalban</span>
                         ) : (
-                          <span className="ml-1 text-[#7A8479]">· {user.role}{isLocalFallback ? " · helyi névlista" : ""}</span>
+                          <span className="ml-1 text-[#7A8479]">· {user.role}</span>
                         )}
                       </button>
                     );
                   })}
-                  {visibleParticipants.length === 0 ? <span className="text-xs text-[#7A8479]">Felhasználók betöltése vagy nem elérhetők.</span> : null}
+                  {visibleParticipants.length === 0 ? <span className="text-xs text-[#7A8479]">Még nincs aktív belső felhasználó a pilot résztvevőkhöz.</span> : null}
                 </div>
                 <p className="mt-2 text-xs text-[#7A8479]">Résztvevőket később is hozzáadhatsz az ügy oldaláról.</p>
               </section>
@@ -888,7 +895,7 @@ export function CasesList() {
                             <div className="grid gap-2 sm:grid-cols-[1fr_180px_130px]">
                               <select value={step.assigneeUserId} onChange={(e) => updateWorkplanStep(step.id, { assigneeUserId: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]">
                                 <option value="">Felelős</option>
-                                {visibleParticipants.filter((user) => !String(user.id).startsWith("local-participant-")).map((user) => <option key={user.id} value={user.id}>{user.name}{user.role && user.role !== 'LAWYER' ? ` (${user.role === 'PARTNER' ? 'partner' : user.role === 'TRAINEE' ? 'ügyvédjelölt' : user.role})` : ''}</option>)}
+                                {visibleParticipants.map((user) => <option key={user.id} value={user.id}>{user.name}{user.role && user.role !== 'LAWYER' ? ` (${user.role === 'PARTNER' ? 'partner' : user.role === 'TRAINEE' ? 'ügyvédjelölt' : user.role})` : ''}</option>)}
                               </select>
                               <input type="date" value={step.dueDate} onChange={(e) => updateWorkplanStep(step.id, { dueDate: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]" />
                               <div className="flex items-center gap-1">

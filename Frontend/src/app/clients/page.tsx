@@ -119,7 +119,7 @@ function ClientsPageContent() {
       setClients((response.data || []).map(mergeCoreDefaults));
     } catch (err) {
       console.error("Failed to load clients:", err);
-      setError("Az ügyfelek betöltése sikertelen.");
+      setError("Az ügyféllista most nem érhető el. Próbáld újra néhány másodperc múlva.");
     } finally {
       setIsLoading(false);
     }
@@ -274,7 +274,21 @@ function ClientsPageContent() {
             </AdminPanel>
           </div>
 
-          {error ? <div className="rounded border border-[#F2DAD6] bg-[#FFF5F3] p-3 text-xs font-semibold text-[#8B2A2A]">{error}</div> : null}
+          {error ? (
+            <div className="rounded border border-[#F2DAD6] bg-[#FFF5F3] p-3 text-xs text-[#8B2A2A]">
+              <p className="font-semibold">{error}</p>
+              <p className="mt-1 text-[11px] text-[#6D5148]">
+                Ha ez staging környezeti hiba, ellenőrizd a backend `/api/v1/clients` végpontot.
+              </p>
+              <button
+                type="button"
+                onClick={loadClients}
+                className="mt-2 inline-flex items-center justify-center rounded-[5px] border border-[#8B2A2A] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#8B2A2A] hover:bg-[#FBE9E6]"
+              >
+                Újrapróbálás
+              </button>
+            </div>
+          ) : null}
 
           {isLoading ? (
             <AdminPanel className="p-10 text-center text-sm text-[#7A8479]">Ügyfelek betöltése…</AdminPanel>

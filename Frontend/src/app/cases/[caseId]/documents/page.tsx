@@ -453,7 +453,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       const fallback = 'Dokumentum feltöltése sikertelen. Kérjük, próbáld újra később.';
       if (err instanceof ApiError) {
         if (err.status === 502) {
-          setActionResult({ type: 'error', message: 'Dokumentum feltöltése sikertelen: SharePoint kapcsolat vagy jogosultság hiba.' });
+          setActionResult({
+            type: 'error',
+            message:
+              'Dokumentum feltöltése sikertelen: SharePoint kapcsolat/jogosultság hiba. Ellenőrizd a staging /api/v1/sharepoint/diagnostics végpontot és a site/drive beállításokat.',
+          });
         } else if (err.status === 400 || err.status === 404 || err.status === 409) {
           setActionResult({ type: 'error', message: `Dokumentum feltöltése sikertelen: ${err.message}` });
         } else {

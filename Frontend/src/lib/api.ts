@@ -18,6 +18,7 @@ interface FetchOptions extends RequestInit {
   skipAuth?: boolean;
   suppressErrorStatuses?: number[];
   suppressErrorLogging?: boolean;
+  waitForAuthMs?: number;
 }
 
 class ApiError extends Error {
@@ -31,10 +32,65 @@ class ApiError extends Error {
   }
 }
 
+const AUTH_TOKEN_KEY = 'auth_token';
+const AUTH_TOKEN_EVENT = 'adminiculum:auth-token-updated';
+const DEFAULT_AUTH_WAIT_MS = 3000;
+
+function readAuthToken(): string | null {
+  return typeof window !== 'undefined' ? localStorage.getItem(AUTH_TOKEN_KEY) : null;
+}
+
+async function waitForAuthToken(timeoutMs = DEFAULT_AUTH_WAIT_MS): Promise<string | null> {
+  const immediate = readAuthToken();
+  if (immediate) return immediate;
+  if (typeof window === 'undefined' || timeoutMs <= 0) return null;
+
+  return await new Promise<string | null>((resolve) => {
+    const startedAt = Date.now();
+
+    const finish = (token: string | null) => {
+      window.removeEventListener(AUTH_TOKEN_EVENT, onTokenEvent as EventListener);
+      clearInterval(pollTimer);
+      clearTimeout(timeoutTimer);
+      resolve(token);
+    };
+
+    const checkNow = () => {
+      const token = readAuthToken();
+      if (token) {
+        finish(token);
+      } else if (Date.now() - startedAt >= timeoutMs) {
+        finish(null);
+      }
+    };
+
+    const onTokenEvent = () => checkNow();
+    window.addEventListener(AUTH_TOKEN_EVENT, onTokenEvent as EventListener);
+
+    const pollTimer = window.setInterval(checkNow, 150);
+    const timeoutTimer = window.setTimeout(() => finish(null), timeoutMs + 50);
+  });
+}
+
+export function setAuthToken(token: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+  window.dispatchEvent(new Event(AUTH_TOKEN_EVENT));
+}
+
+export function clearAuthToken(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  window.dispatchEvent(new Event(AUTH_TOKEN_EVENT));
+}
+
 async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
-  const { skipAuth, suppressErrorStatuses, suppressErrorLogging, ...fetchOptions } = options;
+  const { skipAuth, suppressErrorStatuses, suppressErrorLogging, waitForAuthMs, ...fetchOptions } = options;
   
-  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  const token = skipAuth ? null : await waitForAuthToken(waitForAuthMs ?? DEFAULT_AUTH_WAIT_MS);
+  if (!skipAuth && !token) {
+    throw new ApiError(401, 'Authentication token unavailable', endpoint);
+  }
   const hasBody = fetchOptions.body !== undefined && fetchOptions.body !== null;
   const isFormData = typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData;
   const customHeaders = fetchOptions.headers || {};
@@ -664,7 +720,7 @@ export async function rejectDocument(documentId: string, reason: string): Promis
  * Download a document from SharePoint
  */
 export async function downloadDocument(documentId: string): Promise<Blob> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  const token = await waitForAuthToken(DEFAULT_AUTH_WAIT_MS);
   const headers: HeadersInit = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
@@ -879,7 +935,7 @@ export async function getAnonymizationSourceText(documentId: string): Promise<An
   // This endpoint is a best-effort preview/helper endpoint.
   // Do not use fetchApi() here, because expected fallback statuses (e.g. 404/500/501)
   // should not emit noisy console.error entries and trigger Next dev overlay.
-  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  const token = await waitForAuthToken(DEFAULT_AUTH_WAIT_MS);
   const endpoint = `/documents/${documentId}/anonymization-source`;
   const url = `${API_BASE}${endpoint}`;
 
@@ -1527,7 +1583,7 @@ export async function previewContract(data: {
 }
 
 export async function downloadContract(generationId: string): Promise<Blob> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  const token = await waitForAuthToken(DEFAULT_AUTH_WAIT_MS);
   const headers: HeadersInit = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
@@ -1611,7 +1667,7 @@ export async function uploadContractRevision(params: { threadId: string; file: F
     formData.append('note', params.note);
   }
 
-  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  const token = await waitForAuthToken(DEFAULT_AUTH_WAIT_MS);
   const response = await fetch(`${API_BASE}/contracts/threads/${encodeURIComponent(params.threadId)}/upload-revision`, {
     method: 'POST',
     headers: {
@@ -1703,7 +1759,7 @@ export async function createContractGenerationRevision(contractId: string): Prom
  * Download all generated contracts for a case as a ZIP bundle
  */
 export async function downloadCaseBundle(caseId: string): Promise<Blob> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  const token = await waitForAuthToken(DEFAULT_AUTH_WAIT_MS);
   const headers: HeadersInit = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
@@ -3279,7 +3335,7 @@ export async function saveReviewNotes(data: {
 }
 
 export async function downloadReviewSummary(generationId: string): Promise<Blob> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  const token = await waitForAuthToken(DEFAULT_AUTH_WAIT_MS);
   const headers: HeadersInit = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };

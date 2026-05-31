@@ -178,6 +178,10 @@ router.get('/:caseId', authenticate, async (req: Request, res: Response): Promis
 router.post('/', authenticate, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required for case creation' });
+      return;
+    }
     
     // Handle both JSON and form-urlencoded data
     let clientName = req.body?.clientName || req.body?.['clientName'];
@@ -208,6 +212,18 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
     const message = error instanceof Error ? error.message : 'Internal server error';
     if (message === 'Client not found') {
       res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message });
+      return;
+    }
+    if (message === 'Client is required for case creation' || message === 'Client name or clientId is required') {
+      res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message });
+      return;
+    }
+    if (message === 'Authenticated user not found' || message === 'Authenticated user is required for case creation') {
+      res.status(401).json({ status: 401, code: 'AUTH_USER_NOT_FOUND', message });
+      return;
+    }
+    if (message === 'Authenticated user is inactive') {
+      res.status(403).json({ status: 403, code: 'AUTH_USER_INACTIVE', message });
       return;
     }
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message });

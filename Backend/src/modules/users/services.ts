@@ -6,8 +6,11 @@
 
 import { prisma } from '../../prisma/prisma.service';
 import bcrypt from 'bcryptjs';
+import type { UserStatus } from '@prisma/client';
 
-type Role = 'LAWYER' | 'COLLAB_LAWYER' | 'TRAINEE' | 'LEGAL_ASSISTANT' | 'ADMIN';
+type Role = 'LAWYER' | 'COLLAB_LAWYER' | 'TRAINEE' | 'LEGAL_ASSISTANT' | 'ADMIN' | 'PARTNER';
+
+const INTERNAL_PILOT_ROLES: Role[] = ['ADMIN', 'PARTNER', 'LAWYER', 'COLLAB_LAWYER', 'TRAINEE', 'LEGAL_ASSISTANT'];
 
 interface UserListItem {
   id: string;
@@ -69,6 +72,11 @@ class UsersService {
     status?: string;
   }): Promise<{ data: UserListItem[] }> {
     const users = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        status: (params?.status || 'ACTIVE') as UserStatus,
+        role: params?.role ? params.role : { in: INTERNAL_PILOT_ROLES },
+      },
       orderBy: { name: 'asc' },
       select: {
         id: true,

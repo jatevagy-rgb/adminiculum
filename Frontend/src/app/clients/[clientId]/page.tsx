@@ -72,6 +72,7 @@ export default function ClientDetailPage() {
   const [selectedCollaboratorIds, setSelectedCollaboratorIds] = useState<string[]>([]);
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [isSavingCase, setIsSavingCase] = useState(false);
+  const [caseCreateError, setCaseCreateError] = useState<string | null>(null);
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editFormData, setEditFormData] = useState<Partial<Client>>({});
@@ -154,6 +155,7 @@ export default function ClientDetailPage() {
   const handleCreateCase = async () => {
     if (!caseFormData.clientName?.trim() || !caseFormData.matterType) return;
     setIsSavingCase(true);
+    setCaseCreateError(null);
     try {
       const created = await createCase({
         clientName: caseFormData.clientName,
@@ -175,10 +177,16 @@ export default function ClientDetailPage() {
       setCaseFormData((prev) => ({ ...prev, deadline: "" }));
       setSelectedCollaboratorIds([]);
       await loadClientData();
-      router.push(`/cases/${created.id}`);
+      router.push(`/cases/${created.id}/documents`);
     } catch (err) {
       console.error("Create case failed:", err);
-      alert("Nem sikerült létrehozni az ügyet.");
+      let message = "Nem sikerült létrehozni az ügyet.";
+      if (err instanceof Error && err.name === "ApiError") {
+        message = (err as any).message || message;
+      } else if (err instanceof Error && err.message) {
+        message = err.message;
+      }
+      setCaseCreateError(message);
     } finally {
       setIsSavingCase(false);
     }
@@ -501,6 +509,11 @@ export default function ClientDetailPage() {
                 <label className="block text-xs text-[#7B776D] mb-1">Leírás</label>
                 <textarea value={caseFormData.description} onChange={(e) => setCaseFormData({ ...caseFormData, description: e.target.value })} rows={3} className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm" />
               </div>
+              {caseCreateError ? (
+                <div className="rounded border border-[#f0d2cc] bg-[#fff4f2] px-3 py-2 text-xs text-[#8b3a3a]">
+                  {caseCreateError}
+                </div>
+              ) : null}
             </div>
             <div className="p-6 border-t border-[#DDD7CA] flex justify-end gap-2">
               <button onClick={() => setShowNewCaseModal(false)} className="px-4 py-2 text-xs border border-[#DDD7CA] rounded">Mégsem</button>

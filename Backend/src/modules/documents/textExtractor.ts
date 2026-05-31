@@ -3,13 +3,35 @@
 // ============================================================================
 
 import mammoth from 'mammoth';
-import pdfParseLib from 'pdf-parse';
+import * as pdfParseModule from 'pdf-parse';
 
-// pdf-parse is a CommonJS module that exports a function
-const pdfParse = pdfParseLib as unknown as (buffer: Buffer) => Promise<{
+type LegacyPdfParseFn = (buffer: Buffer) => Promise<{
   text: string;
   numpages: number;
 }>;
+
+type PdfParseV2Instance = {
+  getText: () => Promise<{
+    text?: string;
+    total?: number;
+    pages?: Array<unknown>;
+  }>;
+  destroy?: () => Promise<void> | void;
+};
+
+type PdfParseV2Ctor = new (options: { data: Uint8Array }) => PdfParseV2Instance;
+
+function resolvePdfParseV2Ctor(): PdfParseV2Ctor | null {
+  const candidate = (pdfParseModule as unknown as { PDFParse?: unknown })?.PDFParse;
+  return typeof candidate === 'function' ? (candidate as PdfParseV2Ctor) : null;
+}
+
+function resolveLegacyPdfParse(): LegacyPdfParseFn | null {
+  const candidate =
+    (pdfParseModule as unknown as { default?: unknown })?.default ??
+    (pdfParseModule as unknown);
+  return typeof candidate === 'function' ? (candidate as LegacyPdfParseFn) : null;
+}
 
 /**
  * Supported MIME types for text extraction
@@ -95,13 +117,34 @@ async function extractFromDocx(buffer: Buffer): Promise<ExtractionResult> {
  */
 async function extractFromPdf(buffer: Buffer): Promise<ExtractionResult> {
   try {
-    const result = await pdfParse(buffer);
-    return {
-      success: true,
-      text: result.text,
-      format: 'pdf',
-      pageCount: result.numpages
-    };
+    const PdfParseCtor = resolvePdfParseV2Ctor();
+    if (PdfParseCtor) {
+      const parser = new PdfParseCtor({ data: new Uint8Array(buffer) });
+      try {
+        const result = await parser.getText();
+        return {
+          success: true,
+          text: result.text || '',
+          format: 'pdf',
+          pageCount: result.total || result.pages?.length
+        };
+      } finally {
+        await parser.destroy?.();
+      }
+    }
+
+    const legacyPdfParse = resolveLegacyPdfParse();
+    if (legacyPdfParse) {
+      const result = await legacyPdfParse(buffer);
+      return {
+        success: true,
+        text: result.text,
+        format: 'pdf',
+        pageCount: result.numpages
+      };
+    }
+
+    throw new Error('pdf-parse parser export not found');
   } catch (error) {
     console.error('PDF extraction error:', error);
     return {

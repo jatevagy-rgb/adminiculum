@@ -1097,7 +1097,21 @@ function TimeEntriesPageContent() {
             </div>
           )}
 
-          {error && <div className="mb-6 p-4 bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a] text-xs rounded">{error}</div>}
+          {error && (
+            <div className="mb-6 rounded border border-[#d4b8b8] bg-[#fef2f2] p-4 text-xs text-[#8b3a3a]">
+              <p className="font-semibold">{error}</p>
+              <p className="mt-1 text-[11px] text-[#6E4B4B]">
+                A munkaóra-folyamat nem áll le: ellenőrizd a kapcsolatot, majd próbáld újra.
+              </p>
+              <button
+                type="button"
+                onClick={loadEntries}
+                className="mt-2 inline-flex items-center justify-center rounded border border-[#8b3a3a] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#8b3a3a] hover:bg-[#fff7f6]"
+              >
+                Újrapróbálás
+              </button>
+            </div>
+          )}
           {!error && loadWarning && <div className="mb-6 p-4 bg-[#FBF6E7] border border-[#E8DFC9] text-[#5F675F] text-xs rounded">{loadWarning}</div>}
 
           <div className="mb-6 border border-[#DDD7CA] rounded-xl bg-white p-4 space-y-4">

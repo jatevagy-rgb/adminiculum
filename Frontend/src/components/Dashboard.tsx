@@ -359,7 +359,12 @@ export function Dashboard() {
       {error && <div className="mt-4 bg-[#FEF3F2] border border-[#FCCFC7] text-[#8E2A2A] p-3 text-xs rounded-lg">{error}</div>}
       {!error && warnings.length > 0 && (
         <div className="mt-4 rounded-lg border border-[#E8DFC9] bg-[#FBF6E7] p-3 text-xs text-[#5F675F]">
-          {warnings[0]}
+          <p className="font-semibold text-[#514D45]">Egyes háttéradatok most részlegesen érhetők el:</p>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {warnings.slice(0, 3).map((warning, index) => (
+              <li key={`${warning}-${index}`}>{warning}</li>
+            ))}
+          </ul>
         </div>
       )}
     </Panel>

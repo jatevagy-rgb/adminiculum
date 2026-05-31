@@ -1329,7 +1329,26 @@ return (
               <div className="text-center">
                 <h3 className="font-serif text-2xl font-medium text-[#1F2821]">Nincs kiválasztott dokumentum</h3>
                 <p className="mt-2 max-w-sm text-sm text-[#7B776D]">A workspace használatához válassz meglévő dokumentumot, vagy tölts fel újat a Dokumentumtárban.</p>
+                {caseScopedDocuments.length > 0 ? (
+                  <p className="mt-2 text-xs text-[#5F675F]">
+                    Ehhez az ügyhöz elérhető {caseScopedDocuments.length} dokumentum. Válassz egyet az alábbi gyorslistából.
+                  </p>
+                ) : null}
               </div>
+              {caseScopedDocuments.length > 0 ? (
+                <div className="mx-auto flex w-full max-w-3xl flex-wrap justify-center gap-2">
+                  {caseScopedDocuments.slice(0, 6).map((doc) => (
+                    <button
+                      key={`${doc.kind}-${doc.id}`}
+                      type="button"
+                      onClick={() => handleWorkspaceDocumentChange(doc.id)}
+                      className="inline-flex items-center justify-center rounded-[5px] border border-[#D8CDB6] bg-white px-3 py-2 text-xs font-semibold text-[#16201A] transition-colors hover:border-[#B58A2A] hover:bg-[#FBF6E7]"
+                    >
+                      {doc.fileName}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <div className="flex flex-wrap gap-3 justify-center">
                 <a
                   href={requestedCaseId ? `/cases/${encodeURIComponent(requestedCaseId)}/documents` : '/cases'}

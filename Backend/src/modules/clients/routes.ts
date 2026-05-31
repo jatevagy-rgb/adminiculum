@@ -5,10 +5,23 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../prisma/prisma.service';
 import { authenticate } from '../../middleware/auth';
 
 const router = Router();
+
+function logPrismaRouteError(route: string, error: unknown): void {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    const details =
+      process.env.NODE_ENV === 'production'
+        ? { code: error.code }
+        : { code: error.code, meta: error.meta };
+    console.error(`[clients] ${route} prisma error`, details);
+    return;
+  }
+  console.error(`[clients] ${route} error`, error instanceof Error ? error.message : error);
+}
 
 const HOUSE_STYLE_FIELDS = [
   'officialName',
@@ -141,29 +154,49 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
         orderBy: { name: 'asc' }
       });
     } catch (error) {
+      logPrismaRouteError('GET /clients primary-query', error);
       const message = error instanceof Error ? error.message.toLowerCase() : '';
       const relationDrift =
         message.includes('housestyleprofile') ||
         message.includes('unknown field') ||
         message.includes('unknown arg') ||
         message.includes('does not exist');
-      if (!relationDrift) {
+      const schemaDrift =
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        (error.code === 'P2022' || error.code === 'P2021');
+      if (!relationDrift && !schemaDrift) {
         throw error;
       }
 
-      // Staging fallback: if house-style relation is temporarily unavailable, keep
-      // the client list query functional and expose null profile in response shape.
-      const baseClients = await prisma.client.findMany({
-        orderBy: { name: 'asc' }
-      });
+      // Staging fallback: if relation/column drift occurs, query a minimal stable shape.
+      let baseClients: any[] = [];
+      try {
+        baseClients = await prisma.client.findMany({
+          orderBy: { name: 'asc' },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            address: true,
+          },
+        });
+      } catch (fallbackError) {
+        logPrismaRouteError('GET /clients fallback-query', fallbackError);
+        baseClients = [];
+      }
       clients = baseClients.map((client) => ({
         ...client,
         houseStyleProfile: null,
+        taxNumber: null,
+        companyRegistrationNumber: null,
+        authorizedRepresentative: null,
+        contactPerson: null,
       }));
     }
     res.json({ data: clients });
   } catch (error) {
-    console.error('Get clients error:', error);
+    logPrismaRouteError('GET /clients final', error);
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 });

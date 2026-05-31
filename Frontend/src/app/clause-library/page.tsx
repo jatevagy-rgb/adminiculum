@@ -511,6 +511,17 @@ function ClauseLibraryPageContent() {
 
       <main className="flex-1 min-h-0 overflow-y-auto p-6">
         <div className="max-w-5xl space-y-4">
+          {isFeatureDisabled ? (
+            <div className="rounded-[10px] border border-[#E8DFC9] bg-[#FBF6E7] p-6">
+              <h2 className="font-serif text-2xl text-[#1F2821]">A záradékkönyvtár jelenleg nincs bekapcsolva.</h2>
+              <p className="mt-2 text-sm text-[#514D45]">
+                Ebben a pilot környezetben a modul le van tiltva. A szerződés-workspace és dokumentum-flow ettől függetlenül használható.
+              </p>
+              <p className="mt-2 text-[11px] text-[#7B776D]">
+                Aktiváláshoz staging környezetben szükséges: <code>ENABLE_CLAUSE_LIBRARY=true</code>.
+              </p>
+            </div>
+          ) : null}
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-[#1F2821]">
               {form.id ? "Záradék szerkesztése" : "Új záradék létrehozása"}
@@ -535,7 +546,7 @@ function ClauseLibraryPageContent() {
             <div className="p-3 border border-[#a7f3d0] bg-[#ECFDF5] text-[#059669] text-xs">{success}</div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className={`grid grid-cols-2 gap-3 ${isFeatureDisabled ? "opacity-60 pointer-events-none" : ""}`}>
             <label className="text-xs text-[#514D45] space-y-1 col-span-2">
               <span>Záradék neve *</span>
               <input
