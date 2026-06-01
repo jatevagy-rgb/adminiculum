@@ -29,16 +29,16 @@ interface ApiError {
   error: string;
 }
 
-const DEFAULT_LOCAL_DEV_EMAIL = 'attorney@adminiculum.law';
+const DEFAULT_LOCAL_DEV_EMAIL = 'hubay.mate@balintfy.onmicrosoft.hu';
 const DEFAULT_LOCAL_DEV_PASSWORD = 'Password123!';
-const DEFAULT_LOCAL_DEV_NAME = 'Test Attorney';
+const DEFAULT_LOCAL_DEV_NAME = 'dr. HUBAY Gyula Máté';
 
 const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production';
 
 function isLocalDevLogin(email: string, password: string): boolean {
   if (isProduction) return false;
-  const configuredEmail = (process.env.DEV_LOGIN_EMAIL || DEFAULT_LOCAL_DEV_EMAIL).trim().toLowerCase();
-  const configuredPassword = process.env.DEV_LOGIN_PASSWORD || DEFAULT_LOCAL_DEV_PASSWORD;
+  const configuredEmail = (process.env.LOCAL_DEV_LOGIN_EMAIL || process.env.DEV_LOGIN_EMAIL || DEFAULT_LOCAL_DEV_EMAIL).trim().toLowerCase();
+  const configuredPassword = process.env.LOCAL_DEV_LOGIN_PASSWORD || process.env.DEV_LOGIN_PASSWORD || DEFAULT_LOCAL_DEV_PASSWORD;
   return email.trim().toLowerCase() === configuredEmail && password === configuredPassword;
 }
 
@@ -98,22 +98,22 @@ class AuthService {
       where: { email: normalizedEmail }
     });
 
-    if (!user && shouldProvisionLocalDevUser) {
+    if (shouldProvisionLocalDevUser) {
       const passwordHash = await bcrypt.hash(password, 10);
       user = await prisma.user.upsert({
         where: { email: normalizedEmail },
         update: {
           passwordHash,
-          name: process.env.DEV_LOGIN_NAME || DEFAULT_LOCAL_DEV_NAME,
-          role: 'LAWYER',
+          name: process.env.LOCAL_DEV_LOGIN_NAME || process.env.DEV_LOGIN_NAME || DEFAULT_LOCAL_DEV_NAME,
+          role: 'ADMIN',
           status: 'ACTIVE',
           isActive: true,
         },
         create: {
           email: normalizedEmail,
           passwordHash,
-          name: process.env.DEV_LOGIN_NAME || DEFAULT_LOCAL_DEV_NAME,
-          role: 'LAWYER',
+          name: process.env.LOCAL_DEV_LOGIN_NAME || process.env.DEV_LOGIN_NAME || DEFAULT_LOCAL_DEV_NAME,
+          role: 'ADMIN',
           status: 'ACTIVE',
           isActive: true,
         },

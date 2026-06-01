@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 const CORE_TEAM = [
   {
     name: 'dr. HUBAY Gyula Máté',
-    email: 'hubay.gyula@balintfy.onmicrosoft.com',
+    email: 'hubay.mate@balintfy.onmicrosoft.hu',
     role: 'ADMIN',
     title: 'partner / admin',
     skills: ['partner review', 'ügyvédi review', 'munkaterv', 'pilot admin'],

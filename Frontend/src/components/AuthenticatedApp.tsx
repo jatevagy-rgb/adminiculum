@@ -128,7 +128,7 @@ export function AuthenticatedApp({ section = "dashboard", children }: Authentica
     setBootstrapError(null);
     setAuthState("bootstrapping");
 
-    const devEmail = process.env.NEXT_PUBLIC_DEV_LOGIN_EMAIL || "attorney@adminiculum.law";
+    const devEmail = process.env.NEXT_PUBLIC_LOCAL_DEV_LOGIN_EMAIL || process.env.NEXT_PUBLIC_DEV_LOGIN_EMAIL || "hubay.mate@balintfy.onmicrosoft.hu";
     const devPassword = process.env.NEXT_PUBLIC_DEV_LOGIN_PASSWORD || "Password123!";
 
     try {
