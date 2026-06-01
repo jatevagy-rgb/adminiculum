@@ -1518,125 +1518,39 @@ return (
             </div>
           </section>
 
-          <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-3">
-            <h3 className="font-serif text-lg font-medium text-[#1F2821]">Szerződésátnéző mód</h3>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-[6px] border border-[#DDD7CA] bg-[#FBF9F3] px-3 py-2 text-xs text-[#514D45]">
-                <p className="text-[10px] uppercase tracking-[0.12em] text-[#7B776D]">Függőben</p>
-                <p className="mt-1 text-lg font-semibold text-[#1F2821]">{reviewProgress.pending}</p>
+          <section className="rounded-[10px] border border-[#D8CFB6] bg-white px-3 py-2">
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-[#1F4A33] bg-[#1F4A33] px-3 py-1 text-[10px] font-semibold text-[#F4EFDB]">
+                  Munkamód: {activeWorkspaceMode.label}
+                </span>
+                <span className="rounded-full border border-[#DDD7CA] bg-[#FBF9F3] px-2 py-1 text-[10px] text-[#514D45]">
+                  Függőben: {reviewProgress.pending}
+                </span>
+                <span className="rounded-full border border-[#DDD7CA] bg-[#FBF9F3] px-2 py-1 text-[10px] text-[#514D45]">
+                  Elfogadva: {reviewProgress.accepted}
+                </span>
+                <span className="rounded-full border border-[#DDD7CA] bg-[#FBF9F3] px-2 py-1 text-[10px] text-[#514D45]">
+                  Elutasítva: {reviewProgress.rejected}
+                </span>
+                <span className="rounded-full border border-[#DDD7CA] bg-[#FBF9F3] px-2 py-1 text-[10px] text-[#514D45]">
+                  Ügyvéd által szerkesztve: {reviewProgress.lawyerEdited}
+                </span>
               </div>
-              <div className="rounded-[6px] border border-[#DDD7CA] bg-[#FBF9F3] px-3 py-2 text-xs text-[#514D45]">
-                <p className="text-[10px] uppercase tracking-[0.12em] text-[#7B776D]">Elfogadva</p>
-                <p className="mt-1 text-lg font-semibold text-[#1F2821]">{reviewProgress.accepted}</p>
-              </div>
-              <div className="rounded-[6px] border border-[#DDD7CA] bg-[#FBF9F3] px-3 py-2 text-xs text-[#514D45]">
-                <p className="text-[10px] uppercase tracking-[0.12em] text-[#7B776D]">Elutasítva</p>
-                <p className="mt-1 text-lg font-semibold text-[#1F2821]">{reviewProgress.rejected}</p>
-              </div>
-              <div className="rounded-[6px] border border-[#DDD7CA] bg-[#FBF9F3] px-3 py-2 text-xs text-[#514D45]">
-                <p className="text-[10px] uppercase tracking-[0.12em] text-[#7B776D]">Ügyvéd által szerkesztve</p>
-                <p className="mt-1 text-lg font-semibold text-[#1F2821]">{reviewProgress.lawyerEdited}</p>
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h3 className="font-serif text-lg font-medium text-[#1F2821]">Workspace módok</h3>
-                <p className="mt-1 text-[11px] text-[#6D6A62]">
-                  Az Adminiculum módalapú munkaterekre készül. A jelenlegi aktív mód: {activeWorkspaceMode.label}.
-                </p>
-              </div>
-              <AdminStatusPill tone="green">Aktív: {activeWorkspaceMode.id}</AdminStatusPill>
-            </div>
-
-            <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-              <div className="space-y-3">
-                <div className="rounded-[8px] border border-[#D8CFB6] bg-[#FBF6E7] p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-[#7B776D]">Aktív workflow mód</p>
-                      <h4 className="mt-1 text-sm font-semibold text-[#1F2821]">{activeWorkspaceMode.label}</h4>
-                    </div>
-                    <AdminBadge tone="green">Engedélyezve</AdminBadge>
-                  </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <div className="rounded-[6px] border border-[#DDD7CA] bg-white p-2 text-[11px] text-[#514D45]">
-                      <p className="font-semibold text-[#1F2821]">Cél</p>
-                      <p className="mt-1">{activeWorkspaceMode.purpose}</p>
-                    </div>
-                    <div className="rounded-[6px] border border-[#DDD7CA] bg-white p-2 text-[11px] text-[#514D45]">
-                      <p className="font-semibold text-[#1F2821]">Bemenet</p>
-                      <p className="mt-1">{activeWorkspaceMode.inputType}</p>
-                    </div>
-                    <div className="rounded-[6px] border border-[#DDD7CA] bg-white p-2 text-[11px] text-[#514D45]">
-                      <p className="font-semibold text-[#1F2821]">Fő munkatér</p>
-                      <p className="mt-1">{activeWorkspaceMode.mainWorkspaceType}</p>
-                    </div>
-                    <div className="rounded-[6px] border border-[#DDD7CA] bg-white p-2 text-[11px] text-[#514D45]">
-                      <p className="font-semibold text-[#1F2821]">Végső kimenet</p>
-                      <p className="mt-1">{activeWorkspaceMode.finalOutput}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-[8px] border border-[#DDD7CA] bg-white p-3">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-[#7B776D]">Munkafázisok</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {activeWorkspaceMode.phases.map((phase, index) => (
-                      <div key={phase} className="flex items-center gap-2">
-                        <span className="rounded-full border border-[#1F4A33] bg-[#1F4A33] px-2 py-0.5 text-[10px] font-semibold text-[#F4EFDB]">
-                          {index + 1}. {phase}
-                        </span>
-                        {index < activeWorkspaceMode.phases.length - 1 ? <span className="text-[#A08D63]">→</span> : null}
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-2 text-[11px] text-[#6D6A62]">
-                    Peres és iratközpontú módoknál a stratégiai térkép csak előkészítő fázis; utána a workflow a Dokumentum összeállítása lépésbe vált.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="rounded-[8px] border border-[#DDD7CA] bg-[#FBF9F3] p-3">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-[#7B776D]">Jövőbeli módok</p>
-                  <div className="mt-2 space-y-2">
+              <details className="rounded-[6px] border border-[#DDD7CA] bg-[#FBF9F3] px-3 py-2 text-[10px] text-[#514D45] xl:max-w-[440px]">
+                <summary className="cursor-pointer font-semibold text-[#1F2821]">További munkamódok előkészítés alatt</summary>
+                <div className="mt-2 space-y-2">
+                  <p>{activeWorkspaceMode.purpose}</p>
+                  <div className="flex flex-wrap gap-2">
                     {futureWorkspaceModes.map((mode) => (
-                      <div key={mode.id} className="rounded-[6px] border border-[#E7DECB] bg-white p-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-semibold text-[#1F2821]">{mode.label}</p>
-                          <AdminStatusPill tone="neutral">Előkészítés alatt</AdminStatusPill>
-                        </div>
-                        <p className="mt-1 text-[11px] text-[#6D6A62]">{mode.purpose}</p>
-                      </div>
+                      <span key={mode.id} className="rounded-full border border-[#DDD7CA] bg-white px-2 py-0.5 text-[10px] text-[#6D6A62]">
+                        {mode.label}
+                      </span>
                     ))}
                   </div>
+                  <p className="text-[10px] text-[#7B776D]">Peres módoknál a stratégiai térkép csak előkészítő fázis; utána a workflow dokumentum-összeállításba vált.</p>
                 </div>
-
-                <div className="rounded-[8px] border border-[#DDD7CA] bg-white p-3">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-[#7B776D]">Peres stratégiai térkép alap</p>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                    <div className="rounded-[6px] border border-[#EEE7D9] bg-[#FBF9F3] p-2 text-[11px] text-[#514D45]">
-                      <p className="font-semibold text-[#1F2821]">Opposing / claim side</p>
-                      <p className="mt-1">állítás / érv · forráshely · bizonyíték · jogalap · követelés / jogkövetkezmény</p>
-                    </div>
-                    <div className="rounded-[6px] border border-[#EEE7D9] bg-[#FBF9F3] p-2 text-[11px] text-[#514D45]">
-                      <p className="font-semibold text-[#1F2821]">Response side</p>
-                      <p className="mt-1">ténybeli válasz · bizonyítéki válasz · jogi ellenérv · kommentár · beadvány-szöveg · státusz</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-[8px] border border-[#DDD7CA] bg-white p-3 text-[11px] text-[#6D6A62]">
-                  <p className="font-semibold text-[#1F2821]">Záradéktár és jogi tudástár irány</p>
-                  <p className="mt-1">A záradéktár a szerződéskészítésben központi, szerződésreview-ban támogató, peres módokban újrahasznosítható szövegblokkok forrása lesz.</p>
-                  <p className="mt-2 rounded-[6px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] px-3 py-2 text-xs text-[#7B776D]">
-                    Jogi tudástár előkészítés alatt.
-                  </p>
-                </div>
-              </div>
+              </details>
             </div>
           </section>
 
@@ -1691,8 +1605,9 @@ return (
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
-<aside className="min-w-0 space-y-3 rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-4 text-[#1F2821]">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+              <aside className="order-2 min-w-0 space-y-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+                <section className="space-y-3 rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-4 text-[#1F2821]">
                 <div>
                   <h2 className="font-serif text-lg font-medium text-[#1F2821]">Review eszköztár</h2>
                   <p className="mt-1 text-[11px] text-[#6D6A62]">Klauzulák, promptok és kiegészítő munkafolyamat-eszközök.</p>
@@ -2013,9 +1928,52 @@ return (
                     </div>
                   </section>
                 ) : null}
+                </section>
+
+                <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-serif text-lg font-medium text-[#1F2821]">Ügyvédi review</h3>
+                    <span className="text-[10px] uppercase tracking-[0.12em] text-[#7B776D]">Supporting panel</span>
+                  </div>
+                  {proposedChanges.length === 0 ? (
+                    <p className="mt-3 rounded-[6px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] p-3 text-xs text-[#7B776D]">
+                      Még nincs feldolgozható módosítás. A valódi változáskövetés későbbi patchben aktiválható.
+                    </p>
+                  ) : (
+                    <div className="mt-3 space-y-2">
+                      {proposedChanges.map((item) => (
+                        <div key={item.id} className="rounded-[6px] border border-[#EEE7D9] bg-[#FBF9F3] p-3">
+                          <div className="flex flex-wrap items-center gap-2 text-[10px] text-[#6D6A62]">
+                            <span className="rounded border border-[#DDD7CA] bg-white px-2 py-0.5">
+                              {item.type === "addition" ? "Hozzáadás" : item.type === "deletion" ? "Törlés" : item.type === "modification" ? "Módosítás" : "Megjegyzés"}
+                            </span>
+                            <span>{item.author}</span>
+                            <span>•</span>
+                            <span>{formatDateTime(item.timestamp)}</span>
+                          </div>
+                          <p className="mt-2 text-xs text-[#1F2821] whitespace-pre-wrap">{item.text.slice(0, 280)}</p>
+                          <p className="mt-1 text-[11px] text-[#7B776D]">{item.explanation}</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {["✓ Elfogadás", "✕ Elutasítás", "Szerkesztés", "Válasz / megjegyzés"].map((action) => (
+                              <button
+                                key={action}
+                                type="button"
+                                disabled
+                                title="A módosítások döntési állapota későbbi patchben lesz menthető."
+                                className="rounded-[5px] border border-[#DDD7CA] bg-white px-2 py-1 text-[10px] text-[#6D6A62] disabled:cursor-not-allowed"
+                              >
+                                {action}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
               </aside>
 
-              <div className="min-w-0 space-y-4">
+              <div className="order-1 min-w-0 space-y-4">
                 <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-sm font-semibold text-[#1F2821]">Formázási eszköztár</h3>
@@ -2152,83 +2110,50 @@ return (
                 </div>
                 </section>
 
-                <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="font-serif text-lg font-medium text-[#1F2821]">Javasolt módosítások</h3>
-                    <span className="text-[10px] uppercase tracking-[0.12em] text-[#7B776D]">Contract Review Mode alap</span>
-                  </div>
-                  {proposedChanges.length === 0 ? (
-                    <p className="mt-3 rounded-[6px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] p-3 text-xs text-[#7B776D]">
-                      Még nincs feldolgozható módosítás. A valódi változáskövetés későbbi patchben aktiválható.
-                    </p>
-                  ) : (
-                    <div className="mt-3 space-y-2">
-                      {proposedChanges.map((item) => (
-                        <div key={item.id} className="rounded-[6px] border border-[#EEE7D9] bg-[#FBF9F3] p-3">
-                          <div className="flex flex-wrap items-center gap-2 text-[10px] text-[#6D6A62]">
-                            <span className="rounded border border-[#DDD7CA] bg-white px-2 py-0.5">
-                              {item.type === "addition" ? "Hozzáadás" : item.type === "deletion" ? "Törlés" : item.type === "modification" ? "Módosítás" : "Megjegyzés"}
-                            </span>
-                            <span>{item.author}</span>
-                            <span>•</span>
-                            <span>{formatDateTime(item.timestamp)}</span>
-                            <span>•</span>
-                            <span>Állapot: Függőben</span>
-                          </div>
-                          <p className="mt-2 text-xs text-[#1F2821] whitespace-pre-wrap">{item.text.slice(0, 420)}</p>
-                          <p className="mt-1 text-[11px] text-[#7B776D]">{item.explanation}</p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {["✓ Elfogadás", "✕ Elutasítás", "Szerkesztés", "Válasz / megjegyzés"].map((action) => (
-                              <button
-                                key={action}
-                                type="button"
-                                disabled
-                                title="A módosítások döntési állapota későbbi patchben lesz menthető."
-                                className="rounded-[5px] border border-[#DDD7CA] bg-white px-2 py-1 text-[10px] text-[#6D6A62] disabled:cursor-not-allowed"
-                              >
-                                {action}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                <details
+                  id="history-tech-panel"
+                  open={workspaceViewMode === "compare"}
+                  className={`scroll-mt-4 rounded-[10px] border bg-white p-4 ${workspaceViewMode === "compare" ? "border-[#B58A2A] ring-2 ring-[#F2E4BD]" : "border-[#D8CFB6]"}`}
+                >
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <h2 className="text-sm font-semibold text-[#1F2821]">Előzmények és technikai összevetés</h2>
+                        <p className="mt-1 text-[11px] text-[#7B776D]">Audit és technikai ellenőrző nézet. Ez Adminiculumon belüli szöveg-összevetés, nem Word változáskövetés.</p>
+                      </div>
+                      <span className="rounded-full border border-[#DDD7CA] bg-[#FBF9F3] px-2 py-1 text-[10px] text-[#514D45]">
+                        {workspaceViewMode === "compare" ? "Aktív technikai nézet" : "Másodlagos audit nézet"}
+                      </span>
                     </div>
-                  )}
-                </section>
-
-                <section id="history-tech-panel" className={`scroll-mt-4 rounded-[10px] border bg-white p-4 ${workspaceViewMode === "compare" ? "border-[#B58A2A] ring-2 ring-[#F2E4BD]" : "border-[#D8CFB6]"}`}>
-                <div className="flex items-center justify-between gap-4 mb-3">
-                  <div>
-                    <h2 className="text-sm font-semibold text-[#1F2821]">Előzmények és technikai összevetés</h2>
-                    <p className="mt-1 text-[11px] text-[#7B776D]">Audit és technikai ellenőrző nézet. Ez Adminiculumon belüli szöveg-összevetés, nem Word változáskövetés.</p>
+                  </summary>
+                  <div className="mt-3 flex items-center justify-between gap-4">
+                    <p className="text-[11px] text-[#7B776D]">
+                      Ha nincs kiválasztott alapdokumentum, a felület akkor is használható munkapéldányként.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setSelectedBaselineId(previousVersion?.id || null)}
+                        disabled={!previousVersion}
+                        className="px-2 py-1 border border-[#DDD7CA] text-xs hover:bg-[#FBF9F3] disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Közvetlen előző
+                      </button>
+                      <select
+                        value={selectedBaseline?.id || ""}
+                        onChange={(e) => setSelectedBaselineId(e.target.value || null)}
+                        className="px-2 py-1 border border-[#DDD7CA] text-xs"
+                      >
+                        <option value="">Nincs összevetési alap</option>
+                        {baselineCandidates.map((candidate) => (
+                          <option key={candidate.id} value={candidate.id}>
+                            {candidate.fileName} · {toReadableStatus(candidate.status)} · {formatDateTime(candidate.updatedAt || candidate.createdAt)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setSelectedBaselineId(previousVersion?.id || null)}
-                      disabled={!previousVersion}
-                      className="px-2 py-1 border border-[#DDD7CA] text-xs hover:bg-[#FBF9F3] disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Közvetlen előző
-                    </button>
-                    <select
-                      value={selectedBaseline?.id || ""}
-                      onChange={(e) => setSelectedBaselineId(e.target.value || null)}
-                      className="px-2 py-1 border border-[#DDD7CA] text-xs"
-                    >
-                      <option value="">Nincs összevetési alap</option>
-                      {baselineCandidates.map((candidate) => (
-                        <option key={candidate.id} value={candidate.id}>
-                          {candidate.fileName} · {toReadableStatus(candidate.status)} · {formatDateTime(candidate.updatedAt || candidate.createdAt)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <p className="text-[11px] text-[#7B776D]">
-                  Ha nincs kiválasztott alapdokumentum, a felület akkor is használható munkapéldányként.
-                </p>
 
-                <div className="mb-3 p-3 border border-[#EEE7D9] bg-[#FBF9F3] space-y-2">
+                <div className="mb-3 mt-3 p-3 border border-[#EEE7D9] bg-[#FBF9F3] space-y-2">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <h3 className="text-xs font-semibold text-[#1F2821]">Review folyamat</h3>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -2358,7 +2283,7 @@ return (
                     </p>
                   )}
                 </div>
-              </section>
+                </details>
 
                 <section className="border border-[#DDD7CA] bg-white p-4">
                 <h3 className="text-sm font-semibold text-[#1F2821] mb-2">Verziók és előzmények</h3>
@@ -2560,6 +2485,48 @@ return (
                   </>
                 )}
               </section>
+
+                <details className="rounded-[10px] border border-[#D8CFB6] bg-white p-4">
+                  <summary className="cursor-pointer font-serif text-lg font-medium text-[#1F2821]">További munkamódok és foundation blokkok</summary>
+                  <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
+                    <div className="space-y-3">
+                      <div className="rounded-[8px] border border-[#D8CFB6] bg-[#FBF6E7] p-3">
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-[#7B776D]">Munkafázisok</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {activeWorkspaceMode.phases.map((phase, index) => (
+                            <div key={phase} className="flex items-center gap-2">
+                              <span className="rounded-full border border-[#1F4A33] bg-[#1F4A33] px-2 py-0.5 text-[10px] font-semibold text-[#F4EFDB]">
+                                {index + 1}. {phase}
+                              </span>
+                              {index < activeWorkspaceMode.phases.length - 1 ? <span className="text-[#A08D63]">→</span> : null}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="rounded-[8px] border border-[#DDD7CA] bg-white p-3 text-[11px] text-[#6D6A62]">
+                        <p className="font-semibold text-[#1F2821]">Jogi tudástár és záradéktár irány</p>
+                        <p className="mt-1">A záradéktár a szerződéskészítésben központi, szerződésreview-ban támogató, peres módokban újrahasznosítható szövegblokkok forrása lesz.</p>
+                        <p className="mt-2 rounded-[6px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] px-3 py-2 text-xs text-[#7B776D]">
+                          Jogi tudástár előkészítés alatt.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="rounded-[8px] border border-[#DDD7CA] bg-[#FBF9F3] p-3">
+                      <p className="text-[10px] uppercase tracking-[0.14em] text-[#7B776D]">Jövőbeli munkamódok</p>
+                      <div className="mt-2 space-y-2">
+                        {futureWorkspaceModes.map((mode) => (
+                          <div key={mode.id} className="rounded-[6px] border border-[#E7DECB] bg-white p-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs font-semibold text-[#1F2821]">{mode.label}</p>
+                              <AdminStatusPill tone="neutral">Előkészítés alatt</AdminStatusPill>
+                            </div>
+                            <p className="mt-1 text-[11px] text-[#6D6A62]">{mode.purpose}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </details>
               </div>
             </div>
           )}

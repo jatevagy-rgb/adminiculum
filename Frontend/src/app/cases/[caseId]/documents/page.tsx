@@ -865,7 +865,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const canAnonymizeActiveDocument = Boolean(selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY');
 
   return (
-    <div className="flex min-h-0 flex-1 bg-[#EFE7CF] text-[#16201A] documents-surface">
+    <div className="flex min-h-0 flex-1 flex-col bg-[#EFE7CF] text-[#16201A] documents-surface">
       <CaseWorkspaceNav caseId={canonicalCaseId} caseNumber={displayCaseId} title={displayMatterName} clientName={displayClient} activeTab="documents" activeDocumentId={activeDocument?.id} helperText="Dokumentumtár, workspace és leadási csomag egy ügy-munkaterületen." />
 
       <div className="flex min-h-0 flex-1 flex-col">
