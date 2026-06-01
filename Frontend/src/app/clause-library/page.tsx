@@ -43,9 +43,15 @@ const CONTRACT_TYPE_LABELS: Record<ClauseContractType, string> = {
 
 function makeApiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
+    if (error.status === 0) {
+      return "A művelet nem érhető el. Ellenőrizd a kapcsolatot vagy próbáld újra.";
+    }
     return error.message;
   }
   if (error instanceof Error) {
+    if (/networkerror|failed to fetch|load failed/i.test(error.message)) {
+      return "A művelet nem érhető el. Ellenőrizd a kapcsolatot vagy próbáld újra.";
+    }
     return error.message;
   }
   return "Ismeretlen hiba";
@@ -109,7 +115,8 @@ function ClauseLibraryPageContent() {
           setClauses([]);
           setSelectedClauseId(null);
         } else {
-          setError("A záradéktár betöltése sikertelen.");
+          console.error("Clause library load failed:", loadError);
+          setError(makeApiErrorMessage(loadError));
         }
       } finally {
         setIsLoading(false);
@@ -274,7 +281,9 @@ function ClauseLibraryPageContent() {
               ) : error ? (
                 <div className="mt-3 rounded-[8px] border border-[#F2DAD6] bg-[#FFF5F3] p-4 text-sm text-[#8B2A2A]">
                   {error}
-                  <p className="mt-2 text-[11px] text-[#8B2A2A]">Részlet: {makeApiErrorMessage(error)}</p>
+                  <p className="mt-2 text-[11px] text-[#8B2A2A]">
+                    A Klauzulatár oldala betöltve marad, de a lista jelenleg nem elérhető.
+                  </p>
                 </div>
               ) : isLoading ? (
                 <p className="mt-3 text-xs text-[#7B776D]">Klauzulatár betöltése...</p>

@@ -117,7 +117,7 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
     });
   } catch (networkError) {
     console.error(`[API] Network error calling ${url}:`, networkError);
-    throw new ApiError(0, `Network error: ${networkError}`, endpoint);
+    throw new ApiError(0, 'A művelet nem érhető el. Ellenőrizd a kapcsolatot vagy próbáld újra.', endpoint);
   }
 
   if (!response.ok) {
