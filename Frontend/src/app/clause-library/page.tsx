@@ -1,63 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
+import { AdminBadge, AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import {
   ApiError,
-  createClauseLibraryClause,
   getClauseLibraryClauses,
-  getClauseLibraryProfiles,
-  updateClauseLibraryClause,
   type ClauseCategory,
+  type ClauseContractType,
   type ClauseKind,
   type ClauseLibraryItem,
-  type LawyerProfile,
-  type RepresentedSide,
-  type TriggerCondition,
 } from "@/lib/api";
-
-type ClauseFormState = {
-  id: string | null;
-  title: string;
-  slug: string;
-  body: string;
-  summary: string;
-  clauseKind: ClauseKind;
-  representedSide: RepresentedSide;
-  category: ClauseCategory;
-  keywordsText: string;
-  sortOrder: number;
-  isActive: boolean;
-  triggerConditionsText: string;
-};
-
-const CLAUSE_KIND_OPTIONS: ClauseKind[] = ["REQUIRED", "RECOMMENDED", "OPTIONAL", "SPECIAL"];
-const REPRESENTED_SIDE_OPTIONS: RepresentedSide[] = ["EITHER", "ELOADO", "VEVO", "NEUTRAL"];
-const CATEGORY_OPTIONS: ClauseCategory[] = [
-  "PARTY",
-  "PROPERTY",
-  "OWNERSHIP_PROOF",
-  "TITLE",
-  "WARRANTIES",
-  "PRICE",
-  "FINANCING",
-  "POSSESSION",
-  "CLOSING",
-  "SPECIAL",
-];
 
 const CLAUSE_KIND_LABELS: Record<ClauseKind, string> = {
   REQUIRED: "Kötelező",
-  RECOMMENDED: "Ajánlott",
+  RECOMMENDED: "Ajanlott",
   OPTIONAL: "Opcionális",
   SPECIAL: "Speciális",
-};
-
-const REPRESENTED_SIDE_LABELS: Record<RepresentedSide, string> = {
-  EITHER: "Mindkét oldal",
-  ELOADO: "Eladó",
-  VEVO: "Vevő",
-  NEUTRAL: "Semleges",
 };
 
 const CATEGORY_LABELS: Record<ClauseCategory, string> = {
@@ -73,62 +32,18 @@ const CATEGORY_LABELS: Record<ClauseCategory, string> = {
   SPECIAL: "Egyéb",
 };
 
-function emptyForm(): ClauseFormState {
-  return {
-    id: null,
-    title: "",
-    slug: "",
-    body: "",
-    summary: "",
-    clauseKind: "RECOMMENDED",
-    representedSide: "EITHER",
-    category: "SPECIAL",
-    keywordsText: "",
-    sortOrder: 0,
-    isActive: true,
-    triggerConditionsText: "[]",
-  };
-}
-
-function mapClauseToForm(clause: ClauseLibraryItem): ClauseFormState {
-  return {
-    id: clause.id,
-    title: clause.title,
-    slug: clause.slug,
-    body: clause.body,
-    summary: clause.summary || "",
-    clauseKind: clause.clauseKind,
-    representedSide: clause.representedSide,
-    category: clause.category,
-    keywordsText: (clause.keywords || []).join(", "),
-    sortOrder: clause.sortOrder,
-    isActive: clause.isActive,
-    triggerConditionsText: JSON.stringify(clause.triggerConditions || [], null, 2),
-  };
-}
-
-function normalizeKeywords(value: string): string[] {
-  return value
-    .split(",")
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
-}
-
-function parseTriggerConditions(raw: string): TriggerCondition[] {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return [];
-  }
-  const parsed = JSON.parse(trimmed);
-  if (!Array.isArray(parsed)) {
-    throw new Error("triggerConditions must be a JSON array");
-  }
-  return parsed as TriggerCondition[];
-}
+const CONTRACT_TYPE_LABELS: Record<ClauseContractType, string> = {
+  ADASVETEL: "Adásvétel",
+  BERLET: "Bérlet",
+  MEGBIZAS: "Megbízás",
+  MUNKASZERZODES: "Munkaszerződés",
+  VALLALKOZAS: "Vállalkozás",
+  EGYEB: "Egyéb",
+};
 
 function makeApiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    return `${error.status}: ${error.message}`;
+    return error.message;
   }
   if (error instanceof Error) {
     return error.message;
@@ -136,15 +51,20 @@ function makeApiErrorMessage(error: unknown): string {
   return "Ismeretlen hiba";
 }
 
-function formatLastUsed(value: unknown): string {
-  if (typeof value !== "string" || !value) return "—";
-  const dt = new Date(value);
-  if (Number.isNaN(dt.getTime())) return "—";
-  return dt.toLocaleDateString("hu-HU");
+function previewText(clause: ClauseLibraryItem): string {
+  const source = clause.summary?.trim() || clause.body.trim();
+  return source.length > 220 ? `${source.slice(0, 217)}...` : source;
 }
 
-function getUsageCount(value: unknown): string {
-  return typeof value === "number" ? String(value) : "—";
+function formatDate(value?: string): string {
+  if (!value) return "Nincs adat";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Nincs adat";
+  return parsed.toLocaleDateString("hu-HU");
+}
+
+function getStatusLabel(clause: ClauseLibraryItem): string {
+  return clause.isActive ? "Jóváhagyott" : "Archivált";
 }
 
 export default function ClauseLibraryPage() {
@@ -156,547 +76,321 @@ export default function ClauseLibraryPage() {
 }
 
 function ClauseLibraryPageContent() {
-  const [profiles, setProfiles] = useState<LawyerProfile[]>([]);
-  const [truglyProfileId, setTruglyProfileId] = useState<string | undefined>(undefined);
-  const [profileWarning, setProfileWarning] = useState<string | null>(null);
-
   const [clauses, setClauses] = useState<ClauseLibraryItem[]>([]);
+  const [selectedClauseId, setSelectedClauseId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [featureDisabledMessage, setFeatureDisabledMessage] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
-  const [filterClauseKind, setFilterClauseKind] = useState<"ALL" | ClauseKind>("ALL");
-  const [filterRepresentedSide, setFilterRepresentedSide] = useState<"ALL" | RepresentedSide>("ALL");
-  const [filterCategory, setFilterCategory] = useState<"ALL" | ClauseCategory>("ALL");
-  const [includeInactive, setIncludeInactive] = useState(true);
-
-  const [selectedClauseId, setSelectedClauseId] = useState<string | null>(null);
-  const [form, setForm] = useState<ClauseFormState>(emptyForm());
+  const [categoryFilter, setCategoryFilter] = useState<"ALL" | ClauseCategory>("ALL");
+  const [contractTypeFilter, setContractTypeFilter] = useState<"ALL" | ClauseContractType>("ALL");
+  const [includeInactive, setIncludeInactive] = useState(false);
 
   useEffect(() => {
-    const loadProfiles = async () => {
-      try {
-        const loadedProfiles = await getClauseLibraryProfiles();
-        setProfiles(loadedProfiles);
+    const loadClauses = async () => {
+      setIsLoading(true);
+      setError(null);
+      setFeatureDisabledMessage(null);
 
-        const trugly = loadedProfiles.find((p) => {
-          const name = (p.lawyerName || "").toLowerCase();
-          const email = (p.lawyerEmail || "").toLowerCase();
-          return name.includes("trugly") || email.includes("trugly");
+      try {
+        const list = await getClauseLibraryClauses({
+          contractType: contractTypeFilter === "ALL" ? undefined : contractTypeFilter,
+          category: categoryFilter === "ALL" ? undefined : categoryFilter,
+          includeInactive,
+          search: search.trim() || undefined,
         });
 
-        if (trugly) {
-          setTruglyProfileId(trugly.id);
-          setProfileWarning(null);
+        setClauses(list);
+        setSelectedClauseId((current) => current && list.some((item) => item.id === current) ? current : list[0]?.id || null);
+      } catch (loadError) {
+        if (loadError instanceof ApiError && loadError.status === 501) {
+          setFeatureDisabledMessage("A záradékkönyvtár jelenleg nincs bekapcsolva.");
+          setClauses([]);
+          setSelectedClauseId(null);
         } else {
-          setTruglyProfileId(undefined);
-          setProfileWarning("Dr. Trugly profil nem található. Általános záradéklista betöltve.");
+          setError("A záradéktár betöltése sikertelen.");
         }
-      } catch (err) {
-        setProfileWarning(`A profil betöltése sikertelen: ${makeApiErrorMessage(err)}`);
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    void loadProfiles();
-  }, []);
-
-  const loadClauses = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    setFeatureDisabledMessage(null);
-    try {
-      const list = await getClauseLibraryClauses({
-        contractType: "ADASVETEL",
-        lawyerProfileId: truglyProfileId,
-        clauseKind: filterClauseKind === "ALL" ? undefined : filterClauseKind,
-        representedSide: filterRepresentedSide === "ALL" ? undefined : filterRepresentedSide,
-        category: filterCategory === "ALL" ? undefined : filterCategory,
-        includeInactive,
-        search: search.trim() || undefined,
-      });
-      setClauses(list);
-
-      if (list.length === 0) {
-        setSelectedClauseId(null);
-        setForm(emptyForm());
-      } else if (selectedClauseId) {
-        const existing = list.find((item) => item.id === selectedClauseId);
-        if (!existing) {
-          setSelectedClauseId(list[0].id);
-          setForm(mapClauseToForm(list[0]));
-        }
-      }
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 501) {
-        setFeatureDisabledMessage("A záradékkönyvtár jelenleg nincs bekapcsolva.");
-        setClauses([]);
-        setSelectedClauseId(null);
-        setForm(emptyForm());
-      } else {
-        setError("A záradékok betöltése sikertelen.");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [truglyProfileId, filterClauseKind, filterRepresentedSide, filterCategory, includeInactive, search, selectedClauseId]);
-
-  useEffect(() => {
     void loadClauses();
-  }, [loadClauses]);
+  }, [categoryFilter, contractTypeFilter, includeInactive, search]);
 
   const selectedClause = useMemo(
     () => clauses.find((item) => item.id === selectedClauseId) || null,
     [clauses, selectedClauseId]
   );
+
   const isFeatureDisabled = Boolean(featureDisabledMessage);
 
-  const truglyProfileName = useMemo(() => {
-    if (!truglyProfileId) return "Nincs rögzített profil";
-    const p = profiles.find((profile) => profile.id === truglyProfileId);
-    return p?.lawyerName || "Dr. Trugly";
-  }, [profiles, truglyProfileId]);
-
-  const selectClause = (clause: ClauseLibraryItem) => {
-    setSelectedClauseId(clause.id);
-    setForm(mapClauseToForm(clause));
-    setSuccess(null);
-    setError(null);
-  };
-
-  const startCreate = () => {
-    setSelectedClauseId(null);
-    setForm(emptyForm());
-    setSuccess(null);
-    setError(null);
-  };
-
-  const onSave = async () => {
-    setIsSaving(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      const triggerConditions = parseTriggerConditions(form.triggerConditionsText);
-      const keywords = normalizeKeywords(form.keywordsText);
-
-      if (!form.title.trim() || !form.slug.trim() || !form.body.trim()) {
-        throw new Error("A név, az azonosító és a szöveg kötelező.");
-      }
-
-      if (form.id) {
-        const updated = await updateClauseLibraryClause(form.id, {
-          title: form.title.trim(),
-          slug: form.slug.trim(),
-          body: form.body,
-          summary: form.summary.trim() || "",
-          clauseKind: form.clauseKind,
-          representedSide: form.representedSide,
-          category: form.category,
-          sortOrder: Number(form.sortOrder) || 0,
-          keywords,
-          triggerConditions,
-          isActive: form.isActive,
-        });
-        setSuccess("A záradék mentése sikeres.");
-        await loadClauses();
-        setSelectedClauseId(updated.id);
-        setForm(mapClauseToForm(updated));
-      } else {
-        const created = await createClauseLibraryClause({
-          title: form.title.trim(),
-          slug: form.slug.trim(),
-          body: form.body,
-          summary: form.summary.trim() || undefined,
-          contractType: "ADASVETEL",
-          clauseKind: form.clauseKind,
-          representedSide: form.representedSide,
-          category: form.category,
-          sortOrder: Number(form.sortOrder) || 0,
-          keywords,
-          triggerConditions,
-          lawyerProfileId: truglyProfileId,
-        });
-        setSuccess("Az új záradék létrehozva.");
-        await loadClauses();
-        setSelectedClauseId(created.id);
-        setForm(mapClauseToForm(created));
-      }
-    } catch (err) {
-      setError(`Mentési hiba: ${makeApiErrorMessage(err)}`);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const toggleActive = async () => {
-    if (!form.id) return;
-    setIsSaving(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      const updated = await updateClauseLibraryClause(form.id, { isActive: !form.isActive });
-      setSuccess(updated.isActive ? "A záradék aktív." : "A záradék archivált.");
-      await loadClauses();
-      setSelectedClauseId(updated.id);
-      setForm(mapClauseToForm(updated));
-    } catch (err) {
-      setError(`Állapotváltás sikertelen: ${makeApiErrorMessage(err)}`);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   return (
-    <div className="flex-1 min-h-0 flex">
-      <aside className="w-[34rem] border-r border-[#DDD7CA] bg-white min-h-0 flex flex-col">
-        <div className="p-4 border-b border-[#EEE7D9] space-y-3">
-          <div>
-            <h1 className="text-xl font-serif text-[#1F2821]">Záradék könyvtár</h1>
-            <p className="text-xs text-[#7B776D]">Önálló záradékkezelő felület · Adásvétel munkatípus · {truglyProfileName}</p>
-            <p className="mt-1 text-[11px] text-[#514D45]">
-              Jóváhagyott záradékok kereshető könyvtára. A szerződés-workspace innen tud záradékot beszúrni vagy másolni.
-            </p>
+    <div className="min-h-0 flex-1 overflow-y-auto bg-[#F3EBD4]">
+      <div className="mx-auto max-w-[1520px] space-y-4 px-4 py-4 xl:px-6">
+        <section className="rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-4">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-[5px] border border-[#1F4A33] bg-[#1F4A33] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#F4EFDB]">
+                Klauzulatár
+              </div>
+              <div>
+                <h1 className="font-serif text-[30px] font-medium leading-tight text-[#1F2821]">Klauzulatár</h1>
+                <p className="mt-1 max-w-3xl text-[13px] text-[#6D6A62]">
+                  Jóváhagyott és előkészítés alatt álló szerződéses szövegblokkok.
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-2 rounded-[8px] border border-[#D8CFB6] bg-white p-3 text-[11px] text-[#514D45] sm:grid-cols-3">
+              <div>
+                <p className="font-semibold text-[#1F2821]">Adatforrás</p>
+                <p className="mt-1">{isFeatureDisabled ? "Feature flag letiltva" : "Valós Clause Library endpoint"}</p>
+              </div>
+              <div>
+                <p className="font-semibold text-[#1F2821]">Beszúrás</p>
+                <p className="mt-1">Későbbi patchben aktiválható</p>
+              </div>
+              <div>
+                <p className="font-semibold text-[#1F2821]">AI generálás</p>
+                <p className="mt-1">Nem része ennek a foundation körnek</p>
+              </div>
+            </div>
           </div>
+        </section>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {["Mind", "Adásvétel", "Bérlet", "Munkajog", "Társasági jog", "Compliance", "Egyéb"].map((label) => (
-              <span key={label} className="px-2 py-1 text-[10px] border border-[#DDD7CA] bg-[#F6F2E8] text-[#7B776D] text-center">
-                {label}
-              </span>
-            ))}
-          </div>
-          <p className="text-[11px] text-[#9C9890]">Munkaterület szerinti szűrés későbbi patchben.</p>
-
-          <div className="grid grid-cols-2 gap-2">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Keresés névre, összefoglalóra vagy címkére"
-              className="col-span-2 px-2 py-2 border border-[#DDD7CA] bg-white text-xs"
-            />
-            <select
-              value={filterClauseKind}
-              onChange={(e) => setFilterClauseKind(e.target.value as "ALL" | ClauseKind)}
-              className="px-2 py-2 border border-[#DDD7CA] bg-white text-xs"
-            >
-              <option value="ALL">Minden típus</option>
-              {CLAUSE_KIND_OPTIONS.map((kind) => (
-                <option key={kind} value={kind}>{CLAUSE_KIND_LABELS[kind]}</option>
-              ))}
-            </select>
-            <select
-              value={filterRepresentedSide}
-              onChange={(e) => setFilterRepresentedSide(e.target.value as "ALL" | RepresentedSide)}
-              className="px-2 py-2 border border-[#DDD7CA] bg-white text-xs"
-            >
-              <option value="ALL">Minden oldal</option>
-              {REPRESENTED_SIDE_OPTIONS.map((side) => (
-                <option key={side} value={side}>{REPRESENTED_SIDE_LABELS[side]}</option>
-              ))}
-            </select>
-            <select
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value as "ALL" | ClauseCategory)}
-              className="px-2 py-2 border border-[#DDD7CA] bg-white text-xs"
-            >
-              <option value="ALL">Minden kategória</option>
-              {CATEGORY_OPTIONS.map((category) => (
-                <option key={category} value={category}>{CATEGORY_LABELS[category]}</option>
-              ))}
-            </select>
-            <label className="px-2 py-2 border border-[#DDD7CA] bg-[#F6F2E8] text-xs text-[#514D45] flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={includeInactive}
-                onChange={(e) => setIncludeInactive(e.target.checked)}
-              />
-              Archiváltak mutatása
-            </label>
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => void loadClauses()}
-              className="px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
-            >
-              Frissítés
-            </button>
-            <button
-              type="button"
-              onClick={startCreate}
-              disabled={isFeatureDisabled}
-              className="px-3 py-2 text-xs border border-[#C9A227] text-[#8B6B3A] bg-[#FBF9F3] hover:bg-[#f5ecd8]"
-            >
-              + Új záradék
-            </button>
-          </div>
-          <div className="flex gap-2">
-            <button type="button" disabled className="px-3 py-2 text-xs border border-[#DDD7CA] text-[#9C9890] bg-[#F8F6EF]">
-              Előnézet
-            </button>
-            <button type="button" disabled className="px-3 py-2 text-xs border border-[#DDD7CA] text-[#9C9890] bg-[#F8F6EF]">
-              Használati adatok
-            </button>
-          </div>
-          <p className="text-[11px] text-[#9C9890]">Előnézet és használati adatok részletes nézete későbbi patchben.</p>
-          <p className="text-[11px] text-[#9C9890]">Nincs automatikus AI záradék-generálás: a könyvtár manuális szerkesztésre épül.</p>
-        </div>
-
-        {profileWarning && (
-          <div className="mx-4 mt-3 p-2 border border-[#f5d89a] bg-[#fef3e2] text-[#8B6B3A] text-[11px]">
-            {profileWarning}
-          </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {isLoading ? (
-            <p className="text-xs text-[#7B776D]">Záradékok betöltése…</p>
-          ) : clauses.length === 0 ? (
-            <p className="text-xs text-[#7B776D]">Még nincs záradék a könyvtárban.</p>
-          ) : (
-            clauses.map((clause) => (
-              <button
-                key={clause.id}
-                type="button"
-                onClick={() => selectClause(clause)}
-                className={`w-full text-left border p-3 transition-colors ${
-                  selectedClauseId === clause.id
-                    ? "border-[#C9A227] bg-[#FBF9F3]"
-                    : "border-[#DDD7CA] bg-white hover:bg-[#FBF9F3]"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-[#1F2821] truncate">{clause.title}</p>
-                  <span
-                    className={`text-[10px] px-2 py-0.5 border ${
-                      clause.isActive
-                        ? "bg-[#ECFDF5] text-[#059669] border-[#a7f3d0]"
-                        : "bg-[#FEF2F2] text-[#DC2626] border-[#fca5a5]"
-                    }`}
+        <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-4">
+            <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-serif text-xl font-medium text-[#1F2821]">Szűrés és keresés</h2>
+                <AdminStatusPill tone={isFeatureDisabled ? "gold" : "green"}>
+                  {isFeatureDisabled ? "Foundation állapot" : "Valós lista"}
+                </AdminStatusPill>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
+                  Keresés
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Cím, összefoglaló vagy kulcsszó"
+                    className="mt-2 w-full rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[#1F2821]"
+                  />
+                </label>
+                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
+                  Kategória
+                  <select
+                    value={categoryFilter}
+                    onChange={(event) => setCategoryFilter(event.target.value as "ALL" | ClauseCategory)}
+                    className="mt-2 w-full rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[#1F2821]"
                   >
-                    {clause.isActive ? "Aktív" : "Archivált"}
-                  </span>
+                    <option value="ALL">Minden kategória</option>
+                    {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
+                  Szerződéstípus
+                  <select
+                    value={contractTypeFilter}
+                    onChange={(event) => setContractTypeFilter(event.target.value as "ALL" | ClauseContractType)}
+                    className="mt-2 w-full rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[#1F2821]"
+                  >
+                    <option value="ALL">Minden szerződéstípus</option>
+                    {Object.entries(CONTRACT_TYPE_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
+                  Nyelv
+                  <select
+                    disabled
+                    title="Nyelvi metaadat későbbi patchben lesz strukturáltan kezelhető."
+                    className="mt-2 w-full rounded border border-[#DDD7CA] bg-[#F6F2E8] px-3 py-2 text-xs normal-case tracking-normal text-[#7B776D] disabled:cursor-not-allowed"
+                  >
+                    <option>Előkészítés alatt</option>
+                  </select>
+                </label>
+                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
+                  Kockázati profil
+                  <select
+                    disabled
+                    title="A kockázati profil külön mezőként későbbi patchben lesz kezelhető."
+                    className="mt-2 w-full rounded border border-[#DDD7CA] bg-[#F6F2E8] px-3 py-2 text-xs normal-case tracking-normal text-[#7B776D] disabled:cursor-not-allowed"
+                  >
+                    <option>Előkészítés alatt</option>
+                  </select>
+                </label>
+                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
+                  Ügyfél / house style
+                  <select
+                    disabled
+                    title="A kliens- és house style-kompatibilitás későbbi patchben lesz kapcsolható."
+                    className="mt-2 w-full rounded border border-[#DDD7CA] bg-[#F6F2E8] px-3 py-2 text-xs normal-case tracking-normal text-[#7B776D] disabled:cursor-not-allowed"
+                  >
+                    <option>Előkészítés alatt</option>
+                  </select>
+                </label>
+              </div>
+              <label className="mt-3 inline-flex items-center gap-2 text-xs text-[#514D45]">
+                <input
+                  type="checkbox"
+                  checked={includeInactive}
+                  onChange={(event) => setIncludeInactive(event.target.checked)}
+                />
+                Archivált tételek mutatása
+              </label>
+            </section>
+
+            <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="font-serif text-xl font-medium text-[#1F2821]">Záradéklista</h2>
+                  <p className="mt-1 text-[11px] text-[#6D6A62]">
+                    Valós clause adatok esetén listáz, egyébként őszinte empty vagy disabled state jelenik meg.
+                  </p>
                 </div>
-                <p className="text-[11px] text-[#7B776D] mt-1">Azonosító: {clause.slug}</p>
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  <span className="text-[10px] px-1.5 py-0.5 bg-[#ECE6DA] text-[#514D45]">{CLAUSE_KIND_LABELS[clause.clauseKind]}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 bg-[#ECE6DA] text-[#514D45]">{REPRESENTED_SIDE_LABELS[clause.representedSide]}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 bg-[#ECE6DA] text-[#514D45]">{CATEGORY_LABELS[clause.category]}</span>
+                <AdminButton size="sm" variant="neutral" onClick={() => globalThis.location.reload()}>
+                  Frissítés
+                </AdminButton>
+              </div>
+
+              {featureDisabledMessage ? (
+                <div className="mt-3 rounded-[8px] border border-[#E8DFC9] bg-[#FBF6E7] p-4">
+                  <p className="text-sm font-semibold text-[#1F2821]">A záradékkönyvtár jelenleg nincs bekapcsolva.</p>
+                  <p className="mt-2 text-[11px] text-[#514D45]">
+                    Ebben a környezetben a Clause Library feature flag le van tiltva. Aktiváláshoz szükséges:
+                    {" "}
+                    <code>ENABLE_CLAUSE_LIBRARY=true</code>
+                  </p>
                 </div>
-                <div className="mt-2 text-[10px] text-[#7B776D] grid grid-cols-2 gap-x-2 gap-y-1">
-                  <span>Kategória: {CATEGORY_LABELS[clause.category]}</span>
-                  <span>Státusz: {clause.isActive ? "Aktív" : "Archivált"}</span>
-                  <span>Utolsó használat: {formatLastUsed((clause as unknown as Record<string, unknown>).lastUsedAt)}</span>
-                  <span>Használat: {getUsageCount((clause as unknown as Record<string, unknown>).usageCount)}</span>
+              ) : error ? (
+                <div className="mt-3 rounded-[8px] border border-[#F2DAD6] bg-[#FFF5F3] p-4 text-sm text-[#8B2A2A]">
+                  {error}
+                  <p className="mt-2 text-[11px] text-[#8B2A2A]">Részlet: {makeApiErrorMessage(error)}</p>
                 </div>
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  {(clause.keywords || []).slice(0, 4).map((keyword) => (
-                    <span key={`${clause.id}-${keyword}`} className="text-[10px] px-1.5 py-0.5 bg-[#F6F2E8] text-[#514D45] border border-[#DDD7CA]">
-                      {keyword}
-                    </span>
+              ) : isLoading ? (
+                <p className="mt-3 text-xs text-[#7B776D]">Klauzulatár betöltése...</p>
+              ) : clauses.length === 0 ? (
+                <div className="mt-3 rounded-[8px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] p-4">
+                  <p className="text-sm font-semibold text-[#1F2821]">Még nincs jóváhagyott klauzula.</p>
+                  <p className="mt-2 text-[11px] text-[#6D6A62]">
+                    A klauzulatár feltöltése és jóváhagyási workflow-ja későbbi patchben aktiválható.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-3 grid gap-3">
+                  {clauses.map((clause) => (
+                    <article
+                      key={clause.id}
+                      className={`rounded-[8px] border p-4 transition-colors ${
+                        selectedClauseId === clause.id
+                          ? "border-[#C8B98A] bg-[#FBF6E7]"
+                          : "border-[#EEE7D9] bg-[#FBF9F3]"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-semibold text-[#1F2821]">{clause.title}</h3>
+                          <p className="text-[11px] text-[#6D6A62]">{CATEGORY_LABELS[clause.category]} · {CONTRACT_TYPE_LABELS[clause.contractType]}</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <AdminBadge tone={clause.isActive ? "green" : "neutral"}>{getStatusLabel(clause)}</AdminBadge>
+                          <AdminBadge tone="gold">{CLAUSE_KIND_LABELS[clause.clauseKind]}</AdminBadge>
+                          <AdminStatusPill tone="neutral">Kockázat: előkészítés alatt</AdminStatusPill>
+                          <AdminStatusPill tone="neutral">Nyelv: nincs metaadat</AdminStatusPill>
+                        </div>
+                      </div>
+                      <p className="mt-3 text-[12px] leading-6 text-[#514D45]">{previewText(clause)}</p>
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap gap-1.5">
+                          {(clause.keywords || []).slice(0, 5).map((keyword) => (
+                            <span key={`${clause.id}-${keyword}`} className="rounded-full border border-[#DDD7CA] bg-white px-2 py-0.5 text-[10px] text-[#514D45]">
+                              {keyword}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <AdminButton size="xs" variant="neutral" onClick={() => setSelectedClauseId(clause.id)}>
+                            Megnyitás
+                          </AdminButton>
+                          <button
+                            type="button"
+                            disabled
+                            title="A dokumentumba illesztés későbbi patchben lesz aktiválható."
+                            className="rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#7B776D] disabled:cursor-not-allowed"
+                          >
+                            Beszúrás
+                          </button>
+                        </div>
+                      </div>
+                    </article>
                   ))}
-                  {(!clause.keywords || clause.keywords.length === 0) && (
-                    <span className="text-[10px] text-[#9C9890]">Címkék: —</span>
-                  )}
                 </div>
-              </button>
-            ))
-          )}
-        </div>
-      </aside>
-
-      <main className="flex-1 min-h-0 overflow-y-auto p-6">
-        <div className="max-w-5xl space-y-4">
-          {isFeatureDisabled ? (
-            <div className="rounded-[10px] border border-[#E8DFC9] bg-[#FBF6E7] p-6">
-              <h2 className="font-serif text-2xl text-[#1F2821]">A záradékkönyvtár jelenleg nincs bekapcsolva.</h2>
-              <p className="mt-2 text-sm text-[#514D45]">
-                Ebben a pilot környezetben a modul le van tiltva. A szerződés-workspace és dokumentum-flow ettől függetlenül használható.
-              </p>
-              <p className="mt-2 text-[11px] text-[#7B776D]">
-                Aktiváláshoz staging környezetben szükséges: <code>ENABLE_CLAUSE_LIBRARY=true</code>.
-              </p>
-            </div>
-          ) : null}
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-[#1F2821]">
-              {form.id ? "Záradék szerkesztése" : "Új záradék létrehozása"}
-            </h2>
-            {selectedClause && (
-              <p className="text-xs text-[#7B776D]">Utolsó módosítás: {new Date(selectedClause.updatedAt).toLocaleString("hu-HU")}</p>
-            )}
-          </div>
-          <p className="text-[11px] text-[#7B776D]">
-            A könyvtár nem teljes szerződés-generátor. A záradékszöveg itt karbantartható, majd workspace-ben használható.
-          </p>
-
-          {error && (
-            <div className="p-3 border border-[#fca5a5] bg-[#FEF2F2] text-[#8B3A3A] text-xs">{error}</div>
-          )}
-          {featureDisabledMessage && (
-            <div className="p-3 border border-[#E8DFC9] bg-[#FBF6E7] text-[#514D45] text-xs">
-              {featureDisabledMessage}
-            </div>
-          )}
-          {success && (
-            <div className="p-3 border border-[#a7f3d0] bg-[#ECFDF5] text-[#059669] text-xs">{success}</div>
-          )}
-
-          <div className={`grid grid-cols-2 gap-3 ${isFeatureDisabled ? "opacity-60 pointer-events-none" : ""}`}>
-            <label className="text-xs text-[#514D45] space-y-1 col-span-2">
-              <span>Záradék neve *</span>
-              <input
-                value={form.title}
-                onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
-                className="w-full px-2 py-2 border border-[#DDD7CA] bg-white"
-              />
-            </label>
-
-            <label className="text-xs text-[#514D45] space-y-1 col-span-2">
-              <span>Azonosító *</span>
-              <input
-                value={form.slug}
-                onChange={(e) => setForm((prev) => ({ ...prev, slug: e.target.value }))}
-                className="w-full px-2 py-2 border border-[#DDD7CA] bg-white"
-              />
-            </label>
-
-            <label className="text-xs text-[#514D45] space-y-1 col-span-2">
-              <span>Rövid összefoglaló</span>
-              <input
-                value={form.summary}
-                onChange={(e) => setForm((prev) => ({ ...prev, summary: e.target.value }))}
-                className="w-full px-2 py-2 border border-[#DDD7CA] bg-white"
-              />
-            </label>
-
-            <label className="text-xs text-[#514D45] space-y-1">
-              <span>Záradék típusa</span>
-              <select
-                value={form.clauseKind}
-                onChange={(e) => setForm((prev) => ({ ...prev, clauseKind: e.target.value as ClauseKind }))}
-                className="w-full px-2 py-2 border border-[#DDD7CA] bg-white"
-              >
-                {CLAUSE_KIND_OPTIONS.map((kind) => (
-                  <option key={kind} value={kind}>{CLAUSE_KIND_LABELS[kind]}</option>
-                ))}
-              </select>
-            </label>
-
-            <label className="text-xs text-[#514D45] space-y-1">
-              <span>Képviselt oldal</span>
-              <select
-                value={form.representedSide}
-                onChange={(e) => setForm((prev) => ({ ...prev, representedSide: e.target.value as RepresentedSide }))}
-                className="w-full px-2 py-2 border border-[#DDD7CA] bg-white"
-              >
-                {REPRESENTED_SIDE_OPTIONS.map((side) => (
-                  <option key={side} value={side}>{REPRESENTED_SIDE_LABELS[side]}</option>
-                ))}
-              </select>
-            </label>
-
-            <label className="text-xs text-[#514D45] space-y-1">
-              <span>Kategória</span>
-              <select
-                value={form.category}
-                onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value as ClauseCategory }))}
-                className="w-full px-2 py-2 border border-[#DDD7CA] bg-white"
-              >
-                {CATEGORY_OPTIONS.map((category) => (
-                  <option key={category} value={category}>{CATEGORY_LABELS[category]}</option>
-                ))}
-              </select>
-            </label>
-
-            <label className="text-xs text-[#514D45] space-y-1">
-              <span>Rendezési sorrend</span>
-              <input
-                type="number"
-                value={form.sortOrder}
-                onChange={(e) => setForm((prev) => ({ ...prev, sortOrder: Number(e.target.value) || 0 }))}
-                className="w-full px-2 py-2 border border-[#DDD7CA] bg-white"
-              />
-            </label>
-
-            <label className="text-xs text-[#514D45] space-y-1 col-span-2">
-              <span>Címkék (vesszővel elválasztva)</span>
-              <input
-                value={form.keywordsText}
-                onChange={(e) => setForm((prev) => ({ ...prev, keywordsText: e.target.value }))}
-                className="w-full px-2 py-2 border border-[#DDD7CA] bg-white"
-              />
-            </label>
-
-            <label className="text-xs text-[#514D45] space-y-1 col-span-2">
-              <span>Záradékszöveg *</span>
-              <textarea
-                value={form.body}
-                onChange={(e) => setForm((prev) => ({ ...prev, body: e.target.value }))}
-                rows={12}
-                className="w-full px-2 py-2 border border-[#DDD7CA] bg-white"
-              />
-            </label>
-
-            <label className="text-xs text-[#514D45] space-y-1 col-span-2">
-              <span>Trigger feltételek (JSON tömb)</span>
-              <textarea
-                value={form.triggerConditionsText}
-                onChange={(e) => setForm((prev) => ({ ...prev, triggerConditionsText: e.target.value }))}
-                rows={10}
-                className="w-full px-2 py-2 border border-[#DDD7CA] bg-white font-mono text-[11px]"
-              />
-              <p className="text-[11px] text-[#7B776D]">
-                Példa: [{`{"field":"financing_mode","operator":"eq","value":"loan"}`}]
-              </p>
-            </label>
-
-            <label className="col-span-2 inline-flex items-center gap-2 text-xs text-[#514D45]">
-              <input
-                type="checkbox"
-                checked={form.isActive}
-                onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
-              />
-              Aktív záradék
-            </label>
+              )}
+            </section>
           </div>
 
-          <div className="flex flex-wrap gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onSave}
-              disabled={isSaving || isFeatureDisabled}
-              className="px-4 py-2 text-xs bg-[#C9A227] text-white hover:bg-[#B8911F] disabled:opacity-60"
-            >
-              {isSaving ? "Mentés..." : form.id ? "Szerkesztés mentése" : "Záradék létrehozása"}
-            </button>
+          <aside className="space-y-4">
+            <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-4">
+              <h2 className="font-serif text-xl font-medium text-[#1F2821]">Záradék részletei</h2>
+              {!selectedClause ? (
+                <div className="mt-3 rounded-[8px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] p-4 text-[11px] text-[#6D6A62]">
+                  Válassz ki egy záradékot a listából a részletek megnyitásához.
+                </div>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  <div className="rounded-[8px] border border-[#EEE7D9] bg-[#FBF9F3] p-3">
+                    <h3 className="text-sm font-semibold text-[#1F2821]">{selectedClause.title}</h3>
+                    <p className="mt-1 text-[11px] text-[#6D6A62]">{selectedClause.summary || "Ehhez a tételhez még nincs külön rövid magyarázat rögzítve."}</p>
+                  </div>
+                  <div className="rounded-[8px] border border-[#EEE7D9] bg-white p-3 text-[11px] text-[#514D45]">
+                    <p><span className="font-semibold text-[#1F2821]">Státusz:</span> {getStatusLabel(selectedClause)}</p>
+                    <p className="mt-1"><span className="font-semibold text-[#1F2821]">Utolsó frissítés:</span> {formatDate(selectedClause.updatedAt)}</p>
+                    <p className="mt-1"><span className="font-semibold text-[#1F2821]">House style kompatibilitás:</span> Későbbi patchben kapcsolható.</p>
+                    <p className="mt-1"><span className="font-semibold text-[#1F2821]">Kapcsolódó jogi referencia:</span> Külön mezőként későbbi patchben.</p>
+                  </div>
+                  <div className="rounded-[8px] border border-[#EEE7D9] bg-white p-3 text-[11px] text-[#514D45]">
+                    <p className="font-semibold text-[#1F2821]">Használati iránymutatás</p>
+                    <p className="mt-1">Mikor használd: a strukturált “when to use” mező későbbi patchben kerül be.</p>
+                    <p className="mt-1">Mikor ne használd: a strukturált “when not to use” mező későbbi patchben kerül be.</p>
+                  </div>
+                  <div className="rounded-[8px] border border-[#EEE7D9] bg-white p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Szövegelőnézet</p>
+                    <p className="mt-2 whitespace-pre-wrap text-[12px] leading-6 text-[#1F2821]">
+                      {selectedClause.body.length > 900 ? `${selectedClause.body.slice(0, 900)}...` : selectedClause.body}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </section>
 
-            {form.id && (
-              <button
-                type="button"
-                onClick={toggleActive}
-                disabled={isSaving || isFeatureDisabled}
-                className="px-4 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3] disabled:opacity-60"
-              >
-                {form.isActive ? "Archiválás" : "Aktiválás"}
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={startCreate}
-              className="px-4 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
-            >
-              Szerkesztés
-            </button>
-          </div>
-        </div>
-      </main>
+            <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-4">
+              <h2 className="font-serif text-xl font-medium text-[#1F2821]">Kapcsolódó munkamódok</h2>
+              <div className="mt-3 space-y-2">
+                {[
+                  "Szerződéskészítés",
+                  "Szerződésátnézés",
+                  "Perirat szövegblokkok",
+                  "Ügyfél house style",
+                ].map((item) => (
+                  <div key={item} className="flex items-center justify-between rounded-[6px] border border-[#EEE7D9] bg-[#FBF9F3] px-3 py-2">
+                    <span className="text-[11px] text-[#1F2821]">{item}</span>
+                    <AdminStatusPill tone="neutral">Foundation</AdminStatusPill>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </aside>
+        </section>
+      </div>
     </div>
   );
 }
-
