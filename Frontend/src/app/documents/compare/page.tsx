@@ -9,7 +9,6 @@ import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePane
 import { AIPromptPanel } from "@/components/documents/AIPromptPanel";
 import { LegalAnalysisIntakePanel } from "@/components/documents/LegalAnalysisIntakePanel";
 import { buildHouseStyleInstructionBlock } from "@/components/documents/legalPromptCatalog";
-import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import {
   downloadReviewSummary,
   downloadContract,
@@ -80,6 +79,29 @@ type WorkspaceToolMode =
   | "megjegyzesek"
   | "javitasok";
 
+type WorkspaceMainTab = "review" | "clean" | "original" | "comments" | "history";
+
+type WorkspaceModeId =
+  | "CONTRACT_REVIEW"
+  | "CONTRACT_DRAFTING"
+  | "CLAIM_DRAFTING"
+  | "DEFENSE_RESPONSE"
+  | "COUNTERCLAIM"
+  | "LEGAL_ANALYSIS"
+  | "AUTHORITY_REQUEST"
+  | "DUE_DILIGENCE";
+
+type WorkspaceModeDefinition = {
+  id: WorkspaceModeId;
+  label: string;
+  purpose: string;
+  inputType: string;
+  mainWorkspaceType: string;
+  finalOutput: string;
+  enabled: boolean;
+  phases: string[];
+};
+
 type WorkspaceClauseItem = {
   id: string;
   type: 'clause';
@@ -142,6 +164,89 @@ const workspacePromptTools: WorkspacePromptTool[] = [
   { id: "prompt-ellenoldali-ervek", type: "prompt", title: "Ellenoldali érvek", description: "Ellenérvek és tárgyalási pozíciók feltárásához.", tags: ["ai", "targyalas"] },
   { id: "prompt-formazasi-szamozasi-ellenorzes", type: "prompt", title: "Formázási / számozási ellenőrzés", description: "Szerkezeti és számozási hibák kereséséhez.", tags: ["ai", "formazas"] },
   { id: "prompt-partnerellenorzesi-vazlat", type: "prompt", title: "Partnerellenőrzési vázlat", description: "Partner- és háttérellenőrzéshez használható vázlat.", tags: ["ai", "partner"] },
+];
+
+const workspaceModeRegistry: WorkspaceModeDefinition[] = [
+  {
+    id: "CONTRACT_REVIEW",
+    label: "Szerződésátnézés",
+    purpose: "A módosított munkapéldány ügyvédi áttekintése, döntési pontokkal és technikai előzményekkel.",
+    inputType: "Feltöltött vagy generált szerződés",
+    mainWorkspaceType: "Review-központú munkapéldány",
+    finalOutput: "Ügyvéd által jóváhagyott munkapéldány / export",
+    enabled: true,
+    phases: ["Bemenet", "Review", "Módosítások áttekintése", "Ügyvédi review", "Export / leadás"],
+  },
+  {
+    id: "CONTRACT_DRAFTING",
+    label: "Szerződéskészítés",
+    purpose: "Klauzula-alapú és ügyfélprofilhoz igazított szerződés-összeállítás.",
+    inputType: "Instrukciók, sablonok, záradéktár",
+    mainWorkspaceType: "Drafting és clause assembly",
+    finalOutput: "Tiszta szerződéstervezet",
+    enabled: false,
+    phases: ["Bemenet", "Szerkezet", "Dokumentum összeállítása", "Ügyvédi review", "Export / leadás"],
+  },
+  {
+    id: "CLAIM_DRAFTING",
+    label: "Keresetlevél előkészítés",
+    purpose: "Állítások, bizonyítékok és jogalapok stratégiai térképezése, majd beadvány-összeállítás.",
+    inputType: "Peres iratok, tényállás, bizonyítékok",
+    mainWorkspaceType: "Stratégiai térkép + dokumentum összeállítása",
+    finalOutput: "Keresetlevél munkapéldány",
+    enabled: false,
+    phases: ["Bemenet", "Stratégiai térkép", "Dokumentum összeállítása", "Ügyvédi review", "Export / leadás"],
+  },
+  {
+    id: "DEFENSE_RESPONSE",
+    label: "Ellenirat / védekezés",
+    purpose: "Ténybeli és jogi ellenérvek strukturálása, majd ellenirat szerkesztése.",
+    inputType: "Keresetlevél, beadványok, bizonyítékok",
+    mainWorkspaceType: "Stratégiai térkép + válaszirat",
+    finalOutput: "Ellenirat munkapéldány",
+    enabled: false,
+    phases: ["Bemenet", "Stratégiai térkép", "Dokumentum összeállítása", "Ügyvédi review", "Export / leadás"],
+  },
+  {
+    id: "COUNTERCLAIM",
+    label: "Viszontkereset",
+    purpose: "Ellenkövetelések és kapcsolódó bizonyítékok rendezése, majd viszontkereset összeállítása.",
+    inputType: "Peres anyagok, ellenkövetelések",
+    mainWorkspaceType: "Stratégiai térkép + dokumentum összeállítása",
+    finalOutput: "Viszontkereset munkapéldány",
+    enabled: false,
+    phases: ["Bemenet", "Stratégiai térkép", "Dokumentum összeállítása", "Ügyvédi review", "Export / leadás"],
+  },
+  {
+    id: "LEGAL_ANALYSIS",
+    label: "Jogi elemzés",
+    purpose: "Tényállás, kockázatok és döntési pontok ügyvédi review-ra alkalmas strukturálása.",
+    inputType: "Forrásiratok, anonimizált szöveg, kutatási jegyzetek",
+    mainWorkspaceType: "Elemzési munkatermék",
+    finalOutput: "Ügyvédi review-ra szánt jogi elemzés",
+    enabled: false,
+    phases: ["Bemenet", "Elemzési váz", "Dokumentum összeállítása", "Ügyvédi review", "Export / leadás"],
+  },
+  {
+    id: "AUTHORITY_REQUEST",
+    label: "Hatósági / bírósági kérelem",
+    purpose: "Kérelemtípus szerinti workflow és beadvány-előkészítés.",
+    inputType: "Űrlapok, mellékletek, tényállás",
+    mainWorkspaceType: "Kérelem-előkészítő munkatér",
+    finalOutput: "Benyújtásra kész kérelem",
+    enabled: false,
+    phases: ["Bemenet", "Stratégiai térkép", "Dokumentum összeállítása", "Ügyvédi review", "Export / leadás"],
+  },
+  {
+    id: "DUE_DILIGENCE",
+    label: "Átvilágítás",
+    purpose: "Dokumentum- és kockázatlista alapú átvilágítási megállapítások rendszerezése.",
+    inputType: "Átvilágítási anyagok, dokumentumlista",
+    mainWorkspaceType: "Kockázati és megállapítási mátrix",
+    finalOutput: "Átvilágítási összefoglaló",
+    enabled: false,
+    phases: ["Bemenet", "Stratégiai térkép", "Dokumentum összeállítása", "Ügyvédi review", "Export / leadás"],
+  },
 ];
 
 const formatDateTime = (value?: string | null) => {
@@ -290,6 +395,7 @@ const [isLoadingHouseStyle, setIsLoadingHouseStyle] = useState(false);
   const [isSavingWorkspace, setIsSavingWorkspace] = useState(false);
   const [workspaceSaveState, setWorkspaceSaveState] = useState<{ type: "success" | "error" | null; message: string }>({ type: null, message: "" });
   const [workspaceViewMode, setWorkspaceViewMode] = useState<"edit" | "compare">("edit");
+  const [workspaceMainTab, setWorkspaceMainTab] = useState<WorkspaceMainTab>("review");
 
   type ScopedCase = {
     id: string;
@@ -871,6 +977,56 @@ const filteredClauseTools = useMemo(() => {
     });
   }, [toolSearch, toolMode]);
 
+  const activeWorkspaceModeId: WorkspaceModeId = "CONTRACT_REVIEW";
+  const activeWorkspaceMode =
+    workspaceModeRegistry.find((mode) => mode.id === activeWorkspaceModeId) || workspaceModeRegistry[0];
+  const futureWorkspaceModes = workspaceModeRegistry.filter((mode) => mode.id !== activeWorkspaceModeId);
+
+  const proposedChanges = useMemo(() => {
+    if (!comparisonData?.blocks?.length) return [] as Array<{
+      id: string;
+      type: "addition" | "deletion" | "modification" | "comment";
+      text: string;
+      author: string;
+      timestamp: string;
+      explanation: string;
+      status: "pending" | "accepted" | "rejected" | "lawyer_edited";
+    }>;
+    return comparisonData.blocks.map((block) => {
+      const text =
+        block.targetBlock?.body?.trim() ||
+        block.sourceBlock?.body?.trim() ||
+        block.targetBlock?.title?.trim() ||
+        block.sourceBlock?.title?.trim() ||
+        "Nincs szöveges részlet.";
+      const type: "addition" | "deletion" | "modification" | "comment" =
+        block.status === "added"
+          ? "addition"
+          : block.status === "removed"
+            ? "deletion"
+            : block.status === "modified"
+              ? "modification"
+              : "comment";
+      return {
+        id: block.id,
+        type,
+        text,
+        author: "Nincs hozzárendelt szerző",
+        timestamp: selectedDocument?.updatedAt || selectedDocument?.createdAt || "",
+        explanation: block.inlineDiff ? "Szövegszintű eltérés azonosítva." : "Technikai összevetésből származó javaslat.",
+        status: "pending" as const,
+      };
+    });
+  }, [comparisonData, selectedDocument?.createdAt, selectedDocument?.updatedAt]);
+
+  const reviewProgress = useMemo(() => {
+    const pending = proposedChanges.filter((item) => item.status === "pending").length;
+    const accepted = proposedChanges.filter((item) => item.status === "accepted").length;
+    const rejected = proposedChanges.filter((item) => item.status === "rejected").length;
+    const lawyerEdited = proposedChanges.filter((item) => item.status === "lawyer_edited").length;
+    return { pending, accepted, rejected, lawyerEdited };
+  }, [proposedChanges]);
+
   const filteredPromptTools = useMemo(() => {
     if (toolMode !== "ai-promptok") return [];
     return workspacePromptTools.filter((tool) => {
@@ -924,7 +1080,7 @@ const filteredClauseTools = useMemo(() => {
       setEditorNotice("Nincs összevetési alap. Válassz korábbi verziót vagy ments egy módosított munkapéldányt.");
       return;
     }
-    globalThis.document.getElementById("version-compare-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    globalThis.document.getElementById("history-tech-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const insertClauseIntoDraft = (clauseText: string) => {
@@ -1171,18 +1327,27 @@ const filteredClauseTools = useMemo(() => {
   };
 
 return (
-    <div className="flex min-h-0 flex-1 flex-col bg-[#F3EBD4] xl:flex-row">
-      <CaseWorkspaceNav
-        caseId={selectedDocument?.caseId || requestedCaseId}
-        caseNumber={selectedDocument?.caseNumber}
-        title={selectedDocument?.caseTitle}
-        clientName={selectedDocument?.caseClientName}
-        activeTab="workspace"
-        activeDocumentId={selectedDocument?.id}
-        helperText="A workspace nem ment automatikusan Word-verziót; a mentés külön művelet."
-      />
-      <main className="min-w-0 flex-1 overflow-y-auto border-b border-[#D7CCB0] xl:border-b-0 xl:border-r">
+    <div className="flex min-h-0 flex-1 flex-col bg-[#F3EBD4]">
+      <main className="min-w-0 flex-1 overflow-y-auto">
         <div className="space-y-4 p-4 xl:p-5">
+          <section className="rounded-[10px] border border-[#D7CCB0] bg-[#FBF6E7] p-3">
+            <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.14em] text-[#6B675F]">
+              <span className="rounded border border-[#D7CCB0] bg-white px-2 py-1">Ügy: {selectedDocument?.caseNumber || "—"}</span>
+              <span className="rounded border border-[#D7CCB0] bg-white px-2 py-1">Ügyfél: {selectedDocument?.caseClientName || "—"}</span>
+              <span className="rounded border border-[#D7CCB0] bg-white px-2 py-1">Dokumentum: {getWorkspaceDocumentTitle()}</span>
+              <span className="rounded border border-[#D7CCB0] bg-white px-2 py-1">Feladat típusa: Ügyvédi review</span>
+              <span className="rounded border border-[#D7CCB0] bg-white px-2 py-1">Státusz: {workspaceBacklinkStatusLabel}</span>
+              <span className="rounded border border-[#D7CCB0] bg-white px-2 py-1">Felelősök: ügycsapat</span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link href={activeCaseId ? `/cases/${encodeURIComponent(activeCaseId)}` : "/cases"} className="rounded border border-[#1F4A33] bg-[#1F4A33] px-3 py-1.5 text-[11px] font-semibold text-[#F4EFDB]">Áttekintés</Link>
+              <Link href={activeCaseId ? `/cases/${encodeURIComponent(activeCaseId)}/documents` : "/cases"} className="rounded border border-[#D7CCB0] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F2821] hover:bg-[#F7F0D9]">Dokumentumok</Link>
+              <Link href={selectedDocument ? `/cases/${encodeURIComponent(selectedDocument.caseId)}/review/${encodeURIComponent(selectedDocument.id)}` : "/reviews"} className="rounded border border-[#D7CCB0] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F2821] hover:bg-[#F7F0D9]">Review</Link>
+              <Link href={activeCaseId ? `/cases/${encodeURIComponent(activeCaseId)}/communications` : "/cases"} className="rounded border border-[#D7CCB0] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F2821] hover:bg-[#F7F0D9]">Kommunikáció</Link>
+              <a href="#history-tech-panel" className="rounded border border-[#D7CCB0] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F2821] hover:bg-[#F7F0D9]">Előzmények</a>
+              <Link href={activeCaseId ? `/time-entries?caseId=${encodeURIComponent(activeCaseId)}` : "/time-entries"} className="rounded border border-[#D7CCB0] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F2821] hover:bg-[#F7F0D9]">Munkaórák</Link>
+            </div>
+          </section>
           <header className="rounded-[10px] border border-[#CFC29D] bg-[#FBF6E7] p-4 shadow-sm">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0 space-y-3">
@@ -1320,6 +1485,161 @@ return (
             </div>
           </header>
 
+          <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { key: "review", label: "Módosításokkal" },
+                  { key: "clean", label: "Tiszta példány" },
+                  { key: "original", label: "Eredeti" },
+                  { key: "comments", label: "Kommentek" },
+                  { key: "history", label: "Előzmények" },
+                ] as { key: WorkspaceMainTab; label: string }[]).map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setWorkspaceMainTab(tab.key)}
+                    className={`rounded-[5px] border px-3 py-1.5 text-[11px] font-semibold ${
+                      workspaceMainTab === tab.key
+                        ? "border-[#1F4A33] bg-[#1F4A33] text-[#F4EFDB]"
+                        : "border-[#D7CCB0] bg-[#FBF6E7] text-[#1F2821] hover:bg-white"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <div className="text-[11px] text-[#6D6A62]">
+                {workspaceMainTab === "review" ? "Ügyvédi review" : workspaceMainTab === "comments" ? "Döntési megjegyzések" : "Módosítások áttekintése"}
+              </div>
+            </div>
+            <div className="mt-2 rounded-[6px] border border-[#EEE7D9] bg-[#FBF9F3] px-3 py-2 text-[11px] text-[#514D45]">
+              Ügyvédi review / Módosítások áttekintése alapnézet. Ez a felület döntéstámogatásra szolgál, nem Word változáskövetés.
+            </div>
+          </section>
+
+          <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-3">
+            <h3 className="font-serif text-lg font-medium text-[#1F2821]">Szerződésátnéző mód</h3>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-[6px] border border-[#DDD7CA] bg-[#FBF9F3] px-3 py-2 text-xs text-[#514D45]">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-[#7B776D]">Függőben</p>
+                <p className="mt-1 text-lg font-semibold text-[#1F2821]">{reviewProgress.pending}</p>
+              </div>
+              <div className="rounded-[6px] border border-[#DDD7CA] bg-[#FBF9F3] px-3 py-2 text-xs text-[#514D45]">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-[#7B776D]">Elfogadva</p>
+                <p className="mt-1 text-lg font-semibold text-[#1F2821]">{reviewProgress.accepted}</p>
+              </div>
+              <div className="rounded-[6px] border border-[#DDD7CA] bg-[#FBF9F3] px-3 py-2 text-xs text-[#514D45]">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-[#7B776D]">Elutasítva</p>
+                <p className="mt-1 text-lg font-semibold text-[#1F2821]">{reviewProgress.rejected}</p>
+              </div>
+              <div className="rounded-[6px] border border-[#DDD7CA] bg-[#FBF9F3] px-3 py-2 text-xs text-[#514D45]">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-[#7B776D]">Ügyvéd által szerkesztve</p>
+                <p className="mt-1 text-lg font-semibold text-[#1F2821]">{reviewProgress.lawyerEdited}</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="font-serif text-lg font-medium text-[#1F2821]">Workspace módok</h3>
+                <p className="mt-1 text-[11px] text-[#6D6A62]">
+                  Az Adminiculum módalapú munkaterekre készül. A jelenlegi aktív mód: {activeWorkspaceMode.label}.
+                </p>
+              </div>
+              <AdminStatusPill tone="green">Aktív: {activeWorkspaceMode.id}</AdminStatusPill>
+            </div>
+
+            <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+              <div className="space-y-3">
+                <div className="rounded-[8px] border border-[#D8CFB6] bg-[#FBF6E7] p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.14em] text-[#7B776D]">Aktív workflow mód</p>
+                      <h4 className="mt-1 text-sm font-semibold text-[#1F2821]">{activeWorkspaceMode.label}</h4>
+                    </div>
+                    <AdminBadge tone="green">Engedélyezve</AdminBadge>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <div className="rounded-[6px] border border-[#DDD7CA] bg-white p-2 text-[11px] text-[#514D45]">
+                      <p className="font-semibold text-[#1F2821]">Cél</p>
+                      <p className="mt-1">{activeWorkspaceMode.purpose}</p>
+                    </div>
+                    <div className="rounded-[6px] border border-[#DDD7CA] bg-white p-2 text-[11px] text-[#514D45]">
+                      <p className="font-semibold text-[#1F2821]">Bemenet</p>
+                      <p className="mt-1">{activeWorkspaceMode.inputType}</p>
+                    </div>
+                    <div className="rounded-[6px] border border-[#DDD7CA] bg-white p-2 text-[11px] text-[#514D45]">
+                      <p className="font-semibold text-[#1F2821]">Fő munkatér</p>
+                      <p className="mt-1">{activeWorkspaceMode.mainWorkspaceType}</p>
+                    </div>
+                    <div className="rounded-[6px] border border-[#DDD7CA] bg-white p-2 text-[11px] text-[#514D45]">
+                      <p className="font-semibold text-[#1F2821]">Végső kimenet</p>
+                      <p className="mt-1">{activeWorkspaceMode.finalOutput}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[8px] border border-[#DDD7CA] bg-white p-3">
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-[#7B776D]">Munkafázisok</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {activeWorkspaceMode.phases.map((phase, index) => (
+                      <div key={phase} className="flex items-center gap-2">
+                        <span className="rounded-full border border-[#1F4A33] bg-[#1F4A33] px-2 py-0.5 text-[10px] font-semibold text-[#F4EFDB]">
+                          {index + 1}. {phase}
+                        </span>
+                        {index < activeWorkspaceMode.phases.length - 1 ? <span className="text-[#A08D63]">→</span> : null}
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[11px] text-[#6D6A62]">
+                    Peres és iratközpontú módoknál a stratégiai térkép csak előkészítő fázis; utána a workflow a Dokumentum összeállítása lépésbe vált.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="rounded-[8px] border border-[#DDD7CA] bg-[#FBF9F3] p-3">
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-[#7B776D]">Jövőbeli módok</p>
+                  <div className="mt-2 space-y-2">
+                    {futureWorkspaceModes.map((mode) => (
+                      <div key={mode.id} className="rounded-[6px] border border-[#E7DECB] bg-white p-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-[#1F2821]">{mode.label}</p>
+                          <AdminStatusPill tone="neutral">Előkészítés alatt</AdminStatusPill>
+                        </div>
+                        <p className="mt-1 text-[11px] text-[#6D6A62]">{mode.purpose}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-[8px] border border-[#DDD7CA] bg-white p-3">
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-[#7B776D]">Peres stratégiai térkép alap</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <div className="rounded-[6px] border border-[#EEE7D9] bg-[#FBF9F3] p-2 text-[11px] text-[#514D45]">
+                      <p className="font-semibold text-[#1F2821]">Opposing / claim side</p>
+                      <p className="mt-1">állítás / érv · forráshely · bizonyíték · jogalap · követelés / jogkövetkezmény</p>
+                    </div>
+                    <div className="rounded-[6px] border border-[#EEE7D9] bg-[#FBF9F3] p-2 text-[11px] text-[#514D45]">
+                      <p className="font-semibold text-[#1F2821]">Response side</p>
+                      <p className="mt-1">ténybeli válasz · bizonyítéki válasz · jogi ellenérv · kommentár · beadvány-szöveg · státusz</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[8px] border border-[#DDD7CA] bg-white p-3 text-[11px] text-[#6D6A62]">
+                  <p className="font-semibold text-[#1F2821]">Záradéktár és jogi tudástár irány</p>
+                  <p className="mt-1">A záradéktár a szerződéskészítésben központi, szerződésreview-ban támogató, peres módokban újrahasznosítható szövegblokkok forrása lesz.</p>
+                  <p className="mt-2 rounded-[6px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] px-3 py-2 text-xs text-[#7B776D]">
+                    Jogi tudástár előkészítés alatt.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
           {error && <div className="p-3 text-xs bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a]">{error}</div>}
 
               {isLoading ? (
@@ -1371,11 +1691,11 @@ return (
               </div>
             </div>
           ) : (
-            <div className="grid gap-4 2xl:grid-cols-[320px_minmax(720px,1fr)] xl:grid-cols-[300px_minmax(0,1fr)]">
-<aside className="min-w-0 space-y-3 rounded-[10px] border border-[#123624] bg-[#173824] p-4 text-[#F4EFDB] xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+            <div className="space-y-4">
+<aside className="min-w-0 space-y-3 rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-4 text-[#1F2821]">
                 <div>
-                  <h2 className="font-serif text-xl font-medium text-[#F4EFDB]">Eszközök</h2>
-                  <p className="mt-1 text-[11px] text-[#DCCFA8]">Klauzulák, promptok és munkafolyamat-eszközök.</p>
+                  <h2 className="font-serif text-lg font-medium text-[#1F2821]">Review eszköztár</h2>
+                  <p className="mt-1 text-[11px] text-[#6D6A62]">Klauzulák, promptok és kiegészítő munkafolyamat-eszközök.</p>
                 </div>
 
                 <div className="flex flex-wrap gap-1">
@@ -1399,8 +1719,8 @@ return (
                       }}
                       className={`rounded-[4px] border px-2 py-1 text-[10px] font-semibold transition-colors ${
                         toolMode === mode.key
-                          ? "border-[#B58A2A] bg-[#B58A2A] text-[#1A1A14]"
-                          : "border-[#355E49] bg-[#1F4A33] text-[#E8DFC3] hover:bg-[#28563D]"
+                          ? "border-[#1F4A33] bg-[#1F4A33] text-[#F4EFDB]"
+                          : "border-[#D7CCB0] bg-white text-[#1F2821] hover:bg-[#F7F0D9]"
                       }`}
                     >
                       {mode.label}
@@ -1421,7 +1741,7 @@ return (
                       ? "Keress sablont…"
                       : "Keresés…"
                   }
-                  className="w-full rounded-[6px] border border-[#355E49] bg-[#F7F0D9] px-3 py-2 text-xs text-[#1F2821]"
+                  className="w-full rounded-[6px] border border-[#D7CCB0] bg-white px-3 py-2 text-xs text-[#1F2821]"
                 />
 
                 {editorNotice ? (
@@ -1435,7 +1755,7 @@ return (
 
                 {toolMode === "klauzulak" ? (
                   <section className="space-y-2">
-                    <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#DCCFA8]">Klauzulák</h3>
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6D6A62]">Klauzulák</h3>
                     {filteredClauseTools.length === 0 ? (
                       <p className="rounded-[5px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] p-3 text-xs text-[#9C9890]">Nincs találat a klauzulák között.</p>
                     ) : (
@@ -1696,6 +2016,26 @@ return (
               </aside>
 
               <div className="min-w-0 space-y-4">
+                <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-[#1F2821]">Formázási eszköztár</h3>
+                    <span className="text-[10px] text-[#7B776D]">Formázási eszközök előkészítés alatt.</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {["Nagybetű", "Kisbetű", "Számozás", "Felsorolás", "Sorkizárt", "Balra zárt", "Behúzás", "Bekezdés térköz"].map((label) => (
+                      <button
+                        key={label}
+                        type="button"
+                        disabled
+                        title="Formázási eszközök előkészítés alatt."
+                        className="rounded-[5px] border border-[#DDD7CA] bg-[#FBF9F3] px-2 py-1 text-[10px] text-[#7B776D] disabled:cursor-not-allowed"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
                 <section className="overflow-hidden rounded-[10px] border border-[#D8CFB6] bg-white">
                   <div className="flex flex-col gap-3 border-b border-[#EEE7D9] p-4 lg:flex-row lg:items-start lg:justify-between">
 <div className="space-y-1">
@@ -1812,11 +2152,55 @@ return (
                 </div>
                 </section>
 
-                <section id="version-compare-panel" className={`scroll-mt-4 rounded-[10px] border bg-white p-4 ${workspaceViewMode === "compare" ? "border-[#B58A2A] ring-2 ring-[#F2E4BD]" : "border-[#D8CFB6]"}`}>
+                <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-serif text-lg font-medium text-[#1F2821]">Javasolt módosítások</h3>
+                    <span className="text-[10px] uppercase tracking-[0.12em] text-[#7B776D]">Contract Review Mode alap</span>
+                  </div>
+                  {proposedChanges.length === 0 ? (
+                    <p className="mt-3 rounded-[6px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] p-3 text-xs text-[#7B776D]">
+                      Még nincs feldolgozható módosítás. A valódi változáskövetés későbbi patchben aktiválható.
+                    </p>
+                  ) : (
+                    <div className="mt-3 space-y-2">
+                      {proposedChanges.map((item) => (
+                        <div key={item.id} className="rounded-[6px] border border-[#EEE7D9] bg-[#FBF9F3] p-3">
+                          <div className="flex flex-wrap items-center gap-2 text-[10px] text-[#6D6A62]">
+                            <span className="rounded border border-[#DDD7CA] bg-white px-2 py-0.5">
+                              {item.type === "addition" ? "Hozzáadás" : item.type === "deletion" ? "Törlés" : item.type === "modification" ? "Módosítás" : "Megjegyzés"}
+                            </span>
+                            <span>{item.author}</span>
+                            <span>•</span>
+                            <span>{formatDateTime(item.timestamp)}</span>
+                            <span>•</span>
+                            <span>Állapot: Függőben</span>
+                          </div>
+                          <p className="mt-2 text-xs text-[#1F2821] whitespace-pre-wrap">{item.text.slice(0, 420)}</p>
+                          <p className="mt-1 text-[11px] text-[#7B776D]">{item.explanation}</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {["✓ Elfogadás", "✕ Elutasítás", "Szerkesztés", "Válasz / megjegyzés"].map((action) => (
+                              <button
+                                key={action}
+                                type="button"
+                                disabled
+                                title="A módosítások döntési állapota későbbi patchben lesz menthető."
+                                className="rounded-[5px] border border-[#DDD7CA] bg-white px-2 py-1 text-[10px] text-[#6D6A62] disabled:cursor-not-allowed"
+                              >
+                                {action}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                <section id="history-tech-panel" className={`scroll-mt-4 rounded-[10px] border bg-white p-4 ${workspaceViewMode === "compare" ? "border-[#B58A2A] ring-2 ring-[#F2E4BD]" : "border-[#D8CFB6]"}`}>
                 <div className="flex items-center justify-between gap-4 mb-3">
                   <div>
-                    <h2 className="text-sm font-semibold text-[#1F2821]">Verziók és összevetés</h2>
-                    <p className="mt-1 text-[11px] text-[#7B776D]">Ez Adminiculumon belüli szöveg-összevetés, nem Word változáskövetés.</p>
+                    <h2 className="text-sm font-semibold text-[#1F2821]">Előzmények és technikai összevetés</h2>
+                    <p className="mt-1 text-[11px] text-[#7B776D]">Audit és technikai ellenőrző nézet. Ez Adminiculumon belüli szöveg-összevetés, nem Word változáskövetés.</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
