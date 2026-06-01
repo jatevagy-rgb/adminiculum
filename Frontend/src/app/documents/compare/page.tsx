@@ -15,9 +15,11 @@ import {
   getCaseSummary,
   getCaseTasks,
   getCases,
+  getContractEditDraft,
   getContractTimeline,
   getCurrentUser,
   getReviewNotes,
+  saveContractEditDraft,
   saveReviewNotes,
   getAnonymousDocumentsBySource,
   getDocumentText,
@@ -27,8 +29,10 @@ import {
   type CaseContractListItem,
   type CaseListItem,
   type CaseSummaryResponse,
+  type ContractEditDraftResponse,
   type ContractCompareBlock,
   type ContractComparisonResponse,
+  type CurrentUser,
   type DocumentItem,
   type ReviewNotesResult,
   type TaskItem,
@@ -62,6 +66,14 @@ type BlockNoteDraft = {
   status: BlockReviewStatus;
   title: string;
   note: string;
+};
+
+type LocalWorkspaceComment = {
+  id: string;
+  text: string;
+  createdAt: string;
+  authorLabel: string;
+  persistence: "local-only";
 };
 
 type WorkspaceMainTab = "edit" | "review" | "comments" | "clauses" | "history";
@@ -366,6 +378,7 @@ function DocumentsComparePageContent() {
   });
   const [blockNotesSaving, setBlockNotesSaving] = useState(false);
   const [reviewSummaryDownloading, setReviewSummaryDownloading] = useState(false);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
 
   const [search, setSearch] = useState("");
   const [caseFilter, setCaseFilter] = useState<string>(requestedCaseId || "all");
@@ -379,7 +392,10 @@ function DocumentsComparePageContent() {
   const [editorTouched, setEditorTouched] = useState(false);
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
   const [localCommentDraft, setLocalCommentDraft] = useState("");
-  const [localComments, setLocalComments] = useState<string[]>([]);
+  const [localComments, setLocalComments] = useState<LocalWorkspaceComment[]>([]);
+  const [contractEditDraft, setContractEditDraft] = useState<ContractEditDraftResponse | null>(null);
+  const [isLoadingContractEditDraft, setIsLoadingContractEditDraft] = useState(false);
+  const [contractEditDraftError, setContractEditDraftError] = useState<string | null>(null);
   const toolSearchRef = useRef<HTMLInputElement | null>(null);
   const localCommentRef = useRef<HTMLTextAreaElement | null>(null);
   const editorTextAreaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -410,6 +426,7 @@ function DocumentsComparePageContent() {
       setError(null);
       try {
         const me = await getCurrentUser();
+        setCurrentUser(me);
         const preloadedSummaries: Record<string, CaseSummaryResponse> = {};
 
         let scopedCases: ScopedCase[] = [];
@@ -527,6 +544,7 @@ function DocumentsComparePageContent() {
         setSelectedDocumentId((requested || first)?.id || null);
       } catch (err) {
         console.error("Compare board load failed:", err);
+        setCurrentUser(null);
         setError("A dokumentum összevető felület betöltése sikertelen.");
       } finally {
         setIsLoading(false);
@@ -804,6 +822,40 @@ function DocumentsComparePageContent() {
   }, [comparisonData, reviewNotesData, selectedDocument]);
 
   useEffect(() => {
+    if (!selectedDocument || selectedDocument.kind !== "contract") {
+      setContractEditDraft(null);
+      setContractEditDraftError(null);
+      setIsLoadingContractEditDraft(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingContractEditDraft(true);
+    setContractEditDraftError(null);
+    getContractEditDraft(selectedDocument.id)
+      .then((result) => {
+        if (cancelled) return;
+        setContractEditDraft(result);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setContractEditDraft(null);
+        if (err instanceof ApiError && (err.status === 404 || err.status === 400)) {
+          setContractEditDraftError("A szerződéshez nem érhető el menthető edit-draft szerkezet.");
+        } else {
+          setContractEditDraftError("A szerződés szerkeszthető blokkstruktúrája nem tölthető be.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingContractEditDraft(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDocument]);
+
+  useEffect(() => {
     const loadTimeline = async () => {
       if (!selectedDocument?.id) {
         setTimelineEvents([]);
@@ -864,6 +916,15 @@ function DocumentsComparePageContent() {
   }, [selectedDocument, effectiveBaseline, lineage, reviewTaskCount]);
 
   const effectiveWorkspaceText = useMemo(() => {
+    if (contractEditDraft?.blocks?.length) {
+      return contractEditDraft.blocks
+        .map((block) => {
+          const title = block.title?.trim() || "Szerződésblokk";
+          const body = block.body?.trim() || "";
+          return body ? `${title}\n${body}` : title;
+        })
+        .join("\n\n---\n\n");
+    }
     // Use comparison block text first (available for generated contracts with baseline selected)
     if (comparisonData?.blocks?.length) {
       return comparisonData.blocks
@@ -883,7 +944,7 @@ function DocumentsComparePageContent() {
       return latestAnonymousText;
     }
     return "";
-  }, [comparisonData, documentText, latestAnonymousText]);
+  }, [comparisonData, contractEditDraft, documentText, latestAnonymousText]);
 
   const activeDraftText = editorDraft || effectiveWorkspaceText || "";
   const hasWorkspaceText = Boolean(effectiveWorkspaceText.trim());
@@ -899,9 +960,13 @@ const editorStatusLabel =
   const isModifiedWorkingCopy =
     selectedDocument?.source === "UPLOADED" &&
     documents.some((d) => d.id === selectedDocument.id && d.status === "MODIFIED_WORKING_COPY");
-  const workspaceTextSourceLabel = comparisonData?.blocks?.length
-    ? "Generált dokumentum blokk-szövege"
-    : isDocumentTextLoading
+  const workspaceTextSourceLabel = contractEditDraft?.blocks?.length
+    ? contractEditDraft.sourceMode === "saved_draft"
+      ? "Mentett edit-draft blokkstruktúra"
+      : "Szerkeszthető szerződésblokk-struktúra"
+    : comparisonData?.blocks?.length
+      ? "Generált dokumentum blokk-szövege"
+      : isDocumentTextLoading
       ? "Szöveg betöltése…"
       : isModifiedWorkingCopy && documentText
         ? "Mentett módosított munkapéldány"
@@ -1024,6 +1089,11 @@ const filteredClauseTools = useMemo(() => {
     setWorkspaceViewMode("edit");
   }, [selectedDocumentId]);
 
+  useEffect(() => {
+    setLocalComments([]);
+    setLocalCommentDraft("");
+  }, [selectedDocumentId]);
+
   const getWorkspaceDocumentTitle = () => selectedDocument?.fileName || selectedDocument?.title || "Nincs kiválasztott dokumentum";
 
   const getWorkspaceDocumentKindLabel = () => {
@@ -1046,6 +1116,20 @@ const filteredClauseTools = useMemo(() => {
     setWorkspaceMainTab("clauses");
     toolSearchRef.current?.focus();
   };
+
+  const canPersistWorkspaceSave =
+    Boolean(selectedDocument) &&
+    (selectedDocument?.kind === "document" || selectedDocument?.kind === "contract");
+
+  const saveAvailabilityTitle = !selectedDocument
+    ? "Válassz dokumentumot a mentéshez."
+    : !editorDraft.trim()
+      ? "Nincs mit menteni."
+      : selectedDocument.kind === "contract" && contractEditDraftError
+        ? "Módosított munkapéldány mentése későbbi backend patchben lesz aktiválható."
+        : selectedDocument.kind === "contract"
+          ? "Helyi szerkesztések mentése edit-draftként."
+          : "Munkapéldány mentése a Dokumentumtárba.";
 
   const updateEditorText = (
     nextValue: string,
@@ -1117,6 +1201,28 @@ const filteredClauseTools = useMemo(() => {
     updateEditorText(nextValue, { start: selectionStart, end: selectionStart + nextSelection.length });
   };
 
+  const expandSelectionParagraphSpacing = () =>
+    transformSelectionLines(
+      (line, index) => {
+        const trimmed = line.trim();
+        if (!trimmed) return "";
+        return index === 0 ? trimmed : `\n${trimmed}`;
+      },
+      "Jelölj ki egy vagy több bekezdést a bekezdéstérköz előkészítéséhez."
+    );
+
+  const applyLeftAlignmentHelper = () =>
+    transformSelectionLines(
+      (line) => line.replace(/^\s+/, ""),
+      "Jelölj ki egy vagy több bekezdést a balra záráshoz."
+    );
+
+  const applyIndentHelper = () =>
+    transformSelectionLines(
+      (line) => (line.trim() ? `  ${line.replace(/^\s+/, "")}` : line),
+      "Jelölj ki egy vagy több bekezdést a behúzáshoz."
+    );
+
   const editorToolbarActions: Array<{
     key: string;
     label: string;
@@ -1156,25 +1262,25 @@ const filteredClauseTools = useMemo(() => {
       key: "justify",
       label: "Sorkizárt",
       disabled: true,
-      title: "A helyi szerkesztőben a bekezdésszintű igazítás későbbi patchben lesz aktiválható.",
+      title: "A helyi szerkesztőben a valódi sorkizárt tördelés későbbi patchben lesz aktiválható.",
     },
     {
       key: "left",
       label: "Balra zárt",
-      disabled: true,
-      title: "A helyi szerkesztőben a bekezdésszintű igazítás későbbi patchben lesz aktiválható.",
+      onClick: applyLeftAlignmentHelper,
+      title: "Helyi helper: a kijelölt bekezdések elejéről eltávolítja a behúzást.",
     },
     {
       key: "indent",
       label: "Behúzás",
-      disabled: true,
-      title: "A helyi szerkesztőben a bekezdésszintű behúzás későbbi patchben lesz aktiválható.",
+      onClick: applyIndentHelper,
+      title: "Helyi helper: két szóközös behúzást ad a kijelölt bekezdésekhez.",
     },
     {
       key: "spacing",
       label: "Bekezdés térköz",
-      disabled: true,
-      title: "A helyi szerkesztőben a bekezdéstérköz későbbi patchben lesz aktiválható.",
+      onClick: expandSelectionParagraphSpacing,
+      title: "Helyi helper: üres sort illeszt a kijelölt bekezdések közé.",
     },
   ];
 
@@ -1215,9 +1321,61 @@ const filteredClauseTools = useMemo(() => {
   const handleAddLocalComment = () => {
     const text = localCommentDraft.trim();
     if (!text) return;
-    setLocalComments((prev) => [...prev, text]);
+    setLocalComments((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-${prev.length + 1}`,
+        text,
+        createdAt: new Date().toISOString(),
+        authorLabel: currentUser?.name || currentUser?.email || "Helyi felhasználó",
+        persistence: "local-only",
+      },
+    ]);
     setLocalCommentDraft("");
-    setEditorNotice("Helyi megjegyzés hozzáadva. Mentés külön patchben lesz bekötve.");
+    setEditorNotice("Helyi megjegyzés hozzáadva. Mentés későbbi patchben lesz bekötve.");
+  };
+
+  const buildContractDraftBlocksFromText = (text: string) => {
+    const sections = text
+      .split(/\n\s*---\s*\n/g)
+      .map((section) => section.trim())
+      .filter(Boolean);
+    const fallbackSections = sections.length
+      ? sections
+      : text
+          .split(/\n{2,}/g)
+          .map((section) => section.trim())
+          .filter(Boolean);
+
+    return fallbackSections.map((section, index) => {
+      const existing = contractEditDraft?.blocks[index];
+      const lines = section.split("\n");
+      const firstLine = lines[0]?.trim() || "";
+      const rest = lines.slice(1).join("\n").trim();
+      const hasStructuredHeading = lines.length > 1 && firstLine.length > 0;
+
+      return {
+        id: existing?.id,
+        title: hasStructuredHeading ? firstLine : existing?.title || `Szakasz ${index + 1}`,
+        body: hasStructuredHeading ? rest : section,
+        orderIndex: existing?.orderIndex ?? index,
+        sourceClauseId: existing?.sourceClauseId ?? null,
+      };
+    });
+  };
+
+  const handleInsertClauseIntoDraft = (clauseText: string) => {
+    const normalizedClause = clauseText.trim();
+    if (!normalizedClause) {
+      setEditorNotice("A kiválasztott klauzula nem tartalmaz beszúrható szöveget.");
+      return;
+    }
+
+    const base = editorDraft || effectiveWorkspaceText || "";
+    const nextDraft = base.trim() ? `${base.trim()}\n\n${normalizedClause}` : normalizedClause;
+    setEditorDraft(nextDraft);
+    setEditorTouched(true);
+    setEditorNotice("Helyi beszúrás megtörtént. A változások mentéséhez külön mentés szükséges.");
   };
 
   const handleCopyPromptTool = async (toolTitle: string) => {
@@ -1275,19 +1433,68 @@ const filteredClauseTools = useMemo(() => {
     setIsSavingWorkspace(true);
     setWorkspaceSaveState({ type: null, message: "" });
     try {
+      if (selectedDocument.kind === "contract") {
+        if (contractEditDraftError) {
+          setWorkspaceSaveState({
+            type: "error",
+            message: "A módosított munkapéldány mentése jelenleg nem érhető el.",
+          });
+          return;
+        }
+
+        const blocks = buildContractDraftBlocksFromText(editorDraft);
+        if (blocks.length === 0) {
+          setWorkspaceSaveState({
+            type: "error",
+            message: "A munkapéldány tartalma nem menthető ebben az állapotban.",
+          });
+          return;
+        }
+
+        const result = await saveContractEditDraft(selectedDocument.id, blocks);
+        setContractEditDraft((previous) =>
+          previous
+            ? { ...previous, blocks: result.blocks, sourceMode: "saved_draft", draftMeta: { ...previous.draftMeta, updatedAt: result.updatedAt } }
+            : {
+                documentId: result.documentId,
+                caseId: result.caseId,
+                contractType: result.contractType,
+                blocks: result.blocks,
+                sourceMode: "saved_draft",
+                draftMeta: { generationDraftId: result.draftId, updatedAt: result.updatedAt },
+              }
+        );
+        setWorkspaceSaveState({
+          type: "success",
+          message: "Szerkesztési draft mentve. A véglegesített verzió külön export vagy generálás után jön létre.",
+        });
+        setEditorTouched(false);
+        return;
+      }
+
       const result = await saveWorkspaceDocumentVersion(selectedDocument.id, {
         text: editorDraft,
       });
       setWorkspaceSaveState({
         type: "success",
-        message: `Módosított munkapéldány mentve.`,
+        message: "Módosított munkapéldány mentve.",
       });
       setEditorTouched(false);
       router.push(`/cases/${encodeURIComponent(selectedDocument.caseId)}/documents?documentId=${encodeURIComponent(result.id)}`);
     } catch (err: any) {
+      let message = "A módosított munkapéldány mentése jelenleg nem érhető el.";
+      if (err instanceof ApiError) {
+        if (err.status === 401) {
+          message = "A mentéshez újra be kell jelentkezni.";
+        } else if (err.status === 400) {
+          message = "A munkapéldány tartalma nem menthető ebben az állapotban.";
+        } else if (err.status === 404 || err.status === 501 || err.status === 0) {
+          message = "A módosított munkapéldány mentése jelenleg nem érhető el.";
+        }
+      }
       setWorkspaceSaveState({
         type: "error",
-        message: `Mentés sikertelen: a módosított munkapéldányt nem sikerült elmenteni. ${getUserFacingApiErrorMessage(err)}`,
+        message: `Mentés sikertelen: ${message}`,
       });
     } finally {
       setIsSavingWorkspace(false);
@@ -1488,10 +1695,10 @@ return (
               </div>
                 <div className="flex shrink-0 flex-wrap items-start gap-2 lg:max-w-[420px] lg:justify-end">
                   <AdminButton
-                    disabled={!selectedDocument || !editorDraft.trim() || isSavingWorkspace}
+                    disabled={!canPersistWorkspaceSave || !editorDraft.trim() || isSavingWorkspace || (selectedDocument?.kind === "contract" && Boolean(contractEditDraftError))}
                     variant="primary"
                     onClick={handleSaveWorkspaceVersion}
-                    title={!selectedDocument ? "Válassz dokumentumot a mentéshez." : !editorDraft.trim() ? "Nincs mit menteni." : "Munkapéldány mentése a Dokumentumtárba."}
+                    title={saveAvailabilityTitle}
                   >
                     {isSavingWorkspace ? "Mentés..." : "Módosított verzió mentése"}
                   </AdminButton>
@@ -1784,14 +1991,17 @@ return (
                               {expandedToolId === clause.id ? (
                                 <div className="mt-3 space-y-2 rounded-[6px] border border-[#DDD7CA] bg-[#FBF9F3] p-3">
                                   <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-[#514D45]">{clause.text}</p>
-                                  <button
-                                    type="button"
-                                    disabled
-                                    title="A dokumentumba illesztés későbbi patchben lesz aktiválható."
-                                    className="rounded-[5px] border border-[#DDD7CA] bg-white px-2.5 py-1 text-[10px] text-[#7B776D] disabled:cursor-not-allowed"
-                                  >
-                                    Beszúrás
-                                  </button>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleInsertClauseIntoDraft(clause.text)}
+                                      title="Helyi beszúrás — mentés külön szükséges."
+                                      className="rounded-[5px] border border-[#DDD7CA] bg-white px-2.5 py-1 text-[10px] font-semibold text-[#514D45] hover:bg-white"
+                                    >
+                                      Beszúrás
+                                    </button>
+                                    <span className="text-[10px] text-[#7B776D]">Helyi beszúrás — mentés külön szükséges.</span>
+                                  </div>
                                 </div>
                               ) : null}
                               <div className="mt-3 flex flex-wrap gap-2">
@@ -1808,6 +2018,9 @@ return (
 
                   {workspaceMainTab === "comments" ? (
                     <section className="space-y-3">
+                      <div className="rounded-[6px] border border-[#DDD7CA] bg-[#FBF9F3] px-3 py-2 text-[11px] text-[#6D6A62]">
+                        Helyi megjegyzés — mentés későbbi patchben.
+                      </div>
                       <textarea
                         ref={localCommentRef}
                         value={localCommentDraft}
@@ -1823,14 +2036,22 @@ return (
                       </div>
                       {localComments.length > 0 ? (
                         <div className="space-y-2">
-                          {localComments.map((comment, index) => (
-                            <div key={`${comment}-${index}`} className="rounded-[6px] border border-[#EEE7D9] bg-white p-3 text-[11px] text-[#514D45]">
-                              {comment}
+                          {localComments.map((comment) => (
+                            <div key={comment.id} className="rounded-[6px] border border-[#EEE7D9] bg-white p-3 text-[11px] text-[#514D45]">
+                              <div className="flex flex-wrap items-center gap-2 text-[10px] text-[#7B776D]">
+                                <span className="font-semibold text-[#1F2821]">{comment.authorLabel}</span>
+                                <span>•</span>
+                                <span>{formatDateTime(comment.createdAt)}</span>
+                                <span className="rounded-full border border-[#DDD7CA] bg-[#FBF9F3] px-2 py-0.5 text-[10px]">
+                                  Helyi
+                                </span>
+                              </div>
+                              <p className="mt-2 whitespace-pre-wrap">{comment.text}</p>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p className="text-[11px] text-[#7B776D]">Még nincs rögzített helyi megjegyzés.</p>
+                        <p className="text-[11px] text-[#7B776D]">Még nincs megjegyzés ehhez a munkapéldányhoz.</p>
                       )}
                     </section>
                   ) : null}
@@ -1905,7 +2126,7 @@ return (
                           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-[#EEE7D9] bg-[#FBF9F3] px-4 py-3">
                             <div>
                               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Editor eszköztár</p>
-                              <p className="mt-1 text-[11px] text-[#6D6A62]">Helyi szerkesztési segédek. A teljes Word-szintű formázás későbbi patchben érkezik.</p>
+                              <p className="mt-1 text-[11px] text-[#6D6A62]">Helyi szerkesztési segédek. Ezek a munkapéldány szövegét alakítják, nem Word-szintű formázást végeznek.</p>
                             </div>
                             <div className="flex flex-wrap gap-2">
                               {editorToolbarActions.map((action) => (
