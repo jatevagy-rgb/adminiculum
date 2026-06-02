@@ -87,6 +87,7 @@ type EditorSelectionSnapshot = {
 };
 
 type LocalReviewMarkType = "highlight" | "comment" | "replacement" | "deletion";
+type LocalReviewMarkStatus = "pending" | "accepted" | "rejected" | "lawyer_edited";
 
 type LocalReviewMark = {
   id: string;
@@ -98,7 +99,7 @@ type LocalReviewMark = {
   replacement?: string;
   createdAt: string;
   authorLabel: string;
-  status: "local" | "pending";
+  status: LocalReviewMarkStatus;
   linkedCommentId?: string | null;
 };
 
@@ -276,8 +277,22 @@ const localReviewTypeLabel: Record<LocalReviewMarkType, string> = {
 const localReviewToneClass: Record<LocalReviewMarkType, string> = {
   highlight: "border-[#BFDDBF] bg-[#EEF8ED] text-[#1E6A34]",
   comment: "border-[#C8D8F0] bg-[#F1F6FE] text-[#244B7A]",
-  replacement: "border-[#BFDDBF] bg-[#EEF8ED] text-[#1E6A34]",
+  replacement: "border-[#E6C987] bg-[#FAEFCF] text-[#7A5A1F]",
   deletion: "border-[#E5C3C3] bg-[#FFF1F1] text-[#8B2A2A]",
+};
+
+const localReviewStatusLabel: Record<LocalReviewMarkStatus, string> = {
+  pending: "Helyi / függőben",
+  accepted: "Helyi / elfogadva",
+  rejected: "Helyi / elutasítva",
+  lawyer_edited: "Helyi / szerkesztve",
+};
+
+const localReviewPersistenceLabel: Record<LocalReviewMarkType, string> = {
+  highlight: "Helyi kiemelés — mentés későbbi patchben.",
+  comment: "Helyi megjegyzés — szerveroldali mentés későbbi patchben.",
+  replacement: "Helyi cserejavaslat — mentés későbbi patchben.",
+  deletion: "Helyi törlési javaslat — mentés későbbi patchben.",
 };
 
 const DEFAULT_NETWORK_ERROR_MESSAGE = "A művelet nem érhető el. Ellenőrizd a kapcsolatot vagy próbáld újra.";
@@ -423,6 +438,7 @@ function DocumentsComparePageContent() {
   const [activeAnchorId, setActiveAnchorId] = useState<string | null>(null);
   const [composerMode, setComposerMode] = useState<null | "comment" | "replacement" | "deletion">(null);
   const [composerDraft, setComposerDraft] = useState("");
+  const [editingReviewMarkId, setEditingReviewMarkId] = useState<string | null>(null);
   const [contractEditDraft, setContractEditDraft] = useState<ContractEditDraftResponse | null>(null);
   const [isLoadingContractEditDraft, setIsLoadingContractEditDraft] = useState(false);
   const [contractEditDraftError, setContractEditDraftError] = useState<string | null>(null);
@@ -1126,12 +1142,18 @@ const filteredClauseTools = useMemo(() => {
   const reviewProgress = useMemo(() => {
     const pending =
       proposedChanges.filter((item) => item.status === "pending").length +
-      localReviewMarks.length;
-    const accepted = proposedChanges.filter((item) => item.status === "accepted").length;
-    const rejected = proposedChanges.filter((item) => item.status === "rejected").length;
-    const lawyerEdited = proposedChanges.filter((item) => item.status === "lawyer_edited").length;
+      localReviewMarks.filter((mark) => mark.status === "pending").length;
+    const accepted =
+      proposedChanges.filter((item) => item.status === "accepted").length +
+      localReviewMarks.filter((mark) => mark.status === "accepted").length;
+    const rejected =
+      proposedChanges.filter((item) => item.status === "rejected").length +
+      localReviewMarks.filter((mark) => mark.status === "rejected").length;
+    const lawyerEdited =
+      proposedChanges.filter((item) => item.status === "lawyer_edited").length +
+      localReviewMarks.filter((mark) => mark.status === "lawyer_edited").length;
     return { pending, accepted, rejected, lawyerEdited };
-  }, [localReviewMarks.length, proposedChanges]);
+  }, [localReviewMarks, proposedChanges]);
   const hasReviewProgress = reviewProgress.pending + reviewProgress.accepted + reviewProgress.rejected + reviewProgress.lawyerEdited > 0;
 
   useEffect(() => {
@@ -1437,35 +1459,6 @@ const filteredClauseTools = useMemo(() => {
         },
       ],
     },
-    {
-      key: "review",
-      items: [
-        {
-          key: "highlight",
-          label: "Kiemelés",
-          onClick: handleHighlightSelection,
-          disabled: !hasTextSelection,
-          title: hasTextSelection ? "Kijelölt szöveg helyi review-kiemelése." : "Jelölj ki szöveget a művelethez.",
-          tone: "review",
-        },
-        {
-          key: "comment",
-          label: "Megjegyzés",
-          onClick: openAnchoredCommentComposer,
-          disabled: !hasTextSelection,
-          title: hasTextSelection ? "Helyi megjegyzés a kijelölt szöveghez." : "Jelölj ki szöveget a művelethez.",
-          tone: "comment",
-        },
-        {
-          key: "replace",
-          label: "Cserejavaslat",
-          onClick: () => openProposedChangeComposer("replacement"),
-          disabled: !hasTextSelection,
-          title: hasTextSelection ? "Szövegcsere-javaslat a kijelölt részhez." : "Jelölj ki szöveget a művelethez.",
-          tone: "review",
-        },
-      ],
-    },
   ];
 
   const renderHighlightedWorkspacePreview = () => {
@@ -1602,13 +1595,43 @@ const filteredClauseTools = useMemo(() => {
       end: selection.end,
       createdAt: new Date().toISOString(),
       authorLabel: localAuthorLabel,
-      status: "local",
+      status: "pending",
       linkedCommentId: null,
       ...extra,
     };
     setLocalReviewMarks((prev) => [nextMark, ...prev]);
     setActiveAnchorId(reviewMarkId);
     return nextMark;
+  };
+
+  const updateLocalReviewMark = (markId: string, updater: (mark: LocalReviewMark) => LocalReviewMark) => {
+    setLocalReviewMarks((prev) => prev.map((mark) => (mark.id === markId ? updater(mark) : mark)));
+  };
+
+  const applyLocalReviewDecision = (markId: string, status: LocalReviewMarkStatus) => {
+    updateLocalReviewMark(markId, (mark) => ({ ...mark, status }));
+    setActiveAnchorId(markId);
+    setWorkspaceMainTab("review");
+    setEditorNotice(
+      status === "accepted"
+        ? "A helyi review-jel elfogadva. Mentés későbbi patchben."
+        : status === "rejected"
+          ? "A helyi review-jel elutasítva. Mentés későbbi patchben."
+          : "A helyi review-jel szerkesztve jelölést kapott. Mentés későbbi patchben."
+    );
+  };
+
+  const openReviewMarkEditor = (mark: LocalReviewMark) => {
+    setActiveAnchorId(mark.id);
+    setWorkspaceMainTab(mark.type === "comment" ? "comments" : "review");
+    if (mark.type === "comment" || mark.type === "replacement" || mark.type === "deletion") {
+      setComposerMode(mark.type);
+      setComposerDraft(mark.type === "replacement" ? mark.replacement || "" : mark.comment || "");
+      setEditingReviewMarkId(mark.id);
+      focusAnchor(mark.id, mark.type === "comment" ? "comments" : "review");
+      return;
+    }
+    applyLocalReviewDecision(mark.id, "lawyer_edited");
   };
 
   function handleHighlightSelection() {
@@ -1622,6 +1645,7 @@ const filteredClauseTools = useMemo(() => {
   function openAnchoredCommentComposer() {
     const selection = requireSelectionSnapshot("Jelölj ki szöveget a művelethez.");
     if (!selection) return;
+    setEditingReviewMarkId(null);
     setComposerMode("comment");
     setComposerDraft("");
     setWorkspaceMainTab("comments");
@@ -1631,6 +1655,7 @@ const filteredClauseTools = useMemo(() => {
   function openProposedChangeComposer(mode: "replacement" | "deletion") {
     const selection = requireSelectionSnapshot("Jelölj ki szöveget a művelethez.");
     if (!selection) return;
+    setEditingReviewMarkId(null);
     setComposerMode(mode);
     setComposerDraft("");
     setWorkspaceMainTab("review");
@@ -1642,12 +1667,35 @@ const filteredClauseTools = useMemo(() => {
   }
 
   function handleSubmitAnchoredComment() {
-    const selection = requireSelectionSnapshot("Jelölj ki szöveget a megjegyzéshez.");
     const text = composerDraft.trim();
-    if (!selection || !text) {
+    if (!text) {
       if (!text) setEditorNotice("Írj rövid megjegyzést a kijelölt részhez.");
       return;
     }
+
+    if (editingReviewMarkId) {
+      updateLocalReviewMark(editingReviewMarkId, (mark) => ({
+        ...mark,
+        comment: text,
+        status: "lawyer_edited",
+      }));
+      setLocalComments((prev) =>
+        prev.map((comment) =>
+          comment.linkedMarkId === editingReviewMarkId
+            ? { ...comment, text }
+            : comment
+        )
+      );
+      setActiveAnchorId(editingReviewMarkId);
+      setEditingReviewMarkId(null);
+      setComposerMode(null);
+      setComposerDraft("");
+      setEditorNotice("A helyi megjegyzés frissítve. Szerveroldali mentés későbbi patchben.");
+      return;
+    }
+
+    const selection = requireSelectionSnapshot("Jelölj ki szöveget a megjegyzéshez.");
+    if (!selection) return;
 
     const reviewMark = createLocalReviewMark("comment", selection, { comment: text });
     setLocalComments((prev) => [
@@ -1665,6 +1713,7 @@ const filteredClauseTools = useMemo(() => {
       ...prev,
     ]);
     setActiveAnchorId(reviewMark.id);
+    setEditingReviewMarkId(null);
     setComposerMode(null);
     setComposerDraft("");
     setEditorNotice("Helyi megjegyzés létrejött. Szerveroldali mentés későbbi patchben.");
@@ -1672,16 +1721,37 @@ const filteredClauseTools = useMemo(() => {
 
   function handleSubmitProposedChange() {
     if (composerMode !== "replacement" && composerMode !== "deletion") return;
-    const selection = requireSelectionSnapshot("Jelölj ki szöveget a művelethez.");
-    if (!selection) return;
     if (composerMode === "replacement" && !composerDraft.trim()) {
       setEditorNotice("Adj meg javasolt csere-szöveget.");
       return;
     }
 
+    if (editingReviewMarkId) {
+      updateLocalReviewMark(editingReviewMarkId, (mark) => ({
+        ...mark,
+        replacement: composerMode === "replacement" ? composerDraft.trim() : undefined,
+        status: "lawyer_edited",
+      }));
+      setActiveAnchorId(editingReviewMarkId);
+      setEditingReviewMarkId(null);
+      setComposerMode(null);
+      setComposerDraft("");
+      setWorkspaceMainTab("review");
+      setEditorNotice(
+        composerMode === "replacement"
+          ? "A helyi cserejavaslat frissítve. Mentés későbbi patchben."
+          : "A helyi törlési javaslat frissítve. Mentés későbbi patchben."
+      );
+      return;
+    }
+
+    const selection = requireSelectionSnapshot("Jelölj ki szöveget a művelethez.");
+    if (!selection) return;
+
     createLocalReviewMark(composerMode, selection, {
       replacement: composerMode === "replacement" ? composerDraft.trim() : undefined,
     });
+    setEditingReviewMarkId(null);
     setComposerMode(null);
     setComposerDraft("");
     setWorkspaceMainTab("review");
@@ -2237,7 +2307,7 @@ return (
                             type="button"
                             onClick={() => openProposedChangeComposer("replacement")}
                             disabled={!hasTextSelection}
-                            className="rounded-[5px] border border-[#D9CFEA] bg-[#F6F1FD] px-2.5 py-1 text-[10px] font-semibold text-[#63428E] disabled:cursor-not-allowed disabled:border-[#DDD7CA] disabled:bg-[#FBF9F3] disabled:text-[#8B877E]"
+                            className="rounded-[5px] border border-[#E6C987] bg-[#FAEFCF] px-2.5 py-1 text-[10px] font-semibold text-[#7A5A1F] disabled:cursor-not-allowed disabled:border-[#DDD7CA] disabled:bg-[#FBF9F3] disabled:text-[#8B877E]"
                           >
                             Cserejavaslat
                           </button>
@@ -2304,9 +2374,15 @@ return (
                       </div>
 
                       {composerMode === "replacement" || composerMode === "deletion" ? (
-                        <div className="rounded-[8px] border border-[#D9CFEA] bg-[#FBF8FF] p-3">
-                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#6E5C8A]">
-                            {composerMode === "replacement" ? "Szövegcsere-javaslat" : "Törlési javaslat"}
+                        <div className={`rounded-[8px] border p-3 ${composerMode === "replacement" ? "border-[#E6C987] bg-[#FFF9EC]" : "border-[#E5C3C3] bg-[#FFF8F7]"}`}>
+                          <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${composerMode === "replacement" ? "text-[#7A5A1F]" : "text-[#8B2A2A]"}`}>
+                            {editingReviewMarkId
+                              ? composerMode === "replacement"
+                                ? "Szövegcsere-javaslat szerkesztése"
+                                : "Törlési javaslat szerkesztése"
+                              : composerMode === "replacement"
+                                ? "Szövegcsere-javaslat"
+                                : "Törlési javaslat"}
                           </p>
                           <p className="mt-2 text-[11px] text-[#514D45]">
                             Horgonyzott kijelölés: „{getSelectionExcerpt(selectionSnapshot?.text || "", 120) || "Nincs kijelölés"}”
@@ -2324,7 +2400,7 @@ return (
                             <AdminButton size="xs" variant="primary" onClick={handleSubmitProposedChange}>
                               Helyi review-jel mentése
                             </AdminButton>
-                            <AdminButton size="xs" variant="neutral" onClick={() => { setComposerMode(null); setComposerDraft(""); }}>
+                            <AdminButton size="xs" variant="neutral" onClick={() => { setComposerMode(null); setComposerDraft(""); setEditingReviewMarkId(null); }}>
                               Mégse
                             </AdminButton>
                           </div>
@@ -2335,44 +2411,58 @@ return (
                       {localReviewMarks.length > 0 ? (
                         <div className="space-y-2">
                           {localReviewMarks.map((mark) => (
-                            <button
+                            <div
                               key={mark.id}
-                              type="button"
-                              onClick={() => focusAnchor(mark.id, "review")}
                               className={`w-full rounded-[8px] border bg-white p-3 text-left transition-colors ${localReviewToneClass[mark.type]} ${
                                 activeAnchorId === mark.id ? "ring-2 ring-[#8E6B2E]/30" : ""
                               }`}
                             >
-                              <div className="flex flex-wrap items-center gap-2 text-[10px]">
-                                <span className="rounded-full border border-current px-2 py-0.5 font-semibold">
-                                  {localReviewTypeLabel[mark.type]}
-                                </span>
-                                <span>{mark.authorLabel}</span>
-                                <span>•</span>
-                                <span>{formatDateTime(mark.createdAt)}</span>
-                                <span className="rounded-full border border-current px-2 py-0.5">Helyi / pending</span>
-                              </div>
-                              <p className="mt-2 whitespace-pre-wrap text-[11px] font-semibold">„{getSelectionExcerpt(mark.quote, 180)}”</p>
-                              {mark.comment ? <p className="mt-2 text-[11px]">{mark.comment}</p> : null}
-                              {mark.replacement ? (
-                                <p className="mt-2 text-[11px]">
-                                  <span className="font-semibold">Javasolt csere:</span> {mark.replacement}
-                                </p>
-                              ) : null}
+                              <button type="button" onClick={() => focusAnchor(mark.id, "review")} className="w-full text-left">
+                                <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                                  <span className="rounded-full border border-current px-2 py-0.5 font-semibold">
+                                    {localReviewTypeLabel[mark.type]}
+                                  </span>
+                                  <span>{mark.authorLabel}</span>
+                                  <span>•</span>
+                                  <span>{formatDateTime(mark.createdAt)}</span>
+                                  <span className="rounded-full border border-current px-2 py-0.5">{localReviewStatusLabel[mark.status]}</span>
+                                </div>
+                                <p className="mt-2 whitespace-pre-wrap text-[11px] font-semibold">„{getSelectionExcerpt(mark.quote, 180)}”</p>
+                                <p className="mt-2 text-[10px] opacity-80">{localReviewPersistenceLabel[mark.type]}</p>
+                                {mark.comment ? <p className="mt-2 text-[11px]">{mark.comment}</p> : null}
+                                {mark.replacement ? (
+                                  <p className="mt-2 text-[11px]">
+                                    <span className="font-semibold">Javasolt csere:</span> {mark.replacement}
+                                  </p>
+                                ) : null}
+                              </button>
                               <div className="mt-3 flex flex-wrap gap-2">
-                                {["Elfogadás", "Elutasítás", "Szerkesztés"].map((action) => (
-                                  <button
-                                    key={action}
-                                    type="button"
-                                    disabled
-                                    title="Helyi döntés — mentés későbbi patchben."
-                                    className="rounded-[5px] border border-current/40 bg-white/70 px-2 py-1 text-[10px] disabled:cursor-not-allowed"
-                                  >
-                                    {action}
-                                  </button>
-                                ))}
+                                <button
+                                  type="button"
+                                  onClick={() => applyLocalReviewDecision(mark.id, "accepted")}
+                                  title="Helyi döntés — mentés későbbi patchben."
+                                  className="rounded-[5px] border border-[#BFDDBF] bg-white/80 px-2 py-1 text-[10px] text-[#1E6A34]"
+                                >
+                                  Elfogadás
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => applyLocalReviewDecision(mark.id, "rejected")}
+                                  title="Helyi döntés — mentés későbbi patchben."
+                                  className="rounded-[5px] border border-[#E5C3C3] bg-white/80 px-2 py-1 text-[10px] text-[#8B2A2A]"
+                                >
+                                  Elutasítás
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openReviewMarkEditor(mark)}
+                                  title="Helyi döntés — mentés későbbi patchben."
+                                  className="rounded-[5px] border border-[#D9CFEA] bg-white/80 px-2 py-1 text-[10px] text-[#63428E]"
+                                >
+                                  Szerkesztés
+                                </button>
                               </div>
-                            </button>
+                            </div>
                           ))}
                         </div>
                       ) : null}
@@ -2414,7 +2504,9 @@ return (
                       </div>
                       {composerMode === "comment" ? (
                         <div className="rounded-[8px] border border-[#C8D8F0] bg-white p-3">
-                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#6B7E9A]">Horgonyzott megjegyzés</p>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#6B7E9A]">
+                            {editingReviewMarkId ? "Horgonyzott megjegyzés szerkesztése" : "Horgonyzott megjegyzés"}
+                          </p>
                           <p className="mt-2 text-[11px] text-[#514D45]">Kijelölt idézet: „{getSelectionExcerpt(selectionSnapshot?.text || "", 120) || "Nincs kijelölés"}”</p>
                           <textarea
                             value={composerDraft}
@@ -2427,7 +2519,7 @@ return (
                             <AdminButton size="xs" variant="primary" onClick={handleSubmitAnchoredComment}>
                               Megjegyzés rögzítése
                             </AdminButton>
-                            <AdminButton size="xs" variant="neutral" onClick={() => { setComposerMode(null); setComposerDraft(""); }}>
+                            <AdminButton size="xs" variant="neutral" onClick={() => { setComposerMode(null); setComposerDraft(""); setEditingReviewMarkId(null); }}>
                               Mégse
                             </AdminButton>
                           </div>
@@ -2645,9 +2737,16 @@ return (
                               <button
                                 type="button"
                                 onClick={() => openProposedChangeComposer("replacement")}
-                                className="rounded-[5px] border border-[#D9CFEA] bg-[#F6F1FD] px-2 py-1 text-[10px] font-semibold text-[#63428E]"
+                                className="rounded-[5px] border border-[#E6C987] bg-[#FAEFCF] px-2 py-1 text-[10px] font-semibold text-[#7A5A1F]"
                               >
                                 Cserejavaslat
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openProposedChangeComposer("deletion")}
+                                className="rounded-[5px] border border-[#E5C3C3] bg-[#FFF1F1] px-2 py-1 text-[10px] font-semibold text-[#8B2A2A]"
+                              >
+                                Törlési javaslat
                               </button>
                             </div>
                           ) : (
