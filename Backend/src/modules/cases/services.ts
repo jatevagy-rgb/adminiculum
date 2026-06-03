@@ -382,7 +382,10 @@ return {
     // This avoids creating orphan linkage behavior in create-case flows.
     let resolvedClientId = (params.clientId || '').trim() || undefined;
     if (resolvedClientId) {
-      const linkedClient = await prisma.client.findUnique({ where: { id: resolvedClientId } });
+      const linkedClient = await prisma.client.findUnique({
+        where: { id: resolvedClientId },
+        select: { id: true, name: true }
+      });
       if (!linkedClient) {
         throw new Error('Client not found');
       }
@@ -423,7 +426,10 @@ return {
     }
 
     if (!resolvedClientName) {
-      const linkedClient = await prisma.client.findUnique({ where: { id: clientId } });
+      const linkedClient = await prisma.client.findUnique({
+        where: { id: clientId },
+        select: { id: true, name: true }
+      });
       resolvedClientName = linkedClient?.name || 'Unknown Client';
     }
 
