@@ -837,6 +837,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const generatedLedgerItems = [...families.flatMap((family) => family.items), ...standalone];
   const activeTitle = selectedUploadedDocument?.fileName || selectedGeneratedContract?.title || selectedGeneratedContract?.fileName || selectedGeneratedContract?.templateName || null;
   const metaCompareUrl = activeDocument ? `/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(activeDocument.id)}` : `/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}`;
+  const litigationWorkspaceUrl = activeDocument
+    ? `/litigation-workspace?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(activeDocument.id)}&step=intake`
+    : null;
   const modifiedWorkingCopyCount = modifiedWorkingCopies.length;
   const generatedDocumentCount = generatedLedgerItems.length;
   const handoffPackageCountLabel = caseRecord ? 'panel' : '0';
@@ -1094,6 +1097,14 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <AdminButton className="w-full justify-start" variant="primary" onClick={() => activeDocument ? openWorkspace(activeDocument.id) : router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}`)}>
                         Szerződés-workspace
                       </AdminButton>
+                      <AdminButton className="w-full justify-start" variant="gold" onClick={() => litigationWorkspaceUrl && router.push(litigationWorkspaceUrl)} disabled={!litigationWorkspaceUrl}>
+                        Peres stratégiai térkép indítása
+                      </AdminButton>
+                      {!litigationWorkspaceUrl ? (
+                        <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-white p-3 text-[12px] text-[#7A8479]">
+                          Válassz feltöltött dokumentumot a peres stratégiai térkép indításához.
+                        </p>
+                      ) : null}
                       <AdminButton className="w-full justify-start" variant="gold" onClick={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/handoff`)}>
                         Leadási csomag megnyitása
                       </AdminButton>
