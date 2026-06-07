@@ -1087,7 +1087,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
   const quickActions = [
     {
       title: 'Szerződés-workspace',
-      helper: 'Munkapéldányok, klauzulák és prompt-copy workflow.',
+      helper: 'Munkapéldányok, klauzulák és szerkesztési műveletek.',
       action: () => router.push(`/documents/compare?caseId=${canonicalCaseId}`),
       tone: 'primary',
     },
@@ -1133,7 +1133,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
     : generatedContracts.length > 0
       ? {
           title: 'Szerződés-workspace megnyitása',
-          helper: 'A módosított dokumentumok és klauzulák kezelése a workspace-ben folytatható.',
+          helper: 'A módosított dokumentumok és klauzulák kezelése a szerkesztőben folytatható.',
           label: 'Workspace',
           action: () => router.push(`/documents/compare?caseId=${canonicalCaseId}`),
         }

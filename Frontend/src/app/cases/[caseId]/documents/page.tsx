@@ -447,7 +447,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setModifiedWorkingCopies(modified);
       setSelectedLedgerItem({ kind: 'uploaded', item: selectedUploaded });
       setSelectedContract(null);
-      setActionResult({ type: 'success', message: 'Dokumentum feltöltve. Szöveg kinyerése a workspace megnyitásakor történik, ha a fájlformátum támogatott.' });
+      setActionResult({ type: 'success', message: 'Dokumentum feltöltve. Szöveg kinyerése a szerkesztő megnyitásakor történik, ha a fájlformátum támogatott.' });
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -870,7 +870,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[#EFE7CF] text-[#16201A] documents-surface">
-      <CaseWorkspaceNav caseId={canonicalCaseId} caseNumber={displayCaseId} title={displayMatterName} clientName={displayClient} activeTab="documents" activeDocumentId={activeDocument?.id} helperText="Dokumentumtár, workspace és leadási csomag egy ügy-munkaterületen." />
+      <CaseWorkspaceNav caseId={canonicalCaseId} caseNumber={displayCaseId} title={displayMatterName} clientName={displayClient} activeTab="documents" activeDocumentId={activeDocument?.id} helperText="Dokumentumtár, szerkesztő és leadási csomag egy ügy-munkaterületen." />
 
       <div className="flex min-h-0 flex-1 flex-col">
         <main className="flex-1 overflow-y-auto bg-[#EFE7CF] p-4 lg:p-5">
@@ -1081,41 +1081,46 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           Válassz dokumentumot a műveletekhez.
                         </p>
                       ) : (
-                        <p className="rounded-[10px] border border-[#E7DECB] bg-white p-3 text-[12px] text-[#3D4842]">
-                          Kiválasztott dokumentum: <span className="font-semibold text-[#16201A]">{activeTitle}</span>
-                        </p>
+                        <>
+                          <p className="rounded-[10px] border border-[#E7DECB] bg-white p-3 text-[12px] text-[#3D4842]">
+                            Kiválasztott dokumentum: <span className="font-semibold text-[#16201A]">{activeTitle}</span>
+                          </p>
+                          <AdminButton className="w-full justify-start" variant="primary" onClick={() => openWorkspace(activeDocument.id)}>
+                            Szerződés-workspace
+                          </AdminButton>
+                          <AdminButton className="w-full justify-start" variant="gold" onClick={() => litigationWorkspaceUrl && router.push(litigationWorkspaceUrl)} disabled={!litigationWorkspaceUrl}>
+                            Peres stratégiai térkép indítása
+                          </AdminButton>
+                          {!litigationWorkspaceUrl ? (
+                            <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-white p-3 text-[12px] text-[#7A8479]">
+                              Válassz feltöltött dokumentumot a peres stratégiai térkép indításához.
+                            </p>
+                          ) : null}
+                          <AdminButton className="w-full justify-start" variant="gold" onClick={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/handoff`)}>
+                            Leadási csomag
+                          </AdminButton>
+                          <div className="grid gap-2 border-t border-[#E7DECB] pt-2">
+                            {selectedUploadedDocument ? (
+                              <AdminButton className="w-full justify-start" variant="neutral" onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)} disabled={isDownloading === selectedUploadedDocument.id}>
+                                {isDownloading === selectedUploadedDocument.id ? "Letöltés..." : "Letöltés"}
+                              </AdminButton>
+                            ) : selectedGeneratedContract ? (
+                              <AdminButton className="w-full justify-start" variant="neutral" onClick={() => handleDownload(selectedGeneratedContract)} disabled={isDownloading === selectedGeneratedContract.id}>
+                                {isDownloading === selectedGeneratedContract.id ? "Letöltés..." : "Letöltés"}
+                              </AdminButton>
+                            ) : null}
+                            {canAnonymizeActiveDocument && selectedUploadedDocument ? (
+                              <AdminButton className="w-full justify-start" variant="neutral" onClick={() => openUploadedAnonymize(selectedUploadedDocument)}>
+                                Anonimizálás
+                              </AdminButton>
+                            ) : null}
+                            <AdminButton className="w-full justify-start" variant="neutral" onClick={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/communications`)}>
+                              Kommunikáció
+                            </AdminButton>
+                          </div>
+                        </>
                       )}
-                      <AdminButton className="w-full justify-start" variant="primary" onClick={() => activeDocument ? openWorkspace(activeDocument.id) : router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}`)}>
-                        Szerződés-workspace
-                      </AdminButton>
-                      <AdminButton className="w-full justify-start" variant="gold" onClick={() => litigationWorkspaceUrl && router.push(litigationWorkspaceUrl)} disabled={!litigationWorkspaceUrl}>
-                        Peres stratégiai térkép indítása
-                      </AdminButton>
-                      {!litigationWorkspaceUrl ? (
-                        <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-white p-3 text-[12px] text-[#7A8479]">
-                          Válassz feltöltött dokumentumot a peres stratégiai térkép indításához.
-                        </p>
-                      ) : null}
-                      {selectedUploadedDocument ? (
-                        <AdminButton className="w-full justify-start" variant="neutral" onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)} disabled={isDownloading === selectedUploadedDocument.id}>
-                          {isDownloading === selectedUploadedDocument.id ? "Letöltés..." : "Letöltés"}
-                        </AdminButton>
-                      ) : selectedGeneratedContract ? (
-                        <AdminButton className="w-full justify-start" variant="neutral" onClick={() => handleDownload(selectedGeneratedContract)} disabled={isDownloading === selectedGeneratedContract.id}>
-                          {isDownloading === selectedGeneratedContract.id ? "Letöltés..." : "Letöltés"}
-                        </AdminButton>
-                      ) : null}
-                      {canAnonymizeActiveDocument && selectedUploadedDocument ? (
-                        <AdminButton className="w-full justify-start" variant="neutral" onClick={() => openUploadedAnonymize(selectedUploadedDocument)}>
-                          Anonimizálás
-                        </AdminButton>
-                      ) : null}
-                      <AdminButton className="w-full justify-start" variant="gold" onClick={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/handoff`)}>
-                        Leadási csomag megnyitása
-                      </AdminButton>
-                      <AdminButton className="w-full justify-start" variant="neutral" onClick={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/communications`)}>
-                        Kommunikáció
-                      </AdminButton>
+                      {activeDocument ? (
                       <details className="rounded-[12px] border border-[rgba(22,32,26,0.10)] bg-white p-3">
                         <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-[0.14em] text-[#1F4A33]">Haladó / technikai</summary>
                         <div className="mt-3 space-y-2">
@@ -1123,6 +1128,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <AdminButton className="w-full justify-start" size="sm" variant="muted" onClick={() => router.push(`/reviews`)}>Review sor</AdminButton>
                         </div>
                       </details>
+                      ) : null}
                     </div>
                   </AdminPanel>
 

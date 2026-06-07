@@ -75,7 +75,7 @@ export const DocumentEditorShell = forwardRef<HTMLTextAreaElement, DocumentEdito
     );
 
     return (
-      <section className={`overflow-hidden rounded-[10px] border border-[#D8CFB6] bg-white shadow-sm ${className}`}>
+      <section className={`overflow-hidden rounded-[12px] border border-[#D8CFB6] bg-white shadow-[0_12px_34px_rgba(22,32,26,0.08)] ${className}`}>
         {isDirty ? (
           <div className="border-b border-[#E6C987] bg-[#FAEFCF] px-4 py-3 text-xs font-semibold text-[#7A5A1F]">
             {dirtyLabel}
@@ -86,11 +86,11 @@ export const DocumentEditorShell = forwardRef<HTMLTextAreaElement, DocumentEdito
           </div>
         ) : null}
 
-        <div className="border-b border-[#EEE7D9] bg-[#FCFAF4] px-4 py-3">
+        <div className="border-b border-[#E7DECB] bg-[#FCFAF4] px-4 py-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0 space-y-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="min-w-0 break-words font-serif text-[22px] font-medium leading-tight text-[#1F2821]">
+                <h2 className="min-w-0 break-words font-serif text-[24px] font-medium leading-tight text-[#1F2821]">
                   {title}
                 </h2>
                 {resolvedStatus}
@@ -100,13 +100,13 @@ export const DocumentEditorShell = forwardRef<HTMLTextAreaElement, DocumentEdito
             </div>
             {sideActions ? <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{sideActions}</div> : null}
           </div>
-          {toolbar ? <div className="mt-3 flex flex-wrap items-center gap-2">{toolbar}</div> : null}
+          {toolbar ? <div className="mt-3 rounded-[10px] border border-[#E7DECB] bg-white/80 p-3">{toolbar}</div> : null}
         </div>
 
-        <div className="bg-[#F3EBD4] px-3 py-3 sm:px-5 lg:px-6">
+        <div className="bg-[#F3EBD4] px-3 py-4 sm:px-5 lg:px-6">
           <div className={`mx-auto w-full ${pageClassName}`}>
             <div
-              className={`border border-[rgba(22,32,26,0.14)] bg-[#FFFDF8] px-5 py-6 shadow-[0_18px_50px_rgba(22,32,26,0.12)] sm:px-8 lg:px-12 ${canvasClassName}`}
+              className={`border border-[rgba(22,32,26,0.14)] bg-[#FFFDF8] px-6 py-7 shadow-[0_20px_55px_rgba(22,32,26,0.13)] sm:px-10 lg:px-14 ${canvasClassName}`}
             >
               {beforeEditor}
               {showEditor ? (
@@ -121,14 +121,14 @@ export const DocumentEditorShell = forwardRef<HTMLTextAreaElement, DocumentEdito
                   readOnly={readOnly}
                   rows={rows}
                   placeholder={placeholder}
-                  className={`w-full resize-y border-0 bg-transparent p-0 font-serif text-[16px] leading-8 text-[#1F2821] outline-none placeholder:text-[#A6AEA3] focus:ring-0 read-only:cursor-text ${minHeightClassName} ${textareaClassName}`}
+                  className={`w-full resize-y border-0 bg-transparent p-0 font-serif text-[16.5px] leading-8 text-[#1F2821] outline-none placeholder:text-[#A6AEA3] focus:ring-0 read-only:cursor-text ${minHeightClassName} ${textareaClassName}`}
                 />
               ) : (
                 emptyState
               )}
               {afterEditor}
               {helperText ? (
-                <p className="mt-4 rounded-[6px] border border-dashed border-[#D8CFB6] bg-white px-3 py-2 text-[11px] text-[#7B776D]">
+                <p className="mt-4 rounded-[6px] border border-dashed border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2 text-[11px] text-[#7B776D]">
                   {helperText}
                 </p>
               ) : null}

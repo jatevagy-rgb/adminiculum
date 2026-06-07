@@ -381,7 +381,7 @@ const buildPleadingSkeleton = ({
     "V. Záró kérelem",
     "[Perköltség, dátum, aláírás és záró kérelem helye.]",
     "",
-    "Fontos: ez helyi szerkesztési vázlat. Nincs Word-export, nincs szerveroldali mentés, nincs AI-következtetés.",
+    "Fontos: ez helyi szerkesztési vázlat. Végleges iratmentés és automatikus jogi következtetés nincs bekötve.",
   ].join("\n");
 };
 
@@ -1107,10 +1107,13 @@ function IntakeWorkspace({
         ref={documentTextRef}
         readOnly
         title="Ellenfél irata"
-        subtitle="A munkaterület az ellenfél feltöltött iratának elérhető adatait és munkaszövegét mutatja."
+        subtitle="Irat feldolgozása: az ellenfél feltöltött iratának elérhető adatai és munkaszövege."
         value={localExtractedText}
         placeholder={documentTextFallback}
         rows={20}
+        pageClassName="max-w-[1180px]"
+        canvasClassName="min-h-[620px] bg-[#FFFDF8]"
+        textareaClassName="text-[16.5px]"
         minHeightClassName="min-h-[560px]"
         status={<AdminStatusPill tone={hasDocumentText ? "green" : "gold"}>{hasDocumentText ? "Szöveg elérhető" : "Nincs szöveg"}</AdminStatusPill>}
         badges={
@@ -1712,7 +1715,7 @@ function AssemblyWorkspace({
           <div className="rounded-[8px] border border-[#D8CFB6] bg-white p-3">
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Automatikus vázlat</p>
             <p className="mt-2 text-[12px] leading-5 text-[#514D45]">
-              A beadványszerkesztő a válaszblokkok számából és típusából készít tiszta peres dokumentum-vázat. Hiányzó ügyadatnál helykitöltő marad.
+              A beadványszerkesztő a válaszblokkok számából és típusából készít tiszta peres dokumentum-vázat. Hiányzó ügyadatnál kitöltendő jelölés marad.
             </p>
             <AdminButton variant="gold" size="sm" onClick={onApplyGeneratedSkeleton} className="mt-3">
               Vázlat frissítése válaszblokkokból
@@ -1774,7 +1777,7 @@ function AssemblyWorkspace({
 
           {generatedChapterSeeds.length === 0 ? (
             <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-white p-4 text-[12px] text-[#7B776D]">
-              A válaszútból még nincs átemelhető fejezet. A szerkesztő ilyenkor alap helykitöltő vázat készít.
+              A válaszútból még nincs átemelhető fejezet. A szerkesztő ilyenkor kitöltendő helyekkel előkészített vázat mutat.
             </div>
           ) : (
             <div className="space-y-2">
@@ -1822,6 +1825,9 @@ function AssemblyWorkspace({
         onChange={onPleadingEditorTextChange}
         placeholder={generatedPleadingSkeleton}
         rows={28}
+        pageClassName="max-w-[1180px]"
+        canvasClassName="min-h-[860px] bg-[#FFFDF8]"
+        textareaClassName="text-[16.5px]"
         minHeightClassName="min-h-[820px]"
         isDirty={editorWasTouched}
         dirtyLabel="Nem mentett helyi beadványvázlat."
@@ -1851,7 +1857,7 @@ function AssemblyWorkspace({
               </div>
               <div>
                 <p className="font-semibold text-[#1F2821]">Mentés/export</p>
-                <p className="mt-1">Helyi vázlat; Word-export és szerveroldali mentés nincs bekötve</p>
+                <p className="mt-1">Helyi vázlat; végleges iratmentés nincs bekötve</p>
               </div>
             </div>
             <div className="rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-4">
@@ -1860,7 +1866,7 @@ function AssemblyWorkspace({
                   <h3 className="font-serif text-xl font-medium text-[#1F2821]">Bálintfy ellenkérelem struktúra</h3>
                   <p className="mt-1 text-[12px] text-[#6D6A62]">{outputTemplateLabels[outputTemplate]}</p>
                 </div>
-                <AdminStatusPill tone="gold">Későbbi patch</AdminStatusPill>
+                <AdminStatusPill tone="gold">Előkészítve</AdminStatusPill>
               </div>
               <ol className="mt-4 grid gap-2 rounded-[8px] border border-[#E7DECB] bg-white p-4 text-[12px] text-[#514D45] md:grid-cols-2">
                 {assemblyStructure.map((item) => (

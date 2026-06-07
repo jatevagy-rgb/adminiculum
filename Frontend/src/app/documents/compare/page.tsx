@@ -2103,19 +2103,23 @@ return (
                   />
                 </label>
                 <div className="space-y-2">
-                  <button
+                  <AdminButton
                     onClick={() => selectedDocument && handleDownload(selectedDocument)}
-                    className="w-full rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-[11px] font-semibold text-[#16201A] hover:bg-[#FBF9F3]"
+                    className="w-full justify-start"
+                    size="sm"
+                    variant="neutral"
                   >
                     Dokumentum letöltése
-                  </button>
+                  </AdminButton>
                   {selectedBaseline ? (
-                    <button
+                    <AdminButton
                       onClick={() => handleDownload(selectedBaseline)}
-                      className="w-full rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-2 text-[11px] font-semibold text-[#16201A] hover:bg-[#FBF9F3]"
+                      className="w-full justify-start"
+                      size="sm"
+                      variant="neutral"
                     >
                       Alapdokumentum letöltése
-                    </button>
+                    </AdminButton>
                   ) : null}
                 </div>
               </div>
@@ -2702,8 +2706,8 @@ return (
                     </div>
                   }
                   pageClassName="max-w-[1480px]"
-                  canvasClassName="min-h-[720px] bg-white px-6 py-6 sm:px-10 lg:px-14 xl:px-16"
-                  textareaClassName="bg-white text-[17px]"
+                  canvasClassName="min-h-[720px] bg-[#FFFDF8]"
+                  textareaClassName="text-[16.5px]"
                   minHeightClassName="min-h-[680px]"
                   placeholder="Itt jelenik meg a valós kinyert dokumentumszöveg, az anonimizált szöveg vagy a helyi munkapéldány."
                   onSelect={syncSelectionSnapshot}
