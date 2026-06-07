@@ -4,6 +4,13 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminBadge, AdminButton, AdminPanel, AdminSectionHeader, AdminStatusPill } from "@/components/adminiculum/ui";
+import {
+  getCaseDocuments,
+  getDocumentById,
+  getDocumentText,
+  type DocumentItem,
+  type DocumentReviewData,
+} from "@/lib/api";
 
 type LitigationWorkspaceStep = "intake" | "strategy" | "assembly";
 
@@ -57,6 +64,22 @@ type ChapterBlock = {
 };
 
 type OutputTemplate = "full-defense" | "injunction-opposition" | "counterclaim" | "defense";
+
+type DocumentRecord = (DocumentItem | DocumentReviewData) & Record<string, unknown>;
+
+type LitigationDocumentContext = {
+  id: string;
+  title: string;
+  fileName: string;
+  documentType?: string | null;
+  status?: string | null;
+  folder?: string | null;
+  version?: string | null;
+  updatedAt?: string | null;
+  text: string;
+  textField?: string;
+  unavailableReason?: string;
+};
 
 type PleadingChapterSeed = {
   id: string;
@@ -175,6 +198,74 @@ const responseTone = (type: ResponseBlock["type"]): "green" | "gold" | "blue" | 
 };
 
 const uniqueIds = (ids: string[]) => Array.from(new Set(ids));
+
+const documentTextFallback = "A dokumentum szövege még nem érhető el ezen a munkafelületen.";
+
+const realDocumentTextFields = [
+  "workspaceText",
+  "extractedText",
+  "sourceText",
+  "textContent",
+  "content",
+  "text",
+] as const;
+
+const readStringField = (record: Record<string, unknown> | null | undefined, field: string): string => {
+  const value = record?.[field];
+  return typeof value === "string" ? value.trim() : "";
+};
+
+const pickDocumentText = (documentRecord?: Record<string, unknown> | null, textRecord?: Record<string, unknown> | null) => {
+  for (const field of realDocumentTextFields) {
+    const text = readStringField(documentRecord, field);
+    if (text) return { text, field };
+  }
+
+  const apiText = readStringField(textRecord, "text");
+  if (apiText) {
+    return {
+      text: apiText,
+      field: readStringField(textRecord, "source") === "MODIFIED_WORKING_COPY" ? "workspaceText" : "extractedText",
+    };
+  }
+
+  return { text: "", field: undefined };
+};
+
+const normalizeDocumentContext = ({
+  documentId,
+  detail,
+  listItem,
+  textResult,
+}: {
+  documentId: string;
+  detail?: DocumentRecord | null;
+  listItem?: DocumentItem | null;
+  textResult?: Record<string, unknown> | null;
+}): LitigationDocumentContext => {
+  const record = (detail ?? listItem ?? null) as Record<string, unknown> | null;
+  const { text, field } = pickDocumentText(record, textResult);
+  const fileName = readStringField(record, "fileName") || documentId;
+  const documentType = readStringField(record, "documentType") || null;
+  const status = readStringField(record, "status") || null;
+  const folder = readStringField(record, "folder") || null;
+  const version = readStringField(record, "version") || null;
+  const updatedAt = readStringField(record, "updatedAt") || null;
+
+  return {
+    id: readStringField(record, "id") || documentId,
+    title: fileName,
+    fileName,
+    documentType,
+    status,
+    folder,
+    version,
+    updatedAt,
+    text,
+    textField: field,
+    unavailableReason: readStringField(textResult, "unavailableReason") || undefined,
+  };
+};
 
 const pleadingChapterTitleByType: Record<ResponseBlock["type"], string> = {
   "fact-rebuttal": "Tényállási cáfolat",
@@ -319,6 +410,10 @@ function LitigationWorkspacePageContent() {
 
   const [sourceReference, setSourceReference] = useState("");
   const [localExtractedText, setLocalExtractedText] = useState("");
+  const [localTextWasTouched, setLocalTextWasTouched] = useState(false);
+  const [documentContext, setDocumentContext] = useState<LitigationDocumentContext | null>(null);
+  const [isLoadingDocumentContext, setIsLoadingDocumentContext] = useState(false);
+  const [documentContextError, setDocumentContextError] = useState<string | null>(null);
   const [opponentBrackets, setOpponentBrackets] = useState<OpponentBracket[]>([]);
   const [responseBlocks, setResponseBlocks] = useState<ResponseBlock[]>([]);
   const [openOpponentBracketIds, setOpenOpponentBracketIds] = useState<string[]>([]);
@@ -393,6 +488,74 @@ function LitigationWorkspacePageContent() {
     [caseId, documentId, clientName, outputTemplate, generatedChapterSeeds],
   );
   const currentStepIndex = workspaceSteps.findIndex((step) => step.key === currentStep);
+
+  useEffect(() => {
+    if (!caseId || !documentId) {
+      setDocumentContext(null);
+      setDocumentContextError(null);
+      setIsLoadingDocumentContext(false);
+      setLocalTextWasTouched(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingDocumentContext(true);
+    setDocumentContextError(null);
+    setLocalTextWasTouched(false);
+
+    const loadDocumentContext = async () => {
+      const [detailResult, textResult, listResult] = await Promise.allSettled([
+        getDocumentById(documentId),
+        getDocumentText(documentId),
+        getCaseDocuments(caseId),
+      ]);
+
+      if (cancelled) return;
+
+      const detail = detailResult.status === "fulfilled" ? (detailResult.value as DocumentRecord | null) : null;
+      const textPayload = textResult.status === "fulfilled" ? (textResult.value as unknown as Record<string, unknown>) : null;
+      const caseDocuments = listResult.status === "fulfilled" ? listResult.value : [];
+      const listItem = caseDocuments.find((document) => document.id === documentId) ?? null;
+
+      if (!detail && !listItem && detailResult.status === "rejected" && listResult.status === "rejected") {
+        setDocumentContextError("A dokumentum adatai nem tölthetők be az elérhető frontend API-kon keresztül.");
+      }
+
+      const nextContext = normalizeDocumentContext({
+        documentId,
+        detail,
+        listItem,
+        textResult: textPayload,
+      });
+
+      setDocumentContext(nextContext);
+      if (nextContext.text) {
+        setLocalExtractedText(nextContext.text);
+      } else {
+        setLocalExtractedText("");
+      }
+      setSourceReference(nextContext.fileName ? `Forrásdokumentum: ${nextContext.fileName}` : "");
+      setIsLoadingDocumentContext(false);
+    };
+
+    loadDocumentContext().catch(() => {
+      if (cancelled) return;
+      setDocumentContext(normalizeDocumentContext({ documentId }));
+      setDocumentContextError("A dokumentum adatai nem tölthetők be az elérhető frontend API-kon keresztül.");
+      setLocalExtractedText("");
+      setSourceReference("");
+      setIsLoadingDocumentContext(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [caseId, documentId]);
+
+  useEffect(() => {
+    if (!documentContext || localTextWasTouched) return;
+    setLocalExtractedText(documentContext.text);
+  }, [documentContext, localTextWasTouched]);
 
   useEffect(() => {
     if (currentStep === "assembly" && !editorWasTouched && pleadingEditorText !== generatedPleadingSkeleton) {
@@ -553,12 +716,18 @@ function LitigationWorkspacePageContent() {
               <IntakeWorkspace
                 localExtractedText={localExtractedText}
                 sourceReference={sourceReference}
+                documentContext={documentContext}
+                isLoadingDocumentContext={isLoadingDocumentContext}
+                documentContextError={documentContextError}
                 bracketDraft={bracketDraft}
                 opponentBrackets={opponentBrackets}
                 linkedCounts={linkedCounts}
                 openOpponentBracketIds={openOpponentBracketIds}
                 activeOpponentBracketIds={activeOpponentBracketIds}
-                onExtractedTextChange={setLocalExtractedText}
+                onExtractedTextChange={(value) => {
+                  setLocalExtractedText(value);
+                  setLocalTextWasTouched(true);
+                }}
                 onSourceReferenceChange={setSourceReference}
                 onBracketDraftChange={setBracketDraft}
                 onAddOpponentBracket={addOpponentBracket}
@@ -734,6 +903,9 @@ function WorkflowNavigation({
 function IntakeWorkspace({
   localExtractedText,
   sourceReference,
+  documentContext,
+  isLoadingDocumentContext,
+  documentContextError,
   bracketDraft,
   opponentBrackets,
   linkedCounts,
@@ -748,6 +920,9 @@ function IntakeWorkspace({
 }: {
   localExtractedText: string;
   sourceReference: string;
+  documentContext: LitigationDocumentContext | null;
+  isLoadingDocumentContext: boolean;
+  documentContextError: string | null;
   bracketDraft: {
     type: OpponentBracketType;
     title: string;
@@ -770,31 +945,74 @@ function IntakeWorkspace({
   onToggleOpponentBracket: (bracketId: string) => void;
   onNext: () => void;
 }) {
+  const documentMetaItems = [
+    documentContext?.documentType ? `Típus: ${documentContext.documentType}` : null,
+    documentContext?.status ? `Státusz: ${documentContext.status}` : null,
+    documentContext?.folder ? `Mappa: ${documentContext.folder}` : null,
+    documentContext?.version ? `Verzió: ${documentContext.version}` : null,
+  ].filter((item): item is string => Boolean(item));
+  const hasDocumentText = localExtractedText.trim().length > 0;
+
   return (
     <section className="grid gap-4 xl:grid-cols-[minmax(360px,1.15fr)_minmax(340px,0.85fr)]">
       <AdminPanel className="overflow-hidden">
         <AdminSectionHeader
           eyebrow="Workspace 1"
           title="Ellenfél irata"
-          subtitle="A bal oldali munkaterület az ellenfél feltöltött iratának helyi kivonata. A tényleges SharePoint/iratkinyerés nincs bekötve ebben a patchben."
-          action={<AdminStatusPill tone="burgundy">Input dokumentum</AdminStatusPill>}
+          subtitle="A bal oldali munkaterület az ellenfél feltöltött iratának elérhető adatait és munkaszövegét mutatja."
+          action={<AdminStatusPill tone={hasDocumentText ? "green" : "gold"}>{hasDocumentText ? "Szöveg elérhető" : "Nincs szöveg"}</AdminStatusPill>}
         />
         <div className="space-y-3 p-4">
+          <div className="rounded-[8px] border border-[#D8CFB6] bg-white p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Kiválasztott dokumentum</p>
+                <h3 className="mt-1 break-words font-serif text-xl font-medium text-[#1F2821]">
+                  {isLoadingDocumentContext ? "Dokumentum betöltése..." : documentContext?.title || "Dokumentumadat nem érhető el"}
+                </h3>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {documentMetaItems.length > 0 ? (
+                    documentMetaItems.map((item) => (
+                      <AdminBadge key={item} tone="neutral">
+                        {item}
+                      </AdminBadge>
+                    ))
+                  ) : (
+                    <AdminBadge tone="neutral">Metaadat nem érhető el</AdminBadge>
+                  )}
+                  {documentContext?.textField ? <AdminBadge tone="blue">Szövegforrás: {documentContext.textField}</AdminBadge> : null}
+                </div>
+              </div>
+              <AdminStatusPill tone={documentContext ? "green" : "gold"}>
+                {documentContext ? "Dokumentum kontextus" : "Betöltés alatt"}
+              </AdminStatusPill>
+            </div>
+            {documentContextError ? (
+              <p className="mt-3 rounded-[6px] border border-dashed border-[#E5C3C3] bg-[#FFF7F4] px-3 py-2 text-[11px] text-[#7B776D]">
+                {documentContextError}
+              </p>
+            ) : null}
+          </div>
           <input
             value={sourceReference}
             onChange={(event) => onSourceReferenceChange(event.target.value)}
             placeholder="Forrás referencia: oldal / pont / bekezdés"
             className="w-full rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs text-[#1F2821]"
           />
+          {!hasDocumentText ? (
+            <p className="rounded-[6px] border border-dashed border-[#D8CFB6] bg-white px-3 py-2 text-[11px] text-[#7B776D]">
+              {documentContext?.unavailableReason || documentTextFallback}
+            </p>
+          ) : null}
           <textarea
             value={localExtractedText}
             onChange={(event) => onExtractedTextChange(event.target.value)}
             rows={20}
-            placeholder="Ellenfél iratából helyileg bemásolt / később kinyert szöveg. Nincs automatikus dokumentumolvasás ebben a foundation állapotban."
+            placeholder={documentTextFallback}
             className="min-h-[560px] w-full rounded border border-[#DFCFC6] bg-[#FFFDF8] px-4 py-3 font-serif text-[14px] leading-7 text-[#1F2821]"
           />
           <p className="rounded-[6px] border border-dashed border-[#E5C3C3] bg-white px-3 py-2 text-[11px] text-[#7B776D]">
-            Őszinte állapot: nincs fake AI bracketelés, nincs szerveroldali mentés, nincs automatikus iratkinyerés.
+            Őszinte állapot: a felület csak meglévő dokumentumszöveget jelenít meg. Nincs hamis AI-kimenet, nincs szerveroldali mentés, nincs jogi bizonyosság állítása.
           </p>
         </div>
       </AdminPanel>
