@@ -17,15 +17,21 @@ type DocumentEditorShellProps = {
   status?: ReactNode;
   toolbar?: ReactNode;
   sideActions?: ReactNode;
+  beforeEditor?: ReactNode;
+  afterEditor?: ReactNode;
+  emptyState?: ReactNode;
+  showEditor?: boolean;
   placeholder?: string;
   rows?: number;
   minHeightClassName?: string;
   className?: string;
+  pageClassName?: string;
   canvasClassName?: string;
   textareaClassName?: string;
   onSelect?: () => void;
   onMouseUp?: () => void;
   onKeyUp?: () => void;
+  onClick?: () => void;
 };
 
 export const DocumentEditorShell = forwardRef<HTMLTextAreaElement, DocumentEditorShellProps>(
@@ -44,15 +50,21 @@ export const DocumentEditorShell = forwardRef<HTMLTextAreaElement, DocumentEdito
       status,
       toolbar,
       sideActions,
+      beforeEditor,
+      afterEditor,
+      emptyState,
+      showEditor = true,
       placeholder,
       rows = 24,
       minHeightClassName = "min-h-[640px]",
       className = "",
+      pageClassName = "max-w-[1180px]",
       canvasClassName = "",
       textareaClassName = "",
       onSelect,
       onMouseUp,
       onKeyUp,
+      onClick,
     },
     ref,
   ) {
@@ -92,22 +104,29 @@ export const DocumentEditorShell = forwardRef<HTMLTextAreaElement, DocumentEdito
         </div>
 
         <div className="bg-[#F3EBD4] px-3 py-3 sm:px-5 lg:px-6">
-          <div className="mx-auto w-full max-w-[1180px]">
+          <div className={`mx-auto w-full ${pageClassName}`}>
             <div
               className={`border border-[rgba(22,32,26,0.14)] bg-[#FFFDF8] px-5 py-6 shadow-[0_18px_50px_rgba(22,32,26,0.12)] sm:px-8 lg:px-12 ${canvasClassName}`}
             >
-              <textarea
-                ref={ref}
-                value={value}
-                onChange={(event) => onChange?.(event.target.value)}
-                onSelect={onSelect}
-                onMouseUp={onMouseUp}
-                onKeyUp={onKeyUp}
-                readOnly={readOnly}
-                rows={rows}
-                placeholder={placeholder}
-                className={`w-full resize-y border-0 bg-transparent p-0 font-serif text-[16px] leading-8 text-[#1F2821] outline-none placeholder:text-[#A6AEA3] focus:ring-0 read-only:cursor-text ${minHeightClassName} ${textareaClassName}`}
-              />
+              {beforeEditor}
+              {showEditor ? (
+                <textarea
+                  ref={ref}
+                  value={value}
+                  onChange={(event) => onChange?.(event.target.value)}
+                  onSelect={onSelect}
+                  onMouseUp={onMouseUp}
+                  onKeyUp={onKeyUp}
+                  onClick={onClick}
+                  readOnly={readOnly}
+                  rows={rows}
+                  placeholder={placeholder}
+                  className={`w-full resize-y border-0 bg-transparent p-0 font-serif text-[16px] leading-8 text-[#1F2821] outline-none placeholder:text-[#A6AEA3] focus:ring-0 read-only:cursor-text ${minHeightClassName} ${textareaClassName}`}
+                />
+              ) : (
+                emptyState
+              )}
+              {afterEditor}
               {helperText ? (
                 <p className="mt-4 rounded-[6px] border border-dashed border-[#D8CFB6] bg-white px-3 py-2 text-[11px] text-[#7B776D]">
                   {helperText}

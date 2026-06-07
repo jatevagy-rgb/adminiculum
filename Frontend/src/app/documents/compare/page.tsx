@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
+import { DocumentEditorShell } from "@/components/documents/DocumentEditorShell";
 import {
   downloadReviewSummary,
   downloadContract,
@@ -2642,37 +2643,38 @@ return (
                 </section>
               </aside>
               <div className="order-1 min-w-0 space-y-4">
-                <section className="overflow-hidden rounded-[10px] border border-[#D8CFB6] bg-white">
-                  {isDraftDirty ? (
-                    <div className="border-b border-[#E6C987] bg-[#FAEFCF] px-4 py-3 text-xs font-semibold text-[#7A5A1F]">
-                      Nem mentett helyi módosítások.
-                    </div>
-                  ) : null}
-
-                  {workspaceSaveState.type === "success" ? (
-                    <div className="border-b border-[#A6C0AF] bg-[#E2EDE5] px-4 py-3 text-xs font-semibold text-[#23472F]">
-                      {workspaceSaveState.message}
-                    </div>
-                  ) : workspaceSaveState.type === "error" ? (
-                    <div className="border-b border-[#F2DAD6] bg-[#FFF5F3] px-4 py-3 text-xs font-semibold text-[#8B2A2A]">
-                      {workspaceSaveState.message}
-                    </div>
-                  ) : null}
-
-                  <div className="border-b border-[#EEE7D9] bg-[#FCFAF4] px-4 py-3">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="font-serif text-lg font-medium text-[#1F2821]">Szerkeszthető munkapéldány</h2>
-                          <AdminStatusPill tone={isDraftDirty ? "amber" : activeDraftText ? "green" : "neutral"}>{editorStatusLabel}</AdminStatusPill>
-                          {workspaceMainTab === "review" ? (
-                            <span className="rounded-full border border-[#DDD7CA] bg-white px-2 py-1 text-[10px] font-semibold text-[#514D45]">
-                              {reviewLens === "modified" ? "Módosításokkal" : reviewLens === "clean" ? "Tiszta nézet" : "Eredeti nézet"}
-                            </span>
-                          ) : null}
+                <DocumentEditorShell
+                  ref={editorTextAreaRef}
+                  title="Szerkeszthető munkapéldány"
+                  subtitle={`Helyi szerkesztési nézet. Nem Word változáskövetés. Forrás: ${workspaceTextSourceLabel}`}
+                  value={editorDraft}
+                  onChange={(value) => {
+                    setEditorDraft(value);
+                    setEditorTouched(true);
+                  }}
+                  showEditor={Boolean(activeDraftText)}
+                  isDirty={isDraftDirty}
+                  status={<AdminStatusPill tone={isDraftDirty ? "amber" : activeDraftText ? "green" : "neutral"}>{editorStatusLabel}</AdminStatusPill>}
+                  badges={
+                    <>
+                      {workspaceMainTab === "review" ? (
+                        <span className="rounded-full border border-[#DDD7CA] bg-white px-2 py-1 text-[10px] font-semibold text-[#514D45]">
+                          {reviewLens === "modified" ? "Módosításokkal" : reviewLens === "clean" ? "Tiszta nézet" : "Eredeti nézet"}
+                        </span>
+                      ) : null}
+                    </>
+                  }
+                  toolbar={
+                    <div className="grid w-full gap-3">
+                      {workspaceSaveState.type === "success" ? (
+                        <div className="rounded-[6px] border border-[#A6C0AF] bg-[#E2EDE5] px-3 py-2 text-[11px] font-semibold text-[#23472F]">
+                          {workspaceSaveState.message}
                         </div>
-                        <p className="text-[11px] text-[#6D6A62]">Helyi szerkesztési nézet. Nem Word változáskövetés. Forrás: {workspaceTextSourceLabel}</p>
-                      </div>
+                      ) : workspaceSaveState.type === "error" ? (
+                        <div className="rounded-[6px] border border-[#F2DAD6] bg-[#FFF5F3] px-3 py-2 text-[11px] font-semibold text-[#8B2A2A]">
+                          {workspaceSaveState.message}
+                        </div>
+                      ) : null}
                       <div className="flex flex-wrap items-center gap-2">
                         {editorToolbarGroups.map((group) => (
                           <div key={group.key} className="flex items-center gap-1 rounded-[8px] border border-[#E7DECB] bg-white px-1.5 py-1">
@@ -2698,54 +2700,43 @@ return (
                         ))}
                       </div>
                     </div>
-                  </div>
-
-                  <div className="bg-[#F3EBD4] px-3 py-3 sm:px-5 lg:px-6 xl:px-8">
-                    <div className="mx-auto w-full max-w-[1480px]">
-                    <div className="min-h-[720px] border border-[rgba(22,32,26,0.14)] bg-white px-6 py-6 shadow-[0_18px_50px_rgba(22,32,26,0.12)] sm:px-10 lg:px-14 xl:px-16">
-                      <div className="border-b border-[#EEE7D9] pb-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="min-w-0 break-words font-serif text-[26px] font-medium leading-tight text-[#1F2821]">{getWorkspaceDocumentTitle()}</h3>
-                          <span className="rounded-full border border-[#DDD7CA] px-2 py-0.5 text-[10px] text-[#514D45]">{getWorkspaceDocumentKindLabel()}</span>
+                  }
+                  pageClassName="max-w-[1480px]"
+                  canvasClassName="min-h-[720px] bg-white px-6 py-6 sm:px-10 lg:px-14 xl:px-16"
+                  textareaClassName="bg-white text-[17px]"
+                  minHeightClassName="min-h-[680px]"
+                  placeholder="Itt jelenik meg a valós kinyert dokumentumszöveg, az anonimizált szöveg vagy a helyi munkapéldány."
+                  onSelect={syncSelectionSnapshot}
+                  onKeyUp={syncSelectionSnapshot}
+                  onClick={syncSelectionSnapshot}
+                  beforeEditor={
+                    activeDraftText ? (
+                      <div className="pt-1">
+                        <div className="border-b border-[#EEE7D9] pb-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="min-w-0 break-words font-serif text-[26px] font-medium leading-tight text-[#1F2821]">{getWorkspaceDocumentTitle()}</h3>
+                            <span className="rounded-full border border-[#DDD7CA] px-2 py-0.5 text-[10px] text-[#514D45]">{getWorkspaceDocumentKindLabel()}</span>
+                          </div>
+                          <p className="mt-2 text-[11px] text-[#7B776D]">
+                            Ügy: {selectedDocument?.caseNumber || "—"} · Verzió: v{selectedDocument?.revisionNumber || 1}
+                            {selectedDocument?.id ? ` · Azonosító: ${selectedDocument.id.slice(0, 8)}` : ""}
+                          </p>
                         </div>
-                        <p className="mt-2 text-[11px] text-[#7B776D]">
-                          Ügy: {selectedDocument?.caseNumber || "—"} · Verzió: v{selectedDocument?.revisionNumber || 1}
-                          {selectedDocument?.id ? ` · Azonosító: ${selectedDocument.id.slice(0, 8)}` : ""}
-                        </p>
-                      </div>
-
-                      {activeDraftText ? (
                         <div className="pt-6">
                           {hasTextSelection ? (
                             <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[8px] border border-[#E6D5A6] bg-[#FCF4DB] px-3 py-2 text-[11px] text-[#6C5120]">
                               <span className="font-semibold">Kijelölés:</span>
                               <span className="max-w-[420px] truncate">„{getSelectionExcerpt(selectionSnapshot?.text || "", 110)}”</span>
-                              <button
-                                type="button"
-                                onClick={handleHighlightSelection}
-                                className="rounded-[5px] border border-[#BFDDBF] bg-[#EEF8ED] px-2 py-1 text-[10px] font-semibold text-[#1E6A34]"
-                              >
+                              <button type="button" onClick={handleHighlightSelection} className="rounded-[5px] border border-[#BFDDBF] bg-[#EEF8ED] px-2 py-1 text-[10px] font-semibold text-[#1E6A34]">
                                 Kiemelés
                               </button>
-                              <button
-                                type="button"
-                                onClick={openAnchoredCommentComposer}
-                                className="rounded-[5px] border border-[#C8D8F0] bg-[#F1F6FE] px-2 py-1 text-[10px] font-semibold text-[#244B7A]"
-                              >
+                              <button type="button" onClick={openAnchoredCommentComposer} className="rounded-[5px] border border-[#C8D8F0] bg-[#F1F6FE] px-2 py-1 text-[10px] font-semibold text-[#244B7A]">
                                 Megjegyzés
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => openProposedChangeComposer("replacement")}
-                                className="rounded-[5px] border border-[#E6C987] bg-[#FAEFCF] px-2 py-1 text-[10px] font-semibold text-[#7A5A1F]"
-                              >
+                              <button type="button" onClick={() => openProposedChangeComposer("replacement")} className="rounded-[5px] border border-[#E6C987] bg-[#FAEFCF] px-2 py-1 text-[10px] font-semibold text-[#7A5A1F]">
                                 Cserejavaslat
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => openProposedChangeComposer("deletion")}
-                                className="rounded-[5px] border border-[#E5C3C3] bg-[#FFF1F1] px-2 py-1 text-[10px] font-semibold text-[#8B2A2A]"
-                              >
+                              <button type="button" onClick={() => openProposedChangeComposer("deletion")} className="rounded-[5px] border border-[#E5C3C3] bg-[#FFF1F1] px-2 py-1 text-[10px] font-semibold text-[#8B2A2A]">
                                 Törlési javaslat
                               </button>
                             </div>
@@ -2754,55 +2745,46 @@ return (
                               Jelölj ki szöveget a művelethez.
                             </div>
                           )}
-
                           {renderHighlightedWorkspacePreview()}
-
-                          <textarea
-                            ref={editorTextAreaRef}
-                            value={editorDraft}
-                            onChange={(event) => {
-                              setEditorDraft(event.target.value);
-                              setEditorTouched(true);
-                            }}
-                            onSelect={syncSelectionSnapshot}
-                            onKeyUp={syncSelectionSnapshot}
-                            onClick={syncSelectionSnapshot}
-                            placeholder="Itt jelenik meg a valós kinyert dokumentumszöveg, az anonimizált szöveg vagy a helyi munkapéldány."
-                            className="min-h-[680px] w-full resize-y border-0 bg-white p-0 font-serif text-[17px] leading-8 text-[#1F2821] outline-none placeholder:text-[#A6AEA3] focus:ring-0"
-                          />
-                          {isDraftPreviewTruncated ? (
-                            <p className="mt-3 text-[11px] text-[#7B776D]">A hosszú dokumentum előnézete rövidítve jelenik meg.</p>
-                          ) : null}
-                          <p className="mt-3 text-[10px] text-[#9C9890]">Bekezdések: {draftPreviewParagraphs.length}</p>
                         </div>
-                      ) : (
-<div className="flex min-h-[520px] flex-col items-center justify-center text-center">
-                          <h3 className="font-serif text-2xl font-medium text-[#1F2821]">Szerkeszthető munkapéldány</h3>
-                          <p className="mt-3 max-w-xl text-sm leading-6 text-[#7B776D]">
-                            {isLoadingDocumentText
-                              ? "A dokumentumszöveg betöltése folyamatban."
-                              : documentTextReason
-                              ? `Nincs kinyert dokumentumszöveg — ${documentTextReason}`
-                              : anonymousTextError
-                              ? `Az anonimizált szöveg betöltése nem sikerült. ${anonymousTextError}`
-                              : "A dokumentum szövege még nincs kinyerve. Tölts fel dokumentumot a Dokumentumtárban, hogy a teljes szöveg megjelenjen."}
-                          </p>
-                          {!isLoadingDocumentText && !documentTextReason && !anonymousTextError ? (
-                            <div className="mt-6 flex flex-wrap justify-center gap-2">
-                              <AdminButton variant="neutral" onClick={focusToolSearch}>
-                                Klauzula keresése
-                              </AdminButton>
-                              <Link href={getDocumentLedgerHref()} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-4 py-2 text-[13px] font-semibold leading-none text-[#16201A] transition-colors hover:border-[#16201A] hover:bg-[#FBF6E7]">
-                                Dokumentumtár
-                              </Link>
-                            </div>
-                          ) : null}
+                      </div>
+                    ) : null
+                  }
+                  afterEditor={
+                    activeDraftText ? (
+                      <>
+                        {isDraftPreviewTruncated ? (
+                          <p className="mt-3 text-[11px] text-[#7B776D]">A hosszú dokumentum előnézete rövidítve jelenik meg.</p>
+                        ) : null}
+                        <p className="mt-3 text-[10px] text-[#9C9890]">Bekezdések: {draftPreviewParagraphs.length}</p>
+                      </>
+                    ) : null
+                  }
+                  emptyState={
+                    <div className="flex min-h-[520px] flex-col items-center justify-center text-center">
+                      <h3 className="font-serif text-2xl font-medium text-[#1F2821]">Szerkeszthető munkapéldány</h3>
+                      <p className="mt-3 max-w-xl text-sm leading-6 text-[#7B776D]">
+                        {isLoadingDocumentText
+                          ? "A dokumentumszöveg betöltése folyamatban."
+                          : documentTextReason
+                          ? `Nincs kinyert dokumentumszöveg — ${documentTextReason}`
+                          : anonymousTextError
+                          ? `Az anonimizált szöveg betöltése nem sikerült. ${anonymousTextError}`
+                          : "A dokumentum szövege még nincs kinyerve. Tölts fel dokumentumot a Dokumentumtárban, hogy a teljes szöveg megjelenjen."}
+                      </p>
+                      {!isLoadingDocumentText && !documentTextReason && !anonymousTextError ? (
+                        <div className="mt-6 flex flex-wrap justify-center gap-2">
+                          <AdminButton variant="neutral" onClick={focusToolSearch}>
+                            Klauzula keresése
+                          </AdminButton>
+                          <Link href={getDocumentLedgerHref()} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-4 py-2 text-[13px] font-semibold leading-none text-[#16201A] transition-colors hover:border-[#16201A] hover:bg-[#FBF6E7]">
+                            Dokumentumtár
+                          </Link>
                         </div>
-                      )}
+                      ) : null}
                     </div>
-                  </div>
-                </div>
-                </section>
+                  }
+                />
 
                 {(workspaceMainTab === "history" || workspaceViewMode === "compare") ? (
                 <details
