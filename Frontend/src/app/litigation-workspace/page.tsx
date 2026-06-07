@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminBadge, AdminButton, AdminPanel, AdminSectionHeader, AdminStatusPill } from "@/components/adminiculum/ui";
@@ -98,20 +98,20 @@ const workspaceSteps: Array<{
   {
     key: "intake",
     label: "1. Ellenfél irata",
-    title: "Opponent document intake / bracket extraction",
-    description: "Az ellenfél feltöltött iratából strukturált opponent bracketek készülnek.",
+    title: "Ellenfél iratának feldolgozása",
+    description: "Az ellenfél feltöltött iratából strukturált ellenoldali állítások készülnek.",
   },
   {
     key: "strategy",
-    label: "2. Bracketek / Válaszút",
-    title: "Bracket-to-bracket response strategy",
-    description: "Az ellenoldali bracketekhez ténybeli, bizonyítási, jogi és eljárási válaszblokkok kapcsolódnak.",
+    label: "2. Állítások / Válaszút",
+    title: "Állításhoz kapcsolt válaszstratégia",
+    description: "Az ellenoldali állításokhoz ténybeli, bizonyítási, jogi és eljárási válaszblokkok kapcsolódnak.",
   },
   {
     key: "assembly",
     label: "3. Beadvány összeállítása / Szerkesztés",
     title: "Pleading assembly + editor",
-    description: "A saját fejezet-bracketekből nagy szerkesztőfelületű beadvány-vázlat készül.",
+    description: "A saját fejezet-elemekből nagy szerkesztőfelületű beadvány-vázlat készül.",
   },
 ];
 
@@ -123,6 +123,12 @@ const bracketTypeLabels: Record<OpponentBracketType, string> = {
   amount: "Összegszerűség / kárszámítás",
   procedure: "Eljárási kifogás",
   attackable: "Irreleváns / támadható állítás",
+};
+
+const buildSelectionTitle = (type: OpponentBracketType, text: string) => {
+  const compactText = text.replace(/\s+/g, " ").trim();
+  const preview = compactText.length > 72 ? `${compactText.slice(0, 72)}...` : compactText;
+  return `${bracketTypeLabels[type]}: ${preview}`;
 };
 
 const responseTypeLabels: Record<ResponseBlock["type"], string> = {
@@ -284,14 +290,14 @@ const buildPleadingChapterSeeds = (responseBlocks: ResponseBlock[]): PleadingCha
       {
         id: "placeholder-merits",
         title: "A. Érdemi ellenkérelem előkészítése",
-        sourceLabel: "Nincs még válaszbracket",
-        body: "[Ide kerül az ellenfél kérelmeire adott tételes, bracketekből felépített válasz.]",
+        sourceLabel: "Nincs még válaszblokk",
+        body: "[Ide kerül az ellenfél kérelmeire adott tételes, állításokból felépített válasz.]",
         tone: "gold",
       },
       {
         id: "placeholder-evidence",
         title: "B. Tényállási és bizonyítási rész előkészítése",
-        sourceLabel: "Nincs még bizonyítási válaszbracket",
+        sourceLabel: "Nincs még bizonyítási válaszblokk",
         body: "[Ide kerülnek a tényállási cáfolatok, bizonyítékok és bizonyítási indítványok.]",
         tone: "blue",
       },
@@ -308,7 +314,7 @@ const buildPleadingChapterSeeds = (responseBlocks: ResponseBlock[]): PleadingCha
       id: block.id,
       title: `${String.fromCharCode(65 + typeIndex)}.${blockIndex + 1}. ${pleadingChapterTitleByType[type as ResponseBlock["type"]]}`,
       sourceLabel: block.title,
-      body: block.detail || "[A válaszbracket részlete még nincs kitöltve.]",
+      body: block.detail || "[A válaszblokk részlete még nincs kitöltve.]",
       tone: responseTone(type as ResponseBlock["type"]),
     })),
   );
@@ -332,7 +338,7 @@ const buildPleadingSkeleton = ({
   const chapters = chapterSeeds
     .map(
       (chapter, index) =>
-        `${index + 1}. ${chapter.title}\nForrás bracket: ${chapter.sourceLabel}\n${chapter.body}\n[Ügyvédi pontosítás, jogi ellenőrzés és bizonyítéki hivatkozás szükséges.]`,
+        `${index + 1}. ${chapter.title}\nForrás válaszblokk: ${chapter.sourceLabel}\n${chapter.body}\n[Ügyvédi pontosítás, jogi ellenőrzés és bizonyítéki hivatkozás szükséges.]`,
     )
     .join("\n\n");
 
@@ -354,16 +360,16 @@ const buildPleadingSkeleton = ({
     "",
     "Tisztelt Bíróság!",
     "",
-    "Alulírott jogi képviselő útján eljáró ügyfél nevében az alábbi, bracket-logikából előkészített szerkezetű beadvány-vázlatot terjesztjük elő.",
+    "Alulírott jogi képviselő útján eljáró ügyfél nevében az alábbi, állítás-válasz logikából előkészített szerkezetű beadvány-vázlatot terjesztjük elő.",
     "",
     "I. Kérelem és perbeli álláspont",
     "[A végleges kérelmi rész ügyvédi szerkesztéssel kerül kitöltésre. A rendszer itt nem állít elő jogi bizonyosságot.]",
     "",
-    "II. A válaszbracketekből előkészített fejezetek",
+    "II. A válaszblokkokból előkészített fejezetek",
     chapters,
     "",
     "III. Bizonyítási indítványok",
-    "[A bizonyítékokra és indítványokra vonatkozó rész a válaszbracketekből és ügyvédi ellenőrzésből épül fel.]",
+    "[A bizonyítékokra és indítványokra vonatkozó rész a válaszblokkokból és ügyvédi ellenőrzésből épül fel.]",
     "",
     "IV. Mellékletek",
     "[Mellékletjegyzék / okiratok / csatolmányok helye.]",
@@ -411,6 +417,8 @@ function LitigationWorkspacePageContent() {
   const [sourceReference, setSourceReference] = useState("");
   const [localExtractedText, setLocalExtractedText] = useState("");
   const [localTextWasTouched, setLocalTextWasTouched] = useState(false);
+  const [selectedOpponentText, setSelectedOpponentText] = useState("");
+  const [selectionOpponentType, setSelectionOpponentType] = useState<OpponentBracketType>("fact");
   const [documentContext, setDocumentContext] = useState<LitigationDocumentContext | null>(null);
   const [isLoadingDocumentContext, setIsLoadingDocumentContext] = useState(false);
   const [documentContextError, setDocumentContextError] = useState<string | null>(null);
@@ -630,6 +638,29 @@ function LitigationWorkspacePageContent() {
     });
   };
 
+  const addOpponentItemFromSelection = () => {
+    const selectedText = selectedOpponentText.trim();
+    if (!selectedText) return;
+    const nextBracketId = `bracket-${Date.now()}-${opponentBrackets.length + 1}`;
+    setOpponentBrackets((prev) => [
+      ...prev,
+      {
+        id: nextBracketId,
+        type: selectionOpponentType,
+        title: buildSelectionTitle(selectionOpponentType, selectedText),
+        quote: selectedText,
+        sourceRef: sourceReference.trim(),
+        legalBasis: "",
+        evidence: "",
+        requestedRelief: "",
+        risk: "medium",
+        status: "rögzítve",
+      },
+    ]);
+    setOpenOpponentBracketIds((prev) => [...prev, nextBracketId]);
+    setSelectedOpponentText("");
+  };
+
   const toggleBracketRelation = (bracketId: string) => {
     setResponseDraft((prev) => ({
       ...prev,
@@ -719,6 +750,8 @@ function LitigationWorkspacePageContent() {
                 documentContext={documentContext}
                 isLoadingDocumentContext={isLoadingDocumentContext}
                 documentContextError={documentContextError}
+                selectedOpponentText={selectedOpponentText}
+                selectionOpponentType={selectionOpponentType}
                 bracketDraft={bracketDraft}
                 opponentBrackets={opponentBrackets}
                 linkedCounts={linkedCounts}
@@ -729,8 +762,11 @@ function LitigationWorkspacePageContent() {
                   setLocalTextWasTouched(true);
                 }}
                 onSourceReferenceChange={setSourceReference}
+                onSelectedOpponentTextChange={setSelectedOpponentText}
+                onSelectionOpponentTypeChange={setSelectionOpponentType}
                 onBracketDraftChange={setBracketDraft}
                 onAddOpponentBracket={addOpponentBracket}
+                onAddOpponentItemFromSelection={addOpponentItemFromSelection}
                 onToggleOpponentBracket={toggleOpponentBracket}
                 onNext={() => navigateToStep("strategy")}
               />
@@ -815,7 +851,7 @@ function WorkflowHeader({
           <div>
             <h1 className="font-serif text-[30px] font-medium leading-tight text-[#1F2821]">Peres beadvány-munkafolyamat</h1>
             <p className="mt-1 max-w-4xl text-[13px] text-[#6D6A62]">
-              Ügyhöz és feltöltött ellenfél-iratához kötött háromlépéses bracket, válaszút és szerkesztési workspace.
+              Ügyhöz és feltöltött ellenfél-iratához kötött háromlépéses állítás-, válaszút- és szerkesztési workspace.
             </p>
           </div>
         </div>
@@ -906,6 +942,8 @@ function IntakeWorkspace({
   documentContext,
   isLoadingDocumentContext,
   documentContextError,
+  selectedOpponentText,
+  selectionOpponentType,
   bracketDraft,
   opponentBrackets,
   linkedCounts,
@@ -913,8 +951,11 @@ function IntakeWorkspace({
   activeOpponentBracketIds,
   onExtractedTextChange,
   onSourceReferenceChange,
+  onSelectedOpponentTextChange,
+  onSelectionOpponentTypeChange,
   onBracketDraftChange,
   onAddOpponentBracket,
+  onAddOpponentItemFromSelection,
   onToggleOpponentBracket,
   onNext,
 }: {
@@ -923,6 +964,8 @@ function IntakeWorkspace({
   documentContext: LitigationDocumentContext | null;
   isLoadingDocumentContext: boolean;
   documentContextError: string | null;
+  selectedOpponentText: string;
+  selectionOpponentType: OpponentBracketType;
   bracketDraft: {
     type: OpponentBracketType;
     title: string;
@@ -940,11 +983,15 @@ function IntakeWorkspace({
   activeOpponentBracketIds: string[];
   onExtractedTextChange: (value: string) => void;
   onSourceReferenceChange: (value: string) => void;
+  onSelectedOpponentTextChange: (value: string) => void;
+  onSelectionOpponentTypeChange: (value: OpponentBracketType) => void;
   onBracketDraftChange: (value: typeof bracketDraft | ((prev: typeof bracketDraft) => typeof bracketDraft)) => void;
   onAddOpponentBracket: () => void;
+  onAddOpponentItemFromSelection: () => void;
   onToggleOpponentBracket: (bracketId: string) => void;
   onNext: () => void;
 }) {
+  const documentTextRef = useRef<HTMLTextAreaElement | null>(null);
   const documentMetaItems = [
     documentContext?.documentType ? `Típus: ${documentContext.documentType}` : null,
     documentContext?.status ? `Státusz: ${documentContext.status}` : null,
@@ -952,6 +999,14 @@ function IntakeWorkspace({
     documentContext?.version ? `Verzió: ${documentContext.version}` : null,
   ].filter((item): item is string => Boolean(item));
   const hasDocumentText = localExtractedText.trim().length > 0;
+  const hasSelectedText = selectedOpponentText.trim().length > 0;
+
+  const captureSelectedText = () => {
+    const textarea = documentTextRef.current;
+    if (!textarea) return;
+    const selection = localExtractedText.slice(textarea.selectionStart, textarea.selectionEnd).trim();
+    onSelectedOpponentTextChange(selection);
+  };
 
   return (
     <section className="grid gap-4 xl:grid-cols-[minmax(360px,1.15fr)_minmax(340px,0.85fr)]">
@@ -1005,12 +1060,46 @@ function IntakeWorkspace({
             </p>
           ) : null}
           <textarea
+            ref={documentTextRef}
             value={localExtractedText}
-            onChange={(event) => onExtractedTextChange(event.target.value)}
+            onChange={(event) => {
+              onExtractedTextChange(event.target.value);
+              onSelectedOpponentTextChange("");
+            }}
+            onMouseUp={captureSelectedText}
+            onKeyUp={captureSelectedText}
+            onSelect={captureSelectedText}
             rows={20}
             placeholder={documentTextFallback}
             className="min-h-[560px] w-full rounded border border-[#DFCFC6] bg-[#FFFDF8] px-4 py-3 font-serif text-[14px] leading-7 text-[#1F2821]"
           />
+          <div className="rounded-[8px] border border-[#D8CFB6] bg-white p-3">
+            <div className="grid gap-2 lg:grid-cols-[minmax(180px,260px)_1fr]">
+              <select
+                value={selectionOpponentType}
+                onChange={(event) => onSelectionOpponentTypeChange(event.target.value as OpponentBracketType)}
+                className="rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs text-[#1F2821]"
+              >
+                {Object.entries(bracketTypeLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <AdminButton variant="warning" onClick={onAddOpponentItemFromSelection} disabled={!hasSelectedText}>
+                Ellenfél állításának létrehozása kijelölésből
+              </AdminButton>
+            </div>
+            {hasSelectedText ? (
+              <p className="mt-2 line-clamp-2 rounded-[6px] border border-[#E7DECB] bg-[#FBF9F3] px-3 py-2 text-[11px] text-[#514D45]">
+                Kijelölt szöveg: „{selectedOpponentText}”
+              </p>
+            ) : (
+              <p className="mt-2 rounded-[6px] border border-dashed border-[#D8CFB6] bg-[#FBF9F3] px-3 py-2 text-[11px] text-[#7B776D]">
+                Jelölj ki szöveget az ellenfél iratából.
+              </p>
+            )}
+          </div>
           <p className="rounded-[6px] border border-dashed border-[#E5C3C3] bg-white px-3 py-2 text-[11px] text-[#7B776D]">
             Őszinte állapot: a felület csak meglévő dokumentumszöveget jelenít meg. Nincs hamis AI-kimenet, nincs szerveroldali mentés, nincs jogi bizonyosság állítása.
           </p>
@@ -1019,10 +1108,10 @@ function IntakeWorkspace({
 
       <AdminPanel className="overflow-hidden">
         <AdminSectionHeader
-          eyebrow="Bracket extraction"
-          title="Opponent bracket létrehozása"
+          eyebrow="Állításrögzítés"
+          title="Ellenfél állításának létrehozása"
           subtitle="Kérelem, tényállítás, jogi állítás, bizonyíték vagy támadható állítás strukturált rögzítése."
-          action={<AdminStatusPill tone="burgundy">{opponentBrackets.length} bracket</AdminStatusPill>}
+          action={<AdminStatusPill tone="burgundy">{opponentBrackets.length} állítás</AdminStatusPill>}
         />
         <div className="space-y-3 p-4">
           <OpponentBracketForm
@@ -1040,7 +1129,7 @@ function IntakeWorkspace({
           />
           <div className="flex justify-end">
             <AdminButton variant="primary" size="sm" onClick={onNext}>
-              Tovább: Bracketek / Válaszút
+              Tovább: Állítások / Válaszút
             </AdminButton>
           </div>
         </div>
@@ -1141,7 +1230,7 @@ function OpponentBracketForm({
           </select>
         </div>
         <AdminButton variant="warning" size="sm" onClick={onAddOpponentBracket} disabled={!bracketDraft.title.trim() || !bracketDraft.quote.trim()}>
-          Opponent bracket hozzáadása
+          Ellenfél állítása hozzáadása
         </AdminButton>
       </div>
     </div>
@@ -1166,7 +1255,7 @@ function OpponentBracketList({
   if (opponentBrackets.length === 0) {
     return (
       <div className="rounded-[8px] border border-dashed border-[#DFCFC6] bg-[#FBF9F3] p-4 text-[12px] text-[#7B776D]">
-        Még nincs opponent bracket. Ebben a workspace-ben az ellenfél iratából kell kiemelni a támadható állításokat és kérelmeket.
+        Még nincs ellenfél-állítás. Ebben a workspace-ben az ellenfél iratából kell kiemelni a támadható állításokat és kérelmeket.
       </div>
     );
   }
@@ -1285,13 +1374,13 @@ function StrategyWorkspace({
       <AdminPanel className="overflow-hidden">
         <AdminSectionHeader
           eyebrow="Workspace 2 bal oldal"
-          title="Opponent bracketek"
-          subtitle="A korábban rögzített ellenoldali bracketek. Innen választod ki, mire válaszol a jobb oldali stratégiai blokk."
-          action={<AdminStatusPill tone="burgundy">{opponentBrackets.length} bracket</AdminStatusPill>}
+          title="Ellenfél állításai"
+          subtitle="A korábban rögzített ellenoldali állítások. Innen választod ki, mire válaszol a jobb oldali stratégiai blokk."
+          action={<AdminStatusPill tone="burgundy">{opponentBrackets.length} állítás</AdminStatusPill>}
         />
         <div className="space-y-3 p-4">
           <div className="rounded-[8px] border border-[#E7DECB] bg-[#FBF9F3] px-3 py-2 text-[11px] text-[#6D6A62]">
-            Egy bracket megnyitása kiemeli és automatikusan megnyitja a hozzá kapcsolt válaszbracketeket.
+            Egy állítás megnyitása kiemeli és automatikusan megnyitja a hozzá kapcsolt válaszblokkokat.
           </div>
           <OpponentBracketList
             opponentBrackets={opponentBrackets}
@@ -1310,8 +1399,8 @@ function StrategyWorkspace({
       <AdminPanel className="overflow-hidden">
         <AdminSectionHeader
           eyebrow="Workspace 2 jobb oldal"
-          title="Saját válaszbracketek / válaszút"
-          subtitle="Tények, bizonyítékok, jogszabályhelyek, joggyakorlat és eljárási kifogások az opponent bracketekhez kapcsolva."
+          title="Saját válaszblokkok / válaszút"
+          subtitle="Tények, bizonyítékok, jogszabályhelyek, joggyakorlat és eljárási kifogások az ellenoldali állításokhoz kapcsolva."
           action={<AdminStatusPill tone="green">{responseBlocks.length} válaszblokk</AdminStatusPill>}
         />
         <div className="space-y-3 p-4">
@@ -1331,7 +1420,7 @@ function StrategyWorkspace({
               <input
                 value={responseDraft.title}
                 onChange={(event) => onResponseDraftChange((prev) => ({ ...prev, title: event.target.value }))}
-                placeholder="Válaszbracket címe"
+                placeholder="Válaszblokk címe"
                 className="rounded border border-[#E3D6AA] bg-white px-3 py-2 text-xs text-[#1F2821]"
               />
               <textarea
@@ -1342,10 +1431,10 @@ function StrategyWorkspace({
                 className="rounded border border-[#E3D6AA] bg-white px-3 py-2 text-xs text-[#1F2821]"
               />
               <div className="rounded-[6px] border border-[#E6D8AD] bg-white p-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Kapcsolódó opponent bracketek</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Kapcsolódó ellenoldali állítások</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {opponentBrackets.length === 0 ? (
-                    <span className="text-[11px] text-[#7B776D]">Előbb az Ellenfél irata workspace-ben hozz létre bracketeket.</span>
+                    <span className="text-[11px] text-[#7B776D]">Előbb az Ellenfél irata workspace-ben hozz létre állításokat.</span>
                   ) : (
                     opponentBrackets.map((bracket) => (
                       <button
@@ -1365,14 +1454,14 @@ function StrategyWorkspace({
                 </div>
               </div>
               <AdminButton variant="warning" size="sm" onClick={onAddResponseBlock} disabled={!responseDraft.title.trim() || !responseDraft.detail.trim()}>
-                Válaszbracket hozzáadása
+                Válaszblokk hozzáadása
               </AdminButton>
             </div>
           </div>
 
           {responseBlocks.length === 0 ? (
             <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FBF9F3] p-4 text-[12px] text-[#7B776D]">
-              Még nincs saját válaszbracket. Ez a workspace a bracket-to-bracket válaszstratégia helye, nem kész jogi következtetés.
+              Még nincs saját válaszblokk. Ez a workspace az állításhoz kapcsolt válaszstratégia helye, nem kész jogi következtetés.
             </div>
           ) : (
             <div className="space-y-3">
@@ -1399,12 +1488,12 @@ function StrategyWorkspace({
                       <span className="min-w-0 flex-1">
                         <span className="flex flex-wrap items-center gap-2">
                           <AdminBadge tone={responseTone(block.type)}>{responseTypeLabels[block.type]}</AdminBadge>
-                          <AdminBadge tone={block.relatedBracketIds.length ? "blue" : "neutral"}>{block.relatedBracketIds.length} opponent kapcsolat</AdminBadge>
+                          <AdminBadge tone={block.relatedBracketIds.length ? "blue" : "neutral"}>{block.relatedBracketIds.length} ellenoldali kapcsolat</AdminBadge>
                           {isActive ? <AdminBadge tone="blue">Kapcsolt fókusz</AdminBadge> : null}
                         </span>
                         <span className="mt-2 block truncate font-serif text-lg font-medium text-[#1F2821]">{block.title}</span>
                         <span className="mt-1 block truncate text-[11px] text-[#6D6A62]">
-                          {relatedTitles.length > 0 ? `Válasz erre: ${relatedTitles.join(", ")}` : "Még nincs opponent brackethez kapcsolva"}
+                          {relatedTitles.length > 0 ? `Válasz erre: ${relatedTitles.join(", ")}` : "Még nincs ellenoldali állításhoz kapcsolva"}
                         </span>
                       </span>
                       <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#D8CFB6] bg-[#FBF9F3] text-[14px] font-semibold text-[#1F4A33]">
@@ -1491,18 +1580,18 @@ function AssemblyWorkspace({
       <AdminPanel className="overflow-hidden">
         <AdminSectionHeader
           eyebrow="Workspace 3 bal oldal"
-          title="Bracketből fejezet"
-          subtitle="A válaszbracketekből képzett fejezet-vázlat. Ezek táplálják a jobb oldali szerkesztőt."
+          title="Válaszblokkból fejezet"
+          subtitle="A válaszblokkokból képzett fejezet-vázlat. Ezek táplálják a jobb oldali szerkesztőt."
           action={<AdminStatusPill tone="violet">{generatedChapterSeeds.length} generált fejezet</AdminStatusPill>}
         />
         <div className="space-y-3 p-4">
           <div className="rounded-[8px] border border-[#D8CFB6] bg-white p-3">
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Automatikus vázlat</p>
             <p className="mt-2 text-[12px] leading-5 text-[#514D45]">
-              A jobb oldali szerkesztő a válaszbracketek számából és típusából készít tiszta peres dokumentum-vázat. Hiányzó ügyadatnál placeholder marad.
+              A jobb oldali szerkesztő a válaszblokkok számából és típusából készít tiszta peres dokumentum-vázat. Hiányzó ügyadatnál helykitöltő marad.
             </p>
             <AdminButton variant="gold" size="sm" onClick={onApplyGeneratedSkeleton} className="mt-3">
-              Vázlat frissítése bracketekből
+              Vázlat frissítése válaszblokkokból
             </AdminButton>
           </div>
 
@@ -1554,7 +1643,7 @@ function AssemblyWorkspace({
                 <option value="ügyvédi review">Státusz: ügyvédi review</option>
               </select>
               <AdminButton variant="primary" size="sm" onClick={onAddChapterBlock} disabled={!chapterDraft.title.trim() || !chapterDraft.pleadingText.trim()}>
-                Fejezet-bracket hozzáadása
+                Fejezetelem hozzáadása
               </AdminButton>
             </div>
           </div>
@@ -1580,7 +1669,7 @@ function AssemblyWorkspace({
 
           {chapterBlocks.length === 0 ? (
             <div className="rounded-[8px] border border-dashed border-[#DDD7CA] bg-white p-4 text-[12px] text-[#7B776D]">
-              Még nincs saját fejezet-bracket. Ez a bal oldal a végső beadvány fejezeteinek előkészítése.
+              Még nincs saját fejezetelem. Ez a bal oldal a végső beadvány fejezeteinek előkészítése.
             </div>
           ) : (
             <div className="space-y-3">
@@ -1597,7 +1686,7 @@ function AssemblyWorkspace({
           )}
 
           <AdminButton variant="neutral" size="sm" onClick={onBack}>
-            Vissza: Bracketek / Válaszút
+            Vissza: Állítások / Válaszút
           </AdminButton>
         </div>
       </AdminPanel>
@@ -1606,14 +1695,14 @@ function AssemblyWorkspace({
         <AdminSectionHeader
           eyebrow="Workspace 3 jobb oldal"
           title="Nagy beadvány-szerkesztő"
-          subtitle="Automatikusan előkészített, helyi szerkesztési vázlat Bálintfy-stílusú fejléccel és bracket-alapú fejezetekkel."
-          action={<AdminStatusPill tone="gold">Local skeleton</AdminStatusPill>}
+          subtitle="Automatikusan előkészített, helyi szerkesztési vázlat Bálintfy-stílusú fejléccel és válaszblokkokon alapuló fejezetekkel."
+          action={<AdminStatusPill tone="gold">Helyi vázlat</AdminStatusPill>}
         />
         <div className="space-y-3 p-4">
           <div className="grid gap-3 rounded-[10px] border border-[#D8CFB6] bg-white p-4 text-[11px] text-[#514D45] md:grid-cols-3">
             <div>
               <p className="font-semibold text-[#1F2821]">Forráslogika</p>
-              <p className="mt-1">{responseBlocks.length} válaszbracket alapján előkészítve</p>
+              <p className="mt-1">{responseBlocks.length} válaszblokk alapján előkészítve</p>
             </div>
             <div>
               <p className="font-semibold text-[#1F2821]">Fejezetképzés</p>
