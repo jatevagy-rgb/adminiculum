@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminBadge, AdminButton, AdminPanel, AdminSectionHeader, AdminStatusPill } from "@/components/adminiculum/ui";
@@ -111,7 +112,7 @@ const workspaceSteps: Array<{
   {
     key: "assembly",
     label: "3. Beadvány összeállítása / Szerkesztés",
-    title: "Pleading assembly + editor",
+    title: "Beadvány összeállítása és szerkesztése",
     description: "A saját fejezet-elemekből nagy szerkesztőfelületű beadvány-vázlat készül.",
   },
 ];
@@ -378,7 +379,7 @@ const buildPleadingSkeleton = ({
     "V. Záró kérelem",
     "[Perköltség, dátum, aláírás és záró kérelem helye.]",
     "",
-    "Fontos: ez helyi szerkesztési vázlat. Nincs Word-export, nincs szerveroldali mentés, nincs hamis AI-következtetés.",
+    "Fontos: ez helyi szerkesztési vázlat. Nincs Word-export, nincs szerveroldali mentés, nincs AI-következtetés.",
   ].join("\n");
 };
 
@@ -662,6 +663,29 @@ function LitigationWorkspacePageContent() {
     setSelectedOpponentText("");
   };
 
+  const startResponseForOpponentBracket = (bracketId: string) => {
+    const bracket = opponentBrackets.find((item) => item.id === bracketId);
+    if (!bracket) return;
+
+    setActiveLinkFamily({ side: "opponent", id: bracketId });
+    setOpenOpponentBracketIds((prev) => uniqueIds([...prev, bracketId]));
+    setOpenResponseBlockIds((prev) =>
+      uniqueIds([
+        ...prev,
+        ...responseBlocks
+          .filter((block) => block.relatedBracketIds.includes(bracketId))
+          .map((block) => block.id),
+      ]),
+    );
+    setResponseDraft((prev) => ({
+      ...prev,
+      title: prev.title.trim() ? prev.title : `Válasz: ${bracket.title}`,
+      relatedBracketIds: prev.relatedBracketIds.includes(bracketId)
+        ? prev.relatedBracketIds
+        : [...prev.relatedBracketIds, bracketId],
+    }));
+  };
+
   const toggleBracketRelation = (bracketId: string) => {
     setResponseDraft((prev) => ({
       ...prev,
@@ -783,6 +807,7 @@ function LitigationWorkspacePageContent() {
                 onToggleBracketRelation={toggleBracketRelation}
                 onToggleOpponentBracket={toggleOpponentBracket}
                 onToggleResponseBlock={toggleResponseBlock}
+                onStartResponseForOpponentBracket={startResponseForOpponentBracket}
                 onAddResponseBlock={addResponseBlock}
                 onBack={() => navigateToStep("intake")}
                 onNext={() => navigateToStep("assembly")}
@@ -843,14 +868,36 @@ function WorkflowHeader({
       <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <AdminBadge tone="green">Case-bound litigation workflow</AdminBadge>
+            <AdminBadge tone="green">Ügyhöz kötött peres munkafolyamat</AdminBadge>
             <AdminStatusPill tone="gold">Helyi vázlat — nincs szerveroldali mentés.</AdminStatusPill>
           </div>
           <div>
             <h1 className="font-serif text-[30px] font-medium leading-tight text-[#1F2821]">Peres beadvány-munkafolyamat</h1>
             <p className="mt-1 max-w-4xl text-[13px] text-[#6D6A62]">
-              Ügyhöz és feltöltött ellenfél-iratához kötött háromlépéses állítás-, válaszút- és szerkesztési workspace.
+              Ügyhöz és feltöltött ellenfél-iratához kötött háromlépéses állítás-, válaszút- és szerkesztési munkaterület.
             </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {caseId ? (
+              <>
+                <Link
+                  href={`/cases/${encodeURIComponent(caseId)}`}
+                  className="inline-flex items-center justify-center rounded-[6px] border border-[#D8CFB6] bg-white px-3 py-2 text-[12px] font-semibold text-[#1F2821] transition-colors hover:border-[#1F4A33] hover:bg-[#F7F3E7]"
+                >
+                  ← Ügy áttekintése
+                </Link>
+                <Link
+                  href={`/cases/${encodeURIComponent(caseId)}/documents`}
+                  className="inline-flex items-center justify-center rounded-[6px] border border-[#D8CFB6] bg-white px-3 py-2 text-[12px] font-semibold text-[#1F2821] transition-colors hover:border-[#1F4A33] hover:bg-[#F7F3E7]"
+                >
+                  ← Dokumentumtár
+                </Link>
+              </>
+            ) : (
+              <div className="rounded-[6px] border border-dashed border-[#D8CFB6] bg-white px-3 py-2 text-[11px] text-[#7B776D]">
+                Az ügy áttekintése és a Dokumentumtár megnyitásához előbb ügyazonosító szükséges.
+              </div>
+            )}
           </div>
         </div>
         <div className="grid gap-2 rounded-[8px] border border-[#D8CFB6] bg-white p-3 text-[11px] text-[#514D45] sm:grid-cols-5">
@@ -886,7 +933,7 @@ function MissingContextState() {
       <AdminSectionHeader
         eyebrow="Hiányzó ügykörnyezet"
         title="Válassz ügyet és ellenfél iratát a peres stratégiai térkép indításához."
-        subtitle="Ez a workflow csak caseId és documentId kontextussal értelmezhető. A célindítás: ügy megnyitása, ellenfél feltöltött iratának kiválasztása, majd peres workspace indítása."
+        subtitle="Ez a munkafolyamat csak caseId és documentId kontextussal értelmezhető. A célindítás: ügy megnyitása, ellenfél feltöltött iratának kiválasztása, majd peres munkaterület indítása."
         action={<AdminStatusPill tone="gold">Case + document kell</AdminStatusPill>}
       />
     </section>
@@ -1088,7 +1135,7 @@ function IntakeWorkspace({
         helperText={
           !hasDocumentText
             ? documentContext?.unavailableReason || documentTextFallback
-            : "Őszinte állapot: a felület csak meglévő dokumentumszöveget jelenít meg. Nincs hamis AI-kimenet, nincs szerveroldali mentés, nincs jogi bizonyosság állítása."
+            : "Őszinte állapot: a felület csak meglévő dokumentumszöveget jelenít meg. Nincs AI-kimenet, nincs szerveroldali mentés, nincs jogi bizonyosság állítása."
         }
         onMouseUp={captureSelectedText}
         onKeyUp={captureSelectedText}
@@ -1233,6 +1280,7 @@ function OpponentBracketList({
   openBracketIds,
   activeBracketIds,
   onToggleBracket,
+  onStartResponseForBracket,
 }: {
   opponentBrackets: OpponentBracket[];
   linkedCounts: Record<string, number>;
@@ -1240,11 +1288,12 @@ function OpponentBracketList({
   openBracketIds: string[];
   activeBracketIds: string[];
   onToggleBracket: (bracketId: string) => void;
+  onStartResponseForBracket?: (bracketId: string) => void;
 }) {
   if (opponentBrackets.length === 0) {
     return (
       <div className="rounded-[8px] border border-dashed border-[#DFCFC6] bg-[#FBF9F3] p-4 text-[12px] text-[#7B776D]">
-        Még nincs ellenfél-állítás. Ebben a workspace-ben az ellenfél iratából kell kiemelni a támadható állításokat és kérelmeket.
+        Még nincs ellenfél-állítás. Ezen a munkaterületen az ellenfél iratából kell kiemelni a támadható állításokat és kérelmeket.
       </div>
     );
   }
@@ -1277,6 +1326,9 @@ function OpponentBracketList({
                 </span>
                 <span className="mt-2 block truncate font-serif text-lg font-medium text-[#1F2821]">{bracket.title}</span>
                 <span className="mt-1 block truncate text-[11px] text-[#6D6A62]">
+                  {linkedCount > 0 ? `${linkedCount} kapcsolt saját válasz` : "Még nincs válasz ehhez az állításhoz."}
+                </span>
+                <span className="mt-1 block truncate text-[11px] text-[#8F6D62]">
                   {bracket.sourceRef || sourceReference || "Forráshely nincs megadva"} · {bracket.status}
                 </span>
               </span>
@@ -1287,6 +1339,21 @@ function OpponentBracketList({
                 </span>
               </span>
             </button>
+
+            {onStartResponseForBracket ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#F0DFD8] bg-[#FFFDFC] px-4 py-2 pl-6">
+                <p className="text-[11px] text-[#6D6A62]">
+                  {linkedCount > 0 ? `${linkedCount} saját válasz kapcsolódik ehhez.` : "Még nincs válasz ehhez az állításhoz."}
+                </p>
+                <AdminButton
+                  variant="warning"
+                  size="sm"
+                  onClick={() => onStartResponseForBracket(bracket.id)}
+                >
+                  Válasz készítése ehhez
+                </AdminButton>
+              </div>
+            ) : null}
 
             {isOpen ? (
               <div className="border-t border-[#F0DFD8] px-4 pb-4 pl-6 pt-3">
@@ -1333,6 +1400,7 @@ function StrategyWorkspace({
   onToggleBracketRelation,
   onToggleOpponentBracket,
   onToggleResponseBlock,
+  onStartResponseForOpponentBracket,
   onAddResponseBlock,
   onBack,
   onNext,
@@ -1354,6 +1422,7 @@ function StrategyWorkspace({
   onToggleBracketRelation: (bracketId: string) => void;
   onToggleOpponentBracket: (bracketId: string) => void;
   onToggleResponseBlock: (responseBlockId: string) => void;
+  onStartResponseForOpponentBracket: (bracketId: string) => void;
   onAddResponseBlock: () => void;
   onBack: () => void;
   onNext: () => void;
@@ -1362,9 +1431,9 @@ function StrategyWorkspace({
     <section className="grid gap-4 xl:grid-cols-2">
       <AdminPanel className="overflow-hidden">
         <AdminSectionHeader
-          eyebrow="Workspace 2 bal oldal"
+          eyebrow="Ellenfél állításai"
           title="Ellenfél állításai"
-          subtitle="A korábban rögzített ellenoldali állítások. Innen választod ki, mire válaszol a jobb oldali stratégiai blokk."
+          subtitle="A korábban rögzített ellenoldali állítások. Innen választod ki, mire válaszol a saját stratégiai blokk."
           action={<AdminStatusPill tone="burgundy">{opponentBrackets.length} állítás</AdminStatusPill>}
         />
         <div className="space-y-3 p-4">
@@ -1378,6 +1447,7 @@ function StrategyWorkspace({
             openBracketIds={openOpponentBracketIds}
             activeBracketIds={activeOpponentBracketIds}
             onToggleBracket={onToggleOpponentBracket}
+            onStartResponseForBracket={onStartResponseForOpponentBracket}
           />
           <AdminButton variant="neutral" size="sm" onClick={onBack}>
             Vissza: Ellenfél irata
@@ -1387,14 +1457,27 @@ function StrategyWorkspace({
 
       <AdminPanel className="overflow-hidden">
         <AdminSectionHeader
-          eyebrow="Workspace 2 jobb oldal"
-          title="Saját válaszblokkok / válaszút"
+          eyebrow="Saját válaszok"
+          title="Saját válaszok"
           subtitle="Tények, bizonyítékok, jogszabályhelyek, joggyakorlat és eljárási kifogások az ellenoldali állításokhoz kapcsolva."
           action={<AdminStatusPill tone="green">{responseBlocks.length} válaszblokk</AdminStatusPill>}
         />
         <div className="space-y-3 p-4">
           <div className="rounded-[8px] border border-[#E6D8AD] bg-[#FFF9E6] p-3">
             <div className="grid gap-2">
+              {responseDraft.relatedBracketIds.length > 0 ? (
+                <div className="rounded-[8px] border border-[#C7D6EA] bg-[#F3F7FC] px-3 py-2 text-[11px] text-[#2D4A7C]">
+                  <span className="font-semibold">Erre válaszol: </span>
+                  {responseDraft.relatedBracketIds
+                    .map((bracketId) => opponentBrackets.find((bracket) => bracket.id === bracketId)?.title)
+                    .filter(Boolean)
+                    .join(", ")}
+                </div>
+              ) : (
+                <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-white px-3 py-2 text-[11px] text-[#7B776D]">
+                  Nincs ellenoldali állításhoz kapcsolva.
+                </div>
+              )}
               <select
                 value={responseDraft.type}
                 onChange={(event) => onResponseDraftChange((prev) => ({ ...prev, type: event.target.value as ResponseBlock["type"] }))}
@@ -1423,7 +1506,7 @@ function StrategyWorkspace({
                 <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Kapcsolódó ellenoldali állítások</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {opponentBrackets.length === 0 ? (
-                    <span className="text-[11px] text-[#7B776D]">Előbb az Ellenfél irata workspace-ben hozz létre állításokat.</span>
+                    <span className="text-[11px] text-[#7B776D]">Előbb az Ellenfél irata munkaterületen hozz létre állításokat.</span>
                   ) : (
                     opponentBrackets.map((bracket) => (
                       <button
@@ -1450,7 +1533,7 @@ function StrategyWorkspace({
 
           {responseBlocks.length === 0 ? (
             <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FBF9F3] p-4 text-[12px] text-[#7B776D]">
-              Még nincs saját válaszblokk. Ez a workspace az állításhoz kapcsolt válaszstratégia helye, nem kész jogi következtetés.
+              Még nincs saját válaszblokk. Ez a munkaterület az állításhoz kapcsolt válaszstratégia helye, nem kész jogi következtetés.
             </div>
           ) : (
             <div className="space-y-3">
@@ -1482,7 +1565,7 @@ function StrategyWorkspace({
                         </span>
                         <span className="mt-2 block truncate font-serif text-lg font-medium text-[#1F2821]">{block.title}</span>
                         <span className="mt-1 block truncate text-[11px] text-[#6D6A62]">
-                          {relatedTitles.length > 0 ? `Válasz erre: ${relatedTitles.join(", ")}` : "Még nincs ellenoldali állításhoz kapcsolva"}
+                          {relatedTitles.length > 0 ? `Erre válaszol: ${relatedTitles.join(", ")}` : "Nincs ellenoldali állításhoz kapcsolva."}
                         </span>
                       </span>
                       <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#D8CFB6] bg-[#FBF9F3] text-[14px] font-semibold text-[#1F4A33]">
@@ -1503,7 +1586,7 @@ function StrategyWorkspace({
                               </AdminBadge>
                             ))
                           ) : (
-                            <AdminBadge tone="neutral">Nincs kapcsolat</AdminBadge>
+                            <AdminBadge tone="neutral">Nincs ellenoldali állításhoz kapcsolva.</AdminBadge>
                           )}
                         </div>
                       </div>
@@ -1570,16 +1653,16 @@ function AssemblyWorkspace({
     <section className="grid gap-4 xl:grid-cols-[minmax(280px,0.62fr)_minmax(760px,1.38fr)]">
       <AdminPanel className="overflow-hidden">
         <AdminSectionHeader
-          eyebrow="Workspace 3 bal oldal"
-          title="Válaszblokkból fejezet"
-          subtitle="A válaszblokkokból képzett fejezet-vázlat. Ezek táplálják a jobb oldali szerkesztőt."
+          eyebrow="Válaszokból fejezetek"
+          title="Válaszból fejezet"
+          subtitle="A válaszblokkokból képzett fejezet-vázlat. Ezek táplálják a beadványszerkesztőt."
           action={<AdminStatusPill tone="violet">{generatedChapterSeeds.length} generált fejezet</AdminStatusPill>}
         />
         <div className="space-y-3 p-4">
           <div className="rounded-[8px] border border-[#D8CFB6] bg-white p-3">
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Automatikus vázlat</p>
             <p className="mt-2 text-[12px] leading-5 text-[#514D45]">
-              A jobb oldali szerkesztő a válaszblokkok számából és típusából készít tiszta peres dokumentum-vázat. Hiányzó ügyadatnál helykitöltő marad.
+              A beadványszerkesztő a válaszblokkok számából és típusából készít tiszta peres dokumentum-vázat. Hiányzó ügyadatnál helykitöltő marad.
             </p>
             <AdminButton variant="gold" size="sm" onClick={onApplyGeneratedSkeleton} className="mt-3">
               Vázlat frissítése válaszblokkokból
@@ -1660,7 +1743,7 @@ function AssemblyWorkspace({
 
           {chapterBlocks.length === 0 ? (
             <div className="rounded-[8px] border border-dashed border-[#DDD7CA] bg-white p-4 text-[12px] text-[#7B776D]">
-              Még nincs saját fejezetelem. Ez a bal oldal a végső beadvány fejezeteinek előkészítése.
+              Még nincs saját fejezetelem. Ez a panel a végső beadvány fejezeteinek előkészítése.
             </div>
           ) : (
             <div className="space-y-3">
@@ -1737,7 +1820,7 @@ function AssemblyWorkspace({
             </div>
           </div>
         }
-        helperText="Dokumentum összeállítása későbbi patchben aktiválható. Nincs hamis AI-kimenet, nincs hamis jogi bizonyosság, nincs szerveroldali mentés."
+        helperText="Dokumentum összeállítása későbbi patchben aktiválható. Nincs AI-kimenet, nincs jogi bizonyosság állítása, nincs szerveroldali mentés."
       />
     </section>
   );
