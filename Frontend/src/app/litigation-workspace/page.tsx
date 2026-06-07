@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminBadge, AdminButton, AdminPanel, AdminSectionHeader, AdminStatusPill } from "@/components/adminiculum/ui";
+import { DocumentEditorShell } from "@/components/documents/DocumentEditorShell";
 import {
   getCaseDocuments,
   getDocumentById,
@@ -377,7 +378,7 @@ const buildPleadingSkeleton = ({
     "V. Záró kérelem",
     "[Perköltség, dátum, aláírás és záró kérelem helye.]",
     "",
-    "Fontos: ez helyi, foundation állapotú szerkesztési vázlat. Nincs Word-export, nincs szerveroldali mentés, nincs fake AI-következtetés.",
+    "Fontos: ez helyi szerkesztési vázlat. Nincs Word-export, nincs szerveroldali mentés, nincs hamis AI-következtetés.",
   ].join("\n");
 };
 
@@ -757,10 +758,6 @@ function LitigationWorkspacePageContent() {
                 linkedCounts={linkedCounts}
                 openOpponentBracketIds={openOpponentBracketIds}
                 activeOpponentBracketIds={activeOpponentBracketIds}
-                onExtractedTextChange={(value) => {
-                  setLocalExtractedText(value);
-                  setLocalTextWasTouched(true);
-                }}
                 onSourceReferenceChange={setSourceReference}
                 onSelectedOpponentTextChange={setSelectedOpponentText}
                 onSelectionOpponentTypeChange={setSelectionOpponentType}
@@ -801,6 +798,7 @@ function LitigationWorkspacePageContent() {
                 generatedChapterSeeds={generatedChapterSeeds}
                 generatedPleadingSkeleton={generatedPleadingSkeleton}
                 pleadingEditorText={pleadingEditorText}
+                editorWasTouched={editorWasTouched}
                 responseBlocks={responseBlocks}
                 onChapterDraftChange={setChapterDraft}
                 onAddChapterBlock={addChapterBlock}
@@ -846,7 +844,7 @@ function WorkflowHeader({
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <AdminBadge tone="green">Case-bound litigation workflow</AdminBadge>
-            <AdminStatusPill tone="gold">Local/foundation — nincs szerveroldali mentés.</AdminStatusPill>
+            <AdminStatusPill tone="gold">Helyi vázlat — nincs szerveroldali mentés.</AdminStatusPill>
           </div>
           <div>
             <h1 className="font-serif text-[30px] font-medium leading-tight text-[#1F2821]">Peres beadvány-munkafolyamat</h1>
@@ -874,7 +872,7 @@ function WorkflowHeader({
           </div>
           <div>
             <p className="font-semibold text-[#1F2821]">Státusz</p>
-            <p className="mt-1">{hasContext ? "local/foundation" : "context szükséges"}</p>
+            <p className="mt-1">{hasContext ? "helyi vázlat" : "kontextus szükséges"}</p>
           </div>
         </div>
       </div>
@@ -949,7 +947,6 @@ function IntakeWorkspace({
   linkedCounts,
   openOpponentBracketIds,
   activeOpponentBracketIds,
-  onExtractedTextChange,
   onSourceReferenceChange,
   onSelectedOpponentTextChange,
   onSelectionOpponentTypeChange,
@@ -981,7 +978,6 @@ function IntakeWorkspace({
   linkedCounts: Record<string, number>;
   openOpponentBracketIds: string[];
   activeOpponentBracketIds: string[];
-  onExtractedTextChange: (value: string) => void;
   onSourceReferenceChange: (value: string) => void;
   onSelectedOpponentTextChange: (value: string) => void;
   onSelectionOpponentTypeChange: (value: OpponentBracketType) => void;
@@ -1010,101 +1006,94 @@ function IntakeWorkspace({
 
   return (
     <section className="grid gap-4 xl:grid-cols-[minmax(360px,1.15fr)_minmax(340px,0.85fr)]">
-      <AdminPanel className="overflow-hidden">
-        <AdminSectionHeader
-          eyebrow="Workspace 1"
-          title="Ellenfél irata"
-          subtitle="A bal oldali munkaterület az ellenfél feltöltött iratának elérhető adatait és munkaszövegét mutatja."
-          action={<AdminStatusPill tone={hasDocumentText ? "green" : "gold"}>{hasDocumentText ? "Szöveg elérhető" : "Nincs szöveg"}</AdminStatusPill>}
-        />
-        <div className="space-y-3 p-4">
-          <div className="rounded-[8px] border border-[#D8CFB6] bg-white p-3">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Kiválasztott dokumentum</p>
-                <h3 className="mt-1 break-words font-serif text-xl font-medium text-[#1F2821]">
-                  {isLoadingDocumentContext ? "Dokumentum betöltése..." : documentContext?.title || "Dokumentumadat nem érhető el"}
-                </h3>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {documentMetaItems.length > 0 ? (
-                    documentMetaItems.map((item) => (
-                      <AdminBadge key={item} tone="neutral">
-                        {item}
-                      </AdminBadge>
-                    ))
-                  ) : (
-                    <AdminBadge tone="neutral">Metaadat nem érhető el</AdminBadge>
-                  )}
-                  {documentContext?.textField ? <AdminBadge tone="blue">Szövegforrás: {documentContext.textField}</AdminBadge> : null}
+      <DocumentEditorShell
+        ref={documentTextRef}
+        readOnly
+        title="Ellenfél irata"
+        subtitle="A munkaterület az ellenfél feltöltött iratának elérhető adatait és munkaszövegét mutatja."
+        value={localExtractedText}
+        placeholder={documentTextFallback}
+        rows={20}
+        minHeightClassName="min-h-[560px]"
+        status={<AdminStatusPill tone={hasDocumentText ? "green" : "gold"}>{hasDocumentText ? "Szöveg elérhető" : "Nincs szöveg"}</AdminStatusPill>}
+        badges={
+          <>
+            {documentMetaItems.length > 0 ? (
+              documentMetaItems.map((item) => (
+                <AdminBadge key={item} tone="neutral">
+                  {item}
+                </AdminBadge>
+              ))
+            ) : (
+              <AdminBadge tone="neutral">Metaadat nem érhető el</AdminBadge>
+            )}
+            {documentContext?.textField ? <AdminBadge tone="blue">Szövegforrás: {documentContext.textField}</AdminBadge> : null}
+            <AdminBadge tone={documentContext ? "green" : "gold"}>
+              {documentContext ? "Dokumentum kontextus" : "Betöltés alatt"}
+            </AdminBadge>
+          </>
+        }
+        toolbar={
+          <div className="grid w-full gap-3">
+            <div className="rounded-[8px] border border-[#D8CFB6] bg-white p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Kiválasztott dokumentum</p>
+                  <h3 className="mt-1 break-words font-serif text-xl font-medium text-[#1F2821]">
+                    {isLoadingDocumentContext ? "Dokumentum betöltése..." : documentContext?.title || "Dokumentumadat nem érhető el"}
+                  </h3>
                 </div>
               </div>
-              <AdminStatusPill tone={documentContext ? "green" : "gold"}>
-                {documentContext ? "Dokumentum kontextus" : "Betöltés alatt"}
-              </AdminStatusPill>
+              {documentContextError ? (
+                <p className="mt-3 rounded-[6px] border border-dashed border-[#E5C3C3] bg-[#FFF7F4] px-3 py-2 text-[11px] text-[#7B776D]">
+                  {documentContextError}
+                </p>
+              ) : null}
             </div>
-            {documentContextError ? (
-              <p className="mt-3 rounded-[6px] border border-dashed border-[#E5C3C3] bg-[#FFF7F4] px-3 py-2 text-[11px] text-[#7B776D]">
-                {documentContextError}
-              </p>
-            ) : null}
-          </div>
-          <input
-            value={sourceReference}
-            onChange={(event) => onSourceReferenceChange(event.target.value)}
-            placeholder="Forrás referencia: oldal / pont / bekezdés"
-            className="w-full rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs text-[#1F2821]"
-          />
-          {!hasDocumentText ? (
-            <p className="rounded-[6px] border border-dashed border-[#D8CFB6] bg-white px-3 py-2 text-[11px] text-[#7B776D]">
-              {documentContext?.unavailableReason || documentTextFallback}
-            </p>
-          ) : null}
-          <textarea
-            ref={documentTextRef}
-            value={localExtractedText}
-            onChange={(event) => {
-              onExtractedTextChange(event.target.value);
-              onSelectedOpponentTextChange("");
-            }}
-            onMouseUp={captureSelectedText}
-            onKeyUp={captureSelectedText}
-            onSelect={captureSelectedText}
-            rows={20}
-            placeholder={documentTextFallback}
-            className="min-h-[560px] w-full rounded border border-[#DFCFC6] bg-[#FFFDF8] px-4 py-3 font-serif text-[14px] leading-7 text-[#1F2821]"
-          />
-          <div className="rounded-[8px] border border-[#D8CFB6] bg-white p-3">
-            <div className="grid gap-2 lg:grid-cols-[minmax(180px,260px)_1fr]">
-              <select
-                value={selectionOpponentType}
-                onChange={(event) => onSelectionOpponentTypeChange(event.target.value as OpponentBracketType)}
-                className="rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs text-[#1F2821]"
-              >
-                {Object.entries(bracketTypeLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <AdminButton variant="warning" onClick={onAddOpponentItemFromSelection} disabled={!hasSelectedText}>
-                Ellenfél állításának létrehozása kijelölésből
-              </AdminButton>
+            <input
+              value={sourceReference}
+              onChange={(event) => onSourceReferenceChange(event.target.value)}
+              placeholder="Forrás referencia: oldal / pont / bekezdés"
+              className="w-full rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs text-[#1F2821]"
+            />
+            <div className="rounded-[8px] border border-[#D8CFB6] bg-white p-3">
+              <div className="grid gap-2 lg:grid-cols-[minmax(180px,260px)_1fr]">
+                <select
+                  value={selectionOpponentType}
+                  onChange={(event) => onSelectionOpponentTypeChange(event.target.value as OpponentBracketType)}
+                  className="rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs text-[#1F2821]"
+                >
+                  {Object.entries(bracketTypeLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <AdminButton variant="warning" onClick={onAddOpponentItemFromSelection} disabled={!hasSelectedText}>
+                  Ellenfél állításának létrehozása kijelölésből
+                </AdminButton>
+              </div>
+              {hasSelectedText ? (
+                <p className="mt-2 line-clamp-2 rounded-[6px] border border-[#E7DECB] bg-[#FBF9F3] px-3 py-2 text-[11px] text-[#514D45]">
+                  Kijelölt szöveg: „{selectedOpponentText}”
+                </p>
+              ) : (
+                <p className="mt-2 rounded-[6px] border border-dashed border-[#D8CFB6] bg-[#FBF9F3] px-3 py-2 text-[11px] text-[#7B776D]">
+                  Jelölj ki szöveget az ellenfél iratából.
+                </p>
+              )}
             </div>
-            {hasSelectedText ? (
-              <p className="mt-2 line-clamp-2 rounded-[6px] border border-[#E7DECB] bg-[#FBF9F3] px-3 py-2 text-[11px] text-[#514D45]">
-                Kijelölt szöveg: „{selectedOpponentText}”
-              </p>
-            ) : (
-              <p className="mt-2 rounded-[6px] border border-dashed border-[#D8CFB6] bg-[#FBF9F3] px-3 py-2 text-[11px] text-[#7B776D]">
-                Jelölj ki szöveget az ellenfél iratából.
-              </p>
-            )}
           </div>
-          <p className="rounded-[6px] border border-dashed border-[#E5C3C3] bg-white px-3 py-2 text-[11px] text-[#7B776D]">
-            Őszinte állapot: a felület csak meglévő dokumentumszöveget jelenít meg. Nincs hamis AI-kimenet, nincs szerveroldali mentés, nincs jogi bizonyosság állítása.
-          </p>
-        </div>
-      </AdminPanel>
+        }
+        helperText={
+          !hasDocumentText
+            ? documentContext?.unavailableReason || documentTextFallback
+            : "Őszinte állapot: a felület csak meglévő dokumentumszöveget jelenít meg. Nincs hamis AI-kimenet, nincs szerveroldali mentés, nincs jogi bizonyosság állítása."
+        }
+        onMouseUp={captureSelectedText}
+        onKeyUp={captureSelectedText}
+        onSelect={captureSelectedText}
+      />
 
       <AdminPanel className="overflow-hidden">
         <AdminSectionHeader
@@ -1546,6 +1535,7 @@ function AssemblyWorkspace({
   generatedChapterSeeds,
   generatedPleadingSkeleton,
   pleadingEditorText,
+  editorWasTouched,
   responseBlocks,
   onChapterDraftChange,
   onAddChapterBlock,
@@ -1567,6 +1557,7 @@ function AssemblyWorkspace({
   generatedChapterSeeds: PleadingChapterSeed[];
   generatedPleadingSkeleton: string;
   pleadingEditorText: string;
+  editorWasTouched: boolean;
   responseBlocks: ResponseBlock[];
   onChapterDraftChange: (value: typeof chapterDraft | ((prev: typeof chapterDraft) => typeof chapterDraft)) => void;
   onAddChapterBlock: () => void;
@@ -1650,7 +1641,7 @@ function AssemblyWorkspace({
 
           {generatedChapterSeeds.length === 0 ? (
             <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-white p-4 text-[12px] text-[#7B776D]">
-              A válaszútból még nincs átemelhető fejezet. A szerkesztő ilyenkor alap placeholder-vázat készít.
+              A válaszútból még nincs átemelhető fejezet. A szerkesztő ilyenkor alap helykitöltő vázat készít.
             </div>
           ) : (
             <div className="space-y-2">
@@ -1691,54 +1682,63 @@ function AssemblyWorkspace({
         </div>
       </AdminPanel>
 
-      <AdminPanel className="overflow-hidden">
-        <AdminSectionHeader
-          eyebrow="Workspace 3 jobb oldal"
-          title="Nagy beadvány-szerkesztő"
-          subtitle="Automatikusan előkészített, helyi szerkesztési vázlat Bálintfy-stílusú fejléccel és válaszblokkokon alapuló fejezetekkel."
-          action={<AdminStatusPill tone="gold">Helyi vázlat</AdminStatusPill>}
-        />
-        <div className="space-y-3 p-4">
-          <div className="grid gap-3 rounded-[10px] border border-[#D8CFB6] bg-white p-4 text-[11px] text-[#514D45] md:grid-cols-3">
-            <div>
-              <p className="font-semibold text-[#1F2821]">Forráslogika</p>
-              <p className="mt-1">{responseBlocks.length} válaszblokk alapján előkészítve</p>
-            </div>
-            <div>
-              <p className="font-semibold text-[#1F2821]">Fejezetképzés</p>
-              <p className="mt-1">Tény, bizonyíték, jogszabály, joggyakorlat és kifogás szerint csoportosítva</p>
-            </div>
-            <div>
-              <p className="font-semibold text-[#1F2821]">Mentés/export</p>
-              <p className="mt-1">Helyi vázlat; Word-export és szerveroldali mentés nincs bekötve</p>
-            </div>
-          </div>
-          <div className="rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <DocumentEditorShell
+        title="Beadványszerkesztő"
+        subtitle="Automatikusan előkészített, helyi beadványvázlat Bálintfy-stílusú fejléccel és válaszblokkokon alapuló fejezetekkel."
+        value={pleadingEditorText}
+        onChange={onPleadingEditorTextChange}
+        placeholder={generatedPleadingSkeleton}
+        rows={28}
+        minHeightClassName="min-h-[820px]"
+        isDirty={editorWasTouched}
+        dirtyLabel="Nem mentett helyi beadványvázlat."
+        cleanLabel={pleadingEditorText.trim() ? "Helyi beadványvázlat előkészítve." : undefined}
+        status={<AdminStatusPill tone="gold">Helyi vázlat</AdminStatusPill>}
+        badges={
+          <>
+            <AdminBadge tone="neutral">{responseBlocks.length} saját válasz</AdminBadge>
+            <AdminBadge tone="violet">{generatedChapterSeeds.length} beadványrész</AdminBadge>
+          </>
+        }
+        sideActions={
+          <AdminButton variant="gold" size="sm" onClick={onApplyGeneratedSkeleton}>
+            Vázlat frissítése válaszblokkokból
+          </AdminButton>
+        }
+        toolbar={
+          <div className="grid w-full gap-3">
+            <div className="grid gap-3 rounded-[10px] border border-[#D8CFB6] bg-white p-4 text-[11px] text-[#514D45] md:grid-cols-3">
               <div>
-                <h3 className="font-serif text-xl font-medium text-[#1F2821]">Bálintfy ellenkérelem struktúra</h3>
-                <p className="mt-1 text-[12px] text-[#6D6A62]">{outputTemplateLabels[outputTemplate]}</p>
+                <p className="font-semibold text-[#1F2821]">Forráslogika</p>
+                <p className="mt-1">{responseBlocks.length} saját válasz alapján előkészítve</p>
               </div>
-              <AdminStatusPill tone="gold">Későbbi patch</AdminStatusPill>
+              <div>
+                <p className="font-semibold text-[#1F2821]">Fejezetképzés</p>
+                <p className="mt-1">Tény, bizonyíték, jogszabály, joggyakorlat és kifogás szerint csoportosítva</p>
+              </div>
+              <div>
+                <p className="font-semibold text-[#1F2821]">Mentés/export</p>
+                <p className="mt-1">Helyi vázlat; Word-export és szerveroldali mentés nincs bekötve</p>
+              </div>
             </div>
-            <ol className="mt-4 grid gap-2 rounded-[8px] border border-[#E7DECB] bg-white p-4 text-[12px] text-[#514D45] md:grid-cols-2">
-              {assemblyStructure.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ol>
+            <div className="rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="font-serif text-xl font-medium text-[#1F2821]">Bálintfy ellenkérelem struktúra</h3>
+                  <p className="mt-1 text-[12px] text-[#6D6A62]">{outputTemplateLabels[outputTemplate]}</p>
+                </div>
+                <AdminStatusPill tone="gold">Későbbi patch</AdminStatusPill>
+              </div>
+              <ol className="mt-4 grid gap-2 rounded-[8px] border border-[#E7DECB] bg-white p-4 text-[12px] text-[#514D45] md:grid-cols-2">
+                {assemblyStructure.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ol>
+            </div>
           </div>
-          <textarea
-            value={pleadingEditorText}
-            onChange={(event) => onPleadingEditorTextChange(event.target.value)}
-            rows={28}
-            placeholder={generatedPleadingSkeleton}
-            className="min-h-[820px] w-full rounded border border-[#D8CFB6] bg-[#FFFDF8] px-6 py-5 font-serif text-[15px] leading-8 text-[#1F2821] shadow-inner"
-          />
-          <div className="rounded-[6px] border border-dashed border-[#D8CFB6] bg-white px-3 py-2 text-[11px] text-[#7B776D]">
-            Dokumentum összeállítása későbbi patchben aktiválható. Nincs fake AI output, nincs fake legal certainty, nincs szerveroldali save.
-          </div>
-        </div>
-      </AdminPanel>
+        }
+        helperText="Dokumentum összeállítása későbbi patchben aktiválható. Nincs hamis AI-kimenet, nincs hamis jogi bizonyosság, nincs szerveroldali mentés."
+      />
     </section>
   );
 }
