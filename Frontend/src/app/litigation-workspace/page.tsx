@@ -8,8 +8,10 @@ import { AdminBadge, AdminButton, AdminPanel, AdminSectionHeader, AdminStatusPil
 import { DocumentEditorShell } from "@/components/documents/DocumentEditorShell";
 import {
   getCaseDocuments,
+  getCaseById,
   getDocumentById,
   getDocumentText,
+  type CaseListItem,
   type DocumentItem,
   type DocumentReviewData,
 } from "@/lib/api";
@@ -422,6 +424,8 @@ function LitigationWorkspacePageContent() {
   const [selectedOpponentText, setSelectedOpponentText] = useState("");
   const [selectionOpponentType, setSelectionOpponentType] = useState<OpponentBracketType>("fact");
   const [documentContext, setDocumentContext] = useState<LitigationDocumentContext | null>(null);
+  const [caseContext, setCaseContext] = useState<CaseListItem | null>(null);
+  const [caseContextError, setCaseContextError] = useState<string | null>(null);
   const [isLoadingDocumentContext, setIsLoadingDocumentContext] = useState(false);
   const [documentContextError, setDocumentContextError] = useState<string | null>(null);
   const [opponentBrackets, setOpponentBrackets] = useState<OpponentBracket[]>([]);
@@ -486,16 +490,19 @@ function LitigationWorkspacePageContent() {
 
   const assemblyStructure = outputTemplate === "injunction-opposition" ? injunctionOppositionStructure : fullDefenseStructure;
   const generatedChapterSeeds = useMemo(() => buildPleadingChapterSeeds(responseBlocks), [responseBlocks]);
+  const effectiveClientName = clientName || caseContext?.clientName || "";
+  const effectiveCaseNumber = caseContext?.caseNumber || caseId;
+  const effectiveCaseStatus = caseContext?.status || (hasContext ? "helyi vázlat" : "kontextus szükséges");
   const generatedPleadingSkeleton = useMemo(
     () =>
       buildPleadingSkeleton({
         caseId,
         documentId,
-        clientName,
+        clientName: effectiveClientName,
         outputTemplate,
         chapterSeeds: generatedChapterSeeds,
       }),
-    [caseId, documentId, clientName, outputTemplate, generatedChapterSeeds],
+    [caseId, documentId, effectiveClientName, outputTemplate, generatedChapterSeeds],
   );
   const currentStepIndex = workspaceSteps.findIndex((step) => step.key === currentStep);
 
@@ -561,6 +568,32 @@ function LitigationWorkspacePageContent() {
       cancelled = true;
     };
   }, [caseId, documentId]);
+
+  useEffect(() => {
+    if (!caseId) {
+      setCaseContext(null);
+      setCaseContextError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setCaseContextError(null);
+
+    getCaseById(caseId)
+      .then((record) => {
+        if (cancelled) return;
+        setCaseContext(record);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCaseContext(null);
+        setCaseContextError("Az ügy adatai nem tölthetők be az elérhető frontend API-kon keresztül.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [caseId]);
 
   useEffect(() => {
     if (!documentContext || localTextWasTouched) return;
@@ -753,9 +786,13 @@ function LitigationWorkspacePageContent() {
         <WorkflowHeader
           caseId={caseId}
           documentId={documentId}
-          clientName={clientName}
+          caseNumber={effectiveCaseNumber}
+          clientName={effectiveClientName}
+          documentName={documentContext?.title || documentContext?.fileName || ""}
           mode={mode}
+          status={effectiveCaseStatus}
           hasContext={hasContext}
+          caseContextError={caseContextError}
         />
 
         {!hasContext ? (
@@ -853,15 +890,23 @@ function isWorkspaceStep(step: string | undefined): step is LitigationWorkspaceS
 function WorkflowHeader({
   caseId,
   documentId,
+  caseNumber,
   clientName,
+  documentName,
   mode,
+  status,
   hasContext,
+  caseContextError,
 }: {
   caseId: string;
   documentId: string;
+  caseNumber: string;
   clientName: string;
+  documentName: string;
   mode: string;
+  status: string;
   hasContext: boolean;
+  caseContextError: string | null;
 }) {
   return (
     <section className="rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-4">
@@ -899,19 +944,24 @@ function WorkflowHeader({
               </div>
             )}
           </div>
+          {caseContextError ? (
+            <p className="rounded-[6px] border border-dashed border-[#D8CFB6] bg-white px-3 py-2 text-[11px] text-[#7B776D]">
+              {caseContextError}
+            </p>
+          ) : null}
         </div>
         <div className="grid gap-2 rounded-[8px] border border-[#D8CFB6] bg-white p-3 text-[11px] text-[#514D45] sm:grid-cols-5">
           <div>
-            <p className="font-semibold text-[#1F2821]">Ügy</p>
-            <p className="mt-1 break-all">{caseId || "Hiányzik"}</p>
+            <p className="font-semibold text-[#1F2821]">Ügy száma</p>
+            <p className="mt-1 break-all">{caseNumber || "Hiányzik"}</p>
           </div>
           <div>
             <p className="font-semibold text-[#1F2821]">Dokumentum</p>
-            <p className="mt-1 break-all">{documentId || "Hiányzik"}</p>
+            <p className="mt-1 break-all">{documentName || documentId || "Hiányzik"}</p>
           </div>
           <div>
             <p className="font-semibold text-[#1F2821]">Ügyfél</p>
-            <p className="mt-1 break-all">{clientName || "Nincs megadva"}</p>
+            <p className="mt-1 break-all">{clientName || "Ügyféladat nem érhető el"}</p>
           </div>
           <div>
             <p className="font-semibold text-[#1F2821]">Mód</p>
@@ -919,7 +969,7 @@ function WorkflowHeader({
           </div>
           <div>
             <p className="font-semibold text-[#1F2821]">Státusz</p>
-            <p className="mt-1">{hasContext ? "helyi vázlat" : "kontextus szükséges"}</p>
+            <p className="mt-1">{status}</p>
           </div>
         </div>
       </div>
@@ -1135,7 +1185,7 @@ function IntakeWorkspace({
         helperText={
           !hasDocumentText
             ? documentContext?.unavailableReason || documentTextFallback
-            : "Őszinte állapot: a felület csak meglévő dokumentumszöveget jelenít meg. Nincs AI-kimenet, nincs szerveroldali mentés, nincs jogi bizonyosság állítása."
+            : undefined
         }
         onMouseUp={captureSelectedText}
         onKeyUp={captureSelectedText}
@@ -1820,7 +1870,7 @@ function AssemblyWorkspace({
             </div>
           </div>
         }
-        helperText="Dokumentum összeállítása későbbi patchben aktiválható. Nincs AI-kimenet, nincs jogi bizonyosság állítása, nincs szerveroldali mentés."
+        helperText="Helyi vázlat · AI nélkül · nincs szerveroldali mentés."
       />
     </section>
   );

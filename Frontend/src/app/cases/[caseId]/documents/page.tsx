@@ -851,7 +851,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       ? selectedGeneratedContract.isFinalRevision
         ? 'Végleges dokumentum'
         : 'Generált / módosított'
-      : 'Nincs aktív dokumentum';
+      : 'Nincs kiválasztott dokumentum';
   const selectedStatusLabel = selectedUploadedDocument
     ? selectedUploadedDocument.documentType === 'MODIFIED_WORKING_COPY'
       ? 'Szöveges munkapéldány'
@@ -859,6 +859,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     : selectedGeneratedContract
       ? getContractStatusLabel(selectedGeneratedContract)
       : 'Válassz dokumentumot';
+  const selectedDocumentActionLabel = activeTitle || "nincs kiválasztva";
   const selectedMetaItems = [
     selectedUploadedDocument?.version ? `Verzió: ${selectedUploadedDocument.version}` : selectedGeneratedContract?.revisionNumber ? `Verzió: v${selectedGeneratedContract.revisionNumber}` : null,
     selectedUploadedDocument?.createdAt ? `Dátum: ${formatShortDate(selectedUploadedDocument.createdAt)}` : selectedGeneratedContract?.generatedAt ? `Dátum: ${formatShortDate(selectedGeneratedContract.generatedAt)}` : null,
@@ -889,7 +890,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   <div className="mt-2 flex flex-wrap items-center gap-3">
                     <h1 className="font-serif text-4xl font-semibold leading-tight text-[#16201A]">Dokumentumtár</h1>
                     <span className="rounded-full border border-[#D8C58E] bg-[#F7F0D9] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[#6D5418]">
-                      {totalLedgerDocuments} irat · {activeDocument ? "aktív munkadokumentum" : "nincs aktív"}
+                      {totalLedgerDocuments} irat · {activeDocument ? "kiválasztott munkadokumentum" : "nincs kiválasztva"}
                     </span>
                   </div>
                   <p className="mt-2 max-w-3xl text-sm text-[#3D4842]">
@@ -900,11 +901,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   <AdminButton variant="primary" onClick={() => fileInputRef.current?.click()} disabled={!caseRecord?.id || isUploading}>
                     {isUploading ? "Feltöltés..." : "Dokumentum feltöltése"}
                   </AdminButton>
-                  <AdminButton variant="gold" onClick={handleGenerate}>Szerződés-workspace</AdminButton>
                 </div>
               </div>
               <div className="grid gap-3 bg-[#F7F0D9] px-5 py-3 text-[12px] text-[#3D4842] md:grid-cols-3">
-                <p><span className="font-bold text-[#1F4A33]">Aktív dokumentum:</span> {activeTitle || "nincs kiválasztva"}</p>
+                <p><span className="font-bold text-[#1F4A33]">Kiválasztott dokumentum:</span> {selectedDocumentActionLabel}</p>
                 <p><span className="font-bold text-[#1F4A33]">Ügyfélprofil:</span> {clientHouseStyle ? (houseStyleHasContent ? "house style elérhető" : "profil részleges") : "nincs profil"}</p>
                 <p><span className="font-bold text-[#1F4A33]">Leadási csomag:</span> jobb oldali panelen kezelhető</p>
               </div>
@@ -923,7 +923,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#D8C58E]">Dokumentum ledger</p>
                     <h2 className="mt-1 font-serif text-3xl font-semibold">Iratok</h2>
                     <p className="mt-2 text-[12px] leading-relaxed text-[#E9E2C7]">
-                      Több dokumentum is tárolható, de egyszerre mindig egy aktív munkadokumentumon dolgozol.
+                      Több dokumentum is tárolható, de egyszerre mindig egy kiválasztott munkadokumentumon dolgozol.
                     </p>
                   </div>
                   <div className="space-y-4 p-4">
@@ -1014,7 +1014,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   <div className="flex gap-4 border-b border-[rgba(22,32,26,0.12)] bg-[#FBF6E7] p-5">
                     <div className="mt-1 h-16 w-1.5 rounded-full bg-[#B58A2A]" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#1F4A33]">Aktív munkadokumentum</p>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#1F4A33]">Munkadokumentum</p>
                       <h2 className="mt-2 truncate font-serif text-4xl font-semibold leading-tight text-[#16201A]">{activeTitle || "Nincs még munkadokumentum"}</h2>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <AdminBadge tone={activeDocument ? "gold" : "neutral"}>{selectedDocumentTypeLabel}</AdminBadge>
@@ -1031,18 +1031,17 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   <div className="space-y-5 p-5">
                     {!activeDocument ? (
                       <div className="rounded-[18px] border border-dashed border-[rgba(31,74,51,0.24)] bg-[#FBF6E7] p-8 text-center">
-                        <h3 className="font-serif text-3xl font-semibold text-[#16201A]">Nincs még munkadokumentum</h3>
-                        <p className="mx-auto mt-2 max-w-md text-sm text-[#3D4842]">Kezdéshez tölts fel egy dokumentumot, vagy nyisd meg a szerződés-workspace-t az ügyhöz.</p>
+                        <h3 className="font-serif text-3xl font-semibold text-[#16201A]">Nincs még kiválasztott dokumentum</h3>
+                        <p className="mx-auto mt-2 max-w-md text-sm text-[#3D4842]">Kezdéshez tölts fel egy dokumentumot, vagy válassz egy iratot a bal oldali listából.</p>
                         <div className="mt-5 flex flex-wrap justify-center gap-2">
                           <AdminButton variant="primary" onClick={() => fileInputRef.current?.click()} disabled={!caseRecord?.id || isUploading}>Dokumentum feltöltése</AdminButton>
-                          <AdminButton variant="gold" onClick={handleGenerate}>Szerződés-workspace</AdminButton>
                         </div>
                       </div>
                     ) : (
                       <>
                         <div className="rounded-[16px] border border-[rgba(22,32,26,0.12)] bg-[#FBF6E7] p-4">
                           <h3 className="font-serif text-xl font-semibold text-[#16201A]">
-                            {selectedUploadedDocument?.documentType === 'MODIFIED_WORKING_COPY' ? 'Aktív munkapéldány' : selectedGeneratedContract ? 'Aktív generált dokumentum' : 'Aktív dokumentum'}
+                            {selectedUploadedDocument?.documentType === 'MODIFIED_WORKING_COPY' ? 'Munkapéldány' : selectedGeneratedContract ? 'Generált dokumentum' : 'Kiválasztott dokumentum'}
                           </h3>
                           <p className="mt-1 text-sm text-[#3D4842]">
                             {selectedUploadedDocument?.documentType === 'MODIFIED_WORKING_COPY'
@@ -1054,33 +1053,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </div>
 
                         <div className="rounded-[16px] border border-[rgba(22,32,26,0.12)] bg-white p-4">
-                          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="flex flex-col gap-3">
                             <div>
-                              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7A8479]">Elsődleges művelet</p>
-                              <h3 className="font-serif text-2xl font-semibold text-[#16201A]">Szerződés-workspace</h3>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <AdminButton variant="primary" onClick={() => activeDocument && openWorkspace(activeDocument.id)}>Megnyitás workspace-ben</AdminButton>
-                              {selectedUploadedDocument ? (
-                                <AdminButton variant="neutral" onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)} disabled={isDownloading === selectedUploadedDocument.id}>{isDownloading === selectedUploadedDocument.id ? "Letöltés..." : "Letöltés"}</AdminButton>
-                              ) : selectedGeneratedContract ? (
-                                <AdminButton variant="neutral" onClick={() => handleDownload(selectedGeneratedContract)} disabled={isDownloading === selectedGeneratedContract.id}>{isDownloading === selectedGeneratedContract.id ? "Letöltés..." : "Letöltés"}</AdminButton>
-                              ) : null}
-                              {canAnonymizeActiveDocument && selectedUploadedDocument ? <AdminButton variant="gold" onClick={() => openUploadedAnonymize(selectedUploadedDocument)}>Anonimizálás</AdminButton> : null}
+                              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7A8479]">Dokumentum összefoglaló</p>
+                              <h3 className="font-serif text-2xl font-semibold text-[#16201A]">{activeTitle}</h3>
+                              <p className="mt-2 text-sm text-[#3D4842]">
+                                A kiválasztott irathoz tartozó műveletek a jobb oldali Dokumentum műveletek panelen érhetők el.
+                              </p>
                             </div>
                           </div>
 
-                          <details className="mt-4 rounded-[12px] border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] p-3">
-                            <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-[0.14em] text-[#1F4A33]">Haladó / technikai műveletek</summary>
-                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                              <AdminButton className="justify-start" size="sm" variant="muted" onClick={handleCreateHandoffPackage} disabled={isCreatingHandoffPackage}>{isCreatingHandoffPackage ? "Csomag készül..." : "Csomag készítése"}</AdminButton>
-                              <AdminButton className="justify-start" size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>Metaadat összevetés</AdminButton>
-                              {selectedGeneratedContract ? <AdminButton className="justify-start" size="sm" variant="muted" onClick={() => handleReview(selectedGeneratedContract.id)}>Review megnyitása</AdminButton> : null}
-                              {selectedGeneratedContract ? (
-                                selectedGeneratedContract.spItemId ? <AdminStatusPill tone="green">SharePoint szinkronizálva</AdminStatusPill> : <AdminButton className="justify-start" size="sm" variant="muted" onClick={() => handleSharePointUpload(selectedGeneratedContract)} disabled={isUploadingToSP === selectedGeneratedContract.id}>{isUploadingToSP === selectedGeneratedContract.id ? "Szinkronizálás..." : "SharePoint szinkron"}</AdminButton>
-                              ) : null}
-                            </div>
-                          </details>
                         </div>
                       </>
                     )}
@@ -1094,6 +1076,15 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <h2 className="mt-1 font-serif text-2xl font-semibold">Dokumentum műveletek</h2>
                     </div>
                     <div className="space-y-2 p-4">
+                      {!activeDocument ? (
+                        <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-white p-3 text-[12px] text-[#7A8479]">
+                          Válassz dokumentumot a műveletekhez.
+                        </p>
+                      ) : (
+                        <p className="rounded-[10px] border border-[#E7DECB] bg-white p-3 text-[12px] text-[#3D4842]">
+                          Kiválasztott dokumentum: <span className="font-semibold text-[#16201A]">{activeTitle}</span>
+                        </p>
+                      )}
                       <AdminButton className="w-full justify-start" variant="primary" onClick={() => activeDocument ? openWorkspace(activeDocument.id) : router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}`)}>
                         Szerződés-workspace
                       </AdminButton>
@@ -1104,6 +1095,20 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-white p-3 text-[12px] text-[#7A8479]">
                           Válassz feltöltött dokumentumot a peres stratégiai térkép indításához.
                         </p>
+                      ) : null}
+                      {selectedUploadedDocument ? (
+                        <AdminButton className="w-full justify-start" variant="neutral" onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)} disabled={isDownloading === selectedUploadedDocument.id}>
+                          {isDownloading === selectedUploadedDocument.id ? "Letöltés..." : "Letöltés"}
+                        </AdminButton>
+                      ) : selectedGeneratedContract ? (
+                        <AdminButton className="w-full justify-start" variant="neutral" onClick={() => handleDownload(selectedGeneratedContract)} disabled={isDownloading === selectedGeneratedContract.id}>
+                          {isDownloading === selectedGeneratedContract.id ? "Letöltés..." : "Letöltés"}
+                        </AdminButton>
+                      ) : null}
+                      {canAnonymizeActiveDocument && selectedUploadedDocument ? (
+                        <AdminButton className="w-full justify-start" variant="neutral" onClick={() => openUploadedAnonymize(selectedUploadedDocument)}>
+                          Anonimizálás
+                        </AdminButton>
                       ) : null}
                       <AdminButton className="w-full justify-start" variant="gold" onClick={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/handoff`)}>
                         Leadási csomag megnyitása

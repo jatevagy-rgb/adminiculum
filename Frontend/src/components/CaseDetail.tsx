@@ -1084,14 +1084,6 @@ export function CaseDetail({ params }: CaseDetailProps) {
   const openTasks = tasks.filter(
     (task) => !['COMPLETED', 'APPROVED', 'REJECTED', 'DECLINED', 'CANCELLED', 'ARCHIVED'].includes(String(task.status || '').toUpperCase())
   );
-  const caseNavItems = [
-    { label: 'Ügy áttekintő', href: `/cases/${canonicalCaseId}`, active: true },
-    { label: 'Dokumentumtár', href: `/cases/${canonicalCaseId}/documents` },
-    { label: 'Szerződés-workspace', href: `/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}` },
-    { label: 'Kommunikáció', href: `/cases/${canonicalCaseId}/communications` },
-    { label: 'Verzió-összevetés', href: `/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}` },
-    { label: 'Munkaórák', href: `/time-entries?caseId=${encodeURIComponent(canonicalCaseId)}` },
-  ];
   const quickActions = [
     {
       title: 'Szerződés-workspace',
@@ -1177,35 +1169,17 @@ export function CaseDetail({ params }: CaseDetailProps) {
 
   return (
     <div className="flex-1 min-h-0 overflow-hidden bg-[#D5CBA8]">
-      <div className="mx-auto flex h-full max-w-[1480px] overflow-hidden border-x border-[rgba(22,32,26,0.12)] bg-[#EFE7CF] shadow-[0_24px_60px_rgba(22,32,26,0.16)]">
-        <nav className="w-[232px] shrink-0 border-r border-[#173824] bg-[#1F4A33] p-3 text-[#F4EFDB]" aria-label="Ügy munkaterület navigáció">
-          <div className="mb-5 border-b border-white/10 pb-4">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#B58A2A]">Aktív ügy</p>
-            <p className="mt-2 font-serif text-[19px] leading-tight">{displayCaseNumber}</p>
-            <p className="mt-1 line-clamp-2 text-[12px] text-[#F4EFDB]/75">{displayTitle}</p>
-            <p className="mt-1 truncate text-[11px] text-[#F4EFDB]/55">{displayClient}</p>
-          </div>
-          <div className="space-y-1">
-            {caseNavItems.map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                onClick={() => router.push(item.href)}
-                className={`relative flex w-full items-center justify-between rounded-[5px] px-3 py-2 text-left text-[12px] transition-colors ${
-                  item.active
-                    ? 'bg-[#B58A2A]/20 font-semibold text-[#F4EFDB] before:absolute before:left-[-4px] before:top-2 before:bottom-2 before:w-[3px] before:rounded-r before:bg-[#B58A2A]'
-                    : 'text-[#F4EFDB]/78 hover:bg-white/5 hover:text-[#F4EFDB]'
-                }`}
-              >
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </div>
-          <div className="mt-auto hidden pt-6 text-[10px] text-[#F4EFDB]/55 xl:block">
-            Ügyvéd munkapad · valós ügyadatokból
-          </div>
-        </nav>
-
+      <div className="mx-auto flex h-full max-w-[1480px] flex-col overflow-hidden border-x border-[rgba(22,32,26,0.12)] bg-[#EFE7CF] shadow-[0_24px_60px_rgba(22,32,26,0.16)]">
+        <CaseWorkspaceNav
+          caseId={canonicalCaseId}
+          caseNumber={displayCaseNumber}
+          title={displayTitle}
+          clientName={displayClient}
+          activeTab="overview"
+          activeDocumentId={activeDocument?.id}
+          helperText="Ügyáttekintés, dokumentumok és munkafolyamatok egy helyen."
+        />
+        <div className="min-h-0 flex flex-1 overflow-hidden">
         <main className="min-w-0 flex-1 overflow-y-auto">
           <div className="space-y-4 p-5">
             <section className="border border-[rgba(22,32,26,0.10)] bg-white p-5">
@@ -1395,7 +1369,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
               </div>
 
               <div className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
-                <h3 className="font-serif text-[17px] text-[#16201A]">Aktív dokumentum</h3>
+                <h3 className="font-serif text-[17px] text-[#16201A]">Kiválasztott dokumentum</h3>
                 {activeDocument ? (
                   <div className="mt-3 border border-[#E5DCBE] bg-[#FBF6E7] p-3">
                     <p className="truncate text-[13px] font-semibold text-[#16201A]">{activeDocument.name}</p>
@@ -1407,7 +1381,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-3 border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-4 text-[11px] text-[#7A8479]">Még nincs aktív dokumentum.</div>
+                  <div className="mt-3 border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-4 text-[11px] text-[#7A8479]">Még nincs kiválasztott dokumentum.</div>
                 )}
               </div>
             </section>
@@ -1574,6 +1548,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
             </details>
           </div>
         </aside>
+        </div>
       </div>
 
       {/* Anonymize Modal for Client Documents */}

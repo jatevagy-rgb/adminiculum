@@ -17,7 +17,7 @@ type CaseWorkspaceNavProps = {
 const itemClass = (active: boolean) =>
   `rounded-[5px] border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
     active
-      ? "border-[#1F4A33] bg-[#1F4A33] text-[#F4EFDB]"
+      ? "border-[#B58A2A] bg-[#F7F0D9] text-[#1F4A33]"
       : "border-[#D7CCB0] bg-white text-[#1F2821] hover:bg-[#F7F0D9]"
   }`;
 
@@ -44,7 +44,7 @@ export function CaseWorkspaceNav({ caseId, caseNumber, title, clientName, active
       </div>
 
       <nav className="mt-3 flex flex-wrap gap-2">
-        <button type="button" onClick={() => router.push(`/cases/${caseId}`)} className={itemClass(activeTab === "overview")}>Ügy áttekintő</button>
+        <button type="button" onClick={() => router.push(`/cases/${caseId}`)} className={itemClass(activeTab === "overview")}>Ügy áttekintése</button>
         <button type="button" onClick={() => router.push(`/cases/${caseId}/documents`)} className={itemClass(activeTab === "documents")}>Dokumentumtár</button>
         <button type="button" onClick={() => router.push(workspaceHref)} className={itemClass(activeTab === "workspace")}>Szerződés-workspace</button>
         <button type="button" onClick={() => router.push(`/cases/${caseId}/communications`)} className={itemClass(activeTab === "communications")}>Kommunikáció</button>
