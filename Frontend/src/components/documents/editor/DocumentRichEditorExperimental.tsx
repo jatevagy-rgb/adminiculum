@@ -17,7 +17,7 @@ export function DocumentRichEditorExperimental({
   placeholder,
 }: DocumentRichEditorExperimentalProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
-  const lastRenderedValueRef = useRef(value);
+  const lastRenderedValueRef = useRef<string | null>(null);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -47,9 +47,7 @@ export function DocumentRichEditorExperimental({
         data-placeholder={placeholder}
         onInput={handleInput}
         className="min-h-[640px] whitespace-pre-wrap outline-none empty:before:text-[#A6AEA3] empty:before:content-[attr(data-placeholder)]"
-      >
-        {value}
-      </div>
+      />
     </div>
   );
 }
