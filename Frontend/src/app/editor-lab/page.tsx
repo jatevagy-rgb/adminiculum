@@ -7,6 +7,11 @@ import {
   type ExperimentalEditorCommand,
   type ExperimentalEditorCommandRequest,
 } from "@/components/documents/editor/DocumentRichEditorExperimental";
+import {
+  TipTapEditorExperimental,
+  type TipTapEditorCommand,
+  type TipTapEditorCommandRequest,
+} from "@/components/documents/editor/TipTapEditorExperimental";
 
 const sampleLegalText = `Tisztelt Bíróság!
 
@@ -25,12 +30,18 @@ const toolbarActions: Array<{ label: string; command: ExperimentalEditorCommand 
   { label: "Bekezdés", command: "paragraph" },
 ];
 
+type EditorAdapterKind = "tiptap" | "plain-contenteditable";
+
 export default function EditorLabPage() {
   const [editorValue, setEditorValue] = useState(sampleLegalText);
+  const [editorAdapter, setEditorAdapter] = useState<EditorAdapterKind>("tiptap");
   const [commandRequest, setCommandRequest] = useState<ExperimentalEditorCommandRequest | null>(null);
+  const [tipTapCommandRequest, setTipTapCommandRequest] = useState<TipTapEditorCommandRequest | null>(null);
 
   const runToolbarCommand = (command: ExperimentalEditorCommand) => {
-    setCommandRequest({ id: Date.now(), command });
+    const id = Date.now();
+    setCommandRequest({ id, command });
+    setTipTapCommandRequest({ id, command: command as TipTapEditorCommand });
   };
 
   return (
@@ -41,14 +52,19 @@ export default function EditorLabPage() {
             Belső szerkesztő tesztfelület
           </p>
           <p className="mt-2 text-sm text-[#5F675F]">
-            Rejtett fejlesztői oldal az experimental rich editor kézi próbájához. Nem része a fő navigációnak.
+            Rejtett fejlesztői oldal a TipTap/ProseMirror pilot és a korábbi no-dependency adapter kézi próbájához.
+            Nem része a fő navigációnak.
           </p>
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(340px,0.8fr)]">
           <DocumentEditorShell
             title="Kísérleti beadványszerkesztő"
-            subtitle="DocumentEditorShell editorSlot-tal, produkciós szerkesztők módosítása nélkül."
+            subtitle={
+              editorAdapter === "tiptap"
+                ? "TipTap/ProseMirror adapter DocumentEditorShell editorSlot-tal, produkciós szerkesztők módosítása nélkül."
+                : "Korábbi no-dependency contentEditable adapter DocumentEditorShell editorSlot-tal."
+            }
             value={editorValue}
             onChange={setEditorValue}
             isDirty={editorValue !== sampleLegalText}
@@ -59,6 +75,30 @@ export default function EditorLabPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#7A5A1F]">
                   Belső formázási próba
                 </p>
+                <div className="flex flex-wrap gap-2 border-b border-[#E7DECB] pb-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditorAdapter("tiptap")}
+                    className={`rounded-[999px] border px-3 py-1.5 text-xs font-semibold transition ${
+                      editorAdapter === "tiptap"
+                        ? "border-[#B28B2E] bg-[#FAEFCF] text-[#5A4317]"
+                        : "border-[#D8CFB6] bg-[#FFFDF8] text-[#2F3A31] hover:border-[#B28B2E]"
+                    }`}
+                  >
+                    TipTap pilot
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditorAdapter("plain-contenteditable")}
+                    className={`rounded-[999px] border px-3 py-1.5 text-xs font-semibold transition ${
+                      editorAdapter === "plain-contenteditable"
+                        ? "border-[#B28B2E] bg-[#FAEFCF] text-[#5A4317]"
+                        : "border-[#D8CFB6] bg-[#FFFDF8] text-[#2F3A31] hover:border-[#B28B2E]"
+                    }`}
+                  >
+                    No-dependency adapter
+                  </button>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {toolbarActions.map((action) => (
                     <button
@@ -79,12 +119,21 @@ export default function EditorLabPage() {
             }
             editorMode="rich-text-ready"
             editorSlot={
-              <DocumentRichEditorExperimental
-                value={editorValue}
-                onChange={setEditorValue}
-                commandRequest={commandRequest}
-                placeholder="Írj vagy illessz be jogi szöveget a teszteléshez."
-              />
+              editorAdapter === "tiptap" ? (
+                <TipTapEditorExperimental
+                  value={editorValue}
+                  onChange={setEditorValue}
+                  commandRequest={tipTapCommandRequest}
+                  placeholder="Írj vagy illessz be jogi szöveget a TipTap pilot teszteléséhez."
+                />
+              ) : (
+                <DocumentRichEditorExperimental
+                  value={editorValue}
+                  onChange={setEditorValue}
+                  commandRequest={commandRequest}
+                  placeholder="Írj vagy illessz be jogi szöveget a no-dependency adapter teszteléséhez."
+                />
+              )
             }
             helperText="Ez a felület kizárólag belső tesztelésre szolgál; nem ment szerverre és nem használ mesterséges intelligenciát."
           />
