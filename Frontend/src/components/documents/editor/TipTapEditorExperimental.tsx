@@ -32,6 +32,20 @@ export type TipTapEditorFocusRequest = {
   to: number;
 };
 
+export type TipTapEditorMutationRequest = {
+  id: number;
+  type: "replace" | "delete";
+  from: number;
+  to: number;
+  replacementText?: string;
+};
+
+export type TipTapEditorMutationResult = {
+  requestId: number;
+  ok: boolean;
+  error?: string;
+};
+
 export type TipTapEditorActiveState = {
   bold: boolean;
   italic: boolean;
@@ -48,9 +62,11 @@ type TipTapEditorExperimentalProps = {
   placeholder?: string;
   commandRequest?: TipTapEditorCommandRequest | null;
   focusRequest?: TipTapEditorFocusRequest | null;
+  mutationRequest?: TipTapEditorMutationRequest | null;
   onActiveStateChange?: (state: TipTapEditorActiveState) => void;
   onDocumentJsonChange?: (documentJson: unknown) => void;
   onSelectionChange?: (selection: TipTapEditorSelectionState) => void;
+  onMutationResult?: (result: TipTapEditorMutationResult) => void;
 };
 
 function escapeHtml(value: string) {
@@ -104,9 +120,11 @@ export function TipTapEditorExperimental({
   placeholder,
   commandRequest,
   focusRequest,
+  mutationRequest,
   onActiveStateChange,
   onDocumentJsonChange,
   onSelectionChange,
+  onMutationResult,
 }: TipTapEditorExperimentalProps) {
   const editor = useEditor({
     extensions: [StarterKit, Underline],
@@ -188,6 +206,57 @@ export function TipTapEditorExperimental({
     onSelectionChange?.(getSelectionState(editor));
     onActiveStateChange?.(getActiveState(editor));
   }, [editor, focusRequest, onActiveStateChange, onSelectionChange]);
+
+  useEffect(() => {
+    if (!editor || !mutationRequest || readOnly) return;
+
+    const docSize = editor.state.doc.content.size;
+    const rangeIsValid =
+      mutationRequest.from >= 0 &&
+      mutationRequest.to > mutationRequest.from &&
+      mutationRequest.to <= docSize;
+
+    if (!rangeIsValid) {
+      onMutationResult?.({
+        requestId: mutationRequest.id,
+        ok: false,
+        error: "A tárolt kijelölési tartomány már nem érvényes ebben a dokumentumállapotban.",
+      });
+      return;
+    }
+
+    try {
+      const chain = editor.chain().focus();
+
+      if (mutationRequest.type === "replace") {
+        chain.insertContentAt(
+          { from: mutationRequest.from, to: mutationRequest.to },
+          mutationRequest.replacementText ?? "",
+        ).run();
+      } else {
+        chain.deleteRange({ from: mutationRequest.from, to: mutationRequest.to }).run();
+      }
+
+      onActiveStateChange?.(getActiveState(editor));
+      onDocumentJsonChange?.(editor.getJSON());
+      onSelectionChange?.(getSelectionState(editor));
+      onMutationResult?.({ requestId: mutationRequest.id, ok: true });
+    } catch {
+      onMutationResult?.({
+        requestId: mutationRequest.id,
+        ok: false,
+        error: "A helyi dokumentummódosítás nem sikerült a kísérleti szerkesztőben.",
+      });
+    }
+  }, [
+    editor,
+    mutationRequest,
+    onActiveStateChange,
+    onDocumentJsonChange,
+    onMutationResult,
+    onSelectionChange,
+    readOnly,
+  ]);
 
   return (
     <div className="min-h-[640px] rounded-[2px] bg-[#FFFDF8]">

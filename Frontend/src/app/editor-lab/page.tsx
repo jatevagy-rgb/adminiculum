@@ -10,6 +10,8 @@ import {
 import {
   type TipTapEditorActiveState,
   type TipTapEditorFocusRequest,
+  type TipTapEditorMutationRequest,
+  type TipTapEditorMutationResult,
   TipTapEditorExperimental,
   type TipTapEditorCommand,
   type TipTapEditorCommandRequest,
@@ -39,12 +41,15 @@ type LabReviewSuggestion = {
   id: string;
   createdAt: string;
   type: "comment" | "replacement" | "deletion";
+  status: "pending" | "accepted" | "rejected";
   selectedTextPreview: string;
   range: {
     from: number;
     to: number;
   };
   replacementText?: string;
+  helperText?: string;
+  pendingMutationRequestId?: number;
 };
 
 const initialTipTapActiveState: TipTapEditorActiveState = {
@@ -74,6 +79,7 @@ export default function EditorLabPage() {
   const [tipTapDocumentJson, setTipTapDocumentJson] = useState<unknown>(null);
   const [tipTapSelection, setTipTapSelection] = useState<TipTapEditorSelectionState | null>(null);
   const [tipTapFocusRequest, setTipTapFocusRequest] = useState<TipTapEditorFocusRequest | null>(null);
+  const [tipTapMutationRequest, setTipTapMutationRequest] = useState<TipTapEditorMutationRequest | null>(null);
   const [reviewSuggestions, setReviewSuggestions] = useState<LabReviewSuggestion[]>([]);
   const [replacementText, setReplacementText] = useState("");
 
@@ -97,6 +103,7 @@ export default function EditorLabPage() {
       id: `lab-${type}-${Date.now()}`,
       createdAt,
       type,
+      status: "pending",
       selectedTextPreview,
       range: {
         from: tipTapSelection.from,
@@ -111,6 +118,67 @@ export default function EditorLabPage() {
 
   const focusSuggestion = (suggestion: LabReviewSuggestion) => {
     setTipTapFocusRequest({ id: Date.now(), from: suggestion.range.from, to: suggestion.range.to });
+  };
+
+  const markSuggestionStatus = (
+    suggestionId: string,
+    status: LabReviewSuggestion["status"],
+    helperText?: string,
+    pendingMutationRequestId?: number,
+  ) => {
+    setReviewSuggestions((currentSuggestions) =>
+      currentSuggestions.map((suggestion) =>
+        suggestion.id === suggestionId
+          ? {
+              ...suggestion,
+              status,
+              helperText,
+              pendingMutationRequestId,
+            }
+          : suggestion,
+      ),
+    );
+  };
+
+  const acceptSuggestion = (suggestion: LabReviewSuggestion) => {
+    if (suggestion.status !== "pending") return;
+
+    if (suggestion.type === "comment") {
+      markSuggestionStatus(suggestion.id, "accepted", "A helyi megjegyzés elfogadva; dokumentumszöveg nem módosult.");
+      return;
+    }
+
+    const requestId = Date.now();
+    markSuggestionStatus(suggestion.id, "pending", "Helyi módosítás folyamatban…", requestId);
+    setTipTapMutationRequest({
+      id: requestId,
+      type: suggestion.type === "replacement" ? "replace" : "delete",
+      from: suggestion.range.from,
+      to: suggestion.range.to,
+      replacementText: suggestion.replacementText,
+    });
+  };
+
+  const rejectSuggestion = (suggestion: LabReviewSuggestion) => {
+    if (suggestion.status !== "pending") return;
+    markSuggestionStatus(suggestion.id, "rejected", "A helyi javaslat elutasítva; dokumentumszöveg nem módosult.");
+  };
+
+  const handleMutationResult = (result: TipTapEditorMutationResult) => {
+    setReviewSuggestions((currentSuggestions) =>
+      currentSuggestions.map((suggestion) => {
+        if (suggestion.pendingMutationRequestId !== result.requestId) return suggestion;
+
+        return {
+          ...suggestion,
+          status: result.ok ? ("accepted" as const) : ("pending" as const),
+          helperText: result.ok
+            ? "A helyi javaslat elfogadva és a kísérleti dokumentumszöveg módosítva."
+            : result.error ?? "A helyi dokumentummódosítás nem sikerült.",
+          pendingMutationRequestId: undefined,
+        };
+      }),
+    );
   };
 
   return (
@@ -199,9 +267,11 @@ export default function EditorLabPage() {
                   onChange={setEditorValue}
                   commandRequest={tipTapCommandRequest}
                   focusRequest={tipTapFocusRequest}
+                  mutationRequest={tipTapMutationRequest}
                   onActiveStateChange={setTipTapActiveState}
                   onDocumentJsonChange={setTipTapDocumentJson}
                   onSelectionChange={setTipTapSelection}
+                  onMutationResult={handleMutationResult}
                   placeholder="Írj vagy illessz be jogi szöveget a TipTap pilot teszteléséhez."
                 />
               ) : (
@@ -299,11 +369,11 @@ export default function EditorLabPage() {
                     {reviewSuggestions.length ? (
                       <div className="mt-2 space-y-2">
                         {reviewSuggestions.map((suggestion) => (
-                          <button
+                          <div
                             key={suggestion.id}
-                            type="button"
-                            onClick={() => focusSuggestion(suggestion)}
-                            className="block w-full rounded-[8px] border border-[#E7DECB] bg-white p-3 text-left transition hover:border-[#B28B2E] hover:bg-[#FFFDF8]"
+                            data-review-suggestion-id={suggestion.id}
+                            data-review-suggestion-type={suggestion.type}
+                            className="rounded-[8px] border border-[#E7DECB] bg-white p-3"
                           >
                             <span className="block font-mono text-[11px] text-[#7A5A1F]">{suggestion.id}</span>
                             <span className="mt-1 inline-flex rounded-[999px] border border-[#D8CFB6] bg-[#FCFAF4] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#5A4317]">
@@ -313,16 +383,61 @@ export default function EditorLabPage() {
                                   ? "Cserejavaslat"
                                   : "Törlési javaslat"}
                             </span>
+                            <span
+                              className={`ml-2 mt-1 inline-flex rounded-[999px] border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] ${
+                                suggestion.status === "accepted"
+                                  ? "border-[#BFD8BF] bg-[#F5FAF5] text-[#2F5A37]"
+                                  : suggestion.status === "rejected"
+                                    ? "border-[#E0B8B8] bg-[#FFF5F5] text-[#8A3A2A]"
+                                    : "border-[#D8CFB6] bg-[#FFFDF8] text-[#6D6A62]"
+                              }`}
+                            >
+                              {suggestion.status === "accepted"
+                                ? "Elfogadva"
+                                : suggestion.status === "rejected"
+                                  ? "Elutasítva"
+                                  : "Függőben"}
+                            </span>
                             <span className="mt-2 block text-sm leading-6 text-[#1F2821]">{suggestion.selectedTextPreview}</span>
                             {suggestion.replacementText ? (
                               <span className="mt-2 block rounded-[6px] border border-[#D9E6D9] bg-[#F5FAF5] px-2 py-1 text-xs leading-5 text-[#2F5A37]">
                                 Javasolt csere: {suggestion.replacementText}
                               </span>
                             ) : null}
+                            {suggestion.helperText ? (
+                              <span className="mt-2 block rounded-[6px] border border-[#E7DECB] bg-[#FCFAF4] px-2 py-1 text-xs leading-5 text-[#6D6A62]">
+                                {suggestion.helperText}
+                              </span>
+                            ) : null}
                             <span className="mt-2 block font-mono text-[11px] text-[#6D6A62]">
                               {suggestion.range.from}–{suggestion.range.to} · {suggestion.createdAt}
                             </span>
-                          </button>
+                            <span className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => focusSuggestion(suggestion)}
+                                className="rounded-[999px] border border-[#D8CFB6] bg-[#FFFDF8] px-3 py-1 text-xs font-semibold text-[#5A4317] hover:border-[#B28B2E] hover:bg-[#FAEFCF]"
+                              >
+                                Kijelölés megnyitása
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => acceptSuggestion(suggestion)}
+                                disabled={suggestion.status !== "pending"}
+                                className="rounded-[999px] border border-[#BFD8BF] bg-[#F5FAF5] px-3 py-1 text-xs font-semibold text-[#2F5A37] hover:bg-[#E6F3E6] disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Elfogadás
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => rejectSuggestion(suggestion)}
+                                disabled={suggestion.status !== "pending"}
+                                className="rounded-[999px] border border-[#E0B8B8] bg-[#FFF5F5] px-3 py-1 text-xs font-semibold text-[#8A3A2A] hover:bg-[#FDEBEB] disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Elutasítás
+                              </button>
+                            </span>
+                          </div>
                         ))}
                       </div>
                     ) : (
