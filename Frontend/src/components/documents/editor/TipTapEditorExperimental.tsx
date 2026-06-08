@@ -19,6 +19,19 @@ export type TipTapEditorCommandRequest = {
   command: TipTapEditorCommand;
 };
 
+export type TipTapEditorSelectionState = {
+  text: string;
+  from: number;
+  to: number;
+  empty: boolean;
+};
+
+export type TipTapEditorFocusRequest = {
+  id: number;
+  from: number;
+  to: number;
+};
+
 export type TipTapEditorActiveState = {
   bold: boolean;
   italic: boolean;
@@ -34,8 +47,10 @@ type TipTapEditorExperimentalProps = {
   readOnly?: boolean;
   placeholder?: string;
   commandRequest?: TipTapEditorCommandRequest | null;
+  focusRequest?: TipTapEditorFocusRequest | null;
   onActiveStateChange?: (state: TipTapEditorActiveState) => void;
   onDocumentJsonChange?: (documentJson: unknown) => void;
+  onSelectionChange?: (selection: TipTapEditorSelectionState) => void;
 };
 
 function escapeHtml(value: string) {
@@ -71,14 +86,27 @@ function getActiveState(editor: ReturnType<typeof useEditor>): TipTapEditorActiv
   };
 }
 
+function getSelectionState(editor: NonNullable<ReturnType<typeof useEditor>>): TipTapEditorSelectionState {
+  const { from, to, empty } = editor.state.selection;
+
+  return {
+    text: editor.state.doc.textBetween(from, to, "\n").trim(),
+    from,
+    to,
+    empty,
+  };
+}
+
 export function TipTapEditorExperimental({
   value,
   onChange,
   readOnly = false,
   placeholder,
   commandRequest,
+  focusRequest,
   onActiveStateChange,
   onDocumentJsonChange,
+  onSelectionChange,
 }: TipTapEditorExperimentalProps) {
   const editor = useEditor({
     extensions: [StarterKit, Underline],
@@ -96,14 +124,17 @@ export function TipTapEditorExperimental({
     onCreate: ({ editor: createdEditor }) => {
       onActiveStateChange?.(getActiveState(createdEditor));
       onDocumentJsonChange?.(createdEditor.getJSON());
+      onSelectionChange?.(getSelectionState(createdEditor));
     },
     onUpdate: ({ editor: updatedEditor }) => {
       onChange(paragraphsToPlainText(plainTextToParagraphs(updatedEditor.getText())));
       onActiveStateChange?.(getActiveState(updatedEditor));
       onDocumentJsonChange?.(updatedEditor.getJSON());
+      onSelectionChange?.(getSelectionState(updatedEditor));
     },
     onSelectionUpdate: ({ editor: updatedEditor }) => {
       onActiveStateChange?.(getActiveState(updatedEditor));
+      onSelectionChange?.(getSelectionState(updatedEditor));
     },
   });
 
@@ -145,6 +176,18 @@ export function TipTapEditorExperimental({
     onActiveStateChange?.(getActiveState(editor));
     onDocumentJsonChange?.(editor.getJSON());
   }, [commandRequest, editor, onActiveStateChange, onDocumentJsonChange, readOnly]);
+
+  useEffect(() => {
+    if (!editor || !focusRequest) return;
+
+    const docSize = editor.state.doc.content.size;
+    const from = Math.max(0, Math.min(focusRequest.from, docSize));
+    const to = Math.max(from, Math.min(focusRequest.to, docSize));
+
+    editor.chain().focus().setTextSelection({ from, to }).run();
+    onSelectionChange?.(getSelectionState(editor));
+    onActiveStateChange?.(getActiveState(editor));
+  }, [editor, focusRequest, onActiveStateChange, onSelectionChange]);
 
   return (
     <div className="min-h-[640px] rounded-[2px] bg-[#FFFDF8]">

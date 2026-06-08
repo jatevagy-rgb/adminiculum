@@ -9,9 +9,11 @@ import {
 } from "@/components/documents/editor/DocumentRichEditorExperimental";
 import {
   type TipTapEditorActiveState,
+  type TipTapEditorFocusRequest,
   TipTapEditorExperimental,
   type TipTapEditorCommand,
   type TipTapEditorCommandRequest,
+  type TipTapEditorSelectionState,
 } from "@/components/documents/editor/TipTapEditorExperimental";
 
 const sampleLegalText = `Tisztelt Bíróság!
@@ -32,6 +34,16 @@ const toolbarActions: Array<{ label: string; command: ExperimentalEditorCommand 
 ];
 
 type EditorAdapterKind = "tiptap" | "plain-contenteditable";
+
+type LabCommentAnchor = {
+  id: string;
+  createdAt: string;
+  selectedTextPreview: string;
+  range: {
+    from: number;
+    to: number;
+  };
+};
 
 const initialTipTapActiveState: TipTapEditorActiveState = {
   bold: false,
@@ -58,11 +70,38 @@ export default function EditorLabPage() {
   const [tipTapCommandRequest, setTipTapCommandRequest] = useState<TipTapEditorCommandRequest | null>(null);
   const [tipTapActiveState, setTipTapActiveState] = useState<TipTapEditorActiveState>(initialTipTapActiveState);
   const [tipTapDocumentJson, setTipTapDocumentJson] = useState<unknown>(null);
+  const [tipTapSelection, setTipTapSelection] = useState<TipTapEditorSelectionState | null>(null);
+  const [tipTapFocusRequest, setTipTapFocusRequest] = useState<TipTapEditorFocusRequest | null>(null);
+  const [commentAnchors, setCommentAnchors] = useState<LabCommentAnchor[]>([]);
 
   const runToolbarCommand = (command: ExperimentalEditorCommand) => {
     const id = Date.now();
     setCommandRequest({ id, command });
     setTipTapCommandRequest({ id, command: command as TipTapEditorCommand });
+  };
+
+  const selectedText = tipTapSelection?.text.trim() ?? "";
+  const canCreateAnchor = editorAdapter === "tiptap" && Boolean(selectedText) && !tipTapSelection?.empty;
+
+  const createCommentAnchor = () => {
+    if (!canCreateAnchor || !tipTapSelection) return;
+
+    const createdAt = new Date().toISOString();
+    const nextAnchor: LabCommentAnchor = {
+      id: `lab-comment-${Date.now()}`,
+      createdAt,
+      selectedTextPreview: selectedText.length > 180 ? `${selectedText.slice(0, 180)}…` : selectedText,
+      range: {
+        from: tipTapSelection.from,
+        to: tipTapSelection.to,
+      },
+    };
+
+    setCommentAnchors((currentAnchors) => [nextAnchor, ...currentAnchors]);
+  };
+
+  const focusAnchor = (anchor: LabCommentAnchor) => {
+    setTipTapFocusRequest({ id: Date.now(), from: anchor.range.from, to: anchor.range.to });
   };
 
   return (
@@ -150,8 +189,10 @@ export default function EditorLabPage() {
                   value={editorValue}
                   onChange={setEditorValue}
                   commandRequest={tipTapCommandRequest}
+                  focusRequest={tipTapFocusRequest}
                   onActiveStateChange={setTipTapActiveState}
                   onDocumentJsonChange={setTipTapDocumentJson}
+                  onSelectionChange={setTipTapSelection}
                   placeholder="Írj vagy illessz be jogi szöveget a TipTap pilot teszteléséhez."
                 />
               ) : (
@@ -175,7 +216,68 @@ export default function EditorLabPage() {
               {editorValue}
             </pre>
             {editorAdapter === "tiptap" ? (
-              <div className="mt-4">
+              <div className="mt-4 space-y-4">
+                <section className="rounded-[10px] border border-[#E7DECB] bg-[#FCFAF4] p-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold text-[#1F2821]">Kijelölés / megjegyzés sandbox</h3>
+                      <p className="mt-1 text-xs text-[#6D6A62]">
+                        Helyi próba jövőbeli jogi megjegyzés- és review anchorokhoz; nem Word-komment és nem szervermentés.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={createCommentAnchor}
+                      disabled={!canCreateAnchor}
+                      className="rounded-[999px] border border-[#B28B2E] bg-[#FAEFCF] px-3 py-1.5 text-xs font-semibold text-[#5A4317] transition hover:bg-[#F4DE9D] disabled:cursor-not-allowed disabled:border-[#D8CFB6] disabled:bg-[#F7F2E6] disabled:text-[#8B887F]"
+                    >
+                      Megjegyzés a kijelöléshez
+                    </button>
+                  </div>
+
+                  <div className="mt-3 rounded-[8px] border border-dashed border-[#D8CFB6] bg-white p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7A5A1F]">
+                      Aktuális kijelölés
+                    </p>
+                    {selectedText ? (
+                      <>
+                        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#1F2821]">{selectedText}</p>
+                        <p className="mt-2 font-mono text-[11px] text-[#6D6A62]">
+                          from: {tipTapSelection?.from} · to: {tipTapSelection?.to}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="mt-2 text-sm text-[#6D6A62]">Nincs aktív szövegkijelölés a TipTap szerkesztőben.</p>
+                    )}
+                  </div>
+
+                  <div className="mt-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7A5A1F]">
+                      Helyi anchor lista
+                    </p>
+                    {commentAnchors.length ? (
+                      <div className="mt-2 space-y-2">
+                        {commentAnchors.map((anchor) => (
+                          <button
+                            key={anchor.id}
+                            type="button"
+                            onClick={() => focusAnchor(anchor)}
+                            className="block w-full rounded-[8px] border border-[#E7DECB] bg-white p-3 text-left transition hover:border-[#B28B2E] hover:bg-[#FFFDF8]"
+                          >
+                            <span className="block font-mono text-[11px] text-[#7A5A1F]">{anchor.id}</span>
+                            <span className="mt-1 block text-sm leading-6 text-[#1F2821]">{anchor.selectedTextPreview}</span>
+                            <span className="mt-2 block font-mono text-[11px] text-[#6D6A62]">
+                              {anchor.range.from}–{anchor.range.to} · {anchor.createdAt}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-[#6D6A62]">Még nincs helyi megjegyzés-anchor.</p>
+                    )}
+                  </div>
+                </section>
+
                 <h3 className="text-sm font-semibold text-[#1F2821]">TipTap JSON debug</h3>
                 <p className="mt-1 text-xs text-[#6D6A62]">
                   Kísérleti ProseMirror dokumentumállapot, kizárólag fejlesztői ellenőrzéshez.
