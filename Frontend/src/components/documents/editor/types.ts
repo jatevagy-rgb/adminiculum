@@ -1,4 +1,11 @@
 import type { ReactNode } from "react";
+export type {
+  EditorReviewMutationResult,
+  EditorReviewRange,
+  EditorReviewSuggestion,
+  EditorReviewSuggestionStatus,
+  EditorReviewSuggestionType,
+} from "./reviewModel";
 
 export type DocumentEditorMode = "plain-text" | "rich-text-ready";
 

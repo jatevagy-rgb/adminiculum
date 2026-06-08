@@ -17,6 +17,15 @@ import {
   type TipTapEditorCommandRequest,
   type TipTapEditorSelectionState,
 } from "@/components/documents/editor/TipTapEditorExperimental";
+import {
+  createReviewSuggestion as buildReviewSuggestion,
+  markSuggestionAccepted,
+  markSuggestionHelperText,
+  markSuggestionRejected,
+  type EditorReviewSuggestion,
+  type EditorReviewSuggestionStatus,
+  type EditorReviewSuggestionType,
+} from "@/components/documents/editor/reviewModel";
 
 const sampleLegalText = `Tisztelt Bíróság!
 
@@ -36,21 +45,6 @@ const toolbarActions: Array<{ label: string; command: ExperimentalEditorCommand 
 ];
 
 type EditorAdapterKind = "tiptap" | "plain-contenteditable";
-
-type LabReviewSuggestion = {
-  id: string;
-  createdAt: string;
-  type: "comment" | "replacement" | "deletion";
-  status: "pending" | "accepted" | "rejected";
-  selectedTextPreview: string;
-  range: {
-    from: number;
-    to: number;
-  };
-  replacementText?: string;
-  helperText?: string;
-  pendingMutationRequestId?: number;
-};
 
 const initialTipTapActiveState: TipTapEditorActiveState = {
   bold: false,
@@ -80,7 +74,7 @@ export default function EditorLabPage() {
   const [tipTapSelection, setTipTapSelection] = useState<TipTapEditorSelectionState | null>(null);
   const [tipTapFocusRequest, setTipTapFocusRequest] = useState<TipTapEditorFocusRequest | null>(null);
   const [tipTapMutationRequest, setTipTapMutationRequest] = useState<TipTapEditorMutationRequest | null>(null);
-  const [reviewSuggestions, setReviewSuggestions] = useState<LabReviewSuggestion[]>([]);
+  const [reviewSuggestions, setReviewSuggestions] = useState<EditorReviewSuggestion[]>([]);
   const [replacementText, setReplacementText] = useState("");
 
   const runToolbarCommand = (command: ExperimentalEditorCommand) => {
@@ -93,58 +87,55 @@ export default function EditorLabPage() {
   const canCreateAnchor = editorAdapter === "tiptap" && Boolean(selectedText) && !tipTapSelection?.empty;
   const canCreateReplacement = canCreateAnchor && Boolean(replacementText.trim());
 
-  const createReviewSuggestion = (type: LabReviewSuggestion["type"]) => {
+  const createReviewSuggestion = (type: EditorReviewSuggestionType) => {
     if (!canCreateAnchor || !tipTapSelection) return;
     if (type === "replacement" && !replacementText.trim()) return;
 
     const createdAt = new Date().toISOString();
-    const selectedTextPreview = selectedText.length > 180 ? `${selectedText.slice(0, 180)}…` : selectedText;
-    const nextSuggestion: LabReviewSuggestion = {
+    const nextSuggestion = buildReviewSuggestion({
       id: `lab-${type}-${Date.now()}`,
       createdAt,
       type,
-      status: "pending",
-      selectedTextPreview,
+      selectedText,
       range: {
         from: tipTapSelection.from,
         to: tipTapSelection.to,
       },
-      ...(type === "replacement" ? { replacementText: replacementText.trim() } : {}),
-    };
+      replacementText,
+    });
 
     setReviewSuggestions((currentSuggestions) => [nextSuggestion, ...currentSuggestions]);
     if (type === "replacement") setReplacementText("");
   };
 
-  const focusSuggestion = (suggestion: LabReviewSuggestion) => {
+  const focusSuggestion = (suggestion: EditorReviewSuggestion) => {
     setTipTapFocusRequest({ id: Date.now(), from: suggestion.range.from, to: suggestion.range.to });
   };
 
   const markSuggestionStatus = (
     suggestionId: string,
-    status: LabReviewSuggestion["status"],
+    status: EditorReviewSuggestionStatus,
     helperText?: string,
     pendingMutationRequestId?: number,
   ) => {
     setReviewSuggestions((currentSuggestions) =>
       currentSuggestions.map((suggestion) =>
-        suggestion.id === suggestionId
-          ? {
-              ...suggestion,
-              status,
-              helperText,
-              pendingMutationRequestId,
-            }
-          : suggestion,
+        suggestion.id === suggestionId ? markSuggestionHelperText({ ...suggestion, status }, helperText, pendingMutationRequestId) : suggestion,
       ),
     );
   };
 
-  const acceptSuggestion = (suggestion: LabReviewSuggestion) => {
+  const acceptSuggestion = (suggestion: EditorReviewSuggestion) => {
     if (suggestion.status !== "pending") return;
 
     if (suggestion.type === "comment") {
-      markSuggestionStatus(suggestion.id, "accepted", "A helyi megjegyzés elfogadva; dokumentumszöveg nem módosult.");
+      setReviewSuggestions((currentSuggestions) =>
+        currentSuggestions.map((currentSuggestion) =>
+          currentSuggestion.id === suggestion.id
+            ? markSuggestionAccepted(currentSuggestion, "A helyi megjegyzés elfogadva; dokumentumszöveg nem módosult.")
+            : currentSuggestion,
+        ),
+      );
       return;
     }
 
@@ -159,9 +150,15 @@ export default function EditorLabPage() {
     });
   };
 
-  const rejectSuggestion = (suggestion: LabReviewSuggestion) => {
+  const rejectSuggestion = (suggestion: EditorReviewSuggestion) => {
     if (suggestion.status !== "pending") return;
-    markSuggestionStatus(suggestion.id, "rejected", "A helyi javaslat elutasítva; dokumentumszöveg nem módosult.");
+    setReviewSuggestions((currentSuggestions) =>
+      currentSuggestions.map((currentSuggestion) =>
+        currentSuggestion.id === suggestion.id
+          ? markSuggestionRejected(currentSuggestion, "A helyi javaslat elutasítva; dokumentumszöveg nem módosult.")
+          : currentSuggestion,
+      ),
+    );
   };
 
   const handleMutationResult = (result: TipTapEditorMutationResult) => {
@@ -169,14 +166,13 @@ export default function EditorLabPage() {
       currentSuggestions.map((suggestion) => {
         if (suggestion.pendingMutationRequestId !== result.requestId) return suggestion;
 
-        return {
-          ...suggestion,
-          status: result.ok ? ("accepted" as const) : ("pending" as const),
-          helperText: result.ok
-            ? "A helyi javaslat elfogadva és a kísérleti dokumentumszöveg módosítva."
-            : result.error ?? "A helyi dokumentummódosítás nem sikerült.",
-          pendingMutationRequestId: undefined,
-        };
+        return result.ok
+          ? markSuggestionAccepted(suggestion, "A helyi javaslat elfogadva és a kísérleti dokumentumszöveg módosítva.")
+          : markSuggestionHelperText(
+              suggestion,
+              result.error ?? "A helyi dokumentummódosítás nem sikerült.",
+              undefined,
+            );
       }),
     );
   };
