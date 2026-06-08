@@ -8,6 +8,7 @@ import {
   type ExperimentalEditorCommandRequest,
 } from "@/components/documents/editor/DocumentRichEditorExperimental";
 import {
+  type TipTapEditorActiveState,
   TipTapEditorExperimental,
   type TipTapEditorCommand,
   type TipTapEditorCommandRequest,
@@ -32,11 +33,31 @@ const toolbarActions: Array<{ label: string; command: ExperimentalEditorCommand 
 
 type EditorAdapterKind = "tiptap" | "plain-contenteditable";
 
+const initialTipTapActiveState: TipTapEditorActiveState = {
+  bold: false,
+  italic: false,
+  underline: false,
+  bulletList: false,
+  orderedList: false,
+  paragraph: false,
+};
+
+function isToolbarActionActive(command: ExperimentalEditorCommand, activeState: TipTapEditorActiveState) {
+  if (command === "bold") return activeState.bold;
+  if (command === "italic") return activeState.italic;
+  if (command === "underline") return activeState.underline;
+  if (command === "unordered-list") return activeState.bulletList;
+  if (command === "ordered-list") return activeState.orderedList;
+  return activeState.paragraph;
+}
+
 export default function EditorLabPage() {
   const [editorValue, setEditorValue] = useState(sampleLegalText);
   const [editorAdapter, setEditorAdapter] = useState<EditorAdapterKind>("tiptap");
   const [commandRequest, setCommandRequest] = useState<ExperimentalEditorCommandRequest | null>(null);
   const [tipTapCommandRequest, setTipTapCommandRequest] = useState<TipTapEditorCommandRequest | null>(null);
+  const [tipTapActiveState, setTipTapActiveState] = useState<TipTapEditorActiveState>(initialTipTapActiveState);
+  const [tipTapDocumentJson, setTipTapDocumentJson] = useState<unknown>(null);
 
   const runToolbarCommand = (command: ExperimentalEditorCommand) => {
     const id = Date.now();
@@ -106,7 +127,12 @@ export default function EditorLabPage() {
                       type="button"
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => runToolbarCommand(action.command)}
-                      className="rounded-[999px] border border-[#D8CFB6] bg-[#FFFDF8] px-3 py-1.5 text-xs font-semibold text-[#2F3A31] transition hover:border-[#B28B2E] hover:bg-[#FAEFCF] focus:outline-none focus:ring-2 focus:ring-[#D8B45A]"
+                      className={`rounded-[999px] border px-3 py-1.5 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-[#D8B45A] ${
+                        editorAdapter === "tiptap" && isToolbarActionActive(action.command, tipTapActiveState)
+                          ? "border-[#B28B2E] bg-[#FAEFCF] text-[#5A4317]"
+                          : "border-[#D8CFB6] bg-[#FFFDF8] text-[#2F3A31] hover:border-[#B28B2E] hover:bg-[#FAEFCF]"
+                      }`}
+                      aria-pressed={editorAdapter === "tiptap" ? isToolbarActionActive(action.command, tipTapActiveState) : undefined}
                     >
                       {action.label}
                     </button>
@@ -124,6 +150,8 @@ export default function EditorLabPage() {
                   value={editorValue}
                   onChange={setEditorValue}
                   commandRequest={tipTapCommandRequest}
+                  onActiveStateChange={setTipTapActiveState}
+                  onDocumentJsonChange={setTipTapDocumentJson}
                   placeholder="Írj vagy illessz be jogi szöveget a TipTap pilot teszteléséhez."
                 />
               ) : (
@@ -146,6 +174,17 @@ export default function EditorLabPage() {
             <pre className="mt-4 max-h-[720px] overflow-auto whitespace-pre-wrap rounded-[8px] border border-[#E7DECB] bg-[#FCFAF4] p-4 font-mono text-xs leading-5 text-[#1F2821]">
               {editorValue}
             </pre>
+            {editorAdapter === "tiptap" ? (
+              <div className="mt-4">
+                <h3 className="text-sm font-semibold text-[#1F2821]">TipTap JSON debug</h3>
+                <p className="mt-1 text-xs text-[#6D6A62]">
+                  Kísérleti ProseMirror dokumentumállapot, kizárólag fejlesztői ellenőrzéshez.
+                </p>
+                <pre className="mt-3 max-h-[360px] overflow-auto whitespace-pre-wrap rounded-[8px] border border-[#E7DECB] bg-[#FCFAF4] p-4 font-mono text-[11px] leading-5 text-[#1F2821]">
+                  {JSON.stringify(tipTapDocumentJson, null, 2)}
+                </pre>
+              </div>
+            ) : null}
           </aside>
         </div>
       </div>

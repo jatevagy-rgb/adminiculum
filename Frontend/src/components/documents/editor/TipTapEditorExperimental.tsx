@@ -19,12 +19,23 @@ export type TipTapEditorCommandRequest = {
   command: TipTapEditorCommand;
 };
 
+export type TipTapEditorActiveState = {
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  bulletList: boolean;
+  orderedList: boolean;
+  paragraph: boolean;
+};
+
 type TipTapEditorExperimentalProps = {
   value: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
   placeholder?: string;
   commandRequest?: TipTapEditorCommandRequest | null;
+  onActiveStateChange?: (state: TipTapEditorActiveState) => void;
+  onDocumentJsonChange?: (documentJson: unknown) => void;
 };
 
 function escapeHtml(value: string) {
@@ -49,12 +60,25 @@ function plainTextToSimpleHtml(value: string) {
     .join("");
 }
 
+function getActiveState(editor: ReturnType<typeof useEditor>): TipTapEditorActiveState {
+  return {
+    bold: Boolean(editor?.isActive("bold")),
+    italic: Boolean(editor?.isActive("italic")),
+    underline: Boolean(editor?.isActive("underline")),
+    bulletList: Boolean(editor?.isActive("bulletList")),
+    orderedList: Boolean(editor?.isActive("orderedList")),
+    paragraph: Boolean(editor?.isActive("paragraph")),
+  };
+}
+
 export function TipTapEditorExperimental({
   value,
   onChange,
   readOnly = false,
   placeholder,
   commandRequest,
+  onActiveStateChange,
+  onDocumentJsonChange,
 }: TipTapEditorExperimentalProps) {
   const editor = useEditor({
     extensions: [StarterKit, Underline],
@@ -66,11 +90,20 @@ export function TipTapEditorExperimental({
         "aria-label": "TipTap kísérleti szerkesztő",
         "data-placeholder": placeholder ?? "",
         class:
-          "min-h-[640px] whitespace-pre-wrap font-serif text-[16.5px] leading-8 text-[#1F2821] outline-none empty:before:text-[#A6AEA3] empty:before:content-[attr(data-placeholder)]",
+          "min-h-[640px] font-serif text-[16.5px] leading-8 text-[#1F2821] outline-none empty:before:text-[#A6AEA3] empty:before:content-[attr(data-placeholder)] [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-3 [&_ul]:list-disc [&_ul]:pl-6",
       },
+    },
+    onCreate: ({ editor: createdEditor }) => {
+      onActiveStateChange?.(getActiveState(createdEditor));
+      onDocumentJsonChange?.(createdEditor.getJSON());
     },
     onUpdate: ({ editor: updatedEditor }) => {
       onChange(paragraphsToPlainText(plainTextToParagraphs(updatedEditor.getText())));
+      onActiveStateChange?.(getActiveState(updatedEditor));
+      onDocumentJsonChange?.(updatedEditor.getJSON());
+    },
+    onSelectionUpdate: ({ editor: updatedEditor }) => {
+      onActiveStateChange?.(getActiveState(updatedEditor));
     },
   });
 
@@ -108,7 +141,10 @@ export function TipTapEditorExperimental({
     } else {
       chain.setParagraph().run();
     }
-  }, [commandRequest, editor, readOnly]);
+
+    onActiveStateChange?.(getActiveState(editor));
+    onDocumentJsonChange?.(editor.getJSON());
+  }, [commandRequest, editor, onActiveStateChange, onDocumentJsonChange, readOnly]);
 
   return (
     <div className="min-h-[640px] rounded-[2px] bg-[#FFFDF8]">
