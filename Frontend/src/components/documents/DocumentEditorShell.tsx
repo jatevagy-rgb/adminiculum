@@ -17,6 +17,8 @@ type DocumentEditorShellProps = {
   status?: ReactNode;
   toolbar?: ReactNode;
   sideActions?: ReactNode;
+  editorSlot?: ReactNode;
+  editorMode?: "plain-text" | "rich-text-ready";
   beforeEditor?: ReactNode;
   afterEditor?: ReactNode;
   emptyState?: ReactNode;
@@ -50,6 +52,8 @@ export const DocumentEditorShell = forwardRef<HTMLTextAreaElement, DocumentEdito
       status,
       toolbar,
       sideActions,
+      editorSlot,
+      editorMode = "plain-text",
       beforeEditor,
       afterEditor,
       emptyState,
@@ -110,19 +114,24 @@ export const DocumentEditorShell = forwardRef<HTMLTextAreaElement, DocumentEdito
             >
               {beforeEditor}
               {showEditor ? (
-                <textarea
-                  ref={ref}
-                  value={value}
-                  onChange={(event) => onChange?.(event.target.value)}
-                  onSelect={onSelect}
-                  onMouseUp={onMouseUp}
-                  onKeyUp={onKeyUp}
-                  onClick={onClick}
-                  readOnly={readOnly}
-                  rows={rows}
-                  placeholder={placeholder}
-                  className={`w-full resize-y border-0 bg-transparent p-0 font-serif text-[16.5px] leading-8 text-[#1F2821] outline-none placeholder:text-[#A6AEA3] focus:ring-0 read-only:cursor-text ${minHeightClassName} ${textareaClassName}`}
-                />
+                editorSlot ? (
+                  // Reserved for a future TipTap/ProseMirror adapter; the textarea remains the default editor.
+                  <div data-editor-mode={editorMode}>{editorSlot}</div>
+                ) : (
+                  <textarea
+                    ref={ref}
+                    value={value}
+                    onChange={(event) => onChange?.(event.target.value)}
+                    onSelect={onSelect}
+                    onMouseUp={onMouseUp}
+                    onKeyUp={onKeyUp}
+                    onClick={onClick}
+                    readOnly={readOnly}
+                    rows={rows}
+                    placeholder={placeholder}
+                    className={`w-full resize-y border-0 bg-transparent p-0 font-serif text-[16.5px] leading-8 text-[#1F2821] outline-none placeholder:text-[#A6AEA3] focus:ring-0 read-only:cursor-text ${minHeightClassName} ${textareaClassName}`}
+                  />
+                )
               ) : (
                 emptyState
               )}
