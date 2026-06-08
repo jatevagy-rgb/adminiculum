@@ -35,14 +35,16 @@ const toolbarActions: Array<{ label: string; command: ExperimentalEditorCommand 
 
 type EditorAdapterKind = "tiptap" | "plain-contenteditable";
 
-type LabCommentAnchor = {
+type LabReviewSuggestion = {
   id: string;
   createdAt: string;
+  type: "comment" | "replacement" | "deletion";
   selectedTextPreview: string;
   range: {
     from: number;
     to: number;
   };
+  replacementText?: string;
 };
 
 const initialTipTapActiveState: TipTapEditorActiveState = {
@@ -72,7 +74,8 @@ export default function EditorLabPage() {
   const [tipTapDocumentJson, setTipTapDocumentJson] = useState<unknown>(null);
   const [tipTapSelection, setTipTapSelection] = useState<TipTapEditorSelectionState | null>(null);
   const [tipTapFocusRequest, setTipTapFocusRequest] = useState<TipTapEditorFocusRequest | null>(null);
-  const [commentAnchors, setCommentAnchors] = useState<LabCommentAnchor[]>([]);
+  const [reviewSuggestions, setReviewSuggestions] = useState<LabReviewSuggestion[]>([]);
+  const [replacementText, setReplacementText] = useState("");
 
   const runToolbarCommand = (command: ExperimentalEditorCommand) => {
     const id = Date.now();
@@ -82,26 +85,32 @@ export default function EditorLabPage() {
 
   const selectedText = tipTapSelection?.text.trim() ?? "";
   const canCreateAnchor = editorAdapter === "tiptap" && Boolean(selectedText) && !tipTapSelection?.empty;
+  const canCreateReplacement = canCreateAnchor && Boolean(replacementText.trim());
 
-  const createCommentAnchor = () => {
+  const createReviewSuggestion = (type: LabReviewSuggestion["type"]) => {
     if (!canCreateAnchor || !tipTapSelection) return;
+    if (type === "replacement" && !replacementText.trim()) return;
 
     const createdAt = new Date().toISOString();
-    const nextAnchor: LabCommentAnchor = {
-      id: `lab-comment-${Date.now()}`,
+    const selectedTextPreview = selectedText.length > 180 ? `${selectedText.slice(0, 180)}…` : selectedText;
+    const nextSuggestion: LabReviewSuggestion = {
+      id: `lab-${type}-${Date.now()}`,
       createdAt,
-      selectedTextPreview: selectedText.length > 180 ? `${selectedText.slice(0, 180)}…` : selectedText,
+      type,
+      selectedTextPreview,
       range: {
         from: tipTapSelection.from,
         to: tipTapSelection.to,
       },
+      ...(type === "replacement" ? { replacementText: replacementText.trim() } : {}),
     };
 
-    setCommentAnchors((currentAnchors) => [nextAnchor, ...currentAnchors]);
+    setReviewSuggestions((currentSuggestions) => [nextSuggestion, ...currentSuggestions]);
+    if (type === "replacement") setReplacementText("");
   };
 
-  const focusAnchor = (anchor: LabCommentAnchor) => {
-    setTipTapFocusRequest({ id: Date.now(), from: anchor.range.from, to: anchor.range.to });
+  const focusSuggestion = (suggestion: LabReviewSuggestion) => {
+    setTipTapFocusRequest({ id: Date.now(), from: suggestion.range.from, to: suggestion.range.to });
   };
 
   return (
@@ -220,19 +229,29 @@ export default function EditorLabPage() {
                 <section className="rounded-[10px] border border-[#E7DECB] bg-[#FCFAF4] p-3">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                      <h3 className="text-sm font-semibold text-[#1F2821]">Kijelölés / megjegyzés sandbox</h3>
+                      <h3 className="text-sm font-semibold text-[#1F2821]">Kijelölés / review sandbox</h3>
                       <p className="mt-1 text-xs text-[#6D6A62]">
-                        Helyi próba jövőbeli jogi megjegyzés- és review anchorokhoz; nem Word-komment és nem szervermentés.
+                        Helyi próba jövőbeli jogi megjegyzés- és változtatási javaslatokhoz; nem Word-komment és nem szervermentés.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={createCommentAnchor}
-                      disabled={!canCreateAnchor}
-                      className="rounded-[999px] border border-[#B28B2E] bg-[#FAEFCF] px-3 py-1.5 text-xs font-semibold text-[#5A4317] transition hover:bg-[#F4DE9D] disabled:cursor-not-allowed disabled:border-[#D8CFB6] disabled:bg-[#F7F2E6] disabled:text-[#8B887F]"
-                    >
-                      Megjegyzés a kijelöléshez
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => createReviewSuggestion("comment")}
+                        disabled={!canCreateAnchor}
+                        className="rounded-[999px] border border-[#B28B2E] bg-[#FAEFCF] px-3 py-1.5 text-xs font-semibold text-[#5A4317] transition hover:bg-[#F4DE9D] disabled:cursor-not-allowed disabled:border-[#D8CFB6] disabled:bg-[#F7F2E6] disabled:text-[#8B887F]"
+                      >
+                        Megjegyzés a kijelöléshez
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => createReviewSuggestion("deletion")}
+                        disabled={!canCreateAnchor}
+                        className="rounded-[999px] border border-[#B28B2E] bg-[#FAEFCF] px-3 py-1.5 text-xs font-semibold text-[#5A4317] transition hover:bg-[#F4DE9D] disabled:cursor-not-allowed disabled:border-[#D8CFB6] disabled:bg-[#F7F2E6] disabled:text-[#8B887F]"
+                      >
+                        Törlési javaslat a kijelöléshez
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mt-3 rounded-[8px] border border-dashed border-[#D8CFB6] bg-white p-3">
@@ -251,29 +270,63 @@ export default function EditorLabPage() {
                     )}
                   </div>
 
+                  <div className="mt-3 rounded-[8px] border border-[#E7DECB] bg-white p-3">
+                    <label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7A5A1F]" htmlFor="editor-lab-replacement-text">
+                      Cserejavaslat szövege
+                    </label>
+                    <textarea
+                      id="editor-lab-replacement-text"
+                      value={replacementText}
+                      onChange={(event) => setReplacementText(event.target.value)}
+                      rows={3}
+                      placeholder="Add meg a kijelölt szöveg javasolt cseréjét."
+                      className="mt-2 w-full resize-y rounded-[8px] border border-[#D8CFB6] bg-[#FFFDF8] px-3 py-2 text-sm leading-6 text-[#1F2821] outline-none focus:border-[#B28B2E] focus:ring-2 focus:ring-[#F4DE9D]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => createReviewSuggestion("replacement")}
+                      disabled={!canCreateReplacement}
+                      className="mt-2 rounded-[999px] border border-[#B28B2E] bg-[#FAEFCF] px-3 py-1.5 text-xs font-semibold text-[#5A4317] transition hover:bg-[#F4DE9D] disabled:cursor-not-allowed disabled:border-[#D8CFB6] disabled:bg-[#F7F2E6] disabled:text-[#8B887F]"
+                    >
+                      Cserejavaslat a kijelöléshez
+                    </button>
+                  </div>
+
                   <div className="mt-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7A5A1F]">
-                      Helyi anchor lista
+                      Helyi review lista
                     </p>
-                    {commentAnchors.length ? (
+                    {reviewSuggestions.length ? (
                       <div className="mt-2 space-y-2">
-                        {commentAnchors.map((anchor) => (
+                        {reviewSuggestions.map((suggestion) => (
                           <button
-                            key={anchor.id}
+                            key={suggestion.id}
                             type="button"
-                            onClick={() => focusAnchor(anchor)}
+                            onClick={() => focusSuggestion(suggestion)}
                             className="block w-full rounded-[8px] border border-[#E7DECB] bg-white p-3 text-left transition hover:border-[#B28B2E] hover:bg-[#FFFDF8]"
                           >
-                            <span className="block font-mono text-[11px] text-[#7A5A1F]">{anchor.id}</span>
-                            <span className="mt-1 block text-sm leading-6 text-[#1F2821]">{anchor.selectedTextPreview}</span>
+                            <span className="block font-mono text-[11px] text-[#7A5A1F]">{suggestion.id}</span>
+                            <span className="mt-1 inline-flex rounded-[999px] border border-[#D8CFB6] bg-[#FCFAF4] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#5A4317]">
+                              {suggestion.type === "comment"
+                                ? "Megjegyzés"
+                                : suggestion.type === "replacement"
+                                  ? "Cserejavaslat"
+                                  : "Törlési javaslat"}
+                            </span>
+                            <span className="mt-2 block text-sm leading-6 text-[#1F2821]">{suggestion.selectedTextPreview}</span>
+                            {suggestion.replacementText ? (
+                              <span className="mt-2 block rounded-[6px] border border-[#D9E6D9] bg-[#F5FAF5] px-2 py-1 text-xs leading-5 text-[#2F5A37]">
+                                Javasolt csere: {suggestion.replacementText}
+                              </span>
+                            ) : null}
                             <span className="mt-2 block font-mono text-[11px] text-[#6D6A62]">
-                              {anchor.range.from}–{anchor.range.to} · {anchor.createdAt}
+                              {suggestion.range.from}–{suggestion.range.to} · {suggestion.createdAt}
                             </span>
                           </button>
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-2 text-sm text-[#6D6A62]">Még nincs helyi megjegyzés-anchor.</p>
+                      <p className="mt-2 text-sm text-[#6D6A62]">Még nincs helyi review javaslat.</p>
                     )}
                   </div>
                 </section>
