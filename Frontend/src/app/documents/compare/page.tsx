@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import { DocumentEditorShell } from "@/components/documents/DocumentEditorShell";
+import { TipTapEditorExperimental } from "@/components/documents/editor/TipTapEditorExperimental";
 import {
   downloadReviewSummary,
   downloadContract,
@@ -431,6 +432,8 @@ function DocumentsComparePageContent() {
   const [expandedToolId, setExpandedToolId] = useState<string | null>(null);
   const [editorDraft, setEditorDraft] = useState("");
   const [editorTouched, setEditorTouched] = useState(false);
+  const [isTipTapPreviewEnabled, setIsTipTapPreviewEnabled] = useState(false);
+  const [tipTapPreviewDraft, setTipTapPreviewDraft] = useState("");
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
   const [localCommentDraft, setLocalCommentDraft] = useState("");
   const [localComments, setLocalComments] = useState<LocalWorkspaceComment[]>([]);
@@ -642,6 +645,11 @@ function DocumentsComparePageContent() {
     () => filteredDocuments.find((doc) => doc.id === selectedDocumentId) || filteredDocuments[0] || null,
     [filteredDocuments, selectedDocumentId]
   );
+
+  useEffect(() => {
+    setIsTipTapPreviewEnabled(false);
+    setTipTapPreviewDraft("");
+  }, [selectedDocument?.id]);
 
   const caseScopedDocuments = useMemo(() => {
     if (!requestedCaseId) return documents;
@@ -998,6 +1006,15 @@ function DocumentsComparePageContent() {
   const hasWorkspaceText = Boolean(effectiveWorkspaceText.trim());
   const hasLocalDraftText = Boolean(editorDraft.trim());
   const isDraftDirty = editorTouched && editorDraft !== effectiveWorkspaceText;
+  const toggleTipTapPreview = () => {
+    setIsTipTapPreviewEnabled((currentValue) => {
+      const nextValue = !currentValue;
+      if (nextValue) {
+        setTipTapPreviewDraft(editorDraft || effectiveWorkspaceText || "");
+      }
+      return nextValue;
+    });
+  };
 const editorStatusLabel =
     !hasWorkspaceText && !hasLocalDraftText
       ? "Előkészítő munkanézet"
@@ -2679,6 +2696,25 @@ return (
                           {workspaceSaveState.message}
                         </div>
                       ) : null}
+                      <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FFFDF8] px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={toggleTipTapPreview}
+                          className={`rounded-[999px] border px-3 py-1.5 text-[10px] font-semibold transition ${
+                            isTipTapPreviewEnabled
+                              ? "border-[#B28B2E] bg-[#FAEFCF] text-[#5A4317]"
+                              : "border-[#D8CFB6] bg-white text-[#514D45] hover:border-[#B28B2E] hover:bg-[#FBF6E7]"
+                          }`}
+                          aria-pressed={isTipTapPreviewEnabled}
+                        >
+                          TipTap előnézet
+                        </button>
+                        <span className="text-[11px] text-[#7B776D]">
+                          {isTipTapPreviewEnabled
+                            ? "Kísérleti szerkesztő előnézet. Mentés továbbra is a jelenlegi munkapéldány-logikával."
+                            : "Alapértelmezett textarea szerkesztő aktív."}
+                        </span>
+                      </div>
                       <div className="flex flex-wrap items-center gap-2">
                         {editorToolbarGroups.map((group) => (
                           <div key={group.key} className="flex items-center gap-1 rounded-[8px] border border-[#E7DECB] bg-white px-1.5 py-1">
@@ -2710,6 +2746,25 @@ return (
                   textareaClassName="text-[16.5px]"
                   minHeightClassName="min-h-[680px]"
                   placeholder="Itt jelenik meg a valós kinyert dokumentumszöveg, az anonimizált szöveg vagy a helyi munkapéldány."
+                  editorMode={isTipTapPreviewEnabled ? "rich-text-ready" : "plain-text"}
+                  editorSlot={
+                    isTipTapPreviewEnabled ? (
+                      <div className="space-y-3">
+                        <div className="rounded-[8px] border border-[#E6C987] bg-[#FAEFCF] px-3 py-2 text-[11px] leading-5 text-[#6C5120]">
+                          <span className="font-semibold">Kísérleti szerkesztő előnézet.</span> Mentés továbbra is a jelenlegi munkapéldány-logikával.
+                          A TipTap JSON nem kerül mentésre és nem kerül backendnek elküldésre.
+                        </div>
+                        <TipTapEditorExperimental
+                          value={tipTapPreviewDraft || activeDraftText}
+                          onChange={setTipTapPreviewDraft}
+                          placeholder="Kísérleti TipTap előnézet a szerződés-workspace shellben."
+                        />
+                        <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2 text-[11px] text-[#7B776D]">
+                          Helyi előnézeti szöveg hossza: {tipTapPreviewDraft.length} karakter. A meglévő mentés/export továbbra is a normál munkapéldány szövegét használja.
+                        </div>
+                      </div>
+                    ) : undefined
+                  }
                   onSelect={syncSelectionSnapshot}
                   onKeyUp={syncSelectionSnapshot}
                   onClick={syncSelectionSnapshot}
