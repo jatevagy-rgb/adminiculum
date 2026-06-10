@@ -260,7 +260,7 @@ export function TipTapEditorExperimental({
 
   return (
     <div className="min-h-[640px] rounded-[2px] bg-[#FFFDF8]">
-      {/* Experimental lab only: TipTap/ProseMirror pilot for future editor architecture. Not wired into production editors. */}
+      {/* Experimental TipTap/ProseMirror pilot for future editor architecture; persistence remains owned by each workspace. */}
       <EditorContent editor={editor} />
     </div>
   );

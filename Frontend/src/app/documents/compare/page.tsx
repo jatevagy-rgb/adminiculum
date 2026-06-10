@@ -6,7 +6,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import { DocumentEditorShell } from "@/components/documents/DocumentEditorShell";
-import { TipTapEditorExperimental } from "@/components/documents/editor/TipTapEditorExperimental";
+import {
+  TipTapEditorExperimental,
+  type TipTapEditorActiveState,
+  type TipTapEditorCommand,
+  type TipTapEditorCommandRequest,
+  type TipTapEditorSelectionState,
+} from "@/components/documents/editor/TipTapEditorExperimental";
 import {
   downloadReviewSummary,
   downloadContract,
@@ -434,6 +440,21 @@ function DocumentsComparePageContent() {
   const [editorTouched, setEditorTouched] = useState(false);
   const [isTipTapPreviewEnabled, setIsTipTapPreviewEnabled] = useState(false);
   const [tipTapPreviewDraft, setTipTapPreviewDraft] = useState("");
+  const [tipTapCommandRequest, setTipTapCommandRequest] = useState<TipTapEditorCommandRequest | null>(null);
+  const [tipTapActiveState, setTipTapActiveState] = useState<TipTapEditorActiveState>({
+    bold: false,
+    italic: false,
+    underline: false,
+    bulletList: false,
+    orderedList: false,
+    paragraph: true,
+  });
+  const [tipTapSelection, setTipTapSelection] = useState<TipTapEditorSelectionState>({
+    text: "",
+    from: 0,
+    to: 0,
+    empty: true,
+  });
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
   const [localCommentDraft, setLocalCommentDraft] = useState("");
   const [localComments, setLocalComments] = useState<LocalWorkspaceComment[]>([]);
@@ -1011,11 +1032,33 @@ function DocumentsComparePageContent() {
       const nextValue = !currentValue;
       if (nextValue) {
         setTipTapPreviewDraft(editorDraft || effectiveWorkspaceText || "");
+        setTipTapSelection({ text: "", from: 0, to: 0, empty: true });
       }
       return nextValue;
     });
   };
-const editorStatusLabel =
+  const runTipTapCommand = (command: TipTapEditorCommand) => {
+    setTipTapCommandRequest({ id: Date.now(), command });
+  };
+  const syncTipTapPreviewToWorkingDraft = () => {
+    setEditorDraft(tipTapPreviewDraft);
+    setEditorTouched(true);
+    setEditorNotice("A TipTap előnézet szövege átvéve helyi munkapéldányként.");
+  };
+  const tipTapToolbarItems: Array<{
+    key: TipTapEditorCommand;
+    label: string;
+    title: string;
+    active: boolean;
+  }> = [
+    { key: "bold", label: "Félkövér", title: "Félkövér formázás", active: tipTapActiveState.bold },
+    { key: "italic", label: "Dőlt", title: "Dőlt formázás", active: tipTapActiveState.italic },
+    { key: "underline", label: "Aláhúzás", title: "Aláhúzás", active: tipTapActiveState.underline },
+    { key: "unordered-list", label: "Felsorolás", title: "Felsorolás", active: tipTapActiveState.bulletList },
+    { key: "ordered-list", label: "Számozás", title: "Számozott lista", active: tipTapActiveState.orderedList },
+    { key: "paragraph", label: "Bekezdés", title: "Bekezdés", active: tipTapActiveState.paragraph },
+  ];
+  const editorStatusLabel =
     !hasWorkspaceText && !hasLocalDraftText
       ? "Előkészítő munkanézet"
         : isDraftDirty
@@ -2711,10 +2754,43 @@ return (
                         </button>
                         <span className="text-[11px] text-[#7B776D]">
                           {isTipTapPreviewEnabled
-                            ? "Kísérleti szerkesztő előnézet. Mentés továbbra is a jelenlegi munkapéldány-logikával."
+                            ? "Kísérleti szerkesztő · helyi munkapéldány · nem Word-változáskövetés."
                             : "Alapértelmezett textarea szerkesztő aktív."}
                         </span>
+                        {isTipTapPreviewEnabled ? (
+                          <button
+                            type="button"
+                            onClick={syncTipTapPreviewToWorkingDraft}
+                            disabled={tipTapPreviewDraft === editorDraft}
+                            className="rounded-[999px] border border-[#1F4A33] bg-[#1F4A33] px-3 py-1.5 text-[10px] font-semibold text-[#F4EFDB] transition hover:bg-[#173827] disabled:cursor-not-allowed disabled:border-[#D8CFB6] disabled:bg-[#EFE9DA] disabled:text-[#9C9890]"
+                          >
+                            TipTap szöveg átvétele munkapéldányként
+                          </button>
+                        ) : null}
                       </div>
+                      {isTipTapPreviewEnabled ? (
+                        <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2">
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C5120]">TipTap pilot</span>
+                          {tipTapToolbarItems.map((item) => (
+                            <button
+                              key={item.key}
+                              type="button"
+                              onClick={() => runTipTapCommand(item.key)}
+                              title={item.title}
+                              className={`rounded-[6px] border px-2.5 py-1 text-[10px] font-semibold transition ${
+                                item.active
+                                  ? "border-[#B28B2E] bg-[#FAEFCF] text-[#5A4317] shadow-sm"
+                                  : "border-[#E7DECB] bg-white text-[#514D45] hover:border-[#B28B2E] hover:bg-[#FBF6E7]"
+                              }`}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                          <span className="ml-auto text-[11px] text-[#7B776D]">
+                            Kijelölés: {tipTapSelection.empty ? "nincs helyi pilot kijelölés" : `${tipTapSelection.text.length} karakter`}
+                          </span>
+                        </div>
+                      ) : null}
                       <div className="flex flex-wrap items-center gap-2">
                         {editorToolbarGroups.map((group) => (
                           <div key={group.key} className="flex items-center gap-1 rounded-[8px] border border-[#E7DECB] bg-white px-1.5 py-1">
@@ -2751,16 +2827,27 @@ return (
                     isTipTapPreviewEnabled ? (
                       <div className="space-y-3">
                         <div className="rounded-[8px] border border-[#E6C987] bg-[#FAEFCF] px-3 py-2 text-[11px] leading-5 text-[#6C5120]">
-                          <span className="font-semibold">Kísérleti szerkesztő előnézet.</span> Mentés továbbra is a jelenlegi munkapéldány-logikával.
-                          A TipTap JSON nem kerül mentésre és nem kerül backendnek elküldésre.
+                          <span className="font-semibold">Kísérleti szerkesztő · helyi munkapéldány · nem Word-változáskövetés.</span>{" "}
+                          A textarea munkanézet bármikor visszakapcsolható; mentés/export a munkapéldány szövegéből történik.
                         </div>
                         <TipTapEditorExperimental
-                          value={tipTapPreviewDraft || activeDraftText}
+                          value={tipTapPreviewDraft}
                           onChange={setTipTapPreviewDraft}
+                          commandRequest={tipTapCommandRequest}
+                          onActiveStateChange={setTipTapActiveState}
+                          onSelectionChange={setTipTapSelection}
                           placeholder="Kísérleti TipTap előnézet a szerződés-workspace shellben."
                         />
                         <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2 text-[11px] text-[#7B776D]">
-                          Helyi előnézeti szöveg hossza: {tipTapPreviewDraft.length} karakter. A meglévő mentés/export továbbra is a normál munkapéldány szövegét használja.
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span>Helyi előnézeti szöveg hossza: {tipTapPreviewDraft.length} karakter.</span>
+                            <span>A meglévő mentés/export továbbra is a munkapéldány szövegét használja.</span>
+                          </div>
+                          {!tipTapSelection.empty ? (
+                            <p className="mt-2 text-[#6C5120]">
+                              Helyi pilot kijelölés: „{getSelectionExcerpt(tipTapSelection.text, 140)}”
+                            </p>
+                          ) : null}
                         </div>
                       </div>
                     ) : undefined
