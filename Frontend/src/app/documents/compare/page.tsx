@@ -11,8 +11,20 @@ import {
   type TipTapEditorActiveState,
   type TipTapEditorCommand,
   type TipTapEditorCommandRequest,
+  type TipTapEditorFocusRequest,
+  type TipTapEditorMutationRequest,
+  type TipTapEditorMutationResult,
   type TipTapEditorSelectionState,
 } from "@/components/documents/editor/TipTapEditorExperimental";
+import {
+  createReviewSuggestion as buildReviewSuggestion,
+  markSuggestionAccepted,
+  markSuggestionHelperText,
+  markSuggestionRejected,
+  type EditorReviewSuggestion,
+  type EditorReviewSuggestionStatus,
+  type EditorReviewSuggestionType,
+} from "@/components/documents/editor/reviewModel";
 import {
   downloadReviewSummary,
   downloadContract,
@@ -455,6 +467,10 @@ function DocumentsComparePageContent() {
     to: 0,
     empty: true,
   });
+  const [tipTapFocusRequest, setTipTapFocusRequest] = useState<TipTapEditorFocusRequest | null>(null);
+  const [tipTapMutationRequest, setTipTapMutationRequest] = useState<TipTapEditorMutationRequest | null>(null);
+  const [tipTapReviewSuggestions, setTipTapReviewSuggestions] = useState<EditorReviewSuggestion[]>([]);
+  const [tipTapReplacementText, setTipTapReplacementText] = useState("");
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
   const [localCommentDraft, setLocalCommentDraft] = useState("");
   const [localComments, setLocalComments] = useState<LocalWorkspaceComment[]>([]);
@@ -670,6 +686,11 @@ function DocumentsComparePageContent() {
   useEffect(() => {
     setIsTipTapPreviewEnabled(false);
     setTipTapPreviewDraft("");
+    setTipTapSelection({ text: "", from: 0, to: 0, empty: true });
+    setTipTapFocusRequest(null);
+    setTipTapMutationRequest(null);
+    setTipTapReviewSuggestions([]);
+    setTipTapReplacementText("");
   }, [selectedDocument?.id]);
 
   const caseScopedDocuments = useMemo(() => {
@@ -1058,6 +1079,101 @@ function DocumentsComparePageContent() {
     { key: "ordered-list", label: "Számozás", title: "Számozott lista", active: tipTapActiveState.orderedList },
     { key: "paragraph", label: "Bekezdés", title: "Bekezdés", active: tipTapActiveState.paragraph },
   ];
+  const tipTapSelectedText = tipTapSelection.text.trim();
+  const canCreateTipTapSuggestion = isTipTapPreviewEnabled && Boolean(tipTapSelectedText) && !tipTapSelection.empty;
+  const canCreateTipTapReplacement = canCreateTipTapSuggestion && Boolean(tipTapReplacementText.trim());
+  const createTipTapReviewSuggestion = (type: EditorReviewSuggestionType) => {
+    if (!canCreateTipTapSuggestion) {
+      setEditorNotice("Jelölj ki szöveget a kísérleti szerkesztőben.");
+      return;
+    }
+    if (type === "replacement" && !tipTapReplacementText.trim()) {
+      setEditorNotice("Adj meg csereszöveget a kísérleti cserejavaslathoz.");
+      return;
+    }
+
+    const nextSuggestion = buildReviewSuggestion({
+      id: `compare-tiptap-${type}-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      type,
+      selectedText: tipTapSelectedText,
+      range: {
+        from: tipTapSelection.from,
+        to: tipTapSelection.to,
+      },
+      replacementText: tipTapReplacementText,
+    });
+
+    setTipTapReviewSuggestions((currentSuggestions) => [nextSuggestion, ...currentSuggestions]);
+    setEditorNotice("Helyi TipTap review-javaslat létrehozva.");
+    if (type === "replacement") setTipTapReplacementText("");
+  };
+  const focusTipTapSuggestion = (suggestion: EditorReviewSuggestion) => {
+    setTipTapFocusRequest({ id: Date.now(), from: suggestion.range.from, to: suggestion.range.to });
+  };
+  const markTipTapSuggestionStatus = (
+    suggestionId: string,
+    status: EditorReviewSuggestionStatus,
+    helperText?: string,
+    pendingMutationRequestId?: number,
+  ) => {
+    setTipTapReviewSuggestions((currentSuggestions) =>
+      currentSuggestions.map((suggestion) =>
+        suggestion.id === suggestionId
+          ? markSuggestionHelperText({ ...suggestion, status }, helperText, pendingMutationRequestId)
+          : suggestion,
+      ),
+    );
+  };
+  const acceptTipTapSuggestion = (suggestion: EditorReviewSuggestion) => {
+    if (suggestion.status !== "pending") return;
+
+    if (suggestion.type === "comment") {
+      setTipTapReviewSuggestions((currentSuggestions) =>
+        currentSuggestions.map((currentSuggestion) =>
+          currentSuggestion.id === suggestion.id
+            ? markSuggestionAccepted(currentSuggestion, "A helyi megjegyzés elfogadva; dokumentumszöveg nem módosult.")
+            : currentSuggestion,
+        ),
+      );
+      return;
+    }
+
+    const requestId = Date.now();
+    markTipTapSuggestionStatus(suggestion.id, "pending", "Helyi módosítás folyamatban…", requestId);
+    setTipTapMutationRequest({
+      id: requestId,
+      type: suggestion.type === "replacement" ? "replace" : "delete",
+      from: suggestion.range.from,
+      to: suggestion.range.to,
+      replacementText: suggestion.replacementText,
+    });
+  };
+  const rejectTipTapSuggestion = (suggestion: EditorReviewSuggestion) => {
+    if (suggestion.status !== "pending") return;
+    setTipTapReviewSuggestions((currentSuggestions) =>
+      currentSuggestions.map((currentSuggestion) =>
+        currentSuggestion.id === suggestion.id
+          ? markSuggestionRejected(currentSuggestion, "A helyi javaslat elutasítva; dokumentumszöveg nem módosult.")
+          : currentSuggestion,
+      ),
+    );
+  };
+  const handleTipTapMutationResult = (result: TipTapEditorMutationResult) => {
+    setTipTapReviewSuggestions((currentSuggestions) =>
+      currentSuggestions.map((suggestion) => {
+        if (suggestion.pendingMutationRequestId !== result.requestId) return suggestion;
+
+        return result.ok
+          ? markSuggestionAccepted(suggestion, "A helyi javaslat elfogadva és a kísérleti dokumentumszöveg módosítva.")
+          : markSuggestionHelperText(
+              suggestion,
+              result.error ?? "A tárolt kijelölés már nem módosítható ebben a helyi dokumentumállapotban.",
+              undefined,
+            );
+      }),
+    );
+  };
   const editorStatusLabel =
     !hasWorkspaceText && !hasLocalDraftText
       ? "Előkészítő munkanézet"
@@ -2834,8 +2950,11 @@ return (
                           value={tipTapPreviewDraft}
                           onChange={setTipTapPreviewDraft}
                           commandRequest={tipTapCommandRequest}
+                          focusRequest={tipTapFocusRequest}
+                          mutationRequest={tipTapMutationRequest}
                           onActiveStateChange={setTipTapActiveState}
                           onSelectionChange={setTipTapSelection}
+                          onMutationResult={handleTipTapMutationResult}
                           placeholder="Kísérleti TipTap előnézet a szerződés-workspace shellben."
                         />
                         <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2 text-[11px] text-[#7B776D]">
@@ -2848,6 +2967,153 @@ return (
                               Helyi pilot kijelölés: „{getSelectionExcerpt(tipTapSelection.text, 140)}”
                             </p>
                           ) : null}
+                        </div>
+                        <div className="rounded-[10px] border border-[#D8CFB6] bg-[#FFFDF8] p-3">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7A5A1F]">
+                                Kijelölt szöveg a kísérleti szerkesztőben
+                              </p>
+                              {canCreateTipTapSuggestion ? (
+                                <>
+                                  <p className="mt-2 max-w-2xl text-sm leading-6 text-[#1F2821]">
+                                    „{getSelectionExcerpt(tipTapSelectedText, 180)}”
+                                  </p>
+                                  <p className="mt-1 font-mono text-[11px] text-[#7B776D]">
+                                    Tartomány: {tipTapSelection.from}–{tipTapSelection.to}
+                                  </p>
+                                </>
+                              ) : (
+                                <p className="mt-2 text-sm text-[#7B776D]">
+                                  Jelölj ki szöveget a TipTap előnézetben helyi review-javaslat létrehozásához.
+                                </p>
+                              )}
+                            </div>
+                            <p className="max-w-xs rounded-[8px] border border-[#E6C987] bg-[#FAEFCF] px-3 py-2 text-[11px] leading-5 text-[#6C5120]">
+                              Helyi review-pilot · nem Word-változáskövetés · mentéshez előbb vedd át a munkapéldányba.
+                            </p>
+                          </div>
+                          <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+                            <label className="grid gap-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7A5A1F]">
+                              Csereszöveg
+                              <input
+                                value={tipTapReplacementText}
+                                onChange={(event) => setTipTapReplacementText(event.target.value)}
+                                placeholder="Cserejavaslat szövege"
+                                className="rounded-[8px] border border-[#D8CFB6] bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-[#1F2821] outline-none focus:border-[#B28B2E] focus:ring-2 focus:ring-[#FAEFCF]"
+                              />
+                            </label>
+                            <div className="flex flex-wrap items-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => createTipTapReviewSuggestion("comment")}
+                                disabled={!canCreateTipTapSuggestion}
+                                className="rounded-[999px] border border-[#C8D8F0] bg-[#F1F6FE] px-3 py-2 text-[11px] font-semibold text-[#244B7A] hover:bg-[#E6F0FC] disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Megjegyzés a kijelöléshez
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => createTipTapReviewSuggestion("replacement")}
+                                disabled={!canCreateTipTapReplacement}
+                                className="rounded-[999px] border border-[#E6C987] bg-[#FAEFCF] px-3 py-2 text-[11px] font-semibold text-[#7A5A1F] hover:bg-[#F7E5B8] disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Cserejavaslat a kijelöléshez
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => createTipTapReviewSuggestion("deletion")}
+                                disabled={!canCreateTipTapSuggestion}
+                                className="rounded-[999px] border border-[#E5C3C3] bg-[#FFF1F1] px-3 py-2 text-[11px] font-semibold text-[#8B2A2A] hover:bg-[#FDE5E5] disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Törlési javaslat a kijelöléshez
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="rounded-[10px] border border-[#E7DECB] bg-white p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7A5A1F]">
+                            Helyi TipTap review-javaslatok
+                          </p>
+                          {tipTapReviewSuggestions.length ? (
+                            <div className="mt-3 space-y-2">
+                              {tipTapReviewSuggestions.map((suggestion) => (
+                                <div key={suggestion.id} className="rounded-[8px] border border-[#E7DECB] bg-[#FFFDF8] p-3">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => focusTipTapSuggestion(suggestion)}
+                                      className="text-left text-sm font-semibold text-[#1F2821] hover:text-[#7A5A1F]"
+                                    >
+                                      {suggestion.type === "comment"
+                                        ? "Megjegyzés"
+                                        : suggestion.type === "replacement"
+                                          ? "Cserejavaslat"
+                                          : "Törlési javaslat"}
+                                    </button>
+                                    <span
+                                      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${
+                                        suggestion.status === "accepted"
+                                          ? "border-[#BFDDBF] bg-[#EEF8ED] text-[#1E6A34]"
+                                          : suggestion.status === "rejected"
+                                            ? "border-[#E5C3C3] bg-[#FFF1F1] text-[#8B2A2A]"
+                                            : "border-[#E6C987] bg-[#FAEFCF] text-[#7A5A1F]"
+                                      }`}
+                                    >
+                                      {suggestion.status === "accepted"
+                                        ? "Elfogadva"
+                                        : suggestion.status === "rejected"
+                                          ? "Elutasítva"
+                                          : "Függőben"}
+                                    </span>
+                                    <span className="font-mono text-[10px] text-[#7B776D]">
+                                      {suggestion.range.from}–{suggestion.range.to}
+                                    </span>
+                                  </div>
+                                  <p className="mt-2 text-sm leading-6 text-[#1F2821]">„{suggestion.selectedTextPreview}”</p>
+                                  {suggestion.replacementText ? (
+                                    <p className="mt-2 rounded-[6px] border border-[#BFDDBF] bg-[#EEF8ED] px-2 py-1 text-xs text-[#1E6A34]">
+                                      Javasolt csere: {suggestion.replacementText}
+                                    </p>
+                                  ) : null}
+                                  {suggestion.helperText ? (
+                                    <p className="mt-2 rounded-[6px] border border-[#D8CFB6] bg-[#FCFAF4] px-2 py-1 text-xs text-[#6D6A62]">
+                                      {suggestion.helperText}
+                                    </p>
+                                  ) : null}
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => focusTipTapSuggestion(suggestion)}
+                                      className="rounded-[999px] border border-[#D8CFB6] bg-white px-3 py-1 text-[11px] font-semibold text-[#5A4317] hover:border-[#B28B2E] hover:bg-[#FAEFCF]"
+                                    >
+                                      Kijelölés megnyitása
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => acceptTipTapSuggestion(suggestion)}
+                                      disabled={suggestion.status !== "pending"}
+                                      className="rounded-[999px] border border-[#BFDDBF] bg-[#EEF8ED] px-3 py-1 text-[11px] font-semibold text-[#1E6A34] hover:bg-[#E2F1E0] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      Elfogadás
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => rejectTipTapSuggestion(suggestion)}
+                                      disabled={suggestion.status !== "pending"}
+                                      className="rounded-[999px] border border-[#E5C3C3] bg-[#FFF1F1] px-3 py-1 text-[11px] font-semibold text-[#8B2A2A] hover:bg-[#FDE5E5] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      Elutasítás
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-2 text-sm text-[#7B776D]">
+                              Még nincs helyi TipTap review-javaslat.
+                            </p>
+                          )}
                         </div>
                       </div>
                     ) : undefined
