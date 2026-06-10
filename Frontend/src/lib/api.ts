@@ -1952,6 +1952,76 @@ export async function saveWorkspaceDocumentVersion(
   );
 }
 
+export type DocumentReviewWorkspaceSource = 'CONTRACT_WORKSPACE' | 'LITIGATION_WORKSPACE';
+export type DocumentReviewSuggestionType = 'COMMENT' | 'REPLACEMENT' | 'DELETION';
+export type DocumentReviewSuggestionStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
+
+export interface DocumentReviewSuggestion {
+  id: string;
+  caseId: string;
+  documentId: string;
+  documentVersionId?: string | null;
+  workspaceSource: DocumentReviewWorkspaceSource;
+  type: DocumentReviewSuggestionType;
+  status: DocumentReviewSuggestionStatus;
+  selectedTextPreview: string;
+  rangeFrom?: number | null;
+  rangeTo?: number | null;
+  replacementText?: string | null;
+  documentTextHash?: string | null;
+  anchorMetadata?: unknown;
+  helperText?: string | null;
+  authorId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string | null;
+}
+
+export interface CreateDocumentReviewSuggestionPayload {
+  workspaceSource: DocumentReviewWorkspaceSource;
+  type: DocumentReviewSuggestionType;
+  selectedTextPreview: string;
+  rangeFrom?: number | null;
+  rangeTo?: number | null;
+  replacementText?: string | null;
+  documentTextHash?: string | null;
+  anchorMetadata?: unknown;
+  helperText?: string | null;
+  documentVersionId?: string | null;
+}
+
+export async function listDocumentReviewSuggestions(
+  documentId: string,
+  filters?: { workspaceSource?: DocumentReviewWorkspaceSource; status?: DocumentReviewSuggestionStatus }
+): Promise<DocumentReviewSuggestion[]> {
+  const query = new URLSearchParams();
+  if (filters?.workspaceSource) query.set('workspaceSource', filters.workspaceSource);
+  if (filters?.status) query.set('status', filters.status);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return fetchApi<DocumentReviewSuggestion[]>(`/documents/${documentId}/review-suggestions${suffix}`);
+}
+
+export async function createDocumentReviewSuggestion(
+  documentId: string,
+  payload: CreateDocumentReviewSuggestionPayload
+): Promise<DocumentReviewSuggestion> {
+  return fetchApi<DocumentReviewSuggestion>(`/documents/${documentId}/review-suggestions`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateDocumentReviewSuggestionStatus(
+  documentId: string,
+  suggestionId: string,
+  status: Extract<DocumentReviewSuggestionStatus, 'ACCEPTED' | 'REJECTED'>
+): Promise<DocumentReviewSuggestion> {
+  return fetchApi<DocumentReviewSuggestion>(`/documents/${documentId}/review-suggestions/${suggestionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
 
 // Settings
 export async function getSettings(): Promise<Record<string, unknown>> {

@@ -47,6 +47,7 @@ model User {
   assignedCases         Case[]              @relation("AssignedLawyer")
   timelineEvents        TimelineEvent[]
   comments              Comment[]
+  documentReviewSuggestions DocumentReviewSuggestion[] @relation("DocumentReviewSuggestionAuthor")
   caseCollaborations    CaseCollaborator[]
   documentVersions      DocumentVersion[]
   taskAssignments       TaskAssignmentHistory[]
@@ -481,6 +482,7 @@ documents       Document[]
   tasks           Task[]
   timelineEvents  TimelineEvent[]
   comments        Comment[]
+  documentReviewSuggestions DocumentReviewSuggestion[]
   collaborators   CaseCollaborator[]
   legalAnalyses   LegalAnalysis[]
   lawyerHandoffPackages LawyerHandoffPackage[]
@@ -580,6 +582,7 @@ model Document {
   client          Client          @relation(fields: [clientId], references: [id])
   
   versions        DocumentVersion[]
+  reviewSuggestions DocumentReviewSuggestion[]
 
   @@map("documents")
 }
@@ -620,9 +623,60 @@ model DocumentVersion {
   // Relations
   documentId      String
   document        Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  reviewSuggestions DocumentReviewSuggestion[]
 
   @@unique([documentId, version])
   @@map("document_versions")
+}
+
+enum DocumentReviewWorkspaceSource {
+  CONTRACT_WORKSPACE
+  LITIGATION_WORKSPACE
+}
+
+enum DocumentReviewSuggestionType {
+  COMMENT
+  REPLACEMENT
+  DELETION
+}
+
+enum DocumentReviewSuggestionStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model DocumentReviewSuggestion {
+  id                  String                         @id @default(uuid())
+  caseId              String
+  documentId          String
+  documentVersionId   String?
+  workspaceSource     DocumentReviewWorkspaceSource
+  type                DocumentReviewSuggestionType
+  status              DocumentReviewSuggestionStatus @default(PENDING)
+  selectedTextPreview String
+  rangeFrom           Int?
+  rangeTo             Int?
+  replacementText     String?
+  documentTextHash    String?
+  anchorMetadata      Json?
+  helperText          String?
+  authorId            String?
+  createdAt           DateTime                       @default(now())
+  updatedAt           DateTime                       @updatedAt
+  resolvedAt          DateTime?
+
+  case                Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  document            Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentVersion     DocumentVersion? @relation(fields: [documentVersionId], references: [id], onDelete: SetNull)
+  author              User?            @relation("DocumentReviewSuggestionAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([documentId, status])
+  @@index([caseId, createdAt])
+  @@index([documentId, workspaceSource])
+  @@index([documentVersionId])
+  @@index([authorId])
+  @@map("document_review_suggestions")
 }
 
 // ============================================================================

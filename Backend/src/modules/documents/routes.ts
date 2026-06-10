@@ -7,10 +7,13 @@ import { Router, Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import documentsService from './services';
 import { extractText } from './textExtractor';
+import reviewSuggestionsRoutes from './reviewSuggestions.routes';
 import { authenticate } from '../../middleware/auth';
 import { prisma } from '../../prisma/prisma.service';
 
 const router = Router();
+
+router.use('/:documentId/review-suggestions', reviewSuggestionsRoutes);
 
 /**
  * GET /api/v1/documents/search
