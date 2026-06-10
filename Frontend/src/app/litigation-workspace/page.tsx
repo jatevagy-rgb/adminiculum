@@ -7,6 +7,26 @@ import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminBadge, AdminButton, AdminPanel, AdminSectionHeader, AdminStatusPill } from "@/components/adminiculum/ui";
 import { DocumentEditorShell } from "@/components/documents/DocumentEditorShell";
 import {
+  TipTapEditorExperimental,
+  type TipTapEditorActiveState,
+  type TipTapEditorCommand,
+  type TipTapEditorCommandRequest,
+  type TipTapEditorFocusRequest,
+  type TipTapEditorMutationRequest,
+  type TipTapEditorMutationResult,
+  type TipTapEditorSelectionState,
+} from "@/components/documents/editor/TipTapEditorExperimental";
+import { TipTapReviewPilotPanel } from "@/components/documents/editor/TipTapReviewPilotPanel";
+import {
+  createReviewSuggestion as buildReviewSuggestion,
+  markSuggestionAccepted,
+  markSuggestionHelperText,
+  markSuggestionRejected,
+  type EditorReviewSuggestion,
+  type EditorReviewSuggestionStatus,
+  type EditorReviewSuggestionType,
+} from "@/components/documents/editor/reviewModel";
+import {
   getCaseDocuments,
   getCaseById,
   getDocumentById,
@@ -1702,6 +1722,161 @@ function AssemblyWorkspace({
   onPleadingEditorTextChange: (value: string) => void;
   onBack: () => void;
 }) {
+  const [isTipTapAssemblyPreviewEnabled, setIsTipTapAssemblyPreviewEnabled] = useState(false);
+  const [tipTapAssemblyDraft, setTipTapAssemblyDraft] = useState("");
+  const [tipTapCommandRequest, setTipTapCommandRequest] = useState<TipTapEditorCommandRequest | null>(null);
+  const [tipTapActiveState, setTipTapActiveState] = useState<TipTapEditorActiveState>({
+    bold: false,
+    italic: false,
+    underline: false,
+    bulletList: false,
+    orderedList: false,
+    paragraph: true,
+  });
+  const [tipTapSelection, setTipTapSelection] = useState<TipTapEditorSelectionState>({
+    text: "",
+    from: 0,
+    to: 0,
+    empty: true,
+  });
+  const [tipTapFocusRequest, setTipTapFocusRequest] = useState<TipTapEditorFocusRequest | null>(null);
+  const [tipTapMutationRequest, setTipTapMutationRequest] = useState<TipTapEditorMutationRequest | null>(null);
+  const [tipTapReviewSuggestions, setTipTapReviewSuggestions] = useState<EditorReviewSuggestion[]>([]);
+  const [tipTapReplacementText, setTipTapReplacementText] = useState("");
+
+  const toggleTipTapAssemblyPreview = () => {
+    setIsTipTapAssemblyPreviewEnabled((currentValue) => {
+      const nextValue = !currentValue;
+      if (nextValue) {
+        setTipTapAssemblyDraft(pleadingEditorText || generatedPleadingSkeleton || "");
+        setTipTapSelection({ text: "", from: 0, to: 0, empty: true });
+      }
+      return nextValue;
+    });
+  };
+
+  const runTipTapCommand = (command: TipTapEditorCommand) => {
+    setTipTapCommandRequest({ id: Date.now(), command });
+  };
+
+  const syncTipTapAssemblyToPleadingDraft = () => {
+    onPleadingEditorTextChange(tipTapAssemblyDraft);
+  };
+
+  const getSelectionExcerpt = (text: string, maxLength = 140) => {
+    const normalizedText = text.trim().replace(/\s+/g, " ");
+    return normalizedText.length > maxLength ? `${normalizedText.slice(0, maxLength)}…` : normalizedText;
+  };
+
+  const tipTapToolbarItems: Array<{
+    key: TipTapEditorCommand;
+    label: string;
+    title: string;
+    active: boolean;
+  }> = [
+    { key: "bold", label: "Félkövér", title: "Félkövér formázás", active: tipTapActiveState.bold },
+    { key: "italic", label: "Dőlt", title: "Dőlt formázás", active: tipTapActiveState.italic },
+    { key: "underline", label: "Aláhúzás", title: "Aláhúzás", active: tipTapActiveState.underline },
+    { key: "unordered-list", label: "Felsorolás", title: "Felsorolás", active: tipTapActiveState.bulletList },
+    { key: "ordered-list", label: "Számozás", title: "Számozott lista", active: tipTapActiveState.orderedList },
+    { key: "paragraph", label: "Bekezdés", title: "Bekezdés", active: tipTapActiveState.paragraph },
+  ];
+
+  const tipTapSelectedText = tipTapSelection.text.trim();
+  const canCreateTipTapSuggestion = isTipTapAssemblyPreviewEnabled && Boolean(tipTapSelectedText) && !tipTapSelection.empty;
+  const canCreateTipTapReplacement = canCreateTipTapSuggestion && Boolean(tipTapReplacementText.trim());
+
+  const createTipTapReviewSuggestion = (type: EditorReviewSuggestionType) => {
+    if (!canCreateTipTapSuggestion) return;
+    if (type === "replacement" && !tipTapReplacementText.trim()) return;
+
+    const nextSuggestion = buildReviewSuggestion({
+      id: `litigation-tiptap-${type}-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      type,
+      selectedText: tipTapSelectedText,
+      range: {
+        from: tipTapSelection.from,
+        to: tipTapSelection.to,
+      },
+      replacementText: tipTapReplacementText,
+    });
+
+    setTipTapReviewSuggestions((currentSuggestions) => [nextSuggestion, ...currentSuggestions]);
+    if (type === "replacement") setTipTapReplacementText("");
+  };
+
+  const focusTipTapSuggestion = (suggestion: EditorReviewSuggestion) => {
+    setTipTapFocusRequest({ id: Date.now(), from: suggestion.range.from, to: suggestion.range.to });
+  };
+
+  const markTipTapSuggestionStatus = (
+    suggestionId: string,
+    status: EditorReviewSuggestionStatus,
+    helperText?: string,
+    pendingMutationRequestId?: number,
+  ) => {
+    setTipTapReviewSuggestions((currentSuggestions) =>
+      currentSuggestions.map((suggestion) =>
+        suggestion.id === suggestionId
+          ? markSuggestionHelperText({ ...suggestion, status }, helperText, pendingMutationRequestId)
+          : suggestion,
+      ),
+    );
+  };
+
+  const acceptTipTapSuggestion = (suggestion: EditorReviewSuggestion) => {
+    if (suggestion.status !== "pending") return;
+
+    if (suggestion.type === "comment") {
+      setTipTapReviewSuggestions((currentSuggestions) =>
+        currentSuggestions.map((currentSuggestion) =>
+          currentSuggestion.id === suggestion.id
+            ? markSuggestionAccepted(currentSuggestion, "A helyi megjegyzés elfogadva; beadványszöveg nem módosult.")
+            : currentSuggestion,
+        ),
+      );
+      return;
+    }
+
+    const requestId = Date.now();
+    markTipTapSuggestionStatus(suggestion.id, "pending", "Helyi módosítás folyamatban…", requestId);
+    setTipTapMutationRequest({
+      id: requestId,
+      type: suggestion.type === "replacement" ? "replace" : "delete",
+      from: suggestion.range.from,
+      to: suggestion.range.to,
+      replacementText: suggestion.replacementText,
+    });
+  };
+
+  const rejectTipTapSuggestion = (suggestion: EditorReviewSuggestion) => {
+    if (suggestion.status !== "pending") return;
+    setTipTapReviewSuggestions((currentSuggestions) =>
+      currentSuggestions.map((currentSuggestion) =>
+        currentSuggestion.id === suggestion.id
+          ? markSuggestionRejected(currentSuggestion, "A helyi javaslat elutasítva; beadványszöveg nem módosult.")
+          : currentSuggestion,
+      ),
+    );
+  };
+
+  const handleTipTapMutationResult = (result: TipTapEditorMutationResult) => {
+    setTipTapReviewSuggestions((currentSuggestions) =>
+      currentSuggestions.map((suggestion) => {
+        if (suggestion.pendingMutationRequestId !== result.requestId) return suggestion;
+
+        return result.ok
+          ? markSuggestionAccepted(suggestion, "A helyi javaslat elfogadva és a kísérleti beadványszöveg módosítva.")
+          : markSuggestionHelperText(
+              suggestion,
+              result.error ?? "A tárolt kijelölés már nem módosítható ebben a helyi beadványállapotban.",
+              undefined,
+            );
+      }),
+    );
+  };
+
   return (
     <section className="grid gap-4 xl:grid-cols-[minmax(280px,0.62fr)_minmax(760px,1.38fr)]">
       <AdminPanel className="overflow-hidden">
@@ -1825,6 +2000,53 @@ function AssemblyWorkspace({
         onChange={onPleadingEditorTextChange}
         placeholder={generatedPleadingSkeleton}
         rows={28}
+        editorMode={isTipTapAssemblyPreviewEnabled ? "rich-text-ready" : "plain-text"}
+        editorSlot={
+          isTipTapAssemblyPreviewEnabled ? (
+            <div className="space-y-3">
+              <div className="rounded-[8px] border border-[#E6C987] bg-[#FAEFCF] px-3 py-2 text-[11px] leading-5 text-[#6C5120]">
+                <span className="font-semibold">Kísérleti beadványszerkesztő · helyi vázlat · nem Word-változáskövetés.</span>{" "}
+                A textarea munkanézet bármikor visszakapcsolható; mentéshez előbb vedd át a beadványvázlatba.
+              </div>
+              <TipTapEditorExperimental
+                value={tipTapAssemblyDraft}
+                onChange={setTipTapAssemblyDraft}
+                commandRequest={tipTapCommandRequest}
+                focusRequest={tipTapFocusRequest}
+                mutationRequest={tipTapMutationRequest}
+                onActiveStateChange={setTipTapActiveState}
+                onSelectionChange={setTipTapSelection}
+                onMutationResult={handleTipTapMutationResult}
+                placeholder="Kísérleti TipTap előnézet a peres beadvány szerkesztéséhez."
+              />
+              <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2 text-[11px] text-[#7B776D]">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span>Helyi TipTap beadványszöveg hossza: {tipTapAssemblyDraft.length} karakter.</span>
+                  <span>A meglévő mentési út továbbra is a beadványvázlat szövegét használja.</span>
+                </div>
+                {!tipTapSelection.empty ? (
+                  <p className="mt-2 text-[#6C5120]">
+                    Helyi pilot kijelölés: „{getSelectionExcerpt(tipTapSelection.text, 140)}”
+                  </p>
+                ) : null}
+              </div>
+              <TipTapReviewPilotPanel
+                selection={tipTapSelection}
+                selectedText={tipTapSelectedText}
+                canCreateSuggestion={canCreateTipTapSuggestion}
+                canCreateReplacement={canCreateTipTapReplacement}
+                replacementText={tipTapReplacementText}
+                suggestions={tipTapReviewSuggestions}
+                getSelectionExcerpt={getSelectionExcerpt}
+                onReplacementTextChange={setTipTapReplacementText}
+                onCreateSuggestion={createTipTapReviewSuggestion}
+                onFocusSuggestion={focusTipTapSuggestion}
+                onAcceptSuggestion={acceptTipTapSuggestion}
+                onRejectSuggestion={rejectTipTapSuggestion}
+              />
+            </div>
+          ) : undefined
+        }
         pageClassName="max-w-[1180px]"
         canvasClassName="min-h-[860px] bg-[#FFFDF8]"
         textareaClassName="text-[16.5px]"
@@ -1846,6 +2068,58 @@ function AssemblyWorkspace({
         }
         toolbar={
           <div className="grid w-full gap-3">
+            <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FFFDF8] px-3 py-2">
+              <button
+                type="button"
+                onClick={toggleTipTapAssemblyPreview}
+                className={`rounded-[999px] border px-3 py-1.5 text-[10px] font-semibold transition ${
+                  isTipTapAssemblyPreviewEnabled
+                    ? "border-[#B28B2E] bg-[#FAEFCF] text-[#5A4317]"
+                    : "border-[#D8CFB6] bg-white text-[#514D45] hover:border-[#B28B2E] hover:bg-[#FBF6E7]"
+                }`}
+                aria-pressed={isTipTapAssemblyPreviewEnabled}
+              >
+                TipTap beadványszerkesztő előnézet
+              </button>
+              <span className="text-[11px] text-[#7B776D]">
+                {isTipTapAssemblyPreviewEnabled
+                  ? "Kísérleti beadványszerkesztő · helyi vázlat · nem Word-változáskövetés."
+                  : "Alapértelmezett beadvány textarea aktív."}
+              </span>
+              {isTipTapAssemblyPreviewEnabled ? (
+                <button
+                  type="button"
+                  onClick={syncTipTapAssemblyToPleadingDraft}
+                  disabled={tipTapAssemblyDraft === pleadingEditorText}
+                  className="rounded-[999px] border border-[#1F4A33] bg-[#1F4A33] px-3 py-1.5 text-[10px] font-semibold text-[#F4EFDB] transition hover:bg-[#173827] disabled:cursor-not-allowed disabled:border-[#D8CFB6] disabled:bg-[#EFE9DA] disabled:text-[#9C9890]"
+                >
+                  TipTap szöveg átvétele beadványvázlatként
+                </button>
+              ) : null}
+            </div>
+            {isTipTapAssemblyPreviewEnabled ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C5120]">TipTap pilot</span>
+                {tipTapToolbarItems.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => runTipTapCommand(item.key)}
+                    title={item.title}
+                    className={`rounded-[6px] border px-2.5 py-1 text-[10px] font-semibold transition ${
+                      item.active
+                        ? "border-[#B28B2E] bg-[#FAEFCF] text-[#5A4317] shadow-sm"
+                        : "border-[#E7DECB] bg-white text-[#514D45] hover:border-[#B28B2E] hover:bg-[#FBF6E7]"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+                <span className="ml-auto text-[11px] text-[#7B776D]">
+                  Kijelölés: {tipTapSelection.empty ? "nincs helyi pilot kijelölés" : `${tipTapSelection.text.length} karakter`}
+                </span>
+              </div>
+            ) : null}
             <div className="grid gap-3 rounded-[10px] border border-[#D8CFB6] bg-white p-4 text-[11px] text-[#514D45] md:grid-cols-3">
               <div>
                 <p className="font-semibold text-[#1F2821]">Forráslogika</p>
