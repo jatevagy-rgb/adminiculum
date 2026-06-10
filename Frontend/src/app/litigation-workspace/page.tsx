@@ -2005,8 +2005,7 @@ function AssemblyWorkspace({
           isTipTapAssemblyPreviewEnabled ? (
             <div className="space-y-3">
               <div className="rounded-[8px] border border-[#E6C987] bg-[#FAEFCF] px-3 py-2 text-[11px] leading-5 text-[#6C5120]">
-                <span className="font-semibold">Kísérleti beadványszerkesztő · helyi vázlat · nem Word-változáskövetés.</span>{" "}
-                A textarea munkanézet bármikor visszakapcsolható; mentéshez előbb vedd át a beadványvázlatba.
+                <span className="font-semibold">Kísérleti beadványszerkesztő.</span> Helyi vázlat; mentéshez előbb vedd át a beadványvázlatba.
               </div>
               <TipTapEditorExperimental
                 value={tipTapAssemblyDraft}
@@ -2021,12 +2020,12 @@ function AssemblyWorkspace({
               />
               <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2 text-[11px] text-[#7B776D]">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span>Helyi TipTap beadványszöveg hossza: {tipTapAssemblyDraft.length} karakter.</span>
-                  <span>A meglévő mentési út továbbra is a beadványvázlat szövegét használja.</span>
+                  <span>Szerkesztett beadványszöveg: {tipTapAssemblyDraft.length} karakter.</span>
+                  <span>Átvétel után kerül a beadványvázlatba.</span>
                 </div>
                 {!tipTapSelection.empty ? (
                   <p className="mt-2 text-[#6C5120]">
-                    Helyi pilot kijelölés: „{getSelectionExcerpt(tipTapSelection.text, 140)}”
+                    Kijelölés: „{getSelectionExcerpt(tipTapSelection.text, 140)}”
                   </p>
                 ) : null}
               </div>
@@ -2037,6 +2036,7 @@ function AssemblyWorkspace({
                 canCreateReplacement={canCreateTipTapReplacement}
                 replacementText={tipTapReplacementText}
                 suggestions={tipTapReviewSuggestions}
+                syncTargetLabel="beadványvázlatba"
                 getSelectionExcerpt={getSelectionExcerpt}
                 onReplacementTextChange={setTipTapReplacementText}
                 onCreateSuggestion={createTipTapReviewSuggestion}
@@ -2083,8 +2083,8 @@ function AssemblyWorkspace({
               </button>
               <span className="text-[11px] text-[#7B776D]">
                 {isTipTapAssemblyPreviewEnabled
-                  ? "Kísérleti beadványszerkesztő · helyi vázlat · nem Word-változáskövetés."
-                  : "Alapértelmezett beadvány textarea aktív."}
+                  ? "Kísérleti beadványszerkesztő aktív."
+                  : "Alapértelmezett beadványszerkesztő aktív."}
               </span>
               {isTipTapAssemblyPreviewEnabled ? (
                 <button
@@ -2099,7 +2099,7 @@ function AssemblyWorkspace({
             </div>
             {isTipTapAssemblyPreviewEnabled ? (
               <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C5120]">TipTap pilot</span>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C5120]">Formázás</span>
                 {tipTapToolbarItems.map((item) => (
                   <button
                     key={item.key}
@@ -2116,7 +2116,7 @@ function AssemblyWorkspace({
                   </button>
                 ))}
                 <span className="ml-auto text-[11px] text-[#7B776D]">
-                  Kijelölés: {tipTapSelection.empty ? "nincs helyi pilot kijelölés" : `${tipTapSelection.text.length} karakter`}
+                  Kijelölés: {tipTapSelection.empty ? "nincs kijelölés" : `${tipTapSelection.text.length} karakter`}
                 </span>
               </div>
             ) : null}

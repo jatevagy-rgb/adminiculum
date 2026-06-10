@@ -2871,8 +2871,8 @@ return (
                         </button>
                         <span className="text-[11px] text-[#7B776D]">
                           {isTipTapPreviewEnabled
-                            ? "Kísérleti szerkesztő · helyi munkapéldány · nem Word-változáskövetés."
-                            : "Alapértelmezett textarea szerkesztő aktív."}
+                            ? "Kísérleti szerkesztő aktív."
+                            : "Alapértelmezett szerkesztő aktív."}
                         </span>
                         {isTipTapPreviewEnabled ? (
                           <button
@@ -2887,7 +2887,7 @@ return (
                       </div>
                       {isTipTapPreviewEnabled ? (
                         <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2">
-                          <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C5120]">TipTap pilot</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C5120]">Formázás</span>
                           {tipTapToolbarItems.map((item) => (
                             <button
                               key={item.key}
@@ -2904,7 +2904,7 @@ return (
                             </button>
                           ))}
                           <span className="ml-auto text-[11px] text-[#7B776D]">
-                            Kijelölés: {tipTapSelection.empty ? "nincs helyi pilot kijelölés" : `${tipTapSelection.text.length} karakter`}
+                            Kijelölés: {tipTapSelection.empty ? "nincs kijelölés" : `${tipTapSelection.text.length} karakter`}
                           </span>
                         </div>
                       ) : null}
@@ -2944,8 +2944,7 @@ return (
                     isTipTapPreviewEnabled ? (
                       <div className="space-y-3">
                         <div className="rounded-[8px] border border-[#E6C987] bg-[#FAEFCF] px-3 py-2 text-[11px] leading-5 text-[#6C5120]">
-                          <span className="font-semibold">Kísérleti szerkesztő · helyi munkapéldány · nem Word-változáskövetés.</span>{" "}
-                          A textarea munkanézet bármikor visszakapcsolható; mentés/export a munkapéldány szövegéből történik.
+                          <span className="font-semibold">Kísérleti szerkesztő.</span> Helyi munkapéldány; a mentés/export a munkapéldány szövegéből történik.
                         </div>
                         <TipTapEditorExperimental
                           value={tipTapPreviewDraft}
@@ -2960,12 +2959,12 @@ return (
                         />
                         <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2 text-[11px] text-[#7B776D]">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span>Helyi előnézeti szöveg hossza: {tipTapPreviewDraft.length} karakter.</span>
-                            <span>A meglévő mentés/export továbbra is a munkapéldány szövegét használja.</span>
+                            <span>Szerkesztett szöveg: {tipTapPreviewDraft.length} karakter.</span>
+                            <span>Átvétel után kerül a munkapéldányba.</span>
                           </div>
                           {!tipTapSelection.empty ? (
                             <p className="mt-2 text-[#6C5120]">
-                              Helyi pilot kijelölés: „{getSelectionExcerpt(tipTapSelection.text, 140)}”
+                              Kijelölés: „{getSelectionExcerpt(tipTapSelection.text, 140)}”
                             </p>
                           ) : null}
                         </div>
@@ -2976,6 +2975,7 @@ return (
                           canCreateReplacement={canCreateTipTapReplacement}
                           replacementText={tipTapReplacementText}
                           suggestions={tipTapReviewSuggestions}
+                          syncTargetLabel="munkapéldányba"
                           getSelectionExcerpt={getSelectionExcerpt}
                           onReplacementTextChange={setTipTapReplacementText}
                           onCreateSuggestion={createTipTapReviewSuggestion}

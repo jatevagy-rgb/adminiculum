@@ -6,6 +6,7 @@ import type { TipTapEditorSelectionState } from "./TipTapEditorExperimental";
 type TipTapReviewPilotPanelProps = {
   selection: TipTapEditorSelectionState;
   selectedText: string;
+  syncTargetLabel?: "munkapéldányba" | "beadványvázlatba";
   canCreateSuggestion: boolean;
   canCreateReplacement: boolean;
   replacementText: string;
@@ -39,6 +40,7 @@ function getSuggestionStatusClass(status: EditorReviewSuggestion["status"]) {
 export function TipTapReviewPilotPanel({
   selection,
   selectedText,
+  syncTargetLabel = "munkapéldányba",
   canCreateSuggestion,
   canCreateReplacement,
   replacementText,
@@ -52,15 +54,15 @@ export function TipTapReviewPilotPanel({
 }: TipTapReviewPilotPanelProps) {
   return (
     <>
-      <div className="rounded-[10px] border border-[#D8CFB6] bg-[#FFFDF8] p-3">
+      <div className="rounded-[12px] border border-[#D8CFB6] bg-[#FFFDF8] p-3 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7A5A1F]">
-              Kijelölt szöveg a kísérleti szerkesztőben
+          <div className="min-w-0 flex-1">
+            <p className="font-serif text-[15px] font-medium text-[#1F2821]">
+              Kijelölt szöveg
             </p>
             {canCreateSuggestion ? (
               <>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-[#1F2821]">
+                <p className="mt-2 max-w-2xl rounded-[8px] border border-[#E7DECB] bg-white px-3 py-2 text-sm leading-6 text-[#1F2821]">
                   „{getSelectionExcerpt(selectedText, 180)}”
                 </p>
                 <p className="mt-1 font-mono text-[11px] text-[#7B776D]">
@@ -69,15 +71,15 @@ export function TipTapReviewPilotPanel({
               </>
             ) : (
               <p className="mt-2 text-sm text-[#7B776D]">
-                Jelölj ki szöveget a TipTap előnézetben helyi review-javaslat létrehozásához.
+                Jelölj ki szöveget a kísérleti szerkesztőben review-javaslat létrehozásához.
               </p>
             )}
           </div>
           <p className="max-w-xs rounded-[8px] border border-[#E6C987] bg-[#FAEFCF] px-3 py-2 text-[11px] leading-5 text-[#6C5120]">
-            Helyi review-pilot · nem Word-változáskövetés · mentéshez előbb vedd át a munkapéldányba.
+            Helyi review-pilot · nem Word-változáskövetés · mentéshez előbb vedd át a {syncTargetLabel}.
           </p>
         </div>
-        <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,0.7fr)_minmax(320px,1fr)]">
           <label className="grid gap-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7A5A1F]">
             Csereszöveg
             <input
@@ -87,7 +89,7 @@ export function TipTapReviewPilotPanel({
               className="rounded-[8px] border border-[#D8CFB6] bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-[#1F2821] outline-none focus:border-[#B28B2E] focus:ring-2 focus:ring-[#FAEFCF]"
             />
           </label>
-          <div className="flex flex-wrap items-end gap-2">
+          <div className="flex flex-wrap items-end gap-2 rounded-[8px] border border-[#EFE6D2] bg-white/80 p-2">
             <button
               type="button"
               onClick={() => onCreateSuggestion("comment")}
@@ -116,14 +118,17 @@ export function TipTapReviewPilotPanel({
         </div>
       </div>
 
-      <div className="rounded-[10px] border border-[#E7DECB] bg-white p-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7A5A1F]">
-          Helyi TipTap review-javaslatok
-        </p>
+      <div className="rounded-[12px] border border-[#E7DECB] bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-serif text-[15px] font-medium text-[#1F2821]">Review-javaslatok</p>
+          <span className="rounded-full border border-[#D8CFB6] bg-[#FCFAF4] px-2 py-0.5 text-[10px] font-semibold text-[#7A5A1F]">
+            {suggestions.length} helyi javaslat
+          </span>
+        </div>
         {suggestions.length ? (
           <div className="mt-3 space-y-2">
             {suggestions.map((suggestion) => (
-              <div key={suggestion.id} className="rounded-[8px] border border-[#E7DECB] bg-[#FFFDF8] p-3">
+              <div key={suggestion.id} className="rounded-[10px] border border-[#E7DECB] bg-[#FFFDF8] p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
@@ -143,18 +148,18 @@ export function TipTapReviewPilotPanel({
                     {suggestion.range.from}–{suggestion.range.to}
                   </span>
                 </div>
-                <p className="mt-2 text-sm leading-6 text-[#1F2821]">„{suggestion.selectedTextPreview}”</p>
+                <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#1F2821]">„{suggestion.selectedTextPreview}”</p>
                 {suggestion.replacementText ? (
                   <p className="mt-2 rounded-[6px] border border-[#BFDDBF] bg-[#EEF8ED] px-2 py-1 text-xs text-[#1E6A34]">
                     Javasolt csere: {suggestion.replacementText}
                   </p>
                 ) : null}
                 {suggestion.helperText ? (
-                  <p className="mt-2 rounded-[6px] border border-[#D8CFB6] bg-[#FCFAF4] px-2 py-1 text-xs text-[#6D6A62]">
+                  <p className="mt-2 rounded-[6px] border border-[#D8CFB6] bg-[#FCFAF4] px-2 py-1 text-[11px] text-[#6D6A62]">
                     {suggestion.helperText}
                   </p>
                 ) : null}
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap gap-2 border-t border-[#EFE6D2] pt-2">
                   <button
                     type="button"
                     onClick={() => onFocusSuggestion(suggestion)}
@@ -183,7 +188,7 @@ export function TipTapReviewPilotPanel({
             ))}
           </div>
         ) : (
-          <p className="mt-2 text-sm text-[#7B776D]">Még nincs helyi TipTap review-javaslat.</p>
+          <p className="mt-2 text-sm text-[#7B776D]">Még nincs helyi review-javaslat.</p>
         )}
       </div>
     </>
