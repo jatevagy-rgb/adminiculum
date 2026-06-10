@@ -2454,55 +2454,74 @@ return (
                         ) : null}
                       </div>
 
-                      <div className="rounded-[8px] border border-[#DDD7CA] bg-white p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Kijelölés</p>
-                          {hasTextSelection ? (
-                            <span className="rounded-full border border-[#BFDDBF] bg-[#EEF8ED] px-2 py-0.5 text-[10px] font-semibold text-[#1E6A34]">
-                              {selectionSnapshot?.text.trim().length || 0} karakter kijelölve
+                      {isTipTapPreviewEnabled ? (
+                        <div className="rounded-[8px] border border-[#E6C987] bg-[#FAEFCF] p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7A5A1F]">Aktív szerkesztési mód</p>
+                            <span className="rounded-full border border-[#B28B2E] bg-white px-2 py-0.5 text-[10px] font-semibold text-[#5A4317]">
+                              Kísérleti TipTap
                             </span>
-                          ) : null}
+                          </div>
+                          <p className="mt-2 text-[11px] leading-5 text-[#6C5120]">
+                            A kijelöléshez kapcsolt review-javaslatok a dokumentum vásznán jelennek meg, helyben maradnak, és nem kerülnek szerveroldali mentésre.
+                          </p>
+                          <div className="mt-3 rounded-[6px] border border-[#D8CFB6] bg-white/80 px-3 py-2 text-[11px] text-[#514D45]">
+                            {tipTapPreviewDraft === editorDraft
+                              ? "A TipTap szöveg jelenleg megegyezik a munkapéldánnyal."
+                              : "Átvétel szükséges, ha a TipTap szöveget a munkapéldányban is használni szeretnéd."}
+                          </div>
                         </div>
-                        <p className="mt-2 text-[11px] text-[#6D6A62]">
-                          {hasTextSelection
-                            ? `Kijelölt részlet: „${getSelectionExcerpt(selectionSnapshot?.text || "", 120)}”`
-                            : "Jelölj ki szöveget a művelethez."}
-                        </p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={handleHighlightSelection}
-                            disabled={!hasTextSelection}
-                            className="rounded-[5px] border border-[#BFDDBF] bg-[#EEF8ED] px-2.5 py-1 text-[10px] font-semibold text-[#1E6A34] disabled:cursor-not-allowed disabled:border-[#DDD7CA] disabled:bg-[#FBF9F3] disabled:text-[#8B877E]"
-                          >
-                            Kiemelés
-                          </button>
-                          <button
-                            type="button"
-                            onClick={openAnchoredCommentComposer}
-                            disabled={!hasTextSelection}
-                            className="rounded-[5px] border border-[#C8D8F0] bg-[#F1F6FE] px-2.5 py-1 text-[10px] font-semibold text-[#244B7A] disabled:cursor-not-allowed disabled:border-[#DDD7CA] disabled:bg-[#FBF9F3] disabled:text-[#8B877E]"
-                          >
-                            Megjegyzés
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openProposedChangeComposer("replacement")}
-                            disabled={!hasTextSelection}
-                            className="rounded-[5px] border border-[#E6C987] bg-[#FAEFCF] px-2.5 py-1 text-[10px] font-semibold text-[#7A5A1F] disabled:cursor-not-allowed disabled:border-[#DDD7CA] disabled:bg-[#FBF9F3] disabled:text-[#8B877E]"
-                          >
-                            Cserejavaslat
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openProposedChangeComposer("deletion")}
-                            disabled={!hasTextSelection}
-                            className="rounded-[5px] border border-[#E5C3C3] bg-[#FFF1F1] px-2.5 py-1 text-[10px] font-semibold text-[#8B2A2A] disabled:cursor-not-allowed disabled:border-[#DDD7CA] disabled:bg-[#FBF9F3] disabled:text-[#8B877E]"
-                          >
-                            Törlési javaslat
-                          </button>
+                      ) : (
+                        <div className="rounded-[8px] border border-[#DDD7CA] bg-white p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Kijelölés</p>
+                            {hasTextSelection ? (
+                              <span className="rounded-full border border-[#BFDDBF] bg-[#EEF8ED] px-2 py-0.5 text-[10px] font-semibold text-[#1E6A34]">
+                                {selectionSnapshot?.text.trim().length || 0} karakter kijelölve
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-2 text-[11px] text-[#6D6A62]">
+                            {hasTextSelection
+                              ? `Kijelölt részlet: „${getSelectionExcerpt(selectionSnapshot?.text || "", 120)}”`
+                              : "Jelölj ki szöveget a művelethez."}
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={handleHighlightSelection}
+                              disabled={!hasTextSelection}
+                              className="rounded-[5px] border border-[#BFDDBF] bg-[#EEF8ED] px-2.5 py-1 text-[10px] font-semibold text-[#1E6A34] disabled:cursor-not-allowed disabled:border-[#DDD7CA] disabled:bg-[#FBF9F3] disabled:text-[#8B877E]"
+                            >
+                              Kiemelés
+                            </button>
+                            <button
+                              type="button"
+                              onClick={openAnchoredCommentComposer}
+                              disabled={!hasTextSelection}
+                              className="rounded-[5px] border border-[#C8D8F0] bg-[#F1F6FE] px-2.5 py-1 text-[10px] font-semibold text-[#244B7A] disabled:cursor-not-allowed disabled:border-[#DDD7CA] disabled:bg-[#FBF9F3] disabled:text-[#8B877E]"
+                            >
+                              Megjegyzés
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openProposedChangeComposer("replacement")}
+                              disabled={!hasTextSelection}
+                              className="rounded-[5px] border border-[#E6C987] bg-[#FAEFCF] px-2.5 py-1 text-[10px] font-semibold text-[#7A5A1F] disabled:cursor-not-allowed disabled:border-[#DDD7CA] disabled:bg-[#FBF9F3] disabled:text-[#8B877E]"
+                            >
+                              Cserejavaslat
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openProposedChangeComposer("deletion")}
+                              disabled={!hasTextSelection}
+                              className="rounded-[5px] border border-[#E5C3C3] bg-[#FFF1F1] px-2.5 py-1 text-[10px] font-semibold text-[#8B2A2A] disabled:cursor-not-allowed disabled:border-[#DDD7CA] disabled:bg-[#FBF9F3] disabled:text-[#8B877E]"
+                            >
+                              Törlési javaslat
+                            </button>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </>
                   ) : null}
 
@@ -2856,24 +2875,33 @@ return (
                           {workspaceSaveState.message}
                         </div>
                       ) : null}
-                      <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FFFDF8] px-3 py-2">
-                        <button
-                          type="button"
-                          onClick={toggleTipTapPreview}
-                          className={`rounded-[999px] border px-3 py-1.5 text-[10px] font-semibold transition ${
-                            isTipTapPreviewEnabled
-                              ? "border-[#B28B2E] bg-[#FAEFCF] text-[#5A4317]"
-                              : "border-[#D8CFB6] bg-white text-[#514D45] hover:border-[#B28B2E] hover:bg-[#FBF6E7]"
-                          }`}
-                          aria-pressed={isTipTapPreviewEnabled}
-                        >
-                          TipTap előnézet
-                        </button>
-                        <span className="text-[11px] text-[#7B776D]">
-                          {isTipTapPreviewEnabled
-                            ? "Kísérleti szerkesztő aktív."
-                            : "Alapértelmezett szerkesztő aktív."}
-                        </span>
+                      <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-[#D8CFB6] bg-[#FFFDF8] px-3 py-2">
+                        <div className="flex rounded-[999px] border border-[#D8CFB6] bg-[#F7F2E6] p-0.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isTipTapPreviewEnabled) toggleTipTapPreview();
+                            }}
+                            className={`rounded-[999px] px-3 py-1.5 text-[10px] font-semibold transition ${
+                              !isTipTapPreviewEnabled ? "bg-[#1F4A33] text-[#F4EFDB] shadow-sm" : "text-[#514D45] hover:bg-white"
+                            }`}
+                            aria-pressed={!isTipTapPreviewEnabled}
+                          >
+                            Alap szerkesztő
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!isTipTapPreviewEnabled) toggleTipTapPreview();
+                            }}
+                            className={`rounded-[999px] px-3 py-1.5 text-[10px] font-semibold transition ${
+                              isTipTapPreviewEnabled ? "bg-[#FAEFCF] text-[#5A4317] shadow-sm" : "text-[#514D45] hover:bg-white"
+                            }`}
+                            aria-pressed={isTipTapPreviewEnabled}
+                          >
+                            Kísérleti TipTap
+                          </button>
+                        </div>
                         {isTipTapPreviewEnabled ? (
                           <button
                             type="button"
@@ -2943,9 +2971,6 @@ return (
                   editorSlot={
                     isTipTapPreviewEnabled ? (
                       <div className="space-y-3">
-                        <div className="rounded-[8px] border border-[#E6C987] bg-[#FAEFCF] px-3 py-2 text-[11px] leading-5 text-[#6C5120]">
-                          <span className="font-semibold">Kísérleti szerkesztő.</span> Helyi munkapéldány; a mentés/export a munkapéldány szövegéből történik.
-                        </div>
                         <TipTapEditorExperimental
                           value={tipTapPreviewDraft}
                           onChange={setTipTapPreviewDraft}

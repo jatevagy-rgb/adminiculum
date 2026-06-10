@@ -2004,9 +2004,6 @@ function AssemblyWorkspace({
         editorSlot={
           isTipTapAssemblyPreviewEnabled ? (
             <div className="space-y-3">
-              <div className="rounded-[8px] border border-[#E6C987] bg-[#FAEFCF] px-3 py-2 text-[11px] leading-5 text-[#6C5120]">
-                <span className="font-semibold">Kísérleti beadványszerkesztő.</span> Helyi vázlat; mentéshez előbb vedd át a beadványvázlatba.
-              </div>
               <TipTapEditorExperimental
                 value={tipTapAssemblyDraft}
                 onChange={setTipTapAssemblyDraft}
@@ -2068,24 +2065,33 @@ function AssemblyWorkspace({
         }
         toolbar={
           <div className="grid w-full gap-3">
-            <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FFFDF8] px-3 py-2">
-              <button
-                type="button"
-                onClick={toggleTipTapAssemblyPreview}
-                className={`rounded-[999px] border px-3 py-1.5 text-[10px] font-semibold transition ${
-                  isTipTapAssemblyPreviewEnabled
-                    ? "border-[#B28B2E] bg-[#FAEFCF] text-[#5A4317]"
-                    : "border-[#D8CFB6] bg-white text-[#514D45] hover:border-[#B28B2E] hover:bg-[#FBF6E7]"
-                }`}
-                aria-pressed={isTipTapAssemblyPreviewEnabled}
-              >
-                TipTap beadványszerkesztő előnézet
-              </button>
-              <span className="text-[11px] text-[#7B776D]">
-                {isTipTapAssemblyPreviewEnabled
-                  ? "Kísérleti beadványszerkesztő aktív."
-                  : "Alapértelmezett beadványszerkesztő aktív."}
-              </span>
+            <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-[#D8CFB6] bg-[#FFFDF8] px-3 py-2">
+              <div className="flex rounded-[999px] border border-[#D8CFB6] bg-[#F7F2E6] p-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isTipTapAssemblyPreviewEnabled) toggleTipTapAssemblyPreview();
+                  }}
+                  className={`rounded-[999px] px-3 py-1.5 text-[10px] font-semibold transition ${
+                    !isTipTapAssemblyPreviewEnabled ? "bg-[#1F4A33] text-[#F4EFDB] shadow-sm" : "text-[#514D45] hover:bg-white"
+                  }`}
+                  aria-pressed={!isTipTapAssemblyPreviewEnabled}
+                >
+                  Alap beadványszerkesztő
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isTipTapAssemblyPreviewEnabled) toggleTipTapAssemblyPreview();
+                  }}
+                  className={`rounded-[999px] px-3 py-1.5 text-[10px] font-semibold transition ${
+                    isTipTapAssemblyPreviewEnabled ? "bg-[#FAEFCF] text-[#5A4317] shadow-sm" : "text-[#514D45] hover:bg-white"
+                  }`}
+                  aria-pressed={isTipTapAssemblyPreviewEnabled}
+                >
+                  Kísérleti TipTap
+                </button>
+              </div>
               {isTipTapAssemblyPreviewEnabled ? (
                 <button
                   type="button"
@@ -2120,7 +2126,7 @@ function AssemblyWorkspace({
                 </span>
               </div>
             ) : null}
-            <div className="grid gap-3 rounded-[10px] border border-[#D8CFB6] bg-white p-4 text-[11px] text-[#514D45] md:grid-cols-3">
+            <div className={`grid gap-3 rounded-[10px] border border-[#D8CFB6] bg-white text-[11px] text-[#514D45] md:grid-cols-3 ${isTipTapAssemblyPreviewEnabled ? "p-3" : "p-4"}`}>
               <div>
                 <p className="font-semibold text-[#1F2821]">Forráslogika</p>
                 <p className="mt-1">{responseBlocks.length} saját válasz alapján előkészítve</p>
@@ -2134,15 +2140,15 @@ function AssemblyWorkspace({
                 <p className="mt-1">Helyi vázlat; végleges iratmentés nincs bekötve</p>
               </div>
             </div>
-            <div className="rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-4">
+            <div className={`rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] ${isTipTapAssemblyPreviewEnabled ? "p-3" : "p-4"}`}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h3 className="font-serif text-xl font-medium text-[#1F2821]">Bálintfy ellenkérelem struktúra</h3>
+                  <h3 className={`font-serif font-medium text-[#1F2821] ${isTipTapAssemblyPreviewEnabled ? "text-base" : "text-xl"}`}>Bálintfy ellenkérelem struktúra</h3>
                   <p className="mt-1 text-[12px] text-[#6D6A62]">{outputTemplateLabels[outputTemplate]}</p>
                 </div>
                 <AdminStatusPill tone="gold">Előkészítve</AdminStatusPill>
               </div>
-              <ol className="mt-4 grid gap-2 rounded-[8px] border border-[#E7DECB] bg-white p-4 text-[12px] text-[#514D45] md:grid-cols-2">
+              <ol className={`grid gap-2 rounded-[8px] border border-[#E7DECB] bg-white text-[12px] text-[#514D45] md:grid-cols-2 ${isTipTapAssemblyPreviewEnabled ? "mt-3 max-h-24 overflow-hidden p-3" : "mt-4 p-4"}`}>
                 {assemblyStructure.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
