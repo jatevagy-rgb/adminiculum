@@ -455,12 +455,14 @@ function DocumentsComparePageContent() {
   const [tipTapPreviewDraft, setTipTapPreviewDraft] = useState("");
   const [tipTapCommandRequest, setTipTapCommandRequest] = useState<TipTapEditorCommandRequest | null>(null);
   const [tipTapActiveState, setTipTapActiveState] = useState<TipTapEditorActiveState>({
+    paragraph: true,
+    heading: false,
     bold: false,
     italic: false,
     underline: false,
     bulletList: false,
     orderedList: false,
-    paragraph: true,
+    blockquote: false,
   });
   const [tipTapSelection, setTipTapSelection] = useState<TipTapEditorSelectionState>({
     text: "",
@@ -1072,13 +1074,16 @@ function DocumentsComparePageContent() {
     label: string;
     title: string;
     active: boolean;
+    group: "structure" | "emphasis" | "list";
   }> = [
-    { key: "bold", label: "Félkövér", title: "Félkövér formázás", active: tipTapActiveState.bold },
-    { key: "italic", label: "Dőlt", title: "Dőlt formázás", active: tipTapActiveState.italic },
-    { key: "underline", label: "Aláhúzás", title: "Aláhúzás", active: tipTapActiveState.underline },
-    { key: "unordered-list", label: "Felsorolás", title: "Felsorolás", active: tipTapActiveState.bulletList },
-    { key: "ordered-list", label: "Számozás", title: "Számozott lista", active: tipTapActiveState.orderedList },
-    { key: "paragraph", label: "Bekezdés", title: "Bekezdés", active: tipTapActiveState.paragraph },
+    { key: "paragraph", label: "Bekezdés", title: "Normál bekezdés", active: tipTapActiveState.paragraph, group: "structure" },
+    { key: "heading", label: "Címsor", title: "Címsor", active: tipTapActiveState.heading, group: "structure" },
+    { key: "blockquote", label: "Idézet", title: "Idézet", active: tipTapActiveState.blockquote, group: "structure" },
+    { key: "bold", label: "Félkövér", title: "Félkövér formázás", active: tipTapActiveState.bold, group: "emphasis" },
+    { key: "italic", label: "Dőlt", title: "Dőlt formázás", active: tipTapActiveState.italic, group: "emphasis" },
+    { key: "underline", label: "Aláhúzás", title: "Aláhúzás", active: tipTapActiveState.underline, group: "emphasis" },
+    { key: "unordered-list", label: "Felsorolás", title: "Felsorolás", active: tipTapActiveState.bulletList, group: "list" },
+    { key: "ordered-list", label: "Számozás", title: "Számozott lista", active: tipTapActiveState.orderedList, group: "list" },
   ];
   const tipTapSelectedText = tipTapSelection.text.trim();
   const canCreateTipTapSuggestion = isTipTapPreviewEnabled && Boolean(tipTapSelectedText) && !tipTapSelection.empty;
@@ -2916,20 +2921,26 @@ return (
                       {isTipTapPreviewEnabled ? (
                         <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2">
                           <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C5120]">Formázás</span>
-                          {tipTapToolbarItems.map((item) => (
-                            <button
-                              key={item.key}
-                              type="button"
-                              onClick={() => runTipTapCommand(item.key)}
-                              title={item.title}
-                              className={`rounded-[6px] border px-2.5 py-1 text-[10px] font-semibold transition ${
-                                item.active
-                                  ? "border-[#B28B2E] bg-[#FAEFCF] text-[#5A4317] shadow-sm"
-                                  : "border-[#E7DECB] bg-white text-[#514D45] hover:border-[#B28B2E] hover:bg-[#FBF6E7]"
-                              }`}
-                            >
-                              {item.label}
-                            </button>
+                          {(["structure", "emphasis", "list"] as const).map((group) => (
+                            <span key={group} className="flex items-center gap-1 rounded-[7px] border border-[#E7DECB] bg-white/80 px-1.5 py-1">
+                              {tipTapToolbarItems
+                                .filter((item) => item.group === group)
+                                .map((item) => (
+                                  <button
+                                    key={item.key}
+                                    type="button"
+                                    onClick={() => runTipTapCommand(item.key)}
+                                    title={item.title}
+                                    className={`rounded-[5px] border px-2.5 py-1 text-[10px] font-semibold transition ${
+                                      item.active
+                                        ? "border-[#B28B2E] bg-[#FAEFCF] text-[#5A4317] shadow-sm"
+                                        : "border-transparent bg-white text-[#514D45] hover:border-[#B28B2E] hover:bg-[#FBF6E7]"
+                                    }`}
+                                  >
+                                    {item.label}
+                                  </button>
+                                ))}
+                            </span>
                           ))}
                           <span className="ml-auto text-[11px] text-[#7B776D]">
                             Kijelölés: {tipTapSelection.empty ? "nincs kijelölés" : `${tipTapSelection.text.length} karakter`}

@@ -47,12 +47,14 @@ const toolbarActions: Array<{ label: string; command: ExperimentalEditorCommand 
 type EditorAdapterKind = "tiptap" | "plain-contenteditable";
 
 const initialTipTapActiveState: TipTapEditorActiveState = {
+  paragraph: false,
+  heading: false,
   bold: false,
   italic: false,
   underline: false,
   bulletList: false,
   orderedList: false,
-  paragraph: false,
+  blockquote: false,
 };
 
 function isToolbarActionActive(command: ExperimentalEditorCommand, activeState: TipTapEditorActiveState) {
