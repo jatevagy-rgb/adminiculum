@@ -9,12 +9,14 @@ import { paragraphsToPlainText, plainTextToParagraphs } from "./plainTextAdapter
 export type TipTapEditorCommand =
   | "paragraph"
   | "heading"
+  | "subheading"
   | "bold"
   | "italic"
   | "underline"
   | "unordered-list"
   | "ordered-list"
-  | "blockquote";
+  | "blockquote"
+  | "contract-clause";
 
 export type TipTapEditorCommandRequest = {
   id: number;
@@ -51,6 +53,7 @@ export type TipTapEditorMutationResult = {
 export type TipTapEditorActiveState = {
   paragraph: boolean;
   heading: boolean;
+  subheading: boolean;
   bold: boolean;
   italic: boolean;
   underline: boolean;
@@ -99,6 +102,7 @@ function getActiveState(editor: ReturnType<typeof useEditor>): TipTapEditorActiv
   return {
     paragraph: Boolean(editor?.isActive("paragraph")),
     heading: Boolean(editor?.isActive("heading", { level: 2 })),
+    subheading: Boolean(editor?.isActive("heading", { level: 3 })),
     bold: Boolean(editor?.isActive("bold")),
     italic: Boolean(editor?.isActive("italic")),
     underline: Boolean(editor?.isActive("underline")),
@@ -142,7 +146,7 @@ export function TipTapEditorExperimental({
         "aria-label": "TipTap kísérleti szerkesztő",
         "data-placeholder": placeholder ?? "",
         class:
-          "min-h-[640px] font-serif text-[16.5px] leading-8 text-[#1F2821] outline-none empty:before:text-[#A6AEA3] empty:before:content-[attr(data-placeholder)] [&_blockquote]:my-4 [&_blockquote]:border-l-4 [&_blockquote]:border-[#B28B2E] [&_blockquote]:bg-[#FBF6E7] [&_blockquote]:py-2 [&_blockquote]:pl-4 [&_blockquote]:pr-3 [&_blockquote]:italic [&_h2]:mb-3 [&_h2]:mt-6 [&_h2]:font-serif [&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:leading-9 [&_h2]:text-[#1F4A33] [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-3 [&_ul]:list-disc [&_ul]:pl-6",
+          "min-h-[640px] font-serif text-[16.5px] leading-8 text-[#1F2821] outline-none empty:before:text-[#A6AEA3] empty:before:content-[attr(data-placeholder)] [&_blockquote]:my-4 [&_blockquote]:border-l-4 [&_blockquote]:border-[#B28B2E] [&_blockquote]:bg-[#FBF6E7] [&_blockquote]:py-2 [&_blockquote]:pl-4 [&_blockquote]:pr-3 [&_blockquote]:italic [&_h2]:mb-3 [&_h2]:mt-6 [&_h2]:font-serif [&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:leading-9 [&_h2]:text-[#1F4A33] [&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:font-serif [&_h3]:text-xl [&_h3]:font-semibold [&_h3]:leading-8 [&_h3]:text-[#315A40] [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-3 [&_ul]:list-disc [&_ul]:pl-6",
       },
     },
     onCreate: ({ editor: createdEditor }) => {
@@ -187,6 +191,8 @@ export function TipTapEditorExperimental({
       chain.setParagraph().run();
     } else if (commandRequest.command === "heading") {
       chain.toggleHeading({ level: 2 }).run();
+    } else if (commandRequest.command === "subheading") {
+      chain.toggleHeading({ level: 3 }).run();
     } else if (commandRequest.command === "bold") {
       chain.toggleBold().run();
     } else if (commandRequest.command === "italic") {
@@ -197,8 +203,10 @@ export function TipTapEditorExperimental({
       chain.toggleBulletList().run();
     } else if (commandRequest.command === "ordered-list") {
       chain.toggleOrderedList().run();
-    } else {
+    } else if (commandRequest.command === "blockquote") {
       chain.toggleBlockquote().run();
+    } else {
+      chain.insertContent("<ol><li><p>[Szerződéses pont címe]</p><p>[A szerződéses pont szövege.]</p></li></ol><p></p>").run();
     }
 
     onActiveStateChange?.(getActiveState(editor));

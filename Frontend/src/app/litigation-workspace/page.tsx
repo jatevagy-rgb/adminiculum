@@ -1728,6 +1728,7 @@ function AssemblyWorkspace({
   const [tipTapActiveState, setTipTapActiveState] = useState<TipTapEditorActiveState>({
     paragraph: true,
     heading: false,
+    subheading: false,
     bold: false,
     italic: false,
     underline: false,
@@ -1775,16 +1776,18 @@ function AssemblyWorkspace({
     label: string;
     title: string;
     active: boolean;
-    group: "structure" | "emphasis" | "list";
+    group: "text-style" | "structure" | "list" | "insert";
   }> = [
-    { key: "paragraph", label: "Bekezdés", title: "Normál bekezdés", active: tipTapActiveState.paragraph, group: "structure" },
+    { key: "paragraph", label: "Normál", title: "Normál bekezdés", active: tipTapActiveState.paragraph, group: "text-style" },
     { key: "heading", label: "Címsor", title: "Címsor", active: tipTapActiveState.heading, group: "structure" },
+    { key: "subheading", label: "Alcím", title: "Kisebb címsor", active: tipTapActiveState.subheading, group: "structure" },
     { key: "blockquote", label: "Idézet", title: "Idézet", active: tipTapActiveState.blockquote, group: "structure" },
-    { key: "bold", label: "Félkövér", title: "Félkövér formázás", active: tipTapActiveState.bold, group: "emphasis" },
-    { key: "italic", label: "Dőlt", title: "Dőlt formázás", active: tipTapActiveState.italic, group: "emphasis" },
-    { key: "underline", label: "Aláhúzás", title: "Aláhúzás", active: tipTapActiveState.underline, group: "emphasis" },
+    { key: "bold", label: "Félkövér", title: "Félkövér formázás", active: tipTapActiveState.bold, group: "text-style" },
+    { key: "italic", label: "Dőlt", title: "Dőlt formázás", active: tipTapActiveState.italic, group: "text-style" },
+    { key: "underline", label: "Aláhúzás", title: "Aláhúzás", active: tipTapActiveState.underline, group: "text-style" },
     { key: "unordered-list", label: "Felsorolás", title: "Felsorolás", active: tipTapActiveState.bulletList, group: "list" },
     { key: "ordered-list", label: "Számozás", title: "Számozott lista", active: tipTapActiveState.orderedList, group: "list" },
+    { key: "contract-clause", label: "Szerződéses pont", title: "Szerkeszthető szerződéses pont beszúrása", active: false, group: "insert" },
   ];
 
   const tipTapSelectedText = tipTapSelection.text.trim();
@@ -2111,7 +2114,7 @@ function AssemblyWorkspace({
             {isTipTapAssemblyPreviewEnabled ? (
               <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2">
                 <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C5120]">Formázás</span>
-                {(["structure", "emphasis", "list"] as const).map((group) => (
+                {(["text-style", "structure", "list", "insert"] as const).map((group) => (
                   <span key={group} className="flex items-center gap-1 rounded-[7px] border border-[#E7DECB] bg-white/80 px-1.5 py-1">
                     {tipTapToolbarItems
                       .filter((item) => item.group === group)

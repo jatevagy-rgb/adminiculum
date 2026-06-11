@@ -35,13 +35,22 @@ A felek között létrejött szerződés teljesítése körében vita alakult ki
 
 Kérem a tisztelt bíróságot, hogy a rendelkezésre álló iratok és bizonyítékok alapján a kérelmet érdemben bírálja el.`;
 
-const toolbarActions: Array<{ label: string; command: ExperimentalEditorCommand }> = [
-  { label: "Félkövér", command: "bold" },
-  { label: "Dőlt", command: "italic" },
-  { label: "Aláhúzás", command: "underline" },
-  { label: "Felsorolás", command: "unordered-list" },
-  { label: "Számozás", command: "ordered-list" },
-  { label: "Bekezdés", command: "paragraph" },
+const toolbarActions: Array<{
+  label: string;
+  command: TipTapEditorCommand;
+  plainCommand?: ExperimentalEditorCommand;
+  group: "text-style" | "structure" | "list" | "insert";
+}> = [
+  { label: "Normál", command: "paragraph", plainCommand: "paragraph", group: "text-style" },
+  { label: "Félkövér", command: "bold", plainCommand: "bold", group: "text-style" },
+  { label: "Dőlt", command: "italic", plainCommand: "italic", group: "text-style" },
+  { label: "Aláhúzás", command: "underline", plainCommand: "underline", group: "text-style" },
+  { label: "Címsor", command: "heading", group: "structure" },
+  { label: "Alcím", command: "subheading", group: "structure" },
+  { label: "Idézet", command: "blockquote", group: "structure" },
+  { label: "Felsorolás", command: "unordered-list", plainCommand: "unordered-list", group: "list" },
+  { label: "Számozás", command: "ordered-list", plainCommand: "ordered-list", group: "list" },
+  { label: "Szerződéses pont", command: "contract-clause", group: "insert" },
 ];
 
 type EditorAdapterKind = "tiptap" | "plain-contenteditable";
@@ -49,6 +58,7 @@ type EditorAdapterKind = "tiptap" | "plain-contenteditable";
 const initialTipTapActiveState: TipTapEditorActiveState = {
   paragraph: false,
   heading: false,
+  subheading: false,
   bold: false,
   italic: false,
   underline: false,
@@ -57,13 +67,17 @@ const initialTipTapActiveState: TipTapEditorActiveState = {
   blockquote: false,
 };
 
-function isToolbarActionActive(command: ExperimentalEditorCommand, activeState: TipTapEditorActiveState) {
+function isToolbarActionActive(command: TipTapEditorCommand, activeState: TipTapEditorActiveState) {
+  if (command === "paragraph") return activeState.paragraph;
+  if (command === "heading") return activeState.heading;
+  if (command === "subheading") return activeState.subheading;
+  if (command === "blockquote") return activeState.blockquote;
   if (command === "bold") return activeState.bold;
   if (command === "italic") return activeState.italic;
   if (command === "underline") return activeState.underline;
   if (command === "unordered-list") return activeState.bulletList;
   if (command === "ordered-list") return activeState.orderedList;
-  return activeState.paragraph;
+  return false;
 }
 
 export default function EditorLabPage() {
@@ -79,10 +93,10 @@ export default function EditorLabPage() {
   const [reviewSuggestions, setReviewSuggestions] = useState<EditorReviewSuggestion[]>([]);
   const [replacementText, setReplacementText] = useState("");
 
-  const runToolbarCommand = (command: ExperimentalEditorCommand) => {
+  const runToolbarCommand = (command: TipTapEditorCommand, plainCommand?: ExperimentalEditorCommand) => {
     const id = Date.now();
-    setCommandRequest({ id, command });
-    setTipTapCommandRequest({ id, command: command as TipTapEditorCommand });
+    if (plainCommand) setCommandRequest({ id, command: plainCommand });
+    setTipTapCommandRequest({ id, command });
   };
 
   const selectedText = tipTapSelection?.text.trim() ?? "";
@@ -234,22 +248,28 @@ export default function EditorLabPage() {
                     No-dependency adapter
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {toolbarActions.map((action) => (
-                    <button
-                      key={action.command}
-                      type="button"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => runToolbarCommand(action.command)}
-                      className={`rounded-[999px] border px-3 py-1.5 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-[#D8B45A] ${
-                        editorAdapter === "tiptap" && isToolbarActionActive(action.command, tipTapActiveState)
-                          ? "border-[#B28B2E] bg-[#FAEFCF] text-[#5A4317]"
-                          : "border-[#D8CFB6] bg-[#FFFDF8] text-[#2F3A31] hover:border-[#B28B2E] hover:bg-[#FAEFCF]"
-                      }`}
-                      aria-pressed={editorAdapter === "tiptap" ? isToolbarActionActive(action.command, tipTapActiveState) : undefined}
-                    >
-                      {action.label}
-                    </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {(["text-style", "structure", "list", "insert"] as const).map((group) => (
+                    <span key={group} className="flex items-center gap-1 rounded-[7px] border border-[#E7DECB] bg-white/80 px-1.5 py-1">
+                      {toolbarActions
+                        .filter((action) => action.group === group)
+                        .map((action) => (
+                          <button
+                            key={action.command}
+                            type="button"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => runToolbarCommand(action.command, action.plainCommand)}
+                            className={`rounded-[5px] border px-2.5 py-1 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-[#D8B45A] ${
+                              editorAdapter === "tiptap" && isToolbarActionActive(action.command, tipTapActiveState)
+                                ? "border-[#B28B2E] bg-[#FAEFCF] text-[#5A4317]"
+                                : "border-transparent bg-[#FFFDF8] text-[#2F3A31] hover:border-[#B28B2E] hover:bg-[#FAEFCF]"
+                            }`}
+                            aria-pressed={editorAdapter === "tiptap" ? isToolbarActionActive(action.command, tipTapActiveState) : undefined}
+                          >
+                            {action.label}
+                          </button>
+                        ))}
+                    </span>
                   ))}
                 </div>
                 <p className="text-[11px] leading-5 text-[#7B776D]">
