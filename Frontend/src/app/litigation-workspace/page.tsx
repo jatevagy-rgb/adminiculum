@@ -405,6 +405,18 @@ const buildPleadingSkeleton = ({
   ].join("\n");
 };
 
+const buildPleadingDraftInsert = (chapter: PleadingChapterSeed) =>
+  [
+    chapter.title,
+    `Forrás válaszblokk: ${chapter.sourceLabel}`,
+    "",
+    "Válasz összefoglalása:",
+    chapter.body || "[A válaszblokk részlete még nincs kitöltve.]",
+    "",
+    "Szerkeszthető beadványszöveg:",
+    "[A fenti válasz alapján itt pontosítsd a beadványba kerülő ténybeli és jogi érvelést.]",
+  ].join("\n");
+
 export default function LitigationWorkspacePage() {
   return (
     <AuthenticatedApp section="litigation-workspace">
@@ -1766,6 +1778,23 @@ function AssemblyWorkspace({
     onPleadingEditorTextChange(tipTapAssemblyDraft);
   };
 
+  const appendChapterToPleadingDraft = (chapter: PleadingChapterSeed) => {
+    const insertedBlock = buildPleadingDraftInsert(chapter);
+    const appendToText = (currentText: string) => {
+      const baseText = currentText.trimEnd();
+      return baseText ? `${baseText}\n\n${insertedBlock}` : insertedBlock;
+    };
+    const sourceText = isTipTapAssemblyPreviewEnabled
+      ? tipTapAssemblyDraft || pleadingEditorText || generatedPleadingSkeleton || ""
+      : pleadingEditorText || generatedPleadingSkeleton || "";
+    const nextPleadingText = appendToText(sourceText);
+
+    onPleadingEditorTextChange(nextPleadingText);
+    if (isTipTapAssemblyPreviewEnabled) {
+      setTipTapAssemblyDraft(nextPleadingText);
+    }
+  };
+
   const getSelectionExcerpt = (text: string, maxLength = 140) => {
     const normalizedText = text.trim().replace(/\s+/g, " ");
     return normalizedText.length > maxLength ? `${normalizedText.slice(0, maxLength)}…` : normalizedText;
@@ -1900,6 +1929,9 @@ function AssemblyWorkspace({
             <p className="mt-2 text-[12px] leading-5 text-[#514D45]">
               A beadványszerkesztő a válaszblokkok számából és típusából készít tiszta peres dokumentum-vázat. Hiányzó ügyadatnál kitöltendő jelölés marad.
             </p>
+            <p className="mt-2 text-[11px] leading-5 text-[#7B776D]">
+              A válaszblokkok külön is beilleszthetők a helyi beadványvázlatba; ez szerkeszthető szöveget ad hozzá, nem végleges iratmentés.
+            </p>
             <AdminButton variant="gold" size="sm" onClick={onApplyGeneratedSkeleton} className="mt-3">
               Vázlat frissítése válaszblokkokból
             </AdminButton>
@@ -1969,9 +2001,16 @@ function AssemblyWorkspace({
                   <div className="flex flex-wrap items-center gap-2">
                     <AdminBadge tone={chapter.tone}>{index + 1}. fejezet</AdminBadge>
                     <AdminBadge tone="neutral">{chapter.sourceLabel}</AdminBadge>
+                    <AdminBadge tone="gold">Helyi vázlat</AdminBadge>
                   </div>
                   <h3 className="mt-2 font-serif text-[15px] font-medium text-[#1F2821]">{chapter.title}</h3>
                   <p className="mt-1 line-clamp-3 text-[11px] leading-5 text-[#6D6A62]">{chapter.body}</p>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-[#E7DECB] bg-[#FCFAF4] px-3 py-2">
+                    <p className="text-[11px] leading-5 text-[#6D6A62]">Válaszblokk → szerkeszthető beadványrész</p>
+                    <AdminButton variant="gold" size="sm" onClick={() => appendChapterToPleadingDraft(chapter)}>
+                      Beillesztés a beadványvázlatba
+                    </AdminButton>
+                  </div>
                 </div>
               ))}
             </div>
