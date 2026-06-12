@@ -2950,30 +2950,32 @@ return (
                           </span>
                         </div>
                       ) : null}
-                      <div className="flex flex-wrap items-center gap-2">
-                        {editorToolbarGroups.map((group) => (
-                          <div key={group.key} className="flex items-center gap-1 rounded-[8px] border border-[#E7DECB] bg-white px-1.5 py-1">
-                            {group.items.map((action) => (
-                              <button
-                                key={action.key}
-                                type="button"
-                                onClick={action.onClick}
-                                disabled={action.disabled}
-                                title={action.title}
-                                className={`rounded-[5px] px-2.5 py-1 text-[10px] font-semibold transition-colors ${
-                                  action.tone === "comment"
-                                    ? "text-[#244B7A] hover:bg-[#F1F6FE]"
-                                    : action.tone === "review"
-                                      ? "text-[#63428E] hover:bg-[#F6F1FD]"
-                                      : "text-[#514D45] hover:bg-[#FBF9F3]"
-                                } disabled:cursor-not-allowed disabled:text-[#9C9890]`}
-                              >
-                                {action.label}
-                              </button>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
+                      {!isTipTapPreviewEnabled ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {editorToolbarGroups.map((group) => (
+                            <div key={group.key} className="flex items-center gap-1 rounded-[8px] border border-[#E7DECB] bg-white px-1.5 py-1">
+                              {group.items.map((action) => (
+                                <button
+                                  key={action.key}
+                                  type="button"
+                                  onClick={action.onClick}
+                                  disabled={action.disabled}
+                                  title={action.title}
+                                  className={`rounded-[5px] px-2.5 py-1 text-[10px] font-semibold transition-colors ${
+                                    action.tone === "comment"
+                                      ? "text-[#244B7A] hover:bg-[#F1F6FE]"
+                                      : action.tone === "review"
+                                        ? "text-[#63428E] hover:bg-[#F6F1FD]"
+                                        : "text-[#514D45] hover:bg-[#FBF9F3]"
+                                  } disabled:cursor-not-allowed disabled:text-[#9C9890]`}
+                                >
+                                  {action.label}
+                                </button>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   }
                   pageClassName="max-w-[1480px]"
@@ -2994,6 +2996,8 @@ return (
                           onActiveStateChange={setTipTapActiveState}
                           onSelectionChange={setTipTapSelection}
                           onMutationResult={handleTipTapMutationResult}
+                          legalInsertTitlePlaceholder="Szerződéses pont címe"
+                          legalInsertBodyPlaceholder="A szerződéses pont szövege."
                           placeholder="Kísérleti TipTap előnézet a szerződés-workspace shellben."
                         />
                         <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2 text-[11px] text-[#7B776D]">

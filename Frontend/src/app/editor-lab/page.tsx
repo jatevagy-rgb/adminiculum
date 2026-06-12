@@ -50,7 +50,7 @@ const toolbarActions: Array<{
   { label: "Idézet", command: "blockquote", group: "structure" },
   { label: "Felsorolás", command: "unordered-list", plainCommand: "unordered-list", group: "list" },
   { label: "Számozás", command: "ordered-list", plainCommand: "ordered-list", group: "list" },
-  { label: "Szerződéses pont", command: "contract-clause", group: "insert" },
+  { label: "Jogi pont", command: "contract-clause", group: "insert" },
 ];
 
 type EditorAdapterKind = "tiptap" | "plain-contenteditable";
@@ -290,6 +290,8 @@ export default function EditorLabPage() {
                   onDocumentJsonChange={setTipTapDocumentJson}
                   onSelectionChange={setTipTapSelection}
                   onMutationResult={handleMutationResult}
+                  legalInsertTitlePlaceholder="Jogi pont címe"
+                  legalInsertBodyPlaceholder="A jogi pont szövege."
                   placeholder="Írj vagy illessz be jogi szöveget a TipTap pilot teszteléséhez."
                 />
               ) : (

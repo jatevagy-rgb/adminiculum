@@ -67,6 +67,8 @@ type TipTapEditorExperimentalProps = {
   onChange: (value: string) => void;
   readOnly?: boolean;
   placeholder?: string;
+  legalInsertTitlePlaceholder?: string;
+  legalInsertBodyPlaceholder?: string;
   commandRequest?: TipTapEditorCommandRequest | null;
   focusRequest?: TipTapEditorFocusRequest | null;
   mutationRequest?: TipTapEditorMutationRequest | null;
@@ -96,6 +98,10 @@ function plainTextToSimpleHtml(value: string) {
       return `<p>${lines.join("<br />")}</p>`;
     })
     .join("");
+}
+
+function legalInsertToSimpleHtml(titlePlaceholder: string, bodyPlaceholder: string) {
+  return `<p>1. [${escapeHtml(titlePlaceholder)}]</p><p>[${escapeHtml(bodyPlaceholder)}]</p><p></p>`;
 }
 
 function getActiveState(editor: ReturnType<typeof useEditor>): TipTapEditorActiveState {
@@ -128,6 +134,8 @@ export function TipTapEditorExperimental({
   onChange,
   readOnly = false,
   placeholder,
+  legalInsertTitlePlaceholder = "Szerződéses pont címe",
+  legalInsertBodyPlaceholder = "A szerződéses pont szövege.",
   commandRequest,
   focusRequest,
   mutationRequest,
@@ -206,12 +214,20 @@ export function TipTapEditorExperimental({
     } else if (commandRequest.command === "blockquote") {
       chain.toggleBlockquote().run();
     } else {
-      chain.insertContent("<ol><li><p>[Szerződéses pont címe]</p><p>[A szerződéses pont szövege.]</p></li></ol><p></p>").run();
+      chain.insertContent(legalInsertToSimpleHtml(legalInsertTitlePlaceholder, legalInsertBodyPlaceholder)).run();
     }
 
     onActiveStateChange?.(getActiveState(editor));
     onDocumentJsonChange?.(editor.getJSON());
-  }, [commandRequest, editor, onActiveStateChange, onDocumentJsonChange, readOnly]);
+  }, [
+    commandRequest,
+    editor,
+    legalInsertBodyPlaceholder,
+    legalInsertTitlePlaceholder,
+    onActiveStateChange,
+    onDocumentJsonChange,
+    readOnly,
+  ]);
 
   useEffect(() => {
     if (!editor || !focusRequest) return;

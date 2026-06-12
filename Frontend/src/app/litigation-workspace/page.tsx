@@ -1787,7 +1787,7 @@ function AssemblyWorkspace({
     { key: "underline", label: "Aláhúzás", title: "Aláhúzás", active: tipTapActiveState.underline, group: "text-style" },
     { key: "unordered-list", label: "Felsorolás", title: "Felsorolás", active: tipTapActiveState.bulletList, group: "list" },
     { key: "ordered-list", label: "Számozás", title: "Számozott lista", active: tipTapActiveState.orderedList, group: "list" },
-    { key: "contract-clause", label: "Szerződéses pont", title: "Szerkeszthető szerződéses pont beszúrása", active: false, group: "insert" },
+    { key: "contract-clause", label: "Beadványrész", title: "Szerkeszthető beadványrész beszúrása", active: false, group: "insert" },
   ];
 
   const tipTapSelectedText = tipTapSelection.text.trim();
@@ -2021,6 +2021,8 @@ function AssemblyWorkspace({
                 onActiveStateChange={setTipTapActiveState}
                 onSelectionChange={setTipTapSelection}
                 onMutationResult={handleTipTapMutationResult}
+                legalInsertTitlePlaceholder="Beadványrész címe"
+                legalInsertBodyPlaceholder="A beadványrész szövege."
                 placeholder="Kísérleti TipTap előnézet a peres beadvány szerkesztéséhez."
               />
               <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2 text-[11px] text-[#7B776D]">
