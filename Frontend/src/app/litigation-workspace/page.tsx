@@ -1758,6 +1758,10 @@ function AssemblyWorkspace({
   const [tipTapMutationRequest, setTipTapMutationRequest] = useState<TipTapEditorMutationRequest | null>(null);
   const [tipTapReviewSuggestions, setTipTapReviewSuggestions] = useState<EditorReviewSuggestion[]>([]);
   const [tipTapReplacementText, setTipTapReplacementText] = useState("");
+  const [insertedPleadingSections, setInsertedPleadingSections] = useState<
+    Array<{ id: string; chapterId: string; title: string; sourceLabel: string; insertedAt: string }>
+  >([]);
+  const assemblyEditorRef = useRef<HTMLDivElement | null>(null);
 
   const toggleTipTapAssemblyPreview = () => {
     setIsTipTapAssemblyPreviewEnabled((currentValue) => {
@@ -1778,6 +1782,17 @@ function AssemblyWorkspace({
     onPleadingEditorTextChange(tipTapAssemblyDraft);
   };
 
+  const insertedChapterIds = useMemo(
+    () => new Set(insertedPleadingSections.map((section) => section.chapterId)),
+    [insertedPleadingSections],
+  );
+
+  const focusPleadingEditor = () => {
+    assemblyEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const editableElement = assemblyEditorRef.current?.querySelector<HTMLElement>("textarea, [contenteditable='true']");
+    window.setTimeout(() => editableElement?.focus(), 120);
+  };
+
   const appendChapterToPleadingDraft = (chapter: PleadingChapterSeed) => {
     const insertedBlock = buildPleadingDraftInsert(chapter);
     const appendToText = (currentText: string) => {
@@ -1793,6 +1808,30 @@ function AssemblyWorkspace({
     if (isTipTapAssemblyPreviewEnabled) {
       setTipTapAssemblyDraft(nextPleadingText);
     }
+    setInsertedPleadingSections((currentSections) => {
+      const existingSection = currentSections.find((section) => section.chapterId === chapter.id);
+      if (existingSection) {
+        return currentSections.map((section) =>
+          section.chapterId === chapter.id ? { ...section, insertedAt: new Date().toISOString() } : section,
+        );
+      }
+
+      return [
+        ...currentSections,
+        {
+          id: `inserted-${chapter.id}-${Date.now()}`,
+          chapterId: chapter.id,
+          title: chapter.title,
+          sourceLabel: chapter.sourceLabel,
+          insertedAt: new Date().toISOString(),
+        },
+      ];
+    });
+    focusPleadingEditor();
+  };
+
+  const removeInsertedSection = (sectionId: string) => {
+    setInsertedPleadingSections((currentSections) => currentSections.filter((section) => section.id !== sectionId));
   };
 
   const getSelectionExcerpt = (text: string, maxLength = 140) => {
@@ -1937,6 +1976,44 @@ function AssemblyWorkspace({
             </AdminButton>
           </div>
 
+          <div className="rounded-[10px] border border-[#D8CFB6] bg-[#FFFDF8] p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Beadványvázlat áttekintő</p>
+                <h3 className="mt-1 font-serif text-[16px] font-medium text-[#1F2821]">Beadványrészek</h3>
+              </div>
+              <AdminStatusPill tone="gold">{insertedPleadingSections.length} helyi rész</AdminStatusPill>
+            </div>
+            {insertedPleadingSections.length === 0 ? (
+              <p className="mt-3 rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FBF9F3] px-3 py-2 text-[11px] leading-5 text-[#7B776D]">
+                Még nincs külön beillesztett beadványrész. A forráskártyákon válaszd a „Beillesztés a beadványvázlatba” műveletet.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {insertedPleadingSections.map((section) => (
+                  <div key={section.id} className="rounded-[8px] border border-[#E7DECB] bg-white px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <AdminBadge tone="gold">Helyi vázlat</AdminBadge>
+                      <AdminBadge tone="neutral">{section.sourceLabel}</AdminBadge>
+                    </div>
+                    <p className="mt-2 font-serif text-[14px] font-medium text-[#1F2821]">{section.title}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <AdminButton variant="neutral" size="sm" onClick={focusPleadingEditor}>
+                        Ugrás a beadványrészhez
+                      </AdminButton>
+                      <AdminButton variant="neutral" size="sm" onClick={() => removeInsertedSection(section.id)}>
+                        Eltávolítás a vázlatból
+                      </AdminButton>
+                    </div>
+                  </div>
+                ))}
+                <p className="text-[11px] leading-5 text-[#7B776D]">
+                  Az eltávolítás az áttekintő helyi jelölését törli; a már szerkeszthető beadványszövegben lévő szöveget kézzel tudod módosítani.
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="rounded-[8px] border border-[#D7CCB0] bg-[#FBF9F3] p-3">
             <div className="grid gap-2">
               <select
@@ -1998,19 +2075,29 @@ function AssemblyWorkspace({
             <div className="space-y-2">
               {generatedChapterSeeds.map((chapter, index) => (
                 <div key={chapter.id} className="rounded-[8px] border border-[#E7DECB] bg-white p-3">
+                  {(() => {
+                    const isInserted = insertedChapterIds.has(chapter.id);
+
+                    return (
+                      <>
                   <div className="flex flex-wrap items-center gap-2">
                     <AdminBadge tone={chapter.tone}>{index + 1}. fejezet</AdminBadge>
                     <AdminBadge tone="neutral">{chapter.sourceLabel}</AdminBadge>
-                    <AdminBadge tone="gold">Helyi vázlat</AdminBadge>
+                    {isInserted ? <AdminBadge tone="gold">Beillesztve</AdminBadge> : <AdminBadge tone="neutral">Beadványrész lehet</AdminBadge>}
                   </div>
                   <h3 className="mt-2 font-serif text-[15px] font-medium text-[#1F2821]">{chapter.title}</h3>
                   <p className="mt-1 line-clamp-3 text-[11px] leading-5 text-[#6D6A62]">{chapter.body}</p>
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-[#E7DECB] bg-[#FCFAF4] px-3 py-2">
-                    <p className="text-[11px] leading-5 text-[#6D6A62]">Válaszblokk → szerkeszthető beadványrész</p>
-                    <AdminButton variant="gold" size="sm" onClick={() => appendChapterToPleadingDraft(chapter)}>
-                      Beillesztés a beadványvázlatba
+                    <p className="text-[11px] leading-5 text-[#6D6A62]">
+                      {isInserted ? "Már szerepel a helyi beadványvázlatban" : "Válaszblokk → szerkeszthető beadványrész"}
+                    </p>
+                    <AdminButton variant={isInserted ? "neutral" : "gold"} size="sm" onClick={() => appendChapterToPleadingDraft(chapter)}>
+                      {isInserted ? "Újra beillesztés" : "Beillesztés a beadványvázlatba"}
                     </AdminButton>
                   </div>
+                      </>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
@@ -2040,8 +2127,9 @@ function AssemblyWorkspace({
         </div>
       </AdminPanel>
 
-      <DocumentEditorShell
-        title="Beadványszerkesztő"
+      <div ref={assemblyEditorRef}>
+        <DocumentEditorShell
+          title="Beadványszerkesztő"
         subtitle="Automatikusan előkészített, helyi beadványvázlat Bálintfy-stílusú fejléccel és válaszblokkokon alapuló fejezetekkel."
         value={pleadingEditorText}
         onChange={onPleadingEditorTextChange}
@@ -2212,7 +2300,8 @@ function AssemblyWorkspace({
           </div>
         }
         helperText="Helyi vázlat · AI nélkül · nincs szerveroldali mentés."
-      />
+        />
+      </div>
     </section>
   );
 }
