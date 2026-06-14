@@ -220,6 +220,20 @@ const chapterStatusTone: Record<ChapterBlock["status"], "gold" | "green" | "viol
   "ügyvédi review": "violet",
 };
 
+type PleadingSectionStatus = "Hiányos" | "Szerkesztés alatt" | "Ügyvédi ellenőrzésre kész";
+
+const pleadingSectionStatusOptions: Array<{ label: string; status: PleadingSectionStatus }> = [
+  { label: "Hiányos", status: "Hiányos" },
+  { label: "Szerkesztés alatt", status: "Szerkesztés alatt" },
+  { label: "Kész ellenőrzésre", status: "Ügyvédi ellenőrzésre kész" },
+];
+
+const pleadingSectionStatusTone: Record<PleadingSectionStatus, "amber" | "blue" | "green"> = {
+  Hiányos: "amber",
+  "Szerkesztés alatt": "blue",
+  "Ügyvédi ellenőrzésre kész": "green",
+};
+
 const responseTone = (type: ResponseBlock["type"]): "green" | "gold" | "blue" | "violet" => {
   if (type === "evidence" || type === "evidence-motion") return "blue";
   if (type === "statute" || type === "case-law") return "violet";
@@ -1759,7 +1773,14 @@ function AssemblyWorkspace({
   const [tipTapReviewSuggestions, setTipTapReviewSuggestions] = useState<EditorReviewSuggestion[]>([]);
   const [tipTapReplacementText, setTipTapReplacementText] = useState("");
   const [insertedPleadingSections, setInsertedPleadingSections] = useState<
-    Array<{ id: string; chapterId: string; title: string; sourceLabel: string; insertedAt: string }>
+    Array<{
+      id: string;
+      chapterId: string;
+      title: string;
+      sourceLabel: string;
+      insertedAt: string;
+      status: PleadingSectionStatus;
+    }>
   >([]);
   const assemblyEditorRef = useRef<HTMLDivElement | null>(null);
 
@@ -1787,6 +1808,20 @@ function AssemblyWorkspace({
     [insertedPleadingSections],
   );
 
+  const insertedSectionStatusSummary = useMemo(() => {
+    const summary: Record<PleadingSectionStatus, number> = {
+      Hiányos: 0,
+      "Szerkesztés alatt": 0,
+      "Ügyvédi ellenőrzésre kész": 0,
+    };
+
+    insertedPleadingSections.forEach((section) => {
+      summary[section.status] += 1;
+    });
+
+    return summary;
+  }, [insertedPleadingSections]);
+
   const focusPleadingEditor = () => {
     assemblyEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     const editableElement = assemblyEditorRef.current?.querySelector<HTMLElement>("textarea, [contenteditable='true']");
@@ -1812,7 +1847,7 @@ function AssemblyWorkspace({
       const existingSection = currentSections.find((section) => section.chapterId === chapter.id);
       if (existingSection) {
         return currentSections.map((section) =>
-          section.chapterId === chapter.id ? { ...section, insertedAt: new Date().toISOString() } : section,
+          section.chapterId === chapter.id ? { ...section, insertedAt: new Date().toISOString(), status: "Szerkesztés alatt" } : section,
         );
       }
 
@@ -1824,6 +1859,7 @@ function AssemblyWorkspace({
           title: chapter.title,
           sourceLabel: chapter.sourceLabel,
           insertedAt: new Date().toISOString(),
+          status: "Szerkesztés alatt",
         },
       ];
     });
@@ -1832,6 +1868,12 @@ function AssemblyWorkspace({
 
   const removeInsertedSection = (sectionId: string) => {
     setInsertedPleadingSections((currentSections) => currentSections.filter((section) => section.id !== sectionId));
+  };
+
+  const updateInsertedSectionStatus = (sectionId: string, status: PleadingSectionStatus) => {
+    setInsertedPleadingSections((currentSections) =>
+      currentSections.map((section) => (section.id === sectionId ? { ...section, status } : section)),
+    );
   };
 
   const getSelectionExcerpt = (text: string, maxLength = 140) => {
@@ -1984,6 +2026,14 @@ function AssemblyWorkspace({
               </div>
               <AdminStatusPill tone="gold">{insertedPleadingSections.length} helyi rész</AdminStatusPill>
             </div>
+            <div className="mt-3 rounded-[8px] border border-[#E7DECB] bg-white px-3 py-2">
+              <p className="text-[11px] font-semibold text-[#514D45]">
+                Összesen: {insertedPleadingSections.length} · Hiányos: {insertedSectionStatusSummary["Hiányos"]} · Szerkesztés alatt:{" "}
+                {insertedSectionStatusSummary["Szerkesztés alatt"]} · Ügyvédi ellenőrzésre kész:{" "}
+                {insertedSectionStatusSummary["Ügyvédi ellenőrzésre kész"]}
+              </p>
+              <p className="mt-1 text-[11px] leading-5 text-[#7B776D]">Csak helyben követett státusz · Nincs még adatbázisba mentve.</p>
+            </div>
             {insertedPleadingSections.length === 0 ? (
               <p className="mt-3 rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FBF9F3] px-3 py-2 text-[11px] leading-5 text-[#7B776D]">
                 Még nincs külön beillesztett beadványrész. A forráskártyákon válaszd a „Beillesztés a beadványvázlatba” műveletet.
@@ -1995,8 +2045,30 @@ function AssemblyWorkspace({
                     <div className="flex flex-wrap items-center gap-2">
                       <AdminBadge tone="gold">Helyi vázlat</AdminBadge>
                       <AdminBadge tone="neutral">{section.sourceLabel}</AdminBadge>
+                      <AdminBadge tone={pleadingSectionStatusTone[section.status]}>{section.status}</AdminBadge>
                     </div>
                     <p className="mt-2 font-serif text-[14px] font-medium text-[#1F2821]">{section.title}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {pleadingSectionStatusOptions.map((option) => {
+                        const isActiveStatus = section.status === option.status;
+
+                        return (
+                          <button
+                            key={option.status}
+                            type="button"
+                            aria-pressed={isActiveStatus}
+                            onClick={() => updateInsertedSectionStatus(section.id, option.status)}
+                            className={`rounded-full border px-2.5 py-1 text-[10.5px] font-semibold transition ${
+                              isActiveStatus
+                                ? "border-[#B58A2A] bg-[#B58A2A] text-white shadow-sm"
+                                : "border-[#D8CFB6] bg-[#FFFDF8] text-[#514D45] hover:border-[#B58A2A] hover:text-[#8E6A1B]"
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <AdminButton variant="neutral" size="sm" onClick={focusPleadingEditor}>
                         Ugrás a beadványrészhez
