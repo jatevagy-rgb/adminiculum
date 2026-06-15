@@ -236,6 +236,8 @@ type InsertedPleadingSection = {
   insertedAt: string;
   status: PleadingSectionStatus;
   qualityChecklist: PleadingQualityChecklist;
+  reviewNote: string;
+  nextAction: string;
 };
 
 const pleadingSectionStatusOptions: Array<{ label: string; status: PleadingSectionStatus }> = [
@@ -1863,34 +1865,66 @@ function AssemblyWorkspace({
     return { totalItems, completedItems, completeSections };
   }, [insertedPleadingSections]);
 
+  const insertedSectionReviewSummary = useMemo(() => {
+    const sectionsWithReviewNotes = insertedPleadingSections.filter((section) => section.reviewNote.trim()).length;
+    const sectionsWithOpenNextActions = insertedPleadingSections.filter((section) => section.nextAction.trim()).length;
+
+    return { sectionsWithReviewNotes, sectionsWithOpenNextActions };
+  }, [insertedPleadingSections]);
+
   const pleadingPreviewReadiness = useMemo(() => {
     const readySections = insertedPleadingSections.filter(isInsertedPleadingSectionReady);
     const incompleteSections = insertedPleadingSections.filter((section) => !isInsertedPleadingSectionReady(section));
+    const sectionsWithReviewNotes = insertedPleadingSections.filter((section) => section.reviewNote.trim());
+    const sectionsWithOpenNextActions = insertedPleadingSections.filter((section) => section.nextAction.trim());
     const totalSections = insertedPleadingSections.length;
     const readinessPercent = totalSections ? Math.round((readySections.length / totalSections) * 100) : 0;
-    const previewText = readySections.length
-      ? [
-          "Beadvány előnézet — helyi ellenőrzés",
-          "Ez nem végleges beadvány, hanem helyi előnézeti ellenőrzés.",
-          "A teljes szerkeszthető beadványszöveg továbbra is az editorban van.",
+    const previewLines = [
+      "Beadvány előnézet — helyi előnézeti ellenőrzés",
+      "Ez nem végleges beadvány, hanem helyi előnézeti ellenőrzés.",
+      "A teljes szerkeszthető beadványszöveg továbbra is az editorban van.",
+      "",
+    ];
+
+    if (readySections.length) {
+      previewLines.push(
+        "Kész szakaszok",
+        ...readySections.flatMap((section, index) => [
+          `${index + 1}. ${section.title}`,
+          `Forrás: ${section.sourceLabel}`,
+          `Készenlét: Ügyvédi ellenőrzésre kész · ${pleadingQualityChecklistOptions.length}/${pleadingQualityChecklistOptions.length} ellenőrzési pont kész`,
+          "Megjegyzés: az editable beadványszöveg az editorban marad; ez csak helyi előnézeti vázlat.",
           "",
-          ...readySections.flatMap((section, index) => [
-            `${index + 1}. ${section.title}`,
-            `Forrás: ${section.sourceLabel}`,
-            `Készenlét: Ügyvédi ellenőrzésre kész · ${pleadingQualityChecklistOptions.length}/${pleadingQualityChecklistOptions.length} ellenőrzési pont kész`,
-            "Megjegyzés: az editable beadványszöveg az editorban marad; ez csak helyi előnézeti vázlat.",
-            "",
-          ]),
-          "Nincs még adatbázisba mentve.",
-        ].join("\n")
-      : "Még nincs teljesen ellenőrzött beadványrész.";
+        ]),
+      );
+    } else {
+      previewLines.push("Még nincs teljesen ellenőrzött beadványrész.", "");
+    }
+
+    if (sectionsWithReviewNotes.length) {
+      previewLines.push(
+        "Ellenőrzési megjegyzések",
+        ...sectionsWithReviewNotes.flatMap((section) => [`- ${section.title}: ${section.reviewNote.trim()}`, ""]),
+      );
+    }
+
+    if (sectionsWithOpenNextActions.length) {
+      previewLines.push(
+        "Nyitott teendők",
+        ...sectionsWithOpenNextActions.flatMap((section) => [`- ${section.title}: ${section.nextAction.trim()}`, ""]),
+      );
+    }
+
+    previewLines.push("Nincs még adatbázisba mentve.");
 
     return {
       readySections,
       incompleteSections,
+      sectionsWithReviewNotes,
+      sectionsWithOpenNextActions,
       totalSections,
       readinessPercent,
-      previewText,
+      previewText: previewLines.join("\n"),
     };
   }, [insertedPleadingSections]);
 
@@ -1926,6 +1960,8 @@ function AssemblyWorkspace({
                 insertedAt: new Date().toISOString(),
                 status: "Szerkesztés alatt",
                 qualityChecklist: createDefaultPleadingQualityChecklist(),
+                reviewNote: "",
+                nextAction: "",
               }
             : section,
         );
@@ -1941,6 +1977,8 @@ function AssemblyWorkspace({
           insertedAt: new Date().toISOString(),
           status: "Szerkesztés alatt",
           qualityChecklist: createDefaultPleadingQualityChecklist(),
+          reviewNote: "",
+          nextAction: "",
         },
       ];
     });
@@ -1973,6 +2011,13 @@ function AssemblyWorkspace({
             }
           : section,
       ),
+    );
+  };
+
+  const updateInsertedSectionReviewField = (sectionId: string, field: "reviewNote" | "nextAction", value: string) => {
+    setPleadingPreviewCopyState("idle");
+    setInsertedPleadingSections((currentSections) =>
+      currentSections.map((section) => (section.id === sectionId ? { ...section, [field]: value } : section)),
     );
   };
 
@@ -2145,8 +2190,12 @@ function AssemblyWorkspace({
                 Ellenőrzési pontok: {insertedSectionChecklistSummary.completedItems}/{insertedSectionChecklistSummary.totalItems} kész ·{" "}
                 {insertedSectionChecklistSummary.completeSections} teljes beadványrész
               </p>
+              <p className="mt-1 text-[11px] font-semibold text-[#514D45]">
+                Ellenőrzési megjegyzés: {insertedSectionReviewSummary.sectionsWithReviewNotes} · Nyitott teendő:{" "}
+                {insertedSectionReviewSummary.sectionsWithOpenNextActions}
+              </p>
               <p className="mt-1 text-[11px] leading-5 text-[#7B776D]">
-                Csak helyben követett státusz és ellenőrzőlista · Nincs még adatbázisba mentve.
+                Csak helyben követett státusz, ellenőrzőlista és megjegyzés · Nincs még adatbázisba mentve.
               </p>
             </div>
             {insertedPleadingSections.length === 0 ? (
@@ -2159,6 +2208,7 @@ function AssemblyWorkspace({
                   const completedChecklistItems = countCompletedChecklistItems(section.qualityChecklist);
                   const isChecklistComplete = completedChecklistItems === pleadingQualityChecklistOptions.length;
                   const readyStatusHasMissingItems = section.status === "Ügyvédi ellenőrzésre kész" && !isChecklistComplete;
+                  const readyStatusHasOpenNextAction = section.status === "Ügyvédi ellenőrzésre kész" && Boolean(section.nextAction.trim());
 
                   return (
                     <div key={section.id} className="rounded-[8px] border border-[#E7DECB] bg-white px-3 py-2">
@@ -2223,6 +2273,40 @@ function AssemblyWorkspace({
                           Csak helyben követett ellenőrzőlista · Nincs még adatbázisba mentve.
                         </p>
                       </div>
+                      <div className="mt-3 rounded-[8px] border border-[#E7DECB] bg-white px-3 py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Ellenőrzési megjegyzés</p>
+                          {section.nextAction.trim() ? <AdminBadge tone="gold">Nyitott teendő</AdminBadge> : <AdminBadge tone="neutral">Helyi megjegyzés</AdminBadge>}
+                        </div>
+                        <div className="mt-2 grid gap-2 md:grid-cols-2">
+                          <label className="grid gap-1 text-[11px] font-semibold text-[#514D45]">
+                            Ügyvédi megjegyzés
+                            <textarea
+                              value={section.reviewNote}
+                              onChange={(event) => updateInsertedSectionReviewField(section.id, "reviewNote", event.target.value)}
+                              rows={2}
+                              placeholder="Pl. bizonyíték pontosítása, jogalap ellenőrzése…"
+                              className="rounded border border-[#DDD7CA] bg-[#FFFDF8] px-2.5 py-2 text-[11px] font-normal leading-5 text-[#1F2821]"
+                            />
+                          </label>
+                          <label className="grid gap-1 text-[11px] font-semibold text-[#514D45]">
+                            Következő teendő
+                            <textarea
+                              value={section.nextAction}
+                              onChange={(event) => updateInsertedSectionReviewField(section.id, "nextAction", event.target.value)}
+                              rows={2}
+                              placeholder="Pl. csatolandó irat bekérése, tényállás pontosítása…"
+                              className="rounded border border-[#DDD7CA] bg-[#FFFDF8] px-2.5 py-2 text-[11px] font-normal leading-5 text-[#1F2821]"
+                            />
+                          </label>
+                        </div>
+                        {readyStatusHasOpenNextAction ? (
+                          <p className="mt-2 text-[11px] leading-5 text-[#8E6A1B]">Van még rögzített teendő ennél a szakasznál.</p>
+                        ) : null}
+                        <p className="mt-1 text-[10.5px] leading-5 text-[#7B776D]">
+                          Csak helyben vezetett megjegyzés · Nincs még adatbázisba mentve.
+                        </p>
+                      </div>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <AdminButton variant="neutral" size="sm" onClick={focusPleadingEditor}>
                           Ugrás a beadványrészhez
@@ -2279,8 +2363,10 @@ function AssemblyWorkspace({
                         <div className="flex flex-wrap items-center gap-2">
                           <AdminBadge tone="green">Ügyvédi ellenőrzésre kész</AdminBadge>
                           <AdminBadge tone="neutral">{section.sourceLabel}</AdminBadge>
+                          {section.nextAction.trim() ? <AdminBadge tone="gold">Nyitott teendő</AdminBadge> : null}
                         </div>
                         <p className="mt-1 font-serif text-[13px] font-medium text-[#1F2821]">{section.title}</p>
+                        {section.nextAction.trim() ? <p className="mt-1 text-[11px] leading-5 text-[#8E6A1B]">Van még rögzített teendő ennél a szakasznál.</p> : null}
                       </div>
                     ))}
                   </div>
@@ -2311,6 +2397,7 @@ function AssemblyWorkspace({
                             <AdminBadge tone="neutral">
                               {completedChecklistItems}/{pleadingQualityChecklistOptions.length} ellenőrzési pont
                             </AdminBadge>
+                            {section.nextAction.trim() ? <AdminBadge tone="gold">Nyitott teendő</AdminBadge> : null}
                           </div>
                           <p className="mt-1 font-serif text-[13px] font-medium text-[#1F2821]">{section.title}</p>
                           {readyStatusHasMissingItems ? (
