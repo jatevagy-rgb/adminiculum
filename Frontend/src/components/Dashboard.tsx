@@ -195,6 +195,7 @@ export function Dashboard() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [legalNews, setLegalNews] = useState<NewsFeedResult>({ articles: [], isLoading: true });
+  const [localWorkspaceDraftCount, setLocalWorkspaceDraftCount] = useState(0);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -270,6 +271,20 @@ export function Dashboard() {
     run();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const localDraftCount = Array.from({ length: window.localStorage.length }).filter((_, index) => {
+        const key = window.localStorage.key(index);
+        return key?.startsWith("adminiculum:litigation-workspace:local-draft:v1:");
+      }).length;
+      setLocalWorkspaceDraftCount(localDraftCount);
+    } catch {
+      setLocalWorkspaceDraftCount(0);
+    }
+  }, []);
+
   const activeCase = cases[0] || null;
   const reviewQueue = tasks.filter((task) => mapTaskBucket(task) === "review").slice(0, 6);
 
@@ -302,6 +317,32 @@ export function Dashboard() {
     if (!legalNews.articles.length) return [];
     return legalNews.articles.filter(isLegalSignal).slice(0, 3);
   }, [legalNews.articles]);
+
+  const homeOfficeFocusTasks = useMemo(() => {
+    return tasks
+      .filter((task) => {
+        const bucket = mapTaskBucket(task);
+        return bucket === "urgent" || bucket === "review" || bucket === "waiting" || bucket === "depends";
+      })
+      .slice(0, 3);
+  }, [tasks]);
+
+  const waitingTasks = useMemo(() => {
+    return tasks.filter((task) => {
+      const bucket = mapTaskBucket(task);
+      return bucket === "waiting" || bucket === "urgent" || bucket === "depends";
+    });
+  }, [tasks]);
+
+  const reviewDocumentCount = stats?.stats.inReview ?? reviewQueue.length;
+
+  const quickOpenLinks = [
+    { href: "/cases", label: "Ügyek", description: "Aktív ügyek áttekintése" },
+    { href: "/tasks", label: "Feladatok", description: "Rám váró feladatok" },
+    { href: "/documents/compare", label: "Dokumentum-összehasonlítás", description: "Szerződés-workspace" },
+    { href: "/litigation-workspace", label: "Peres munkatér", description: "Peres stratégiai térkép" },
+    { href: "/editor-lab", label: "Szerkesztő labor", description: "Belső szerkesztő tesztfelület" },
+  ];
 
   const greetingName = currentUser?.name || "dr. Hubay Máté";
 
@@ -338,6 +379,81 @@ export function Dashboard() {
           <KpiCard label="Sürgős ma" value={kpis.urgent} tone="red" zeroHint="Nincs sürgős határidő" />
           <KpiCard label="Átadásra kész" value={kpis.ready} tone="sage" zeroHint="Nincs átadásra kész" />
           <KpiCard label="Kész ezen a héten" value={kpis.done} tone="green" zeroHint="Még nincs lezárt tétel" />
+        </section>
+
+        <section className="rounded-xl border border-[#D9CFB7] bg-[#FFFDF7] p-4 shadow-[0_1px_0_rgba(21,32,26,0.06)]">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-[#5F6A62]">Home Office munkanézet</p>
+              <h2 className="font-serif text-[24px] leading-tight text-[#15201A]">Mai ügyvédi fókusz</h2>
+              <p className="mt-1 max-w-3xl text-[12px] leading-5 text-[#5F6A62]">
+                A home office nézet egyelőre meglévő adatokból és gyorslinkekből dolgozik. A részletes aktivitási napló későbbi fejlesztés.
+              </p>
+            </div>
+            <span className="rounded-full border border-[#D4C8AA] bg-[#FBF6E7] px-3 py-1 text-[11px] font-semibold text-[#6B4B14]">
+              Nem valós idejű kollaboráció
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-[1.15fr_0.9fr_0.95fr]">
+            <div className="rounded-lg border border-[#E8DFC9] bg-white p-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-serif text-[18px] text-[#15201A]">Mai fókusz</h3>
+                <span className="text-[11px] font-semibold text-[#6B4B14]">{homeOfficeFocusTasks.length} tétel</span>
+              </div>
+              {loading ? <p className="mt-3 text-xs text-[#5F6A62]">Fókuszpontok betöltése...</p> : null}
+              {!loading && homeOfficeFocusTasks.length === 0 ? (
+                <p className="mt-3 rounded border border-dashed border-[#D9CFB7] bg-[#FBF6E7] px-3 py-2 text-[11px] text-[#5F6A62]">
+                  Nincs betöltött teendő.
+                </p>
+              ) : null}
+              <div className="mt-3 space-y-2">
+                {homeOfficeFocusTasks.map((task) => (
+                  <Link key={task.id} href={`/tasks?taskId=${task.id}`} className="block rounded border border-[#E8DFC9] bg-[#FBF6E7] px-3 py-2 hover:bg-[#F8EDCD]">
+                    <p className="text-xs font-semibold text-[#15201A]">{task.title}</p>
+                    <p className="mt-1 text-[11px] text-[#5F6A62]">
+                      {task.case?.caseNumber || "Feladat"} · Határidő: {displayDate(task.dueDate)}
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+              <div className="rounded-lg border border-[#E8DFC9] bg-white p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-[#5F6A62]">Rám váró feladatok</p>
+                <p className="mt-1 font-serif text-[28px] leading-none text-[#15201A]">{waitingTasks.length}</p>
+                <p className="mt-1 text-[11px] text-[#5F6A62]">{waitingTasks.length === 0 ? "Nincs betöltött teendő." : "Meglévő feladatlistából számolva."}</p>
+              </div>
+              <div className="rounded-lg border border-[#E8DFC9] bg-white p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-[#5F6A62]">Ellenőrzésre váró dokumentumok</p>
+                <p className="mt-1 font-serif text-[28px] leading-none text-[#15201A]">{reviewDocumentCount}</p>
+                <p className="mt-1 text-[11px] text-[#5F6A62]">{reviewDocumentCount === 0 ? "Nincs ellenőrzésre váró dokumentum." : "Dashboard/review adatokból számolva."}</p>
+              </div>
+              <div className="rounded-lg border border-[#E8DFC9] bg-white p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-[#5F6A62]">Félbehagyott munkák</p>
+                <p className="mt-1 font-serif text-[28px] leading-none text-[#15201A]">{localWorkspaceDraftCount}</p>
+                <p className="mt-1 text-[11px] text-[#5F6A62]">
+                  {localWorkspaceDraftCount === 0 ? "Nincs helyi böngészős vázlat." : "Csak ezen az eszközön mentett helyi vázlat."}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-[#E8DFC9] bg-white p-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-serif text-[18px] text-[#15201A]">Gyors megnyitás</h3>
+                <span className="text-[11px] text-[#5F6A62]">Munkaterületek</span>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {quickOpenLinks.map((link) => (
+                  <Link key={link.href} href={link.href} className="rounded border border-[#D4C8AA] bg-[#FBF6E7] px-3 py-2 hover:bg-[#F8EDCD]">
+                    <p className="text-xs font-semibold text-[#1F4A33]">{link.label}</p>
+                    <p className="mt-0.5 text-[10.5px] text-[#5F6A62]">{link.description}</p>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </div>
         </section>
 
         <section className="grid grid-cols-12 gap-3">
