@@ -17,6 +17,17 @@ import {
   type TipTapEditorSelectionState,
 } from "@/components/documents/editor/TipTapEditorExperimental";
 import { TipTapReviewPilotPanel } from "@/components/documents/editor/TipTapReviewPilotPanel";
+import { PleadingPreviewPanel } from "@/components/litigation/PleadingPreviewPanel";
+import { PleadingSectionsOverviewPanel } from "@/components/litigation/PleadingSectionsOverviewPanel";
+import {
+  countCompletedChecklistItems,
+  createDefaultPleadingQualityChecklist,
+  isInsertedPleadingSectionReady,
+  pleadingQualityChecklistOptions,
+  type InsertedPleadingSection,
+  type PleadingQualityChecklistKey,
+  type PleadingSectionStatus,
+} from "@/components/litigation/pleadingAssemblyTypes";
 import {
   createReviewSuggestion as buildReviewSuggestion,
   markSuggestionAccepted,
@@ -219,60 +230,6 @@ const chapterStatusTone: Record<ChapterBlock["status"], "gold" | "green" | "viol
   szerkeszthető: "green",
   "ügyvédi review": "violet",
 };
-
-type PleadingSectionStatus = "Hiányos" | "Szerkesztés alatt" | "Ügyvédi ellenőrzésre kész";
-type PleadingQualityChecklistKey =
-  | "factsOrganized"
-  | "evidenceIdentified"
-  | "legalBasisIdentified"
-  | "counterargumentHandled"
-  | "reliefClarified";
-type PleadingQualityChecklist = Record<PleadingQualityChecklistKey, boolean>;
-type InsertedPleadingSection = {
-  id: string;
-  chapterId: string;
-  title: string;
-  sourceLabel: string;
-  insertedAt: string;
-  status: PleadingSectionStatus;
-  qualityChecklist: PleadingQualityChecklist;
-  reviewNote: string;
-  nextAction: string;
-};
-
-const pleadingSectionStatusOptions: Array<{ label: string; status: PleadingSectionStatus }> = [
-  { label: "Hiányos", status: "Hiányos" },
-  { label: "Szerkesztés alatt", status: "Szerkesztés alatt" },
-  { label: "Kész ellenőrzésre", status: "Ügyvédi ellenőrzésre kész" },
-];
-
-const pleadingSectionStatusTone: Record<PleadingSectionStatus, "amber" | "blue" | "green"> = {
-  Hiányos: "amber",
-  "Szerkesztés alatt": "blue",
-  "Ügyvédi ellenőrzésre kész": "green",
-};
-
-const pleadingQualityChecklistOptions: Array<{ key: PleadingQualityChecklistKey; label: string }> = [
-  { key: "factsOrganized", label: "Tényállás rendezve" },
-  { key: "evidenceIdentified", label: "Bizonyíték megjelölve" },
-  { key: "legalBasisIdentified", label: "Jogi alap megjelölve" },
-  { key: "counterargumentHandled", label: "Ellenérv kezelve" },
-  { key: "reliefClarified", label: "Kérelem / indítvány pontosítva" },
-];
-
-const createDefaultPleadingQualityChecklist = (): PleadingQualityChecklist => ({
-  factsOrganized: false,
-  evidenceIdentified: false,
-  legalBasisIdentified: false,
-  counterargumentHandled: false,
-  reliefClarified: false,
-});
-
-const countCompletedChecklistItems = (checklist: PleadingQualityChecklist) =>
-  pleadingQualityChecklistOptions.filter((item) => checklist[item.key]).length;
-
-const isInsertedPleadingSectionReady = (section: InsertedPleadingSection) =>
-  section.status === "Ügyvédi ellenőrzésre kész" && countCompletedChecklistItems(section.qualityChecklist) === pleadingQualityChecklistOptions.length;
 
 const responseTone = (type: ResponseBlock["type"]): "green" | "gold" | "blue" | "violet" => {
   if (type === "evidence" || type === "evidence-motion") return "blue";
@@ -2172,264 +2129,19 @@ function AssemblyWorkspace({
             </AdminButton>
           </div>
 
-          <div className="rounded-[10px] border border-[#D8CFB6] bg-[#FFFDF8] p-3">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Beadványvázlat áttekintő</p>
-                <h3 className="mt-1 font-serif text-[16px] font-medium text-[#1F2821]">Beadványrészek</h3>
-              </div>
-              <AdminStatusPill tone="gold">{insertedPleadingSections.length} helyi rész</AdminStatusPill>
-            </div>
-            <div className="mt-3 rounded-[8px] border border-[#E7DECB] bg-white px-3 py-2">
-              <p className="text-[11px] font-semibold text-[#514D45]">
-                Összesen: {insertedPleadingSections.length} · Hiányos: {insertedSectionStatusSummary["Hiányos"]} · Szerkesztés alatt:{" "}
-                {insertedSectionStatusSummary["Szerkesztés alatt"]} · Ügyvédi ellenőrzésre kész:{" "}
-                {insertedSectionStatusSummary["Ügyvédi ellenőrzésre kész"]}
-              </p>
-              <p className="mt-1 text-[11px] font-semibold text-[#514D45]">
-                Ellenőrzési pontok: {insertedSectionChecklistSummary.completedItems}/{insertedSectionChecklistSummary.totalItems} kész ·{" "}
-                {insertedSectionChecklistSummary.completeSections} teljes beadványrész
-              </p>
-              <p className="mt-1 text-[11px] font-semibold text-[#514D45]">
-                Ellenőrzési megjegyzés: {insertedSectionReviewSummary.sectionsWithReviewNotes} · Nyitott teendő:{" "}
-                {insertedSectionReviewSummary.sectionsWithOpenNextActions}
-              </p>
-              <p className="mt-1 text-[11px] leading-5 text-[#7B776D]">
-                Csak helyben követett státusz, ellenőrzőlista és megjegyzés · Nincs még adatbázisba mentve.
-              </p>
-            </div>
-            {insertedPleadingSections.length === 0 ? (
-              <p className="mt-3 rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FBF9F3] px-3 py-2 text-[11px] leading-5 text-[#7B776D]">
-                Még nincs külön beillesztett beadványrész. A forráskártyákon válaszd a „Beillesztés a beadványvázlatba” műveletet.
-              </p>
-            ) : (
-              <div className="mt-3 space-y-2">
-                {insertedPleadingSections.map((section) => {
-                  const completedChecklistItems = countCompletedChecklistItems(section.qualityChecklist);
-                  const isChecklistComplete = completedChecklistItems === pleadingQualityChecklistOptions.length;
-                  const readyStatusHasMissingItems = section.status === "Ügyvédi ellenőrzésre kész" && !isChecklistComplete;
-                  const readyStatusHasOpenNextAction = section.status === "Ügyvédi ellenőrzésre kész" && Boolean(section.nextAction.trim());
+          <PleadingSectionsOverviewPanel
+            sections={insertedPleadingSections}
+            statusSummary={insertedSectionStatusSummary}
+            checklistSummary={insertedSectionChecklistSummary}
+            reviewSummary={insertedSectionReviewSummary}
+            onFocusEditor={focusPleadingEditor}
+            onRemoveSection={removeInsertedSection}
+            onStatusChange={updateInsertedSectionStatus}
+            onChecklistToggle={toggleInsertedSectionChecklistItem}
+            onReviewFieldChange={updateInsertedSectionReviewField}
+          />
 
-                  return (
-                    <div key={section.id} className="rounded-[8px] border border-[#E7DECB] bg-white px-3 py-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <AdminBadge tone="gold">Helyi vázlat</AdminBadge>
-                        <AdminBadge tone="neutral">{section.sourceLabel}</AdminBadge>
-                        <AdminBadge tone={pleadingSectionStatusTone[section.status]}>{section.status}</AdminBadge>
-                        {isChecklistComplete ? <AdminBadge tone="green">Ellenőrzési pontok kész</AdminBadge> : null}
-                      </div>
-                      <p className="mt-2 font-serif text-[14px] font-medium text-[#1F2821]">{section.title}</p>
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        {pleadingSectionStatusOptions.map((option) => {
-                          const isActiveStatus = section.status === option.status;
-
-                          return (
-                            <button
-                              key={option.status}
-                              type="button"
-                              aria-pressed={isActiveStatus}
-                              onClick={() => updateInsertedSectionStatus(section.id, option.status)}
-                              className={`rounded-full border px-2.5 py-1 text-[10.5px] font-semibold transition ${
-                                isActiveStatus
-                                  ? "border-[#B58A2A] bg-[#B58A2A] text-white shadow-sm"
-                                  : "border-[#D8CFB6] bg-[#FFFDF8] text-[#514D45] hover:border-[#B58A2A] hover:text-[#8E6A1B]"
-                              }`}
-                            >
-                              {option.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <div className="mt-3 rounded-[8px] border border-[#E7DECB] bg-[#FCFAF4] px-3 py-2">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Beadványrész ellenőrzése</p>
-                          <AdminBadge tone={isChecklistComplete ? "green" : "neutral"}>
-                            {completedChecklistItems}/{pleadingQualityChecklistOptions.length} ellenőrzési pont kész
-                          </AdminBadge>
-                        </div>
-                        <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
-                          {pleadingQualityChecklistOptions.map((item) => (
-                            <label
-                              key={item.key}
-                              className="flex cursor-pointer items-center gap-2 rounded-[6px] border border-[#E7DECB] bg-white px-2.5 py-1.5 text-[11px] font-medium text-[#514D45]"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={section.qualityChecklist[item.key]}
-                                onChange={() => toggleInsertedSectionChecklistItem(section.id, item.key)}
-                                className="h-3.5 w-3.5 rounded border-[#D8CFB6] accent-[#123B27]"
-                              />
-                              <span>{item.label}</span>
-                            </label>
-                          ))}
-                        </div>
-                        {isChecklistComplete ? (
-                          <p className="mt-2 text-[11px] leading-5 text-[#3F6B35]">Az ellenőrzőlista teljes; a rész alkalmas lehet ügyvédi ellenőrzésre.</p>
-                        ) : null}
-                        {readyStatusHasMissingItems ? (
-                          <p className="mt-2 text-[11px] leading-5 text-[#8E6A1B]">A státusz kész, de még hiányzik ellenőrzési pont.</p>
-                        ) : null}
-                        <p className="mt-1 text-[10.5px] leading-5 text-[#7B776D]">
-                          Csak helyben követett ellenőrzőlista · Nincs még adatbázisba mentve.
-                        </p>
-                      </div>
-                      <div className="mt-3 rounded-[8px] border border-[#E7DECB] bg-white px-3 py-2">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Ellenőrzési megjegyzés</p>
-                          {section.nextAction.trim() ? <AdminBadge tone="gold">Nyitott teendő</AdminBadge> : <AdminBadge tone="neutral">Helyi megjegyzés</AdminBadge>}
-                        </div>
-                        <div className="mt-2 grid gap-2 md:grid-cols-2">
-                          <label className="grid gap-1 text-[11px] font-semibold text-[#514D45]">
-                            Ügyvédi megjegyzés
-                            <textarea
-                              value={section.reviewNote}
-                              onChange={(event) => updateInsertedSectionReviewField(section.id, "reviewNote", event.target.value)}
-                              rows={2}
-                              placeholder="Pl. bizonyíték pontosítása, jogalap ellenőrzése…"
-                              className="rounded border border-[#DDD7CA] bg-[#FFFDF8] px-2.5 py-2 text-[11px] font-normal leading-5 text-[#1F2821]"
-                            />
-                          </label>
-                          <label className="grid gap-1 text-[11px] font-semibold text-[#514D45]">
-                            Következő teendő
-                            <textarea
-                              value={section.nextAction}
-                              onChange={(event) => updateInsertedSectionReviewField(section.id, "nextAction", event.target.value)}
-                              rows={2}
-                              placeholder="Pl. csatolandó irat bekérése, tényállás pontosítása…"
-                              className="rounded border border-[#DDD7CA] bg-[#FFFDF8] px-2.5 py-2 text-[11px] font-normal leading-5 text-[#1F2821]"
-                            />
-                          </label>
-                        </div>
-                        {readyStatusHasOpenNextAction ? (
-                          <p className="mt-2 text-[11px] leading-5 text-[#8E6A1B]">Van még rögzített teendő ennél a szakasznál.</p>
-                        ) : null}
-                        <p className="mt-1 text-[10.5px] leading-5 text-[#7B776D]">
-                          Csak helyben vezetett megjegyzés · Nincs még adatbázisba mentve.
-                        </p>
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <AdminButton variant="neutral" size="sm" onClick={focusPleadingEditor}>
-                          Ugrás a beadványrészhez
-                        </AdminButton>
-                        <AdminButton variant="neutral" size="sm" onClick={() => removeInsertedSection(section.id)}>
-                          Eltávolítás a vázlatból
-                        </AdminButton>
-                      </div>
-                    </div>
-                  );
-                })}
-                <p className="text-[11px] leading-5 text-[#7B776D]">
-                  Az eltávolítás az áttekintő helyi jelölését törli; a már szerkeszthető beadványszövegben lévő szöveget kézzel tudod módosítani.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-[10px] border border-[#D8CFB6] bg-white p-3">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Beadvány előnézet</p>
-                <h3 className="mt-1 font-serif text-[16px] font-medium text-[#1F2821]">Véglegesítés előtti áttekintés</h3>
-              </div>
-              <AdminStatusPill tone={pleadingPreviewReadiness.readySections.length ? "green" : "gold"}>
-                {pleadingPreviewReadiness.readySections.length}/{pleadingPreviewReadiness.totalSections} szakasz kész
-              </AdminStatusPill>
-            </div>
-            <div className="mt-3 grid gap-2 rounded-[8px] border border-[#E7DECB] bg-[#FCFAF4] px-3 py-2 text-[11px] text-[#514D45]">
-              <p className="font-semibold">
-                Kész: {pleadingPreviewReadiness.readySections.length} · Még szerkesztendő: {pleadingPreviewReadiness.incompleteSections.length} · Készenlét:{" "}
-                {pleadingPreviewReadiness.readinessPercent}%
-              </p>
-              <p className="leading-5 text-[#7B776D]">
-                Ez nem végleges beadvány, hanem helyi előnézeti ellenőrzés. A teljes szerkeszthető beadványszöveg továbbra is az editorban van. Nincs még
-                adatbázisba mentve.
-              </p>
-            </div>
-
-            <div className="mt-3 grid gap-3 lg:grid-cols-2">
-              <div className="rounded-[8px] border border-[#E7DECB] bg-[#FFFDF8] p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Kész szakaszok</p>
-                  <AdminBadge tone="green">{pleadingPreviewReadiness.readySections.length} kész</AdminBadge>
-                </div>
-                {pleadingPreviewReadiness.readySections.length === 0 ? (
-                  <p className="mt-2 rounded-[8px] border border-dashed border-[#D8CFB6] bg-white px-3 py-2 text-[11px] leading-5 text-[#7B776D]">
-                    Még nincs teljesen ellenőrzött beadványrész.
-                  </p>
-                ) : (
-                  <div className="mt-2 space-y-2">
-                    {pleadingPreviewReadiness.readySections.map((section) => (
-                      <div key={section.id} className="rounded-[7px] border border-[#D8E3D2] bg-white px-3 py-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <AdminBadge tone="green">Ügyvédi ellenőrzésre kész</AdminBadge>
-                          <AdminBadge tone="neutral">{section.sourceLabel}</AdminBadge>
-                          {section.nextAction.trim() ? <AdminBadge tone="gold">Nyitott teendő</AdminBadge> : null}
-                        </div>
-                        <p className="mt-1 font-serif text-[13px] font-medium text-[#1F2821]">{section.title}</p>
-                        {section.nextAction.trim() ? <p className="mt-1 text-[11px] leading-5 text-[#8E6A1B]">Van még rögzített teendő ennél a szakasznál.</p> : null}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-[8px] border border-[#E7DECB] bg-[#FFFDF8] p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Még szerkesztendő szakaszok</p>
-                  <AdminBadge tone="gold">{pleadingPreviewReadiness.incompleteSections.length} nyitott</AdminBadge>
-                </div>
-                {pleadingPreviewReadiness.incompleteSections.length === 0 ? (
-                  <p className="mt-2 rounded-[8px] border border-dashed border-[#D8CFB6] bg-white px-3 py-2 text-[11px] leading-5 text-[#7B776D]">
-                    {pleadingPreviewReadiness.totalSections === 0
-                      ? "Még nincs beillesztett beadványrész."
-                      : "Minden beillesztett szakasz teljes ellenőrzést kapott."}
-                  </p>
-                ) : (
-                  <div className="mt-2 space-y-2">
-                    {pleadingPreviewReadiness.incompleteSections.map((section) => {
-                      const completedChecklistItems = countCompletedChecklistItems(section.qualityChecklist);
-                      const readyStatusHasMissingItems = section.status === "Ügyvédi ellenőrzésre kész";
-
-                      return (
-                        <div key={section.id} className="rounded-[7px] border border-[#E7DECB] bg-white px-3 py-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <AdminBadge tone={pleadingSectionStatusTone[section.status]}>{section.status}</AdminBadge>
-                            <AdminBadge tone="neutral">
-                              {completedChecklistItems}/{pleadingQualityChecklistOptions.length} ellenőrzési pont
-                            </AdminBadge>
-                            {section.nextAction.trim() ? <AdminBadge tone="gold">Nyitott teendő</AdminBadge> : null}
-                          </div>
-                          <p className="mt-1 font-serif text-[13px] font-medium text-[#1F2821]">{section.title}</p>
-                          {readyStatusHasMissingItems ? (
-                            <p className="mt-1 text-[11px] leading-5 text-[#8E6A1B]">Ellenőrzési pont hiányzik.</p>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-3 rounded-[8px] border border-[#E7DECB] bg-[#FBF9F3] p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Helyi előnézet</p>
-                  <p className="mt-1 text-[11px] leading-5 text-[#7B776D]">Nem végleges beadvány; nem helyettesíti a mentést vagy exportot.</p>
-                </div>
-                <AdminButton variant="neutral" size="sm" onClick={copyPleadingPreview}>
-                  Másolás előnézetként
-                </AdminButton>
-              </div>
-              <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-[8px] border border-[#E7DECB] bg-white p-3 text-[11px] leading-5 text-[#514D45]">
-                {pleadingPreviewReadiness.previewText}
-              </pre>
-              {pleadingPreviewCopyState === "success" ? <p className="mt-2 text-[11px] text-[#3F6B35]">Az előnézet vágólapra másolva.</p> : null}
-              {pleadingPreviewCopyState === "error" ? (
-                <p className="mt-2 text-[11px] text-[#8B2A2A]">A vágólapra másolás nem sikerült ebben a böngészőkörnyezetben.</p>
-              ) : null}
-            </div>
-          </div>
+          <PleadingPreviewPanel readiness={pleadingPreviewReadiness} copyState={pleadingPreviewCopyState} onCopyPreview={copyPleadingPreview} />
 
           <div className="rounded-[8px] border border-[#D7CCB0] bg-[#FBF9F3] p-3">
             <div className="grid gap-2">
