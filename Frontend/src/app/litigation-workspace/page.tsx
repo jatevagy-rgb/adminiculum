@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
@@ -124,6 +124,20 @@ type PleadingChapterSeed = {
   tone: "green" | "gold" | "blue" | "violet";
 };
 
+type LitigationLocalDraft = {
+  version: 1;
+  savedAt: string;
+  workspaceLabel: string;
+  caseId: string;
+  documentId: string;
+  opponentBrackets: OpponentBracket[];
+  responseBlocks: ResponseBlock[];
+  chapterBlocks: ChapterBlock[];
+  insertedPleadingSections: InsertedPleadingSection[];
+  outputTemplate: OutputTemplate;
+  pleadingEditorText: string;
+};
+
 const workspaceSteps: Array<{
   key: LitigationWorkspaceStep;
   label: string;
@@ -239,6 +253,39 @@ const responseTone = (type: ResponseBlock["type"]): "green" | "gold" | "blue" | 
 };
 
 const uniqueIds = (ids: string[]) => Array.from(new Set(ids));
+
+const getLitigationLocalDraftStorageKey = (caseId: string, documentId: string) =>
+  `adminiculum:litigation-workspace:local-draft:v1:${encodeURIComponent(caseId || "no-case")}:${encodeURIComponent(documentId || "no-document")}`;
+
+const isOutputTemplate = (value: unknown): value is OutputTemplate =>
+  typeof value === "string" && value in outputTemplateLabels;
+
+const readLocalDraftArray = <T,>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
+
+const parseLitigationLocalDraft = (rawValue: string): LitigationLocalDraft | null => {
+  const parsedValue = JSON.parse(rawValue) as Partial<LitigationLocalDraft> | null;
+  if (!parsedValue || parsedValue.version !== 1) return null;
+
+  return {
+    version: 1,
+    savedAt: typeof parsedValue.savedAt === "string" ? parsedValue.savedAt : new Date().toISOString(),
+    workspaceLabel: typeof parsedValue.workspaceLabel === "string" ? parsedValue.workspaceLabel : "Peres stratégiai munkamenet",
+    caseId: typeof parsedValue.caseId === "string" ? parsedValue.caseId : "",
+    documentId: typeof parsedValue.documentId === "string" ? parsedValue.documentId : "",
+    opponentBrackets: readLocalDraftArray<OpponentBracket>(parsedValue.opponentBrackets),
+    responseBlocks: readLocalDraftArray<ResponseBlock>(parsedValue.responseBlocks),
+    chapterBlocks: readLocalDraftArray<ChapterBlock>(parsedValue.chapterBlocks),
+    insertedPleadingSections: readLocalDraftArray<InsertedPleadingSection>(parsedValue.insertedPleadingSections),
+    outputTemplate: isOutputTemplate(parsedValue.outputTemplate) ? parsedValue.outputTemplate : "full-defense",
+    pleadingEditorText: typeof parsedValue.pleadingEditorText === "string" ? parsedValue.pleadingEditorText : "",
+  };
+};
+
+const formatLocalDraftSavedAt = (savedAt?: string) => {
+  if (!savedAt) return "nincs helyi mentés";
+  const date = new Date(savedAt);
+  return Number.isNaN(date.getTime()) ? savedAt : date.toLocaleString("hu-HU");
+};
 
 const documentTextFallback = "A dokumentum szövege még nem érhető el ezen a munkafelületen.";
 
@@ -828,6 +875,18 @@ function LitigationWorkspacePageContent() {
     });
   };
 
+  const restoreLitigationLocalDraft = (draft: LitigationLocalDraft) => {
+    setOpponentBrackets(draft.opponentBrackets);
+    setResponseBlocks(draft.responseBlocks);
+    setChapterBlocks(draft.chapterBlocks);
+    setOutputTemplate(draft.outputTemplate);
+    setPleadingEditorText(draft.pleadingEditorText);
+    setEditorWasTouched(Boolean(draft.pleadingEditorText.trim()));
+    setOpenOpponentBracketIds(draft.opponentBrackets.map((bracket) => bracket.id));
+    setOpenResponseBlockIds(draft.responseBlocks.map((block) => block.id));
+    setActiveLinkFamily(null);
+  };
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto bg-[#F3EBD4]">
       <div className="mx-auto max-w-[1640px] space-y-4 px-4 py-4 xl:px-6">
@@ -906,6 +965,8 @@ function LitigationWorkspacePageContent() {
 
             {currentStep === "assembly" ? (
               <AssemblyWorkspace
+                caseId={caseId}
+                documentId={documentId}
                 chapterBlocks={chapterBlocks}
                 chapterDraft={chapterDraft}
                 outputTemplate={outputTemplate}
@@ -914,6 +975,7 @@ function LitigationWorkspacePageContent() {
                 generatedPleadingSkeleton={generatedPleadingSkeleton}
                 pleadingEditorText={pleadingEditorText}
                 editorWasTouched={editorWasTouched}
+                opponentBrackets={opponentBrackets}
                 responseBlocks={responseBlocks}
                 onChapterDraftChange={setChapterDraft}
                 onAddChapterBlock={addChapterBlock}
@@ -926,6 +988,7 @@ function LitigationWorkspacePageContent() {
                   setPleadingEditorText(value);
                   setEditorWasTouched(true);
                 }}
+                onRestoreLocalDraft={restoreLitigationLocalDraft}
                 onBack={() => navigateToStep("strategy")}
               />
             ) : null}
@@ -1789,6 +1852,8 @@ function StrategyWorkspace({
 }
 
 function AssemblyWorkspace({
+  caseId,
+  documentId,
   chapterBlocks,
   chapterDraft,
   outputTemplate,
@@ -1797,14 +1862,18 @@ function AssemblyWorkspace({
   generatedPleadingSkeleton,
   pleadingEditorText,
   editorWasTouched,
+  opponentBrackets,
   responseBlocks,
   onChapterDraftChange,
   onAddChapterBlock,
   onOutputTemplateChange,
   onApplyGeneratedSkeleton,
   onPleadingEditorTextChange,
+  onRestoreLocalDraft,
   onBack,
 }: {
+  caseId: string;
+  documentId: string;
   chapterBlocks: ChapterBlock[];
   chapterDraft: {
     title: string;
@@ -1819,12 +1888,14 @@ function AssemblyWorkspace({
   generatedPleadingSkeleton: string;
   pleadingEditorText: string;
   editorWasTouched: boolean;
+  opponentBrackets: OpponentBracket[];
   responseBlocks: ResponseBlock[];
   onChapterDraftChange: (value: typeof chapterDraft | ((prev: typeof chapterDraft) => typeof chapterDraft)) => void;
   onAddChapterBlock: () => void;
   onOutputTemplateChange: (value: OutputTemplate) => void;
   onApplyGeneratedSkeleton: () => void;
   onPleadingEditorTextChange: (value: string) => void;
+  onRestoreLocalDraft: (draft: LitigationLocalDraft) => void;
   onBack: () => void;
 }) {
   const [isTipTapAssemblyPreviewEnabled, setIsTipTapAssemblyPreviewEnabled] = useState(false);
@@ -1853,7 +1924,95 @@ function AssemblyWorkspace({
   const [tipTapReplacementText, setTipTapReplacementText] = useState("");
   const [insertedPleadingSections, setInsertedPleadingSections] = useState<InsertedPleadingSection[]>([]);
   const [pleadingPreviewCopyState, setPleadingPreviewCopyState] = useState<"idle" | "success" | "error">("idle");
+  const [localDraftInfo, setLocalDraftInfo] = useState<{ exists: boolean; savedAt?: string }>({ exists: false });
+  const [localDraftMessage, setLocalDraftMessage] = useState("");
+  const [localDraftMessageTone, setLocalDraftMessageTone] = useState<"neutral" | "success" | "error">("neutral");
   const assemblyEditorRef = useRef<HTMLDivElement | null>(null);
+  const localDraftStorageKey = useMemo(() => getLitigationLocalDraftStorageKey(caseId, documentId), [caseId, documentId]);
+  const localDraftWorkspaceLabel = useMemo(() => `Ügy: ${caseId || "nincs ügy"} · Dokumentum: ${documentId || "nincs dokumentum"}`, [caseId, documentId]);
+
+  const refreshLocalDraftInfo = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const rawValue = window.localStorage.getItem(localDraftStorageKey);
+    if (!rawValue) {
+      setLocalDraftInfo({ exists: false });
+      return;
+    }
+
+    try {
+      const parsedDraft = parseLitigationLocalDraft(rawValue);
+      setLocalDraftInfo({ exists: true, savedAt: parsedDraft?.savedAt });
+    } catch {
+      setLocalDraftInfo({ exists: true });
+    }
+  }, [localDraftStorageKey]);
+
+  useEffect(() => {
+    refreshLocalDraftInfo();
+  }, [refreshLocalDraftInfo]);
+
+  const showLocalDraftMessage = (message: string, tone: "neutral" | "success" | "error" = "neutral") => {
+    setLocalDraftMessage(message);
+    setLocalDraftMessageTone(tone);
+  };
+
+  const saveLocalDraft = () => {
+    if (typeof window === "undefined") return;
+
+    const currentPleadingText = isTipTapAssemblyPreviewEnabled ? tipTapAssemblyDraft : pleadingEditorText;
+    const draft: LitigationLocalDraft = {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      workspaceLabel: localDraftWorkspaceLabel,
+      caseId,
+      documentId,
+      opponentBrackets,
+      responseBlocks,
+      chapterBlocks,
+      insertedPleadingSections,
+      outputTemplate,
+      pleadingEditorText: currentPleadingText,
+    };
+
+    try {
+      window.localStorage.setItem(localDraftStorageKey, JSON.stringify(draft));
+      refreshLocalDraftInfo();
+      showLocalDraftMessage("Helyi vázlat mentve.", "success");
+    } catch {
+      showLocalDraftMessage("A helyi vázlat mentése nem sikerült ebben a böngészőben.", "error");
+    }
+  };
+
+  const loadLocalDraft = () => {
+    if (typeof window === "undefined") return;
+    const rawValue = window.localStorage.getItem(localDraftStorageKey);
+    if (!rawValue) {
+      showLocalDraftMessage("Nincs korábbi helyi vázlat ehhez a munkaterülethez.", "neutral");
+      setLocalDraftInfo({ exists: false });
+      return;
+    }
+
+    try {
+      const parsedDraft = parseLitigationLocalDraft(rawValue);
+      if (!parsedDraft) throw new Error("Invalid local draft");
+      onRestoreLocalDraft(parsedDraft);
+      setInsertedPleadingSections(parsedDraft.insertedPleadingSections);
+      setTipTapAssemblyDraft(parsedDraft.pleadingEditorText);
+      setPleadingPreviewCopyState("idle");
+      setLocalDraftInfo({ exists: true, savedAt: parsedDraft.savedAt });
+      showLocalDraftMessage("Helyi vázlat betöltve.", "success");
+    } catch {
+      showLocalDraftMessage("A helyi mentés sérült vagy nem olvasható.", "error");
+      setLocalDraftInfo({ exists: true });
+    }
+  };
+
+  const clearLocalDraft = () => {
+    if (typeof window === "undefined") return;
+    window.localStorage.removeItem(localDraftStorageKey);
+    setLocalDraftInfo({ exists: false });
+    showLocalDraftMessage("Helyi mentés törölve.", "success");
+  };
 
   const toggleTipTapAssemblyPreview = () => {
     setIsTipTapAssemblyPreviewEnabled((currentValue) => {
@@ -2209,6 +2368,50 @@ function AssemblyWorkspace({
             <AdminButton variant="gold" size="sm" onClick={onApplyGeneratedSkeleton} className="mt-3">
               Vázlat frissítése válaszblokkokból
             </AdminButton>
+          </div>
+
+          <div className="rounded-[8px] border border-[#D8CFB6] bg-[#FFFDF8] p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Helyi munkamenet</p>
+                <h3 className="mt-1 font-serif text-[15px] font-medium text-[#1F2821]">Helyi mentés</h3>
+              </div>
+              <AdminStatusPill tone={localDraftInfo.exists ? "gold" : "green"}>
+                {localDraftInfo.exists ? "Van helyi vázlat" : "Nincs helyi vázlat"}
+              </AdminStatusPill>
+            </div>
+            <p className="mt-2 text-[11px] leading-5 text-[#6D6A62]">
+              Ez csak böngészőben tárolt helyi munkamenet. Nem adatbázisba mentés. Csak ezen az eszközön érhető el.
+            </p>
+            {localDraftInfo.exists ? (
+              <p className="mt-1 text-[11px] font-semibold text-[#6C5120]">
+                Van korábbi helyi vázlat ehhez a munkaterülethez. Utolsó helyi mentés: {formatLocalDraftSavedAt(localDraftInfo.savedAt)}.
+              </p>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <AdminButton variant="gold" size="sm" onClick={saveLocalDraft}>
+                Helyi vázlat mentése
+              </AdminButton>
+              <AdminButton variant="neutral" size="sm" onClick={loadLocalDraft} disabled={!localDraftInfo.exists}>
+                Helyi vázlat betöltése
+              </AdminButton>
+              <AdminButton variant="neutral" size="sm" onClick={clearLocalDraft} disabled={!localDraftInfo.exists}>
+                Helyi mentés törlése
+              </AdminButton>
+            </div>
+            {localDraftMessage ? (
+              <p
+                className={`mt-2 rounded-[6px] border px-3 py-2 text-[11px] leading-5 ${
+                  localDraftMessageTone === "success"
+                    ? "border-[#D8E3D2] bg-[#F5FAF2] text-[#3F6B35]"
+                    : localDraftMessageTone === "error"
+                      ? "border-[#E5C3C3] bg-[#FFF7F4] text-[#8B2A2A]"
+                      : "border-[#E7DECB] bg-white text-[#6D6A62]"
+                }`}
+              >
+                {localDraftMessage}
+              </p>
+            ) : null}
           </div>
 
           <PleadingSectionsOverviewPanel
