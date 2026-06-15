@@ -1924,6 +1924,8 @@ function AssemblyWorkspace({
   const [tipTapReplacementText, setTipTapReplacementText] = useState("");
   const [insertedPleadingSections, setInsertedPleadingSections] = useState<InsertedPleadingSection[]>([]);
   const [pleadingPreviewCopyState, setPleadingPreviewCopyState] = useState<"idle" | "success" | "error">("idle");
+  const [handoffPackageCopyState, setHandoffPackageCopyState] = useState<"idle" | "success" | "error">("idle");
+  const [handoffPackageDownloadState, setHandoffPackageDownloadState] = useState<"idle" | "success" | "error">("idle");
   const [localDraftInfo, setLocalDraftInfo] = useState<{ exists: boolean; savedAt?: string }>({ exists: false });
   const [localDraftMessage, setLocalDraftMessage] = useState("");
   const [localDraftMessageTone, setLocalDraftMessageTone] = useState<"neutral" | "success" | "error">("neutral");
@@ -2126,6 +2128,78 @@ function AssemblyWorkspace({
     };
   }, [insertedPleadingSections]);
 
+  const currentEditablePleadingText = isTipTapAssemblyPreviewEnabled ? tipTapAssemblyDraft : pleadingEditorText;
+
+  const handoffPackageText = useMemo(() => {
+    const readySections = insertedPleadingSections.filter(isInsertedPleadingSectionReady);
+    const incompleteSections = insertedPleadingSections.filter((section) => !isInsertedPleadingSectionReady(section));
+    const sectionsWithReviewNotes = insertedPleadingSections.filter((section) => section.reviewNote.trim());
+    const sectionsWithOpenNextActions = insertedPleadingSections.filter((section) => section.nextAction.trim());
+    const readySectionsWithOpenNextActions = readySections.filter((section) => section.nextAction.trim());
+    const createdAt = new Date().toLocaleString("hu-HU");
+    const checklistLine = (section: InsertedPleadingSection) =>
+      `${countCompletedChecklistItems(section.qualityChecklist)}/${pleadingQualityChecklistOptions.length} ellenőrzési pont kész`;
+
+    return [
+      "Beadvány munkacsomag",
+      `Készült: ${createdAt}`,
+      `Munkaterület: ${localDraftWorkspaceLabel}`,
+      "",
+      "Figyelmeztetés",
+      "Ez nem végleges beadvány.",
+      "Nem Word-export, hanem helyi munkacsomag másoláshoz vagy letöltéshez.",
+      "Az adatbázisba mentés későbbi fejlesztés.",
+      readySectionsWithOpenNextActions.length
+        ? `Figyelem: ${readySectionsWithOpenNextActions.length} késznek jelölt szakasznál még nyitott teendő szerepel.`
+        : "Nincs késznek jelölt szakasz nyitott teendővel.",
+      "",
+      "Szerkeszthető beadványszöveg",
+      currentEditablePleadingText.trim() || "[Nincs szerkeszthető beadványszöveg a helyi editorban.]",
+      "",
+      "Kész szakaszok",
+      readySections.length
+        ? readySections
+            .flatMap((section, index) => [
+              `${index + 1}. ${section.title}`,
+              `Forrás: ${section.sourceLabel}`,
+              `Állapot: ${section.status}`,
+              `Ellenőrzés: ${checklistLine(section)}`,
+              section.reviewNote.trim() ? `Ellenőrzési megjegyzés: ${section.reviewNote.trim()}` : "Ellenőrzési megjegyzés: nincs",
+              section.nextAction.trim() ? `Nyitott teendő: ${section.nextAction.trim()}` : "Nyitott teendő: nincs",
+              "",
+            ])
+            .join("\n")
+        : "Nincs ügyvédi ellenőrzésre kész szakasz.",
+      "",
+      "Még szerkesztendő szakaszok",
+      incompleteSections.length
+        ? incompleteSections
+            .flatMap((section, index) => [
+              `${index + 1}. ${section.title}`,
+              `Forrás: ${section.sourceLabel}`,
+              `Állapot: ${section.status}`,
+              `Ellenőrzés: ${checklistLine(section)}`,
+              section.reviewNote.trim() ? `Ellenőrzési megjegyzés: ${section.reviewNote.trim()}` : "Ellenőrzési megjegyzés: nincs",
+              section.nextAction.trim() ? `Nyitott teendő: ${section.nextAction.trim()}` : "Nyitott teendő: nincs",
+              "",
+            ])
+            .join("\n")
+        : "Nincs nyitott vagy hiányos beadványrész.",
+      "",
+      "Ellenőrzési megjegyzések",
+      sectionsWithReviewNotes.length
+        ? sectionsWithReviewNotes.map((section) => `- ${section.title}: ${section.reviewNote.trim()}`).join("\n")
+        : "Nincs rögzített ellenőrzési megjegyzés.",
+      "",
+      "Nyitott teendők",
+      sectionsWithOpenNextActions.length
+        ? sectionsWithOpenNextActions.map((section) => `- ${section.title}: ${section.nextAction.trim()}`).join("\n")
+        : "Nincs nyitott teendő.",
+      "",
+      "Helyi munkacsomag vége",
+    ].join("\n");
+  }, [currentEditablePleadingText, insertedPleadingSections, localDraftWorkspaceLabel]);
+
   const focusPleadingEditor = () => {
     assemblyEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     const editableElement = assemblyEditorRef.current?.querySelector<HTMLElement>("textarea, [contenteditable='true']");
@@ -2225,6 +2299,32 @@ function AssemblyWorkspace({
       setPleadingPreviewCopyState("success");
     } catch {
       setPleadingPreviewCopyState("error");
+    }
+  };
+
+  const copyHandoffPackage = async () => {
+    try {
+      await navigator.clipboard.writeText(handoffPackageText);
+      setHandoffPackageCopyState("success");
+    } catch {
+      setHandoffPackageCopyState("error");
+    }
+  };
+
+  const downloadHandoffPackage = () => {
+    try {
+      const blob = new Blob([handoffPackageText], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "adminiculum-beadvany-munkacsomag.txt";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setHandoffPackageDownloadState("success");
+    } catch {
+      setHandoffPackageDownloadState("error");
     }
   };
 
@@ -2427,6 +2527,47 @@ function AssemblyWorkspace({
           />
 
           <PleadingPreviewPanel readiness={pleadingPreviewReadiness} copyState={pleadingPreviewCopyState} onCopyPreview={copyPleadingPreview} />
+
+          <div className="rounded-[10px] border border-[#D8CFB6] bg-white p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Beadvány munkacsomag</p>
+                <h3 className="mt-1 font-serif text-[16px] font-medium text-[#1F2821]">Ügyvédi munkacsomag</h3>
+              </div>
+              <AdminStatusPill tone="gold">Helyi munkacsomag</AdminStatusPill>
+            </div>
+            <p className="mt-2 text-[11px] leading-5 text-[#6D6A62]">
+              Ez nem végleges Word-export, hanem helyi munkacsomag másoláshoz vagy letöltéshez. Az adatbázisba mentés későbbi fejlesztés.
+            </p>
+            <div className="mt-3 grid gap-2 rounded-[8px] border border-[#E7DECB] bg-[#FCFAF4] px-3 py-2 text-[11px] text-[#514D45]">
+              <p className="font-semibold">
+                Tartalom: szerkeszthető beadványszöveg · kész és nyitott szakaszok · ellenőrzési pontok · megjegyzések · nyitott teendők.
+              </p>
+              <p className="leading-5 text-[#7B776D]">
+                Nem exportál eredeti ellenoldali iratszöveget, tokent, titkot vagy alkalmazásbeállítást.
+              </p>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <AdminButton variant="gold" size="sm" onClick={copyHandoffPackage}>
+                Munkacsomag másolása
+              </AdminButton>
+              <AdminButton variant="neutral" size="sm" onClick={downloadHandoffPackage}>
+                Letöltés .txt-ként
+              </AdminButton>
+            </div>
+            {handoffPackageCopyState === "success" ? (
+              <p className="mt-2 text-[11px] text-[#3F6B35]">A munkacsomag vágólapra másolva.</p>
+            ) : null}
+            {handoffPackageCopyState === "error" ? (
+              <p className="mt-2 text-[11px] text-[#8B2A2A]">A munkacsomag másolása nem sikerült ebben a böngészőkörnyezetben.</p>
+            ) : null}
+            {handoffPackageDownloadState === "success" ? (
+              <p className="mt-2 text-[11px] text-[#3F6B35]">A .txt munkacsomag letöltése elindult.</p>
+            ) : null}
+            {handoffPackageDownloadState === "error" ? (
+              <p className="mt-2 text-[11px] text-[#8B2A2A]">A .txt munkacsomag letöltése nem sikerült ebben a böngészőkörnyezetben.</p>
+            ) : null}
+          </div>
 
           <div className="rounded-[8px] border border-[#D7CCB0] bg-[#FBF9F3] p-3">
             <div className="grid gap-2">
