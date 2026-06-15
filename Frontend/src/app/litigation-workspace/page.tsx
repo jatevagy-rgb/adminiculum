@@ -228,6 +228,15 @@ type PleadingQualityChecklistKey =
   | "counterargumentHandled"
   | "reliefClarified";
 type PleadingQualityChecklist = Record<PleadingQualityChecklistKey, boolean>;
+type InsertedPleadingSection = {
+  id: string;
+  chapterId: string;
+  title: string;
+  sourceLabel: string;
+  insertedAt: string;
+  status: PleadingSectionStatus;
+  qualityChecklist: PleadingQualityChecklist;
+};
 
 const pleadingSectionStatusOptions: Array<{ label: string; status: PleadingSectionStatus }> = [
   { label: "Hiányos", status: "Hiányos" },
@@ -259,6 +268,9 @@ const createDefaultPleadingQualityChecklist = (): PleadingQualityChecklist => ({
 
 const countCompletedChecklistItems = (checklist: PleadingQualityChecklist) =>
   pleadingQualityChecklistOptions.filter((item) => checklist[item.key]).length;
+
+const isInsertedPleadingSectionReady = (section: InsertedPleadingSection) =>
+  section.status === "Ügyvédi ellenőrzésre kész" && countCompletedChecklistItems(section.qualityChecklist) === pleadingQualityChecklistOptions.length;
 
 const responseTone = (type: ResponseBlock["type"]): "green" | "gold" | "blue" | "violet" => {
   if (type === "evidence" || type === "evidence-motion") return "blue";
@@ -1798,17 +1810,8 @@ function AssemblyWorkspace({
   const [tipTapMutationRequest, setTipTapMutationRequest] = useState<TipTapEditorMutationRequest | null>(null);
   const [tipTapReviewSuggestions, setTipTapReviewSuggestions] = useState<EditorReviewSuggestion[]>([]);
   const [tipTapReplacementText, setTipTapReplacementText] = useState("");
-  const [insertedPleadingSections, setInsertedPleadingSections] = useState<
-    Array<{
-      id: string;
-      chapterId: string;
-      title: string;
-      sourceLabel: string;
-      insertedAt: string;
-      status: PleadingSectionStatus;
-      qualityChecklist: PleadingQualityChecklist;
-    }>
-  >([]);
+  const [insertedPleadingSections, setInsertedPleadingSections] = useState<InsertedPleadingSection[]>([]);
+  const [pleadingPreviewCopyState, setPleadingPreviewCopyState] = useState<"idle" | "success" | "error">("idle");
   const assemblyEditorRef = useRef<HTMLDivElement | null>(null);
 
   const toggleTipTapAssemblyPreview = () => {
@@ -1855,11 +1858,40 @@ function AssemblyWorkspace({
       (total, section) => total + countCompletedChecklistItems(section.qualityChecklist),
       0,
     );
-    const completeSections = insertedPleadingSections.filter(
-      (section) => countCompletedChecklistItems(section.qualityChecklist) === pleadingQualityChecklistOptions.length,
-    ).length;
+    const completeSections = insertedPleadingSections.filter((section) => countCompletedChecklistItems(section.qualityChecklist) === pleadingQualityChecklistOptions.length).length;
 
     return { totalItems, completedItems, completeSections };
+  }, [insertedPleadingSections]);
+
+  const pleadingPreviewReadiness = useMemo(() => {
+    const readySections = insertedPleadingSections.filter(isInsertedPleadingSectionReady);
+    const incompleteSections = insertedPleadingSections.filter((section) => !isInsertedPleadingSectionReady(section));
+    const totalSections = insertedPleadingSections.length;
+    const readinessPercent = totalSections ? Math.round((readySections.length / totalSections) * 100) : 0;
+    const previewText = readySections.length
+      ? [
+          "Beadvány előnézet — helyi ellenőrzés",
+          "Ez nem végleges beadvány, hanem helyi előnézeti ellenőrzés.",
+          "A teljes szerkeszthető beadványszöveg továbbra is az editorban van.",
+          "",
+          ...readySections.flatMap((section, index) => [
+            `${index + 1}. ${section.title}`,
+            `Forrás: ${section.sourceLabel}`,
+            `Készenlét: Ügyvédi ellenőrzésre kész · ${pleadingQualityChecklistOptions.length}/${pleadingQualityChecklistOptions.length} ellenőrzési pont kész`,
+            "Megjegyzés: az editable beadványszöveg az editorban marad; ez csak helyi előnézeti vázlat.",
+            "",
+          ]),
+          "Nincs még adatbázisba mentve.",
+        ].join("\n")
+      : "Még nincs teljesen ellenőrzött beadványrész.";
+
+    return {
+      readySections,
+      incompleteSections,
+      totalSections,
+      readinessPercent,
+      previewText,
+    };
   }, [insertedPleadingSections]);
 
   const focusPleadingEditor = () => {
@@ -1883,6 +1915,7 @@ function AssemblyWorkspace({
     if (isTipTapAssemblyPreviewEnabled) {
       setTipTapAssemblyDraft(nextPleadingText);
     }
+    setPleadingPreviewCopyState("idle");
     setInsertedPleadingSections((currentSections) => {
       const existingSection = currentSections.find((section) => section.chapterId === chapter.id);
       if (existingSection) {
@@ -1915,16 +1948,19 @@ function AssemblyWorkspace({
   };
 
   const removeInsertedSection = (sectionId: string) => {
+    setPleadingPreviewCopyState("idle");
     setInsertedPleadingSections((currentSections) => currentSections.filter((section) => section.id !== sectionId));
   };
 
   const updateInsertedSectionStatus = (sectionId: string, status: PleadingSectionStatus) => {
+    setPleadingPreviewCopyState("idle");
     setInsertedPleadingSections((currentSections) =>
       currentSections.map((section) => (section.id === sectionId ? { ...section, status } : section)),
     );
   };
 
   const toggleInsertedSectionChecklistItem = (sectionId: string, itemKey: PleadingQualityChecklistKey) => {
+    setPleadingPreviewCopyState("idle");
     setInsertedPleadingSections((currentSections) =>
       currentSections.map((section) =>
         section.id === sectionId
@@ -1938,6 +1974,15 @@ function AssemblyWorkspace({
           : section,
       ),
     );
+  };
+
+  const copyPleadingPreview = async () => {
+    try {
+      await navigator.clipboard.writeText(pleadingPreviewReadiness.previewText);
+      setPleadingPreviewCopyState("success");
+    } catch {
+      setPleadingPreviewCopyState("error");
+    }
   };
 
   const getSelectionExcerpt = (text: string, maxLength = 140) => {
@@ -2194,6 +2239,109 @@ function AssemblyWorkspace({
                 </p>
               </div>
             )}
+          </div>
+
+          <div className="rounded-[10px] border border-[#D8CFB6] bg-white p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Beadvány előnézet</p>
+                <h3 className="mt-1 font-serif text-[16px] font-medium text-[#1F2821]">Véglegesítés előtti áttekintés</h3>
+              </div>
+              <AdminStatusPill tone={pleadingPreviewReadiness.readySections.length ? "green" : "gold"}>
+                {pleadingPreviewReadiness.readySections.length}/{pleadingPreviewReadiness.totalSections} szakasz kész
+              </AdminStatusPill>
+            </div>
+            <div className="mt-3 grid gap-2 rounded-[8px] border border-[#E7DECB] bg-[#FCFAF4] px-3 py-2 text-[11px] text-[#514D45]">
+              <p className="font-semibold">
+                Kész: {pleadingPreviewReadiness.readySections.length} · Még szerkesztendő: {pleadingPreviewReadiness.incompleteSections.length} · Készenlét:{" "}
+                {pleadingPreviewReadiness.readinessPercent}%
+              </p>
+              <p className="leading-5 text-[#7B776D]">
+                Ez nem végleges beadvány, hanem helyi előnézeti ellenőrzés. A teljes szerkeszthető beadványszöveg továbbra is az editorban van. Nincs még
+                adatbázisba mentve.
+              </p>
+            </div>
+
+            <div className="mt-3 grid gap-3 lg:grid-cols-2">
+              <div className="rounded-[8px] border border-[#E7DECB] bg-[#FFFDF8] p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Kész szakaszok</p>
+                  <AdminBadge tone="green">{pleadingPreviewReadiness.readySections.length} kész</AdminBadge>
+                </div>
+                {pleadingPreviewReadiness.readySections.length === 0 ? (
+                  <p className="mt-2 rounded-[8px] border border-dashed border-[#D8CFB6] bg-white px-3 py-2 text-[11px] leading-5 text-[#7B776D]">
+                    Még nincs teljesen ellenőrzött beadványrész.
+                  </p>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {pleadingPreviewReadiness.readySections.map((section) => (
+                      <div key={section.id} className="rounded-[7px] border border-[#D8E3D2] bg-white px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <AdminBadge tone="green">Ügyvédi ellenőrzésre kész</AdminBadge>
+                          <AdminBadge tone="neutral">{section.sourceLabel}</AdminBadge>
+                        </div>
+                        <p className="mt-1 font-serif text-[13px] font-medium text-[#1F2821]">{section.title}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-[8px] border border-[#E7DECB] bg-[#FFFDF8] p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Még szerkesztendő szakaszok</p>
+                  <AdminBadge tone="gold">{pleadingPreviewReadiness.incompleteSections.length} nyitott</AdminBadge>
+                </div>
+                {pleadingPreviewReadiness.incompleteSections.length === 0 ? (
+                  <p className="mt-2 rounded-[8px] border border-dashed border-[#D8CFB6] bg-white px-3 py-2 text-[11px] leading-5 text-[#7B776D]">
+                    {pleadingPreviewReadiness.totalSections === 0
+                      ? "Még nincs beillesztett beadványrész."
+                      : "Minden beillesztett szakasz teljes ellenőrzést kapott."}
+                  </p>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {pleadingPreviewReadiness.incompleteSections.map((section) => {
+                      const completedChecklistItems = countCompletedChecklistItems(section.qualityChecklist);
+                      const readyStatusHasMissingItems = section.status === "Ügyvédi ellenőrzésre kész";
+
+                      return (
+                        <div key={section.id} className="rounded-[7px] border border-[#E7DECB] bg-white px-3 py-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <AdminBadge tone={pleadingSectionStatusTone[section.status]}>{section.status}</AdminBadge>
+                            <AdminBadge tone="neutral">
+                              {completedChecklistItems}/{pleadingQualityChecklistOptions.length} ellenőrzési pont
+                            </AdminBadge>
+                          </div>
+                          <p className="mt-1 font-serif text-[13px] font-medium text-[#1F2821]">{section.title}</p>
+                          {readyStatusHasMissingItems ? (
+                            <p className="mt-1 text-[11px] leading-5 text-[#8E6A1B]">Ellenőrzési pont hiányzik.</p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-[8px] border border-[#E7DECB] bg-[#FBF9F3] p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Helyi előnézet</p>
+                  <p className="mt-1 text-[11px] leading-5 text-[#7B776D]">Nem végleges beadvány; nem helyettesíti a mentést vagy exportot.</p>
+                </div>
+                <AdminButton variant="neutral" size="sm" onClick={copyPleadingPreview}>
+                  Másolás előnézetként
+                </AdminButton>
+              </div>
+              <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-[8px] border border-[#E7DECB] bg-white p-3 text-[11px] leading-5 text-[#514D45]">
+                {pleadingPreviewReadiness.previewText}
+              </pre>
+              {pleadingPreviewCopyState === "success" ? <p className="mt-2 text-[11px] text-[#3F6B35]">Az előnézet vágólapra másolva.</p> : null}
+              {pleadingPreviewCopyState === "error" ? (
+                <p className="mt-2 text-[11px] text-[#8B2A2A]">A vágólapra másolás nem sikerült ebben a böngészőkörnyezetben.</p>
+              ) : null}
+            </div>
           </div>
 
           <div className="rounded-[8px] border border-[#D7CCB0] bg-[#FBF9F3] p-3">
