@@ -499,48 +499,103 @@ export function Dashboard() {
             </span>
           </div>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-[1.15fr_0.9fr_0.95fr]">
-            <div className="rounded-lg border border-[#E8DFC9] bg-white p-3">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="font-serif text-[18px] text-[#15201A]">Mai fókusz</h3>
-                <span className="text-[11px] font-semibold text-[#6B4B14]">{homeOfficeFocusTasks.length} tétel</span>
+          <div className="mt-4 grid gap-3 xl:grid-cols-[1.25fr_0.75fr]">
+            <div className="rounded-lg border border-[#D4C8AA] bg-[#FBF6E7] p-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-[#5F6A62]">Következő megnyitandó munka</p>
+                  <h3 className="mt-1 font-serif text-[20px] text-[#15201A]">Itt folytasd</h3>
+                  <p className="mt-1 max-w-3xl text-[11px] leading-5 text-[#5F6A62]">
+                    Meglévő feladatokból, ügyekből, dokumentumjelzésekből és helyi böngészős vázlatokból adott nyitási javaslat.
+                    A pontos priorizálás későbbi backend-alapú fejlesztés.
+                  </p>
+                </div>
+                <span className="rounded-full border border-[#D4C8AA] bg-white px-3 py-1 text-[11px] font-semibold text-[#6B4B14]">
+                  {nextWorkCards.length} javaslat
+                </span>
               </div>
-              {loading ? <p className="mt-3 text-xs text-[#5F6A62]">Fókuszpontok betöltése...</p> : null}
-              {!loading && homeOfficeFocusTasks.length === 0 ? (
-                <p className="mt-3 rounded border border-dashed border-[#D9CFB7] bg-[#FBF6E7] px-3 py-2 text-[11px] text-[#5F6A62]">
-                  Nincs betöltött teendő.
+              {loading ? <p className="mt-3 text-xs text-[#5F6A62]">Fókuszjavaslatok betöltése...</p> : null}
+              {!loading && nextWorkCards.length === 0 ? (
+                <p className="mt-3 rounded border border-dashed border-[#D9CFB7] bg-white px-3 py-2 text-[11px] text-[#5F6A62]">
+                  Nincs kiemelt fókuszfeladat. Nincs helyi böngészős munkavázlat.
                 </p>
               ) : null}
-              <div className="mt-3 space-y-2">
-                {homeOfficeFocusTasks.map((task) => (
-                  <Link key={task.id} href={`/tasks?taskId=${task.id}`} className="block rounded border border-[#E8DFC9] bg-[#FBF6E7] px-3 py-2 hover:bg-[#F8EDCD]">
-                    <p className="text-xs font-semibold text-[#15201A]">{task.title}</p>
-                    <p className="mt-1 text-[11px] text-[#5F6A62]">
-                      {task.case?.caseNumber || "Feladat"} · Határidő: {displayDate(task.dueDate)}
-                    </p>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {nextWorkCards.map((card) => (
+                  <Link key={card.id} href={card.href} className="rounded-lg border border-[#E8DFC9] bg-white px-3 py-2 hover:bg-[#FFFDF7]">
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-[#6B4B14]">{card.label}</p>
+                    <p className="mt-1 text-xs font-semibold text-[#15201A]">{card.title}</p>
+                    <p className="mt-1 text-[11px] leading-4 text-[#5F6A62]">{card.detail}</p>
+                    <p className="mt-2 text-[11px] font-semibold text-[#1F4A33]">{card.action}</p>
                   </Link>
                 ))}
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
               <div className="rounded-lg border border-[#E8DFC9] bg-white p-3">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-[#5F6A62]">Rám váró feladatok</p>
-                <p className="mt-1 font-serif text-[28px] leading-none text-[#15201A]">{waitingTasks.length}</p>
+                <p className="mt-1 font-serif text-[26px] leading-none text-[#15201A]">{waitingTasks.length}</p>
                 <p className="mt-1 text-[11px] text-[#5F6A62]">{waitingTasks.length === 0 ? "Nincs betöltött teendő." : "Meglévő feladatlistából számolva."}</p>
               </div>
               <div className="rounded-lg border border-[#E8DFC9] bg-white p-3">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-[#5F6A62]">Ellenőrzésre váró dokumentumok</p>
-                <p className="mt-1 font-serif text-[28px] leading-none text-[#15201A]">{reviewDocumentCount}</p>
+                <p className="mt-1 font-serif text-[26px] leading-none text-[#15201A]">{reviewDocumentCount}</p>
                 <p className="mt-1 text-[11px] text-[#5F6A62]">{reviewDocumentCount === 0 ? "Nincs ellenőrzésre váró dokumentum." : "Dashboard/review adatokból számolva."}</p>
               </div>
               <div className="rounded-lg border border-[#E8DFC9] bg-white p-3">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-[#5F6A62]">Félbehagyott munkák</p>
-                <p className="mt-1 font-serif text-[28px] leading-none text-[#15201A]">{localWorkspaceDraftCount}</p>
+                <p className="mt-1 font-serif text-[26px] leading-none text-[#15201A]">{localWorkspaceDraftCount}</p>
                 <p className="mt-1 text-[11px] text-[#5F6A62]">
                   {localWorkspaceDraftCount === 0 ? "Nincs helyi böngészős vázlat." : "Csak ezen az eszközön mentett helyi vázlat."}
                 </p>
               </div>
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-3 xl:grid-cols-[1.15fr_0.85fr]">
+            <div className="rounded-lg border border-[#D9CFB7] bg-white p-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-[#5F6A62]">Átadások és aktivitás</p>
+                  <h3 className="mt-1 font-serif text-[18px] text-[#15201A]">Aszinkron ügyátadás</h3>
+                  <p className="mt-1 text-[11px] leading-5 text-[#5F6A62]">
+                    Meglévő feladatokból, ügyadatokból, dokumentum aktivitásból és helyi böngészős vázlatokból összeállított munkafolyamat-nézet.
+                    A részletes aktivitási napló későbbi fejlesztés.
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center text-[10.5px]">
+                  <div className="rounded border border-[#E8DFC9] bg-[#FBF6E7] px-2 py-1.5">
+                    <p className="font-serif text-[17px] leading-none text-[#15201A]">{openTasks.length}</p>
+                    <p className="mt-1 text-[#5F6A62]">feladat</p>
+                  </div>
+                  <div className="rounded border border-[#E8DFC9] bg-[#FBF6E7] px-2 py-1.5">
+                    <p className="font-serif text-[17px] leading-none text-[#15201A]">{attentionCases.length}</p>
+                    <p className="mt-1 text-[#5F6A62]">ügy</p>
+                  </div>
+                  <div className="rounded border border-[#E8DFC9] bg-[#FBF6E7] px-2 py-1.5">
+                    <p className="font-serif text-[17px] leading-none text-[#15201A]">{localWorkspaceDraftCount}</p>
+                    <p className="mt-1 text-[#5F6A62]">vázlat</p>
+                  </div>
+                </div>
+              </div>
+              {loading ? <p className="mt-3 text-xs text-[#5F6A62]">Átadási nézet betöltése...</p> : null}
+              {!loading && asyncHandoffItems.length === 0 ? (
+                <p className="mt-3 rounded border border-dashed border-[#D9CFB7] bg-[#FBF6E7] px-3 py-2 text-[11px] text-[#5F6A62]">
+                  Nincs rögzített átadás. Nincs helyi böngészős munkavázlat.
+                </p>
+              ) : null}
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {asyncHandoffItems.slice(0, 4).map((item) => (
+                  <Link key={item.id} href={item.href} className="block rounded border border-[#E8DFC9] bg-[#FFFDF7] px-3 py-2 hover:bg-[#FBF6E7]">
+                    <p className="text-xs font-semibold text-[#15201A]">{item.title}</p>
+                    <p className="mt-1 text-[11px] text-[#5F6A62]">{item.meta} · {item.detail}</p>
+                  </Link>
+                ))}
+              </div>
+              <p className="mt-3 text-[10.5px] leading-5 text-[#5F6A62]">
+                Ez nem backend audit log, hanem aszinkron munkanézet meglévő adatokból és helyi böngészős jelzésekből.
+              </p>
             </div>
 
             <div className="rounded-lg border border-[#E8DFC9] bg-white p-3">
@@ -548,121 +603,13 @@ export function Dashboard() {
                 <h3 className="font-serif text-[18px] text-[#15201A]">Gyors megnyitás</h3>
                 <span className="text-[11px] text-[#5F6A62]">Munkaterületek</span>
               </div>
-              <div className="mt-3 grid gap-2">
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
                 {quickOpenLinks.map((link) => (
                   <Link key={link.href} href={link.href} className="rounded border border-[#D4C8AA] bg-[#FBF6E7] px-3 py-2 hover:bg-[#F8EDCD]">
                     <p className="text-xs font-semibold text-[#1F4A33]">{link.label}</p>
                     <p className="mt-0.5 text-[10.5px] text-[#5F6A62]">{link.description}</p>
                   </Link>
                 ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-3 rounded-lg border border-[#D4C8AA] bg-[#FBF6E7] p-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-[#5F6A62]">Következő megnyitandó munka</p>
-                <h3 className="mt-1 font-serif text-[20px] text-[#15201A]">Itt folytasd</h3>
-                <p className="mt-1 max-w-3xl text-[11px] leading-5 text-[#5F6A62]">
-                  Meglévő feladatokból, ügyekből, dokumentumjelzésekből és helyi böngészős vázlatokból adott nyitási javaslat.
-                  A pontos priorizálás későbbi backend-alapú fejlesztés.
-                </p>
-              </div>
-              <Link href="/editor-lab" className="rounded border border-[#D4C8AA] bg-white px-3 py-2 text-[11px] font-semibold text-[#1F4A33] hover:bg-[#FFFDF7]">
-                Editor megnyitása
-              </Link>
-            </div>
-            {loading ? <p className="mt-3 text-xs text-[#5F6A62]">Fókuszjavaslatok betöltése...</p> : null}
-            {!loading && nextWorkCards.length === 0 ? (
-              <p className="mt-3 rounded border border-dashed border-[#D9CFB7] bg-white px-3 py-2 text-[11px] text-[#5F6A62]">
-                Nincs kiemelt fókuszfeladat. Nincs helyi böngészős munkavázlat.
-              </p>
-            ) : null}
-            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-              {nextWorkCards.map((card) => (
-                <Link key={card.id} href={card.href} className="rounded-lg border border-[#E8DFC9] bg-white px-3 py-2 hover:bg-[#FFFDF7]">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-[#6B4B14]">{card.label}</p>
-                  <p className="mt-1 text-xs font-semibold text-[#15201A]">{card.title}</p>
-                  <p className="mt-1 min-h-[32px] text-[11px] leading-4 text-[#5F6A62]">{card.detail}</p>
-                  <p className="mt-2 text-[11px] font-semibold text-[#1F4A33]">{card.action}</p>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-3 rounded-lg border border-[#D9CFB7] bg-white p-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-[#5F6A62]">Átadások és aktivitás</p>
-                <h3 className="mt-1 font-serif text-[20px] text-[#15201A]">Aszinkron ügyátadás</h3>
-                <p className="mt-1 text-[11px] leading-5 text-[#5F6A62]">
-                  Meglévő feladatokból, ügyadatokból, dokumentum aktivitásból és helyi böngészős vázlatokból összeállított munkafolyamat-nézet.
-                  A részletes aktivitási napló későbbi fejlesztés.
-                </p>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
-                <div className="rounded border border-[#E8DFC9] bg-[#FBF6E7] px-2 py-1.5">
-                  <p className="font-serif text-[18px] leading-none text-[#15201A]">{openTasks.length}</p>
-                  <p className="mt-1 text-[#5F6A62]">nyitott feladat</p>
-                </div>
-                <div className="rounded border border-[#E8DFC9] bg-[#FBF6E7] px-2 py-1.5">
-                  <p className="font-serif text-[18px] leading-none text-[#15201A]">{attentionCases.length}</p>
-                  <p className="mt-1 text-[#5F6A62]">figyelmet kérő ügy</p>
-                </div>
-                <div className="rounded border border-[#E8DFC9] bg-[#FBF6E7] px-2 py-1.5">
-                  <p className="font-serif text-[18px] leading-none text-[#15201A]">{localWorkspaceDraftCount}</p>
-                  <p className="mt-1 text-[#5F6A62]">helyi vázlat</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-3 grid gap-3 xl:grid-cols-[1.2fr_0.8fr]">
-              <div className="rounded-lg border border-[#E8DFC9] bg-[#FFFDF7] p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5F6A62]">Legutóbbi munkafolyamatok</p>
-                  <Link href="/tasks" className="text-[11px] font-semibold text-[#1F4A33] hover:underline">
-                    Feladatok megnyitása
-                  </Link>
-                </div>
-                {loading ? <p className="mt-3 text-xs text-[#5F6A62]">Átadási nézet betöltése...</p> : null}
-                {!loading && asyncHandoffItems.length === 0 ? (
-                  <p className="mt-3 rounded border border-dashed border-[#D9CFB7] bg-[#FBF6E7] px-3 py-2 text-[11px] text-[#5F6A62]">
-                    Nincs rögzített átadás. Nincs helyi böngészős munkavázlat.
-                  </p>
-                ) : null}
-                <div className="mt-3 space-y-2">
-                  {asyncHandoffItems.map((item) => (
-                    <Link key={item.id} href={item.href} className="block rounded border border-[#E8DFC9] bg-white px-3 py-2 hover:bg-[#FBF6E7]">
-                      <p className="text-xs font-semibold text-[#15201A]">{item.title}</p>
-                      <p className="mt-1 text-[11px] text-[#5F6A62]">{item.meta} · {item.detail}</p>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-[#E8DFC9] bg-[#FFFDF7] p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5F6A62]">Folytatás gyorsan</p>
-                <div className="mt-3 grid gap-2 text-[11px]">
-                  <Link href="/tasks" className="rounded border border-[#D4C8AA] bg-[#FBF6E7] px-3 py-2 font-semibold text-[#1F4A33] hover:bg-[#F8EDCD]">
-                    Feladatok megnyitása
-                  </Link>
-                  <Link href="/cases" className="rounded border border-[#D4C8AA] bg-[#FBF6E7] px-3 py-2 font-semibold text-[#1F4A33] hover:bg-[#F8EDCD]">
-                    Ügyek megnyitása
-                  </Link>
-                  <Link href="/documents/compare" className="rounded border border-[#D4C8AA] bg-[#FBF6E7] px-3 py-2 font-semibold text-[#1F4A33] hover:bg-[#F8EDCD]">
-                    Dokumentum-ellenőrzés
-                  </Link>
-                  <Link href="/litigation-workspace" className="rounded border border-[#D4C8AA] bg-[#FBF6E7] px-3 py-2 font-semibold text-[#1F4A33] hover:bg-[#F8EDCD]">
-                    Peres munkatér
-                  </Link>
-                  <Link href="/editor-lab" className="rounded border border-[#D4C8AA] bg-[#FBF6E7] px-3 py-2 font-semibold text-[#1F4A33] hover:bg-[#F8EDCD]">
-                    Editor labor
-                  </Link>
-                </div>
-                <p className="mt-3 text-[10.5px] leading-5 text-[#5F6A62]">
-                  Ez nem backend audit log, hanem aszinkron munkanézet meglévő adatokból és helyi böngészős jelzésekből.
-                </p>
               </div>
             </div>
           </div>
