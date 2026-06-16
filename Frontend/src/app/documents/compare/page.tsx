@@ -2311,6 +2311,61 @@ return (
             </details>
           </header>
 
+          <section className="rounded-[10px] border border-[#D8CFB6] bg-[#FFFDF7] p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7B776D]">Ügyvédi review mód</p>
+                <h2 className="mt-1 font-serif text-[20px] font-medium text-[#1F2821]">Mit ellenőrizz először?</h2>
+                <p className="mt-1 max-w-3xl text-[11px] leading-5 text-[#6D6A62]">
+                  Először válaszd ki az aktuális dokumentumot és az összevetési alapot, majd nézd át a munkapéldány szövegét,
+                  a kijelöléshez kötött helyi review-jeleket és a blokk-szintű összevetést.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setWorkspaceMainTab("edit")}
+                  className="rounded-[5px] border border-[#D7CCB0] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F4A33] hover:bg-[#FBF6E7]"
+                >
+                  Munkapéldány
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWorkspaceMainTab("review")}
+                  className="rounded-[5px] border border-[#D7CCB0] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F4A33] hover:bg-[#FBF6E7]"
+                >
+                  Review jelek
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWorkspaceMainTab("history");
+                    activateCompareMode();
+                  }}
+                  className="rounded-[5px] border border-[#D7CCB0] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F4A33] hover:bg-[#FBF6E7]"
+                >
+                  Összehasonlítás
+                </button>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-3">
+              <div className="rounded-[8px] border border-[#E8DFC9] bg-white px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Munkapéldány</p>
+                <p className="mt-1 text-[11px] leading-4 text-[#514D45]">A szerkesztés és export a meglévő munkapéldány-logikát használja.</p>
+              </div>
+              <div className="rounded-[8px] border border-[#E8DFC9] bg-white px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Összehasonlítás</p>
+                <p className="mt-1 text-[11px] leading-4 text-[#514D45]">Metaadat és elérhető blokk-szintű eltérések segítik a döntést.</p>
+              </div>
+              <div className="rounded-[8px] border border-[#E8DFC9] bg-white px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Helyi review</p>
+                <p className="mt-1 text-[11px] leading-4 text-[#514D45]">
+                  Ez nem Word track changes, hanem Adminiculum review munkanézet. A tartós review napló későbbi backend-fejlesztés.
+                </p>
+              </div>
+            </div>
+          </section>
+
           <section className="rounded-[10px] border border-[#D8CFB6] bg-white px-3 py-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap gap-1 rounded-[8px] border border-[#EEE7D9] bg-[#FBF9F3] p-1">
@@ -2363,8 +2418,10 @@ return (
           ) : !selectedDocument ? (
             <div className="flex flex-col items-center justify-center gap-6 py-16">
               <div className="text-center">
-                <h3 className="font-serif text-2xl font-medium text-[#1F2821]">Nincs kiválasztott dokumentum</h3>
-                <p className="mt-2 max-w-sm text-sm text-[#7B776D]">A workspace használatához válassz meglévő dokumentumot, vagy tölts fel újat a Dokumentumtárban.</p>
+                <h3 className="font-serif text-2xl font-medium text-[#1F2821]">Nincs betöltött dokumentum-ellenőrzés.</h3>
+                <p className="mt-2 max-w-sm text-sm text-[#7B776D]">
+                  A review munkanézet használatához válassz meglévő dokumentumot, vagy tölts fel újat a Dokumentumtárban.
+                </p>
                 {caseScopedDocuments.length > 0 ? (
                   <p className="mt-2 text-xs text-[#5F675F]">
                     Ehhez az ügyhöz elérhető {caseScopedDocuments.length} dokumentum. Válassz egyet az alábbi gyorslistából.
