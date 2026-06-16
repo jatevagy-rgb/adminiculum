@@ -375,6 +375,71 @@ export function Dashboard() {
     return [...taskItems, ...documentItems, ...caseItems].slice(0, 5);
   }, [attentionCases, openTasks, recentDocuments]);
 
+  const nextWorkCards = useMemo(() => {
+    const focusTask = homeOfficeFocusTasks[0] || openTasks[0] || null;
+    const focusCase = attentionCases[0] || cases[0] || null;
+    const focusDocument = recentDocuments[0] || null;
+
+    const cards: Array<{
+      id: string;
+      label: string;
+      title: string;
+      detail: string;
+      href: string;
+      action: string;
+    }> = [];
+
+    if (focusTask) {
+      cards.push({
+        id: `next-task-${focusTask.id}`,
+        label: "Feladatlista",
+        title: focusTask.title,
+        detail: focusTask.dueDate
+          ? `${focusTask.case?.caseNumber || "Feladat"} · Határidő: ${displayDate(focusTask.dueDate)}`
+          : `${focusTask.case?.caseNumber || "Feladat"} · Nincs megadott határidő`,
+        href: "/tasks",
+        action: "Feladatok megnyitása",
+      });
+    }
+
+    if (focusCase) {
+      cards.push({
+        id: `next-case-${focusCase.id}`,
+        label: "Ügylista",
+        title: focusCase.title || focusCase.caseNumber,
+        detail: focusCase.deadline
+          ? `${focusCase.caseNumber || "Ügy"} · Határidő: ${displayDate(focusCase.deadline)}`
+          : `${focusCase.caseNumber || "Ügy"} · Meglévő ügyadatból`,
+        href: "/cases",
+        action: "Ügy megnyitása",
+      });
+    }
+
+    if (focusDocument) {
+      cards.push({
+        id: `next-document-${focusDocument.id}`,
+        label: "Dokumentumjelzés",
+        title: mapRecentDocLabel(focusDocument.type || focusDocument.text),
+        detail: `Meglévő dokumentum aktivitás · ${displayDateTimeShort(focusDocument.timestamp)}`,
+        href: "/documents/compare",
+        action: "Dokumentum-ellenőrzés folytatása",
+      });
+    }
+
+    if (localWorkspaceDraftCount > 0) {
+      cards.push({
+        id: "next-litigation-local-draft",
+        label: "Helyi böngészős vázlat",
+        title: `${localWorkspaceDraftCount} helyi peres munkavázlat`,
+        detail: "Csak ezen az eszközön elérhető helyi jelzés.",
+        href: "/litigation-workspace",
+        action: "Peres munkatér folytatása",
+      });
+    }
+
+    return cards.slice(0, 4);
+  }, [attentionCases, cases, homeOfficeFocusTasks, localWorkspaceDraftCount, openTasks, recentDocuments]);
+
   const quickOpenLinks = [
     { href: "/cases", label: "Ügyek", description: "Aktív ügyek áttekintése" },
     { href: "/tasks", label: "Feladatok", description: "Rám váró feladatok" },
@@ -491,6 +556,38 @@ export function Dashboard() {
                   </Link>
                 ))}
               </div>
+            </div>
+          </div>
+
+          <div className="mt-3 rounded-lg border border-[#D4C8AA] bg-[#FBF6E7] p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-[#5F6A62]">Következő megnyitandó munka</p>
+                <h3 className="mt-1 font-serif text-[20px] text-[#15201A]">Itt folytasd</h3>
+                <p className="mt-1 max-w-3xl text-[11px] leading-5 text-[#5F6A62]">
+                  Meglévő feladatokból, ügyekből, dokumentumjelzésekből és helyi böngészős vázlatokból adott nyitási javaslat.
+                  A pontos priorizálás későbbi backend-alapú fejlesztés.
+                </p>
+              </div>
+              <Link href="/editor-lab" className="rounded border border-[#D4C8AA] bg-white px-3 py-2 text-[11px] font-semibold text-[#1F4A33] hover:bg-[#FFFDF7]">
+                Editor megnyitása
+              </Link>
+            </div>
+            {loading ? <p className="mt-3 text-xs text-[#5F6A62]">Fókuszjavaslatok betöltése...</p> : null}
+            {!loading && nextWorkCards.length === 0 ? (
+              <p className="mt-3 rounded border border-dashed border-[#D9CFB7] bg-white px-3 py-2 text-[11px] text-[#5F6A62]">
+                Nincs kiemelt fókuszfeladat. Nincs helyi böngészős munkavázlat.
+              </p>
+            ) : null}
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {nextWorkCards.map((card) => (
+                <Link key={card.id} href={card.href} className="rounded-lg border border-[#E8DFC9] bg-white px-3 py-2 hover:bg-[#FFFDF7]">
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-[#6B4B14]">{card.label}</p>
+                  <p className="mt-1 text-xs font-semibold text-[#15201A]">{card.title}</p>
+                  <p className="mt-1 min-h-[32px] text-[11px] leading-4 text-[#5F6A62]">{card.detail}</p>
+                  <p className="mt-2 text-[11px] font-semibold text-[#1F4A33]">{card.action}</p>
+                </Link>
+              ))}
             </div>
           </div>
 
