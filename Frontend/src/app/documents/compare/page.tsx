@@ -309,6 +309,12 @@ const localReviewStatusLabel: Record<LocalReviewMarkStatus, string> = {
   lawyer_edited: "Helyi / szerkesztve",
 };
 
+const tipTapReviewSuggestionTypeLabel: Record<EditorReviewSuggestionType, string> = {
+  comment: "Megjegyzés",
+  replacement: "Cserejavaslat",
+  deletion: "Törlési javaslat",
+};
+
 const localReviewPersistenceLabel: Record<LocalReviewMarkType, string> = {
   highlight: "Helyi kiemelés — mentés későbbi patchben.",
   comment: "Helyi megjegyzés — szerveroldali mentés későbbi patchben.",
@@ -476,6 +482,8 @@ function DocumentsComparePageContent() {
   const [tipTapReviewSuggestions, setTipTapReviewSuggestions] = useState<EditorReviewSuggestion[]>([]);
   const [tipTapReplacementText, setTipTapReplacementText] = useState("");
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
+  const [reviewHandoffDraft, setReviewHandoffDraft] = useState("");
+  const [reviewHandoffCopied, setReviewHandoffCopied] = useState(false);
   const [localCommentDraft, setLocalCommentDraft] = useState("");
   const [localComments, setLocalComments] = useState<LocalWorkspaceComment[]>([]);
   const [localReviewMarks, setLocalReviewMarks] = useState<LocalReviewMark[]>([]);
@@ -1342,6 +1350,78 @@ const filteredClauseTools = useMemo(() => {
   }, [localReviewMarks, proposedChanges]);
   const hasReviewProgress = reviewProgress.pending + reviewProgress.accepted + reviewProgress.rejected + reviewProgress.lawyerEdited > 0;
 
+  const generatedReviewHandoffText = useMemo(() => {
+    const documentLines = [
+      `- Dokumentum: ${selectedDocument?.fileName || selectedDocument?.title || "Nincs kiválasztott dokumentum"}`,
+      `- Ügy: ${selectedDocument?.caseNumber || "Nincs ügyazonosító"}${selectedDocument?.caseTitle ? ` — ${selectedDocument.caseTitle}` : ""}`,
+      `- Munkapéldány státusza: ${isDraftDirty ? "helyi, nem mentett módosításokkal" : activeDraftText ? "helyi munkapéldány elérhető" : "nincs betöltött munkapéldány-szöveg"}`,
+      selectedBaseline
+        ? `- Összevetési alap: ${selectedBaseline.fileName || selectedBaseline.title || selectedBaseline.id}`
+        : "- Összevetési alap: nincs kiválasztott vagy elérhető alapdokumentum",
+    ];
+
+    const questionLines = comparisonSummary.length
+      ? comparisonSummary.map((line) => `- ${line}`)
+      : ["- Nincs betöltött összehasonlítási összefoglaló."];
+
+    const localReviewSignalLines = [
+      ...localReviewMarks.slice(0, 6).map((mark) => {
+        const replacementText = mark.replacement ? ` — Javasolt csere: ${mark.replacement}` : "";
+        const commentText = mark.comment ? ` — Megjegyzés: ${mark.comment}` : "";
+        return `- ${localReviewTypeLabel[mark.type]} (${localReviewStatusLabel[mark.status]}): „${getSelectionExcerpt(mark.quote, 140)}”${replacementText}${commentText}`;
+      }),
+      ...tipTapReviewSuggestions.slice(0, 6).map((suggestion) => {
+        const replacementText = suggestion.replacementText ? ` — Javasolt csere: ${suggestion.replacementText}` : "";
+        return `- TipTap ${tipTapReviewSuggestionTypeLabel[suggestion.type]} (${suggestion.status}): „${getSelectionExcerpt(suggestion.selectedTextPreview, 140)}”${replacementText}`;
+      }),
+    ];
+
+    const nextStepLines =
+      localReviewSignalLines.length > 0
+        ? [
+            "- Nézd át a kiemelt helyi review jeleket, és döntsd el, melyek kerüljenek át a munkapéldányba.",
+            "- Ha szükséges, frissítsd a munkapéldányt, majd használd a meglévő mentés/export műveleteket.",
+          ]
+        : [
+            "- Válassz összevetési alapot vagy jelöld ki a kritikus részeket a helyi review munkanézetben.",
+            "- A munkapéldány szerkesztése után használd a meglévő mentés/export műveleteket.",
+          ];
+
+    return [
+      "Review átadási csomag",
+      "",
+      "Dokumentum / munkapéldány",
+      ...documentLines,
+      "",
+      "Ellenőrizendő fő kérdések",
+      ...questionLines,
+      "",
+      "Kiemelt review jelek",
+      ...(localReviewSignalLines.length ? localReviewSignalLines : ["- Nincs rögzített helyi review jel."]),
+      "",
+      "Javasolt következő lépés",
+      ...nextStepLines,
+      "",
+      "Korlátok",
+      "- Ez helyi/frontendes munkasegédlet, nem backend review napló.",
+      "- Ez nem Word track changes.",
+      "- A tartós review suggestion persistence későbbi backend-fejlesztés.",
+    ].join("\n");
+  }, [
+    activeDraftText,
+    comparisonSummary,
+    isDraftDirty,
+    localReviewMarks,
+    selectedBaseline,
+    selectedDocument,
+    tipTapReviewSuggestions,
+  ]);
+
+  useEffect(() => {
+    setReviewHandoffDraft(generatedReviewHandoffText);
+    setReviewHandoffCopied(false);
+  }, [generatedReviewHandoffText, selectedDocumentId, selectedBaselineId]);
+
   useEffect(() => {
     if (!editorTouched) {
       setEditorDraft(effectiveWorkspaceText || "");
@@ -1646,6 +1726,20 @@ const filteredClauseTools = useMemo(() => {
       ],
     },
   ];
+
+  const handleCopyReviewHandoffPackage = async () => {
+    const handoffText = reviewHandoffDraft.trim() || generatedReviewHandoffText;
+    if (!handoffText.trim()) return;
+
+    try {
+      await navigator.clipboard.writeText(handoffText);
+      setReviewHandoffCopied(true);
+      setEditorNotice("Átadási csomag vágólapra másolva.");
+    } catch {
+      setReviewHandoffCopied(false);
+      setEditorNotice("A vágólapra másolás nem sikerült. Jelöld ki és másold kézzel az átadási csomagot.");
+    }
+  };
 
   const renderHighlightedWorkspacePreview = () => {
     if (!activeDraftText.trim()) return null;
@@ -2474,6 +2568,54 @@ return (
                     </button>
                   </div>
                 ) : null}
+
+                <section className="space-y-3 rounded-[10px] border border-[#D8CFB6] bg-[#FFFDF7] p-4 text-[#1F2821]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Ügyvédi átadás</p>
+                      <h2 className="mt-1 font-serif text-lg font-medium">Review átadási csomag</h2>
+                      <p className="mt-1 text-[11px] leading-5 text-[#6D6A62]">
+                        Másolható, helyi munkasegédlet kollégának vagy vezető ügyvédnek. Nem készít backend naplót.
+                      </p>
+                    </div>
+                    <AdminStatusPill tone="gold">Helyi</AdminStatusPill>
+                  </div>
+                  <textarea
+                    value={reviewHandoffDraft}
+                    onChange={(event) => {
+                      setReviewHandoffDraft(event.target.value);
+                      setReviewHandoffCopied(false);
+                    }}
+                    rows={12}
+                    className="min-h-[240px] w-full resize-y rounded-[8px] border border-[#D8CFB6] bg-white px-3 py-2 font-mono text-[11px] leading-5 text-[#1F2821] outline-none transition-colors focus:border-[#B58A2A] focus:ring-2 focus:ring-[#E6C987]/40"
+                    aria-label="Review átadási csomag helyi szövege"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <AdminButton
+                      size="xs"
+                      variant="primary"
+                      onClick={handleCopyReviewHandoffPackage}
+                      disabled={!reviewHandoffDraft.trim() && !generatedReviewHandoffText.trim()}
+                    >
+                      {reviewHandoffCopied ? "Átadási csomag másolva" : "Átadási csomag másolása"}
+                    </AdminButton>
+                    <AdminButton
+                      size="xs"
+                      variant="neutral"
+                      onClick={() => {
+                        setReviewHandoffDraft(generatedReviewHandoffText);
+                        setReviewHandoffCopied(false);
+                      }}
+                    >
+                      Sablon frissítése
+                    </AdminButton>
+                  </div>
+                  <div className="space-y-1 rounded-[8px] border border-[#EEE7D9] bg-[#FBF9F3] px-3 py-2 text-[11px] leading-5 text-[#6D6A62]">
+                    <p>Ez helyi/frontendes munkasegédlet, nem backend review napló.</p>
+                    <p>Ez nem Word track changes.</p>
+                    <p>A tartós review suggestion persistence későbbi backend-fejlesztés.</p>
+                  </div>
+                </section>
 
                 <section className="space-y-3 rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-4 text-[#1F2821]">
                   <div className="flex items-start justify-between gap-3">
