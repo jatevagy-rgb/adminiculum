@@ -912,6 +912,8 @@ function LitigationWorkspacePageContent() {
               onNavigate={navigateToStep}
             />
 
+            <LitigationWorkflowGuide currentStep={currentStep} onNavigate={navigateToStep} />
+
             {currentStep === "intake" ? (
               <IntakeWorkspace
                 localExtractedText={localExtractedText}
@@ -1139,6 +1141,88 @@ function WorkflowNavigation({
               <span className={`mt-1 block text-[11px] leading-5 ${active ? "text-[#F4EFDB]" : "text-[#6D6A62]"}`}>
                 {step.description}
               </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function LitigationWorkflowGuide({
+  currentStep,
+  onNavigate,
+}: {
+  currentStep: LitigationWorkspaceStep;
+  onNavigate: (step: LitigationWorkspaceStep) => void;
+}) {
+  const guideItems: Array<{
+    id: string;
+    label: string;
+    title: string;
+    detail: string;
+    targetStep: LitigationWorkspaceStep;
+  }> = [
+    {
+      id: "opponent-points",
+      label: "1. Ellenoldali pontok",
+      title: "Jelöld ki, mit kell megválaszolni",
+      detail: "Az ellenfél iratából rögzített rövid című pontok adják a munkatér alapját.",
+      targetStep: "intake",
+    },
+    {
+      id: "own-responses",
+      label: "2. Saját válaszok",
+      title: "Kapcsold hozzá a saját válaszblokkokat",
+      detail: "A válaszblokkok címe és helyi sorrendje később a beadványrészeket táplálja.",
+      targetStep: "strategy",
+    },
+    {
+      id: "pleading-draft",
+      label: "3. Beadványvázlat",
+      title: "Illeszd be a válaszból képzett fejezeteket",
+      detail: "A beadványszerkesztő helyi vázlatot készít; TipTap csak választható előnézet.",
+      targetStep: "assembly",
+    },
+    {
+      id: "review-export",
+      label: "4. Ellenőrzés és export",
+      title: "Nézd át, másold vagy töltsd le a munkacsomagot",
+      detail: "Az előnézet és .txt export ügyvédi átadásra segít, nem véglegesen benyújtott irat.",
+      targetStep: "assembly",
+    },
+  ];
+
+  return (
+    <section className="rounded-[10px] border border-[#D8CFB6] bg-[#FFFDF7] p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7B776D]">Peres stratégiai munkatér</p>
+          <h2 className="mt-1 font-serif text-[22px] font-medium text-[#1F2821]">Mit csinálj először?</h2>
+          <p className="mt-1 max-w-3xl text-[12px] leading-5 text-[#6D6A62]">
+            A munkafolyamat ellenoldali pontból saját válaszba, majd beadványrészbe vezet. A mentés böngésző-local jellegű;
+            nincs backend peres review-napló, TipTap JSON mentés vagy Word változáskövetés.
+          </p>
+        </div>
+        <AdminStatusPill tone="gold">Helyi vázlat · nem végleges beadvány</AdminStatusPill>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+        {guideItems.map((item) => {
+          const active = currentStep === item.targetStep && item.id !== "review-export";
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onNavigate(item.targetStep)}
+              className={`rounded-[8px] border p-3 text-left transition-colors ${
+                active
+                  ? "border-[#1F4A33] bg-[#E7EFE7] text-[#1F2821]"
+                  : "border-[#E7DECB] bg-white text-[#514D45] hover:bg-[#FBF6E7]"
+              }`}
+            >
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#6C5120]">{item.label}</span>
+              <span className="mt-1 block text-[12px] font-semibold text-[#1F2821]">{item.title}</span>
+              <span className="mt-1 block text-[11px] leading-5 text-[#6D6A62]">{item.detail}</span>
             </button>
           );
         })}
