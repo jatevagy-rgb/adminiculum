@@ -602,8 +602,38 @@ export function CasesList() {
     });
   }, [backendCases, practiceArea, clientName, riskLevel, deriveRiskLevel]);
 
+  const caseEntrypointStats = useMemo(() => {
+    const openCases = backendCases.filter((item) => String(item.status || "").toUpperCase() === "OPEN").length;
+    const assignedCases = backendCases.filter((item) => Boolean(item.assignedLawyer?.name)).length;
+    const highAttentionCases = backendCases.filter((item) => deriveRiskLevel(item.priority) === "Magas").length;
+    return { openCases, assignedCases, highAttentionCases };
+  }, [backendCases, deriveRiskLevel]);
+
   return (
     <section className="space-y-4">
+      <div className="grid gap-3 border border-[#D8CFB6] bg-[#FFFDF7] p-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">Home Office ügyindító</p>
+          <h1 className="mt-1 font-serif text-2xl font-medium text-[#1F2821]">Ügyek — itt válaszd ki, mivel folytatod</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#5F675F]">
+            A dashboard gyorslinkje innen vezet tovább az ügy dokumentumtárába, feladataiba és review munkanézeteibe. A lista valós betöltött ügyadatokra épül; a pontos priorizálás későbbi backend-alapú fejlesztés.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[#514D45]">
+            <span className="rounded-full border border-[#D8CFB6] bg-white px-3 py-1">Nyitott ügyek: {caseEntrypointStats.openCases}</span>
+            <span className="rounded-full border border-[#D8CFB6] bg-white px-3 py-1">Felelőssel: {caseEntrypointStats.assignedCases}</span>
+            <span className="rounded-full border border-[#E6C987] bg-[#FAEFCF] px-3 py-1">Magas figyelmi jelzés: {caseEntrypointStats.highAttentionCases}</span>
+          </div>
+        </div>
+        <div className="flex flex-col justify-center gap-2 rounded-[10px] border border-[#EEE7D9] bg-[#FBF9F3] p-3">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Mit intézz először?</p>
+          <p className="text-[11px] leading-5 text-[#6D6A62]">Nyiss meg egy ügyet a Dokumentumtárhoz, vagy menj a feladatlistára, ha kiosztott teendőből folytatnád.</p>
+          <div className="flex flex-wrap gap-2">
+            <AdminButton size="xs" variant="primary" onClick={() => setShowNewCaseModal(true)}>Új ügy</AdminButton>
+            <AdminButton size="xs" variant="neutral" onClick={() => router.push("/tasks")}>Feladatok</AdminButton>
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-end gap-3 border border-[rgba(22,32,26,0.10)] bg-white p-4">
         <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">
           Szakterület
@@ -672,7 +702,12 @@ export function CasesList() {
                 </tr>
               ))}
               {filteredCases.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-xs text-[#7A8479]">Nincs találat a beállított szűrőkre.</td></tr>
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-xs text-[#7A8479]">
+                    <p>Nincs megjeleníthető ügy.</p>
+                    <p className="mt-1">Nincs találat a beállított szűrőkre; módosítsd a szűrést vagy hozz létre új ügyet.</p>
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>

@@ -300,6 +300,25 @@ function TasksPageContent() {
     });
   }, [tasks, search, statusFilter, priorityFilter, assigneeFilter, caseFilter]);
 
+  const taskEntrypointStats = useMemo(() => {
+    const isOpen = (status?: string) => !["DONE", "COMPLETED", "CANCELLED", "ARCHIVED"].includes(String(status || "").toUpperCase());
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    const dueToday = tasks.filter((task) => {
+      if (!task.dueDate) return false;
+      const due = new Date(task.dueDate);
+      return due.getTime() >= todayStart.getTime() && due.getTime() < tomorrowStart.getTime();
+    }).length;
+
+    return {
+      openTasks: tasks.filter((task) => isOpen(task.status)).length,
+      unassignedTasks: tasks.filter((task) => !task.assignedTo).length,
+      dueToday,
+    };
+  }, [tasks]);
+
   const runTaskAction = async (taskId: string, action: "start" | "submit" | "approve" | "reject") => {
     setIsActionLoading(taskId + action);
     try {
@@ -400,15 +419,40 @@ function TasksPageContent() {
             </button>
           </div>
 
+          <section className="mb-4 grid gap-3 border border-[#D8CFB6] bg-[#FFFDF7] p-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Home Office feladatindító</p>
+              <h2 className="mt-1 font-serif text-xl font-medium text-[#1F2821]">Itt válaszd ki a következő operatív lépést</h2>
+              <p className="mt-2 text-xs leading-5 text-[#5F675F]">
+                A feladatlista valós ügyhöz kötött teendőket mutat. Nem állít elő automatikus rangsort; a pontos priorizálás későbbi backend-alapú fejlesztés.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[#514D45]">
+                <span className="rounded-full border border-[#D8CFB6] bg-white px-3 py-1">Nyitott feladatok: {taskEntrypointStats.openTasks}</span>
+                <span className="rounded-full border border-[#D8CFB6] bg-white px-3 py-1">Nincs felelős: {taskEntrypointStats.unassignedTasks}</span>
+                <span className="rounded-full border border-[#E6C987] bg-[#FAEFCF] px-3 py-1">Ma esedékes: {taskEntrypointStats.dueToday}</span>
+              </div>
+            </div>
+            <div className="rounded-[10px] border border-[#EEE7D9] bg-[#FBF9F3] p-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Gyors folytatás</p>
+              <p className="mt-1 text-[11px] leading-5 text-[#6D6A62]">Válassz feladatot a jobb oldali kontextushoz, vagy nyisd meg az ügylistát, ha ügyből indulnál.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link href="/cases" className="rounded border border-[#D8CFB6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F2821] hover:bg-[#FBF6E7]">Ügyek megnyitása</Link>
+                <Link href="/documents/compare" className="rounded border border-[#D8CFB6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F2821] hover:bg-[#FBF6E7]">Dokumentum-review</Link>
+              </div>
+            </div>
+          </section>
+
           {error && <div className="mb-4 p-3 text-xs bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a]">{error}</div>}
 
           {isLoading ? (
             <div className="py-10 text-center text-xs text-[#7B776D]">Feladatok betöltése...</div>
           ) : filteredTasks.length === 0 ? (
             <div className="py-10 text-center text-xs text-[#7B776D] border border-dashed border-[#DDD7CA] space-y-1">
-              <p>Nincs megjeleníthető feladat.</p>
+              <p>Nincs betöltött feladat.</p>
+              <p>Nincs megjeleníthető feladat a jelenlegi szűrés szerint.</p>
               <p>Új feladat létrehozásához válassz ügyet, majd add meg a feladat címét és határidejét.</p>
               <p>A feladatok ügyhöz kapcsolódnak; az ügyből következik az ügyfélkörnyezet.</p>
+              <p>A pontos priorizálás későbbi backend-alapú fejlesztés.</p>
             </div>
           ) : (
             <div className="border border-[#DDD7CA] bg-white overflow-hidden">
