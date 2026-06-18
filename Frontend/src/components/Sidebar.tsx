@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { navItems } from "@/lib/mockData";
 import { useRouter } from "next/navigation";
 import type { UiPackId } from "@/lib/uiPack";
@@ -186,7 +187,16 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
     <aside className={`${collapsed ? "w-20" : "w-[220px]"} min-h-screen ${isSignal ? "bg-[#111827]" : "bg-[#1F4A33]"} text-white flex flex-col transition-[width] duration-150`}>
       <div className={`${collapsed ? "px-3" : "px-4"} py-4 border-b ${isSignal ? "border-[#1F2937]" : "border-[#173824]"}`}>
         <div className="flex items-center gap-3">
-          <div className={`grid h-9 w-9 place-items-center rounded-full border font-serif text-[18px] font-semibold ${isSignal ? "border-[#22D3EE] text-[#22D3EE]" : "border-[#B58A2A] text-[#B58A2A]"}`}>A</div>
+          <div className="flex h-11 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[4px] bg-[#F4EFDB]">
+            <Image
+              src="/brand/adminiculum-logo.png"
+              alt="Adminiculum logó"
+              width={36}
+              height={45}
+              className="h-full w-full object-contain"
+              priority
+            />
+          </div>
           {!collapsed && (
             <div>
               <h1 className="font-serif text-[21px] leading-none text-[#F4EFDB]">Adminiculum</h1>
