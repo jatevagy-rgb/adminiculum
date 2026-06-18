@@ -445,7 +445,6 @@ export function Dashboard() {
     { href: "/tasks", label: "Feladatok", description: "Rám váró feladatok" },
     { href: "/documents/compare", label: "Dokumentum-összehasonlítás", description: "Szerződés-workspace" },
     { href: "/litigation-workspace", label: "Peres munkatér", description: "Peres stratégiai térkép" },
-    { href: "/editor-lab", label: "Szerkesztő labor", description: "Belső szerkesztő tesztfelület" },
   ];
 
   const greetingName = currentUser?.name || "dr. Hubay Máté";

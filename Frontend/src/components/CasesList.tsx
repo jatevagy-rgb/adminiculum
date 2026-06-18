@@ -207,7 +207,7 @@ export function CasesList() {
   const searchParams = useSearchParams();
   const [practiceArea, setPracticeArea] = useState("all");
   const [clientName, setClientName] = useState("");
-  const [riskLevel, setRiskLevel] = useState("all");
+  const [workPriorityFilter, setWorkPriorityFilter] = useState("all");
   const [showNewCaseModal, setShowNewCaseModal] = useState(false);
   const [newCaseData, setNewCaseData] = useState<CreateCaseData>(defaultCaseData);
   const [customMatterType, setCustomMatterType] = useState("");
@@ -537,7 +537,7 @@ export function CasesList() {
     setNewCaseData((prev) => ({ ...prev, deadline: toInputDateTimeLocal(new Date(Date.now() + amount * multiplier)) }));
   };
 
-  const deriveRiskLevel = useCallback((priority?: string) => {
+  const deriveWorkPriorityLabel = useCallback((priority?: string) => {
     if (!priority) return "Közepes";
     const normalized = priority.toLowerCase();
     if (normalized.includes("high") || normalized.includes("urgent")) return "Magas";
@@ -597,17 +597,17 @@ export function CasesList() {
     return backendCases.filter((item) => {
       const practiceMatch = practiceArea === "all" || item.matterType === practiceArea;
       const clientMatch = !normalizedQuery || (item.clientName ?? "").toLowerCase().includes(normalizedQuery);
-      const riskMatch = riskLevel === "all" || deriveRiskLevel(item.priority) === riskLevel;
-      return practiceMatch && clientMatch && riskMatch;
+      const workPriorityMatch = workPriorityFilter === "all" || deriveWorkPriorityLabel(item.priority) === workPriorityFilter;
+      return practiceMatch && clientMatch && workPriorityMatch;
     });
-  }, [backendCases, practiceArea, clientName, riskLevel, deriveRiskLevel]);
+  }, [backendCases, practiceArea, clientName, workPriorityFilter, deriveWorkPriorityLabel]);
 
   const caseEntrypointStats = useMemo(() => {
     const openCases = backendCases.filter((item) => String(item.status || "").toUpperCase() === "OPEN").length;
     const assignedCases = backendCases.filter((item) => Boolean(item.assignedLawyer?.name)).length;
-    const highAttentionCases = backendCases.filter((item) => deriveRiskLevel(item.priority) === "Magas").length;
+    const highAttentionCases = backendCases.filter((item) => deriveWorkPriorityLabel(item.priority) === "Magas").length;
     return { openCases, assignedCases, highAttentionCases };
-  }, [backendCases, deriveRiskLevel]);
+  }, [backendCases, deriveWorkPriorityLabel]);
 
   return (
     <section className="space-y-4">
@@ -621,7 +621,7 @@ export function CasesList() {
           <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[#514D45]">
             <span className="rounded-full border border-[#D8CFB6] bg-white px-3 py-1">Nyitott ügyek: {caseEntrypointStats.openCases}</span>
             <span className="rounded-full border border-[#D8CFB6] bg-white px-3 py-1">Felelőssel: {caseEntrypointStats.assignedCases}</span>
-            <span className="rounded-full border border-[#E6C987] bg-[#FAEFCF] px-3 py-1">Magas figyelmi jelzés: {caseEntrypointStats.highAttentionCases}</span>
+            <span className="rounded-full border border-[#E6C987] bg-[#FAEFCF] px-3 py-1">Magas munkaprioritás: {caseEntrypointStats.highAttentionCases}</span>
           </div>
         </div>
         <div className="flex flex-col justify-center gap-2 rounded-[10px] border border-[#EEE7D9] bg-[#FBF9F3] p-3">
@@ -649,15 +649,15 @@ export function CasesList() {
           <input value={clientName} onChange={(e) => setClientName(e.target.value)} className="mt-2 block h-10 w-52 border border-[rgba(22,32,26,0.20)] bg-[#FBF6E7] px-2 text-xs text-[#16201A]" placeholder="Ügyfél keresése" />
         </label>
         <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">
-          Kockázati szint
-          <select value={riskLevel} onChange={(e) => setRiskLevel(e.target.value)} className="mt-2 block h-10 w-44 border border-[rgba(22,32,26,0.20)] bg-[#FBF6E7] px-2 text-xs text-[#16201A]">
+          Munkaprioritás
+          <select value={workPriorityFilter} onChange={(e) => setWorkPriorityFilter(e.target.value)} className="mt-2 block h-10 w-44 border border-[rgba(22,32,26,0.20)] bg-[#FBF6E7] px-2 text-xs text-[#16201A]">
             <option value="all">Mind</option>
             <option value="Alacsony">Alacsony</option>
             <option value="Közepes">Közepes</option>
             <option value="Magas">Magas</option>
           </select>
         </label>
-        <AdminButton className="ml-auto" variant="neutral" onClick={() => { setPracticeArea("all"); setClientName(""); setRiskLevel("all"); }}>Szűrők törlése</AdminButton>
+        <AdminButton className="ml-auto" variant="neutral" onClick={() => { setPracticeArea("all"); setClientName(""); setWorkPriorityFilter("all"); }}>Szűrők törlése</AdminButton>
         <AdminButton variant="primary" onClick={() => setShowNewCaseModal(true)}>Új ügy létrehozása</AdminButton>
       </div>
 
@@ -679,7 +679,7 @@ export function CasesList() {
                 <th className="px-4 py-3">Szakterület</th>
                 <th className="px-4 py-3">Státusz</th>
                 <th className="px-4 py-3">Felelős</th>
-                <th className="px-4 py-3">Kockázat</th>
+                <th className="px-4 py-3">Munkaprioritás</th>
                 <th className="px-4 py-3">Művelet</th>
               </tr>
             </thead>
@@ -697,7 +697,7 @@ export function CasesList() {
                   <td className="px-4 py-4 text-sm text-[#3D4842]">{formatMatterType(item.matterType)}</td>
                   <td className="px-4 py-4"><AdminStatusPill tone={item.status === "OPEN" ? "green" : "neutral"}>{statusLabel[item.status] || item.status}</AdminStatusPill></td>
                   <td className="px-4 py-4 text-xs text-[#3D4842]">{item.assignedLawyer?.name || "Nincs hozzárendelve"}</td>
-                  <td className="px-4 py-4"><AdminBadge tone={deriveRiskLevel(item.priority) === "Magas" ? "amber" : "neutral"}>{deriveRiskLevel(item.priority)}</AdminBadge></td>
+                  <td className="px-4 py-4"><AdminBadge tone={deriveWorkPriorityLabel(item.priority) === "Magas" ? "amber" : "neutral"}>{deriveWorkPriorityLabel(item.priority)}</AdminBadge></td>
                   <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}><AdminButton size="sm" onClick={() => router.push(`/cases/${item.id}/documents`)}>Dokumentumtár</AdminButton></td>
                 </tr>
               ))}

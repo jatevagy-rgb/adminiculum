@@ -302,19 +302,20 @@ function TasksPageContent() {
 
   const taskEntrypointStats = useMemo(() => {
     const isOpen = (status?: string) => !["DONE", "COMPLETED", "CANCELLED", "ARCHIVED"].includes(String(status || "").toUpperCase());
+    const openTasks = tasks.filter((task) => isOpen(task.status));
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const tomorrowStart = new Date(todayStart);
     tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-    const dueToday = tasks.filter((task) => {
+    const dueToday = openTasks.filter((task) => {
       if (!task.dueDate) return false;
       const due = new Date(task.dueDate);
       return due.getTime() >= todayStart.getTime() && due.getTime() < tomorrowStart.getTime();
     }).length;
 
     return {
-      openTasks: tasks.filter((task) => isOpen(task.status)).length,
-      unassignedTasks: tasks.filter((task) => !task.assignedTo).length,
+      openTasks: openTasks.length,
+      unassignedTasks: openTasks.filter((task) => !task.assignedTo).length,
       dueToday,
     };
   }, [tasks]);
@@ -424,7 +425,7 @@ function TasksPageContent() {
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Home Office feladatindító</p>
               <h2 className="mt-1 font-serif text-xl font-medium text-[#1F2821]">Itt válaszd ki a következő operatív lépést</h2>
               <p className="mt-2 text-xs leading-5 text-[#5F675F]">
-                A feladatlista valós ügyhöz kötött teendőket mutat. Nem állít elő automatikus rangsort; a pontos priorizálás későbbi backend-alapú fejlesztés.
+                A feladatlista valós ügyhöz kötött teendőket mutat, munkaprioritás szerint rendezve. A határidőket és az ügyvédi kontextust továbbra is külön kell mérlegelni.
               </p>
               <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[#514D45]">
                 <span className="rounded-full border border-[#D8CFB6] bg-white px-3 py-1">Nyitott feladatok: {taskEntrypointStats.openTasks}</span>

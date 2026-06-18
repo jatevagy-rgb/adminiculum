@@ -483,6 +483,7 @@ function DocumentsComparePageContent() {
   const [tipTapReplacementText, setTipTapReplacementText] = useState("");
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
   const [reviewHandoffDraft, setReviewHandoffDraft] = useState("");
+  const [reviewHandoffIsPristine, setReviewHandoffIsPristine] = useState(true);
   const [reviewHandoffCopied, setReviewHandoffCopied] = useState(false);
   const [localCommentDraft, setLocalCommentDraft] = useState("");
   const [localComments, setLocalComments] = useState<LocalWorkspaceComment[]>([]);
@@ -1418,9 +1419,10 @@ const filteredClauseTools = useMemo(() => {
   ]);
 
   useEffect(() => {
+    if (!reviewHandoffIsPristine) return;
     setReviewHandoffDraft(generatedReviewHandoffText);
     setReviewHandoffCopied(false);
-  }, [generatedReviewHandoffText, selectedDocumentId, selectedBaselineId]);
+  }, [generatedReviewHandoffText, reviewHandoffIsPristine]);
 
   useEffect(() => {
     if (!editorTouched) {
@@ -2584,6 +2586,7 @@ return (
                     value={reviewHandoffDraft}
                     onChange={(event) => {
                       setReviewHandoffDraft(event.target.value);
+                      setReviewHandoffIsPristine(false);
                       setReviewHandoffCopied(false);
                     }}
                     rows={12}
@@ -2604,17 +2607,16 @@ return (
                       variant="neutral"
                       onClick={() => {
                         setReviewHandoffDraft(generatedReviewHandoffText);
+                        setReviewHandoffIsPristine(true);
                         setReviewHandoffCopied(false);
                       }}
                     >
                       Sablon frissítése
                     </AdminButton>
                   </div>
-                  <div className="space-y-1 rounded-[8px] border border-[#EEE7D9] bg-[#FBF9F3] px-3 py-2 text-[11px] leading-5 text-[#6D6A62]">
-                    <p>Ez helyi/frontendes munkasegédlet, nem backend review napló.</p>
-                    <p>Ez nem Word track changes.</p>
-                    <p>A tartós review suggestion persistence későbbi backend-fejlesztés.</p>
-                  </div>
+                  <p className="rounded-[8px] border border-[#EEE7D9] bg-[#FBF9F3] px-3 py-2 text-[11px] leading-5 text-[#6D6A62]">
+                    Helyi munkasegédlet, nem backend review napló vagy Word változáskövetés; a tartós review-mentés későbbi fejlesztés.
+                  </p>
                 </section>
 
                 <section className="space-y-3 rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-4 text-[#1F2821]">

@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import Underline from "@tiptap/extension-underline";
 import { paragraphsToPlainText, plainTextToParagraphs } from "./plainTextAdapter";
 
 export type TipTapEditorCommand =
@@ -145,7 +144,7 @@ export function TipTapEditorExperimental({
   onMutationResult,
 }: TipTapEditorExperimentalProps) {
   const editor = useEditor({
-    extensions: [StarterKit, Underline],
+    extensions: [StarterKit],
     content: plainTextToSimpleHtml(value),
     editable: !readOnly,
     immediatelyRender: false,

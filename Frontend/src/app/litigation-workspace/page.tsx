@@ -692,10 +692,11 @@ function LitigationWorkspacePageContent() {
     }
   }, [currentStep, editorWasTouched, generatedPleadingSkeleton, pleadingEditorText]);
 
-  const navigateToStep = (step: LitigationWorkspaceStep) => {
+  const navigateToStep = (step: LitigationWorkspaceStep, anchorId?: string) => {
     const nextParams = new URLSearchParams(searchParams?.toString());
     nextParams.set("step", step);
-    router.push(`${pathname}?${nextParams.toString()}`);
+    const anchor = anchorId ? `#${anchorId}` : "";
+    router.push(`${pathname}?${nextParams.toString()}${anchor}`);
   };
 
   const toggleOpponentBracket = (bracketId: string) => {
@@ -1154,7 +1155,7 @@ function LitigationWorkflowGuide({
   onNavigate,
 }: {
   currentStep: LitigationWorkspaceStep;
-  onNavigate: (step: LitigationWorkspaceStep) => void;
+  onNavigate: (step: LitigationWorkspaceStep, anchorId?: string) => void;
 }) {
   const guideItems: Array<{
     id: string;
@@ -1162,6 +1163,7 @@ function LitigationWorkflowGuide({
     title: string;
     detail: string;
     targetStep: LitigationWorkspaceStep;
+    anchorId?: string;
   }> = [
     {
       id: "opponent-points",
@@ -1190,6 +1192,7 @@ function LitigationWorkflowGuide({
       title: "Nézd át, másold vagy töltsd le a munkacsomagot",
       detail: "Az előnézet és .txt export ügyvédi átadásra segít, nem véglegesen benyújtott irat.",
       targetStep: "assembly",
+      anchorId: "pleading-review-export",
     },
   ];
 
@@ -1213,7 +1216,7 @@ function LitigationWorkflowGuide({
             <button
               key={item.id}
               type="button"
-              onClick={() => onNavigate(item.targetStep)}
+              onClick={() => onNavigate(item.targetStep, item.anchorId)}
               className={`rounded-[8px] border p-3 text-left transition-colors ${
                 active
                   ? "border-[#1F4A33] bg-[#E7EFE7] text-[#1F2821]"
@@ -2610,7 +2613,9 @@ function AssemblyWorkspace({
             onReviewFieldChange={updateInsertedSectionReviewField}
           />
 
-          <PleadingPreviewPanel readiness={pleadingPreviewReadiness} copyState={pleadingPreviewCopyState} onCopyPreview={copyPleadingPreview} />
+          <div id="pleading-review-export" className="scroll-mt-4">
+            <PleadingPreviewPanel readiness={pleadingPreviewReadiness} copyState={pleadingPreviewCopyState} onCopyPreview={copyPleadingPreview} />
+          </div>
 
           <div className="rounded-[10px] border border-[#D8CFB6] bg-white p-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
