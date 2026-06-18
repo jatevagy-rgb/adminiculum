@@ -73,7 +73,7 @@ function NotificationsPageContent() {
       setUnreadCount(unreadResult.unreadCount);
     } catch (err) {
       console.error("Notification load failed:", err);
-      setError("Az értesítések betöltése sikertelen.");
+      setError("Az értesítések most nem érhetők el.");
     } finally {
       setIsLoading(false);
     }
@@ -145,7 +145,7 @@ function NotificationsPageContent() {
             <button
               type="button"
               onClick={handleMarkAllRead}
-              disabled={isMarkingAll || unreadCount === 0}
+              disabled={isLoading || isMarkingAll || notifications.length === 0 || unreadCount === 0}
               className="rounded-lg border border-[#1F3B2D] px-3 py-2 text-xs font-semibold text-[#1F3B2D] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isMarkingAll ? "Összes jelölése..." : "Összes olvasottnak jelölése"}
@@ -154,11 +154,21 @@ function NotificationsPageContent() {
         </div>
 
         {isLoading ? (
-          <p className="py-8 text-sm text-[#5D6B62]">Értesítések betöltése…</p>
+          <div className="mt-5 rounded-xl border border-[#E5DAC4] bg-[#FFFCF4] px-5 py-8 text-center">
+            <p className="font-serif text-lg text-[#1F3B2D]">Értesítések betöltése...</p>
+            <p className="mt-2 text-sm text-[#5D6B62]">A munkajelzések összegyűjtése folyamatban van.</p>
+          </div>
         ) : error ? (
-          <p className="py-8 text-sm text-[#8F3D32]">{error}</p>
+          <div className="mt-5 rounded-xl border border-[#D4B8B8] bg-[#FFF7F4] px-5 py-8 text-center">
+            <p className="font-serif text-lg text-[#8F3D32]">{error}</p>
+            <p className="mt-2 text-sm text-[#5D6B62]">A kapcsolódó ügyek és feladatok továbbra is megnyithatók a fő navigációból.</p>
+            <button type="button" onClick={loadNotifications} className="mt-4 rounded-lg border border-[#8F3D32] bg-white px-3 py-2 text-xs font-semibold text-[#8F3D32] hover:bg-[#FFF0ED]">Újrapróbálás</button>
+          </div>
         ) : sortedNotifications.length === 0 ? (
-          <p className="py-8 text-sm text-[#5D6B62]">Nincs új értesítés.</p>
+          <div className="mt-5 rounded-xl border border-dashed border-[#D8CDB6] bg-[#FFFCF4] px-5 py-10 text-center">
+            <p className="font-serif text-lg text-[#1F3B2D]">Nincs új értesítés.</p>
+            <p className="mt-2 text-sm text-[#5D6B62]">Az új ügy-, dokumentum- és review-jelzések itt jelennek meg.</p>
+          </div>
         ) : (
           <ul className="mt-4 space-y-3">
             {sortedNotifications.map((item) => (

@@ -2571,53 +2571,58 @@ return (
                   </div>
                 ) : null}
 
-                <section className="space-y-3 rounded-[10px] border border-[#D8CFB6] bg-[#FFFDF7] p-4 text-[#1F2821]">
-                  <div className="flex items-start justify-between gap-3">
+                <details className="group rounded-[10px] border border-[#D8CFB6] bg-[#FFFDF7] text-[#1F2821]">
+                  <summary className="flex cursor-pointer list-none items-start justify-between gap-3 p-4 marker:hidden">
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Ügyvédi átadás</p>
                       <h2 className="mt-1 font-serif text-lg font-medium">Review átadási csomag</h2>
                       <p className="mt-1 text-[11px] leading-5 text-[#6D6A62]">
-                        Másolható, helyi munkasegédlet kollégának vagy vezető ügyvédnek. Nem készít backend naplót.
+                        Másolható helyi munkasegédlet kollégának vagy vezető ügyvédnek. Kinyitva szerkeszthető és másolható.
                       </p>
                     </div>
-                    <AdminStatusPill tone="gold">Helyi</AdminStatusPill>
-                  </div>
-                  <textarea
-                    value={reviewHandoffDraft}
-                    onChange={(event) => {
-                      setReviewHandoffDraft(event.target.value);
-                      setReviewHandoffIsPristine(false);
-                      setReviewHandoffCopied(false);
-                    }}
-                    rows={12}
-                    className="min-h-[240px] w-full resize-y rounded-[8px] border border-[#D8CFB6] bg-white px-3 py-2 font-mono text-[11px] leading-5 text-[#1F2821] outline-none transition-colors focus:border-[#B58A2A] focus:ring-2 focus:ring-[#E6C987]/40"
-                    aria-label="Review átadási csomag helyi szövege"
-                  />
-                  <div className="flex flex-wrap items-center gap-2">
-                    <AdminButton
-                      size="xs"
-                      variant="primary"
-                      onClick={handleCopyReviewHandoffPackage}
-                      disabled={!reviewHandoffDraft.trim() && !generatedReviewHandoffText.trim()}
-                    >
-                      {reviewHandoffCopied ? "Átadási csomag másolva" : "Átadási csomag másolása"}
-                    </AdminButton>
-                    <AdminButton
-                      size="xs"
-                      variant="neutral"
-                      onClick={() => {
-                        setReviewHandoffDraft(generatedReviewHandoffText);
-                        setReviewHandoffIsPristine(true);
+                    <div className="flex items-center gap-2">
+                      <AdminStatusPill tone="gold">Helyi</AdminStatusPill>
+                      <span className="text-sm text-[#7B776D] transition-transform group-open:rotate-180" aria-hidden="true">⌄</span>
+                    </div>
+                  </summary>
+                  <div className="space-y-3 border-t border-[#EEE7D9] px-4 pb-4 pt-3">
+                    <textarea
+                      value={reviewHandoffDraft}
+                      onChange={(event) => {
+                        setReviewHandoffDraft(event.target.value);
+                        setReviewHandoffIsPristine(false);
                         setReviewHandoffCopied(false);
                       }}
-                    >
-                      Sablon frissítése
-                    </AdminButton>
+                      rows={10}
+                      className="min-h-[200px] w-full resize-y rounded-[8px] border border-[#D8CFB6] bg-white px-3 py-2 font-mono text-[11px] leading-5 text-[#1F2821] outline-none transition-colors focus:border-[#B58A2A] focus:ring-2 focus:ring-[#E6C987]/40"
+                      aria-label="Review átadási csomag helyi szövege"
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <AdminButton
+                        size="xs"
+                        variant="primary"
+                        onClick={handleCopyReviewHandoffPackage}
+                        disabled={!reviewHandoffDraft.trim() && !generatedReviewHandoffText.trim()}
+                      >
+                        {reviewHandoffCopied ? "Átadási csomag másolva" : "Átadási csomag másolása"}
+                      </AdminButton>
+                      <AdminButton
+                        size="xs"
+                        variant="neutral"
+                        onClick={() => {
+                          setReviewHandoffDraft(generatedReviewHandoffText);
+                          setReviewHandoffIsPristine(true);
+                          setReviewHandoffCopied(false);
+                        }}
+                      >
+                        Sablon frissítése
+                      </AdminButton>
+                    </div>
+                    <p className="rounded-[8px] border border-[#EEE7D9] bg-[#FBF9F3] px-3 py-2 text-[11px] leading-5 text-[#6D6A62]">
+                      Helyi munkasegédlet, nem backend review napló vagy Word változáskövetés; a tartós review-mentés későbbi fejlesztés.
+                    </p>
                   </div>
-                  <p className="rounded-[8px] border border-[#EEE7D9] bg-[#FBF9F3] px-3 py-2 text-[11px] leading-5 text-[#6D6A62]">
-                    Helyi munkasegédlet, nem backend review napló vagy Word változáskövetés; a tartós review-mentés későbbi fejlesztés.
-                  </p>
-                </section>
+                </details>
 
                 <section className="space-y-3 rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-4 text-[#1F2821]">
                   <div className="flex items-start justify-between gap-3">
@@ -2668,7 +2673,7 @@ return (
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7A5A1F]">Aktív szerkesztési mód</p>
                             <span className="rounded-full border border-[#B28B2E] bg-white px-2 py-0.5 text-[10px] font-semibold text-[#5A4317]">
-                              Kísérleti TipTap
+                              Kísérleti formázott szerkesztő
                             </span>
                           </div>
                           <p className="mt-2 text-[11px] leading-5 text-[#6C5120]">
@@ -2676,8 +2681,8 @@ return (
                           </p>
                           <div className="mt-3 rounded-[6px] border border-[#D8CFB6] bg-white/80 px-3 py-2 text-[11px] text-[#514D45]">
                             {tipTapPreviewDraft === editorDraft
-                              ? "A TipTap szöveg jelenleg megegyezik a munkapéldánnyal."
-                              : "Átvétel szükséges, ha a TipTap szöveget a munkapéldányban is használni szeretnéd."}
+                              ? "A formázott szerkesztő szövege jelenleg megegyezik a munkapéldánnyal."
+                              : "Átvétel szükséges, ha a formázott szerkesztő szövegét a munkapéldányban is használni szeretnéd."}
                           </div>
                         </div>
                       ) : (
@@ -3108,7 +3113,7 @@ return (
                             }`}
                             aria-pressed={isTipTapPreviewEnabled}
                           >
-                            Kísérleti TipTap
+                            Kísérleti formázott szerkesztő
                           </button>
                         </div>
                         {isTipTapPreviewEnabled ? (
@@ -3118,7 +3123,7 @@ return (
                             disabled={tipTapPreviewDraft === editorDraft}
                             className="rounded-[999px] border border-[#1F4A33] bg-[#1F4A33] px-3 py-1.5 text-[10px] font-semibold text-[#F4EFDB] transition hover:bg-[#173827] disabled:cursor-not-allowed disabled:border-[#D8CFB6] disabled:bg-[#EFE9DA] disabled:text-[#9C9890]"
                           >
-                            TipTap szöveg átvétele munkapéldányként
+                            Formázott szöveg átvétele munkapéldányként
                           </button>
                         ) : null}
                       </div>
@@ -3199,7 +3204,7 @@ return (
                           onMutationResult={handleTipTapMutationResult}
                           legalInsertTitlePlaceholder="Szerződéses pont címe"
                           legalInsertBodyPlaceholder="A szerződéses pont szövege."
-                          placeholder="Kísérleti TipTap előnézet a szerződés-workspace shellben."
+                          placeholder="Kísérleti formázott előnézet a szerződés-workspace-ben."
                         />
                         <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2 text-[11px] text-[#7B776D]">
                           <div className="flex flex-wrap items-center gap-2">

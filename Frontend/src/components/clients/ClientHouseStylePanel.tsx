@@ -140,10 +140,17 @@ export function ClientHouseStylePanel({ clientId, clientName, compact = false, o
         if (cancelled) return;
         setProfile(loaded);
         setForm(toForm(loaded));
-        setIsEditing(!hasProfileContent(loaded));
+        setIsEditing(false);
       })
-      .catch(() => {
-        if (!cancelled) setError("Az ügyfélprofil betöltése sikertelen.");
+      .catch((loadError) => {
+        if (cancelled) return;
+        if (typeof loadError === "object" && loadError !== null && "status" in loadError && loadError.status === 404) {
+          setProfile(null);
+          setForm(EMPTY_FORM);
+          setIsEditing(false);
+          return;
+        }
+        setError("A house style profil most nem érhető el.");
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -209,7 +216,15 @@ export function ClientHouseStylePanel({ clientId, clientName, compact = false, o
       {error ? <p className="mt-3 rounded bg-[#FFF5F3] p-2 text-xs font-semibold text-[#8B2A2A]">{error}</p> : null}
       {message ? <p className="mt-3 rounded bg-[#EEF5E7] p-2 text-xs font-semibold text-[#23472F]">{message}</p> : null}
 
-      {!isLoading && !isEditing ? (
+      {!isLoading && !error && !hasProfileContent(profile) && !isEditing ? (
+        <div className="mt-3 rounded border border-[#EEE7D9] bg-white p-3">
+          <p className="text-xs font-semibold text-[#1F2821]">Ehhez az ügyfélhez még nincs részletes house style profil.</p>
+          <p className="mt-1 text-[11px] leading-5 text-[#7B776D]">A profil csak akkor jelenik meg, ha valós ügyfél-specifikus stílus- és dokumentumelvárásokat rögzítesz.</p>
+          <AdminButton size="sm" variant="neutral" onClick={() => setIsEditing(true)} className="mt-3">Profil létrehozása</AdminButton>
+        </div>
+      ) : null}
+
+      {!isLoading && !error && hasProfileContent(profile) && !isEditing ? (
         <div className="mt-3 space-y-3">
           <p className="rounded border border-[#EEE7D9] bg-white p-3 text-xs text-[#3D4842]">
             {summary || "Ehhez az ügyfélhez még nincs részletes house style profil."}

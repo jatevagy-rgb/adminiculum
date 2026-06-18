@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import {
@@ -238,11 +238,10 @@ function ReviewsPageContent() {
     }
   };
 
-  useEffect(() => {
-    const load = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
+  const loadReviewQueue = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
         const me = await getCurrentUser();
         const [assignedCases, myTasks] = await Promise.all([getCases(1, 100, me.id), getMyTasks()]);
 
@@ -326,15 +325,17 @@ function ReviewsPageContent() {
         );
         setQueue(merged);
         if (merged.length > 0) setSelectedId(merged[0].id);
-      } catch (err) {
-        console.error("Review queue load failed:", err);
-        setError("A review sor betöltése sikertelen.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    load();
+    } catch (err) {
+      console.error("Review queue load failed:", err);
+      setError("A review sor most nem érhető el.");
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadReviewQueue();
+  }, [loadReviewQueue]);
 
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -403,6 +404,12 @@ function ReviewsPageContent() {
   }), [filtered.length, groupedByUrgency]);
 
   const selected = useMemo(() => filtered.find((item) => item.id === selectedId) || filtered[0] || null, [filtered, selectedId]);
+  const hasActiveFilters =
+    statusFilter !== "all" ||
+    assigneeFilter !== "all" ||
+    caseFilter !== "all" ||
+    urgentOnly ||
+    search.trim().length > 0;
   const assignees = useMemo(() => Array.from(new Set(queue.map((item) => item.assigneeName))).sort(), [queue]);
   const statuses = useMemo(() => Array.from(new Set(queue.map((item) => item.status))).sort(), [queue]);
   const cases = useMemo(() => {
@@ -479,14 +486,27 @@ function ReviewsPageContent() {
               Csak sürgős
             </label>
           </div>
-          {error && <div className="mb-4 p-3 bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a] text-xs">{error}</div>}
-
           {isLoading ? (
             <div className="py-12 text-center text-xs text-[#7B776D]">Review sor betöltése…</div>
+          ) : error ? (
+            <div className="border border-[#D4B8B8] bg-[#FFF7F4] px-5 py-10 text-center">
+              <p className="font-serif text-lg text-[#8B3A3A]">{error}</p>
+              <p className="mt-2 text-xs text-[#6D6A62]">Próbáld újra, vagy nyisd meg az ügyeket és dokumentumokat közvetlenül.</p>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                <button type="button" onClick={loadReviewQueue} className="rounded border border-[#8B3A3A] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#8B3A3A] hover:bg-[#FFF0ED]">Újrapróbálás</button>
+                <Link href="/cases" className="rounded border border-[#DDD7CA] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F2821] hover:bg-[#FBF9F3]">Ügyek megnyitása</Link>
+              </div>
+            </div>
           ) : filtered.length === 0 ? (
-            <div className="py-12 text-center text-xs text-[#7B776D] border border-dashed border-[#DDD7CA]">
-              <p>Nincs review-ra váró dokumentum.</p>
-              <p className="mt-2 text-[11px] text-[#9C9890]">Szűrés későbbi patchben.</p>
+            <div className="border border-dashed border-[#DDD7CA] px-5 py-12 text-center text-xs text-[#7B776D]">
+              <p className="font-serif text-lg text-[#1F2821]">{queue.length === 0 ? "Nincs review-ra váró dokumentum." : "Nincs találat a kiválasztott szűrőkkel."}</p>
+              <p className="mt-2 text-[11px] text-[#7B776D]">
+                {queue.length === 0
+                  ? "A review-ra küldött munkapéldányok és feladatok itt jelennek meg."
+                  : hasActiveFilters
+                    ? "Módosítsd a keresést vagy a szűrőket a teljes review sor megjelenítéséhez."
+                    : "Jelenleg nincs megjeleníthető review tétel."}
+              </p>
             </div>
           ) : (
             <div className="space-y-6">

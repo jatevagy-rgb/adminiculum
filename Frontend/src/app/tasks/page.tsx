@@ -224,7 +224,7 @@ function TasksPageContent() {
       }
     } catch (err) {
       console.error("Failed to load task workstation:", err);
-      setError("A feladatok betöltése sikertelen.");
+      setError("A feladatlista most nem érhető el.");
     } finally {
       setIsLoading(false);
     }
@@ -443,17 +443,26 @@ function TasksPageContent() {
             </div>
           </section>
 
-          {error && <div className="mb-4 p-3 text-xs bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a]">{error}</div>}
-
           {isLoading ? (
             <div className="py-10 text-center text-xs text-[#7B776D]">Feladatok betöltése...</div>
+          ) : error ? (
+            <div className="border border-[#D4B8B8] bg-[#FFF7F4] px-5 py-8 text-center">
+              <p className="font-serif text-lg text-[#7A2F2F]">{error}</p>
+              <p className="mt-2 text-xs text-[#6D6A62]">Próbáld újra, vagy indulj egy meglévő ügyből.</p>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                <button onClick={loadTasksWorkspace} className="rounded border border-[#8B3A3A] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#8B3A3A] hover:bg-[#FFF0ED]">Újrapróbálás</button>
+                <button onClick={() => setShowCreateModal(true)} className="rounded bg-[#1A2E21] px-3 py-1.5 text-[11px] font-semibold text-white">Új feladat</button>
+                <Link href="/cases" className="rounded border border-[#D8CFB6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F2821] hover:bg-[#FBF6E7]">Ügyek megnyitása</Link>
+              </div>
+            </div>
           ) : filteredTasks.length === 0 ? (
-            <div className="py-10 text-center text-xs text-[#7B776D] border border-dashed border-[#DDD7CA] space-y-1">
-              <p>Nincs betöltött feladat.</p>
-              <p>Nincs megjeleníthető feladat a jelenlegi szűrés szerint.</p>
-              <p>Új feladat létrehozásához válassz ügyet, majd add meg a feladat címét és határidejét.</p>
-              <p>A feladatok ügyhöz kapcsolódnak; az ügyből következik az ügyfélkörnyezet.</p>
-              <p>A pontos priorizálás későbbi backend-alapú fejlesztés.</p>
+            <div className="space-y-2 border border-dashed border-[#DDD7CA] px-5 py-10 text-center text-xs text-[#7B776D]">
+              <p className="font-serif text-lg text-[#1F2821]">{tasks.length === 0 ? "Nincs betöltött feladat." : "Nincs találat a kiválasztott szűrőkkel."}</p>
+              <p>{tasks.length === 0 ? "Új feladat létrehozásához válassz ügyet, majd add meg a feladat címét és határidejét." : "Módosítsd a szűrőket, vagy nyisd meg az ügylistát másik munkafolyamat választásához."}</p>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                <button onClick={() => setShowCreateModal(true)} className="rounded bg-[#1A2E21] px-3 py-1.5 text-[11px] font-semibold text-white">Új feladat</button>
+                <Link href="/cases" className="rounded border border-[#D8CFB6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F2821] hover:bg-[#FBF6E7]">Ügyek megnyitása</Link>
+              </div>
             </div>
           ) : (
             <div className="border border-[#DDD7CA] bg-white overflow-hidden">
