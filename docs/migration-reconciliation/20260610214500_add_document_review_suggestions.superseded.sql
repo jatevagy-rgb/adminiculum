@@ -1,5 +1,18 @@
--- Add document-level review suggestion persistence foundation.
--- Local migration file only; do not apply to production without an explicit deploy step.
+-- SUPERSEDED LOCAL-ONLY MIGRATION ARTIFACT
+--
+-- Original active migration name:
+--   20260610214500_add_document_review_suggestions
+--
+-- Status:
+--   - local-only
+--   - never applied to production
+--   - removed from Backend/prisma/migrations during RC1A
+--   - must not be deployed or marked as applied
+--   - must not be reused as a future migration name
+--   - will be replaced by a new reviewed forward migration after RC1B/RC1C
+--
+-- This file preserves design intent only. It is outside Prisma's active
+-- migrations directory and must never be executed as an operational script.
 
 CREATE TYPE "DocumentReviewWorkspaceSource" AS ENUM ('CONTRACT_WORKSPACE', 'LITIGATION_WORKSPACE');
 CREATE TYPE "DocumentReviewSuggestionType" AS ENUM ('COMMENT', 'REPLACEMENT', 'DELETION');
