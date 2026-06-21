@@ -26,27 +26,28 @@
 import { Router, Request, Response } from 'express';
 import clauseLibraryService from './service';
 import { authenticate } from '../../middleware/auth';
+import {
+  isDatabaseFoundationEnabled,
+  requireDatabaseFoundation,
+} from '../../middleware/featureAvailability';
 
 const router = Router();
 
 // ============================================================================
 // FEATURE FLAG GUARD
 // ============================================================================
-const isClauseLibraryEnabled = process.env.ENABLE_CLAUSE_LIBRARY === 'true';
-
-function requireEnabled(req: Request, res: Response, next: () => void) {
-  if (!isClauseLibraryEnabled) {
-    return res.status(501).json({
-      error: 'Not Implemented',
-      message: 'Clause Library feature is disabled. Set ENABLE_CLAUSE_LIBRARY=true to enable.',
-    });
-  }
-  next();
-}
+const isClauseLibraryEnabled = () =>
+  isDatabaseFoundationEnabled('ENABLE_CLAUSE_LIBRARY');
+const requireEnabled = requireDatabaseFoundation({
+  feature: 'CLAUSE_LIBRARY',
+  enabled: isClauseLibraryEnabled,
+  message: 'Clause library persistence is not available in this environment.',
+  nextStep: 'Complete the clause and assembly database reconciliation before enabling this feature.',
+});
 
 // Root status endpoint for staging smoke checks.
 router.get('/', authenticate, (_req: Request, res: Response) => {
-  if (!isClauseLibraryEnabled) {
+  if (!isClauseLibraryEnabled()) {
     res.status(200).json({
       enabled: false,
       message: 'Clause Library feature is disabled. Set ENABLE_CLAUSE_LIBRARY=true to enable.',

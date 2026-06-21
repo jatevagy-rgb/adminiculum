@@ -9,8 +9,18 @@ import { authenticate } from '../../middleware/auth';
 import handoffPackagesService, {
   HandoffPackageServiceError,
 } from './service';
+import {
+  isDatabaseFoundationEnabled,
+  requireDatabaseFoundation,
+} from '../../middleware/featureAvailability';
 
 const router = Router();
+const requireHandoffFoundation = requireDatabaseFoundation({
+  feature: 'LAWYER_HANDOFF_PACKAGES',
+  enabled: () => isDatabaseFoundationEnabled('ENABLE_HANDOFF_PACKAGES'),
+  message: 'Lawyer handoff package persistence is not available in this environment.',
+  nextStep: 'Complete the handoff package database reconciliation before enabling writes.',
+});
 
 function getUserId(req: Request): string | undefined {
   return (req as any).user?.userId;
@@ -45,7 +55,7 @@ router.get('/cases/:caseId/handoff-packages', authenticate, async (req: Request,
 });
 
 // POST /api/v1/cases/:caseId/handoff-packages
-router.post('/cases/:caseId/handoff-packages', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/cases/:caseId/handoff-packages', authenticate, requireHandoffFoundation, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const {
@@ -101,7 +111,7 @@ router.get('/handoff-packages/:id', authenticate, async (req: Request, res: Resp
 });
 
 // PATCH /api/v1/handoff-packages/:id
-router.patch('/handoff-packages/:id', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.patch('/handoff-packages/:id', authenticate, requireHandoffFoundation, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const {
@@ -133,7 +143,7 @@ router.patch('/handoff-packages/:id', authenticate, async (req: Request, res: Re
 });
 
 // POST /api/v1/handoff-packages/:id/review
-router.post('/handoff-packages/:id/review', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/handoff-packages/:id/review', authenticate, requireHandoffFoundation, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const { decision, reviewComment } = req.body || {};

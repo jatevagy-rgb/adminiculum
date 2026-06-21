@@ -11,11 +11,21 @@
 
 import { Router, Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
-import { authenticate } from '../../middleware/auth.js';
-import { prisma } from '../../prisma/prisma.service.js';
-import { buildPrismaErrorResponse } from '../../utils/prismaError.js';
+import { authenticate } from '../../middleware/auth';
+import {
+  isDatabaseFoundationEnabled,
+  requireDatabaseFoundation,
+} from '../../middleware/featureAvailability';
+import { prisma } from '../../prisma/prisma.service';
+import { buildPrismaErrorResponse } from '../../utils/prismaError';
 
 const router = Router();
+const requireCommunicationsFoundation = requireDatabaseFoundation({
+  feature: 'COMMUNICATIONS',
+  enabled: () => isDatabaseFoundationEnabled('ENABLE_COMMUNICATIONS_PERSISTENCE'),
+  message: 'Communication persistence is not available in this environment.',
+  nextStep: 'Complete the communications database reconciliation before enabling this operation.',
+});
 
 function logPrismaRouteError(route: string, error: unknown): void {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -213,7 +223,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
 // GET /api/v1/communications/:id - Get single communication with details
 // ============================================================================
 
-router.get('/:id', authenticate, async (req: Request, res: Response) => {
+router.get('/:id', authenticate, requireCommunicationsFoundation, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -245,7 +255,7 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
 // POST /api/v1/communications - Create new communication
 // ============================================================================
 
-router.post('/', authenticate, async (req: Request, res: Response) => {
+router.post('/', authenticate, requireCommunicationsFoundation, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
     const { 
@@ -308,7 +318,7 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
 // POST /api/v1/communications/:id/link-case - Link communication to case
 // ============================================================================
 
-router.post('/:id/link-case', authenticate, async (req: Request, res: Response) => {
+router.post('/:id/link-case', authenticate, requireCommunicationsFoundation, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
     const { id } = req.params;
@@ -362,7 +372,7 @@ router.post('/:id/link-case', authenticate, async (req: Request, res: Response) 
 // POST /api/v1/communications/:id/extract-task - Create task from communication
 // ============================================================================
 
-router.post('/:id/extract-task', authenticate, async (req: Request, res: Response) => {
+router.post('/:id/extract-task', authenticate, requireCommunicationsFoundation, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
     const { id } = req.params;
@@ -441,7 +451,7 @@ router.post('/:id/extract-task', authenticate, async (req: Request, res: Respons
 // POST /api/v1/communications/:id/extract-deadline - Create deadline event
 // ============================================================================
 
-router.post('/:id/extract-deadline', authenticate, async (req: Request, res: Response) => {
+router.post('/:id/extract-deadline', authenticate, requireCommunicationsFoundation, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
     const { id } = req.params;
@@ -518,7 +528,7 @@ router.post('/:id/extract-deadline', authenticate, async (req: Request, res: Res
 // POST /api/v1/communications/:id/add-attachment - Link document attachment
 // ============================================================================
 
-router.post('/:id/add-attachment', authenticate, async (req: Request, res: Response) => {
+router.post('/:id/add-attachment', authenticate, requireCommunicationsFoundation, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
     const { id } = req.params;
@@ -577,7 +587,7 @@ router.post('/:id/add-attachment', authenticate, async (req: Request, res: Respo
 // GET /api/v1/communications/:id/tasks - Get tasks created from communication
 // ============================================================================
 
-router.get('/:id/tasks', authenticate, async (req: Request, res: Response) => {
+router.get('/:id/tasks', authenticate, requireCommunicationsFoundation, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -603,7 +613,7 @@ router.get('/:id/tasks', authenticate, async (req: Request, res: Response) => {
 // GET /api/v1/communications/:id/attachments - Get communication attachments
 // ============================================================================
 
-router.get('/:id/attachments', authenticate, async (req: Request, res: Response) => {
+router.get('/:id/attachments', authenticate, requireCommunicationsFoundation, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 

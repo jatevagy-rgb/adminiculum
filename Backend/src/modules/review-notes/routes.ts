@@ -7,13 +7,23 @@
 import { Router } from 'express';
 import reviewNotesService from './service';
 import { prisma } from '../../prisma/prisma.service';
+import {
+  isDatabaseFoundationEnabled,
+  requireDatabaseFoundation,
+} from '../../middleware/featureAvailability';
 
 const router = Router();
+const requireReviewNotesFoundation = requireDatabaseFoundation({
+  feature: 'CONTRACT_REVIEW_NOTES',
+  enabled: () => isDatabaseFoundationEnabled('ENABLE_CONTRACT_REVIEW_NOTES'),
+  message: 'Contract review-note persistence is not available in this environment.',
+  nextStep: 'Complete the contract review database reconciliation before enabling this feature.',
+});
 
 // GET /api/v1/contracts/:id/review-notes
-router.get('/:generationId/review-notes', async (req, res) => {
+router.get('/:generationId/review-notes', requireReviewNotesFoundation, async (req, res) => {
   try {
-    const { generationId } = req.params;
+    const generationId = String(req.params.generationId);
     const result = await reviewNotesService.getReviewNotes(generationId);
     res.json(result);
   } catch (err) {
@@ -23,9 +33,9 @@ router.get('/:generationId/review-notes', async (req, res) => {
 });
 
 // PUT /api/v1/contracts/:id/review-notes
-router.put('/:generationId/review-notes', async (req, res) => {
+router.put('/:generationId/review-notes', requireReviewNotesFoundation, async (req, res) => {
   try {
-    const { generationId } = req.params;
+    const generationId = String(req.params.generationId);
     const { overallStatus, overallTitle, overallNote, authorId, blockNotes } = req.body;
 
     if (!overallStatus) {
@@ -49,9 +59,9 @@ router.put('/:generationId/review-notes', async (req, res) => {
 });
 
 // GET /api/v1/contracts/:id/review-summary.txt
-router.get('/:generationId/review-summary.txt', async (req, res) => {
+router.get('/:generationId/review-summary.txt', requireReviewNotesFoundation, async (req, res) => {
   try {
-    const { generationId } = req.params;
+    const generationId = String(req.params.generationId);
 
     const [reviewNotes, contract] = await Promise.all([
       reviewNotesService.getReviewNotes(generationId),

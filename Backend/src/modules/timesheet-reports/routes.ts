@@ -1,8 +1,18 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../../middleware/auth';
+import {
+  isDatabaseFoundationEnabled,
+  requireDatabaseFoundation,
+} from '../../middleware/featureAvailability';
 import { timesheetReportService } from './service';
 
 const router = Router();
+const requireTimesheetPersistenceFoundation = requireDatabaseFoundation({
+  feature: 'TIMESHEET_REPORT_PERSISTENCE',
+  enabled: () => isDatabaseFoundationEnabled('ENABLE_TIMESHEET_REPORT_PERSISTENCE'),
+  message: 'Timesheet report persistence is not available in this environment.',
+  nextStep: 'Complete the timesheet reporting database reconciliation before saving records.',
+});
 
 router.get('/templates', authenticate, (_req: Request, res: Response) => {
   const templates = timesheetReportService.listTemplates();
@@ -33,7 +43,7 @@ router.get('/presets/:id', authenticate, async (req: Request, res: Response) => 
   }
 });
 
-router.post('/presets', authenticate, async (req: Request, res: Response) => {
+router.post('/presets', authenticate, requireTimesheetPersistenceFoundation, async (req: Request, res: Response) => {
   try {
     const payload = await timesheetReportService.createPreset(req.body || {});
     res.status(201).json(payload);
@@ -43,7 +53,7 @@ router.post('/presets', authenticate, async (req: Request, res: Response) => {
   }
 });
 
-router.put('/presets/:id', authenticate, async (req: Request, res: Response) => {
+router.put('/presets/:id', authenticate, requireTimesheetPersistenceFoundation, async (req: Request, res: Response) => {
   try {
     const payload = await timesheetReportService.updatePreset(String(req.params.id || ''), req.body || {});
     if (!payload) {
@@ -57,7 +67,7 @@ router.put('/presets/:id', authenticate, async (req: Request, res: Response) => 
   }
 });
 
-router.delete('/presets/:id', authenticate, async (req: Request, res: Response) => {
+router.delete('/presets/:id', authenticate, requireTimesheetPersistenceFoundation, async (req: Request, res: Response) => {
   try {
     const payload = await timesheetReportService.deactivatePreset(String(req.params.id || ''));
     if (!payload) {
@@ -147,7 +157,7 @@ router.get('/instances/:id', authenticate, async (req: Request, res: Response) =
   }
 });
 
-router.post('/instances', authenticate, async (req: Request, res: Response) => {
+router.post('/instances', authenticate, requireTimesheetPersistenceFoundation, async (req: Request, res: Response) => {
   try {
     const payload = await timesheetReportService.createInstance(req.body);
     res.status(201).json(payload);
@@ -157,7 +167,7 @@ router.post('/instances', authenticate, async (req: Request, res: Response) => {
   }
 });
 
-router.put('/instances/:id', authenticate, async (req: Request, res: Response) => {
+router.put('/instances/:id', authenticate, requireTimesheetPersistenceFoundation, async (req: Request, res: Response) => {
   try {
     const instanceId = String(req.params.id || '');
     const payload = await timesheetReportService.updateInstance(instanceId, req.body);
@@ -172,7 +182,7 @@ router.put('/instances/:id', authenticate, async (req: Request, res: Response) =
   }
 });
 
-router.post('/instances/:id/render', authenticate, async (req: Request, res: Response) => {
+router.post('/instances/:id/render', authenticate, requireTimesheetPersistenceFoundation, async (req: Request, res: Response) => {
   try {
     const instanceId = String(req.params.id || '');
     const payload = await timesheetReportService.renderInstance(instanceId);
@@ -187,7 +197,7 @@ router.post('/instances/:id/render', authenticate, async (req: Request, res: Res
   }
 });
 
-router.post('/instances/:id/render-docx', authenticate, async (req: Request, res: Response) => {
+router.post('/instances/:id/render-docx', authenticate, requireTimesheetPersistenceFoundation, async (req: Request, res: Response) => {
   try {
     const instanceId = String(req.params.id || '');
     const payload = await timesheetReportService.renderDocxInstance(instanceId);

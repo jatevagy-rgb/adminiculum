@@ -1,0 +1,196 @@
+import express, { Express, NextFunction, Request, Response } from 'express';
+import http from 'http';
+
+jest.mock('../src/middleware/auth', () => ({
+  authenticate: (req: Request, res: Response, next: NextFunction) => {
+    if (req.headers.authorization !== 'Bearer test-token') {
+      res.status(401).json({ error: 'No token provided' });
+      return;
+    }
+    next();
+  },
+}));
+
+jest.mock('../src/prisma/prisma.service', () => ({
+  prisma: {
+    document: {
+      findUnique: jest.fn(),
+    },
+  },
+}));
+
+import clientsRoutes from '../src/modules/clients/routes';
+import clauseLibraryRoutes from '../src/modules/clause-library/routes';
+import communicationsRoutes from '../src/modules/communications/routes';
+import reviewSuggestionsRoutes from '../src/modules/documents/reviewSuggestions.routes';
+import handoffPackagesRoutes from '../src/modules/handoff-packages/routes';
+import legalAnalysesRoutes from '../src/modules/legal-analyses/routes';
+import reviewNotesRoutes from '../src/modules/review-notes/routes';
+import timesheetReportRoutes from '../src/modules/timesheet-reports/routes';
+
+type TestResponse = {
+  status: number;
+  body: unknown;
+};
+
+function requestJson(
+  app: Express,
+  method: string,
+  path: string,
+  authenticated = true
+): Promise<TestResponse> {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        server.close();
+        reject(new Error('Test server address unavailable'));
+        return;
+      }
+
+      const request = http.request(
+        {
+          hostname: '127.0.0.1',
+          port: address.port,
+          path,
+          method,
+          headers: {
+            ...(authenticated ? { authorization: 'Bearer test-token' } : {}),
+            'content-type': 'application/json',
+          },
+        },
+        (response) => {
+          const chunks: Buffer[] = [];
+          response.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+          response.on('end', () => {
+            server.close();
+            const text = Buffer.concat(chunks).toString('utf8');
+            resolve({
+              status: response.statusCode || 0,
+              body: text ? JSON.parse(text) : null,
+            });
+          });
+        }
+      );
+
+      request.on('error', (error) => {
+        server.close();
+        reject(error);
+      });
+      request.end();
+    });
+  });
+}
+
+function createApp(): Express {
+  const app = express();
+  app.use(express.json());
+  app.use('/documents/:documentId/review-suggestions', reviewSuggestionsRoutes);
+  app.use('/clients', clientsRoutes);
+  app.use('/clause-library', clauseLibraryRoutes);
+  app.use('/communications', communicationsRoutes);
+  app.use('/', legalAnalysesRoutes);
+  app.use('/contracts', reviewNotesRoutes);
+  app.use('/timesheet-reports', timesheetReportRoutes);
+  app.use('/', handoffPackagesRoutes);
+  return app;
+}
+
+describe('database foundation route guards', () => {
+  beforeEach(() => {
+    delete process.env.ENABLE_DOCUMENT_REVIEW_SUGGESTIONS;
+    delete process.env.ENABLE_CLIENT_HOUSE_STYLE;
+    delete process.env.ENABLE_CLAUSE_LIBRARY;
+    delete process.env.ENABLE_COMMUNICATIONS_PERSISTENCE;
+    delete process.env.ENABLE_LEGAL_ANALYSES;
+    delete process.env.ENABLE_CONTRACT_REVIEW_NOTES;
+    delete process.env.ENABLE_TIMESHEET_REPORT_PERSISTENCE;
+    delete process.env.ENABLE_HANDOFF_PACKAGES;
+  });
+
+  it('keeps authentication ahead of the document review guard', async () => {
+    const response = await requestJson(
+      createApp(),
+      'GET',
+      '/documents/document-1/review-suggestions',
+      false
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it('returns the controlled unavailable response for guarded review routes', async () => {
+    const response = await requestJson(
+      createApp(),
+      'GET',
+      '/documents/document-1/review-suggestions'
+    );
+
+    expect(response.status).toBe(501);
+    expect(response.body).toMatchObject({
+      status: 501,
+      code: 'FEATURE_NOT_AVAILABLE',
+      feature: 'DOCUMENT_REVIEW_SUGGESTIONS',
+      reason: 'DATABASE_FOUNDATION_NOT_DEPLOYED',
+    });
+    expect(JSON.stringify(response.body).toLowerCase()).not.toContain('prisma');
+  });
+
+  it('preserves the demo-safe empty house-style read and guards writes', async () => {
+    const app = createApp();
+    const readResponse = await requestJson(app, 'GET', '/clients/client-1/house-style');
+    const writeResponse = await requestJson(app, 'PUT', '/clients/client-1/house-style');
+
+    expect(readResponse).toEqual({ status: 200, body: null });
+    expect(writeResponse.status).toBe(501);
+    expect(writeResponse.body).toMatchObject({
+      code: 'FEATURE_NOT_AVAILABLE',
+      feature: 'CLIENT_HOUSE_STYLE',
+    });
+  });
+
+  it('keeps stateless timesheet templates available and guards persistence', async () => {
+    const app = createApp();
+    const templatesResponse = await requestJson(app, 'GET', '/timesheet-reports/templates');
+    const persistenceResponse = await requestJson(app, 'POST', '/timesheet-reports/instances');
+
+    expect(templatesResponse.status).toBe(200);
+    expect(Array.isArray(templatesResponse.body)).toBe(true);
+    expect(persistenceResponse.status).toBe(501);
+    expect(persistenceResponse.body).toMatchObject({
+      code: 'FEATURE_NOT_AVAILABLE',
+      feature: 'TIMESHEET_REPORT_PERSISTENCE',
+    });
+  });
+
+  it('preserves empty handoff reads and guards handoff writes', async () => {
+    const app = createApp();
+    const readResponse = await requestJson(app, 'GET', '/cases/case-1/handoff-packages');
+    const writeResponse = await requestJson(app, 'POST', '/cases/case-1/handoff-packages');
+
+    expect(readResponse).toEqual({ status: 200, body: [] });
+    expect(writeResponse.status).toBe(501);
+    expect(writeResponse.body).toMatchObject({
+      code: 'FEATURE_NOT_AVAILABLE',
+      feature: 'LAWYER_HANDOFF_PACKAGES',
+    });
+  });
+
+  it.each([
+    ['GET', '/clause-library/clauses', 'CLAUSE_LIBRARY'],
+    ['GET', '/communications/communication-1', 'COMMUNICATIONS'],
+    ['GET', '/documents/document-1/legal-analyses', 'LEGAL_ANALYSES'],
+    ['GET', '/contracts/generation-1/review-notes', 'CONTRACT_REVIEW_NOTES'],
+  ])('guards %s %s without leaking Prisma errors', async (method, path, feature) => {
+    const response = await requestJson(createApp(), method, path);
+
+    expect(response.status).toBe(501);
+    expect(response.body).toMatchObject({
+      status: 501,
+      code: 'FEATURE_NOT_AVAILABLE',
+      feature,
+      reason: 'DATABASE_FOUNDATION_NOT_DEPLOYED',
+    });
+    expect(JSON.stringify(response.body).toLowerCase()).not.toContain('prisma');
+  });
+});

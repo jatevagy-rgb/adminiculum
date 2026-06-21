@@ -8,8 +8,20 @@ import { Router, Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../prisma/prisma.service';
 import { authenticate } from '../../middleware/auth';
+import {
+  isDatabaseFoundationEnabled,
+  requireDatabaseFoundation,
+} from '../../middleware/featureAvailability';
 
 const router = Router();
+const isHouseStyleFoundationEnabled = () =>
+  isDatabaseFoundationEnabled('ENABLE_CLIENT_HOUSE_STYLE');
+const requireHouseStyleFoundation = requireDatabaseFoundation({
+  feature: 'CLIENT_HOUSE_STYLE',
+  enabled: isHouseStyleFoundationEnabled,
+  message: 'Client house-style persistence is not available in this environment.',
+  nextStep: 'Complete the client house-style database reconciliation before saving a profile.',
+});
 
 function logPrismaRouteError(route: string, error: unknown): void {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -74,6 +86,10 @@ router.get('/ping', (_req: Request, res: Response) => {
 // GET /clients/:clientId/house-style
 // ============================================================================
 router.get('/:clientId/house-style', authenticate, async (req: Request, res: Response): Promise<void> => {
+  if (!isHouseStyleFoundationEnabled()) {
+    res.json(null);
+    return;
+  }
   try {
     const clientId = Array.isArray(req.params.clientId) ? req.params.clientId[0] : req.params.clientId;
 
@@ -105,7 +121,7 @@ router.get('/:clientId/house-style', authenticate, async (req: Request, res: Res
 // ============================================================================
 // PUT /clients/:clientId/house-style
 // ============================================================================
-router.put('/:clientId/house-style', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.put('/:clientId/house-style', authenticate, requireHouseStyleFoundation, async (req: Request, res: Response): Promise<void> => {
   try {
     const clientId = Array.isArray(req.params.clientId) ? req.params.clientId[0] : req.params.clientId;
 

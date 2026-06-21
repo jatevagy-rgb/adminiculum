@@ -4,8 +4,18 @@ import legalAnalysesService, {
   LegalAnalysisServiceError,
   type LegalAnalysisSourceDocumentType,
 } from './service';
+import {
+  isDatabaseFoundationEnabled,
+  requireDatabaseFoundation,
+} from '../../middleware/featureAvailability';
 
 const router = Router();
+const requireLegalAnalysisFoundation = requireDatabaseFoundation({
+  feature: 'LEGAL_ANALYSES',
+  enabled: () => isDatabaseFoundationEnabled('ENABLE_LEGAL_ANALYSES'),
+  message: 'Legal analysis persistence is not available in this environment.',
+  nextStep: 'Complete the legal analysis database reconciliation before enabling this feature.',
+});
 
 function getUserId(req: Request): string | undefined {
   return (req as any).user?.userId;
@@ -28,7 +38,7 @@ function sendServiceError(res: Response, error: unknown): void {
   });
 }
 
-router.get('/documents/:documentId/legal-analyses', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/documents/:documentId/legal-analyses', authenticate, requireLegalAnalysisFoundation, async (req: Request, res: Response): Promise<void> => {
   try {
     const { documentId } = req.params as { documentId: string };
     const documentSourceType = req.query.documentSourceType
@@ -49,7 +59,7 @@ router.get('/documents/:documentId/legal-analyses', authenticate, async (req: Re
   }
 });
 
-router.post('/documents/:documentId/legal-analyses', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/documents/:documentId/legal-analyses', authenticate, requireLegalAnalysisFoundation, async (req: Request, res: Response): Promise<void> => {
   try {
     const { documentId } = req.params as { documentId: string };
     const { caseId, documentSourceType, title, analysisText, status, sourceType, aiToolName, anonymizedInputSnapshot } = req.body || {};
@@ -83,7 +93,7 @@ router.post('/documents/:documentId/legal-analyses', authenticate, async (req: R
   }
 });
 
-router.get('/legal-analyses/:id', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/legal-analyses/:id', authenticate, requireLegalAnalysisFoundation, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const analysis = await legalAnalysesService.getLegalAnalysis(id);
@@ -100,7 +110,7 @@ router.get('/legal-analyses/:id', authenticate, async (req: Request, res: Respon
   }
 });
 
-router.patch('/legal-analyses/:id', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.patch('/legal-analyses/:id', authenticate, requireLegalAnalysisFoundation, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const { title, analysisText, status, aiToolName, anonymizedInputSnapshot } = req.body || {};
@@ -121,7 +131,7 @@ router.patch('/legal-analyses/:id', authenticate, async (req: Request, res: Resp
   }
 });
 
-router.delete('/legal-analyses/:id', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.delete('/legal-analyses/:id', authenticate, requireLegalAnalysisFoundation, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     await legalAnalysesService.deleteLegalAnalysis(id, getUserId(req));

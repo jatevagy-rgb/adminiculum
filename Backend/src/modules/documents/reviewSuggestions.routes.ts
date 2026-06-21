@@ -6,8 +6,18 @@ import {
   listDocumentReviewSuggestions,
   updateDocumentReviewSuggestionStatus,
 } from './reviewSuggestions.service';
+import {
+  isDatabaseFoundationEnabled,
+  requireDatabaseFoundation,
+} from '../../middleware/featureAvailability';
 
 const router = Router({ mergeParams: true });
+const requireReviewSuggestionFoundation = requireDatabaseFoundation({
+  feature: 'DOCUMENT_REVIEW_SUGGESTIONS',
+  enabled: () => isDatabaseFoundationEnabled('ENABLE_DOCUMENT_REVIEW_SUGGESTIONS'),
+  message: 'Document review suggestion persistence is not available in this environment.',
+  nextStep: 'Complete BP3A database reconciliation before enabling this feature.',
+});
 
 const getAuthorId = (req: Request): string | null =>
   ((req as any).user?.userId || (req as any).user?.id || null) as string | null;
@@ -30,7 +40,7 @@ const sendError = (res: Response, error: unknown) => {
   });
 };
 
-router.get('/', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/', authenticate, requireReviewSuggestionFoundation, async (req: Request, res: Response): Promise<void> => {
   try {
     const { documentId } = req.params as { documentId: string };
     const suggestions = await listDocumentReviewSuggestions(documentId, {
@@ -44,7 +54,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
   }
 });
 
-router.post('/', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/', authenticate, requireReviewSuggestionFoundation, async (req: Request, res: Response): Promise<void> => {
   try {
     const { documentId } = req.params as { documentId: string };
     const suggestion = await createDocumentReviewSuggestion(documentId, {
@@ -58,7 +68,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
   }
 });
 
-router.patch('/:suggestionId', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.patch('/:suggestionId', authenticate, requireReviewSuggestionFoundation, async (req: Request, res: Response): Promise<void> => {
   try {
     const { documentId, suggestionId } = req.params as { documentId: string; suggestionId: string };
     const suggestion = await updateDocumentReviewSuggestionStatus(documentId, suggestionId, req.body?.status);
