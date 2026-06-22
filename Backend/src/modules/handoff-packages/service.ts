@@ -5,6 +5,7 @@
  */
 
 import { prisma } from '../../prisma/prisma.service';
+import { isDatabaseFoundationEnabled } from '../../middleware/featureAvailability';
 
 export type LawyerHandoffPackageType = 'STANDARD' | 'FINAL_APPROVAL';
 export type LawyerHandoffStatus = 'DRAFT' | 'PREPARED' | 'SUBMITTED' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED' | 'ARCHIVED';
@@ -96,6 +97,17 @@ function assertDecision(value: string | undefined): LawyerHandoffDecision {
     throw new HandoffPackageServiceError(400, 'INVALID_DECISION', 'Invalid review decision');
   }
   return value as LawyerHandoffDecision;
+}
+
+function assertAdjacentFoundationAvailable(
+  value: string | null | undefined,
+  environmentVariable: string,
+  code: string,
+  message: string
+): void {
+  if (value && !isDatabaseFoundationEnabled(environmentVariable)) {
+    throw new HandoffPackageServiceError(501, code, message);
+  }
 }
 
 function toResult(record: any): LawyerHandoffPackageResult {
@@ -227,6 +239,19 @@ class HandoffPackagesService {
       throw new HandoffPackageServiceError(400, 'CASE_ID_REQUIRED', 'caseId is required');
     }
 
+    assertAdjacentFoundationAvailable(
+      params.legalAnalysisId,
+      'ENABLE_LEGAL_ANALYSES',
+      'LEGAL_ANALYSIS_FEATURE_UNAVAILABLE',
+      'Legal analysis references are not available in this environment.'
+    );
+    assertAdjacentFoundationAvailable(
+      params.reviewNotesId,
+      'ENABLE_CONTRACT_REVIEW_NOTES',
+      'REVIEW_NOTES_FEATURE_UNAVAILABLE',
+      'Review note references are not available in this environment.'
+    );
+
     const caseRecord = await prisma.case.findUnique({ where: { id: caseId }, select: { id: true } });
     if (!caseRecord) {
       throw new HandoffPackageServiceError(404, 'CASE_NOT_FOUND', 'Case not found');
@@ -301,6 +326,19 @@ class HandoffPackagesService {
   }
 
   async updateHandoffPackage(id: string, params: UpdateHandoffPackageParams): Promise<LawyerHandoffPackageResult> {
+    assertAdjacentFoundationAvailable(
+      params.legalAnalysisId,
+      'ENABLE_LEGAL_ANALYSES',
+      'LEGAL_ANALYSIS_FEATURE_UNAVAILABLE',
+      'Legal analysis references are not available in this environment.'
+    );
+    assertAdjacentFoundationAvailable(
+      params.reviewNotesId,
+      'ENABLE_CONTRACT_REVIEW_NOTES',
+      'REVIEW_NOTES_FEATURE_UNAVAILABLE',
+      'Review note references are not available in this environment.'
+    );
+
     const repo = this.assertRepoAvailable();
     const existing = await repo.findUnique({ where: { id } });
     if (!existing) {

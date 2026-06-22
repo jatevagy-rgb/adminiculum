@@ -4,7 +4,7 @@
  * Mount: /api/v1/cases/:caseId/handoff-packages, /api/v1/handoff-packages/:id
  */
 
-import { Router, Request, Response } from 'express';
+import { NextFunction, Router, Request, Response } from 'express';
 import { authenticate } from '../../middleware/auth';
 import handoffPackagesService, {
   HandoffPackageServiceError,
@@ -13,17 +13,35 @@ import {
   isDatabaseFoundationEnabled,
   requireDatabaseFoundation,
 } from '../../middleware/featureAvailability';
+import {
+  requireHandoffCaseAccess,
+  requireHandoffPackageAccess,
+} from './authorization';
 
 const router = Router();
+const isHandoffFoundationEnabled = () =>
+  isDatabaseFoundationEnabled('ENABLE_HANDOFF_PACKAGES');
 const requireHandoffFoundation = requireDatabaseFoundation({
   feature: 'LAWYER_HANDOFF_PACKAGES',
-  enabled: () => isDatabaseFoundationEnabled('ENABLE_HANDOFF_PACKAGES'),
+  enabled: isHandoffFoundationEnabled,
   message: 'Lawyer handoff package persistence is not available in this environment.',
   nextStep: 'Complete the handoff package database reconciliation before enabling writes.',
 });
 
 function getUserId(req: Request): string | undefined {
   return (req as any).user?.userId;
+}
+
+function gateHandoffListRead(
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  if (!isHandoffFoundationEnabled()) {
+    res.json([]);
+    return;
+  }
+  next();
 }
 
 function sendServiceError(res: Response, error: unknown): void {
@@ -43,7 +61,7 @@ function sendServiceError(res: Response, error: unknown): void {
 }
 
 // GET /api/v1/cases/:caseId/handoff-packages
-router.get('/cases/:caseId/handoff-packages', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/cases/:caseId/handoff-packages', authenticate, gateHandoffListRead, requireHandoffCaseAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const packages = await handoffPackagesService.listHandoffPackages(caseId);
@@ -55,7 +73,7 @@ router.get('/cases/:caseId/handoff-packages', authenticate, async (req: Request,
 });
 
 // POST /api/v1/cases/:caseId/handoff-packages
-router.post('/cases/:caseId/handoff-packages', authenticate, requireHandoffFoundation, async (req: Request, res: Response): Promise<void> => {
+router.post('/cases/:caseId/handoff-packages', authenticate, requireHandoffFoundation, requireHandoffCaseAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const {
@@ -93,7 +111,7 @@ router.post('/cases/:caseId/handoff-packages', authenticate, requireHandoffFound
 });
 
 // GET /api/v1/handoff-packages/:id
-router.get('/handoff-packages/:id', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/handoff-packages/:id', authenticate, requireHandoffFoundation, requireHandoffPackageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const pkg = await handoffPackagesService.getHandoffPackage(id);
@@ -111,7 +129,7 @@ router.get('/handoff-packages/:id', authenticate, async (req: Request, res: Resp
 });
 
 // PATCH /api/v1/handoff-packages/:id
-router.patch('/handoff-packages/:id', authenticate, requireHandoffFoundation, async (req: Request, res: Response): Promise<void> => {
+router.patch('/handoff-packages/:id', authenticate, requireHandoffFoundation, requireHandoffPackageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const {
@@ -143,7 +161,7 @@ router.patch('/handoff-packages/:id', authenticate, requireHandoffFoundation, as
 });
 
 // POST /api/v1/handoff-packages/:id/review
-router.post('/handoff-packages/:id/review', authenticate, requireHandoffFoundation, async (req: Request, res: Response): Promise<void> => {
+router.post('/handoff-packages/:id/review', authenticate, requireHandoffFoundation, requireHandoffPackageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const { decision, reviewComment } = req.body || {};
