@@ -160,6 +160,18 @@ router.patch('/handoff-packages/:id', authenticate, requireHandoffFoundation, re
   }
 });
 
+// POST /api/v1/handoff-packages/:id/archive
+router.post('/handoff-packages/:id/archive', authenticate, requireHandoffFoundation, requireHandoffPackageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params as { id: string };
+    const pkg = await handoffPackagesService.archiveHandoffPackage(id);
+    res.json(pkg);
+  } catch (error) {
+    console.error('archiveHandoffPackage error:', error instanceof Error ? error.message : 'Unknown error');
+    sendServiceError(res, error);
+  }
+});
+
 // POST /api/v1/handoff-packages/:id/review
 router.post('/handoff-packages/:id/review', authenticate, requireHandoffFoundation, requireHandoffPackageAccess, async (req: Request, res: Response): Promise<void> => {
   try {

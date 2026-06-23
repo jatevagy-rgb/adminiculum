@@ -204,7 +204,10 @@ class HandoffPackagesService {
     }
     try {
       const records = await repo.findMany({
-        where: { caseId },
+        where: {
+          caseId,
+          status: { not: 'ARCHIVED' },
+        },
         orderBy: { updatedAt: 'desc' },
       });
       return records.map(toResult);
@@ -386,6 +389,25 @@ class HandoffPackagesService {
 
     const result = toResult(record);
     return result;
+  }
+
+  async archiveHandoffPackage(id: string): Promise<LawyerHandoffPackageResult> {
+    const repo = this.assertRepoAvailable();
+    const existing = await repo.findUnique({ where: { id } });
+    if (!existing) {
+      throw new HandoffPackageServiceError(404, 'HANDOFF_PACKAGE_NOT_FOUND', 'Handoff package not found');
+    }
+
+    if (existing.status === 'ARCHIVED') {
+      return toResult(existing);
+    }
+
+    const record = await repo.update({
+      where: { id },
+      data: { status: 'ARCHIVED' },
+    });
+
+    return toResult(record);
   }
 
   async reviewHandoffPackage(id: string, params: ReviewHandoffPackageParams): Promise<LawyerHandoffPackageResult> {

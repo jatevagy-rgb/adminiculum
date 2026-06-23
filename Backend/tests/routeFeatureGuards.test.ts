@@ -280,7 +280,10 @@ describe('database foundation route guards', () => {
     expect(response).toEqual({ status: 200, body: [] });
     expect(prisma.caseCollaborator.findFirst).not.toHaveBeenCalled();
     expect(prisma.lawyerHandoffPackage.findMany).toHaveBeenCalledWith({
-      where: { caseId: 'case-1' },
+      where: {
+        caseId: 'case-1',
+        status: { not: 'ARCHIVED' },
+      },
       orderBy: { updatedAt: 'desc' },
     });
   });
@@ -307,6 +310,131 @@ describe('database foundation route guards', () => {
       code: 'HANDOFF_ACCESS_FORBIDDEN',
     });
     expect(prisma.lawyerHandoffPackage.findUnique).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps authentication ahead of handoff archive', async () => {
+    const response = await requestJson(
+      createApp(),
+      'POST',
+      '/handoff-packages/package-1/archive',
+      false
+    );
+
+    expect(response.status).toBe(401);
+    expect(prisma.lawyerHandoffPackage.findUnique).not.toHaveBeenCalled();
+    expect(prisma.lawyerHandoffPackage.update).not.toHaveBeenCalled();
+  });
+
+  it('returns controlled unavailable for disabled handoff archive', async () => {
+    const response = await requestJson(
+      createApp(),
+      'POST',
+      '/handoff-packages/package-1/archive'
+    );
+
+    expect(response.status).toBe(501);
+    expect(response.body).toMatchObject({
+      code: 'FEATURE_NOT_AVAILABLE',
+      feature: 'LAWYER_HANDOFF_PACKAGES',
+      reason: 'DATABASE_FOUNDATION_NOT_DEPLOYED',
+    });
+    expect(prisma.lawyerHandoffPackage.findUnique).not.toHaveBeenCalled();
+    expect(prisma.lawyerHandoffPackage.update).not.toHaveBeenCalled();
+  });
+
+  it('blocks handoff archive when the user cannot access the owning case', async () => {
+    process.env.ENABLE_HANDOFF_PACKAGES = 'true';
+    (prisma.lawyerHandoffPackage.findUnique as jest.Mock).mockResolvedValue({
+      caseId: 'case-1',
+    });
+    (prisma.case.findUnique as jest.Mock).mockResolvedValue({
+      id: 'case-1',
+      assignedLawyerId: 'user-2',
+    });
+    (prisma.caseCollaborator.findFirst as jest.Mock).mockResolvedValue(null);
+
+    const response = await requestJson(
+      createApp(),
+      'POST',
+      '/handoff-packages/package-1/archive'
+    );
+
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({
+      code: 'HANDOFF_ACCESS_FORBIDDEN',
+    });
+    expect(prisma.lawyerHandoffPackage.update).not.toHaveBeenCalled();
+  });
+
+  it('archives a package for an authorized same-case user', async () => {
+    process.env.ENABLE_HANDOFF_PACKAGES = 'true';
+    const existing = {
+      id: 'package-1',
+      caseId: 'case-1',
+      status: 'DRAFT',
+      packageType: 'STANDARD',
+      sourceDocumentId: null,
+      anonymizedDocumentId: null,
+      generatedContractId: null,
+      legalAnalysisId: null,
+      reviewNotesId: null,
+      preparerSummary: null,
+      preparedById: 'user-1',
+      submittedAt: null,
+      reviewedById: null,
+      reviewedAt: null,
+      reviewDecision: null,
+      reviewComment: null,
+      createdAt: new Date('2026-06-23T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-23T00:00:00.000Z'),
+    };
+    (prisma.lawyerHandoffPackage.findUnique as jest.Mock)
+      .mockResolvedValueOnce({ caseId: 'case-1' })
+      .mockResolvedValueOnce(existing);
+    (prisma.case.findUnique as jest.Mock).mockResolvedValue({
+      id: 'case-1',
+      assignedLawyerId: 'user-1',
+    });
+    (prisma.lawyerHandoffPackage.update as jest.Mock).mockResolvedValue({
+      ...existing,
+      status: 'ARCHIVED',
+    });
+
+    const response = await requestJson(
+      createApp(),
+      'POST',
+      '/handoff-packages/package-1/archive'
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      id: 'package-1',
+      caseId: 'case-1',
+      status: 'ARCHIVED',
+    });
+    expect(prisma.lawyerHandoffPackage.update).toHaveBeenCalledWith({
+      where: { id: 'package-1' },
+      data: { status: 'ARCHIVED' },
+    });
+  });
+
+  it('returns controlled not found for a missing handoff archive target', async () => {
+    process.env.ENABLE_HANDOFF_PACKAGES = 'true';
+    (prisma.lawyerHandoffPackage.findUnique as jest.Mock).mockResolvedValue(null);
+
+    const response = await requestJson(
+      createApp(),
+      'POST',
+      '/handoff-packages/missing-package/archive',
+      true,
+      { 'x-test-role': 'ADMIN' }
+    );
+
+    expect(response.status).toBe(404);
+    expect(response.body).toMatchObject({
+      code: 'HANDOFF_PACKAGE_NOT_FOUND',
+    });
+    expect(prisma.lawyerHandoffPackage.update).not.toHaveBeenCalled();
   });
 
   it.each([

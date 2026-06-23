@@ -20,6 +20,7 @@ jest.mock('../src/prisma/prisma.service', () => ({
     },
     lawyerHandoffPackage: {
       findUnique: jest.fn(),
+      findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
     },
@@ -67,5 +68,117 @@ describe('handoff package adjacent foundation checks', () => {
 
     expect(prisma.contractReviewRecord.findUnique).not.toHaveBeenCalled();
     expect(prisma.lawyerHandoffPackage.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('excludes archived packages from the default case list', async () => {
+    (prisma.lawyerHandoffPackage.findMany as jest.Mock).mockResolvedValue([]);
+
+    await handoffPackagesService.listHandoffPackages('case-1');
+
+    expect(prisma.lawyerHandoffPackage.findMany).toHaveBeenCalledWith({
+      where: {
+        caseId: 'case-1',
+        status: { not: 'ARCHIVED' },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+  });
+
+  it('archives only the package row and preserves timeline records', async () => {
+    const existing = {
+      id: 'package-1',
+      caseId: 'case-1',
+      status: 'DRAFT',
+      packageType: 'STANDARD',
+      sourceDocumentId: null,
+      anonymizedDocumentId: null,
+      generatedContractId: null,
+      legalAnalysisId: null,
+      reviewNotesId: null,
+      preparerSummary: null,
+      preparedById: 'user-1',
+      submittedAt: null,
+      reviewedById: null,
+      reviewedAt: null,
+      reviewDecision: null,
+      reviewComment: null,
+      createdAt: new Date('2026-06-23T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-23T00:00:00.000Z'),
+    };
+    (prisma.lawyerHandoffPackage.findUnique as jest.Mock).mockResolvedValue(existing);
+    (prisma.lawyerHandoffPackage.update as jest.Mock).mockResolvedValue({
+      ...existing,
+      status: 'ARCHIVED',
+    });
+
+    const result = await handoffPackagesService.archiveHandoffPackage('package-1');
+
+    expect(result.status).toBe('ARCHIVED');
+    expect(prisma.lawyerHandoffPackage.update).toHaveBeenCalledWith({
+      where: { id: 'package-1' },
+      data: { status: 'ARCHIVED' },
+    });
+    expect(prisma.timelineEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('keeps archive idempotent for an already archived package', async () => {
+    const archived = {
+      id: 'package-1',
+      caseId: 'case-1',
+      status: 'ARCHIVED',
+      packageType: 'STANDARD',
+      sourceDocumentId: null,
+      anonymizedDocumentId: null,
+      generatedContractId: null,
+      legalAnalysisId: null,
+      reviewNotesId: null,
+      preparerSummary: null,
+      preparedById: null,
+      submittedAt: null,
+      reviewedById: null,
+      reviewedAt: null,
+      reviewDecision: null,
+      reviewComment: null,
+      createdAt: new Date('2026-06-23T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-23T00:00:00.000Z'),
+    };
+    (prisma.lawyerHandoffPackage.findUnique as jest.Mock).mockResolvedValue(archived);
+
+    const result = await handoffPackagesService.archiveHandoffPackage('package-1');
+
+    expect(result.status).toBe('ARCHIVED');
+    expect(prisma.lawyerHandoffPackage.update).not.toHaveBeenCalled();
+    expect(prisma.timelineEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('keeps archived packages available through explicit single-package reads', async () => {
+    const archived = {
+      id: 'package-1',
+      caseId: 'case-1',
+      status: 'ARCHIVED',
+      packageType: 'STANDARD',
+      sourceDocumentId: null,
+      anonymizedDocumentId: null,
+      generatedContractId: null,
+      legalAnalysisId: null,
+      reviewNotesId: null,
+      preparerSummary: null,
+      preparedById: null,
+      submittedAt: null,
+      reviewedById: null,
+      reviewedAt: null,
+      reviewDecision: null,
+      reviewComment: null,
+      createdAt: new Date('2026-06-23T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-23T00:00:00.000Z'),
+    };
+    (prisma.lawyerHandoffPackage.findUnique as jest.Mock).mockResolvedValue(archived);
+
+    const result = await handoffPackagesService.getHandoffPackage('package-1');
+
+    expect(result).toMatchObject({
+      id: 'package-1',
+      status: 'ARCHIVED',
+    });
   });
 });
