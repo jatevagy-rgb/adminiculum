@@ -4,6 +4,7 @@ export interface FeatureUnavailableOptions {
   feature: string;
   message?: string;
   nextStep?: string;
+  reason?: string;
 }
 
 export interface DatabaseFoundationGuardOptions extends FeatureUnavailableOptions {
@@ -23,7 +24,7 @@ export function sendFeatureUnavailable(
     code: 'FEATURE_NOT_AVAILABLE',
     message: options.message || `${options.feature} is not available in this environment.`,
     feature: options.feature,
-    reason: 'DATABASE_FOUNDATION_NOT_DEPLOYED',
+    reason: options.reason || 'DATABASE_FOUNDATION_NOT_DEPLOYED',
     ...(options.nextStep ? { nextStep: options.nextStep } : {}),
   });
 }

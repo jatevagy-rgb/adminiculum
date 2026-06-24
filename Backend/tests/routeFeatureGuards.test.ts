@@ -46,6 +46,7 @@ import handoffPackagesRoutes from '../src/modules/handoff-packages/routes';
 import legalAnalysesRoutes from '../src/modules/legal-analyses/routes';
 import reviewNotesRoutes from '../src/modules/review-notes/routes';
 import timesheetReportRoutes from '../src/modules/timesheet-reports/routes';
+import clientPortalRoutes from '../src/routes/clientPortal';
 
 type TestResponse = {
   status: number;
@@ -114,6 +115,7 @@ function createApp(): Express {
   app.use('/contracts', reviewNotesRoutes);
   app.use('/timesheet-reports', timesheetReportRoutes);
   app.use('/', handoffPackagesRoutes);
+  app.use('/client-portal', clientPortalRoutes);
   return app;
 }
 
@@ -128,6 +130,7 @@ describe('database foundation route guards', () => {
     delete process.env.ENABLE_CONTRACT_REVIEW_NOTES;
     delete process.env.ENABLE_TIMESHEET_REPORT_PERSISTENCE;
     delete process.env.ENABLE_HANDOFF_PACKAGES;
+    delete process.env.ENABLE_CLIENT_PORTAL;
   });
 
   it('keeps authentication ahead of the document review guard', async () => {
@@ -453,5 +456,75 @@ describe('database foundation route guards', () => {
       reason: 'DATABASE_FOUNDATION_NOT_DEPLOYED',
     });
     expect(JSON.stringify(response.body).toLowerCase()).not.toContain('prisma');
+  });
+
+  // ── Client portal RC2F security patch ──────────────────────────────────────
+
+  it.each([
+    ['GET', '/client-portal/summary/client-1'],
+    ['GET', '/client-portal/departments/client-1'],
+    ['GET', '/client-portal/departments/dept-1/matters'],
+    ['GET', '/client-portal/matters/matter-1'],
+    ['GET', '/client-portal/matters/matter-1/time-log'],
+    ['GET', '/client-portal/export/client-1'],
+  ])('client portal %s %s returns 501 when feature is disabled (unauthenticated)', async (_method, path) => {
+    const response = await requestJson(createApp(), 'GET', path, false);
+
+    expect(response.status).toBe(501);
+    expect(response.body).toMatchObject({
+      status: 501,
+      code: 'FEATURE_NOT_AVAILABLE',
+      feature: 'CLIENT_PORTAL',
+      reason: 'CLIENT_PORTAL_NOT_ENABLED',
+    });
+    expect(JSON.stringify(response.body).toLowerCase()).not.toContain('prisma');
+  });
+
+  it.each([
+    ['GET', '/client-portal/summary/client-1'],
+    ['GET', '/client-portal/departments/client-1'],
+    ['GET', '/client-portal/departments/dept-1/matters'],
+    ['GET', '/client-portal/matters/matter-1'],
+    ['GET', '/client-portal/matters/matter-1/time-log'],
+    ['GET', '/client-portal/export/client-1'],
+  ])('client portal %s %s returns 501 when feature is disabled (authenticated)', async (_method, path) => {
+    const response = await requestJson(createApp(), 'GET', path, true);
+
+    expect(response.status).toBe(501);
+    expect(response.body).toMatchObject({
+      status: 501,
+      code: 'FEATURE_NOT_AVAILABLE',
+      feature: 'CLIENT_PORTAL',
+      reason: 'CLIENT_PORTAL_NOT_ENABLED',
+    });
+    expect(JSON.stringify(response.body).toLowerCase()).not.toContain('prisma');
+  });
+
+  it('spoofed x-user-id header cannot access client portal data', async () => {
+    const response = await requestJson(
+      createApp(),
+      'GET',
+      '/client-portal/summary/client-1',
+      false,
+      { 'x-user-id': 'spoofed-client-id' }
+    );
+
+    expect(response.status).toBe(501);
+    expect(response.body).toMatchObject({
+      code: 'FEATURE_NOT_AVAILABLE',
+      feature: 'CLIENT_PORTAL',
+      reason: 'CLIENT_PORTAL_NOT_ENABLED',
+    });
+  });
+
+  it('no Prisma data queries run when client portal is disabled', async () => {
+    await requestJson(createApp(), 'GET', '/client-portal/summary/client-1', false);
+    await requestJson(createApp(), 'GET', '/client-portal/export/client-1', true);
+    await requestJson(createApp(), 'GET', '/client-portal/matters/matter-1/time-log', false);
+
+    // No Prisma mock on the shared prisma object should have been called
+    expect(prisma.case.findUnique).not.toHaveBeenCalled();
+    expect(prisma.lawyerHandoffPackage.findMany).not.toHaveBeenCalled();
+    expect(prisma.lawyerHandoffPackage.create).not.toHaveBeenCalled();
   });
 });
