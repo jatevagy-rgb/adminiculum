@@ -698,7 +698,12 @@ export function CasesList() {
                   <td className="px-4 py-4"><AdminStatusPill tone={item.status === "OPEN" ? "green" : "neutral"}>{statusLabel[item.status] || item.status}</AdminStatusPill></td>
                   <td className="px-4 py-4 text-xs text-[#3D4842]">{item.assignedLawyer?.name || "Nincs hozzárendelve"}</td>
                   <td className="px-4 py-4"><AdminBadge tone={deriveWorkPriorityLabel(item.priority) === "Magas" ? "amber" : "neutral"}>{deriveWorkPriorityLabel(item.priority)}</AdminBadge></td>
-                  <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}><AdminButton size="sm" onClick={() => router.push(`/cases/${item.id}/documents`)}>Dokumentumtár</AdminButton></td>
+                  <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex flex-wrap gap-2">
+                      <AdminButton size="sm" variant="primary" onClick={() => router.push(`/cases/${item.id}`)}>Megnyitás</AdminButton>
+                      <AdminButton size="sm" variant="neutral" onClick={() => router.push(`/cases/${item.id}/documents`)}>Dokumentumtár</AdminButton>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {filteredCases.length === 0 && (
