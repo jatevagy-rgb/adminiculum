@@ -50,10 +50,10 @@ const TASK_TYPES = [
 ];
 
 const priorityChip: Record<string, string> = {
-  URGENT: "bg-[#FEF2F2] text-[#B91C1C] border-[#FCA5A5]",
+  URGENT: "bg-[var(--adm-terracotta-100)] text-[var(--adm-terracotta-700)] border-[#FCA5A5]",
   HIGH: "bg-[#FEF3C7] text-[#92400E] border-[#FCD34D]",
   MEDIUM: "bg-[#EDE9FE] text-[#5B21B6] border-[#C4B5FD]",
-  LOW: "bg-[#EAF0E7] text-[#2C4A35] border-[#BFD1C3]",
+  LOW: "bg-[var(--adm-sage-100)] text-[var(--adm-green-800)] border-[#BFD1C3]",
 };
 
 const statusChip: Record<string, string> = {
@@ -65,13 +65,13 @@ const statusChip: Record<string, string> = {
   SUBMITTED: "bg-[#FEF3C7] text-[#92400E] border-[#FCD34D]",
   REVIEW_NEEDED: "bg-[#FEF3C7] text-[#92400E] border-[#FCD34D]",
   REVIEW_SUBMITTED: "bg-[#FEF3C7] text-[#92400E] border-[#FCD34D]",
-  DONE: "bg-[#E2EDE5] text-[#23472F] border-[#A6C0AF]",
-  COMPLETED: "bg-[#E2EDE5] text-[#23472F] border-[#A6C0AF]",
-  APPROVED: "bg-[#E2EDE5] text-[#23472F] border-[#A6C0AF]",
-  FINALIZED: "bg-[#E2EDE5] text-[#23472F] border-[#A6C0AF]",
-  REJECTED: "bg-[#FEE2E2] text-[#991B1B] border-[#FCA5A5]",
-  DECLINED: "bg-[#FEE2E2] text-[#991B1B] border-[#FCA5A5]",
-  BLOCKED: "bg-[#FEE2E2] text-[#991B1B] border-[#FCA5A5]",
+  DONE: "bg-[var(--adm-sage-100)] text-[var(--adm-green-800)] border-[#A6C0AF]",
+  COMPLETED: "bg-[var(--adm-sage-100)] text-[var(--adm-green-800)] border-[#A6C0AF]",
+  APPROVED: "bg-[var(--adm-sage-100)] text-[var(--adm-green-800)] border-[#A6C0AF]",
+  FINALIZED: "bg-[var(--adm-sage-100)] text-[var(--adm-green-800)] border-[#A6C0AF]",
+  REJECTED: "bg-[var(--adm-terracotta-100)] text-[#991B1B] border-[#FCA5A5]",
+  DECLINED: "bg-[var(--adm-terracotta-100)] text-[#991B1B] border-[#FCA5A5]",
+  BLOCKED: "bg-[var(--adm-terracotta-100)] text-[#991B1B] border-[#FCA5A5]",
   CANCELLED: "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]",
   ARCHIVED: "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]",
 };
@@ -345,12 +345,12 @@ function TasksPageContent() {
     const tomorrowStart = new Date(todayStart);
     tomorrowStart.setDate(tomorrowStart.getDate() + 1);
     if (due.getTime() < todayStart.getTime()) {
-      return { label: "lejárt", className: "text-[#B91C1C]" };
+      return { label: "lejárt", className: "text-[var(--adm-terracotta-700)]" };
     }
     if (due.getTime() >= todayStart.getTime() && due.getTime() < tomorrowStart.getTime()) {
       return { label: "ma esedékes", className: "text-[#B45309]" };
     }
-    return { label: "határidős", className: "text-[#2C4A35]" };
+    return { label: "határidős", className: "text-[var(--adm-green-800)]" };
   };
 
   const handleReassign = async (taskId: string, newAssigneeId: string) => {
@@ -401,74 +401,74 @@ function TasksPageContent() {
 
   return (
     <div className="flex-1 flex min-h-0">
-      <main className="flex-1 overflow-y-auto border-r border-[#DDD7CA]">
+      <main className="flex-1 overflow-y-auto border-r border-[var(--adm-border)]">
         <div className="max-w-5xl mx-auto p-8">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-2xl font-serif text-[#1F2821]">Feladatok és határidők</h1>
-              <p className="text-xs text-[#7B776D] mt-1">{filteredTasks.length} feladat a szűrés szerint</p>
-              <p className="text-[10px] text-[#9C9890] mt-1">Operatív munkasor: teendők, review alatti elemek és határidős feladatok.</p>
+              <h1 className="text-2xl font-serif text-[var(--adm-text)]">Feladatok és határidők</h1>
+              <p className="text-xs text-[var(--adm-text-muted)] mt-1">{filteredTasks.length} feladat a szűrés szerint</p>
+              <p className="text-[10px] text-[var(--adm-text-soft)] mt-1">Operatív munkasor: teendők, review alatti elemek és határidős feladatok.</p>
               {deepLinkedTaskId && (
                 <p className="text-[10px] text-[#8B7355] mt-1">Deep-linkelt feladat nézet aktív.</p>
               )}
             </div>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2 bg-[#1A2E21] text-white text-xs uppercase tracking-[0.2em] hover:bg-[#243D2D]"
+              className="px-4 py-2 bg-[var(--adm-green-950)] text-white text-xs uppercase tracking-[0.2em] hover:bg-[#243D2D]"
             >
               + Új feladat
             </button>
           </div>
 
-          <section className="mb-4 grid gap-3 border border-[#D8CFB6] bg-[#FFFDF7] p-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+          <section className="mb-4 grid gap-3 border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 lg:grid-cols-[minmax(0,1fr)_260px]">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7B776D]">Home Office feladatindító</p>
-              <h2 className="mt-1 font-serif text-xl font-medium text-[#1F2821]">Itt válaszd ki a következő operatív lépést</h2>
-              <p className="mt-2 text-xs leading-5 text-[#5F675F]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Home Office feladatindító</p>
+              <h2 className="mt-1 font-serif text-xl font-medium text-[var(--adm-text)]">Itt válaszd ki a következő operatív lépést</h2>
+              <p className="mt-2 text-xs leading-5 text-[var(--adm-text-muted)]">
                 A feladatlista valós ügyhöz kötött teendőket mutat, munkaprioritás szerint rendezve. A határidőket és az ügyvédi kontextust továbbra is külön kell mérlegelni.
               </p>
-              <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[#514D45]">
-                <span className="rounded-full border border-[#D8CFB6] bg-white px-3 py-1">Nyitott feladatok: {taskEntrypointStats.openTasks}</span>
-                <span className="rounded-full border border-[#D8CFB6] bg-white px-3 py-1">Nincs felelős: {taskEntrypointStats.unassignedTasks}</span>
-                <span className="rounded-full border border-[#E6C987] bg-[#FAEFCF] px-3 py-1">Ma esedékes: {taskEntrypointStats.dueToday}</span>
+              <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[var(--adm-text-muted)]">
+                <span className="rounded-full border border-[var(--adm-border)] bg-white px-3 py-1">Nyitott feladatok: {taskEntrypointStats.openTasks}</span>
+                <span className="rounded-full border border-[var(--adm-border)] bg-white px-3 py-1">Nincs felelős: {taskEntrypointStats.unassignedTasks}</span>
+                <span className="rounded-full border border-[#E6C987] bg-[var(--adm-sand-100)] px-3 py-1">Ma esedékes: {taskEntrypointStats.dueToday}</span>
               </div>
             </div>
-            <div className="rounded-[10px] border border-[#EEE7D9] bg-[#FBF9F3] p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Gyors folytatás</p>
-              <p className="mt-1 text-[11px] leading-5 text-[#6D6A62]">Válassz feladatot a jobb oldali kontextushoz, vagy nyisd meg az ügylistát, ha ügyből indulnál.</p>
+            <div className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Gyors folytatás</p>
+              <p className="mt-1 text-[11px] leading-5 text-[var(--adm-text-muted)]">Válassz feladatot a jobb oldali kontextushoz, vagy nyisd meg az ügylistát, ha ügyből indulnál.</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Link href="/cases" className="rounded border border-[#D8CFB6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F2821] hover:bg-[#FBF6E7]">Ügyek megnyitása</Link>
-                <Link href="/documents/compare" className="rounded border border-[#D8CFB6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F2821] hover:bg-[#FBF6E7]">Dokumentum-review</Link>
+                <Link href="/cases" className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ügyek megnyitása</Link>
+                <Link href="/documents/compare" className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Dokumentum-review</Link>
               </div>
             </div>
           </section>
 
           {isLoading ? (
-            <div className="py-10 text-center text-xs text-[#7B776D]">Feladatok betöltése...</div>
+            <div className="py-10 text-center text-xs text-[var(--adm-text-muted)]">Feladatok betöltése...</div>
           ) : error ? (
-            <div className="border border-[#D4B8B8] bg-[#FFF7F4] px-5 py-8 text-center">
+            <div className="border border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] px-5 py-8 text-center">
               <p className="font-serif text-lg text-[#7A2F2F]">{error}</p>
-              <p className="mt-2 text-xs text-[#6D6A62]">Próbáld újra, vagy indulj egy meglévő ügyből.</p>
+              <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Próbáld újra, vagy indulj egy meglévő ügyből.</p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 <button onClick={loadTasksWorkspace} className="rounded border border-[#8B3A3A] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#8B3A3A] hover:bg-[#FFF0ED]">Újrapróbálás</button>
-                <button onClick={() => setShowCreateModal(true)} className="rounded bg-[#1A2E21] px-3 py-1.5 text-[11px] font-semibold text-white">Új feladat</button>
-                <Link href="/cases" className="rounded border border-[#D8CFB6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F2821] hover:bg-[#FBF6E7]">Ügyek megnyitása</Link>
+                <button onClick={() => setShowCreateModal(true)} className="rounded bg-[var(--adm-green-950)] px-3 py-1.5 text-[11px] font-semibold text-white">Új feladat</button>
+                <Link href="/cases" className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ügyek megnyitása</Link>
               </div>
             </div>
           ) : filteredTasks.length === 0 ? (
-            <div className="space-y-2 border border-dashed border-[#DDD7CA] px-5 py-10 text-center text-xs text-[#7B776D]">
-              <p className="font-serif text-lg text-[#1F2821]">{tasks.length === 0 ? "Nincs betöltött feladat." : "Nincs találat a kiválasztott szűrőkkel."}</p>
+            <div className="space-y-2 border border-dashed border-[var(--adm-border)] px-5 py-10 text-center text-xs text-[var(--adm-text-muted)]">
+              <p className="font-serif text-lg text-[var(--adm-text)]">{tasks.length === 0 ? "Nincs betöltött feladat." : "Nincs találat a kiválasztott szűrőkkel."}</p>
               <p>{tasks.length === 0 ? "Új feladat létrehozásához válassz ügyet, majd add meg a feladat címét és határidejét." : "Módosítsd a szűrőket, vagy nyisd meg az ügylistát másik munkafolyamat választásához."}</p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <button onClick={() => setShowCreateModal(true)} className="rounded bg-[#1A2E21] px-3 py-1.5 text-[11px] font-semibold text-white">Új feladat</button>
-                <Link href="/cases" className="rounded border border-[#D8CFB6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F2821] hover:bg-[#FBF6E7]">Ügyek megnyitása</Link>
+                <button onClick={() => setShowCreateModal(true)} className="rounded bg-[var(--adm-green-950)] px-3 py-1.5 text-[11px] font-semibold text-white">Új feladat</button>
+                <Link href="/cases" className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ügyek megnyitása</Link>
               </div>
             </div>
           ) : (
-            <div className="border border-[#DDD7CA] bg-white overflow-hidden">
+            <div className="border border-[var(--adm-border)] bg-white overflow-hidden">
               <table className="w-full text-left">
-                <thead className="bg-[#F6F2E8] border-b border-[#DDD7CA]">
-                  <tr className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">
+                <thead className="bg-[var(--adm-ivory-100)] border-b border-[var(--adm-border)]">
+                  <tr className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)]">
                     <th className="px-4 py-3">Feladat</th>
                     <th className="px-4 py-3">Ügy</th>
                     <th className="px-4 py-3">Prioritás</th>
@@ -483,22 +483,22 @@ function TasksPageContent() {
                     <tr
                       key={task.id}
                       onClick={() => setSelectedTaskId(task.id)}
-                      className={`border-b border-[#EEE7D9] cursor-pointer ${selectedTaskId === task.id ? "bg-[#FBF9F3]" : "hover:bg-[#FBF9F3]"}`}
+                      className={`border-b border-[var(--adm-border)] cursor-pointer ${selectedTaskId === task.id ? "bg-[var(--adm-surface)]" : "hover:bg-[var(--adm-surface)]"}`}
                     >
                       <td className="px-4 py-3">
-                        <p className="text-sm font-semibold text-[#1F2821]">{task.title}</p>
-                        <p className="text-[11px] text-[#7B776D] truncate max-w-[280px]">{task.description || "Nincs leírás"}</p>
+                        <p className="text-sm font-semibold text-[var(--adm-text)]">{task.title}</p>
+                        <p className="text-[11px] text-[var(--adm-text-muted)] truncate max-w-[280px]">{task.description || "Nincs leírás"}</p>
                       </td>
-                      <td className="px-4 py-3 text-xs text-[#514D45]">{task.case.caseNumber}</td>
+                      <td className="px-4 py-3 text-xs text-[var(--adm-text-muted)]">{task.case.caseNumber}</td>
                       <td className="px-4 py-3">
                         <span className={`text-[10px] uppercase px-2 py-1 border ${priorityChip[task.priority] || priorityChip.MEDIUM}`}>
                           {priorityLabel[String(task.priority || "").toUpperCase()] || "Közepes"}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-[#514D45]">
+                      <td className="px-4 py-3 text-xs text-[var(--adm-text-muted)]">
                         {task.dueDate ? new Date(task.dueDate).toLocaleDateString("hu-HU") : "Nincs határidő"}
                       </td>
-                      <td className="px-4 py-3 text-xs text-[#514D45]">{task.assignedTo?.name || "Nincs hozzárendelve"}</td>
+                      <td className="px-4 py-3 text-xs text-[var(--adm-text-muted)]">{task.assignedTo?.name || "Nincs hozzárendelve"}</td>
                       <td className="px-4 py-3">
                         <span className={`text-[10px] uppercase px-2 py-1 border ${statusChip[String(task.status || "").toUpperCase()] || statusChip.TODO}`}>
                           {statusLabel[String(task.status || "").toUpperCase()] || "Ismeretlen állapot"}
@@ -509,7 +509,7 @@ function TasksPageContent() {
                           <button
                             onClick={() => runTaskAction(task.id, "start")}
                             disabled={isActionLoading === task.id + "start"}
-                            className="text-[10px] px-2 py-1 bg-[#1A2E21] text-white"
+                            className="text-[10px] px-2 py-1 bg-[var(--adm-green-950)] text-white"
                           >
                             Indítás
                           </button>
@@ -554,16 +554,16 @@ function TasksPageContent() {
       <aside className="w-80 bg-white overflow-y-auto">
         <div className="p-4 space-y-5">
           <div>
-            <h2 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-2">Feladat kontextus</h2>
+            <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Feladat kontextus</h2>
             {!selectedTask ? (
-              <p className="text-xs text-[#9C9890]">Válassz feladatot a részletekhez.</p>
+              <p className="text-xs text-[var(--adm-text-soft)]">Válassz feladatot a részletekhez.</p>
             ) : (
               <div className="space-y-2">
-                <p className="text-sm font-semibold text-[#1F2821]">{selectedTask.title}</p>
-                <p className="text-xs text-[#514D45]">{selectedTask.description || "Nincs részletes leírás"}</p>
-                        <p className="text-[11px] text-[#7B776D]">Prioritás: {priorityLabel[String(selectedTask.priority || "").toUpperCase()] || "Közepes"}</p>
-                        <p className="text-[11px] text-[#7B776D]">Státusz: {statusLabel[String(selectedTask.status || "").toUpperCase()] || "Ismeretlen állapot"}</p>
-                        <p className="text-[11px] text-[#7B776D]">
+                <p className="text-sm font-semibold text-[var(--adm-text)]">{selectedTask.title}</p>
+                <p className="text-xs text-[var(--adm-text-muted)]">{selectedTask.description || "Nincs részletes leírás"}</p>
+                        <p className="text-[11px] text-[var(--adm-text-muted)]">Prioritás: {priorityLabel[String(selectedTask.priority || "").toUpperCase()] || "Közepes"}</p>
+                        <p className="text-[11px] text-[var(--adm-text-muted)]">Státusz: {statusLabel[String(selectedTask.status || "").toUpperCase()] || "Ismeretlen állapot"}</p>
+                        <p className="text-[11px] text-[var(--adm-text-muted)]">
                           Határidő: {selectedTask.dueDate ? new Date(selectedTask.dueDate).toLocaleDateString("hu-HU") : "Nincs határidő"}
                         </p>
                         {(() => {
@@ -571,11 +571,11 @@ function TasksPageContent() {
                           if (!dueBadge) return null;
                           return <p className={`text-[11px] font-semibold ${dueBadge.className}`}>{dueBadge.label}</p>;
                         })()}
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mt-3">
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mt-3">
                   Átadás
                   <select
                     onChange={(e) => handleReassign(selectedTask.id, e.target.value)}
-                    className="mt-1 w-full px-2 py-2 border border-[#DDD7CA] text-xs"
+                    className="mt-1 w-full px-2 py-2 border border-[var(--adm-border)] text-xs"
                     defaultValue=""
                   >
                     <option value="" disabled>
@@ -608,75 +608,75 @@ function TasksPageContent() {
             )}
           </div>
 
-          <div className="border-t border-[#EEE7D9] pt-4">
-            <h3 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-2">Kapcsolt ügy</h3>
+          <div className="border-t border-[var(--adm-border)] pt-4">
+            <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Kapcsolt ügy</h3>
             {!selectedTask ? (
-              <p className="text-xs text-[#9C9890]">Nincs kiválasztott ügy.</p>
+              <p className="text-xs text-[var(--adm-text-soft)]">Nincs kiválasztott ügy.</p>
             ) : (
               <div className="space-y-2">
-                <Link href={`/cases/${selectedTask.case.id}`} className="text-sm font-semibold text-[#1F2821] hover:text-[#C9A227]">
+                <Link href={`/cases/${selectedTask.case.id}`} className="text-sm font-semibold text-[var(--adm-text)] hover:text-[var(--adm-ochre-500)]">
                   {selectedTask.case.caseNumber}
                 </Link>
-                <p className="text-xs text-[#514D45]">{selectedTask.case.clientName || "Ismeretlen ügyfél"}</p>
-                <p className="text-xs text-[#7B776D]">{selectedTask.case.matterType || "Nincs ügytípus"}</p>
+                <p className="text-xs text-[var(--adm-text-muted)]">{selectedTask.case.clientName || "Ismeretlen ügyfél"}</p>
+                <p className="text-xs text-[var(--adm-text-muted)]">{selectedTask.case.matterType || "Nincs ügytípus"}</p>
                 {selectedCaseSummary ? (
-                  <div className="mt-2 p-2 bg-[#F6F2E8] border border-[#EEE7D9]">
-                    <p className="text-[11px] text-[#514D45]">Dokumentumok: {selectedCaseSummary.stats.totalDocuments}</p>
-                    <p className="text-[11px] text-[#514D45]">Ellenőrzés alatt: {selectedCaseSummary.stats.pendingReview}</p>
+                  <div className="mt-2 p-2 bg-[var(--adm-ivory-100)] border border-[var(--adm-border)]">
+                    <p className="text-[11px] text-[var(--adm-text-muted)]">Dokumentumok: {selectedCaseSummary.stats.totalDocuments}</p>
+                    <p className="text-[11px] text-[var(--adm-text-muted)]">Ellenőrzés alatt: {selectedCaseSummary.stats.pendingReview}</p>
                   </div>
                 ) : (
-                  <p className="text-[11px] text-[#9C9890]">Ügy-összegzés nem érhető el.</p>
+                  <p className="text-[11px] text-[var(--adm-text-soft)]">Ügy-összegzés nem érhető el.</p>
                 )}
               </div>
             )}
           </div>
 
-          <div className="border-t border-[#EEE7D9] pt-4">
-            <h3 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-2">Friss ügyesemények</h3>
+          <div className="border-t border-[var(--adm-border)] pt-4">
+            <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Friss ügyesemények</h3>
             {!selectedCaseSummary?.last5TimelineEvents?.length ? (
-              <p className="text-xs text-[#9C9890]">Nincs megjeleníthető idővonal-esemény.</p>
+              <p className="text-xs text-[var(--adm-text-soft)]">Nincs megjeleníthető idővonal-esemény.</p>
             ) : (
               <div className="space-y-2">
                 {selectedCaseSummary.last5TimelineEvents.slice(0, 4).map((item) => (
-                  <div key={item.id} className="p-2 border border-[#EEE7D9]">
-                    <p className="text-[11px] font-semibold text-[#1F2821]">{item.type}</p>
-                    <p className="text-[10px] text-[#7B776D]">{new Date(item.createdAt).toLocaleString("hu-HU")}</p>
+                  <div key={item.id} className="p-2 border border-[var(--adm-border)]">
+                    <p className="text-[11px] font-semibold text-[var(--adm-text)]">{item.type}</p>
+                    <p className="text-[10px] text-[var(--adm-text-muted)]">{new Date(item.createdAt).toLocaleString("hu-HU")}</p>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          <div className="border-t border-[#EEE7D9] pt-4">
-            <h3 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-2">Kapcsolt munkafolyamatok</h3>
+          <div className="border-t border-[var(--adm-border)] pt-4">
+            <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Kapcsolt munkafolyamatok</h3>
             <div className="space-y-1">
-              <Link href="/reviews" className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Review sor</Link>
-              <Link href="/notifications" className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Értesítések</Link>
+              <Link href="/reviews" className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Review sor</Link>
+              <Link href="/notifications" className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Értesítések</Link>
               <Link
                 href={selectedTask ? `/documents/compare?caseId=${encodeURIComponent(selectedTask.case.id)}` : "/documents/compare"}
-                className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
+                className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]"
               >
                 Szerződés-workspace
               </Link>
               <Link
                 href={selectedTask ? `/cases/${selectedTask.case.id}/documents` : "/cases"}
-                className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
+                className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]"
               >
                 Dokumentumtár
               </Link>
               <Link
                 href={selectedTask ? `/cases/${selectedTask.case.id}/communications` : "/cases"}
-                className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
+                className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]"
               >
                 Kommunikáció
               </Link>
               <Link
                 href={selectedTask ? `/cases/${selectedTask.case.id}/handoff` : "/cases"}
-                className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
+                className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]"
               >
                 Leadási csomag
               </Link>
-              <Link href="/time-entries" className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Munkaórák</Link>
+              <Link href="/time-entries" className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Munkaórák</Link>
             </div>
           </div>
         </div>
@@ -684,17 +684,17 @@ function TasksPageContent() {
 
       {showCreateModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg border border-[#DDD7CA]">
-            <div className="px-6 py-4 border-b border-[#DDD7CA]">
-              <h2 className="text-lg font-serif text-[#1F2821]">Új feladat</h2>
+          <div className="bg-white w-full max-w-lg border border-[var(--adm-border)]">
+            <div className="px-6 py-4 border-b border-[var(--adm-border)]">
+              <h2 className="text-lg font-serif text-[var(--adm-text)]">Új feladat</h2>
             </div>
             <div className="p-6 space-y-4">
-              <label className="block text-xs text-[#7B776D]">
+              <label className="block text-xs text-[var(--adm-text-muted)]">
                 Ügy *
                 <select
                   value={createData.caseId}
                   onChange={(e) => setCreateData((prev) => ({ ...prev, caseId: e.target.value }))}
-                  className="mt-1 w-full px-3 py-2 border border-[#DDD7CA] text-sm"
+                  className="mt-1 w-full px-3 py-2 border border-[var(--adm-border)] text-sm"
                 >
                   <option value="">Válassz ügyet</option>
                   {cases.map((caseItem) => (
@@ -703,33 +703,33 @@ function TasksPageContent() {
                     </option>
                   ))}
                 </select>
-                <span className="mt-1 block text-[10px] text-[#9C9890]">
+                <span className="mt-1 block text-[10px] text-[var(--adm-text-soft)]">
                   Az ügy kiválasztása határozza meg az ügyfélkörnyezetet.
                 </span>
                 {selectedCreateCase?.clientName && (
-                  <span className="mt-1 block text-[10px] font-semibold text-[#514D45]">
+                  <span className="mt-1 block text-[10px] font-semibold text-[var(--adm-text-muted)]">
                     Kapcsolt ügyfél: {selectedCreateCase.clientName}
                   </span>
                 )}
               </label>
 
-              <label className="block text-xs text-[#7B776D]">
+              <label className="block text-xs text-[var(--adm-text-muted)]">
                 Cím *
                 <input
                   value={createData.title}
                   onChange={(e) => setCreateData((prev) => ({ ...prev, title: e.target.value }))}
-                  className="mt-1 w-full px-3 py-2 border border-[#DDD7CA] text-sm"
+                  className="mt-1 w-full px-3 py-2 border border-[var(--adm-border)] text-sm"
                   placeholder="Feladat címe"
                 />
               </label>
 
               <div className="grid grid-cols-2 gap-3">
-                <label className="block text-xs text-[#7B776D]">
+                <label className="block text-xs text-[var(--adm-text-muted)]">
                   Típus *
                   <select
                     value={createData.type}
                     onChange={(e) => setCreateData((prev) => ({ ...prev, type: e.target.value }))}
-                    className="mt-1 w-full px-3 py-2 border border-[#DDD7CA] text-sm"
+                    className="mt-1 w-full px-3 py-2 border border-[var(--adm-border)] text-sm"
                   >
                     {TASK_TYPES.map((item) => (
                       <option key={item.value} value={item.value}>
@@ -738,12 +738,12 @@ function TasksPageContent() {
                     ))}
                   </select>
                 </label>
-                <label className="block text-xs text-[#7B776D]">
+                <label className="block text-xs text-[var(--adm-text-muted)]">
                   Prioritás
                   <select
                     value={createData.priority}
                     onChange={(e) => setCreateData((prev) => ({ ...prev, priority: e.target.value }))}
-                    className="mt-1 w-full px-3 py-2 border border-[#DDD7CA] text-sm"
+                    className="mt-1 w-full px-3 py-2 border border-[var(--adm-border)] text-sm"
                   >
                     <option value="LOW">Alacsony</option>
                     <option value="MEDIUM">Közepes</option>
@@ -754,26 +754,26 @@ function TasksPageContent() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <label className="block text-xs text-[#7B776D]">
+                <label className="block text-xs text-[var(--adm-text-muted)]">
                   Határidő
                   <input
                     type="date"
                     value={createData.dueDate || ""}
                     onChange={(e) => setCreateData((prev) => ({ ...prev, dueDate: e.target.value }))}
-                    className="mt-1 w-full px-3 py-2 border border-[#DDD7CA] text-sm"
+                    className="mt-1 w-full px-3 py-2 border border-[var(--adm-border)] text-sm"
                   />
                 </label>
-                <label className="block text-xs text-[#7B776D]">
+                <label className="block text-xs text-[var(--adm-text-muted)]">
                   Felelős
                   {collaboratorsLoading ? (
-                    <span className="mt-1 w-full px-3 py-2 border border-[#DDD7CA] text-xs text-[#9C9890] block">
+                    <span className="mt-1 w-full px-3 py-2 border border-[var(--adm-border)] text-xs text-[var(--adm-text-soft)] block">
                       Résztvevők betöltése...
                     </span>
                   ) : (
                     <select
                       value={createData.assignedTo || ""}
                       onChange={(e) => setCreateData((prev) => ({ ...prev, assignedTo: e.target.value }))}
-                      className="mt-1 w-full px-3 py-2 border border-[#DDD7CA] text-sm"
+                      className="mt-1 w-full px-3 py-2 border border-[var(--adm-border)] text-sm"
                     >
                       <option value="">Nincs hozzárendelve</option>
                       {caseCollaborators.length > 0 && (
@@ -802,28 +802,28 @@ function TasksPageContent() {
                 </label>
               </div>
 
-              <label className="block text-xs text-[#7B776D]">
+              <label className="block text-xs text-[var(--adm-text-muted)]">
                 Leírás
                 <textarea
                   value={createData.description || ""}
                   onChange={(e) => setCreateData((prev) => ({ ...prev, description: e.target.value }))}
-                  className="mt-1 w-full px-3 py-2 border border-[#DDD7CA] text-sm"
+                  className="mt-1 w-full px-3 py-2 border border-[var(--adm-border)] text-sm"
                   rows={3}
                   placeholder="Feladat részletei"
                 />
               </label>
             </div>
-            <div className="px-6 py-4 border-t border-[#DDD7CA] flex justify-end gap-2">
+            <div className="px-6 py-4 border-t border-[var(--adm-border)] flex justify-end gap-2">
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="px-4 py-2 border border-[#DDD7CA] text-xs uppercase tracking-[0.2em] text-[#514D45]"
+                className="px-4 py-2 border border-[var(--adm-border)] text-xs uppercase tracking-[0.2em] text-[var(--adm-text-muted)]"
                 disabled={isSaving}
               >
                 Mégsem
               </button>
               <button
                 onClick={handleCreateTask}
-                className="px-4 py-2 bg-[#1A2E21] text-white text-xs uppercase tracking-[0.2em]"
+                className="px-4 py-2 bg-[var(--adm-green-950)] text-white text-xs uppercase tracking-[0.2em]"
                 disabled={isSaving}
               >
                 {isSaving ? "Mentés..." : "Létrehozás"}

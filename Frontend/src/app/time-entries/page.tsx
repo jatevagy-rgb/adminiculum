@@ -1031,66 +1031,66 @@ function TimeEntriesPageContent() {
   };
 
   return (
-    <div className="flex-1 p-2 md:p-4 time-entries-surface bg-[#FBF6E7]">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-6 rounded-xl border border-[#DDD7CA] bg-white p-4">
+    <div className="flex-1 p-2 md:p-4 time-entries-surface bg-[var(--adm-surface)]">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-6 rounded-xl border border-[var(--adm-border)] bg-white p-4">
             <div>
-              <h1 className="text-2xl font-serif text-[#1F2821]">Munkaórák</h1>
-              <p className="text-sm text-[#514D45] mt-1">Munkaóra-rögzítés és elszámolási munkapad</p>
-              <p className="text-xs text-[#7B776D] mt-1">
+              <h1 className="text-2xl font-serif text-[var(--adm-text)]">Munkaórák</h1>
+              <p className="text-sm text-[var(--adm-text-muted)] mt-1">Munkaóra-rögzítés és elszámolási munkapad</p>
+              <p className="text-xs text-[var(--adm-text-muted)] mt-1">
                 {totals.totalEntries} bejegyzés · {formatMinutes(totals.totalMinutes)} összesen
               </p>
-              <p className="text-[10px] text-[#9C9890] mt-1">Nézet: ügyfél → ügy → bejegyzés</p>
+              <p className="text-[10px] text-[var(--adm-text-soft)] mt-1">Nézet: ügyfél → ügy → bejegyzés</p>
             </div>
             <button
               onClick={handleCreate}
-              className="px-4 py-2 bg-[#1F4A33] text-[#FBF6E7] text-xs uppercase tracking-[0.2em] hover:bg-[#173824] transition-colors rounded self-start"
+              className="px-4 py-2 bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] text-xs uppercase tracking-[0.2em] hover:bg-[#173824] transition-colors rounded self-start"
             >
               Munkaóra rögzítése
             </button>
           </div>
 
           {deepLinkedCaseId && caseResolutionState.status !== "idle" && (
-            <div className="mb-5 rounded-xl border border-[#C9A227] bg-[#FBF9F3] px-4 py-3">
+            <div className="mb-5 rounded-xl border border-[var(--adm-ochre-500)] bg-[var(--adm-surface)] px-4 py-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] px-2 py-0.5 bg-[#C9A227] text-white uppercase tracking-wide">Ügyhöz kapcsolt munkaóra</span>
+                  <span className="text-[10px] px-2 py-0.5 bg-[var(--adm-ochre-500)] text-white uppercase tracking-wide">Ügyhöz kapcsolt munkaóra</span>
                 {caseResolutionState.status === "loading" ? (
-                  <span className="text-xs text-[#7B776D]">Ügy betöltése...</span>
+                  <span className="text-xs text-[var(--adm-text-muted)]">Ügy betöltése...</span>
                 ) : caseResolutionState.caseLabel ? (
-                  <span className="text-xs text-[#1F2821] font-semibold">{caseResolutionState.caseLabel}</span>
+                  <span className="text-xs text-[var(--adm-text)] font-semibold">{caseResolutionState.caseLabel}</span>
                 ) : (
-                  <span className="text-xs text-[#1F2821]">Munkaóra-rögzítés ebben az ügyben</span>
+                  <span className="text-xs text-[var(--adm-text)]">Munkaóra-rögzítés ebben az ügyben</span>
                 )}
                 {caseResolutionState.matterLabel && (
-                  <span className="text-[10px] text-[#7B776D]">· Munkacsomag: {caseResolutionState.matterLabel}</span>
+                  <span className="text-[10px] text-[var(--adm-text-muted)]">· Munkacsomag: {caseResolutionState.matterLabel}</span>
                 )}
                 {caseResolutionState.status === "not_found" && (
-                  <span className="text-[10px] text-[#9C9890] italic">
+                  <span className="text-[10px] text-[var(--adm-text-soft)] italic">
                     Az ügyhöz tartozó munkacsomag nem található. Válassz munkacsomagot kézzel.
                   </span>
                 )}
                 </div>
                 <Link
                   href={`/cases/${deepLinkedCaseId}`}
-                  className="px-3 py-1 text-[10px] border border-[#1F4A33] bg-[#1F4A33] text-[#FBF6E7] hover:bg-[#173824] rounded shrink-0"
+                  className="px-3 py-1 text-[10px] border border-[#1F4A33] bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:bg-[#173824] rounded shrink-0"
                 >
                   ← Vissza az ügyhöz
                 </Link>
               </div>
-              <p className="mt-2 text-[10px] text-[#7B776D]">
+              <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">
                 Az időrögzítés az ügyhöz kapcsolt munkacsomaghoz történik, ha elérhető.
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Link href={`/cases/${deepLinkedCaseId}/documents`} className="px-2 py-1 text-[10px] border border-[#DDD7CA] bg-white text-[#1F2821] rounded hover:bg-[#F6F2E8]">
+                <Link href={`/cases/${deepLinkedCaseId}/documents`} className="px-2 py-1 text-[10px] border border-[var(--adm-border)] bg-white text-[var(--adm-text)] rounded hover:bg-[var(--adm-ivory-100)]">
                   Dokumentumtár
                 </Link>
-                <Link href={`/cases/${deepLinkedCaseId}/communications`} className="px-2 py-1 text-[10px] border border-[#DDD7CA] bg-white text-[#1F2821] rounded hover:bg-[#F6F2E8]">
+                <Link href={`/cases/${deepLinkedCaseId}/communications`} className="px-2 py-1 text-[10px] border border-[var(--adm-border)] bg-white text-[var(--adm-text)] rounded hover:bg-[var(--adm-ivory-100)]">
                   Kommunikáció
                 </Link>
-                <Link href={`/documents/compare?caseId=${deepLinkedCaseId}`} className="px-2 py-1 text-[10px] border border-[#B58A2A] bg-[#B58A2A] text-white rounded hover:bg-[#9C7723]">
+                <Link href={`/documents/compare?caseId=${deepLinkedCaseId}`} className="px-2 py-1 text-[10px] border border-[var(--adm-ochre-500)] bg-[var(--adm-ochre-500)] text-white rounded hover:bg-[#9C7723]">
                   Szerződés-workspace
                 </Link>
-                <Link href={`/cases/${deepLinkedCaseId}/handoff`} className="px-2 py-1 text-[10px] border border-[#DDD7CA] bg-white text-[#1F2821] rounded hover:bg-[#F6F2E8]">
+                <Link href={`/cases/${deepLinkedCaseId}/handoff`} className="px-2 py-1 text-[10px] border border-[var(--adm-border)] bg-white text-[var(--adm-text)] rounded hover:bg-[var(--adm-ivory-100)]">
                   Leadási csomag
                 </Link>
               </div>
@@ -1098,7 +1098,7 @@ function TimeEntriesPageContent() {
           )}
 
           {error && (
-            <div className="mb-6 rounded border border-[#d4b8b8] bg-[#fef2f2] p-4 text-xs text-[#8b3a3a]">
+            <div className="mb-6 rounded border border-[var(--adm-terracotta-100)] bg-[#fef2f2] p-4 text-xs text-[#8b3a3a]">
               <p className="font-semibold">{error}</p>
               <p className="mt-1 text-[11px] text-[#6E4B4B]">
                 A munkaóra-folyamat nem áll le: ellenőrizd a kapcsolatot, majd próbáld újra.
@@ -1112,37 +1112,37 @@ function TimeEntriesPageContent() {
               </button>
             </div>
           )}
-          {!error && loadWarning && <div className="mb-6 p-4 bg-[#FBF6E7] border border-[#E8DFC9] text-[#5F675F] text-xs rounded">{loadWarning}</div>}
+          {!error && loadWarning && <div className="mb-6 p-4 bg-[var(--adm-surface)] border border-[var(--adm-border)] text-[var(--adm-text-muted)] text-xs rounded">{loadWarning}</div>}
 
-          <div className="mb-6 border border-[#DDD7CA] rounded-xl bg-white p-4 space-y-4">
+          <div className="mb-6 border border-[var(--adm-border)] rounded-xl bg-white p-4 space-y-4">
             <div>
-              <h2 className="text-sm font-semibold text-[#1F2821]">Munkaóra-kimutatás</h2>
-              <p className="text-[10px] text-[#7B776D] mt-1">Preset, sorfeltöltés, riport és outputok egy munkapadban.</p>
+              <h2 className="text-sm font-semibold text-[var(--adm-text)]">Munkaóra-kimutatás</h2>
+              <p className="text-[10px] text-[var(--adm-text-muted)] mt-1">Preset, sorfeltöltés, riport és outputok egy munkapadban.</p>
             </div>
 
-            <div className="border border-[#EEE7D9] rounded p-3 bg-[#FBF9F3] space-y-3">
+            <div className="border border-[var(--adm-border)] rounded p-3 bg-[var(--adm-surface)] space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-[#1F2821]">Mentett riport példányok</p>
+                <p className="text-xs font-semibold text-[var(--adm-text)]">Mentett riport példányok</p>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={loadReportInstances}
                     disabled={isLoadingReportInstances}
-                    className="px-2 py-1 text-[10px] border border-[#DDD7CA] rounded bg-white disabled:opacity-50"
+                    className="px-2 py-1 text-[10px] border border-[var(--adm-border)] rounded bg-white disabled:opacity-50"
                   >
                     {isLoadingReportInstances ? "Frissítés..." : "Frissít"}
                   </button>
                   <button
                     onClick={handleSaveReportInstance}
                     disabled={isSavingReportInstance}
-                    className="px-3 py-1 text-[10px] rounded bg-[#1F4A33] text-[#FBF6E7] disabled:opacity-50"
+                    className="px-3 py-1 text-[10px] rounded bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] disabled:opacity-50"
                   >
                     {isSavingReportInstance ? "Mentés..." : selectedReportInstanceId ? "Példány frissítése" : "Új példány mentése"}
                   </button>
                 </div>
               </div>
-              <div className="max-h-40 overflow-auto border border-[#EEE7D9] rounded bg-white">
+              <div className="max-h-40 overflow-auto border border-[var(--adm-border)] rounded bg-white">
                 {savedReportInstances.length === 0 ? (
-                  <p className="p-2 text-[10px] text-[#7B776D]">Nincs mentett riport példány.</p>
+                  <p className="p-2 text-[10px] text-[var(--adm-text-muted)]">Nincs mentett riport példány.</p>
                 ) : (
                   savedReportInstances.map((instance) => {
                     const isActive = selectedReportInstanceId === instance.id;
@@ -1150,12 +1150,12 @@ function TimeEntriesPageContent() {
                       <button
                         key={instance.id}
                         onClick={() => handleLoadReportInstance(instance.id)}
-                        className={`w-full text-left p-2 border-b border-[#F3EFE5] last:border-b-0 ${isActive ? "bg-[#F6F2E8]" : "hover:bg-[#FBF9F3]"}`}
+                        className={`w-full text-left p-2 border-b border-[#F3EFE5] last:border-b-0 ${isActive ? "bg-[var(--adm-ivory-100)]" : "hover:bg-[var(--adm-surface)]"}`}
                       >
-                        <p className="text-xs text-[#1F2821]">
+                        <p className="text-xs text-[var(--adm-text)]">
                           {instance.reportPeriod} · {instance.clientName || "Nincs ügyfél"}
                         </p>
-                        <p className="text-[10px] text-[#7B776D]">
+                        <p className="text-[10px] text-[var(--adm-text-muted)]">
                           {instance.templateFamily} · {instance.rows.length} sor · {new Date(instance.updatedAt).toLocaleString("hu-HU")}
                         </p>
                       </button>
@@ -1167,12 +1167,12 @@ function TimeEntriesPageContent() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Preset</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Preset</label>
                 <div className="flex items-center gap-2">
                   <select
                     value={selectedPresetId}
                     onChange={(e) => setSelectedPresetId(e.target.value)}
-                    className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm"
+                    className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm"
                   >
                     {presets.map((preset) => (
                       <option key={preset.id} value={preset.id}>
@@ -1180,7 +1180,7 @@ function TimeEntriesPageContent() {
                       </option>
                     ))}
                   </select>
-                  <button onClick={handleApplyPreset} className="px-3 py-2 text-[10px] border border-[#DDD7CA] rounded bg-white hover:bg-[#FBF9F3]">
+                  <button onClick={handleApplyPreset} className="px-3 py-2 text-[10px] border border-[var(--adm-border)] rounded bg-white hover:bg-[var(--adm-surface)]">
                     Alkalmaz
                   </button>
                 </div>
@@ -1188,7 +1188,7 @@ function TimeEntriesPageContent() {
                   <select
                     value={presetClientContextId}
                     onChange={(e) => setPresetClientContextId(e.target.value)}
-                    className="px-2 py-1 border border-[#DDD7CA] rounded text-xs"
+                    className="px-2 py-1 border border-[var(--adm-border)] rounded text-xs"
                   >
                     <option value="">Preset ügyfél kontextus (opcionális)</option>
                     {reportClientOptions.map((item) => (
@@ -1199,7 +1199,7 @@ function TimeEntriesPageContent() {
                     <input
                       value={presetLawyerContextName}
                       onChange={(e) => setPresetLawyerContextName(e.target.value)}
-                      className="px-2 py-1 border border-[#DDD7CA] rounded text-xs"
+                      className="px-2 py-1 border border-[var(--adm-border)] rounded text-xs"
                       placeholder="Preset jogász kontextus (opcionális)"
                       list="preset-lawyers"
                     />
@@ -1211,23 +1211,23 @@ function TimeEntriesPageContent() {
                   </>
                 </div>
                 {lastPresetResolution && (
-                  <div className="mt-2 p-2 border border-[#EEE7D9] rounded bg-[#FBF9F3]">
-                    <p className="text-[10px] text-[#7B776D]">
+                  <div className="mt-2 p-2 border border-[var(--adm-border)] rounded bg-[var(--adm-surface)]">
+                    <p className="text-[10px] text-[var(--adm-text-muted)]">
                       Rétegek: {lastPresetResolution.appliedLayers.join(" → ")}
                     </p>
-                    <p className="text-[10px] text-[#7B776D] mt-1">
+                    <p className="text-[10px] text-[var(--adm-text-muted)] mt-1">
                       Források — záradék: {lastPresetResolution.fieldSources.monthlyClosure || "—"}, pending: {lastPresetResolution.fieldSources.pendingOpenMattersNote || "—"}, jogász: {lastPresetResolution.fieldSources.lawyerName || "—"}, client záró: {lastPresetResolution.fieldSources.clientClosingText || "—"}
                     </p>
-                    <p className="text-[10px] text-[#9C9890] mt-1">Kézi mező-értékek nem íródnak felül preset alkalmazáskor.</p>
+                    <p className="text-[10px] text-[var(--adm-text-soft)] mt-1">Kézi mező-értékek nem íródnak felül preset alkalmazáskor.</p>
                   </div>
                 )}
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Sablon</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Sablon</label>
                 <select
                   value={selectedTemplateId}
                   onChange={(e) => setSelectedTemplateId(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm"
                 >
                   {templates.map((template) => (
                     <option key={template.id} value={template.id}>
@@ -1237,113 +1237,113 @@ function TimeEntriesPageContent() {
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Időszak</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Időszak</label>
                 <input
                   type="month"
                   value={reportPeriod}
                   onChange={(e) => setReportPeriod(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm"
                 />
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Ügyfél</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Ügyfél</label>
                 <input
                   value={reportClientName}
                   onChange={(e) => setReportClientName(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm"
                   placeholder="Pl. Alpha Zrt."
                 />
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Munkacsomag / ügy</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Munkacsomag / ügy</label>
                 <input
                   value={reportMatterName}
                   onChange={(e) => setReportMatterName(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm"
                   placeholder="Pl. Munkajogi tanácsadás"
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Ügyhivatkozás</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Ügyhivatkozás</label>
                 <input
                   value={reportCaseReference}
                   onChange={(e) => setReportCaseReference(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm"
                   placeholder="Pl. 2026-031"
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Havi záradék (preset/default)</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Havi záradék (preset/default)</label>
                 <textarea
                   value={reportMonthlyClosure}
                   onChange={(e) => setReportMonthlyClosure(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm"
                   rows={2}
                   placeholder="Havi záradék"
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Pending/open note (preset/default)</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Pending/open note (preset/default)</label>
                 <textarea
                   value={reportPendingNote}
                   onChange={(e) => setReportPendingNote(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm"
                   rows={2}
                   placeholder="Nyitott tételek megjegyzése"
                 />
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Áthozott órák</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Áthozott órák</label>
                 <input
                   type="number"
                   step={0.1}
                   value={reportCarriedHours}
                   onChange={(e) => setReportCarriedHours(Number(e.target.value || 0))}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm"
                 />
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Túlóra</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Túlóra</label>
                 <input
                   type="number"
                   step={0.1}
                   value={reportOvertimeHours}
                   onChange={(e) => setReportOvertimeHours(Number(e.target.value || 0))}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm"
                 />
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Küszöb feletti órák</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Küszöb feletti órák</label>
                 <input
                   type="number"
                   step={0.1}
                   value={reportAboveThresholdHours}
                   onChange={(e) => setReportAboveThresholdHours(Number(e.target.value || 0))}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm"
                 />
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Default jogász név</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Default jogász név</label>
                 <input
                   value={reportDefaultLawyerName}
                   onChange={(e) => setReportDefaultLawyerName(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm"
                   placeholder="Pl. Dr. Hubay"
                 />
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Ügyfélnek szóló záró szöveg</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Ügyfélnek szóló záró szöveg</label>
                 <input
                   value={reportClientClosingText}
                   onChange={(e) => setReportClientClosingText(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm"
+                  className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm"
                   placeholder="Rövid lezáró üzenet"
                 />
               </div>
             </div>
 
-            <div className="border border-[#EEE7D9] rounded p-3 bg-[#FBF9F3] space-y-3">
-              <p className="text-xs font-semibold text-[#1F2821]">Automatikus sorfeltöltés mentett munkaórákból</p>
+            <div className="border border-[var(--adm-border)] rounded p-3 bg-[var(--adm-surface)] space-y-3">
+              <p className="text-xs font-semibold text-[var(--adm-text)]">Automatikus sorfeltöltés mentett munkaórákból</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <select
                   value={autofillClientId}
@@ -1352,7 +1352,7 @@ function TimeEntriesPageContent() {
                     setAutofillMatterId("");
                     setAutofillCaseId("");
                   }}
-                  className="px-2 py-1 border border-[#DDD7CA] rounded text-xs"
+                  className="px-2 py-1 border border-[var(--adm-border)] rounded text-xs"
                 >
                   <option value="">Ügyfél (opcionális)</option>
                   {reportClientOptions.map((item) => (
@@ -1365,7 +1365,7 @@ function TimeEntriesPageContent() {
                     setAutofillMatterId(e.target.value);
                     setAutofillCaseId("");
                   }}
-                  className="px-2 py-1 border border-[#DDD7CA] rounded text-xs"
+                  className="px-2 py-1 border border-[var(--adm-border)] rounded text-xs"
                 >
                   <option value="">Munkacsomag (opcionális)</option>
                   {reportMatterOptions.map((item) => (
@@ -1375,7 +1375,7 @@ function TimeEntriesPageContent() {
                 <select
                   value={autofillCaseId}
                   onChange={(e) => setAutofillCaseId(e.target.value)}
-                  className="px-2 py-1 border border-[#DDD7CA] rounded text-xs"
+                  className="px-2 py-1 border border-[var(--adm-border)] rounded text-xs"
                 >
                   <option value="">Ügy (opcionális)</option>
                   {reportCaseOptions.map((item) => (
@@ -1385,7 +1385,7 @@ function TimeEntriesPageContent() {
                 <input
                   value={autofillLawyerName}
                   onChange={(e) => setAutofillLawyerName(e.target.value)}
-                  className="px-2 py-1 border border-[#DDD7CA] rounded text-xs"
+                  className="px-2 py-1 border border-[var(--adm-border)] rounded text-xs"
                   placeholder="Jogász név (opcionális)"
                   list="autofill-lawyers"
                 />
@@ -1394,7 +1394,7 @@ function TimeEntriesPageContent() {
                     <option key={name} value={name} />
                   ))}
                 </datalist>
-                <label className="flex items-center gap-2 px-2 py-1 border border-[#DDD7CA] rounded text-xs">
+                <label className="flex items-center gap-2 px-2 py-1 border border-[var(--adm-border)] rounded text-xs">
                   <input
                     type="checkbox"
                     checked={autofillBillableOnly}
@@ -1405,7 +1405,7 @@ function TimeEntriesPageContent() {
                 <button
                   onClick={handleAutofillRows}
                   disabled={isAutofillingRows}
-                  className="px-3 py-2 bg-[#1F4A33] text-[#FBF6E7] text-xs rounded disabled:opacity-50"
+                  className="px-3 py-2 bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] text-xs rounded disabled:opacity-50"
                 >
                   {isAutofillingRows ? "Betöltés..." : "Munkaórák betöltése"}
                 </button>
@@ -1414,8 +1414,8 @@ function TimeEntriesPageContent() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-[#1F2821]">Munka sorok</p>
-                <button onClick={addReportRow} className="px-2 py-1 text-[10px] border border-[#DDD7CA] rounded">+ Sor</button>
+                <p className="text-xs font-semibold text-[var(--adm-text)]">Munka sorok</p>
+                <button onClick={addReportRow} className="px-2 py-1 text-[10px] border border-[var(--adm-border)] rounded">+ Sor</button>
               </div>
               {reportRows.map((row, idx) => (
                 <div key={idx} className="grid grid-cols-1 md:grid-cols-[140px_minmax(0,1fr)_180px_90px_80px] gap-2 items-center">
@@ -1423,18 +1423,18 @@ function TimeEntriesPageContent() {
                     type="date"
                     value={row.date || ""}
                     onChange={(e) => updateReportRow(idx, { date: e.target.value })}
-                    className="px-2 py-1 border border-[#DDD7CA] rounded text-xs"
+                    className="px-2 py-1 border border-[var(--adm-border)] rounded text-xs"
                   />
                   <input
                     value={row.description}
                     onChange={(e) => updateReportRow(idx, { description: e.target.value })}
-                    className="px-2 py-1 border border-[#DDD7CA] rounded text-xs"
+                    className="px-2 py-1 border border-[var(--adm-border)] rounded text-xs"
                     placeholder="Elvégzett jogi munka"
                   />
                   <input
                     value={row.lawyer}
                     onChange={(e) => updateReportRow(idx, { lawyer: e.target.value })}
-                    className="px-2 py-1 border border-[#DDD7CA] rounded text-xs"
+                    className="px-2 py-1 border border-[var(--adm-border)] rounded text-xs"
                     placeholder="Jogász neve"
                   />
                   <input
@@ -1443,9 +1443,9 @@ function TimeEntriesPageContent() {
                     step={0.1}
                     value={row.hours}
                     onChange={(e) => updateReportRow(idx, { hours: Number(e.target.value || 0) })}
-                    className="px-2 py-1 border border-[#DDD7CA] rounded text-xs"
+                    className="px-2 py-1 border border-[var(--adm-border)] rounded text-xs"
                   />
-                  <button onClick={() => removeReportRow(idx)} className="px-2 py-1 text-[10px] border border-[#DDD7CA] rounded">
+                  <button onClick={() => removeReportRow(idx)} className="px-2 py-1 text-[10px] border border-[var(--adm-border)] rounded">
                     Töröl
                   </button>
                 </div>
@@ -1453,12 +1453,12 @@ function TimeEntriesPageContent() {
             </div>
 
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <p className="text-xs text-[#7B776D]">Elszámolási előkészítés valós mentett munkaórák alapján</p>
+              <p className="text-xs text-[var(--adm-text-muted)]">Elszámolási előkészítés valós mentett munkaórák alapján</p>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={handleGenerateReportPayload}
                   disabled={isGeneratingReport}
-                  className="px-3 py-2 bg-[#1F4A33] text-[#FBF6E7] text-xs rounded disabled:opacity-50"
+                  className="px-3 py-2 bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] text-xs rounded disabled:opacity-50"
                 >
                   {isGeneratingReport ? "Generálás..." : "Riport generálása"}
                 </button>
@@ -1472,7 +1472,7 @@ function TimeEntriesPageContent() {
                 <button
                   onClick={handleRenderReportDocxOutput}
                   disabled={isGeneratingReport}
-                  className="px-3 py-2 bg-[#C9A227] text-white text-xs rounded disabled:opacity-50"
+                  className="px-3 py-2 bg-[var(--adm-ochre-500)] text-white text-xs rounded disabled:opacity-50"
                 >
                   {isGeneratingReport ? "Generálás..." : "DOCX letöltése"}
                 </button>
@@ -1480,14 +1480,14 @@ function TimeEntriesPageContent() {
             </div>
 
             {generatedReport && (
-              <div className="bg-[#F6F2E8] border border-[#DDD7CA] rounded p-3">
-                <p className="text-xs font-semibold text-[#1F2821]">Generált összesítés</p>
-                <p className="text-[10px] text-[#7B776D] mt-1">
+              <div className="bg-[var(--adm-ivory-100)] border border-[var(--adm-border)] rounded p-3">
+                <p className="text-xs font-semibold text-[var(--adm-text)]">Generált összesítés</p>
+                <p className="text-[10px] text-[var(--adm-text-muted)] mt-1">
                   Sorok: {generatedReport.totals.rowCount} · Total: {generatedReport.totals.totalHours} óra · Final: {generatedReport.totals.finalHours} óra
                 </p>
                 <details className="mt-2">
-                  <summary className="cursor-pointer text-[10px] text-[#7B776D]">Technikai részletek</summary>
-                  <pre className="mt-2 text-[10px] text-[#514D45] overflow-auto max-h-48">
+                  <summary className="cursor-pointer text-[10px] text-[var(--adm-text-muted)]">Technikai részletek</summary>
+                  <pre className="mt-2 text-[10px] text-[var(--adm-text-muted)] overflow-auto max-h-48">
                     {JSON.stringify(generatedReport.exportPayload, null, 2)}
                   </pre>
                 </details>
@@ -1495,56 +1495,56 @@ function TimeEntriesPageContent() {
             )}
 
             {renderedReport?.renderedOutput && (
-              <div className="bg-[#F6F2E8] border border-[#DDD7CA] rounded p-3">
+              <div className="bg-[var(--adm-ivory-100)] border border-[var(--adm-border)] rounded p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-[#1F2821]">Generált kimutatás</p>
-                  <button onClick={handleDownloadRenderedOutput} className="px-2 py-1 text-[10px] border border-[#DDD7CA] rounded bg-white">
+                  <p className="text-xs font-semibold text-[var(--adm-text)]">Generált kimutatás</p>
+                  <button onClick={handleDownloadRenderedOutput} className="px-2 py-1 text-[10px] border border-[var(--adm-border)] rounded bg-white">
                     Letöltés ({renderedReport.renderedOutput.fileName})
                   </button>
                 </div>
-                <p className="text-[10px] text-[#7B776D] mt-1">
+                <p className="text-[10px] text-[var(--adm-text-muted)] mt-1">
                   Formátum: {renderedReport.renderedOutput.format} · MIME: {renderedReport.renderedOutput.mimeType}
                 </p>
                 {renderedReport.renderedOutput.format === "TEXT_V1" && renderedReport.renderedOutput.content ? (
-                  <pre className="mt-2 text-[10px] text-[#514D45] overflow-auto max-h-48 whitespace-pre-wrap">
+                  <pre className="mt-2 text-[10px] text-[var(--adm-text-muted)] overflow-auto max-h-48 whitespace-pre-wrap">
                     {renderedReport.renderedOutput.content}
                   </pre>
                 ) : (
-                  <p className="mt-2 text-[10px] text-[#514D45]">DOCX állomány elkészült, előnézet itt nem jelenik meg.</p>
+                  <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">DOCX állomány elkészült, előnézet itt nem jelenik meg.</p>
                 )}
               </div>
             )}
 
-            <div className="bg-[#F6F2E8] border border-[#DDD7CA] rounded p-3">
+            <div className="bg-[var(--adm-ivory-100)] border border-[var(--adm-border)] rounded p-3">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-[#1F2821]">Korábbi renderelt outputok</p>
+                <p className="text-xs font-semibold text-[var(--adm-text)]">Korábbi renderelt outputok</p>
                 {selectedReportInstanceId && (
                   <button
                     onClick={() => loadReportArtifacts(selectedReportInstanceId)}
                     disabled={isLoadingReportArtifacts}
-                    className="px-2 py-1 text-[10px] border border-[#DDD7CA] rounded bg-white disabled:opacity-50"
+                    className="px-2 py-1 text-[10px] border border-[var(--adm-border)] rounded bg-white disabled:opacity-50"
                   >
                     {isLoadingReportArtifacts ? "Frissítés..." : "Frissít"}
                   </button>
                 )}
               </div>
               {!selectedReportInstanceId ? (
-                <p className="mt-2 text-[10px] text-[#7B776D]">Válassz mentett riport példányt az output történethez.</p>
+                <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Válassz mentett riport példányt az output történethez.</p>
               ) : reportArtifacts.length === 0 ? (
-                <p className="mt-2 text-[10px] text-[#7B776D]">Még nincs mentett renderelt output ehhez a riporthoz.</p>
+                <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Még nincs mentett renderelt output ehhez a riporthoz.</p>
               ) : (
                 <div className="mt-2 space-y-1">
                   {reportArtifacts.map((artifact) => (
-                    <div key={artifact.id} className="flex items-center justify-between gap-2 p-2 border border-[#EEE7D9] rounded bg-white">
+                    <div key={artifact.id} className="flex items-center justify-between gap-2 p-2 border border-[var(--adm-border)] rounded bg-white">
                       <div>
-                        <p className="text-[11px] text-[#1F2821]">{artifact.fileName}</p>
-                        <p className="text-[10px] text-[#7B776D]">
+                        <p className="text-[11px] text-[var(--adm-text)]">{artifact.fileName}</p>
+                        <p className="text-[10px] text-[var(--adm-text-muted)]">
                           {artifact.format} · {new Date(artifact.createdAt).toLocaleString("hu-HU")}
                         </p>
                       </div>
                       <button
                         onClick={() => handleDownloadArtifact(artifact.id)}
-                        className="px-2 py-1 text-[10px] border border-[#DDD7CA] rounded bg-white"
+                        className="px-2 py-1 text-[10px] border border-[var(--adm-border)] rounded bg-white"
                       >
                         Letöltés
                       </button>
@@ -1556,39 +1556,39 @@ function TimeEntriesPageContent() {
           </div>
 
           <div className="mb-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-            <div className="p-4 bg-white border border-[#DDD7CA] rounded-lg">
-              <p className="text-2xl font-serif text-[#1F2821]">{formatMinutes(totals.totalMinutes)}</p>
-              <p className="text-[10px] text-[#7B776D]">Összes munkaóra</p>
+            <div className="p-4 bg-white border border-[var(--adm-border)] rounded-lg">
+              <p className="text-2xl font-serif text-[var(--adm-text)]">{formatMinutes(totals.totalMinutes)}</p>
+              <p className="text-[10px] text-[var(--adm-text-muted)]">Összes munkaóra</p>
             </div>
-            <div className="p-4 bg-white border border-[#DDD7CA] rounded-lg">
-              <p className="text-2xl font-serif text-[#1F2821]">{totals.totalEntries}</p>
-              <p className="text-[10px] text-[#7B776D]">Összes bejegyzés</p>
+            <div className="p-4 bg-white border border-[var(--adm-border)] rounded-lg">
+              <p className="text-2xl font-serif text-[var(--adm-text)]">{totals.totalEntries}</p>
+              <p className="text-[10px] text-[var(--adm-text-muted)]">Összes bejegyzés</p>
             </div>
             <div className="p-4 bg-[#ECF7F0] border border-[#CFE5D9] rounded-lg">
-              <p className="text-2xl font-serif text-[#1F4A33]">{formatMinutes(totals.billableMinutes)}</p>
+              <p className="text-2xl font-serif text-[var(--adm-green-800)]">{formatMinutes(totals.billableMinutes)}</p>
               <p className="text-[10px] text-[#315442]">Számlázható idő</p>
             </div>
-            <div className="p-4 bg-white border border-[#DDD7CA] rounded-lg">
-              <p className="text-2xl font-serif text-[#1F2821]">{totals.totalClients}</p>
-              <p className="text-[10px] text-[#7B776D]">Érintett ügyfelek</p>
-              <p className="text-[10px] text-[#9C9890] mt-1">Nem számlázható: {formatMinutes(totals.nonBillableMinutes)}</p>
+            <div className="p-4 bg-white border border-[var(--adm-border)] rounded-lg">
+              <p className="text-2xl font-serif text-[var(--adm-text)]">{totals.totalClients}</p>
+              <p className="text-[10px] text-[var(--adm-text-muted)]">Érintett ügyfelek</p>
+              <p className="text-[10px] text-[var(--adm-text-soft)] mt-1">Nem számlázható: {formatMinutes(totals.nonBillableMinutes)}</p>
             </div>
           </div>
 
           {isLoading ? (
-            <div className="text-center py-12 text-xs text-[#9C9890]">Munkaórák betöltése...</div>
+            <div className="text-center py-12 text-xs text-[var(--adm-text-soft)]">Munkaórák betöltése...</div>
           ) : entries.length === 0 ? (
-            <div className="text-center py-12 border border-dashed border-[#DDD7CA]">
-              <p className="text-xs text-[#9C9890] mb-4">Még nincs rögzített munkaóra</p>
-              <button onClick={handleCreate} className="px-4 py-2 bg-[#1F4A33] text-[#FBF6E7] text-xs rounded hover:bg-[#173824]">
+            <div className="text-center py-12 border border-dashed border-[var(--adm-border)]">
+              <p className="text-xs text-[var(--adm-text-soft)] mb-4">Még nincs rögzített munkaóra</p>
+              <button onClick={handleCreate} className="px-4 py-2 bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] text-xs rounded hover:bg-[#173824]">
                 Első bejegyzés rögzítése
               </button>
             </div>
           ) : (
             <div className="grid lg:grid-cols-[300px_minmax(0,1fr)] gap-4">
-              <div className="border border-[#DDD7CA] bg-white rounded p-3 h-fit">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-1">Ügyfelek</p>
-                <p className="text-[10px] text-[#9C9890] mb-3">Összes munkaóra ügyfelenként</p>
+              <div className="border border-[var(--adm-border)] bg-white rounded p-3 h-fit">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Ügyfelek</p>
+                <p className="text-[10px] text-[var(--adm-text-soft)] mb-3">Összes munkaóra ügyfelenként</p>
                 <div className="space-y-2">
                   {groupedByClient.map((clientGroup) => {
                     const isActive = clientGroup.clientId === selectedClientId;
@@ -1597,11 +1597,11 @@ function TimeEntriesPageContent() {
                         key={clientGroup.clientId}
                         onClick={() => setSelectedClientId(clientGroup.clientId)}
                         className={`w-full text-left p-3 border rounded ${
-                          isActive ? "border-[#C9A227] bg-[#FBF9F3]" : "border-[#EEE7D9] hover:bg-[#FBF9F3]"
+                          isActive ? "border-[var(--adm-ochre-500)] bg-[var(--adm-surface)]" : "border-[var(--adm-border)] hover:bg-[var(--adm-surface)]"
                         }`}
                       >
-                        <p className="text-sm font-semibold text-[#1F2821]">{clientGroup.clientName}</p>
-                        <p className="text-[10px] text-[#7B776D] mt-1">
+                        <p className="text-sm font-semibold text-[var(--adm-text)]">{clientGroup.clientName}</p>
+                        <p className="text-[10px] text-[var(--adm-text-muted)] mt-1">
                           {formatMinutes(clientGroup.totalMinutes)} · {clientGroup.totalEntries} bejegyzés
                         </p>
                       </button>
@@ -1612,14 +1612,14 @@ function TimeEntriesPageContent() {
 
               <div className="space-y-3">
                 {!selectedClientGroup ? (
-                  <div className="p-6 border border-dashed border-[#DDD7CA] text-xs text-[#7B776D]">
+                  <div className="p-6 border border-dashed border-[var(--adm-border)] text-xs text-[var(--adm-text-muted)]">
                     Nincs megjeleníthető ügyfél-csoportosítás.
                   </div>
                 ) : (
                   <>
-                    <div className="p-4 border border-[#DDD7CA] bg-[#F6F2E8] rounded">
-                      <p className="text-sm font-semibold text-[#1F2821]">{selectedClientGroup.clientName}</p>
-                      <p className="text-[10px] text-[#7B776D] mt-1">
+                    <div className="p-4 border border-[var(--adm-border)] bg-[var(--adm-ivory-100)] rounded">
+                      <p className="text-sm font-semibold text-[var(--adm-text)]">{selectedClientGroup.clientName}</p>
+                      <p className="text-[10px] text-[var(--adm-text-muted)] mt-1">
                         {formatMinutes(selectedClientGroup.totalMinutes)} · {selectedClientGroup.totalEntries} bejegyzés · {selectedClientGroup.cases.length} ügycsoport
                       </p>
                     </div>
@@ -1627,27 +1627,27 @@ function TimeEntriesPageContent() {
                     {selectedClientGroup.cases.map((caseGroup) => {
                       const isExpanded = expandedCaseKeys[caseGroup.caseKey] ?? true;
                       return (
-                        <div key={caseGroup.caseKey} className="border border-[#DDD7CA] rounded bg-white overflow-hidden">
+                        <div key={caseGroup.caseKey} className="border border-[var(--adm-border)] rounded bg-white overflow-hidden">
                           <button
                             onClick={() => toggleCaseExpanded(caseGroup.caseKey)}
-                            className="w-full px-4 py-3 bg-[#F6F2E8] border-b border-[#EEE7D9] flex items-center justify-between"
+                            className="w-full px-4 py-3 bg-[var(--adm-ivory-100)] border-b border-[var(--adm-border)] flex items-center justify-between"
                           >
                             <div className="text-left">
-                              <p className="text-sm font-semibold text-[#1F2821]">
+                              <p className="text-sm font-semibold text-[var(--adm-text)]">
                                 {caseGroup.caseNumber ? `${caseGroup.caseNumber} · ${caseGroup.caseTitle}` : caseGroup.caseTitle}
                               </p>
-                              <p className="text-[10px] text-[#7B776D] mt-1">
+                              <p className="text-[10px] text-[var(--adm-text-muted)] mt-1">
                                 {caseGroup.entries.length} bejegyzés · {formatMinutes(caseGroup.totalMinutes)}
                               </p>
                               {caseGroup.linkageMode !== "resolved-case" && (
-                                <p className="text-[10px] text-[#9C9890] mt-1">
+                                <p className="text-[10px] text-[var(--adm-text-soft)] mt-1">
                                   {caseGroup.linkageMode === "ambiguous"
                                     ? `Ügykapcsolat nem egyértelmű (${caseGroup.candidateCaseCount} lehetséges ügy)`
                                     : "Ügykapcsolat jelenleg nem érhető el ehhez a munkához"}
                                 </p>
                               )}
                             </div>
-                            <span className="text-[#7B776D] text-xs">{isExpanded ? "Elrejtés" : "Megnyitás"}</span>
+                            <span className="text-[var(--adm-text-muted)] text-xs">{isExpanded ? "Elrejtés" : "Megnyitás"}</span>
                           </button>
 
                           {isExpanded && (
@@ -1657,21 +1657,21 @@ function TimeEntriesPageContent() {
                                   <div className="flex items-start justify-between gap-3">
                                     <div className="flex-1">
                                       <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-xs font-semibold text-[#1F2821]">Időtartam: {formatMinutes(entry.minutes)}</span>
+                                        <span className="text-xs font-semibold text-[var(--adm-text)]">Időtartam: {formatMinutes(entry.minutes)}</span>
                                         {(entry.billable || WORK_TYPE_LABEL_MAP[entry.workType]) && (
-                                        <span className={`text-[10px] uppercase tracking-[0.1em] px-2 py-1 rounded ${entry.billable ? "bg-[#ECF7F0] text-[#1F4A33]" : "bg-[#ECE6DA] text-[#6B665D]"}`}>
+                                        <span className={`text-[10px] uppercase tracking-[0.1em] px-2 py-1 rounded ${entry.billable ? "bg-[#ECF7F0] text-[var(--adm-green-800)]" : "bg-[var(--adm-ivory-200)] text-[#6B665D]"}`}>
                                           Munkatípus: {WORK_TYPE_LABEL_MAP[entry.workType] ?? "Egyéb"}
                                         </span>
                                       )}
                                       </div>
-                                      <p className="text-xs text-[#514D45]"><span className="font-semibold text-[#1F2821]">Leírás:</span> {entry.description}</p>
+                                      <p className="text-xs text-[var(--adm-text-muted)]"><span className="font-semibold text-[var(--adm-text)]">Leírás:</span> {entry.description}</p>
                                       <div className="flex items-center gap-4 mt-2">
-                                        {entry.department && <span className="text-[10px] text-[#7B776D]">{entry.department.name}</span>}
-                                        <span className="text-[10px] text-[#9C9890]">Dátum: {formatDate(entry.workDate)}</span>
-                                        <span className="text-[10px] text-[#7B776D]">{entry.billable ? "Számlázható" : "Nem számlázható"}</span>
-                                        <span className="text-[10px] text-[#7B776D]">Munkacsomag: {caseGroup.caseTitle}</span>
+                                        {entry.department && <span className="text-[10px] text-[var(--adm-text-muted)]">{entry.department.name}</span>}
+                                        <span className="text-[10px] text-[var(--adm-text-soft)]">Dátum: {formatDate(entry.workDate)}</span>
+                                        <span className="text-[10px] text-[var(--adm-text-muted)]">{entry.billable ? "Számlázható" : "Nem számlázható"}</span>
+                                        <span className="text-[10px] text-[var(--adm-text-muted)]">Munkacsomag: {caseGroup.caseTitle}</span>
                                         {caseGroup.caseId && (
-                                          <Link href={`/cases/${caseGroup.caseId}`} className="text-[10px] text-[#C9A227] hover:underline">
+                                          <Link href={`/cases/${caseGroup.caseId}`} className="text-[10px] text-[var(--adm-ochre-500)] hover:underline">
                                             Ugrás az ügyre
                                           </Link>
                                         )}
@@ -1681,7 +1681,7 @@ function TimeEntriesPageContent() {
                                     <div className="flex items-center gap-2">
                                       <button
                                         onClick={() => handleEdit(entry)}
-                                        className="px-2 py-1 text-[10px] text-[#6D695F] hover:text-[#1F4A33] border border-[#EEE7D9] rounded"
+                                        className="px-2 py-1 text-[10px] text-[#6D695F] hover:text-[var(--adm-green-800)] border border-[var(--adm-border)] rounded"
                                       >
                                         Szerkeszt
                                       </button>
@@ -1695,7 +1695,7 @@ function TimeEntriesPageContent() {
                                           </button>
                                           <button
                                             onClick={() => setDeleteConfirm(null)}
-                                            className="px-2 py-1 text-[10px] text-[#7B776D] border border-[#EEE7D9] rounded"
+                                            className="px-2 py-1 text-[10px] text-[var(--adm-text-muted)] border border-[var(--adm-border)] rounded"
                                           >
                                             Mégsem
                                           </button>
@@ -1703,7 +1703,7 @@ function TimeEntriesPageContent() {
                                       ) : (
                                         <button
                                           onClick={() => setDeleteConfirm(entry.id)}
-                                          className="px-2 py-1 text-[10px] text-[#7B776D] hover:text-[#DC2626] border border-[#EEE7D9] rounded"
+                                          className="px-2 py-1 text-[10px] text-[var(--adm-text-muted)] hover:text-[var(--adm-terracotta-700)] border border-[var(--adm-border)] rounded"
                                         >
                                           Törlés
                                         </button>
@@ -1727,19 +1727,19 @@ function TimeEntriesPageContent() {
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div className="p-6 border-b border-[#DDD7CA]">
-              <h2 className="text-lg font-serif text-[#1F2821]">{editingEntry ? "Munkaóra bejegyzés szerkesztése" : "Munkaóra rögzítése"}</h2>
+            <div className="p-6 border-b border-[var(--adm-border)]">
+              <h2 className="text-lg font-serif text-[var(--adm-text)]">{editingEntry ? "Munkaóra bejegyzés szerkesztése" : "Munkaóra rögzítése"}</h2>
             </div>
 
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-xs uppercase tracking-[0.2em] text-[#7B776D] mb-2">
-                  Ügyhöz kapcsolt munkacsomag <span className="text-[#DC2626]">*</span>
+                <label className="block text-xs uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">
+                  Ügyhöz kapcsolt munkacsomag <span className="text-[var(--adm-terracotta-700)]">*</span>
                 </label>
                 <select
                   value={formData.matterId}
                   onChange={(e) => setFormData({ ...formData, matterId: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm focus:outline-none focus:border-[#C9A227]"
+                  className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm focus:outline-none focus:border-[var(--adm-ochre-500)]"
                   disabled={!!editingEntry}
                 >
                   <option value="">Válassz ügyhöz kapcsolt munkacsomagot...</option>
@@ -1750,16 +1750,16 @@ function TimeEntriesPageContent() {
                   ))}
                 </select>
                 {!editingEntry && (
-                  <p className="text-[10px] text-[#9C9890] mt-1">Azonosító mező nincs kitéve; ügy és ügyfél címkével választhatsz.</p>
+                  <p className="text-[10px] text-[var(--adm-text-soft)] mt-1">Azonosító mező nincs kitéve; ügy és ügyfél címkével választhatsz.</p>
                 )}
               </div>
 
               <div>
-                <label className="block text-xs uppercase tracking-[0.2em] text-[#7B776D] mb-2">Munkatípus</label>
+                <label className="block text-xs uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Munkatípus</label>
                 <select
                   value={formData.workType}
                   onChange={(e) => setFormData({ ...formData, workType: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm focus:outline-none focus:border-[#C9A227]"
+                  className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm focus:outline-none focus:border-[var(--adm-ochre-500)]"
                 >
                   {WORK_TYPES.map((type) => (
                     <option key={type} value={type}>
@@ -1770,19 +1770,19 @@ function TimeEntriesPageContent() {
               </div>
 
               <div>
-                <label className="block text-xs uppercase tracking-[0.2em] text-[#7B776D] mb-2">Leírás</label>
+                <label className="block text-xs uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Leírás</label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm focus:outline-none focus:border-[#C9A227]"
+                  className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm focus:outline-none focus:border-[var(--adm-ochre-500)]"
                   rows={3}
                   placeholder="Röviden írd le az elvégzett munkát..."
                 />
               </div>
 
               <div>
-                <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-2">Gyors kategória</p>
-                <p className="text-[10px] text-[#9C9890] mb-2">A kiválasztás csak a mezőket tölti ki, mentés nem történik automatikusan.</p>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Gyors kategória</p>
+                <p className="text-[10px] text-[var(--adm-text-soft)] mb-2">A kiválasztás csak a mezőket tölti ki, mentés nem történik automatikusan.</p>
                 <div className="flex flex-wrap gap-2">
                   {[
                     { label: "Dokumentum átnézése", workType: "FELÜLVIZSGÁLAT" },
@@ -1796,7 +1796,7 @@ function TimeEntriesPageContent() {
                       key={preset.label}
                       type="button"
                       onClick={() => setFormData((f) => ({ ...f, workType: preset.workType, description: f.description || preset.label }))}
-                      className="px-2 py-1 text-[10px] border border-[#DDD7CA] rounded bg-white hover:bg-[#FBF9F3] hover:border-[#C9A227] transition-colors"
+                      className="px-2 py-1 text-[10px] border border-[var(--adm-border)] rounded bg-white hover:bg-[var(--adm-surface)] hover:border-[var(--adm-ochre-500)] transition-colors"
                     >
                       {preset.label}
                     </button>
@@ -1812,38 +1812,38 @@ function TimeEntriesPageContent() {
                     onChange={(e) => setFormData({ ...formData, billable: e.target.checked })}
                     className="w-4 h-4 accent-[#C9A227]"
                   />
-                  <span className="text-xs text-[#514D45]">Számlázható</span>
+                  <span className="text-xs text-[var(--adm-text-muted)]">Számlázható</span>
                 </label>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs uppercase tracking-[0.2em] text-[#7B776D] mb-2">Időtartam (perc)</label>
+                  <label className="block text-xs uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Időtartam (perc)</label>
                   <input
                     type="number"
                     value={formData.minutes}
                     onChange={(e) => setFormData({ ...formData, minutes: parseInt(e.target.value, 10) || 0 })}
-                    className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm focus:outline-none focus:border-[#C9A227]"
+                    className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm focus:outline-none focus:border-[var(--adm-ochre-500)]"
                     min={1}
                     max={1440}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs uppercase tracking-[0.2em] text-[#7B776D] mb-2">Dátum</label>
+                  <label className="block text-xs uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Dátum</label>
                   <input
                     type="date"
                     value={formData.workDate}
                     onChange={(e) => setFormData({ ...formData, workDate: e.target.value })}
-                    className="w-full px-3 py-2 border border-[#DDD7CA] rounded text-sm focus:outline-none focus:border-[#C9A227]"
+                    className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm focus:outline-none focus:border-[var(--adm-ochre-500)]"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="p-6 border-t border-[#DDD7CA] flex justify-end gap-3">
+            <div className="p-6 border-t border-[var(--adm-border)] flex justify-end gap-3">
               <button
                 onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-xs uppercase tracking-[0.2em] text-[#514D45] border border-[#DDD7CA] hover:bg-[#ECE6DA] rounded"
+                className="px-4 py-2 text-xs uppercase tracking-[0.2em] text-[var(--adm-text-muted)] border border-[var(--adm-border)] hover:bg-[var(--adm-ivory-200)] rounded"
                 disabled={isSaving}
               >
                 Mégsem
@@ -1851,7 +1851,7 @@ function TimeEntriesPageContent() {
               <button
                 onClick={handleSave}
                 disabled={isSaving || !formData.matterId?.trim() || !formData.description?.trim()}
-                className="px-4 py-2 text-xs uppercase tracking-[0.2em] bg-[#1F4A33] text-[#FBF6E7] hover:bg-[#173824] rounded disabled:opacity-50"
+                className="px-4 py-2 text-xs uppercase tracking-[0.2em] bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:bg-[#173824] rounded disabled:opacity-50"
               >
                 {isSaving ? "Mentés..." : "Mentés"}
               </button>

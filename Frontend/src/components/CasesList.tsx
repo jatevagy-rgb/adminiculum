@@ -611,22 +611,22 @@ export function CasesList() {
 
   return (
     <section className="space-y-4">
-      <div className="grid gap-3 border border-[#D8CFB6] bg-[#FFFDF7] p-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+      <div className="grid gap-3 border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 lg:grid-cols-[minmax(0,1fr)_260px]">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">Home Office ügyindító</p>
-          <h1 className="mt-1 font-serif text-2xl font-medium text-[#1F2821]">Ügyek — itt válaszd ki, mivel folytatod</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#5F675F]">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Home Office ügyindító</p>
+          <h1 className="mt-1 font-serif text-2xl font-medium text-[var(--adm-text)]">Ügyek — itt válaszd ki, mivel folytatod</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--adm-text-muted)]">
             A dashboard gyorslinkje innen vezet tovább az ügy dokumentumtárába, feladataiba és review munkanézeteibe. A lista valós betöltött ügyadatokra épül; a pontos priorizálás későbbi backend-alapú fejlesztés.
           </p>
-          <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[#514D45]">
-            <span className="rounded-full border border-[#D8CFB6] bg-white px-3 py-1">Nyitott ügyek: {caseEntrypointStats.openCases}</span>
-            <span className="rounded-full border border-[#D8CFB6] bg-white px-3 py-1">Felelőssel: {caseEntrypointStats.assignedCases}</span>
-            <span className="rounded-full border border-[#E6C987] bg-[#FAEFCF] px-3 py-1">Magas munkaprioritás: {caseEntrypointStats.highAttentionCases}</span>
+          <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[var(--adm-text-muted)]">
+            <span className="rounded-full border border-[var(--adm-border)] bg-white px-3 py-1">Nyitott ügyek: {caseEntrypointStats.openCases}</span>
+            <span className="rounded-full border border-[var(--adm-border)] bg-white px-3 py-1">Felelőssel: {caseEntrypointStats.assignedCases}</span>
+            <span className="rounded-full border border-[#E6C987] bg-[var(--adm-sand-100)] px-3 py-1">Magas munkaprioritás: {caseEntrypointStats.highAttentionCases}</span>
           </div>
         </div>
-        <div className="flex flex-col justify-center gap-2 rounded-[10px] border border-[#EEE7D9] bg-[#FBF9F3] p-3">
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Mit intézz először?</p>
-          <p className="text-[11px] leading-5 text-[#6D6A62]">Nyiss meg egy ügyet a Dokumentumtárhoz, vagy menj a feladatlistára, ha kiosztott teendőből folytatnád.</p>
+        <div className="flex flex-col justify-center gap-2 rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Mit intézz először?</p>
+          <p className="text-[11px] leading-5 text-[var(--adm-text-muted)]">Nyiss meg egy ügyet a Dokumentumtárhoz, vagy menj a feladatlistára, ha kiosztott teendőből folytatnád.</p>
           <div className="flex flex-wrap gap-2">
             <AdminButton size="xs" variant="primary" onClick={() => setShowNewCaseModal(true)}>Új ügy</AdminButton>
             <AdminButton size="xs" variant="neutral" onClick={() => router.push("/tasks")}>Feladatok</AdminButton>
@@ -635,22 +635,22 @@ export function CasesList() {
       </div>
 
       <div className="flex flex-wrap items-end gap-3 border border-[rgba(22,32,26,0.10)] bg-white p-4">
-        <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">
+        <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
           Szakterület
-          <select value={practiceArea} onChange={(e) => setPracticeArea(e.target.value)} className="mt-2 block h-10 w-48 border border-[rgba(22,32,26,0.20)] bg-[#FBF6E7] px-2 text-xs text-[#16201A]">
+          <select value={practiceArea} onChange={(e) => setPracticeArea(e.target.value)} className="mt-2 block h-10 w-48 border border-[rgba(22,32,26,0.20)] bg-[var(--adm-surface)] px-2 text-xs text-[var(--adm-text)]">
             <option value="all">Mind</option>
             {matterTypes.filter((type) => type.value !== "CUSTOM").map((type) => (
               <option key={type.value} value={type.value}>{type.label}</option>
             ))}
           </select>
         </label>
-        <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">
+        <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
           Ügyfél neve
-          <input value={clientName} onChange={(e) => setClientName(e.target.value)} className="mt-2 block h-10 w-52 border border-[rgba(22,32,26,0.20)] bg-[#FBF6E7] px-2 text-xs text-[#16201A]" placeholder="Ügyfél keresése" />
+          <input value={clientName} onChange={(e) => setClientName(e.target.value)} className="mt-2 block h-10 w-52 border border-[rgba(22,32,26,0.20)] bg-[var(--adm-surface)] px-2 text-xs text-[var(--adm-text)]" placeholder="Ügyfél keresése" />
         </label>
-        <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">
+        <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
           Munkaprioritás
-          <select value={workPriorityFilter} onChange={(e) => setWorkPriorityFilter(e.target.value)} className="mt-2 block h-10 w-44 border border-[rgba(22,32,26,0.20)] bg-[#FBF6E7] px-2 text-xs text-[#16201A]">
+          <select value={workPriorityFilter} onChange={(e) => setWorkPriorityFilter(e.target.value)} className="mt-2 block h-10 w-44 border border-[rgba(22,32,26,0.20)] bg-[var(--adm-surface)] px-2 text-xs text-[var(--adm-text)]">
             <option value="all">Mind</option>
             <option value="Alacsony">Alacsony</option>
             <option value="Közepes">Közepes</option>
@@ -663,16 +663,16 @@ export function CasesList() {
 
       <div className="overflow-hidden border border-[rgba(22,32,26,0.10)] bg-white">
         {isLoadingCases ? (
-          <div className="py-12 text-center text-xs text-[#7A8479]">Ügyek betöltése...</div>
+          <div className="py-12 text-center text-xs text-[var(--adm-text-muted)]">Ügyek betöltése...</div>
         ) : caseLoadError ? (
-          <div className="border-b border-[rgba(22,32,26,0.10)] p-6 text-center text-xs text-[#8B2A2A]">
+          <div className="border-b border-[rgba(22,32,26,0.10)] p-6 text-center text-xs text-[var(--adm-terracotta-700)]">
             <p>{caseLoadError}</p>
-            <button onClick={loadCases} className="mt-3 text-[#B58A2A] underline">Újrapróbálkozás</button>
+            <button onClick={loadCases} className="mt-3 text-[var(--adm-ochre-500)] underline">Újrapróbálkozás</button>
           </div>
         ) : (
           <table className="w-full text-left">
-            <thead className="border-b border-[rgba(22,32,26,0.10)] bg-[#F7F0D9]">
-              <tr className="text-[10px] uppercase tracking-[0.18em] text-[#7A8479]">
+            <thead className="border-b border-[rgba(22,32,26,0.10)] bg-[var(--adm-sand-100)]">
+              <tr className="text-[10px] uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
                 <th className="px-4 py-3">Ügyszám</th>
                 <th className="px-4 py-3">Ügyfél</th>
                 <th className="px-4 py-3">Ügy címe</th>
@@ -685,12 +685,12 @@ export function CasesList() {
             </thead>
             <tbody>
               {filteredCases.map((item) => (
-                <tr key={item.id} className="cursor-pointer border-b border-[#EFE7CF] last:border-b-0 hover:bg-[#FBF6E7]" onClick={() => router.push(`/cases/${item.id}/documents`)}>
-                  <td className="px-4 py-4 text-xs font-semibold text-[#16201A]">{item.caseNumber}</td>
+                <tr key={item.id} className="cursor-pointer border-b border-[var(--adm-border)] last:border-b-0 hover:bg-[var(--adm-surface)]" onClick={() => router.push(`/cases/${item.id}/documents`)}>
+                  <td className="px-4 py-4 text-xs font-semibold text-[var(--adm-text)]">{item.caseNumber}</td>
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-2">
                       <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: item.clientColor || getClientColor(item.clientName).bg }} />
-                      <span className="text-sm text-[#16201A]">{item.clientName || "Nincs megadva"}</span>
+                      <span className="text-sm text-[var(--adm-text)]">{item.clientName || "Nincs megadva"}</span>
                     </div>
                   </td>
                   <td className="px-4 py-4 text-sm text-[#3D4842]">{item.title}</td>
@@ -703,7 +703,7 @@ export function CasesList() {
               ))}
               {filteredCases.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-xs text-[#7A8479]">
+                  <td colSpan={8} className="px-4 py-8 text-center text-xs text-[var(--adm-text-muted)]">
                     <p>Nincs megjeleníthető ügy.</p>
                     <p className="mt-1">Nincs találat a beállított szűrőkre; módosítsd a szűrést vagy hozz létre új ügyet.</p>
                   </td>
@@ -715,18 +715,18 @@ export function CasesList() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 border border-[rgba(22,32,26,0.10)] bg-white p-4">
-        <p className="text-xs text-[#7A8479]">Megjelenítve: {filteredCases.length} / {backendCases.length} ügy</p>
-        <span className="text-[10px] uppercase tracking-[0.14em] text-[#7A8479]">Az új ügy létrehozása után a Dokumentumtár nyílik meg</span>
+        <p className="text-xs text-[var(--adm-text-muted)]">Megjelenítve: {filteredCases.length} / {backendCases.length} ügy</p>
+        <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Az új ügy létrehozása után a Dokumentumtár nyílik meg</span>
       </div>
 
       {showNewCaseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#16201A]/70 p-4 backdrop-blur-sm">
           <div className="max-h-[calc(100vh-44px)] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b-[3px] border-[#B58A2A] bg-[#1F4A33] px-7 py-5 text-[#F4EFDB]">
+            <div className="flex items-center justify-between border-b-[3px] border-[var(--adm-ochre-500)] bg-[var(--adm-green-800)] px-7 py-5 text-[#F4EFDB]">
               <div className="flex items-center gap-4">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[#B58A2A] font-serif text-xl text-[#B58A2A]">A</div>
+                <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--adm-ochre-500)] font-serif text-xl text-[var(--adm-ochre-500)]">A</div>
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#B58A2A]">Adminiculum</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-ochre-500)]">Adminiculum</p>
                   <h2 className="font-serif text-2xl font-medium">Új ügy létrehozása</h2>
                 </div>
               </div>
@@ -734,19 +734,19 @@ export function CasesList() {
             </div>
 
             <div className="max-h-[calc(100vh-190px)] overflow-y-auto px-7 pb-6">
-              <div className="mt-4 rounded-lg border border-[rgba(181,138,42,0.28)] bg-[#F7F0D9] px-4 py-3 text-xs text-[#4D5A53]">
+              <div className="mt-4 rounded-lg border border-[rgba(181,138,42,0.28)] bg-[var(--adm-sand-100)] px-4 py-3 text-xs text-[#4D5A53]">
                 Ügyindítási munkafolyamat: töltsd ki a kötelező mezőket, majd állítsd be a résztvevőket és a munkatervet.
               </div>
-              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] px-5 py-5">
-                <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">1</span><h3 className="font-serif text-xl font-medium">Ügyfél</h3><span className="text-[11px] font-semibold text-[#8B2A2A]">kötelező</span></div>
-                <p className="mb-4 text-xs text-[#7A8479]">Válassz meglévő ügyfelet, vagy rögzíts új ügyféladatot az ügyindításhoz.</p>
-                <div className="mb-4 inline-flex rounded-md border border-[rgba(22,32,26,0.20)] bg-[#F7F0D9] p-1">
-                  <button onClick={() => setClientMode("existing")} className={`rounded px-4 py-1.5 text-xs font-semibold ${clientMode === "existing" ? "bg-[#1F4A33] text-[#F4EFDB]" : "text-[#3D4842]"}`}>Meglévő ügyfél</button>
-                  <button onClick={() => setClientMode("new")} className={`rounded px-4 py-1.5 text-xs font-semibold ${clientMode === "new" ? "bg-[#1F4A33] text-[#F4EFDB]" : "text-[#3D4842]"}`}>Új ügyfél hozzáadása</button>
+              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-5">
+                <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">1</span><h3 className="font-serif text-xl font-medium">Ügyfél</h3><span className="text-[11px] font-semibold text-[var(--adm-terracotta-700)]">kötelező</span></div>
+                <p className="mb-4 text-xs text-[var(--adm-text-muted)]">Válassz meglévő ügyfelet, vagy rögzíts új ügyféladatot az ügyindításhoz.</p>
+                <div className="mb-4 inline-flex rounded-md border border-[rgba(22,32,26,0.20)] bg-[var(--adm-sand-100)] p-1">
+                  <button onClick={() => setClientMode("existing")} className={`rounded px-4 py-1.5 text-xs font-semibold ${clientMode === "existing" ? "bg-[var(--adm-green-800)] text-[#F4EFDB]" : "text-[#3D4842]"}`}>Meglévő ügyfél</button>
+                  <button onClick={() => setClientMode("new")} className={`rounded px-4 py-1.5 text-xs font-semibold ${clientMode === "new" ? "bg-[var(--adm-green-800)] text-[#F4EFDB]" : "text-[#3D4842]"}`}>Új ügyfél hozzáadása</button>
                 </div>
                 {clientMode === "existing" ? (
                   <>
-                    <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Ügyfél keresése</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Ügyfél keresése</label>
                     <select
                       value={newCaseData.clientId || ""}
                       onChange={(e) => {
@@ -758,7 +758,7 @@ export function CasesList() {
                           setNewCaseData({ ...newCaseData, clientId: undefined, clientName: "" });
                         }
                       }}
-                      className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] bg-white px-3 py-3 text-sm text-[#16201A] outline-none focus:border-[#1F4A33]"
+                      className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] bg-white px-3 py-3 text-sm text-[var(--adm-text)] outline-none focus:border-[#1F4A33]"
                     >
                       <option value="">Válassz meglévő ügyfelet</option>
                       {orderedClients.map((client) => {
@@ -770,8 +770,8 @@ export function CasesList() {
                       {showOtherClients ? "Egyéb / teszt ügyfelek elrejtése" : "Egyéb / teszt ügyfelek megjelenítése"}
                     </button>
                     {selectedClient ? (
-                      <article className="mt-4 grid grid-cols-[48px_1fr] gap-4 rounded-lg border border-[rgba(22,32,26,0.10)] border-l-4 border-l-[#1F4A33] bg-[#FBF6E7] p-4">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#1F4A33] font-serif text-xl text-[#F4EFDB]">{selectedClient.name.slice(0, 1).toUpperCase()}</div>
+                      <article className="mt-4 grid grid-cols-[48px_1fr] gap-4 rounded-lg border border-[rgba(22,32,26,0.10)] border-l-4 border-l-[#1F4A33] bg-[var(--adm-surface)] p-4">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--adm-green-800)] font-serif text-xl text-[#F4EFDB]">{selectedClient.name.slice(0, 1).toUpperCase()}</div>
                         <div>
                           <div className="flex flex-wrap items-center gap-2"><h4 className="font-serif text-xl font-medium">{hydrateCoreClient(selectedClient).name}</h4><AdminBadge tone="green">{getCoreClientKey(selectedClient) ? "Kiemelt ügyfél" : selectedClient.taxNumber || selectedClient.companyRegistrationNumber ? "Cég" : "Ügyfél"}</AdminBadge></div>
                           <div className="mt-2 grid grid-cols-1 gap-1 text-xs text-[#3D4842] md:grid-cols-2">
@@ -786,50 +786,50 @@ export function CasesList() {
                   </>
                 ) : (
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <label className="md:col-span-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Hivatalos név<input value={newClientData.name} onChange={(e) => { setNewClientData({ ...newClientData, name: e.target.value }); setNewCaseData((prev) => ({ ...prev, clientName: e.target.value, clientId: undefined })); }} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
-                    <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Rövid név<input value={newCaseData.clientName} onChange={(e) => setNewCaseData((prev) => ({ ...prev, clientName: e.target.value, clientId: undefined }))} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
-                    <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Típus<select value={clientType} onChange={(e) => setClientType(e.target.value as "Magánszemély" | "Cég")} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal"><option>Magánszemély</option><option>Cég</option></select></label>
-                    <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Kapcsolattartó<input value={newClientData.contactPerson || ""} onChange={(e) => setNewClientData({ ...newClientData, contactPerson: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
-                    <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Email<input value={newClientData.email || ""} onChange={(e) => setNewClientData({ ...newClientData, email: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
-                    <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Telefon<input value={newClientData.phone || ""} onChange={(e) => setNewClientData({ ...newClientData, phone: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
-                    {clientType === "Cég" ? <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Adószám<input value={newClientData.taxNumber || ""} onChange={(e) => setNewClientData({ ...newClientData, taxNumber: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label> : null}
-                    {clientType === "Cég" ? <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Cégjegyzékszám / nyilvántartási szám<input value={newClientData.companyRegistrationNumber || ""} onChange={(e) => setNewClientData({ ...newClientData, companyRegistrationNumber: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label> : null}
-                    <label className="md:col-span-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Székhely / cím<input value={newClientData.address || ""} onChange={(e) => setNewClientData({ ...newClientData, address: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" placeholder="pl. 1051 Budapest, ..." /></label>
-                    <div className="md:col-span-2 flex flex-wrap items-center gap-3"><AdminButton variant="muted" onClick={handleSaveClientOnly} disabled={isSavingClient || !newClientData.name.trim()}>{isSavingClient ? "Ügyfél mentése..." : "Ügyfél mentése adatbázisba"}</AdminButton><p className="text-xs text-[#7A8479]">Az ügy létrehozásakor az új ügyfél mentett adatbázis-rekordként kapcsolódik az ügyhöz.</p>{clientMessage ? <p className="text-xs text-[#7A8479]">{clientMessage}</p> : null}</div>
+                    <label className="md:col-span-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Hivatalos név<input value={newClientData.name} onChange={(e) => { setNewClientData({ ...newClientData, name: e.target.value }); setNewCaseData((prev) => ({ ...prev, clientName: e.target.value, clientId: undefined })); }} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
+                    <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Rövid név<input value={newCaseData.clientName} onChange={(e) => setNewCaseData((prev) => ({ ...prev, clientName: e.target.value, clientId: undefined }))} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
+                    <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Típus<select value={clientType} onChange={(e) => setClientType(e.target.value as "Magánszemély" | "Cég")} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal"><option>Magánszemély</option><option>Cég</option></select></label>
+                    <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Kapcsolattartó<input value={newClientData.contactPerson || ""} onChange={(e) => setNewClientData({ ...newClientData, contactPerson: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
+                    <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Email<input value={newClientData.email || ""} onChange={(e) => setNewClientData({ ...newClientData, email: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
+                    <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Telefon<input value={newClientData.phone || ""} onChange={(e) => setNewClientData({ ...newClientData, phone: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label>
+                    {clientType === "Cég" ? <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Adószám<input value={newClientData.taxNumber || ""} onChange={(e) => setNewClientData({ ...newClientData, taxNumber: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label> : null}
+                    {clientType === "Cég" ? <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Cégjegyzékszám / nyilvántartási szám<input value={newClientData.companyRegistrationNumber || ""} onChange={(e) => setNewClientData({ ...newClientData, companyRegistrationNumber: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" /></label> : null}
+                    <label className="md:col-span-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Székhely / cím<input value={newClientData.address || ""} onChange={(e) => setNewClientData({ ...newClientData, address: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" placeholder="pl. 1051 Budapest, ..." /></label>
+                    <div className="md:col-span-2 flex flex-wrap items-center gap-3"><AdminButton variant="muted" onClick={handleSaveClientOnly} disabled={isSavingClient || !newClientData.name.trim()}>{isSavingClient ? "Ügyfél mentése..." : "Ügyfél mentése adatbázisba"}</AdminButton><p className="text-xs text-[var(--adm-text-muted)]">Az ügy létrehozásakor az új ügyfél mentett adatbázis-rekordként kapcsolódik az ügyhöz.</p>{clientMessage ? <p className="text-xs text-[var(--adm-text-muted)]">{clientMessage}</p> : null}</div>
                   </div>
                 )}
               </section>
 
-              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] px-5 py-5">
-                <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">2</span><h3 className="font-serif text-xl font-medium">Ügy típusa</h3><span className="text-[11px] font-semibold text-[#8B2A2A]">kötelező</span></div>
-                <p className="mb-4 text-xs text-[#7A8479]">Nevezd meg röviden az ügyet, majd jelöld ki a legjobb ügytípus kategóriát.</p>
-                <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">Ügy megnevezése<input value={newCaseData.description || ""} onChange={(e) => setNewCaseData({ ...newCaseData, description: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" placeholder="pl. Meggyes utca 12. — ajándékozási szerződés" /></label>
+              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-5">
+                <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">2</span><h3 className="font-serif text-xl font-medium">Ügy típusa</h3><span className="text-[11px] font-semibold text-[var(--adm-terracotta-700)]">kötelező</span></div>
+                <p className="mb-4 text-xs text-[var(--adm-text-muted)]">Nevezd meg röviden az ügyet, majd jelöld ki a legjobb ügytípus kategóriát.</p>
+                <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Ügy megnevezése<input value={newCaseData.description || ""} onChange={(e) => setNewCaseData({ ...newCaseData, description: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" placeholder="pl. Meggyes utca 12. — ajándékozási szerződés" /></label>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {matterTypes.map((type) => <button key={type.value} onClick={() => setNewCaseData({ ...newCaseData, matterType: type.value })} className={`rounded-full border px-3 py-1.5 text-xs ${newCaseData.matterType === type.value ? "border-[#173824] bg-[#1F4A33] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{type.label}</button>)}
+                  {matterTypes.map((type) => <button key={type.value} onClick={() => setNewCaseData({ ...newCaseData, matterType: type.value })} className={`rounded-full border px-3 py-1.5 text-xs ${newCaseData.matterType === type.value ? "border-[#173824] bg-[var(--adm-green-800)] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{type.label}</button>)}
                 </div>
                 {newCaseData.matterType === "CUSTOM" ? <input value={customMatterType} onChange={(e) => setCustomMatterType(e.target.value)} className="mt-3 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm" placeholder="Saját ügytípus" /> : null}
               </section>
 
-              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] px-5 py-5">
+              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-5">
                 <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">3</span><h3 className="font-serif text-xl font-medium">Ügyfél szerepe</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
-                <p className="mb-4 text-xs text-[#7A8479]">Állítsd be, milyen minőségben képviseled az ügyfelet ebben az ügyben.</p>
-                <div className="flex flex-wrap gap-2">{clientRoles.map((role) => <button key={role} onClick={() => setNewCaseData({ ...newCaseData, clientRole: role })} className={`rounded-full border px-3 py-1.5 text-xs ${newCaseData.clientRole === role ? "border-[#173824] bg-[#1F4A33] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{role}</button>)}</div>
+                <p className="mb-4 text-xs text-[var(--adm-text-muted)]">Állítsd be, milyen minőségben képviseled az ügyfelet ebben az ügyben.</p>
+                <div className="flex flex-wrap gap-2">{clientRoles.map((role) => <button key={role} onClick={() => setNewCaseData({ ...newCaseData, clientRole: role })} className={`rounded-full border px-3 py-1.5 text-xs ${newCaseData.clientRole === role ? "border-[#173824] bg-[var(--adm-green-800)] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{role}</button>)}</div>
                 {newCaseData.clientRole === "Egyéb / saját szerep" ? <input value={customClientRole} onChange={(e) => setCustomClientRole(e.target.value)} className="mt-3 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm" placeholder="pl. társtulajdonos" /> : null}
               </section>
 
-              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] px-5 py-5">
+              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-5">
                 <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">4</span><h3 className="font-serif text-xl font-medium">Határidő</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
-                <p className="mb-4 text-xs text-[#7A8479]">Rögzíts pontos határidőt vagy relatív időablakot, ha az ügy menete ezt igényli.</p>
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-5">{[{ id: "none", label: "Nincs határidő" }, { id: "date", label: "Pontos dátum" }, { id: "days", label: "X nap múlva" }, { id: "hours", label: "X óra múlva" }, { id: "minutes", label: "X perc múlva" }].map((mode) => <button key={mode.id} onClick={() => updateDeadline(mode.id as DeadlineMode)} className={`rounded border p-3 text-left text-xs font-semibold ${deadlineMode === mode.id ? "border-[#173824] bg-[#1F4A33] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{mode.label}</button>)}</div>
+                <p className="mb-4 text-xs text-[var(--adm-text-muted)]">Rögzíts pontos határidőt vagy relatív időablakot, ha az ügy menete ezt igényli.</p>
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-5">{[{ id: "none", label: "Nincs határidő" }, { id: "date", label: "Pontos dátum" }, { id: "days", label: "X nap múlva" }, { id: "hours", label: "X óra múlva" }, { id: "minutes", label: "X perc múlva" }].map((mode) => <button key={mode.id} onClick={() => updateDeadline(mode.id as DeadlineMode)} className={`rounded border p-3 text-left text-xs font-semibold ${deadlineMode === mode.id ? "border-[#173824] bg-[var(--adm-green-800)] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{mode.label}</button>)}</div>
                 {deadlineMode === "date" ? <input type="datetime-local" value={newCaseData.deadline || ""} onChange={(e) => setNewCaseData({ ...newCaseData, deadline: e.target.value })} className="mt-3 rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm" /> : null}
                 {["days", "hours", "minutes"].includes(deadlineMode) ? <input type="number" min={1} value={relativeDeadlineValue} onChange={(e) => { setRelativeDeadlineValue(e.target.value); updateDeadline(deadlineMode, e.target.value); }} className="mt-3 w-32 rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm" /> : null}
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs"><span className="text-[#7A8479]">Emlékeztető:</span>{["Nincs emlékeztető", "1 órával előtte", "1 nappal előtte", "3 nappal előtte", "1 héttel előtte"].map((item) => <button key={item} onClick={() => setReminder(item)} className={`rounded-full border px-3 py-1 ${reminder === item ? "border-[#173824] bg-[#1F4A33] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white"}`}>{item}</button>)}</div>
-                <div className="mt-3 rounded-md border border-[#C5D3C8] bg-[#E2E8DA] p-3 text-sm text-[#1F4A33]">Határidő: <b>{formatDeadlinePreview(newCaseData.deadline)}</b>{reminder !== "Nincs emlékeztető" ? ` — emlékeztető: ${reminder}` : ""}</div>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs"><span className="text-[var(--adm-text-muted)]">Emlékeztető:</span>{["Nincs emlékeztető", "1 órával előtte", "1 nappal előtte", "3 nappal előtte", "1 héttel előtte"].map((item) => <button key={item} onClick={() => setReminder(item)} className={`rounded-full border px-3 py-1 ${reminder === item ? "border-[#173824] bg-[var(--adm-green-800)] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white"}`}>{item}</button>)}</div>
+                <div className="mt-3 rounded-md border border-[#C5D3C8] bg-[#E2E8DA] p-3 text-sm text-[var(--adm-green-800)]">Határidő: <b>{formatDeadlinePreview(newCaseData.deadline)}</b>{reminder !== "Nincs emlékeztető" ? ` — emlékeztető: ${reminder}` : ""}</div>
               </section>
 
-              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] px-5 py-5">
+              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-5">
                 <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">5</span><h3 className="font-serif text-xl font-medium">Résztvevők</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
-                <p className="mb-4 text-xs text-[#7A8479]">Válaszd ki, kik dolgoznak együtt az ügyön és kik kerüljenek be a review-útvonalba.</p>
+                <p className="mb-4 text-xs text-[var(--adm-text-muted)]">Válaszd ki, kik dolgoznak együtt az ügyön és kik kerüljenek be a review-útvonalba.</p>
                 <div className="flex flex-wrap gap-2">
                   {visibleParticipants.map((user) => {
                     const active = selectedCollaboratorIds.includes(user.id);
@@ -846,10 +846,10 @@ export function CasesList() {
                         disabled={alreadyInWorkplan}
                         className={`rounded-full border px-3 py-1.5 text-xs ${
                           active
-                            ? "border-[#1F4A33] bg-[#E2E8DA] text-[#1F4A33]"
+                            ? "border-[#1F4A33] bg-[#E2E8DA] text-[var(--adm-green-800)]"
                             : alreadyInWorkplan
                               ? "border-[#4A6B4A] bg-[#D9E3CC] text-[#4A6B4A] cursor-default"
-                              : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842] hover:border-[#173824] hover:bg-[#ECE6DA]"
+                              : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842] hover:border-[#173824] hover:bg-[var(--adm-ivory-200)]"
                         }`}
                       >
                         {user.name || user.email}
@@ -858,19 +858,19 @@ export function CasesList() {
                         ) : alreadyInWorkplan ? (
                           <span className="ml-1 text-[9px] opacity-60">✓ útvonalban</span>
                         ) : (
-                          <span className="ml-1 text-[#7A8479]">· {user.role}</span>
+                          <span className="ml-1 text-[var(--adm-text-muted)]">· {user.role}</span>
                         )}
                       </button>
                     );
                   })}
-                  {visibleParticipants.length === 0 ? <span className="text-xs text-[#7A8479]">Még nincs aktív belső felhasználó a pilot résztvevőkhöz.</span> : null}
+                  {visibleParticipants.length === 0 ? <span className="text-xs text-[var(--adm-text-muted)]">Még nincs aktív belső felhasználó a pilot résztvevőkhöz.</span> : null}
                 </div>
-                <p className="mt-2 text-xs text-[#7A8479]">Résztvevőket később is hozzáadhatsz az ügy oldaláról.</p>
+                <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Résztvevőket később is hozzáadhatsz az ügy oldaláról.</p>
               </section>
 
-              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[#FBF6E7] px-5 py-5">
+              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-5">
                 <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">6</span><h3 className="font-serif text-xl font-medium">Munkaterv / review-útvonal</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
-                <p className="mb-4 text-xs text-[#7A8479]">Építsd fel, ki milyen sorrendben dolgozik az ügyön.</p>
+                <p className="mb-4 text-xs text-[var(--adm-text-muted)]">Építsd fel, ki milyen sorrendben dolgozik az ügyön.</p>
                 <div className="flex flex-wrap gap-2">
                   {[
                     ["none", "Nincs munkaterv"],
@@ -879,13 +879,13 @@ export function CasesList() {
                     ["three-step", "Jelölt → ügyvéd → partner"],
                     ["custom", "Saját"],
                   ].map(([value, label]) => (
-                    <button key={value} type="button" onClick={() => applyWorkplanPreset(value)} className={`rounded-full border px-3 py-1.5 text-xs ${workplanPreset === value ? "border-[#173824] bg-[#1F4A33] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{label}</button>
+                    <button key={value} type="button" onClick={() => applyWorkplanPreset(value)} className={`rounded-full border px-3 py-1.5 text-xs ${workplanPreset === value ? "border-[#173824] bg-[var(--adm-green-800)] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{label}</button>
                   ))}
                 </div>
                 {workplanSteps.length > 0 ? (
                   <div className="mt-4 space-y-3">
                     {workplanSteps.length > 1 && (
-                      <p className="text-[10px] text-[#9C9890]">⟳ Sorrend módosítása: fogd meg és húzd a lépést, vagy használd a fel/le gombokat.</p>
+                      <p className="text-[10px] text-[var(--adm-text-soft)]">⟳ Sorrend módosítása: fogd meg és húzd a lépést, vagy használd a fel/le gombokat.</p>
                     )}
                     {workplanSteps.length > 0 && (
                       <div className="flex flex-wrap items-center gap-1 rounded border border-[#C5D3C8] bg-[#E2E8DA] p-2 text-xs">
@@ -895,9 +895,9 @@ export function CasesList() {
                           const name = assignee ? assignee.name : step.title || "?";
                           return (
                             <span key={step.id} className="flex items-center gap-1">
-                              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#1F4A33] text-[9px] font-bold text-[#F4EFDB]">{idx + 1}</span>
-                              <span className="font-medium text-[#1F4A33]">{name}</span>
-                              {idx < workplanSteps.length - 1 && <span className="mx-1 text-[#7A8479]">→</span>}
+                              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--adm-green-800)] text-[9px] font-bold text-[#F4EFDB]">{idx + 1}</span>
+                              <span className="font-medium text-[var(--adm-green-800)]">{name}</span>
+                              {idx < workplanSteps.length - 1 && <span className="mx-1 text-[var(--adm-text-muted)]">→</span>}
                             </span>
                           );
                         })}
@@ -912,11 +912,11 @@ export function CasesList() {
                             draggable
                             onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(index)); e.currentTarget.classList.add("opacity-60"); }}
                             onDragEnd={(e) => { e.currentTarget.classList.remove("opacity-60"); }}
-                            onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-[#B58A2A]"); }}
-                            onDragLeave={(e) => { e.currentTarget.classList.remove("border-[#B58A2A]"); }}
+                            onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-[var(--adm-ochre-500)]"); }}
+                            onDragLeave={(e) => { e.currentTarget.classList.remove("border-[var(--adm-ochre-500)]"); }}
                             onDrop={(e) => {
                               e.preventDefault();
-                              e.currentTarget.classList.remove("border-[#B58A2A]");
+                              e.currentTarget.classList.remove("border-[var(--adm-ochre-500)]");
                               const fromIndex = parseInt(e.dataTransfer.getData("text/plain") || "-1", 10);
                               if (fromIndex !== -1 && fromIndex !== index) {
                                 setWorkplanSteps((prev) => {
@@ -927,54 +927,54 @@ export function CasesList() {
                                 });
                               }
                             }}
-                            className="rounded-lg border border-[rgba(22,32,26,0.12)] bg-[#FBF6E7] p-3 cursor-grab active:cursor-grabbing"
+                            className="rounded-lg border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3 cursor-grab active:cursor-grabbing"
                           >
                             <div className="flex items-center gap-2 mb-2">
-                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1F4A33] text-[10px] font-bold text-[#F4EFDB]">{index + 1}</span>
-                              <input value={step.title} onChange={(e) => updateWorkplanStep(step.id, { title: e.target.value })} placeholder="Feladat megnevezése" className="flex-1 rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]" />
+                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--adm-green-800)] text-[10px] font-bold text-[#F4EFDB]">{index + 1}</span>
+                              <input value={step.title} onChange={(e) => updateWorkplanStep(step.id, { title: e.target.value })} placeholder="Feladat megnevezése" className="flex-1 rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[var(--adm-text)] outline-none focus:border-[#1F4A33]" />
                               {assignee && (
                                 <span className="shrink-0 rounded-full border border-[#4A6B4A] bg-[#D9E3CC] px-2 py-0.5 text-[10px] text-[#4A6B4A]">{assignee.name}{assignee.role ? ` · ${getRoleLabel(assignee.role)}` : ''}</span>
                               )}
                             </div>
                             <div className="grid gap-2 sm:grid-cols-[1fr_180px_130px]">
-                              <select value={step.assigneeUserId} onChange={(e) => updateWorkplanStep(step.id, { assigneeUserId: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]">
+                              <select value={step.assigneeUserId} onChange={(e) => updateWorkplanStep(step.id, { assigneeUserId: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[var(--adm-text)] outline-none focus:border-[#1F4A33]">
                                 <option value="">Felelős</option>
                                 {visibleParticipants.map((user) => <option key={user.id} value={user.id}>{user.name}{user.role && user.role !== 'LAWYER' ? ` (${user.role === 'PARTNER' ? 'partner' : user.role === 'TRAINEE' ? 'ügyvédjelölt' : user.role})` : ''}</option>)}
                               </select>
-                              <input type="date" value={step.dueDate} onChange={(e) => updateWorkplanStep(step.id, { dueDate: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]" />
+                              <input type="date" value={step.dueDate} onChange={(e) => updateWorkplanStep(step.id, { dueDate: e.target.value })} className="rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[var(--adm-text)] outline-none focus:border-[#1F4A33]" />
                               <div className="flex items-center gap-1">
-                                <button type="button" onClick={() => moveUpStep(index)} disabled={index === 0} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(22,32,26,0.20)] text-[10px] text-[#3D4842] disabled:opacity-30 hover:bg-[#ECE6DA]" title="Fel">
+                                <button type="button" onClick={() => moveUpStep(index)} disabled={index === 0} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(22,32,26,0.20)] text-[10px] text-[#3D4842] disabled:opacity-30 hover:bg-[var(--adm-ivory-200)]" title="Fel">
                                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path d="M5 15l7-7 7 7"/></svg>
                                 </button>
-                                <button type="button" onClick={() => moveDownStep(index)} disabled={index === workplanSteps.length - 1} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(22,32,26,0.20)] text-[10px] text-[#3D4842] disabled:opacity-30 hover:bg-[#ECE6DA]" title="Le">
+                                <button type="button" onClick={() => moveDownStep(index)} disabled={index === workplanSteps.length - 1} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(22,32,26,0.20)] text-[10px] text-[#3D4842] disabled:opacity-30 hover:bg-[var(--adm-ivory-200)]" title="Le">
                                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path d="M19 9l-7 7-7-7"/></svg>
                                 </button>
-                                <button type="button" onClick={() => removeWorkplanStep(step.id)} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(181,42,42,0.30)] text-[#8B2A2A] hover:bg-[#FFF0EE]" title="Lépés törlése">
+                                <button type="button" onClick={() => removeWorkplanStep(step.id)} className="flex h-6 w-6 items-center justify-center rounded border border-[rgba(181,42,42,0.30)] text-[var(--adm-terracotta-700)] hover:bg-[#FFF0EE]" title="Lépés törlése">
                                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3"><path d="M6 18L18 6M6 6l12 12"/></svg>
                                 </button>
                               </div>
                             </div>
-                            <textarea value={step.note} onChange={(e) => updateWorkplanStep(step.id, { note: e.target.value })} rows={1} placeholder="Leírás / megjegyzés" className="mt-2 w-full resize-none rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[#16201A] outline-none focus:border-[#1F4A33]" />
+                            <textarea value={step.note} onChange={(e) => updateWorkplanStep(step.id, { note: e.target.value })} rows={1} placeholder="Leírás / megjegyzés" className="mt-2 w-full resize-none rounded border border-[rgba(22,32,26,0.20)] bg-white px-2 py-1.5 text-xs text-[var(--adm-text)] outline-none focus:border-[#1F4A33]" />
                           </div>
                         );
                       })}
                     </div>
                     <AdminButton size="sm" variant="muted" onClick={addWorkplanStep}>+ Lépés hozzáadása</AdminButton>
-                    <p className="text-[11px] text-[#7A8479]">A lépések valós ügyfeladatként jönnek létre. Felelős csak akkor kerül mentésre, ha létező felhasználót választasz.</p>
+                    <p className="text-[11px] text-[var(--adm-text-muted)]">A lépések valós ügyfeladatként jönnek létre. Felelős csak akkor kerül mentésre, ha létező felhasználót választasz.</p>
                   </div>
                 ) : (
                   <div className="mt-4 rounded border border-dashed border-[rgba(22,32,26,0.20)] bg-[#FFFBEF] p-5 text-center">
                     <p className="text-sm font-medium text-[#3D4842]">Építsd fel, ki milyen sorrendben dolgozik az ügyön.</p>
-                    <p className="mt-1 text-xs text-[#7A8479]">Válassz egy sablont vagy adj lépéseket egyénileg. A fenti résztvevők közül egy kattintással is hozzáadhatsz valakit az útvonalhoz.</p>
+                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Válassz egy sablont vagy adj lépéseket egyénileg. A fenti résztvevők közül egy kattintással is hozzáadhatsz valakit az útvonalhoz.</p>
                   </div>
                 )}
               </section>
 
-              {createError ? <div className="mb-4 rounded border border-[#F2DAD6] bg-[#F2DAD6] p-3 text-xs font-semibold text-[#8B2A2A]">{createError}</div> : null}
+              {createError ? <div className="mb-4 rounded border border-[#F2DAD6] bg-[#F2DAD6] p-3 text-xs font-semibold text-[var(--adm-terracotta-700)]">{createError}</div> : null}
             </div>
 
-            <div className="flex items-center justify-between gap-4 border-t border-[rgba(22,32,26,0.10)] bg-[#F7F0D9] px-7 py-4">
-              <p className="text-[11.5px] text-[#7A8479]">Az ügy létrehozása után a Dokumentumtárba lépünk, ahol feltöltheted az első iratot.</p>
+            <div className="flex items-center justify-between gap-4 border-t border-[rgba(22,32,26,0.10)] bg-[var(--adm-sand-100)] px-7 py-4">
+              <p className="text-[11.5px] text-[var(--adm-text-muted)]">Az ügy létrehozása után a Dokumentumtárba lépünk, ahol feltöltheted az első iratot.</p>
               <div className="flex gap-2"><AdminButton variant="ghost" onClick={() => setShowNewCaseModal(false)}>Mégse</AdminButton><AdminButton variant="primary" size="lg" onClick={handleCreateCase} disabled={isCreating}>{isCreating ? "Létrehozás..." : "Ügy létrehozása"}</AdminButton></div>
             </div>
           </div>

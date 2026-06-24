@@ -49,41 +49,41 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   REVIEW_SUBMITTED: { label: "Review alatt", color: "text-[#8B6B3A]", bg: "bg-[#fef3e2]", border: "border-[#f5d89a]", badge: "Folyamatban" },
   SUBMITTED: { label: "Review alatt", color: "text-[#8B6B3A]", bg: "bg-[#fef3e2]", border: "border-[#f5d89a]", badge: "Folyamatban" },
   APPROVED: { label: "Jóváhagyva", color: "text-[#059669]", bg: "bg-[#ECFDF5]", border: "border-[#a7f3d0]", badge: "Kész" },
-  REJECTED: { label: "Visszaküldve", color: "text-[#DC2626]", bg: "bg-[#FEF2F2]", border: "border-[#fca5a5]", badge: "Vissza" },
-  GENERATED: { label: "Generálva", color: "text-[#514D45]", bg: "bg-[#ECE6DA]", border: "border-[#DDD7CA]", badge: "Generálva" },
-  PENDING: { label: "Függőben", color: "text-[#7B776D]", bg: "bg-[#F6F2E8]", border: "border-[#DDD7CA]", badge: "Függőben" },
-  DRAFT: { label: "Piszkozat", color: "text-[#7B776D]", bg: "bg-[#F6F2E8]", border: "border-[#DDD7CA]", badge: "Piszkozat" },
+  REJECTED: { label: "Visszaküldve", color: "text-[var(--adm-terracotta-700)]", bg: "bg-[var(--adm-terracotta-100)]", border: "border-[#fca5a5]", badge: "Vissza" },
+  GENERATED: { label: "Generálva", color: "text-[var(--adm-text-muted)]", bg: "bg-[var(--adm-ivory-200)]", border: "border-[var(--adm-border)]", badge: "Generálva" },
+  PENDING: { label: "Függőben", color: "text-[var(--adm-text-muted)]", bg: "bg-[var(--adm-ivory-100)]", border: "border-[var(--adm-border)]", badge: "Függőben" },
+  DRAFT: { label: "Piszkozat", color: "text-[var(--adm-text-muted)]", bg: "bg-[var(--adm-ivory-100)]", border: "border-[var(--adm-border)]", badge: "Piszkozat" },
   FINALIZED: { label: "Véglegesítve", color: "text-[#059669]", bg: "bg-[#ECFDF5]", border: "border-[#a7f3d0]", badge: "Kész" },
   IN_PROGRESS: { label: "Folyamatban", color: "text-[#2563EB]", bg: "bg-[#EFF6FF]", border: "border-[#bfdbfe]", badge: "Folyamatban" },
-  TODO: { label: "Teendő", color: "text-[#514D45]", bg: "bg-[#ECE6DA]", border: "border-[#DDD7CA]", badge: "Teendő" },
+  TODO: { label: "Teendő", color: "text-[var(--adm-text-muted)]", bg: "bg-[var(--adm-ivory-200)]", border: "border-[var(--adm-border)]", badge: "Teendő" },
   DONE: { label: "Kész", color: "text-[#059669]", bg: "bg-[#ECFDF5]", border: "border-[#a7f3d0]", badge: "Kész" },
   COMPLETED: { label: "Befejezve", color: "text-[#059669]", bg: "bg-[#ECFDF5]", border: "border-[#a7f3d0]", badge: "Kész" },
-  BLOCKED: { label: "Blokkolva", color: "text-[#DC2626]", bg: "bg-[#FEF2F2]", border: "border-[#fca5a5]", badge: "Blokkolva" },
-  CANCELLED: { label: "Törölve", color: "text-[#7B776D]", bg: "bg-[#F6F2E8]", border: "border-[#DDD7CA]", badge: "Törölve" },
+  BLOCKED: { label: "Blokkolva", color: "text-[var(--adm-terracotta-700)]", bg: "bg-[var(--adm-terracotta-100)]", border: "border-[#fca5a5]", badge: "Blokkolva" },
+  CANCELLED: { label: "Törölve", color: "text-[var(--adm-text-muted)]", bg: "bg-[var(--adm-ivory-100)]", border: "border-[var(--adm-border)]", badge: "Törölve" },
 };
 
 const getStatusConfig = (status: string) => {
   const upper = status.toUpperCase();
   return STATUS_CONFIG[upper] || STATUS_CONFIG[upper.replace(/-/g, "_")] || {
     label: "Ismeretlen állapot",
-    color: "text-[#514D45]",
-    bg: "bg-[#ECE6DA]",
-    border: "border-[#DDD7CA]",
+    color: "text-[var(--adm-text-muted)]",
+    bg: "bg-[var(--adm-ivory-200)]",
+    border: "border-[var(--adm-border)]",
     badge: "Ismeretlen",
   };
 };
 
 // Priority config
 const PRIORITY_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-  URGENT: { color: "text-[#DC2626]", bg: "bg-[#FEF2F2]", label: "Sürgős" },
+  URGENT: { color: "text-[var(--adm-terracotta-700)]", bg: "bg-[var(--adm-terracotta-100)]", label: "Sürgős" },
   HIGH: { color: "text-[#8B6B3A]", bg: "bg-[#fef3e2]", label: "Magas" },
-  MEDIUM: { color: "text-[#514D45]", bg: "bg-[#ECE6DA]", label: "Közepes" },
-  LOW: { color: "text-[#7B776D]", bg: "bg-[#F6F2E8]", label: "Alacsony" },
+  MEDIUM: { color: "text-[var(--adm-text-muted)]", bg: "bg-[var(--adm-ivory-200)]", label: "Közepes" },
+  LOW: { color: "text-[var(--adm-text-muted)]", bg: "bg-[var(--adm-ivory-100)]", label: "Alacsony" },
 };
 
 const getPriorityConfig = (priority: string) => {
   const upper = priority.toUpperCase();
-  return PRIORITY_CONFIG[upper] || { color: "text-[#7B776D]", bg: "bg-[#F6F2E8]", label: priority };
+  return PRIORITY_CONFIG[upper] || { color: "text-[var(--adm-text-muted)]", bg: "bg-[var(--adm-ivory-100)]", label: priority };
 };
 
 // Action urgency classification
@@ -166,19 +166,19 @@ function ReviewsPageContent() {
   const [uiPack] = useUiPack();
   const isSignalTiles = uiPack === "signal_tiles_console";
   const p = {
-    bg: isSignalTiles ? "bg-[#0C1222]" : "bg-[#F6F2E8]",
-    bgAlt: isSignalTiles ? "bg-[#111827]" : "bg-[#F0EBE0]",
-    bgHover: isSignalTiles ? "hover:bg-[#1a2744]" : "hover:bg-[#EAE3D5]",
+    bg: isSignalTiles ? "bg-[#0C1222]" : "bg-[var(--adm-ivory-100)]",
+    bgAlt: isSignalTiles ? "bg-[#111827]" : "bg-[var(--adm-ivory-100)]",
+    bgHover: isSignalTiles ? "hover:bg-[#1a2744]" : "hover:bg-[var(--adm-ivory-200)]",
     bgCard: isSignalTiles ? "bg-[#0F1923]" : "bg-white",
-    bgSection: isSignalTiles ? "bg-[#0A1020]" : "bg-[#FAF8F2]",
-    text: isSignalTiles ? "text-[#CBD5E1]" : "text-[#514D45]",
-    textMuted: isSignalTiles ? "text-[#94A3B8]" : "text-[#7B776D]",
-    textDark: isSignalTiles ? "text-[#F1F5F9]" : "text-[#1F2821]",
-    border: isSignalTiles ? "border-[#1E3A5F]" : "border-[#DDD7CA]",
-    borderLight: isSignalTiles ? "border-[#1E3A5F]" : "border-[#E8E2D6]",
-    badge: isSignalTiles ? "bg-[#1E3A5F] text-[#67E8F9]" : "bg-[#E8E2D6] text-[#7B776D]",
+    bgSection: isSignalTiles ? "bg-[#0A1020]" : "bg-[var(--adm-surface)]",
+    text: isSignalTiles ? "text-[#CBD5E1]" : "text-[var(--adm-text-muted)]",
+    textMuted: isSignalTiles ? "text-[#94A3B8]" : "text-[var(--adm-text-muted)]",
+    textDark: isSignalTiles ? "text-[#F1F5F9]" : "text-[var(--adm-text)]",
+    border: isSignalTiles ? "border-[#1E3A5F]" : "border-[var(--adm-border)]",
+    borderLight: isSignalTiles ? "border-[#1E3A5F]" : "border-[var(--adm-border)]",
+    badge: isSignalTiles ? "bg-[#1E3A5F] text-[#67E8F9]" : "bg-[var(--adm-ivory-200)] text-[var(--adm-text-muted)]",
     accent: isSignalTiles ? "text-cyan-400" : "text-[#8B7355]",
-    accentBg: isSignalTiles ? "bg-cyan-400/10" : "bg-[#F6F2E8]",
+    accentBg: isSignalTiles ? "bg-cyan-400/10" : "bg-[var(--adm-ivory-100)]",
     success: isSignalTiles ? "text-emerald-400" : "text-emerald-700",
     warning: isSignalTiles ? "text-amber-400" : "text-amber-700",
     danger: isSignalTiles ? "text-red-400" : "text-red-700",
@@ -424,14 +424,14 @@ function ReviewsPageContent() {
         <div className="max-w-5xl mx-auto p-8">
           <h1 className={`text-2xl font-serif ${p.textDark} mb-1`}>Review sor</h1>
           <p className={`text-xs ${p.textMuted} mb-2`}>Jóváhagyásra vagy visszaküldésre váró munkapéldányok és feladatok.</p>
-          <p className="text-[10px] text-[#7B776D] mb-4">Dokumentumtár → Szerződés-workspace → Leadási csomag → Review sor. Batch jóváhagyás későbbi patchben.</p>
+          <p className="text-[10px] text-[var(--adm-text-muted)] mb-4">Dokumentumtár → Szerződés-workspace → Leadási csomag → Review sor. Batch jóváhagyás későbbi patchben.</p>
 
           {/* Queue statistics bar */}
           {!isLoading && queueStats.total > 0 && (
-            <div className={`mb-4 flex flex-wrap gap-3 p-3 ${isSignalTiles ? "bg-slate-800 border-slate-600" : "bg-[#F6F2E8] border-[#DDD7CA]"} border rounded`}>
+            <div className={`mb-4 flex flex-wrap gap-3 p-3 ${isSignalTiles ? "bg-slate-800 border-slate-600" : "bg-[var(--adm-ivory-100)] border-[var(--adm-border)]"} border rounded`}>
               <div className="flex items-center gap-1.5">
-                <span className="text-sm font-semibold text-[#1F2821]">{queueStats.total}</span>
-                <span className="text-[10px] text-[#7B776D]">összes</span>
+                <span className="text-sm font-semibold text-[var(--adm-text)]">{queueStats.total}</span>
+                <span className="text-[10px] text-[var(--adm-text-muted)]">összes</span>
               </div>
               {queueStats.needsAction > 0 && (
                 <div className="flex items-center gap-1.5 px-2 py-1 bg-[#fef3e2] border border-[#f5d89a] rounded">
@@ -440,15 +440,15 @@ function ReviewsPageContent() {
                 </div>
               )}
               {queueStats.waiting > 0 && (
-                <div className="flex items-center gap-1.5 px-2 py-1 bg-[#ECE6DA] border border-[#DDD7CA] rounded">
-                  <span className="text-sm font-semibold text-[#514D45]">{queueStats.waiting}</span>
-                  <span className="text-[10px] text-[#7B776D]">várakozó</span>
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-[var(--adm-ivory-200)] border border-[var(--adm-border)] rounded">
+                  <span className="text-sm font-semibold text-[var(--adm-text-muted)]">{queueStats.waiting}</span>
+                  <span className="text-[10px] text-[var(--adm-text-muted)]">várakozó</span>
                 </div>
               )}
               {queueStats.blocked > 0 && (
-                <div className="flex items-center gap-1.5 px-2 py-1 bg-[#FEF2F2] border border-[#fca5a5] rounded">
-                  <span className="text-sm font-semibold text-[#DC2626]">{queueStats.blocked}</span>
-                  <span className="text-[10px] text-[#DC2626]">blokkolva</span>
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-[var(--adm-terracotta-100)] border border-[#fca5a5] rounded">
+                  <span className="text-sm font-semibold text-[var(--adm-terracotta-700)]">{queueStats.blocked}</span>
+                  <span className="text-[10px] text-[var(--adm-terracotta-700)]">blokkolva</span>
                 </div>
               )}
               {queueStats.done > 0 && (
@@ -487,20 +487,20 @@ function ReviewsPageContent() {
             </label>
           </div>
           {isLoading ? (
-            <div className="py-12 text-center text-xs text-[#7B776D]">Review sor betöltése…</div>
+            <div className="py-12 text-center text-xs text-[var(--adm-text-muted)]">Review sor betöltése…</div>
           ) : error ? (
-            <div className="border border-[#D4B8B8] bg-[#FFF7F4] px-5 py-10 text-center">
+            <div className="border border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] px-5 py-10 text-center">
               <p className="font-serif text-lg text-[#8B3A3A]">{error}</p>
-              <p className="mt-2 text-xs text-[#6D6A62]">Próbáld újra, vagy nyisd meg az ügyeket és dokumentumokat közvetlenül.</p>
+              <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Próbáld újra, vagy nyisd meg az ügyeket és dokumentumokat közvetlenül.</p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 <button type="button" onClick={loadReviewQueue} className="rounded border border-[#8B3A3A] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#8B3A3A] hover:bg-[#FFF0ED]">Újrapróbálás</button>
-                <Link href="/cases" className="rounded border border-[#DDD7CA] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F2821] hover:bg-[#FBF9F3]">Ügyek megnyitása</Link>
+                <Link href="/cases" className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ügyek megnyitása</Link>
               </div>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="border border-dashed border-[#DDD7CA] px-5 py-12 text-center text-xs text-[#7B776D]">
-              <p className="font-serif text-lg text-[#1F2821]">{queue.length === 0 ? "Nincs review-ra váró dokumentum." : "Nincs találat a kiválasztott szűrőkkel."}</p>
-              <p className="mt-2 text-[11px] text-[#7B776D]">
+            <div className="border border-dashed border-[var(--adm-border)] px-5 py-12 text-center text-xs text-[var(--adm-text-muted)]">
+              <p className="font-serif text-lg text-[var(--adm-text)]">{queue.length === 0 ? "Nincs review-ra váró dokumentum." : "Nincs találat a kiválasztott szűrőkkel."}</p>
+              <p className="mt-2 text-[11px] text-[var(--adm-text-muted)]">
                 {queue.length === 0
                   ? "A review-ra küldött munkapéldányok és feladatok itt jelennek meg."
                   : hasActiveFilters
@@ -526,22 +526,22 @@ function ReviewsPageContent() {
                         <button
                           key={item.id}
                           onClick={() => setSelectedId(item.id)}
-                          className={`w-full text-left p-4 border rounded transition-colors ${selected?.id === item.id ? "border-[#C9A227] bg-[#FBF9F3]" : "border-[#DDD7CA] bg-white hover:bg-[#FBF9F3]"}`}
+                          className={`w-full text-left p-4 border rounded transition-colors ${selected?.id === item.id ? "border-[var(--adm-ochre-500)] bg-[var(--adm-surface)]" : "border-[var(--adm-border)] bg-white hover:bg-[var(--adm-surface)]"}`}
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <p className="text-sm font-semibold text-[#1F2821]">{item.title}</p>
+                                <p className="text-sm font-semibold text-[var(--adm-text)]">{item.title}</p>
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${statusCfg.bg} ${statusCfg.color} border ${statusCfg.border}`}>
                                   {statusCfg.label}
                                 </span>
                                 {item.documentType && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#EEE7D9] text-[#514D45] border border-[#DDD7CA]">
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--adm-ivory-200)] text-[var(--adm-text-muted)] border border-[var(--adm-border)]">
                                     {getDocumentTypeLabel(item.documentType)}
                                   </span>
                                 )}
                                 {item.version && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#EEE7D9] text-[#7B776D]">
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--adm-ivory-200)] text-[var(--adm-text-muted)]">
                                     v{item.version}
                                   </span>
                                 )}
@@ -549,9 +549,9 @@ function ReviewsPageContent() {
                                   {priorityCfg.label}
                                 </span>
                               </div>
-                              <p className="text-xs text-[#514D45] mt-1">{item.caseNumber} · {item.caseTitle}</p>
+                              <p className="text-xs text-[var(--adm-text-muted)] mt-1">{item.caseNumber} · {item.caseTitle}</p>
                               <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                                <span className="text-[10px] text-[#7B776D]">
+                                <span className="text-[10px] text-[var(--adm-text-muted)]">
                                   <span className="font-medium">Felelős:</span> {item.assigneeName}
                                 </span>
                                 {(item.collaboratorCount ?? 0) > 0 && (
@@ -562,7 +562,7 @@ function ReviewsPageContent() {
                                 {item.dueDate && (
                                   <span className={`text-[10px] ${
                                     (daysUntil(item.dueDate) ?? 99) < 0
-                                      ? "text-[#DC2626] font-medium"
+                                      ? "text-[var(--adm-terracotta-700)] font-medium"
                                       : (daysUntil(item.dueDate) ?? 99) === 0
                                       ? "text-[#8B6B3A] font-medium"
                                       : "text-[#166534] font-medium"
@@ -573,7 +573,7 @@ function ReviewsPageContent() {
                                   </span>
                                 )}
                                 {item.daysWaiting !== null && item.daysWaiting !== undefined && (
-                                  <span className={`text-[10px] ${(item.daysWaiting ?? 0) >= 3 ? "text-[#DC2626]" : "text-[#9C9890]"}`}>
+                                  <span className={`text-[10px] ${(item.daysWaiting ?? 0) >= 3 ? "text-[var(--adm-terracotta-700)]" : "text-[var(--adm-text-soft)]"}`}>
                                     {item.daysWaiting === 0 ? "Ma" : `${item.daysWaiting} napja`}
                                   </span>
                                 )}
@@ -584,9 +584,9 @@ function ReviewsPageContent() {
                               </p>
                             </div>
                             <div className="text-right flex-shrink-0">
-                              <span className="text-[10px] text-[#9C9890]">{formatDate(item.timestamp)}</span>
+                              <span className="text-[10px] text-[var(--adm-text-soft)]">{formatDate(item.timestamp)}</span>
                               <div className="mt-1">
-                                <Link href={item.openHref} onClick={(e) => e.stopPropagation()} className="inline-block px-2 py-1 text-[10px] bg-[#1F4A33] text-[#FBF6E7] hover:bg-[#173824] rounded">
+                                <Link href={item.openHref} onClick={(e) => e.stopPropagation()} className="inline-block px-2 py-1 text-[10px] bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:bg-[#173824] rounded">
                                   Review megnyitása
                                 </Link>
                               </div>
@@ -602,7 +602,7 @@ function ReviewsPageContent() {
               {/* Waiting Section */}
               {groupedByUrgency.waiting.length > 0 && (
                 <div>
-                  <h2 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-2 flex items-center gap-2">
+                  <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2 flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-[#7B776D]"></span>
                     Várakozó ({groupedByUrgency.waiting.length})
                   </h2>
@@ -614,37 +614,37 @@ function ReviewsPageContent() {
                         <button
                           key={item.id}
                           onClick={() => setSelectedId(item.id)}
-                          className={`w-full text-left p-4 border border-[#EEE7D9] rounded transition-colors ${selected?.id === item.id ? "border-[#C9A227] bg-[#FBF9F3]" : "border-[#EEE7D9] bg-white hover:bg-[#FBF9F3]"}`}
+                          className={`w-full text-left p-4 border border-[var(--adm-border)] rounded transition-colors ${selected?.id === item.id ? "border-[var(--adm-ochre-500)] bg-[var(--adm-surface)]" : "border-[var(--adm-border)] bg-white hover:bg-[var(--adm-surface)]"}`}
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <div className="flex items-center gap-2 flex-wrap opacity-80">
-                                <p className="text-sm font-semibold text-[#1F2821]">{item.title}</p>
+                                <p className="text-sm font-semibold text-[var(--adm-text)]">{item.title}</p>
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${statusCfg.bg} ${statusCfg.color} border ${statusCfg.border}`}>
                                   {statusCfg.label}
                                 </span>
                                 {item.documentType && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#EEE7D9] text-[#514D45] border border-[#DDD7CA]">
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--adm-ivory-200)] text-[var(--adm-text-muted)] border border-[var(--adm-border)]">
                                     {getDocumentTypeLabel(item.documentType)}
                                   </span>
                                 )}
                                 {item.version && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#EEE7D9] text-[#7B776D]">
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--adm-ivory-200)] text-[var(--adm-text-muted)]">
                                     v{item.version}
                                   </span>
                                 )}
                               </div>
-                              <p className="text-xs text-[#514D45] mt-1">{item.caseNumber} · {item.caseTitle}</p>
-                              <p className="text-[10px] text-[#9C9890] mt-1">Felelős: {item.assigneeName}</p>
+                              <p className="text-xs text-[var(--adm-text-muted)] mt-1">{item.caseNumber} · {item.caseTitle}</p>
+                              <p className="text-[10px] text-[var(--adm-text-soft)] mt-1">Felelős: {item.assigneeName}</p>
                               {(item.collaboratorCount ?? 0) > 0 && (
                                 <p className="text-[10px] text-[#8B5CF6] mt-0.5">+{item.collaboratorCount} résztvevő az ügyön</p>
                               )}
                               <p className="text-[10px] text-[#8B6B3A] mt-1">→ {item.nextActionLabel}</p>
                             </div>
                             <div className="text-right flex-shrink-0">
-                              <span className="text-[10px] text-[#9C9890]">{formatDate(item.timestamp)}</span>
+                              <span className="text-[10px] text-[var(--adm-text-soft)]">{formatDate(item.timestamp)}</span>
                               <div className="mt-1">
-                                <Link href={item.openHref} onClick={(e) => e.stopPropagation()} className="inline-block px-2 py-1 text-[10px] border border-[#C9A227] text-[#C9A227] hover:bg-[#FBF9F3] rounded">
+                                <Link href={item.openHref} onClick={(e) => e.stopPropagation()} className="inline-block px-2 py-1 text-[10px] border border-[var(--adm-ochre-500)] text-[var(--adm-ochre-500)] hover:bg-[var(--adm-surface)] rounded">
                                   Review megnyitása
                                 </Link>
                               </div>
@@ -660,7 +660,7 @@ function ReviewsPageContent() {
               {/* Blocked Section */}
               {groupedByUrgency.blocked.length > 0 && (
                 <div>
-                  <h2 className="text-[10px] uppercase tracking-[0.2em] text-[#DC2626] mb-2 flex items-center gap-2">
+                  <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-terracotta-700)] mb-2 flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-[#DC2626]"></span>
                     Blokkolva ({groupedByUrgency.blocked.length})
                   </h2>
@@ -672,26 +672,26 @@ function ReviewsPageContent() {
                         <button
                           key={item.id}
                           onClick={() => setSelectedId(item.id)}
-                          className={`w-full text-left p-4 border border-[#fca5a5] rounded transition-colors ${selected?.id === item.id ? "border-[#DC2626] bg-[#FEF2F2]" : "border-[#fca5a5] bg-[#FEF2F2] hover:bg-[#fef2f2]"}`}
+                          className={`w-full text-left p-4 border border-[#fca5a5] rounded transition-colors ${selected?.id === item.id ? "border-[#DC2626] bg-[var(--adm-terracotta-100)]" : "border-[#fca5a5] bg-[var(--adm-terracotta-100)] hover:bg-[#fef2f2]"}`}
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <div className="flex items-center gap-2 flex-wrap">
-                                <p className="text-sm font-semibold text-[#1F2821]">{item.title}</p>
+                                <p className="text-sm font-semibold text-[var(--adm-text)]">{item.title}</p>
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${statusCfg.bg} ${statusCfg.color} border ${statusCfg.border}`}>
                                   {statusCfg.label}
                                 </span>
                               </div>
-                              <p className="text-xs text-[#514D45] mt-1">{item.caseNumber} · {item.caseTitle}</p>
-                              <p className="text-[10px] text-[#9C9890] mt-1">Felelős: {item.assigneeName}</p>
+                              <p className="text-xs text-[var(--adm-text-muted)] mt-1">{item.caseNumber} · {item.caseTitle}</p>
+                              <p className="text-[10px] text-[var(--adm-text-soft)] mt-1">Felelős: {item.assigneeName}</p>
                               {(item.collaboratorCount ?? 0) > 0 && (
                                 <p className="text-[10px] text-[#8B5CF6] mt-0.5">+{item.collaboratorCount} résztvevő az ügyön</p>
                               )}
                             </div>
                             <div className="text-right flex-shrink-0">
-                              <span className="text-[10px] text-[#9C9890]">{formatDate(item.timestamp)}</span>
+                              <span className="text-[10px] text-[var(--adm-text-soft)]">{formatDate(item.timestamp)}</span>
                               <div className="mt-1">
-                                <Link href={item.openHref} onClick={(e) => e.stopPropagation()} className="inline-block px-2 py-1 text-[10px] border border-[#DC2626] text-[#DC2626] hover:bg-white rounded">
+                                <Link href={item.openHref} onClick={(e) => e.stopPropagation()} className="inline-block px-2 py-1 text-[10px] border border-[#DC2626] text-[var(--adm-terracotta-700)] hover:bg-white rounded">
                                   Review megnyitása
                                 </Link>
                               </div>
@@ -723,15 +723,15 @@ function ReviewsPageContent() {
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <div className="flex items-center gap-2 flex-wrap opacity-80">
-                                <p className="text-sm font-semibold text-[#1F2821]">{item.title}</p>
+                                <p className="text-sm font-semibold text-[var(--adm-text)]">{item.title}</p>
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${statusCfg.bg} ${statusCfg.color} border ${statusCfg.border}`}>
                                   {statusCfg.label}
                                 </span>
                               </div>
-                              <p className="text-xs text-[#514D45] mt-1">{item.caseNumber} · {item.caseTitle}</p>
+                              <p className="text-xs text-[var(--adm-text-muted)] mt-1">{item.caseNumber} · {item.caseTitle}</p>
                             </div>
                             <div className="text-right flex-shrink-0">
-                              <span className="text-[10px] text-[#9C9890]">{formatDate(item.timestamp)}</span>
+                              <span className="text-[10px] text-[var(--adm-text-soft)]">{formatDate(item.timestamp)}</span>
                             </div>
                           </div>
                         </button>
@@ -747,9 +747,9 @@ function ReviewsPageContent() {
 
       <aside className="w-80 bg-white overflow-y-auto">
         <div className="p-4 space-y-4">
-          <h2 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Kiválasztott review elem</h2>
+          <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)]">Kiválasztott review elem</h2>
           {!selected ? (
-            <p className="text-xs text-[#9C9890]">Válassz review tételt a részletekhez.</p>
+            <p className="text-xs text-[var(--adm-text-soft)]">Válassz review tételt a részletekhez.</p>
           ) : (
             <>
               {/* Status and priority badges */}
@@ -768,9 +768,9 @@ function ReviewsPageContent() {
                       </span>
                       <span className={`text-xs px-2 py-1 rounded ${
                         urgency === "needs_action" ? "bg-[#fef3e2] text-[#8B6B3A]" :
-                        urgency === "blocked" ? "bg-[#FEF2F2] text-[#DC2626]" :
+                        urgency === "blocked" ? "bg-[var(--adm-terracotta-100)] text-[var(--adm-terracotta-700)]" :
                         urgency === "done" ? "bg-[#ECFDF5] text-[#059669]" :
-                        "bg-[#ECE6DA] text-[#514D45]"
+                        "bg-[var(--adm-ivory-200)] text-[var(--adm-text-muted)]"
                       }`}>
                         {urgency === "needs_action" ? "Cselekvés szükséges" :
                          urgency === "blocked" ? "Blokkolva" :
@@ -781,19 +781,19 @@ function ReviewsPageContent() {
                 })()}
               </div>
 
-              <div className="border border-[#DDD7CA] p-3 space-y-2">
-                <p className="text-sm font-semibold text-[#1F2821]">{selected.title}</p>
-                <p className="text-xs text-[#514D45]">{selected.caseNumber} · {selected.caseTitle}</p>
+              <div className="border border-[var(--adm-border)] p-3 space-y-2">
+                <p className="text-sm font-semibold text-[var(--adm-text)]">{selected.title}</p>
+                <p className="text-xs text-[var(--adm-text-muted)]">{selected.caseNumber} · {selected.caseTitle}</p>
                 {selected.documentType && (
-                  <p className="text-[11px] text-[#7B776D]">
-                    Típus: <span className="font-medium text-[#514D45]">{getDocumentTypeLabel(selected.documentType)}</span>
+                  <p className="text-[11px] text-[var(--adm-text-muted)]">
+                    Típus: <span className="font-medium text-[var(--adm-text-muted)]">{getDocumentTypeLabel(selected.documentType)}</span>
                     {selected.version && ` · v${selected.version}`}
                   </p>
                 )}
                 {selected.dueDate && (
                   <p className={`text-[11px] ${
                     (daysUntil(selected.dueDate) ?? 99) < 0
-                      ? "text-[#DC2626] font-medium"
+                      ? "text-[var(--adm-terracotta-700)] font-medium"
                       : (daysUntil(selected.dueDate) ?? 99) === 0
                       ? "text-[#8B6B3A] font-medium"
                       : "text-[#166534] font-medium"
@@ -803,9 +803,9 @@ function ReviewsPageContent() {
                     {(daysUntil(selected.dueDate) ?? 99) === 0 && " (ma esedékes)"}
                   </p>
                 )}
-                <p className="text-[11px] text-[#7B776D]">Létrehozva: {formatDate(selected.timestamp)}</p>
+                <p className="text-[11px] text-[var(--adm-text-muted)]">Létrehozva: {formatDate(selected.timestamp)}</p>
                 {selected.daysWaiting !== null && selected.daysWaiting !== undefined && (
-                  <p className={`text-[11px] font-medium ${(selected.daysWaiting ?? 0) >= 3 ? "text-[#DC2626]" : "text-[#7B776D]"}`}>
+                  <p className={`text-[11px] font-medium ${(selected.daysWaiting ?? 0) >= 3 ? "text-[var(--adm-terracotta-700)]" : "text-[var(--adm-text-muted)]"}`}>
                     {selected.daysWaiting === 0 ? "Ma került a sorba" : `${selected.daysWaiting} napja a sorban`}
                   </p>
                 )}
@@ -815,13 +815,13 @@ function ReviewsPageContent() {
               </div>
 
               {/* Reviewer/Assignee Info */}
-              <div className="border border-[#DDD7CA] p-3 bg-[#F6F2E8]">
+              <div className="border border-[var(--adm-border)] p-3 bg-[var(--adm-ivory-100)]">
                 <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <h3 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">Felelős</h3>
+                  <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)]">Felelős</h3>
                   {selected.source === "task" && (
                     <button
                       type="button"
-                      className="text-[10px] px-2 py-1 border border-[#C9A227] text-[#8B6B3A] rounded hover:bg-[#FBF9F3]"
+                      className="text-[10px] px-2 py-1 border border-[var(--adm-ochre-500)] text-[#8B6B3A] rounded hover:bg-[var(--adm-surface)]"
                       onClick={() => {
                         setReviewShowReassign((prev) => !prev);
                         if (!reviewShowReassign) {
@@ -834,7 +834,7 @@ function ReviewsPageContent() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-[#1F2821]">
+                  <p className="text-sm font-semibold text-[var(--adm-text)]">
                     {selected.assigneeName || "Nincs kijelölve"}
                   </p>
                   {(selected.collaboratorCount ?? 0) > 0 && (
@@ -843,7 +843,7 @@ function ReviewsPageContent() {
                     </span>
                   )}
                 </div>
-                <p className="text-[10px] text-[#9C9890] mt-0.5">
+                <p className="text-[10px] text-[var(--adm-text-soft)] mt-0.5">
                   {selected.assigneeName ? "Ez a személy felelős a feladatért" : "A feladat még nincs kiosztva"}
                 </p>
                 {(selected.collaboratorCount ?? 0) > 0 && (
@@ -853,11 +853,11 @@ function ReviewsPageContent() {
                 )}
                 {selected.source === "task" && reviewShowReassign && (
                   <div className="mt-2 space-y-2">
-                    <p className="text-[10px] text-[#7B776D]">
+                    <p className="text-[10px] text-[var(--adm-text-muted)]">
                       Kollaborátorok előre sorolva a kiosztáshoz.
                     </p>
                     <select
-                      className="w-full px-2 py-2 border border-[#DDD7CA] bg-white text-xs"
+                      className="w-full px-2 py-2 border border-[var(--adm-border)] bg-white text-xs"
                       value={reviewSelectedAssignee}
                       onChange={(e) => {
                         const newAssigneeId = e.target.value;
@@ -895,13 +895,13 @@ function ReviewsPageContent() {
 
               {/* Action next hint */}
               <div className="space-y-1">
-                <Link href={selected.openHref} className="block px-3 py-2 text-xs border border-[#1F4A33] bg-[#1F4A33] text-[#FBF6E7] text-center font-semibold hover:bg-[#173824]">
+                <Link href={selected.openHref} className="block px-3 py-2 text-xs border border-[#1F4A33] bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] text-center font-semibold hover:bg-[#173824]">
                   Review megnyitása
                 </Link>
-                <Link href={`/cases/${selected.caseId}/documents`} className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3] text-center">
+                <Link href={`/cases/${selected.caseId}/documents`} className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)] text-center">
                   Dokumentumtár
                 </Link>
-                <Link href={`/cases/${selected.caseId}/handoff`} className="block px-3 py-2 text-xs border border-[#B58A2A] bg-[#FBF4E2] text-[#7B5E2E] hover:bg-[#f5ecd8] text-center">
+                <Link href={`/cases/${selected.caseId}/handoff`} className="block px-3 py-2 text-xs border border-[var(--adm-ochre-500)] bg-[var(--adm-sand-100)] text-[#7B5E2E] hover:bg-[#f5ecd8] text-center">
                   Leadási csomag
                 </Link>
                 <Link
@@ -910,7 +910,7 @@ function ReviewsPageContent() {
                       ? `/tasks?taskId=${selected.taskId}`
                       : selected.fallbackHref
                   }
-                  className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3] text-center"
+                  className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)] text-center"
                 >
                   Kapcsolt workflow nézet
                 </Link>
@@ -920,37 +920,37 @@ function ReviewsPageContent() {
                       ? `/documents/compare?caseId=${encodeURIComponent(selected.caseId)}&documentId=${encodeURIComponent(selected.documentId)}`
                       : `/documents/compare?caseId=${encodeURIComponent(selected.caseId)}`
                   }
-                  className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3] text-center"
+                  className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)] text-center"
                 >
                   Szerződés-workspace
                 </Link>
-                <Link href={`/cases/${selected.caseId}`} className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3] text-center">
+                <Link href={`/cases/${selected.caseId}`} className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)] text-center">
                   Ügy megnyitása
                 </Link>
               </div>
 
-              <div className="pt-2 border-t border-[#EEE7D9]">
-                <h3 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-2">Kapcsolt ügy összegzés</h3>
+              <div className="pt-2 border-t border-[var(--adm-border)]">
+                <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Kapcsolt ügy összegzés</h3>
                 {caseSummaries[selected.caseId] ? (
-                  <div className="text-xs text-[#514D45] space-y-1">
+                  <div className="text-xs text-[var(--adm-text-muted)] space-y-1">
                     <p>Dokumentumok: {caseSummaries[selected.caseId].stats.totalDocuments}</p>
                     <p>Review alatt: {caseSummaries[selected.caseId].stats.pendingReview}</p>
                     <p>Jóváhagyott: {caseSummaries[selected.caseId].stats.approvedDocuments}</p>
                   </div>
                 ) : (
-                  <p className="text-xs text-[#9C9890]">Ügy-összegzés nem érhető el.</p>
+                  <p className="text-xs text-[var(--adm-text-soft)]">Ügy-összegzés nem érhető el.</p>
                 )}
               </div>
             </>
           )}
 
-          <div className="pt-2 border-t border-[#EEE7D9]">
-            <h3 className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D] mb-2">Kapcsolt felületek</h3>
+          <div className="pt-2 border-t border-[var(--adm-border)]">
+            <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Kapcsolt felületek</h3>
             <div className="space-y-1">
-              <Link href="/tasks" className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Feladatok</Link>
-              <Link href="/notifications" className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Értesítések</Link>
-              <Link href="/documents/compare" className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Verzió-összevetés</Link>
-              <Link href="/cases" className="block px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Ügylista</Link>
+              <Link href="/tasks" className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Feladatok</Link>
+              <Link href="/notifications" className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Értesítések</Link>
+              <Link href="/documents/compare" className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Verzió-összevetés</Link>
+              <Link href="/cases" className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Ügylista</Link>
             </div>
           </div>
         </div>

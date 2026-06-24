@@ -214,7 +214,7 @@ function ClientsPageContent() {
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-serif text-2xl font-medium leading-tight text-[#16201A]">{profile?.officialName || display.name}</h2>
+              <h2 className="font-serif text-2xl font-medium leading-tight text-[var(--adm-text)]">{profile?.officialName || display.name}</h2>
               {primary ? <AdminBadge tone="gold">Alap ügyfél</AdminBadge> : <AdminBadge tone="neutral">Ügyfél</AdminBadge>}
             </div>
             <p className="mt-1 text-sm text-[#3D4842]">Rövid név: <b>{profile?.shortName || (coreKey(client) === "blackbelt" ? "BlackBelt" : coreKey(client) === "saubermacher" ? "Saubermacher" : coreKey(client) === "balintfy" ? "Bálintfy" : display.name)}</b></p>
@@ -230,14 +230,14 @@ function ClientsPageContent() {
               </AdminStatusPill>
               <AdminStatusPill tone={hasHeader ? "green" : "neutral"}>Fejlécminta: {hasHeader ? "Van" : "Nincs"}</AdminStatusPill>
             </div>
-            <p className="mt-3 text-[11px] leading-5 text-[#514D45]">
+            <p className="mt-3 text-[11px] leading-5 text-[var(--adm-text-muted)]">
               A house style profil dokumentumformátumot, fejléc/arculati elvárásokat és ügyfél-specifikus instrukciókat ad a prompt-copy workflow-hoz.
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
-            <Link href={`/clients/${client.id}`} className="inline-flex items-center justify-center rounded-[5px] border border-[#173824] bg-[#1F4A33] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#173824]">Ügyfél dosszié</Link>
-            <Link href={`/clients/${client.id}#house-style`} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#16201A] hover:bg-[#FBF6E7]">House style</Link>
-            <Link href={`/cases?newCase=1&clientId=${encodeURIComponent(client.id)}`} className="inline-flex items-center justify-center rounded-[5px] border border-[#8E6A1B] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#16201A] hover:bg-[#FBF6E7]">+ Új ügy</Link>
+            <Link href={`/clients/${client.id}`} className="inline-flex items-center justify-center rounded-[5px] border border-[#173824] bg-[var(--adm-green-800)] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#173824]">Ügyfél dosszié</Link>
+            <Link href={`/clients/${client.id}#house-style`} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">House style</Link>
+            <Link href={`/cases?newCase=1&clientId=${encodeURIComponent(client.id)}`} className="inline-flex items-center justify-center rounded-[5px] border border-[#8E6A1B] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">+ Új ügy</Link>
             <AdminButton size="sm" variant="neutral" onClick={() => handleEdit(client)}>Szerkesztés</AdminButton>
           </div>
         </div>
@@ -246,13 +246,13 @@ function ClientsPageContent() {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 bg-[#EFE7CF] text-[#16201A]">
+    <div className="flex min-h-0 flex-1 adm-shell-bg text-[var(--adm-text)]">
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-5xl space-y-5 p-8">
           <div className="flex flex-col gap-4 border border-[rgba(22,32,26,0.10)] bg-white p-5 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">Ügyfelek</p>
-              <h1 className="mt-1 font-serif text-4xl font-medium text-[#16201A]">Ügyfelek</h1>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Ügyfelek</p>
+              <h1 className="mt-1 font-serif text-4xl font-medium text-[var(--adm-text)]">Ügyfelek</h1>
               <p className="mt-1 text-sm text-[#3D4842]">Ügyfélkapcsolatok, house style profilok és ügyindítás.</p>
             </div>
             <AdminButton variant="primary" onClick={handleCreate}>+ Új ügyfél</AdminButton>
@@ -266,7 +266,7 @@ function ClientsPageContent() {
 
           <div className="grid gap-3 lg:grid-cols-2">
             <AdminPanel className="p-4">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7A8479]">House style termékérték</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">House style termékérték</p>
               <ul className="mt-2 space-y-1 text-[11px] text-[#3D4842]">
                 <li>Dokumentumstílus, címsor- és számozási szabályok ügyfelenként.</li>
                 <li>Fejléc / branding minta és kétnyelvűségi elvárások kezelése.</li>
@@ -274,7 +274,7 @@ function ClientsPageContent() {
               </ul>
             </AdminPanel>
             <AdminPanel className="p-4">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7A8479]">Külső AI workflow</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Külső AI workflow</p>
               <p className="mt-2 text-[11px] leading-5 text-[#3D4842]">
                 Az Adminiculum nem futtat automatikusan külső AI-t. A house style panel instrukciós kontextust ad, amit a felhasználó promptként másolhat át.
               </p>
@@ -282,7 +282,7 @@ function ClientsPageContent() {
           </div>
 
           {error ? (
-            <div className="rounded border border-[#F2DAD6] bg-[#FFF5F3] p-3 text-xs text-[#8B2A2A]">
+            <div className="rounded border border-[#F2DAD6] bg-[var(--adm-terracotta-100)] p-3 text-xs text-[var(--adm-terracotta-700)]">
               <p className="font-semibold">{error}</p>
               <p className="mt-1 text-[11px] text-[#6D5148]">
                 Ha ez staging környezeti hiba, ellenőrizd a backend `/api/v1/clients` végpontot.
@@ -290,7 +290,7 @@ function ClientsPageContent() {
               <button
                 type="button"
                 onClick={loadClients}
-                className="mt-2 inline-flex items-center justify-center rounded-[5px] border border-[#8B2A2A] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#8B2A2A] hover:bg-[#FBE9E6]"
+                className="mt-2 inline-flex items-center justify-center rounded-[5px] border border-[#8B2A2A] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-terracotta-700)] hover:bg-[#FBE9E6]"
               >
                 Újrapróbálás
               </button>
@@ -298,19 +298,19 @@ function ClientsPageContent() {
           ) : null}
 
           {isLoading ? (
-            <AdminPanel className="p-10 text-center text-sm text-[#7A8479]">Ügyfelek betöltése…</AdminPanel>
+            <AdminPanel className="p-10 text-center text-sm text-[var(--adm-text-muted)]">Ügyfelek betöltése…</AdminPanel>
           ) : (
             <>
               <section className="space-y-3">
-                <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#7A8479]">Kiemelt ügyfelek</h2>
-                {visibleGroups.primary.length > 0 ? visibleGroups.primary.map((client) => renderClientCard(client, true)) : <AdminPanel className="p-4 text-sm text-[#7A8479]">Még nincs ügyfél.</AdminPanel>}
+                <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Kiemelt ügyfelek</h2>
+                {visibleGroups.primary.length > 0 ? visibleGroups.primary.map((client) => renderClientCard(client, true)) : <AdminPanel className="p-4 text-sm text-[var(--adm-text-muted)]">Még nincs ügyfél.</AdminPanel>}
               </section>
 
               <section className="space-y-3">
-                <button type="button" onClick={() => setShowOtherClients((value) => !value)} className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#7A8479] hover:text-[#16201A]">
+                <button type="button" onClick={() => setShowOtherClients((value) => !value)} className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]">
                   {showOtherClients ? "▾" : "▸"} Egyéb / teszt ügyfelek ({visibleGroups.other.length})
                 </button>
-                <p className="text-[11px] text-[#7A8479]">Ezek az ügyfelek nincsenek törölve; alapértelmezés szerint nem jelennek meg az ügyindítási listában.</p>
+                <p className="text-[11px] text-[var(--adm-text-muted)]">Ezek az ügyfelek nincsenek törölve; alapértelmezés szerint nem jelennek meg az ügyindítási listában.</p>
                 {showOtherClients ? <div className="space-y-3">{visibleGroups.other.map((client) => renderClientCard(client, false))}</div> : null}
               </section>
             </>
@@ -321,7 +321,7 @@ function ClientsPageContent() {
       {showModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#16201A]/70 p-4">
           <div className="max-h-[calc(100vh-48px)] w-full max-w-md overflow-hidden rounded-lg bg-white shadow-xl">
-            <div className="border-b border-[#DDD7CA] bg-[#082817] p-5 text-[#F4EFDB]">
+            <div className="border-b border-[var(--adm-border)] bg-[#082817] p-5 text-[#F4EFDB]">
               <h2 className="font-serif text-2xl font-medium">{editingClient ? "Ügyfél szerkesztése" : "Új ügyfél"}</h2>
             </div>
             <div className="max-h-[calc(100vh-190px)] space-y-4 overflow-y-auto p-6">
@@ -334,17 +334,17 @@ function ClientsPageContent() {
                 ["authorizedRepresentative", "Cégjegyzésre jogosult", "text"],
                 ["contactPerson", "Kapcsolattartó", "text"],
               ].map(([key, label, type]) => (
-                <label key={key} className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">
-                  {label}{key === "name" ? <span className="text-[#8B2A2A]"> *</span> : null}
-                  <input type={type} value={String(formData[key as keyof CreateClientData] || "")} onChange={(event) => setFormData({ ...formData, [key]: event.target.value })} className="mt-2 w-full rounded border border-[#DDD7CA] px-3 py-2 text-sm normal-case tracking-normal text-[#16201A] focus:outline-none focus:border-[#082817]" />
+                <label key={key} className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">
+                  {label}{key === "name" ? <span className="text-[var(--adm-terracotta-700)]"> *</span> : null}
+                  <input type={type} value={String(formData[key as keyof CreateClientData] || "")} onChange={(event) => setFormData({ ...formData, [key]: event.target.value })} className="mt-2 w-full rounded border border-[var(--adm-border)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--adm-text)] focus:outline-none focus:border-[#082817]" />
                 </label>
               ))}
-              <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">
+              <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">
                 Székhely / cím
-                <textarea value={formData.address || ""} onChange={(event) => setFormData({ ...formData, address: event.target.value })} rows={3} className="mt-2 w-full rounded border border-[#DDD7CA] px-3 py-2 text-sm normal-case tracking-normal text-[#16201A] focus:outline-none focus:border-[#082817]" />
+                <textarea value={formData.address || ""} onChange={(event) => setFormData({ ...formData, address: event.target.value })} rows={3} className="mt-2 w-full rounded border border-[var(--adm-border)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--adm-text)] focus:outline-none focus:border-[#082817]" />
               </label>
             </div>
-            <div className="flex justify-end gap-3 border-t border-[#DDD7CA] bg-[#F7F0D9] p-4">
+            <div className="flex justify-end gap-3 border-t border-[var(--adm-border)] bg-[var(--adm-sand-100)] p-4">
               <AdminButton variant="ghost" onClick={() => setShowModal(false)} disabled={isSaving}>Mégse</AdminButton>
               <AdminButton variant="primary" onClick={handleSave} disabled={isSaving || !formData.name?.trim()}>{isSaving ? "Mentés..." : "Mentés"}</AdminButton>
             </div>

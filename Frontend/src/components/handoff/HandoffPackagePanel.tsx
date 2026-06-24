@@ -33,17 +33,17 @@ const STATUS_LABELS: Record<LawyerHandoffStatus, string> = {
 function getStatusColor(status: LawyerHandoffStatus): string {
   switch (status) {
     case "APPROVED":
-      return "bg-[#d1e8d3] text-[#23472F]";
+      return "bg-[var(--adm-sage-100)] text-[var(--adm-green-800)]";
     case "REJECTED":
-      return "bg-[#ffdad6] text-[#ba1a1a]";
+      return "bg-[var(--adm-terracotta-100)] text-[var(--adm-terracotta-700)]";
     case "IN_REVIEW":
       return "bg-[#e4e2e1] text-[#656464]";
     case "SUBMITTED":
       return "bg-[#e4e2e1] text-[#656464]";
     case "ARCHIVED":
-      return "bg-[#EEE7D9] text-[#7B776D]";
+      return "bg-[var(--adm-ivory-200)] text-[var(--adm-text-muted)]";
     case "PREPARED":
-      return "bg-[#EEE7D9] text-[#514D45]";
+      return "bg-[var(--adm-ivory-200)] text-[var(--adm-text-muted)]";
     case "DRAFT":
     default:
       return "bg-[#f5f3ee] text-[#434843]";
@@ -269,30 +269,30 @@ export function HandoffPackagePanel({
 
   return (
     <section
-      className="border border-[#DDD7CA] bg-[#FBF9F3] p-4"
+      className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4"
       aria-label="Ügyvédi leadási csomagok"
     >
       <div className="flex items-center gap-2 mb-4">
-        <span className="material-symbols-outlined text-lg text-[#06190d] hidden">folder_special</span>
-        <h3 className="text-xs font-bold uppercase tracking-widest text-[#06190d]">
+        <span className="material-symbols-outlined text-lg text-[var(--adm-green-950)] hidden">folder_special</span>
+        <h3 className="text-xs font-bold uppercase tracking-widest text-[var(--adm-green-950)]">
           Átadási csomagok
         </h3>
       </div>
-      <p className="text-[10px] text-[#514D45] mb-2">Ügyvédi review-ra előkészített belső munkacsomag.</p>
+      <p className="text-[10px] text-[var(--adm-text-muted)] mb-2">Ügyvédi review-ra előkészített belső munkacsomag.</p>
       {contextLabel ? (
-        <p className="mb-2 rounded border border-[#EEE7D9] bg-white px-2 py-1 text-[9px] text-[#514D45]">
+        <p className="mb-2 rounded border border-[var(--adm-border)] bg-white px-2 py-1 text-[9px] text-[var(--adm-text-muted)]">
           Kapcsolt munkadokumentum: <span className="font-semibold">{contextLabel}</span>
         </p>
       ) : null}
-      <p className="text-[9px] text-[#7B776D] mb-3 italic">
+      <p className="text-[9px] text-[var(--adm-text-muted)] mb-3 italic">
         Ez a csomag előkészítő munkairat. Ügyvédi jóváhagyás nélkül nem minősül végleges jogi állásfoglalásnak.
       </p>
 
-      <div className="mb-3 rounded border border-[#EEE7D9] bg-white p-3">
+      <div className="mb-3 rounded border border-[var(--adm-border)] bg-white p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="text-[10px] font-bold text-[#1F2821]">Új átadási csomag</p>
-            <p className="mt-1 text-[9px] text-[#7B776D]">
+            <p className="text-[10px] font-bold text-[var(--adm-text)]">Új átadási csomag</p>
+            <p className="mt-1 text-[9px] text-[var(--adm-text-muted)]">
               {hasDocumentContext
                 ? "A kiválasztott ügy- és dokumentumkörnyezetből piszkozat készíthető."
                 : "Válassz munkadokumentumot a dokumentumtárban vagy a szerződés-workspace-ben a létrehozáshoz."}
@@ -302,30 +302,30 @@ export function HandoffPackagePanel({
             type="button"
             onClick={handleCreateDraft}
             disabled={!hasDocumentContext || isCreatingPackage}
-            className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#1F4A33] text-[#FBF6E7] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {isCreatingPackage ? "Létrehozás..." : "Mentés piszkozatként"}
           </button>
         </div>
-        {createMessage ? <p className="mt-2 text-[9px] font-semibold text-[#23472F]">{createMessage}</p> : null}
-        {createError ? <p className="mt-2 text-[9px] font-semibold text-[#ba1a1a]">{createError}</p> : null}
+        {createMessage ? <p className="mt-2 text-[9px] font-semibold text-[var(--adm-green-800)]">{createMessage}</p> : null}
+        {createError ? <p className="mt-2 text-[9px] font-semibold text-[var(--adm-terracotta-700)]">{createError}</p> : null}
       </div>
 
       {isLoading && (
-        <p className="text-[10px] text-[#7B776D] italic py-2">Átadási csomagok betöltése…</p>
+        <p className="text-[10px] text-[var(--adm-text-muted)] italic py-2">Átadási csomagok betöltése…</p>
       )}
 
       {error && (
-        <p className="text-[10px] text-[#ba1a1a] py-2">{error}</p>
+        <p className="text-[10px] text-[var(--adm-terracotta-700)] py-2">{error}</p>
       )}
 
       {!isLoading && !error && activePackages.length === 0 && (
-        <div className="text-center py-6 border border-[#EEE7D9] bg-[#F6F2E8]">
+        <div className="text-center py-6 border border-[var(--adm-border)] bg-[var(--adm-ivory-100)]">
           <span className="material-symbols-outlined text-2xl text-[#c3c8c1]">inbox</span>
-          <p className="text-[11px] text-[#514D45] mt-2">
+          <p className="text-[11px] text-[var(--adm-text-muted)] mt-2">
             Nincs aktív átadási csomag ehhez az ügyhöz.
           </p>
-          <p className="mt-1 text-[9px] text-[#7B776D]">
+          <p className="mt-1 text-[9px] text-[var(--adm-text-muted)]">
             Az archivált csomagok az audit miatt megmaradnak, de az aktív listában nem jelennek meg.
           </p>
         </div>
@@ -343,10 +343,10 @@ export function HandoffPackagePanel({
             return (
               <div
                 key={pkg.id}
-                className="border border-[#DDD7CA] bg-white p-3 rounded-lg"
+                className="border border-[var(--adm-border)] bg-white p-3 rounded-lg"
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
-                  <p className="text-xs font-bold text-[#06190d]">
+                  <p className="text-xs font-bold text-[var(--adm-green-950)]">
                     Ügyvédi leadási csomag
                   </p>
                   <span
@@ -356,66 +356,66 @@ export function HandoffPackagePanel({
                   </span>
                 </div>
 
-                <div className="mb-2 flex flex-wrap items-center gap-3 text-[9px] text-[#7B776D]">
-                  <span className="px-1.5 py-0.5 rounded bg-[#F6F2E8] border border-[#EEE7D9]">Azonosító: {pkg.id.slice(0, 8)}</span>
+                <div className="mb-2 flex flex-wrap items-center gap-3 text-[9px] text-[var(--adm-text-muted)]">
+                  <span className="px-1.5 py-0.5 rounded bg-[var(--adm-ivory-100)] border border-[var(--adm-border)]">Azonosító: {pkg.id.slice(0, 8)}</span>
                   <span>Létrehozva: {pkg.createdAt ? new Date(pkg.createdAt).toLocaleDateString("hu-HU") : "—"}</span>
                   <span>Frissítve: {pkg.updatedAt ? new Date(pkg.updatedAt).toLocaleDateString("hu-HU") : "—"}</span>
                 </div>
 
                 {/* Csomag tartalma */}
-                <div className="border border-[#EEE7D9] bg-[#FAFAF8] p-2 mb-2">
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-[#7B776D] mb-1">Csomag tartalma</p>
+                <div className="border border-[var(--adm-border)] bg-[#FAFAF8] p-2 mb-2">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-[var(--adm-text-muted)] mb-1">Csomag tartalma</p>
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-[9px] text-[#514D45]">Forrásdokumentum</span>
+                      <span className="text-[9px] text-[var(--adm-text-muted)]">Forrásdokumentum</span>
                       {pkg.sourceDocumentId ? (
-                        <span className="text-[9px] text-[#23472F] font-bold">Kapcsolva</span>
+                        <span className="text-[9px] text-[var(--adm-green-800)] font-bold">Kapcsolva</span>
                       ) : (
-                        <span className="text-[9px] text-[#ba1a1a]">Hiányzik</span>
+                        <span className="text-[9px] text-[var(--adm-terracotta-700)]">Hiányzik</span>
                       )}
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[9px] text-[#514D45]">Anonimizált szöveg</span>
+                      <span className="text-[9px] text-[var(--adm-text-muted)]">Anonimizált szöveg</span>
                       {pkg.anonymizedDocumentId ? (
-                        <span className="text-[9px] text-[#23472F] font-bold">Kapcsolva</span>
+                        <span className="text-[9px] text-[var(--adm-green-800)] font-bold">Kapcsolva</span>
                       ) : (
-                        <span className="text-[9px] text-[#7B776D]">Nincs csatolva</span>
+                        <span className="text-[9px] text-[var(--adm-text-muted)]">Nincs csatolva</span>
                       )}
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[9px] text-[#514D45]">Módosított munkapéldány</span>
+                      <span className="text-[9px] text-[var(--adm-text-muted)]">Módosított munkapéldány</span>
                       {pkg.generatedContractId ? (
-                        <span className="text-[9px] text-[#23472F] font-bold">Kapcsolva</span>
+                        <span className="text-[9px] text-[var(--adm-green-800)] font-bold">Kapcsolva</span>
                       ) : (
-                        <span className="text-[9px] text-[#7B776D]">Nincs csatolva</span>
+                        <span className="text-[9px] text-[var(--adm-text-muted)]">Nincs csatolva</span>
                       )}
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[9px] text-[#514D45]">Jogi elemzés</span>
+                      <span className="text-[9px] text-[var(--adm-text-muted)]">Jogi elemzés</span>
                       {pkg.legalAnalysisId ? (
-                        <span className="text-[9px] text-[#23472F] font-bold">Kapcsolva</span>
+                        <span className="text-[9px] text-[var(--adm-green-800)] font-bold">Kapcsolva</span>
                       ) : (
-                        <span className="text-[9px] text-[#ba1a1a]">Hiányzik</span>
+                        <span className="text-[9px] text-[var(--adm-terracotta-700)]">Hiányzik</span>
                       )}
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[9px] text-[#514D45]">Ügyvédi review jegyzetek</span>
+                      <span className="text-[9px] text-[var(--adm-text-muted)]">Ügyvédi review jegyzetek</span>
                       {pkg.reviewNotesId ? (
-                        <span className="text-[9px] text-[#23472F] font-bold">Kapcsolva</span>
+                        <span className="text-[9px] text-[var(--adm-green-800)] font-bold">Kapcsolva</span>
                       ) : (
-                        <span className="text-[9px] text-[#7B776D]">Nincs csatolva</span>
+                        <span className="text-[9px] text-[var(--adm-text-muted)]">Nincs csatolva</span>
                       )}
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[9px] text-[#514D45]">Kommunikációs összefoglaló</span>
-                      <span className="text-[9px] text-[#7B776D]">Későbbi patchben</span>
+                      <span className="text-[9px] text-[var(--adm-text-muted)]">Kommunikációs összefoglaló</span>
+                      <span className="text-[9px] text-[var(--adm-text-muted)]">Későbbi patchben</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[9px] text-[#514D45]">Előkészítő összefoglaló</span>
+                      <span className="text-[9px] text-[var(--adm-text-muted)]">Előkészítő összefoglaló</span>
                       {pkg.preparerSummary?.trim() ? (
-                        <span className="text-[9px] text-[#23472F] font-bold">Megadva</span>
+                        <span className="text-[9px] text-[var(--adm-green-800)] font-bold">Megadva</span>
                       ) : (
-                        <span className="text-[9px] text-[#ba1a1a]">Hiányzik</span>
+                        <span className="text-[9px] text-[var(--adm-terracotta-700)]">Hiányzik</span>
                       )}
                     </div>
                   </div>
@@ -423,21 +423,21 @@ export function HandoffPackagePanel({
 
                 {/* Missing items / completeness helper */}
                 {canPkgSubmit && hasMissingMandatory && (
-                  <p className="text-[9px] text-[#ba1a1a] mb-1">
+                  <p className="text-[9px] text-[var(--adm-terracotta-700)] mb-1">
                     Beküldés előtt érdemes pótolni: {pkgMissing.join(", ")}.
                   </p>
                 )}
                 {canPkgSubmit && !hasMissingMandatory && (
-                  <p className="text-[9px] text-[#23472F] font-bold mb-1">
+                  <p className="text-[9px] text-[var(--adm-green-800)] font-bold mb-1">
                     A csomag alapadatai beküldésre előkészítve.
                   </p>
                 )}
 
                 {/* Következő lépés */}
-                <p className="text-[9px] text-[#7B776D] italic mb-2">Következő lépés: {nextAction}</p>
+                <p className="text-[9px] text-[var(--adm-text-muted)] italic mb-2">Következő lépés: {nextAction}</p>
 
                 {/* Timestamps */}
-                <div className="flex items-center gap-3 text-[9px] text-[#7B776D] mb-2 border-t border-[#EEE7D9] pt-2">
+                <div className="flex items-center gap-3 text-[9px] text-[var(--adm-text-muted)] mb-2 border-t border-[var(--adm-border)] pt-2">
                   <span>
                     Létrehozva:{" "}
                     {pkg.createdAt
@@ -461,9 +461,9 @@ export function HandoffPackagePanel({
                 </div>
 
                 {editingPackageId === pkg.id ? (
-                  <div className="border-t border-[#EEE7D9] pt-2">
-                    <p className="text-[10px] font-semibold text-[#1F2821] mb-1">Előkészítő összefoglaló</p>
-                    <p className="text-[9px] text-[#7B776D] mb-2">
+                  <div className="border-t border-[var(--adm-border)] pt-2">
+                    <p className="text-[10px] font-semibold text-[var(--adm-text)] mb-1">Előkészítő összefoglaló</p>
+                    <p className="text-[9px] text-[var(--adm-text-muted)] mb-2">
                       Ide kerüljön, mit kell az ügyvédnek ellenőriznie, milyen döntési pontok vannak, és mi nem használható fel jóváhagyás nélkül.
                     </p>
                     <textarea
@@ -471,46 +471,46 @@ export function HandoffPackagePanel({
                       onChange={(e) => setSummaryDraft(e.target.value)}
                       rows={3}
                       placeholder="Írd le röviden, mit tartalmaz a leadási csomag, milyen módosítások történtek, és mire figyeljen az ügyvéd."
-                      className="w-full px-2 py-1.5 text-[10px] border border-[#DDD7CA] bg-white text-[#1F2821] placeholder:text-[#7B776D] focus:outline-none focus:border-[#06190d] resize-none"
+                      className="w-full px-2 py-1.5 text-[10px] border border-[var(--adm-border)] bg-white text-[var(--adm-text)] placeholder:text-[var(--adm-text-muted)] focus:outline-none focus:border-[#06190d] resize-none"
                     />
                     <div className="flex items-center gap-2 mt-2">
                       <button
                         onClick={() => handleSaveSummary(pkg.id)}
                         disabled={isSavingSummary}
-                        className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#1F4A33] text-[#FBF6E7] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {isSavingSummary ? "Mentés..." : "Mentés"}
                       </button>
                       <button
                         onClick={cancelEditing}
                         disabled={isSavingSummary}
-                        className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border border-[#c3c8c1] text-[#7B776D] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border border-[#c3c8c1] text-[var(--adm-text-muted)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         Mégse
                       </button>
                     </div>
                     {summaryMessage && (
-                      <p className="text-[9px] text-[#23472F] mt-1">{summaryMessage}</p>
+                      <p className="text-[9px] text-[var(--adm-green-800)] mt-1">{summaryMessage}</p>
                     )}
                     {summaryError && (
-                      <p className="text-[9px] text-[#ba1a1a] mt-1">{summaryError}</p>
+                      <p className="text-[9px] text-[var(--adm-terracotta-700)] mt-1">{summaryError}</p>
                     )}
                   </div>
                 ) : (
-                  <div className="border-t border-[#EEE7D9] pt-2">
-                    <p className="text-[10px] font-semibold text-[#1F2821] mb-1">Előkészítő összefoglaló</p>
-                    <p className="text-[9px] text-[#7B776D] mb-2">
+                  <div className="border-t border-[var(--adm-border)] pt-2">
+                    <p className="text-[10px] font-semibold text-[var(--adm-text)] mb-1">Előkészítő összefoglaló</p>
+                    <p className="text-[9px] text-[var(--adm-text-muted)] mb-2">
                       Ide kerüljön, mit kell az ügyvédnek ellenőriznie, milyen döntési pontok vannak, és mi nem használható fel jóváhagyás nélkül.
                     </p>
                     {pkg.preparerSummary ? (
-                      <p className="text-[10px] text-[#514D45] whitespace-pre-wrap">{pkg.preparerSummary}</p>
+                      <p className="text-[10px] text-[var(--adm-text-muted)] whitespace-pre-wrap">{pkg.preparerSummary}</p>
                     ) : (
-                      <p className="text-[10px] text-[#7B776D] italic">Nincs még előkészítő összefoglaló.</p>
+                      <p className="text-[10px] text-[var(--adm-text-muted)] italic">Nincs még előkészítő összefoglaló.</p>
                     )}
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
                       <button
                         onClick={() => startEditing(pkg)}
-                        className="text-[9px] font-bold uppercase tracking-widest text-[#06190d] hover:underline"
+                        className="text-[9px] font-bold uppercase tracking-widest text-[var(--adm-green-950)] hover:underline"
                       >
                         Szerkesztés
                       </button>
@@ -518,7 +518,7 @@ export function HandoffPackagePanel({
                         <button
                           onClick={() => handleSubmitForReview(pkg.id)}
                           disabled={submittingPackageId === pkg.id || submitDisabled}
-                          className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#B58A2A] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[var(--adm-ochre-500)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                           {submittingPackageId === pkg.id ? "Beküldés..." : "Beküldés ügyvédi review-ra"}
                         </button>
@@ -527,21 +527,21 @@ export function HandoffPackagePanel({
                         type="button"
                         onClick={() => handleArchivePackage(pkg)}
                         disabled={archivingPackageId === pkg.id}
-                        className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border border-[#D8CDB6] bg-[#FBF9F3] text-[#7B5E2E] hover:bg-[#F6F2E8] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border border-[var(--adm-border)] bg-[var(--adm-surface)] text-[#7B5E2E] hover:bg-[var(--adm-ivory-100)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {archivingPackageId === pkg.id ? "Archiválás..." : "Archiválás"}
                       </button>
                     </div>
                     <details className="mt-1">
-                      <summary className="text-[9px] text-[#7B776D] cursor-pointer">További műveletek</summary>
+                      <summary className="text-[9px] text-[var(--adm-text-muted)] cursor-pointer">További műveletek</summary>
                       <div className="mt-1 space-y-1">
-                        <p className="text-[9px] text-[#7B776D]">Export későbbi patchben.</p>
-                        <p className="text-[9px] text-[#7B776D]">Jóváhagyási workflow későbbi patchben.</p>
+                        <p className="text-[9px] text-[var(--adm-text-muted)]">Export későbbi patchben.</p>
+                        <p className="text-[9px] text-[var(--adm-text-muted)]">Jóváhagyási workflow későbbi patchben.</p>
                       </div>
                     </details>
                     <details className="mt-1">
-                      <summary className="text-[9px] text-[#7B776D] cursor-pointer">Technikai részletek</summary>
-                      <div className="mt-1 space-y-1 text-[9px] text-[#7B776D]">
+                      <summary className="text-[9px] text-[var(--adm-text-muted)] cursor-pointer">Technikai részletek</summary>
+                      <div className="mt-1 space-y-1 text-[9px] text-[var(--adm-text-muted)]">
                         <p>Csomag azonosító: {pkg.id}</p>
                         <p>Státusz: {getStatusLabel(pkg.status)}</p>
                         <p>Létrehozva: {pkg.createdAt || "—"}</p>
@@ -549,10 +549,10 @@ export function HandoffPackagePanel({
                       </div>
                     </details>
                     {canPkgSubmit && !pkg.preparerSummary?.trim() && (
-                      <p className="text-[9px] text-[#ba1a1a] mt-1">Beküldés előtt add meg az előkészítő összefoglalót.</p>
+                      <p className="text-[9px] text-[var(--adm-terracotta-700)] mt-1">Beküldés előtt add meg az előkészítő összefoglalót.</p>
                     )}
                     {canPkgSubmit && !pkg.sourceDocumentId && !pkg.generatedContractId && (
-                      <p className="text-[9px] text-[#ba1a1a] mt-1">Beküldéshez legalább egy forrás- vagy generált dokumentum szükséges.</p>
+                      <p className="text-[9px] text-[var(--adm-terracotta-700)] mt-1">Beküldéshez legalább egy forrás- vagy generált dokumentum szükséges.</p>
                     )}
                   </div>
                 )}
@@ -562,7 +562,7 @@ export function HandoffPackagePanel({
         </div>
       )}
 
-      <p className="text-[8px] text-[#7B776D] mt-3 italic border-t border-[#EEE7D9] pt-2">
+      <p className="text-[8px] text-[var(--adm-text-muted)] mt-3 italic border-t border-[var(--adm-border)] pt-2">
         A panel belső előkészítést támogat, nem helyettesíti a végleges ügyvédi jóváhagyási folyamatot.
       </p>
     </section>

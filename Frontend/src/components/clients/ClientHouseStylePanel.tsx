@@ -198,12 +198,12 @@ export function ClientHouseStylePanel({ clientId, clientName, compact = false, o
   ].filter(Boolean).join(" · ");
 
   return (
-    <section className={`border border-[#DDD7CA] bg-[#FBF9F3] ${compact ? "p-3" : "p-4"}`}>
+    <section className={`border border-[var(--adm-border)] bg-[var(--adm-surface)] ${compact ? "p-3" : "p-4"}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7B776D]">Ügyfélprofil / house style</p>
-          <h3 className="mt-1 font-serif text-xl font-medium text-[#16201A]">{clientName || "Ügyfél"}</h3>
-          <p className="mt-1 text-[11px] leading-5 text-[#514D45]">
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Ügyfélprofil / house style</p>
+          <h3 className="mt-1 font-serif text-xl font-medium text-[var(--adm-text)]">{clientName || "Ügyfél"}</h3>
+          <p className="mt-1 text-[11px] leading-5 text-[var(--adm-text-muted)]">
             Ez a profil prompt- és dokumentum-előkészítési segédlet. Nem módosítja automatikusan a Word-dokumentumot.
           </p>
         </div>
@@ -212,35 +212,35 @@ export function ClientHouseStylePanel({ clientId, clientName, compact = false, o
         </AdminStatusPill>
       </div>
 
-      {isLoading ? <p className="mt-3 text-xs text-[#7B776D]">Profil betöltése...</p> : null}
-      {error ? <p className="mt-3 rounded bg-[#FFF5F3] p-2 text-xs font-semibold text-[#8B2A2A]">{error}</p> : null}
-      {message ? <p className="mt-3 rounded bg-[#EEF5E7] p-2 text-xs font-semibold text-[#23472F]">{message}</p> : null}
+      {isLoading ? <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Profil betöltése...</p> : null}
+      {error ? <p className="mt-3 rounded bg-[var(--adm-terracotta-100)] p-2 text-xs font-semibold text-[var(--adm-terracotta-700)]">{error}</p> : null}
+      {message ? <p className="mt-3 rounded bg-[var(--adm-sage-100)] p-2 text-xs font-semibold text-[var(--adm-green-800)]">{message}</p> : null}
 
       {!isLoading && !error && !hasProfileContent(profile) && !isEditing ? (
-        <div className="mt-3 rounded border border-[#EEE7D9] bg-white p-3">
-          <p className="text-xs font-semibold text-[#1F2821]">Ehhez az ügyfélhez még nincs részletes house style profil.</p>
-          <p className="mt-1 text-[11px] leading-5 text-[#7B776D]">A profil csak akkor jelenik meg, ha valós ügyfél-specifikus stílus- és dokumentumelvárásokat rögzítesz.</p>
+        <div className="mt-3 rounded border border-[var(--adm-border)] bg-white p-3">
+          <p className="text-xs font-semibold text-[var(--adm-text)]">Ehhez az ügyfélhez még nincs részletes house style profil.</p>
+          <p className="mt-1 text-[11px] leading-5 text-[var(--adm-text-muted)]">A profil csak akkor jelenik meg, ha valós ügyfél-specifikus stílus- és dokumentumelvárásokat rögzítesz.</p>
           <AdminButton size="sm" variant="neutral" onClick={() => setIsEditing(true)} className="mt-3">Profil létrehozása</AdminButton>
         </div>
       ) : null}
 
       {!isLoading && !error && hasProfileContent(profile) && !isEditing ? (
         <div className="mt-3 space-y-3">
-          <p className="rounded border border-[#EEE7D9] bg-white p-3 text-xs text-[#3D4842]">
+          <p className="rounded border border-[var(--adm-border)] bg-white p-3 text-xs text-[#3D4842]">
             {summary || "Ehhez az ügyfélhez még nincs részletes house style profil."}
           </p>
-          <div className="rounded border border-[#EEE7D9] bg-white p-3">
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7B776D]">Fejléc / arculati minta</p>
+          <div className="rounded border border-[var(--adm-border)] bg-white p-3">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Fejléc / arculati minta</p>
             {profile?.headerAssetPath ? (
               <div className="mt-2 space-y-2">
-                <img src={profile.headerAssetPath} alt={profile.headerDescription || "Ügyfél fejlécminta"} className="max-h-16 max-w-full rounded border border-[#EEE7D9] bg-white object-contain" />
+                <img src={profile.headerAssetPath} alt={profile.headerDescription || "Ügyfél fejlécminta"} className="max-h-16 max-w-full rounded border border-[var(--adm-border)] bg-white object-contain" />
                 <p className="text-[11px] text-[#3D4842]">{profile.headerDescription || profile.headerAssetPath}</p>
               </div>
             ) : (
-              <p className="mt-2 text-[11px] text-[#7B776D]">Nincs fejlécminta.</p>
+              <p className="mt-2 text-[11px] text-[var(--adm-text-muted)]">Nincs fejlécminta.</p>
             )}
             {profile?.brandingNotes ? <p className="mt-2 whitespace-pre-wrap text-[11px] text-[#3D4842]">{profile.brandingNotes}</p> : null}
-            <p className="mt-2 text-[10px] leading-4 text-[#7B776D]">
+            <p className="mt-2 text-[10px] leading-4 text-[var(--adm-text-muted)]">
               Ez a fejlécminta jelenleg prompt- és dokumentum-előkészítési referencia. A Word-dokumentumba történő automatikus beillesztés külön export patchben készül el.
             </p>
           </div>
@@ -252,19 +252,19 @@ export function ClientHouseStylePanel({ clientId, clientName, compact = false, o
         <div className="mt-4 space-y-5">
           {GROUPS.map((group) => (
             <div key={group.title} className="space-y-2">
-              <h4 className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7B776D]">{group.title}</h4>
+              <h4 className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">{group.title}</h4>
               <div className="grid gap-2 sm:grid-cols-2">
                 {group.fields.map((field) => (
                   <label key={field.key} className={field.type === "textarea" ? "sm:col-span-2" : ""}>
-                    <span className="text-[10px] font-semibold text-[#7B776D]">{field.label}</span>
+                    <span className="text-[10px] font-semibold text-[var(--adm-text-muted)]">{field.label}</span>
                     {field.type === "select" ? (
-                      <select value={String(form[field.key] || "")} onChange={(event) => updateField(field.key, event.target.value)} className="mt-1 w-full rounded border border-[#DDD7CA] bg-white px-2 py-1.5 text-xs text-[#16201A]">
+                      <select value={String(form[field.key] || "")} onChange={(event) => updateField(field.key, event.target.value)} className="mt-1 w-full rounded border border-[var(--adm-border)] bg-white px-2 py-1.5 text-xs text-[var(--adm-text)]">
                         {field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                       </select>
                     ) : field.type === "textarea" ? (
-                      <textarea value={String(form[field.key] || "")} onChange={(event) => updateField(field.key, event.target.value)} rows={compact ? 2 : 3} className="mt-1 w-full rounded border border-[#DDD7CA] bg-white px-2 py-1.5 text-xs text-[#16201A]" />
+                      <textarea value={String(form[field.key] || "")} onChange={(event) => updateField(field.key, event.target.value)} rows={compact ? 2 : 3} className="mt-1 w-full rounded border border-[var(--adm-border)] bg-white px-2 py-1.5 text-xs text-[var(--adm-text)]" />
                     ) : (
-                      <input value={String(form[field.key] || "")} onChange={(event) => updateField(field.key, event.target.value)} className="mt-1 w-full rounded border border-[#DDD7CA] bg-white px-2 py-1.5 text-xs text-[#16201A]" />
+                      <input value={String(form[field.key] || "")} onChange={(event) => updateField(field.key, event.target.value)} className="mt-1 w-full rounded border border-[var(--adm-border)] bg-white px-2 py-1.5 text-xs text-[var(--adm-text)]" />
                     )}
                   </label>
                 ))}

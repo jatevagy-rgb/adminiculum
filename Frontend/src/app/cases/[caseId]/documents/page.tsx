@@ -195,22 +195,22 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
   // Pack-aware palette
   const p = {
-    bg: isSignalTiles ? "bg-slate-900" : "bg-[#fbf9f4]",
-    bgAlt: isSignalTiles ? "bg-slate-800" : "bg-[#F6F2E8]",
-    bgHover: isSignalTiles ? "hover:bg-slate-700" : "hover:bg-[#ECE6DA]",
+    bg: isSignalTiles ? "bg-slate-900" : "bg-[var(--adm-surface)]",
+    bgAlt: isSignalTiles ? "bg-slate-800" : "bg-[var(--adm-ivory-100)]",
+    bgHover: isSignalTiles ? "hover:bg-slate-700" : "hover:bg-[var(--adm-ivory-200)]",
     bgCard: isSignalTiles ? "bg-slate-800" : "bg-white",
     bgSection: isSignalTiles ? "bg-slate-800" : "bg-[#f5f3ee]",
-    text: isSignalTiles ? "text-slate-100" : "text-[#1F2821]",
-    textMuted: isSignalTiles ? "text-slate-400" : "text-[#7B776D]",
-    textDark: isSignalTiles ? "text-slate-200" : "text-[#514D45]",
-    border: isSignalTiles ? "border-slate-600" : "border-[#DDD7CA]",
-    borderLight: isSignalTiles ? "border-slate-700" : "border-[#EEE7D9]",
+    text: isSignalTiles ? "text-slate-100" : "text-[var(--adm-text)]",
+    textMuted: isSignalTiles ? "text-slate-400" : "text-[var(--adm-text-muted)]",
+    textDark: isSignalTiles ? "text-slate-200" : "text-[var(--adm-text-muted)]",
+    border: isSignalTiles ? "border-slate-600" : "border-[var(--adm-border)]",
+    borderLight: isSignalTiles ? "border-slate-700" : "border-[var(--adm-border)]",
     badge: isSignalTiles ? "bg-slate-700 text-slate-200" : "bg-[#f5f3ee] text-[#434843]",
-    accent: isSignalTiles ? "text-cyan-400" : "text-[#C9A227]",
-    accentBg: isSignalTiles ? "bg-cyan-900 text-cyan-200" : "bg-[#C9A227] text-white",
-    success: isSignalTiles ? "bg-emerald-900 text-emerald-200" : "bg-[#d1e8d3] text-[#23472F]",
-    warning: isSignalTiles ? "bg-amber-900 text-amber-200" : "bg-[#EEE7D9] text-[#514D45]",
-    danger: isSignalTiles ? "bg-red-900 text-red-200" : "bg-[#ffdad6] text-[#ba1a1a]",
+    accent: isSignalTiles ? "text-cyan-400" : "text-[var(--adm-ochre-500)]",
+    accentBg: isSignalTiles ? "bg-cyan-900 text-cyan-200" : "bg-[var(--adm-ochre-500)] text-white",
+    success: isSignalTiles ? "bg-emerald-900 text-emerald-200" : "bg-[var(--adm-sage-100)] text-[var(--adm-green-800)]",
+    warning: isSignalTiles ? "bg-amber-900 text-amber-200" : "bg-[var(--adm-ivory-200)] text-[var(--adm-text-muted)]",
+    danger: isSignalTiles ? "bg-red-900 text-red-200" : "bg-[var(--adm-terracotta-100)] text-[var(--adm-terracotta-700)]",
   };
 
   const [contracts, setContracts] = useState<CaseContractListItem[]>([]);
@@ -730,12 +730,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     }
     switch (contract.status) {
       case 'APPROVED':
-        return { label: 'Jóváhagyott', class: 'bg-[#d1e8d3] text-[#23472F]' };
+        return { label: 'Jóváhagyott', class: 'bg-[var(--adm-sage-100)] text-[var(--adm-green-800)]' };
       case 'IN_REVIEW':
       case 'SUBMITTED':
         return { label: 'Review alatt', class: 'bg-[#e4e2e1] text-[#656464]' };
       case 'REJECTED':
-        return { label: 'Módosítás szükséges', class: 'bg-[#ffdad6] text-[#ba1a1a]' };
+        return { label: 'Módosítás szükséges', class: 'bg-[var(--adm-terracotta-100)] text-[var(--adm-terracotta-700)]' };
       case 'GENERATED':
         return { label: 'Piszkozat', class: 'bg-[#f5f3ee] text-[#434843]' };
       default:
@@ -869,27 +869,27 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const canAnonymizeActiveDocument = Boolean(selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY');
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-[#EFE7CF] text-[#16201A] documents-surface">
+    <div className="flex min-h-0 flex-1 flex-col adm-shell-bg text-[var(--adm-text)] documents-surface">
       <CaseWorkspaceNav caseId={canonicalCaseId} caseNumber={displayCaseId} title={displayMatterName} clientName={displayClient} activeTab="documents" activeDocumentId={activeDocument?.id} helperText="Dokumentumtár, szerkesztő és leadási csomag egy ügy-munkaterületen." />
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <main className="flex-1 overflow-y-auto bg-[#EFE7CF] p-4 lg:p-5">
+        <main className="flex-1 overflow-y-auto adm-shell-bg p-4 lg:p-5">
           <section className="mx-auto flex max-w-[1500px] flex-col gap-4">
             {actionResult && (
-              <div className={`rounded-[10px] border p-3 text-sm font-medium ${actionResult.type === "success" ? "border-[#D9E3CC] bg-[#EEF5E7] text-[#23472F]" : "border-[#F2DAD6] bg-[#FFF5F3] text-[#8B2A2A]"}`}>
+              <div className={`rounded-[10px] border p-3 text-sm font-medium ${actionResult.type === "success" ? "border-[#D9E3CC] bg-[var(--adm-sage-100)] text-[var(--adm-green-800)]" : "border-[#F2DAD6] bg-[var(--adm-terracotta-100)] text-[var(--adm-terracotta-700)]"}`}>
                 {actionResult.message}
               </div>
             )}
 
-            <header className="overflow-hidden rounded-[18px] border border-[rgba(22,32,26,0.14)] bg-[#FBF6E7] shadow-[0_18px_45px_rgba(31,74,51,0.10)]">
+            <header className="overflow-hidden rounded-[18px] border border-[rgba(22,32,26,0.14)] bg-[var(--adm-surface)] shadow-[0_18px_45px_rgba(31,74,51,0.10)]">
               <div className="flex flex-col gap-5 border-b border-[rgba(22,32,26,0.12)] bg-white px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#1F4A33]">
-                    Ügy munkaterület <span className="mx-2 text-[#B58A2A]">/</span> Dokumentumtár
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--adm-green-800)]">
+                    Ügy munkaterület <span className="mx-2 text-[var(--adm-ochre-500)]">/</span> Dokumentumtár
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-3">
-                    <h1 className="font-serif text-4xl font-semibold leading-tight text-[#16201A]">Dokumentumtár</h1>
-                    <span className="rounded-full border border-[#D8C58E] bg-[#F7F0D9] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[#6D5418]">
+                    <h1 className="font-serif text-4xl font-semibold leading-tight text-[var(--adm-text)]">Dokumentumtár</h1>
+                    <span className="rounded-full border border-[#D8C58E] bg-[var(--adm-sand-100)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[#6D5418]">
                       {totalLedgerDocuments} irat · {activeDocument ? "kiválasztott munkadokumentum" : "nincs kiválasztva"}
                     </span>
                   </div>
@@ -903,23 +903,23 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   </AdminButton>
                 </div>
               </div>
-              <div className="grid gap-3 bg-[#F7F0D9] px-5 py-3 text-[12px] text-[#3D4842] md:grid-cols-3">
-                <p><span className="font-bold text-[#1F4A33]">Kiválasztott dokumentum:</span> {selectedDocumentActionLabel}</p>
-                <p><span className="font-bold text-[#1F4A33]">Ügyfélprofil:</span> {clientHouseStyle ? (houseStyleHasContent ? "house style elérhető" : "profil részleges") : "nincs profil"}</p>
-                <p><span className="font-bold text-[#1F4A33]">Leadási csomag:</span> jobb oldali panelen kezelhető</p>
+              <div className="grid gap-3 bg-[var(--adm-sand-100)] px-5 py-3 text-[12px] text-[#3D4842] md:grid-cols-3">
+                <p><span className="font-bold text-[var(--adm-green-800)]">Kiválasztott dokumentum:</span> {selectedDocumentActionLabel}</p>
+                <p><span className="font-bold text-[var(--adm-green-800)]">Ügyfélprofil:</span> {clientHouseStyle ? (houseStyleHasContent ? "house style elérhető" : "profil részleges") : "nincs profil"}</p>
+                <p><span className="font-bold text-[var(--adm-green-800)]">Leadási csomag:</span> jobb oldali panelen kezelhető</p>
               </div>
             </header>
 
             <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleFileUpload} className="hidden" />
-            {isUploading && uploadPhase ? <div className="rounded-[10px] border border-[#D8C58E] bg-[#FBF6E7] p-3 text-sm font-semibold text-[#6D5418]">{uploadPhase}</div> : null}
-            {isRefreshing ? <div className="rounded-[10px] border border-[#EEE7D9] bg-[#FBF6E7] px-4 py-2 text-xs text-[#7A8479]">Frissítés...</div> : null}
+            {isUploading && uploadPhase ? <div className="rounded-[10px] border border-[#D8C58E] bg-[var(--adm-surface)] p-3 text-sm font-semibold text-[#6D5418]">{uploadPhase}</div> : null}
+            {isRefreshing ? <div className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-4 py-2 text-xs text-[var(--adm-text-muted)]">Frissítés...</div> : null}
 
             {isInitialLoading ? (
-              <AdminPanel className="p-10 text-center text-sm text-[#7A8479]">Dokumentumok betöltése...</AdminPanel>
+              <AdminPanel className="p-10 text-center text-sm text-[var(--adm-text-muted)]">Dokumentumok betöltése...</AdminPanel>
             ) : (
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)_360px]">
-                <aside className="overflow-hidden rounded-[18px] border border-[rgba(22,32,26,0.16)] bg-[#F7F0D9] shadow-[0_16px_38px_rgba(31,74,51,0.08)]">
-                  <div className="border-b border-[rgba(22,32,26,0.14)] bg-[#1F4A33] p-5 text-white">
+                <aside className="overflow-hidden rounded-[18px] border border-[rgba(22,32,26,0.16)] bg-[var(--adm-sand-100)] shadow-[0_16px_38px_rgba(31,74,51,0.08)]">
+                  <div className="border-b border-[rgba(22,32,26,0.14)] bg-[var(--adm-green-800)] p-5 text-white">
                     <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#D8C58E]">Dokumentum ledger</p>
                     <h2 className="mt-1 font-serif text-3xl font-semibold">Iratok</h2>
                     <p className="mt-2 text-[12px] leading-relaxed text-[#E9E2C7]">
@@ -929,11 +929,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   <div className="space-y-4 p-4">
                     <section className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#1F4A33]">Feltöltött dokumentumok</h3>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#1F4A33]">{uploadedDocuments.length}</span>
+                        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Feltöltött dokumentumok</h3>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{uploadedDocuments.length}</span>
                       </div>
                       {uploadedDocuments.length === 0 ? (
-                        <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[#FBF6E7] p-3 text-[12px] text-[#7A8479]">Nincs feltöltött dokumentum.</p>
+                        <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[var(--adm-surface)] p-3 text-[12px] text-[var(--adm-text-muted)]">Nincs feltöltött dokumentum.</p>
                       ) : uploadedDocuments.map((doc) => {
                         const isSelected = selectedLedgerItem?.kind === "uploaded" && selectedLedgerItem.item.id === doc.id;
                         return (
@@ -953,11 +953,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
                     <section className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#1F4A33]">Módosított munkapéldányok</h3>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#1F4A33]">{modifiedWorkingCopyCount}</span>
+                        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Módosított munkapéldányok</h3>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{modifiedWorkingCopyCount}</span>
                       </div>
                       {modifiedWorkingCopies.length === 0 ? (
-                        <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[#FBF6E7] p-3 text-[12px] text-[#7A8479]">Nincs módosított munkapéldány.</p>
+                        <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[var(--adm-surface)] p-3 text-[12px] text-[var(--adm-text-muted)]">Nincs módosított munkapéldány.</p>
                       ) : modifiedWorkingCopies.map((doc) => {
                         const isSelected = selectedLedgerItem?.kind === "uploaded" && selectedLedgerItem.item.id === doc.id;
                         return (
@@ -976,11 +976,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
                     <section className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#1F4A33]">Generált / módosított</h3>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#1F4A33]">{generatedDocumentCount}</span>
+                        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Generált / módosított</h3>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{generatedDocumentCount}</span>
                       </div>
                       {generatedLedgerItems.length === 0 ? (
-                        <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[#FBF6E7] p-3 text-[12px] text-[#7A8479]">Nincs generált dokumentum.</p>
+                        <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[var(--adm-surface)] p-3 text-[12px] text-[var(--adm-text-muted)]">Nincs generált dokumentum.</p>
                       ) : generatedLedgerItems.map((contract) => {
                         const isSelected = selectedLedgerItem?.kind === "generated" && selectedLedgerItem.item.id === contract.id;
                         return (
@@ -1000,10 +1000,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
                     <section className="space-y-2 border-t border-[rgba(22,32,26,0.12)] pt-3">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#1F4A33]">Ügyvédi leadási csomagok</h3>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#1F4A33]">{handoffPackageCountLabel}</span>
+                        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyvédi leadási csomagok</h3>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{handoffPackageCountLabel}</span>
                       </div>
-                      <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[#FBF6E7] p-3 text-[12px] text-[#7A8479]">
+                      <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[var(--adm-surface)] p-3 text-[12px] text-[var(--adm-text-muted)]">
                         A leadási csomagok a jobb oldali ügyvédi csomag panelen kezelhetők.
                       </p>
                     </section>
@@ -1011,11 +1011,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 </aside>
 
                 <section className="min-w-0 overflow-hidden rounded-[22px] border border-[rgba(22,32,26,0.16)] bg-white shadow-[0_20px_55px_rgba(31,74,51,0.10)]">
-                  <div className="flex gap-4 border-b border-[rgba(22,32,26,0.12)] bg-[#FBF6E7] p-5">
-                    <div className="mt-1 h-16 w-1.5 rounded-full bg-[#B58A2A]" />
+                  <div className="flex gap-4 border-b border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-5">
+                    <div className="mt-1 h-16 w-1.5 rounded-full bg-[var(--adm-ochre-500)]" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#1F4A33]">Munkadokumentum</p>
-                      <h2 className="mt-2 truncate font-serif text-4xl font-semibold leading-tight text-[#16201A]">{activeTitle || "Nincs még munkadokumentum"}</h2>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--adm-green-800)]">Munkadokumentum</p>
+                      <h2 className="mt-2 truncate font-serif text-4xl font-semibold leading-tight text-[var(--adm-text)]">{activeTitle || "Nincs még munkadokumentum"}</h2>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <AdminBadge tone={activeDocument ? "gold" : "neutral"}>{selectedDocumentTypeLabel}</AdminBadge>
                         <AdminBadge tone={activeDocument ? "green" : "neutral"}>{selectedStatusLabel}</AdminBadge>
@@ -1030,8 +1030,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
                   <div className="space-y-5 p-5">
                     {!activeDocument ? (
-                      <div className="rounded-[18px] border border-dashed border-[rgba(31,74,51,0.24)] bg-[#FBF6E7] p-8 text-center">
-                        <h3 className="font-serif text-3xl font-semibold text-[#16201A]">Nincs még kiválasztott dokumentum</h3>
+                      <div className="rounded-[18px] border border-dashed border-[rgba(31,74,51,0.24)] bg-[var(--adm-surface)] p-8 text-center">
+                        <h3 className="font-serif text-3xl font-semibold text-[var(--adm-text)]">Nincs még kiválasztott dokumentum</h3>
                         <p className="mx-auto mt-2 max-w-md text-sm text-[#3D4842]">Kezdéshez tölts fel egy dokumentumot, vagy válassz egy iratot a bal oldali listából.</p>
                         <div className="mt-5 flex flex-wrap justify-center gap-2">
                           <AdminButton variant="primary" onClick={() => fileInputRef.current?.click()} disabled={!caseRecord?.id || isUploading}>Dokumentum feltöltése</AdminButton>
@@ -1039,8 +1039,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       </div>
                     ) : (
                       <>
-                        <div className="rounded-[16px] border border-[rgba(22,32,26,0.12)] bg-[#FBF6E7] p-4">
-                          <h3 className="font-serif text-xl font-semibold text-[#16201A]">
+                        <div className="rounded-[16px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-4">
+                          <h3 className="font-serif text-xl font-semibold text-[var(--adm-text)]">
                             {selectedUploadedDocument?.documentType === 'MODIFIED_WORKING_COPY' ? 'Munkapéldány' : selectedGeneratedContract ? 'Generált dokumentum' : 'Kiválasztott dokumentum'}
                           </h3>
                           <p className="mt-1 text-sm text-[#3D4842]">
@@ -1055,8 +1055,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         <div className="rounded-[16px] border border-[rgba(22,32,26,0.12)] bg-white p-4">
                           <div className="flex flex-col gap-3">
                             <div>
-                              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7A8479]">Dokumentum összefoglaló</p>
-                              <h3 className="font-serif text-2xl font-semibold text-[#16201A]">{activeTitle}</h3>
+                              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Dokumentum összefoglaló</p>
+                              <h3 className="font-serif text-2xl font-semibold text-[var(--adm-text)]">{activeTitle}</h3>
                               <p className="mt-2 text-sm text-[#3D4842]">
                                 A kiválasztott irathoz tartozó műveletek a jobb oldali Dokumentum műveletek panelen érhetők el.
                               </p>
@@ -1070,20 +1070,20 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 </section>
 
                 <aside className="space-y-4">
-                  <AdminPanel className="overflow-hidden border-[rgba(22,32,26,0.14)] bg-[#FBF6E7]">
-                    <div className="bg-[#1F4A33] p-4 text-white">
+                  <AdminPanel className="overflow-hidden border-[rgba(22,32,26,0.14)] bg-[var(--adm-surface)]">
+                    <div className="bg-[var(--adm-green-800)] p-4 text-white">
                       <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#D8C58E]">Akciók</p>
                       <h2 className="mt-1 font-serif text-2xl font-semibold">Dokumentum műveletek</h2>
                     </div>
                     <div className="space-y-2 p-4">
                       {!activeDocument ? (
-                        <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-white p-3 text-[12px] text-[#7A8479]">
+                        <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-white p-3 text-[12px] text-[var(--adm-text-muted)]">
                           Válassz dokumentumot a műveletekhez.
                         </p>
                       ) : (
                         <>
                           <p className="rounded-[10px] border border-[#E7DECB] bg-white p-3 text-[12px] text-[#3D4842]">
-                            Kiválasztott dokumentum: <span className="font-semibold text-[#16201A]">{activeTitle}</span>
+                            Kiválasztott dokumentum: <span className="font-semibold text-[var(--adm-text)]">{activeTitle}</span>
                           </p>
                           <AdminButton className="w-full justify-start" variant="primary" onClick={() => openWorkspace(activeDocument.id)}>
                             Szerződés-workspace
@@ -1092,7 +1092,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             Peres stratégiai térkép indítása
                           </AdminButton>
                           {!litigationWorkspaceUrl ? (
-                            <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-white p-3 text-[12px] text-[#7A8479]">
+                            <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-white p-3 text-[12px] text-[var(--adm-text-muted)]">
                               Válassz feltöltött dokumentumot a peres stratégiai térkép indításához.
                             </p>
                           ) : null}
@@ -1122,7 +1122,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       )}
                       {activeDocument ? (
                       <details className="rounded-[12px] border border-[rgba(22,32,26,0.10)] bg-white p-3">
-                        <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-[0.14em] text-[#1F4A33]">Haladó / technikai</summary>
+                        <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Haladó / technikai</summary>
                         <div className="mt-3 space-y-2">
                           <AdminButton className="w-full justify-start" size="sm" variant="muted" onClick={() => router.push(metaCompareUrl)}>Metaadat összevetés</AdminButton>
                           <AdminButton className="w-full justify-start" size="sm" variant="muted" onClick={() => router.push(`/reviews`)}>Review sor</AdminButton>
@@ -1132,10 +1132,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     </div>
                   </AdminPanel>
 
-                  <AdminPanel className="border-[rgba(22,32,26,0.14)] bg-[#FBF6E7] p-4">
+                  <AdminPanel className="border-[rgba(22,32,26,0.14)] bg-[var(--adm-surface)] p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1F4A33]">Ügyfélprofil / house style</p>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyfélprofil / house style</p>
                         <p className="mt-1 text-xs text-[#3D4842]">
                           {isLoadingHouseStyle
                             ? "Profil betöltése..."
@@ -1156,11 +1156,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     <AdminButton className="mt-3" size="sm" variant="muted" onClick={() => setShowHouseStylePanel((value) => !value)} disabled={!caseRecord?.clientId}>
                       {showHouseStylePanel ? "Profil bezárása" : clientHouseStyle ? "Profil megnyitása" : "Profil létrehozása"}
                     </AdminButton>
-                    {!caseRecord?.clientId ? <p className="mt-2 text-[10px] text-[#8B2A2A]">Az ügyfél azonosítója nem érhető el.</p> : null}
+                    {!caseRecord?.clientId ? <p className="mt-2 text-[10px] text-[var(--adm-terracotta-700)]">Az ügyfél azonosítója nem érhető el.</p> : null}
                   </AdminPanel>
 
                   {showHouseStylePanel && caseRecord?.clientId ? (
-                    <div className="max-h-[520px] overflow-y-auto rounded-[12px] border border-[rgba(22,32,26,0.14)] bg-[#FBF9F3]">
+                    <div className="max-h-[520px] overflow-y-auto rounded-[12px] border border-[rgba(22,32,26,0.14)] bg-[var(--adm-surface)]">
                       <ClientHouseStylePanel
                         compact
                         clientId={caseRecord.clientId}
@@ -1178,21 +1178,21 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       contextLabel={activeTitle || undefined}
                     />
                   )}
-                  {handoffPackageMessage && <p className="rounded bg-[#EEF5E7] p-2 text-[12px] font-semibold text-[#23472F]">{handoffPackageMessage}</p>}
-                  {handoffPackageError && <p className="rounded bg-[#FFF5F3] p-2 text-[12px] font-semibold text-[#8B2A2A]">{handoffPackageError}</p>}
+                  {handoffPackageMessage && <p className="rounded bg-[var(--adm-sage-100)] p-2 text-[12px] font-semibold text-[var(--adm-green-800)]">{handoffPackageMessage}</p>}
+                  {handoffPackageError && <p className="rounded bg-[var(--adm-terracotta-100)] p-2 text-[12px] font-semibold text-[var(--adm-terracotta-700)]">{handoffPackageError}</p>}
                 </aside>
               </div>
             )}
 
-            <AdminPanel className="border-[rgba(22,32,26,0.14)] bg-[#FBF6E7] p-5">
-              <h2 className="font-serif text-2xl font-medium text-[#16201A]">Ügy története</h2>
+            <AdminPanel className="border-[rgba(22,32,26,0.14)] bg-[var(--adm-surface)] p-5">
+              <h2 className="font-serif text-2xl font-medium text-[var(--adm-text)]">Ügy története</h2>
               <div className="mt-4 space-y-3">
                 {timeline.length > 0 ? timeline.slice(0, 8).map((event) => (
-                  <div key={event.id} className="border-l-2 border-[#B58A2A] pl-3">
-                    <p className="text-sm font-semibold text-[#16201A]">{humanizeTimelineType(event)}</p>
-                    <p className="text-[12px] text-[#7A8479]">{formatShortDate(event.createdAt)}</p>
+                  <div key={event.id} className="border-l-2 border-[var(--adm-ochre-500)] pl-3">
+                    <p className="text-sm font-semibold text-[var(--adm-text)]">{humanizeTimelineType(event)}</p>
+                    <p className="text-[12px] text-[var(--adm-text-muted)]">{formatShortDate(event.createdAt)}</p>
                   </div>
-                )) : <p className="text-sm text-[#7A8479]">Még nincs rögzített ügyesemény.</p>}
+                )) : <p className="text-sm text-[var(--adm-text-muted)]">Még nincs rögzített ügyesemény.</p>}
               </div>
             </AdminPanel>
           </section>

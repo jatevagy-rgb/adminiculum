@@ -66,7 +66,7 @@ function CaseHandoffPageContent({ params }: CaseHandoffPageProps) {
   }, [caseId]);
 
   return (
-    <main className="min-h-screen bg-[#F4EFE5] text-[#1F3B2D]">
+    <main className="min-h-screen adm-shell-bg text-[var(--adm-green-800)]">
       <div className="mx-auto flex w-full max-w-[1400px]">
         <CaseWorkspaceNav
           caseId={caseId}
@@ -81,60 +81,60 @@ function CaseHandoffPageContent({ params }: CaseHandoffPageProps) {
           <div className="mb-4 flex flex-wrap gap-2">
             <Link
               href={`/cases/${encodeURIComponent(caseId)}`}
-              className="rounded border border-[#D8CDB6] bg-[#FAF5EA] px-3 py-1.5 text-xs font-semibold text-[#1F3B2D] hover:bg-[#F2E8D6]"
+              className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-green-800)] hover:bg-[#F2E8D6]"
             >
               ← Vissza az ügyhöz
             </Link>
             <Link
               href={`/cases/${encodeURIComponent(caseId)}/documents`}
-              className="rounded border border-[#D8CDB6] bg-[#FAF5EA] px-3 py-1.5 text-xs font-semibold text-[#1F3B2D] hover:bg-[#F2E8D6]"
+              className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-green-800)] hover:bg-[#F2E8D6]"
             >
               ← Vissza a Dokumentumtárba
             </Link>
             <Link
               href={`/documents/compare?caseId=${encodeURIComponent(caseId)}`}
-              className="rounded border border-[#D8CDB6] bg-[#FAF5EA] px-3 py-1.5 text-xs font-semibold text-[#1F3B2D] hover:bg-[#F2E8D6]"
+              className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-green-800)] hover:bg-[#F2E8D6]"
             >
               Szerződés-workspace
             </Link>
             <Link
               href={`/cases/${encodeURIComponent(caseId)}/communications`}
-              className="rounded border border-[#D8CDB6] bg-[#FAF5EA] px-3 py-1.5 text-xs font-semibold text-[#1F3B2D] hover:bg-[#F2E8D6]"
+              className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-green-800)] hover:bg-[#F2E8D6]"
             >
               Kommunikáció
             </Link>
             <Link
               href={`/time-entries?caseId=${encodeURIComponent(caseId)}`}
-              className="rounded border border-[#D8CDB6] bg-[#FAF5EA] px-3 py-1.5 text-xs font-semibold text-[#1F3B2D] hover:bg-[#F2E8D6]"
+              className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-green-800)] hover:bg-[#F2E8D6]"
             >
               Munkaórák
             </Link>
             <Link
               href="/reviews"
-              className="rounded border border-[#B58A2A] bg-[#B58A2A] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#9C7723]"
+              className="rounded border border-[var(--adm-ochre-500)] bg-[var(--adm-ochre-500)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#9C7723]"
             >
               Review sor
             </Link>
           </div>
 
-          <header className="mb-6 rounded-xl border border-[#D8CDB6] bg-[#FFFDF7] p-5">
-            <p className="text-[10px] uppercase tracking-[0.24em] text-[#7B776D]">Output workflow</p>
-            <h1 className="text-2xl text-[#1F3B2D]" style={{ fontFamily: "var(--font-newsreader)" }}>
+          <header className="mb-6 rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-5">
+            <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--adm-text-muted)]">Output workflow</p>
+            <h1 className="text-2xl text-[var(--adm-green-800)]" style={{ fontFamily: "var(--font-newsreader)" }}>
               Leadási csomag
             </h1>
-            <p className="mt-2 text-sm text-[#4F5A50]">
+            <p className="mt-2 text-sm text-[var(--adm-text-muted)]">
               Ügyvédi review-ra előkészített belső munkacsomag.
             </p>
-            <p className="mt-2 rounded border border-[#E2D3B0] bg-[#FBF4E2] px-3 py-2 text-xs text-[#7B5E2E]">
+            <p className="mt-2 rounded border border-[var(--adm-border-strong)] bg-[var(--adm-sand-100)] px-3 py-2 text-xs text-[#7B5E2E]">
               Ez a csomag előkészítő munkairat. Ügyvédi jóváhagyás nélkül nem minősül végleges jogi állásfoglalásnak.
             </p>
-            <p className="mt-2 text-[10px] text-[#7B776D]">
+            <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">
               Dokumentumtár → Szerződés-workspace → Leadási csomag → Review sor
             </p>
             {isLoading ? (
-              <p className="mt-3 text-xs text-[#6E736D]">Ügyadatok betöltése…</p>
+              <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Ügyadatok betöltése…</p>
             ) : caseInfo ? (
-              <p className="mt-3 text-xs text-[#6E736D]">
+              <p className="mt-3 text-xs text-[var(--adm-text-muted)]">
                 {caseInfo.caseNumber} · {caseInfo.title}
               </p>
             ) : null}

@@ -25,19 +25,19 @@ function SettingsPageContent() {
   const [uiPack, setUiPack] = useUiPack();
   const isSignalTiles = uiPack === "signal_tiles_console";
   const p = {
-    bg: isSignalTiles ? "bg-[#0C1222]" : "bg-[#F6F2E8]",
-    bgAlt: isSignalTiles ? "bg-[#111827]" : "bg-[#F0EBE0]",
-    bgHover: isSignalTiles ? "hover:bg-[#1a2744]" : "hover:bg-[#EAE3D5]",
+    bg: isSignalTiles ? "bg-[#0C1222]" : "bg-[var(--adm-ivory-100)]",
+    bgAlt: isSignalTiles ? "bg-[#111827]" : "bg-[var(--adm-ivory-100)]",
+    bgHover: isSignalTiles ? "hover:bg-[#1a2744]" : "hover:bg-[var(--adm-ivory-200)]",
     bgCard: isSignalTiles ? "bg-[#0F1923]" : "bg-white",
-    bgSection: isSignalTiles ? "bg-[#0A1020]" : "bg-[#FAF8F2]",
-    text: isSignalTiles ? "text-[#CBD5E1]" : "text-[#514D45]",
-    textMuted: isSignalTiles ? "text-[#94A3B8]" : "text-[#7B776D]",
-    textDark: isSignalTiles ? "text-[#F1F5F9]" : "text-[#1F2821]",
-    border: isSignalTiles ? "border-[#1E3A5F]" : "border-[#DDD7CA]",
-    borderLight: isSignalTiles ? "border-[#1E3A5F]" : "border-[#E8E2D6]",
-    badge: isSignalTiles ? "bg-[#1E3A5F] text-[#D8C58E]" : "bg-[#E8E2D6] text-[#7B776D]",
+    bgSection: isSignalTiles ? "bg-[#0A1020]" : "bg-[var(--adm-surface)]",
+    text: isSignalTiles ? "text-[#CBD5E1]" : "text-[var(--adm-text-muted)]",
+    textMuted: isSignalTiles ? "text-[#94A3B8]" : "text-[var(--adm-text-muted)]",
+    textDark: isSignalTiles ? "text-[#F1F5F9]" : "text-[var(--adm-text)]",
+    border: isSignalTiles ? "border-[#1E3A5F]" : "border-[var(--adm-border)]",
+    borderLight: isSignalTiles ? "border-[#1E3A5F]" : "border-[var(--adm-border)]",
+    badge: isSignalTiles ? "bg-[#1E3A5F] text-[#D8C58E]" : "bg-[var(--adm-ivory-200)] text-[var(--adm-text-muted)]",
     accent: isSignalTiles ? "text-[#D8C58E]" : "text-[#8B7355]",
-    accentBg: isSignalTiles ? "bg-[#1E3A5F]/40" : "bg-[#F6F2E8]",
+    accentBg: isSignalTiles ? "bg-[#1E3A5F]/40" : "bg-[var(--adm-ivory-100)]",
     success: isSignalTiles ? "text-emerald-400" : "text-emerald-700",
     warning: isSignalTiles ? "text-amber-400" : "text-amber-700",
     danger: isSignalTiles ? "text-red-400" : "text-red-700",
@@ -57,7 +57,7 @@ function SettingsPageContent() {
               ["#integrations", "Integrációk"],
               ["#security", "Adatkezelés"],
             ].map(([href, label]) => (
-              <a key={href} href={href} className={`block rounded border ${p.borderLight} ${p.bgSection} px-3 py-2 ${p.text} hover:border-[#B58A2A]`}>
+              <a key={href} href={href} className={`block rounded border ${p.borderLight} ${p.bgSection} px-3 py-2 ${p.text} hover:border-[var(--adm-ochre-500)]`}>
                 {label}
               </a>
             ))}
@@ -128,7 +128,7 @@ function SettingsPageContent() {
                     onClick={() => setUiPack(pack.id)}
                     className={`settings-ui-pack-option w-full text-left border rounded-lg p-4 transition-all ${
                       selected
-                        ? `${p.accent} border-[#B58A2A] ${p.accentBg} shadow-sm`
+                        ? `${p.accent} border-[var(--adm-ochre-500)] ${p.accentBg} shadow-sm`
                         : `${p.border} ${p.bgCard} ${p.bgHover}`
                     }`}
                   >
@@ -168,7 +168,7 @@ function SettingsPageContent() {
             <p className={`text-xs ${p.textMuted} mb-4`}>
               Az ügyfél-specifikus house style profilok az Ügyfelek oldalon kezelhetők. Ezek adják majd a külső AI promptok dokumentumstílus-, fejléc-, kétnyelvűségi és formázási kontextusát.
             </p>
-            <Link href="/clients" className="inline-block px-3 py-2 text-xs border border-[#C9A227] text-[#8B6B3A] bg-[#FBF9F3] hover:bg-[#f5ecd8]">
+            <Link href="/clients" className="inline-block px-3 py-2 text-xs border border-[var(--adm-ochre-500)] text-[#8B6B3A] bg-[var(--adm-surface)] hover:bg-[#f5ecd8]">
               Ügyfelek megnyitása
             </Link>
           </section>
@@ -203,9 +203,9 @@ function SettingsPageContent() {
           <section className={`${p.bgSection} border ${p.border} rounded p-4`}>
             <h3 className={`text-xs font-semibold ${p.textDark} mb-2`}>Kapcsolódó felületek</h3>
             <div className="flex flex-wrap gap-2">
-              <Link href="/reviews" className="px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Review sor megnyitása</Link>
-              <Link href="/clause-library" className="px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Záradék könyvtár</Link>
-              <Link href="/clients" className="px-3 py-2 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]">Ügyfelek megnyitása</Link>
+              <Link href="/reviews" className="px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Review sor megnyitása</Link>
+              <Link href="/clause-library" className="px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Záradék könyvtár</Link>
+              <Link href="/clients" className="px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Ügyfelek megnyitása</Link>
             </div>
           </section>
         </div>

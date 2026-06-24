@@ -129,24 +129,24 @@ function NotificationsPageContent() {
   };
 
   return (
-    <main className="min-h-screen bg-[#F4EFE5] px-6 py-8 lg:px-10">
-      <section className="mx-auto w-full max-w-6xl rounded-2xl border border-[#D8CDB6] bg-[#FFFDF7] p-6 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5DAC4] pb-4">
+    <main className="min-h-screen adm-shell-bg px-6 py-8 lg:px-10">
+      <section className="mx-auto w-full max-w-6xl rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--adm-border)] pb-4">
           <div>
-            <h1 className="text-2xl text-[#1F3B2D]" style={{ fontFamily: "var(--font-newsreader)" }}>
+            <h1 className="text-2xl text-[var(--adm-green-800)]" style={{ fontFamily: "var(--font-newsreader)" }}>
               Értesítések
             </h1>
-            <p className="mt-1 text-sm text-[#5D6B62]">Munkajelzések ügyekhez, dokumentumokhoz és review feladatokhoz.</p>
+            <p className="mt-1 text-sm text-[var(--adm-text-muted)]">Munkajelzések ügyekhez, dokumentumokhoz és review feladatokhoz.</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="rounded-full border border-[#D8CDB6] bg-[#FAF5EA] px-3 py-1 text-xs font-semibold text-[#5A4A2A]">
+            <span className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1 text-xs font-semibold text-[#5A4A2A]">
               Olvasatlan: {unreadCount}
             </span>
             <button
               type="button"
               onClick={handleMarkAllRead}
               disabled={isLoading || isMarkingAll || notifications.length === 0 || unreadCount === 0}
-              className="rounded-lg border border-[#1F3B2D] px-3 py-2 text-xs font-semibold text-[#1F3B2D] disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg border border-[var(--adm-green-800)] px-3 py-2 text-xs font-semibold text-[var(--adm-green-800)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isMarkingAll ? "Összes jelölése..." : "Összes olvasottnak jelölése"}
             </button>
@@ -154,20 +154,20 @@ function NotificationsPageContent() {
         </div>
 
         {isLoading ? (
-          <div className="mt-5 rounded-xl border border-[#E5DAC4] bg-[#FFFCF4] px-5 py-8 text-center">
-            <p className="font-serif text-lg text-[#1F3B2D]">Értesítések betöltése...</p>
-            <p className="mt-2 text-sm text-[#5D6B62]">A munkajelzések összegyűjtése folyamatban van.</p>
+          <div className="mt-5 rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface)] px-5 py-8 text-center">
+            <p className="font-serif text-lg text-[var(--adm-green-800)]">Értesítések betöltése...</p>
+            <p className="mt-2 text-sm text-[var(--adm-text-muted)]">A munkajelzések összegyűjtése folyamatban van.</p>
           </div>
         ) : error ? (
-          <div className="mt-5 rounded-xl border border-[#D4B8B8] bg-[#FFF7F4] px-5 py-8 text-center">
-            <p className="font-serif text-lg text-[#8F3D32]">{error}</p>
-            <p className="mt-2 text-sm text-[#5D6B62]">A kapcsolódó ügyek és feladatok továbbra is megnyithatók a fő navigációból.</p>
-            <button type="button" onClick={loadNotifications} className="mt-4 rounded-lg border border-[#8F3D32] bg-white px-3 py-2 text-xs font-semibold text-[#8F3D32] hover:bg-[#FFF0ED]">Újrapróbálás</button>
+          <div className="mt-5 rounded-xl border border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] px-5 py-8 text-center">
+            <p className="font-serif text-lg text-[var(--adm-terracotta-700)]">{error}</p>
+            <p className="mt-2 text-sm text-[var(--adm-text-muted)]">A kapcsolódó ügyek és feladatok továbbra is megnyithatók a fő navigációból.</p>
+            <button type="button" onClick={loadNotifications} className="mt-4 rounded-lg border border-[#8F3D32] bg-white px-3 py-2 text-xs font-semibold text-[var(--adm-terracotta-700)] hover:bg-[#FFF0ED]">Újrapróbálás</button>
           </div>
         ) : sortedNotifications.length === 0 ? (
-          <div className="mt-5 rounded-xl border border-dashed border-[#D8CDB6] bg-[#FFFCF4] px-5 py-10 text-center">
-            <p className="font-serif text-lg text-[#1F3B2D]">Nincs új értesítés.</p>
-            <p className="mt-2 text-sm text-[#5D6B62]">Az új ügy-, dokumentum- és review-jelzések itt jelennek meg.</p>
+          <div className="mt-5 rounded-xl border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] px-5 py-10 text-center">
+            <p className="font-serif text-lg text-[var(--adm-green-800)]">Nincs új értesítés.</p>
+            <p className="mt-2 text-sm text-[var(--adm-text-muted)]">Az új ügy-, dokumentum- és review-jelzések itt jelennek meg.</p>
           </div>
         ) : (
           <ul className="mt-4 space-y-3">
@@ -176,33 +176,33 @@ function NotificationsPageContent() {
                 key={item.id}
                 className={`rounded-xl border p-4 ${
                   item.isRead
-                    ? "border-[#E5DAC4] bg-[#FFFCF4]"
+                    ? "border-[var(--adm-border)] bg-[var(--adm-surface)]"
                     : "border-[#D5B56A] bg-[#FFF7E3]"
                 }`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-[#EDE4D3] px-2 py-0.5 text-[11px] font-semibold text-[#4F5A50]">
+                      <span className="rounded-full bg-[var(--adm-ivory-200)] px-2 py-0.5 text-[11px] font-semibold text-[var(--adm-text-muted)]">
                         {typeLabels[item.type] || "Értesítés"}
                       </span>
                       {!item.isRead && (
-                        <span className="rounded-full bg-[#1F3B2D] px-2 py-0.5 text-[11px] font-semibold text-white">
+                        <span className="rounded-full bg-[var(--adm-green-800)] px-2 py-0.5 text-[11px] font-semibold text-white">
                           Olvasatlan
                         </span>
                       )}
                     </div>
-                    <p className="text-sm font-semibold text-[#1F3B2D]">{item.title}</p>
-                    <p className="text-sm text-[#4F5A50]">{item.message}</p>
-                    <p className="text-[11px] text-[#7C807A]">{resolveLinkContextLabel(item.link)}</p>
-                    <p className="text-xs text-[#7C807A]">{formatDateTime(item.createdAt)}</p>
+                    <p className="text-sm font-semibold text-[var(--adm-green-800)]">{item.title}</p>
+                    <p className="text-sm text-[var(--adm-text-muted)]">{item.message}</p>
+                    <p className="text-[11px] text-[var(--adm-text-soft)]">{resolveLinkContextLabel(item.link)}</p>
+                    <p className="text-xs text-[var(--adm-text-soft)]">{formatDateTime(item.createdAt)}</p>
                   </div>
 
                   <div className="flex items-center gap-2">
                     {item.link ? (
                       <a
                         href={item.link}
-                        className="rounded-lg border border-[#D8CDB6] px-3 py-2 text-xs font-semibold text-[#1F3B2D] hover:bg-[#F8F2E4]"
+                        className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-xs font-semibold text-[var(--adm-green-800)] hover:bg-[#F8F2E4]"
                       >
                         Megnyitás
                       </a>
@@ -212,7 +212,7 @@ function NotificationsPageContent() {
                         type="button"
                         onClick={() => handleMarkRead(item.id)}
                         disabled={markingId === item.id}
-                        className="rounded-lg bg-[#1F3B2D] px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg bg-[var(--adm-green-800)] px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {markingId === item.id ? "Mentés..." : "Megjelölés olvasottként"}
                       </button>
