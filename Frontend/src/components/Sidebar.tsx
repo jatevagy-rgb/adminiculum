@@ -184,10 +184,10 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
   };
 
   return (
-    <aside className={`${collapsed ? "w-20" : "w-[220px]"} min-h-screen ${isSignal ? "bg-[#111827]" : "bg-[#1F4A33]"} text-white flex flex-col transition-[width] duration-150`}>
-      <div className={`${collapsed ? "px-3" : "px-4"} py-4 border-b ${isSignal ? "border-[#1F2937]" : "border-[#173824]"}`}>
+    <aside className={`${collapsed ? "w-20" : "w-[232px]"} min-h-screen ${isSignal ? "bg-[#111827]" : "adm-sidebar"} text-white flex flex-col transition-[width] duration-150`}>
+      <div className={`${collapsed ? "px-3" : "px-4"} py-4 border-b ${isSignal ? "border-[#1F2937]" : "border-white/10"}`}>
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[4px] bg-[#F4EFDB]">
+          <div className="flex h-11 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-[var(--adm-ivory-100)] shadow-[0_10px_24px_rgba(0,0,0,0.16)]">
             <Image
               src="/brand/adminiculum-logo.png"
               alt="Adminiculum logó"
@@ -199,14 +199,14 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
           </div>
           {!collapsed && (
             <div>
-              <h1 className="font-serif text-[21px] leading-none text-[#F4EFDB]">Adminiculum</h1>
-              <p className={`mt-1 text-[10px] uppercase tracking-[0.18em] ${isSignal ? "text-[#6B7280]" : "text-[#F4EFDB]/55"}`}>Jogi munkapad</p>
+              <h1 className="font-serif text-[21px] leading-none text-[var(--adm-ivory-50)]">Adminiculum</h1>
+              <p className={`mt-1 text-[10px] uppercase tracking-[0.18em] ${isSignal ? "text-[#6B7280]" : "text-[var(--adm-sage-300)]"}`}>Jogi munkapad</p>
             </div>
           )}
         </div>
         <button
           onClick={toggleCollapsed}
-          className={`mt-4 h-8 w-full rounded-[5px] border bg-white/5 text-[12px] hover:text-white ${isSignal ? "border-[#1F2937] text-[#9CA3AF]" : "border-white/10 text-[#F4EFDB]/65"}`}
+          className={`mt-4 h-8 w-full rounded-[8px] border bg-white/5 text-[12px] transition-colors hover:bg-white/10 hover:text-white ${isSignal ? "border-[#1F2937] text-[#9CA3AF]" : "border-white/10 text-[var(--adm-ivory-50)]/70"}`}
           title={collapsed ? "Sidebar kinyitása" : "Sidebar összecsukása"}
           type="button"
         >
@@ -218,7 +218,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
         {navGroups.map((group) => (
           <div key={group.id} className="space-y-1">
             {!collapsed && (
-              <p className={`px-3 pt-2 pb-1 text-[9.5px] uppercase tracking-[0.18em] ${isSignal ? "text-[#6B7280]" : "text-[#F4EFDB]/45"}`}>
+              <p className={`px-3 pt-2 pb-1 text-[9.5px] uppercase tracking-[0.18em] ${isSignal ? "text-[#6B7280]" : "text-[var(--adm-sage-300)]/80"}`}>
                 {group.label}
               </p>
             )}
@@ -243,19 +243,19 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
                 <button
                   key={nav.id}
                   onClick={() => router.push(routeMap[nav.id] || "/")}
-                  className={`relative w-full flex items-center ${collapsed ? "justify-center" : "gap-2.5"} rounded-[5px] px-3 py-2 text-[12.5px] font-medium transition-colors duration-150 ${
+                  className={`relative w-full flex items-center ${collapsed ? "justify-center" : "gap-2.5"} rounded-[10px] px-3 py-2 text-[12.5px] font-medium transition-colors duration-150 ${
                     isActive
-                      ? `${isSignal ? "text-white bg-[#0B1220]" : "text-[#F4EFDB] bg-[#B58A2A]/18 before:absolute before:left-[-5px] before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r before:bg-[#B58A2A]"}`
-                      : `${isSignal ? "text-[#9CA3AF] hover:text-white hover:bg-[#0B1220]" : "text-[#F4EFDB]/78 hover:text-[#F4EFDB] hover:bg-white/5"}`
+                      ? `${isSignal ? "text-white bg-[#0B1220]" : "text-[var(--adm-ivory-50)] bg-white/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] before:absolute before:left-[-5px] before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r before:bg-[var(--adm-ochre-500)]"}`
+                      : `${isSignal ? "text-[#9CA3AF] hover:text-white hover:bg-[#0B1220]" : "text-[var(--adm-ivory-50)]/76 hover:text-[var(--adm-ivory-50)] hover:bg-white/6"}`
                   }`}
                   title={nav.label}
                 >
-                  <span className={isActive ? (isSignal ? 'text-[#22D3EE]' : 'text-[#B58A2A]') : 'text-inherit'}>{iconFor(nav.icon)}</span>
+                  <span className={isActive ? (isSignal ? 'text-[#22D3EE]' : 'text-[var(--adm-ochre-500)]') : 'text-inherit'}>{iconFor(nav.icon)}</span>
                   {!collapsed && (
                     <>
                       <span>{navLabelMap[nav.id] || nav.label}</span>
                       {nav.id === "notifications" && unreadNotifications > 0 ? (
-                        <span className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-semibold ${isSignal ? "bg-[#22D3EE] text-[#0B1220]" : "bg-[#B58A2A] text-[#173824]"}`}>
+                        <span className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-semibold ${isSignal ? "bg-[#22D3EE] text-[#0B1220]" : "bg-[var(--adm-ochre-500)] text-[var(--adm-green-950)]"}`}>
                           {unreadNotifications}
                         </span>
                       ) : null}
@@ -271,18 +271,18 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
       <div className={`${collapsed ? "px-2" : "px-3"} py-4 border-t ${isSignal ? "border-[#1F2937]" : "border-white/10"}`}>
         {profileName && !collapsed && (
           <div className="flex items-center gap-3 mb-4">
-            <div className={`w-9 h-9 rounded-full flex items-center justify-center font-semibold ${isSignal ? "bg-[#22D3EE] text-[#0B1220]" : "bg-[#B58A2A] text-[#173824]"}`}>
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center font-semibold ${isSignal ? "bg-[#22D3EE] text-[#0B1220]" : "bg-[var(--adm-sand-300)] text-[var(--adm-green-950)]"}`}>
               {initials}
             </div>
             <div>
               <p className="text-sm font-medium text-white leading-tight">{profileName}</p>
-              <p className={`text-xs ${isSignal ? "text-[#6B7280]" : "text-[#F4EFDB]/55"}`}>{profileRole}</p>
+              <p className={`text-xs ${isSignal ? "text-[#6B7280]" : "text-[var(--adm-sage-300)]"}`}>{profileRole}</p>
             </div>
           </div>
         )}
         <button
           onClick={() => router.push("/cases?newCase=1")}
-          className={`w-full rounded-[5px] text-xs font-semibold uppercase ${collapsed ? "tracking-normal" : "tracking-[0.16em]"} py-2.5 transition-colors ${isSignal ? "bg-[#22D3EE] text-[#0B1220] hover:bg-[#06B6D4]" : "bg-[#B58A2A] text-[#173824] hover:bg-[#8E6A1B] hover:text-white"}`}
+          className={`w-full rounded-[10px] text-xs font-semibold uppercase ${collapsed ? "tracking-normal" : "tracking-[0.16em]"} py-2.5 transition-colors ${isSignal ? "bg-[#22D3EE] text-[#0B1220] hover:bg-[#06B6D4]" : "bg-[var(--adm-ochre-500)] text-[var(--adm-green-950)] hover:bg-[var(--adm-sand-300)]"}`}
           type="button"
           title="Új ügy"
         >

@@ -71,7 +71,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
   return (
     <div
       data-ui-pack={uiPack}
-      className={`min-h-screen flex app-shell ${isSignalOps ? "bg-[#0B1220] text-[#D6E2F2] ui-pack-signal-ops" : "bg-[#D5CBA8] text-[#16201A] ui-pack-insight-analytics"}`}
+      className={`min-h-screen flex app-shell ${isSignalOps ? "bg-[#0B1220] text-[#D6E2F2] ui-pack-signal-ops" : "adm-shell-bg text-[var(--adm-text)] ui-pack-insight-analytics"}`}
     >
         <Sidebar
           activeItem={section}
@@ -80,7 +80,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
           uiPack={uiPack}
         />
 
-      <div className={`min-w-0 flex-1 flex flex-col app-shell-content ${isSignalOps ? "" : "bg-[#EFE7CF]"}`}>
+      <div className={`min-w-0 flex-1 flex flex-col app-shell-content ${isSignalOps ? "" : "adm-shell-bg"}`}>
         <TopBar
           title={titleBySection[section] || "Műszerfal"}
           onSignOut={onSignOut}
@@ -88,17 +88,17 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
           uiPack={uiPack}
         />
 
-        <main className={`flex-1 overflow-y-auto app-shell-main ${isSignalOps ? "bg-[#0B1220] p-6" : "bg-[#EFE7CF] p-4"}`}>
-          <div className={`${shouldFrameBody ? "mx-auto max-w-[1480px] border border-[rgba(22,32,26,0.10)] bg-white p-5 shadow-[0_12px_32px_rgba(22,32,26,0.08)]" : "h-full min-h-0"}`}>
+        <main className={`flex-1 overflow-y-auto app-shell-main ${isSignalOps ? "bg-[#0B1220] p-6" : "adm-shell-bg p-4 lg:p-5"}`}>
+          <div className={`${shouldFrameBody ? "adm-page-frame mx-auto max-w-[1480px] p-4 lg:p-5" : "h-full min-h-0"}`}>
             {shellBody}
           </div>
         </main>
 
-        <footer className={`app-shell-footer border-t px-5 py-2 flex items-center justify-between gap-3 ${isSignalOps ? "border-[#1E293B] bg-[#0F172A]" : "border-[#D5CBA8] bg-[#F7F0D9]"}`}>
-          <p className={`text-xs ${isSignalOps ? "text-[#94A3B8]" : "text-[#6E7872]"}`} style={{ fontFamily: 'var(--font-newsreader)' }}>
+        <footer className={`app-shell-footer border-t px-5 py-2 flex items-center justify-between gap-3 ${isSignalOps ? "border-[#1E293B] bg-[#0F172A]" : "border-[var(--adm-border)] bg-[rgba(255,253,247,0.72)]"}`}>
+          <p className={`text-xs ${isSignalOps ? "text-[#94A3B8]" : "text-[var(--adm-text-muted)]"}`} style={{ fontFamily: 'var(--font-newsreader)' }}>
             Adminiculum · Jogi munkapad
           </p>
-          <div className={`text-[10px] uppercase tracking-[0.2em] ${isSignalOps ? "text-[#64748B]" : "text-[#8B8477]"}`}>
+          <div className={`text-[10px] uppercase tracking-[0.2em] ${isSignalOps ? "text-[#64748B]" : "text-[var(--adm-text-soft)]"}`}>
             {new Date().getFullYear()}
           </div>
         </footer>
