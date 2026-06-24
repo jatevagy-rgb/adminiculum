@@ -241,28 +241,118 @@ select {
   color: #fff;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Dashboard command center (UIR4B)                                            */
+/* -------------------------------------------------------------------------- */
+
+.adm-dash-stage {
+  background:
+    radial-gradient(circle at 25% 0%, rgba(181, 138, 42, 0.16), transparent 30rem),
+    linear-gradient(135deg, var(--adm-ivory-100) 0%, var(--adm-ivory-50) 46%, #efe5cc 100%);
+}
+
+.adm-command-hero {
+  border: 1px solid var(--adm-border);
+  border-radius: var(--adm-radius-lg);
+  background:
+    linear-gradient(135deg, #fffdf8 0%, #f6ead8 100%);
+  box-shadow: var(--adm-shadow-md);
+  overflow: hidden;
+}
+
+.adm-hero-title {
+  color: var(--adm-text);
+  font-family: Georgia, 'Times New Roman', serif;
+  letter-spacing: -0.045em;
+}
+
+.adm-dark-status {
+  background: linear-gradient(180deg, var(--adm-green-950) 0%, var(--adm-green-900) 100%);
+  color: var(--adm-ivory-50);
+}
+
+.adm-stat-box {
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: var(--adm-radius-md);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.adm-panel {
+  border: 1px solid var(--adm-border);
+  border-radius: var(--adm-radius-lg);
+  background: var(--adm-surface-raised);
+  box-shadow: var(--adm-shadow-sm);
+}
+
+.adm-panel-tonal {
+  border: 1px solid var(--adm-border);
+  border-radius: var(--adm-radius-lg);
+  background: var(--adm-surface);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Internal Microsoft / Entra login helpers (UIR4B)                            */
+/* -------------------------------------------------------------------------- */
+
+.auth-states {
+  display: grid;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.auth-state {
+  border: 1px solid var(--adm-border);
+  border-radius: var(--adm-radius-sm);
+  padding: 12px 14px;
+  background: var(--adm-surface);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--adm-text-muted);
+}
+
+.auth-state strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--adm-green-900);
+  font-size: 12px;
+}
+
+.auth-helper {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--adm-border);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--adm-text-muted);
+}
+
 .auth-page {
   min-height: 100vh;
   padding: 16px;
+  display: grid;
+  place-items: center;
   background:
-    radial-gradient(circle at top left, rgba(255,255,255,0.18) 0, rgba(255,255,255,0.18) 1px, transparent 1px) 0 0 / 18px 18px,
-    #17191d;
+    radial-gradient(circle at 15% 10%, rgba(212, 145, 76, 0.15), transparent 30rem),
+    var(--adm-ivory-50);
 }
 
 .auth-frame {
-  min-height: calc(100vh - 32px);
-  border: 1px solid rgba(255,255,255,0.08);
-  background: var(--auth-paper);
-  color: var(--auth-ink);
+  width: min(1180px, 100%);
+  border: 1px solid var(--adm-border);
+  border-radius: var(--adm-radius-lg);
+  background: var(--adm-surface-raised);
+  color: var(--adm-text);
+  box-shadow: var(--adm-shadow-shell);
   display: grid;
   grid-template-rows: auto 1fr auto;
+  overflow: hidden;
 }
 
 .auth-brandbar {
-  padding: 18px 24px 0;
-  color: #f5f1e8;
+  padding: 16px 28px 0;
+  color: var(--adm-text-muted);
   background: transparent;
-  font-size: 14px;
+  font-size: 11px;
 }
 
 .auth-shell {
@@ -274,9 +364,9 @@ select {
 }
 
 .auth-brand-panel {
-  background: #162c1f;
+  background: linear-gradient(160deg, var(--adm-green-950) 0%, var(--adm-green-900) 100%);
   color: rgba(244, 240, 232, 0.92);
-  padding: 56px 36px;
+  padding: 56px 44px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -287,7 +377,7 @@ select {
   font-family: Georgia, 'Times New Roman', serif;
   font-size: 24px;
   font-weight: 700;
-  color: #143122;
+  color: var(--adm-ivory-50);
   margin-bottom: 72px;
 }
 
@@ -297,23 +387,23 @@ select {
 }
 
 .auth-brand-title {
-  font-size: 54px;
-  line-height: 1;
+  font-size: 60px;
+  line-height: 0.98;
   margin-bottom: 24px;
-  color: rgba(16, 28, 20, 0.72);
+  color: var(--adm-ivory-50);
 }
 
 .auth-brand-copy {
-  max-width: 280px;
-  color: rgba(232, 226, 212, 0.62);
+  max-width: 340px;
+  color: rgba(232, 226, 212, 0.72);
   font-size: 17px;
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
 .auth-brand-footer {
-  border-left: 1px solid rgba(232, 226, 212, 0.28);
-  padding-left: 16px;
-  color: rgba(232, 226, 212, 0.52);
+  border-left: 2px solid var(--adm-sand-300);
+  padding-left: 18px;
+  color: rgba(232, 226, 212, 0.62);
 }
 
 .auth-brand-footer-label,
@@ -468,17 +558,24 @@ select {
 }
 
 .auth-microsoft-button {
-  border: 1px solid #e3ddd2;
-  background: #fff;
-  color: var(--auth-ink);
+  height: 58px;
+  border: 1px solid var(--adm-green-950);
+  border-radius: var(--adm-radius-md);
+  background: var(--adm-green-900);
+  color: var(--adm-ivory-50);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
-  font-size: 11px;
-  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-size: 15px;
+  font-weight: 800;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.auth-microsoft-button:hover:not(:disabled) {
+  background: var(--adm-green-950);
+  transform: translateY(-1px);
 }
 
 .auth-microsoft-badge {

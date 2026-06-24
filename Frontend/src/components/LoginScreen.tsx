@@ -16,36 +16,36 @@ export function LoginScreen({ onSignIn, onDevSignIn, showDevSignIn = false, disa
 
   return (
     <AuthShell
-      title={isExpired ? "Session expired" : "Log in to your workspace"}
+      title="Adminiculum"
       subtitle={
         isExpired
-          ? "Your secure legal session has ended. Sign in again to restore access to the workspace."
-          : "Enter your credentials to access the legal vault."
+          ? "A biztonságos munkamenet lejárt. Jelentkezzen be újra az irodai Microsoft-fiókkal a munkatér eléréséhez."
+          : "Folytatáshoz jelentkezzen be az irodai Microsoft / Entra ID fiókkal."
       }
-      eyebrow={isExpired ? "Session security alert" : "Enterprise authentication"}
+      eyebrow={isExpired ? "Munkamenet-biztonsági jelzés" : "Belső ügyvédi munkatér"}
       notice={
         isExpired
           ? {
-              title: "Session expired",
-              body: errorMessage || "For your protection, the Adminiculum session timed out and requires renewed Microsoft authentication.",
+              title: "Lejárt munkamenet",
+              body: errorMessage || "Biztonsági okból az Adminiculum munkamenet lejárt, és ismételt Microsoft-hitelesítés szükséges.",
               tone: "warning",
             }
           : errorMessage
             ? {
-                title: "Authentication status",
+                title: "Hitelesítési állapot",
                 body: errorMessage,
                 tone: "warning",
               }
             : undefined
       }
-      microsoftLabel={disabled ? "Redirect in progress..." : "Sign in with Microsoft"}
+      microsoftLabel={disabled ? "Átirányítás folyamatban…" : "Belépés Microsoft-fiókkal"}
       microsoftDisabled={disabled}
       onMicrosoftSignIn={onSignIn}
       onDevSignIn={onDevSignIn}
       showDevSignIn={showDevSignIn}
     >
       <p className="auth-support-copy">
-        Microsoft Entra ID remains the primary authentication path. Email and password fields are retained as visual policy context only.
+        A Microsoft Entra ID az egyetlen belépési útvonal. Nincs e-mail/jelszó alapú belépés ezen a felületen.
       </p>
     </AuthShell>
   );

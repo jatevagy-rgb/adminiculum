@@ -74,12 +74,12 @@ function kpiDot(tone: KpiCardProps["tone"]) {
 
 function KpiCard({ label, value, tone, zeroHint }: KpiCardProps) {
   return (
-    <div className={`rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] border-l-4 px-3 py-3 shadow-[var(--adm-shadow-sm)] ${kpiTone(tone)}`}>
-      <p className="flex items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">
+    <div className={`rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] border-l-4 px-4 py-4 shadow-[var(--adm-shadow-sm)] ${kpiTone(tone)}`}>
+      <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">
         <span className={`h-2 w-2 rounded-full ${kpiDot(tone)}`} />
         {label}
       </p>
-      <p className="mt-1 font-serif text-[34px] leading-none text-[var(--adm-text)]">{value}</p>
+      <p className="mt-2 font-serif text-[40px] leading-none text-[var(--adm-text)]">{value}</p>
       <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{value === 0 ? zeroHint : "Aktív tétel"}</p>
     </div>
   );
@@ -450,32 +450,84 @@ export function Dashboard() {
   const greetingName = currentUser?.name || "dr. Hubay Máté";
 
   return (
-    <div className="min-h-full adm-shell-bg px-3 pb-4 pt-2 sm:px-4 xl:px-6">
-      <div className="mx-auto w-full max-w-[1860px] space-y-2.5">
-        <section className="adm-card overflow-hidden px-4 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="adm-kicker">Command Center</p>
-              <h1 className="adm-heading text-[30px] leading-none">Jó reggelt, {greetingName}!</h1>
+    <div className="adm-dash-stage min-h-full px-3 pb-10 pt-4 sm:px-5 xl:px-8">
+      <div className="mx-auto w-full max-w-[1480px] space-y-6">
+        {/* 1 + 2 — Command-center hero with dark "Mai működési kép" status column */}
+        <section className="adm-command-hero">
+          <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="flex min-h-[340px] flex-col justify-between p-6 lg:p-10">
+              <div>
+                <p className="adm-kicker">Adminiculum · Műszerfal</p>
+                <h1 className="adm-hero-title mt-5 max-w-4xl text-[40px] leading-[0.98] sm:text-[54px] xl:text-[64px]">
+                  Jogi munkapad a mai ügyekhez.
+                </h1>
+                <p className="mt-5 max-w-2xl text-[15px] leading-7 text-[var(--adm-text-muted)]">
+                  Jó reggelt, {greetingName}. Ez a command center meglévő ügyadatokból, feladatokból és
+                  dokumentumjelzésekből állítja össze a munkanézetet. Csak a rendszerben ténylegesen elérhető
+                  jelzések jelennek meg.
+                </p>
+              </div>
+
+              <div className="mt-9">
+                {error ? (
+                  <div className="mb-4 rounded-[var(--adm-radius-sm)] border border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] px-3 py-2 text-xs text-[var(--adm-terracotta-700)]">
+                    {error}
+                  </div>
+                ) : warnings.length > 0 ? (
+                  <div className="mb-4 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-xs text-[var(--adm-text-muted)]">
+                    {warnings.slice(0, 2).join(" ")}
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <Link href="/cases?newCase=1" className="adm-link-button adm-link-button-primary px-4 py-3">
+                    Új ügy
+                  </Link>
+                  <Link
+                    href={activeCase ? `/cases/${activeCase.id}/documents` : "/cases"}
+                    className="adm-link-button px-4 py-3 text-[#6B4B14]"
+                  >
+                    Dokumentum feltöltés
+                  </Link>
+                  <Link href="/reviews" className="adm-link-button px-4 py-3">
+                    Review sor
+                  </Link>
+                </div>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2 text-xs">
-              <Link href="/cases?newCase=1" className="adm-link-button adm-link-button-primary px-3 py-2">Új ügy</Link>
-              <Link
-                href={activeCase ? `/cases/${activeCase.id}/documents` : "/cases"}
-                className="adm-link-button px-3 py-2 text-[#6B4B14]"
-              >
-                Dokumentum feltöltés
-              </Link>
-              <Link href="/reviews" className="adm-link-button px-3 py-2">Review sor</Link>
-            </div>
+
+            <aside className="adm-dark-status flex flex-col gap-4 border-t border-white/10 p-6 xl:border-l xl:border-t-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[var(--adm-sage-300)]">
+                Mai működési kép
+              </p>
+              <div className="grid grid-cols-3 gap-3 xl:grid-cols-1">
+                <div className="adm-stat-box p-4">
+                  <p className="font-serif text-[40px] leading-none">{waitingTasks.length}</p>
+                  <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-sage-300)]">Rám váró teendő</p>
+                  <p className="mt-1 text-[11px] leading-4 text-[var(--adm-ivory-100)]/70">
+                    {waitingTasks.length === 0 ? "Nincs betöltött teendő." : "Meglévő feladatlistából számolva."}
+                  </p>
+                </div>
+                <div className="adm-stat-box p-4">
+                  <p className="font-serif text-[40px] leading-none">{reviewDocumentCount}</p>
+                  <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-sage-300)]">Review jelzés</p>
+                  <p className="mt-1 text-[11px] leading-4 text-[var(--adm-ivory-100)]/70">
+                    {reviewDocumentCount === 0 ? "Nincs ellenőrzésre váró dokumentum." : "Dashboard/review adatokból számolva."}
+                  </p>
+                </div>
+                <div className="adm-stat-box p-4">
+                  <p className="font-serif text-[40px] leading-none">{localWorkspaceDraftCount}</p>
+                  <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-sage-300)]">Helyi vázlat</p>
+                  <p className="mt-1 text-[11px] leading-4 text-[var(--adm-ivory-100)]/70">
+                    {localWorkspaceDraftCount === 0 ? "Nincs helyi böngészős vázlat." : "Csak ezen az eszközön mentett helyi vázlat."}
+                  </p>
+                </div>
+              </div>
+            </aside>
           </div>
-          {error ? <div className="mt-2 rounded-[var(--adm-radius-sm)] border border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] px-3 py-2 text-xs text-[var(--adm-terracotta-700)]">{error}</div> : null}
-          {!error && warnings.length > 0 ? (
-            <div className="mt-2 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-xs text-[var(--adm-text-muted)]">{warnings.slice(0, 2).join(" ")}</div>
-          ) : null}
         </section>
 
-        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+        {/* 3 — KPI / status strip */}
+        <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <KpiCard label="Rám vár" value={kpis.waiting} tone="gold" zeroHint="Nincs nyitott tétel" />
           <KpiCard label="Tőlem függ" value={kpis.depends} tone="ink" zeroHint="Nincs blokkolt tétel" />
           <KpiCard label="Review alatt" value={kpis.review} tone="purple" zeroHint="Nincs review alatt" />
@@ -484,96 +536,127 @@ export function Dashboard() {
           <KpiCard label="Kész ezen a héten" value={kpis.done} tone="green" zeroHint="Még nincs lezárt tétel" />
         </section>
 
-        <section className="adm-card p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="adm-kicker">Home Office munkanézet</p>
-              <h2 className="adm-heading text-[24px] leading-tight">Mai ügyvédi fókusz</h2>
-              <p className="mt-1 max-w-3xl text-[12px] leading-5 text-[var(--adm-text-muted)]">
-                A home office nézet egyelőre meglévő adatokból és gyorslinkekből dolgozik. A részletes aktivitási napló későbbi fejlesztés.
-              </p>
-            </div>
-            <span className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1 text-[11px] font-semibold text-[#6B4B14]">
-              Nem valós idejű kollaboráció
-            </span>
-          </div>
-
-          <div className="mt-4 grid gap-3 xl:grid-cols-[1.25fr_0.75fr]">
-            <div className="adm-card-soft p-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="adm-kicker">Következő megnyitandó munka</p>
-                  <h3 className="adm-heading mt-1 text-[20px]">Itt folytasd</h3>
-                  <p className="mt-1 max-w-3xl text-[11px] leading-5 text-[var(--adm-text-muted)]">
-                    Meglévő feladatokból, ügyekből, dokumentumjelzésekből és helyi böngészős vázlatokból adott nyitási javaslat.
-                    A pontos priorizálás későbbi backend-alapú fejlesztés.
-                  </p>
-                </div>
-                <span className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface-raised)] px-3 py-1 text-[11px] font-semibold text-[#6B4B14]">
-                  {nextWorkCards.length} javaslat
-                </span>
-              </div>
-              {loading ? <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Fókuszjavaslatok betöltése...</p> : null}
-              {!loading && nextWorkCards.length === 0 ? (
-                <p className="mt-3 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border-strong)] bg-[var(--adm-surface-raised)] px-3 py-2 text-[11px] text-[var(--adm-text-muted)]">
-                  Nincs kiemelt fókuszfeladat. Nincs helyi böngészős munkavázlat.
+        {/* 4 + 5 — Dominant "Itt folytasd" workbench + review/handoff side column */}
+        <section className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.75fr)]">
+          <article className="adm-panel p-5 lg:p-7">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="adm-kicker">Elsődleges munkasor</p>
+                <h2 className="adm-heading mt-1 text-[34px] leading-tight">Itt folytasd</h2>
+                <p className="mt-2 max-w-3xl text-[13px] leading-6 text-[var(--adm-text-muted)]">
+                  Meglévő feladatokból, ügyekből, dokumentumjelzésekből és helyi böngészős vázlatokból adott
+                  nyitási javaslat. A pontos priorizálás későbbi backend-alapú fejlesztés.
                 </p>
+              </div>
+              <span className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1 text-[11px] font-semibold text-[#6B4B14]">
+                {nextWorkCards.length} javaslat
+              </span>
+            </div>
+
+            {loading ? <p className="mt-5 text-xs text-[var(--adm-text-muted)]">Fókuszjavaslatok betöltése...</p> : null}
+            {!loading && nextWorkCards.length === 0 ? (
+              <div className="mt-5">
+                <EmptyState
+                  title="Nincs kiemelt fókuszfeladat"
+                  subtitle="Nincs helyi böngészős munkavázlat vagy betöltött prioritás. A dashboard üres állapotban is megtartja a command-center szerkezetet."
+                />
+              </div>
+            ) : null}
+
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              {nextWorkCards.map((card) => (
+                <Link
+                  key={card.id}
+                  href={card.href}
+                  className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 transition-colors hover:border-[var(--adm-border-strong)] hover:bg-white"
+                >
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#6B4B14]">{card.label}</p>
+                  <p className="mt-1 text-sm font-semibold text-[var(--adm-text)]">{card.title}</p>
+                  <p className="mt-1 text-[11px] leading-4 text-[var(--adm-text-muted)]">{card.detail}</p>
+                  <p className="mt-2 text-[11px] font-semibold text-[var(--adm-green-800)]">{card.action}</p>
+                </Link>
+              ))}
+            </div>
+          </article>
+
+          <aside className="grid content-start gap-6">
+            <article className="adm-panel p-5">
+              <p className="adm-kicker">Review / handoff</p>
+              <h3 className="adm-heading mt-1 text-[24px]">Mai sor</h3>
+              {loading ? <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Betöltés...</p> : null}
+              {!loading && reviewQueue.length === 0 ? (
+                <div className="mt-3 space-y-2">
+                  <EmptyState title="Még nincs review tétel" subtitle="A beérkező dokumentumok és feladatok itt jelennek meg áttekinthető sorban." />
+                  <div className="flex flex-wrap gap-2">
+                    <Link href="/reviews" className="adm-link-button px-3 py-2 text-[11px]">Teljes review sor</Link>
+                    <Link href="/cases?newCase=1" className="adm-link-button adm-link-button-primary px-3 py-2 text-[11px]">Új ügy</Link>
+                  </div>
+                </div>
               ) : null}
-              <div className="mt-3 grid gap-2 md:grid-cols-2">
-                {nextWorkCards.map((card) => (
-                  <Link key={card.id} href={card.href} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface-raised)] px-3 py-2 transition-colors hover:bg-[var(--adm-sand-100)]">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-[#6B4B14]">{card.label}</p>
-                    <p className="mt-1 text-xs font-semibold text-[var(--adm-text)]">{card.title}</p>
-                    <p className="mt-1 text-[11px] leading-4 text-[var(--adm-text-muted)]">{card.detail}</p>
-                    <p className="mt-2 text-[11px] font-semibold text-[var(--adm-green-800)]">{card.action}</p>
+              <div className="mt-3 space-y-2">
+                {reviewQueue.map((task) => (
+                  <Link
+                    key={task.id}
+                    href={`/tasks?taskId=${task.id}`}
+                    className="block rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 hover:bg-white"
+                  >
+                    <p className="text-xs font-semibold text-[var(--adm-text)]">{task.title}</p>
+                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">
+                      {task.case?.caseNumber ? `${task.case.caseNumber} · Ügy review` : "Review tétel"} · Határidő: {displayDate(task.dueDate)}
+                    </p>
                   </Link>
                 ))}
               </div>
-            </div>
+            </article>
 
-            <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
-              <div className="rounded-lg border border-[var(--adm-border)] bg-white p-3">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Rám váró feladatok</p>
-                <p className="mt-1 font-serif text-[26px] leading-none text-[var(--adm-text)]">{waitingTasks.length}</p>
-                <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{waitingTasks.length === 0 ? "Nincs betöltött teendő." : "Meglévő feladatlistából számolva."}</p>
+            <article className="adm-panel p-5">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="adm-heading text-[22px]">Gyors megnyitás</h3>
+                <span className="text-[11px] text-[var(--adm-text-muted)]">Munkaterületek</span>
               </div>
-              <div className="rounded-lg border border-[var(--adm-border)] bg-white p-3">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Ellenőrzésre váró dokumentumok</p>
-                <p className="mt-1 font-serif text-[26px] leading-none text-[var(--adm-text)]">{reviewDocumentCount}</p>
-                <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{reviewDocumentCount === 0 ? "Nincs ellenőrzésre váró dokumentum." : "Dashboard/review adatokból számolva."}</p>
+              <div className="mt-3 grid gap-2">
+                {quickOpenLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="flex items-center justify-between rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2.5 hover:bg-[var(--adm-sand-100)]"
+                  >
+                    <span>
+                      <span className="block text-xs font-semibold text-[var(--adm-green-800)]">{link.label}</span>
+                      <span className="mt-0.5 block text-[10.5px] text-[var(--adm-text-muted)]">{link.description}</span>
+                    </span>
+                    <span className="text-[var(--adm-text-soft)]">→</span>
+                  </Link>
+                ))}
               </div>
-              <div className="rounded-lg border border-[var(--adm-border)] bg-white p-3">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Félbehagyott munkák</p>
-                <p className="mt-1 font-serif text-[26px] leading-none text-[var(--adm-text)]">{localWorkspaceDraftCount}</p>
-                <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">
-                  {localWorkspaceDraftCount === 0 ? "Nincs helyi böngészős vázlat." : "Csak ezen az eszközön mentett helyi vázlat."}
-                </p>
-              </div>
-            </div>
-          </div>
+            </article>
+          </aside>
+        </section>
 
-          <div className="mt-3 grid gap-3 xl:grid-cols-[1.15fr_0.85fr]">
-            <div className="rounded-lg border border-[var(--adm-border)] bg-white p-3">
+        {/* 6 — Lower support panels (lower visual weight) */}
+        <section className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.6fr)]">
+          <div className="space-y-5">
+            <article className="adm-panel p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Átadások és aktivitás</p>
-                  <h3 className="mt-1 font-serif text-[18px] text-[var(--adm-text)]">Aszinkron ügyátadás</h3>
-                  <p className="mt-1 text-[11px] leading-5 text-[var(--adm-text-muted)]">
-                    Meglévő feladatokból, ügyadatokból, dokumentum aktivitásból és helyi böngészős vázlatokból összeállított munkafolyamat-nézet.
-                    A részletes aktivitási napló későbbi fejlesztés.
+                  <p className="adm-kicker">Átadások és aktivitás</p>
+                  <h3 className="adm-heading mt-1 text-[20px]">Aszinkron ügyátadás</h3>
+                  <p className="mt-1 max-w-2xl text-[11px] leading-5 text-[var(--adm-text-muted)]">
+                    Meglévő feladatokból, ügyadatokból, dokumentum aktivitásból és helyi böngészős vázlatokból
+                    összeállított munkafolyamat-nézet. Ez nem backend audit log.
                   </p>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center text-[10.5px]">
                   <div className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-1.5">
-                    <p className="font-serif text-[17px] leading-none text-[var(--adm-text)]">{openTasks.length}</p>
+                    <p className="font-serif text-[18px] leading-none text-[var(--adm-text)]">{openTasks.length}</p>
                     <p className="mt-1 text-[var(--adm-text-muted)]">feladat</p>
                   </div>
                   <div className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-1.5">
-                    <p className="font-serif text-[17px] leading-none text-[var(--adm-text)]">{attentionCases.length}</p>
+                    <p className="font-serif text-[18px] leading-none text-[var(--adm-text)]">{attentionCases.length}</p>
                     <p className="mt-1 text-[var(--adm-text-muted)]">ügy</p>
                   </div>
                   <div className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-1.5">
-                    <p className="font-serif text-[17px] leading-none text-[var(--adm-text)]">{localWorkspaceDraftCount}</p>
+                    <p className="font-serif text-[18px] leading-none text-[var(--adm-text)]">{localWorkspaceDraftCount}</p>
                     <p className="mt-1 text-[var(--adm-text-muted)]">vázlat</p>
                   </div>
                 </div>
@@ -586,76 +669,25 @@ export function Dashboard() {
               ) : null}
               <div className="mt-3 grid gap-2 md:grid-cols-2">
                 {asyncHandoffItems.slice(0, 4).map((item) => (
-                  <Link key={item.id} href={item.href} className="block rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 hover:bg-[var(--adm-surface)]">
+                  <Link key={item.id} href={item.href} className="block rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 hover:bg-white">
                     <p className="text-xs font-semibold text-[var(--adm-text)]">{item.title}</p>
                     <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{item.meta} · {item.detail}</p>
                   </Link>
                 ))}
               </div>
-              <p className="mt-3 text-[10.5px] leading-5 text-[var(--adm-text-muted)]">
-                Ez nem backend audit log, hanem aszinkron munkanézet meglévő adatokból és helyi böngészős jelzésekből.
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-[var(--adm-border)] bg-white p-3">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="font-serif text-[18px] text-[var(--adm-text)]">Gyors megnyitás</h3>
-                <span className="text-[11px] text-[var(--adm-text-muted)]">Munkaterületek</span>
-              </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                {quickOpenLinks.map((link) => (
-                  <Link key={link.href} href={link.href} className="rounded border border-[var(--adm-border-strong)] bg-[var(--adm-surface)] px-3 py-2 hover:bg-[var(--adm-sand-100)]">
-                    <p className="text-xs font-semibold text-[var(--adm-green-800)]">{link.label}</p>
-                    <p className="mt-0.5 text-[10.5px] text-[var(--adm-text-muted)]">{link.description}</p>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="grid grid-cols-12 gap-3">
-          <div className="col-span-12 space-y-3 xl:col-span-9">
-            <article className="rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface-raised)] shadow-[0_1px_0_rgba(21,32,26,0.06)]">
-              <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-4 py-3">
-                <h2 className="font-serif text-[24px] text-[var(--adm-text)]">Mai teendők · Review sor</h2>
-                <Link href="/reviews" className="rounded-md border border-[var(--adm-border-strong)] bg-[var(--adm-surface)] px-2 py-1 text-xs font-semibold text-[var(--adm-green-800)] hover:bg-[var(--adm-sand-100)]">Teljes sor</Link>
-              </div>
-              <div className="space-y-2 p-3">
-                {loading ? <p className="px-2 py-3 text-xs text-[var(--adm-text-muted)]">Betöltés...</p> : null}
-                {!loading && reviewQueue.length === 0 ? (
-                  <div className="space-y-2">
-                    <EmptyState title="Még nincs review tétel" subtitle="A beérkező dokumentumok és feladatok itt jelennek meg áttekinthető sorban." />
-                    <div className="flex justify-center gap-2">
-                      <Link href="/reviews" className="rounded-md border border-[var(--adm-border-strong)] bg-white px-2 py-1 text-[11px] font-semibold text-[var(--adm-green-800)]">Teljes review sor</Link>
-                      <Link href="/cases?newCase=1" className="rounded-md border border-[var(--adm-green-900)] bg-[var(--adm-green-800)] px-2 py-1 text-[11px] font-semibold text-[var(--adm-ivory-50)]">Új ügy</Link>
-                    </div>
-                  </div>
-                ) : null}
-                {reviewQueue.map((task) => (
-                  <div key={task.id} className="flex items-start justify-between gap-3 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-[var(--adm-text)]">{task.title}</p>
-                      <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{task.case?.caseNumber ? `${task.case.caseNumber} · Ügy review` : "Review tétel"}</p>
-                      <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Határidő: {displayDate(task.dueDate)}</p>
-                    </div>
-                    <Link href={`/tasks?taskId=${task.id}`} className="shrink-0 rounded-md border border-[var(--adm-border-strong)] bg-white px-2 py-1 text-[11px] font-semibold text-[var(--adm-green-800)]">Megnyitás</Link>
-                  </div>
-                ))}
-              </div>
             </article>
 
-            <article className="rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface-raised)] shadow-[0_1px_0_rgba(21,32,26,0.06)]">
-              <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-4 py-3">
-                <h2 className="font-serif text-[24px] text-[var(--adm-text)]">Aktív ügyek</h2>
-                <Link href="/cases" className="rounded-md border border-[var(--adm-border-strong)] bg-[var(--adm-surface)] px-2 py-1 text-xs font-semibold text-[var(--adm-green-800)] hover:bg-[var(--adm-sand-100)]">Összes ügy</Link>
+            <article className="adm-panel overflow-hidden">
+              <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-5 py-3">
+                <h3 className="adm-heading text-[22px]">Aktív ügyek</h3>
+                <Link href="/cases" className="adm-link-button px-3 py-1.5 text-xs">Összes ügy</Link>
               </div>
-              {loading ? <p className="px-4 py-4 text-xs text-[var(--adm-text-muted)]">Ügyek betöltése...</p> : null}
+              {loading ? <p className="px-5 py-4 text-xs text-[var(--adm-text-muted)]">Ügyek betöltése...</p> : null}
               {!loading && cases.length === 0 ? (
-                <div className="p-4 space-y-2">
+                <div className="space-y-2 p-5">
                   <EmptyState title="Még nincs aktív ügy" subtitle="Nyiss egy új ügyet, és itt azonnal megjelenik a dokumentumfolyamat állapota." />
                   <div className="text-center">
-                    <Link href="/cases?newCase=1" className="inline-flex rounded-md border border-[var(--adm-green-900)] bg-[var(--adm-green-800)] px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-ivory-50)]">Új ügy indítása</Link>
+                    <Link href="/cases?newCase=1" className="adm-link-button adm-link-button-primary px-3 py-1.5 text-[11px]">Új ügy indítása</Link>
                   </div>
                 </div>
               ) : null}
@@ -673,7 +705,7 @@ export function Dashboard() {
                     </thead>
                     <tbody>
                       {cases.slice(0, 8).map((item) => (
-                        <tr key={item.id} className="border-t border-[#EFE5CC] hover:bg-[var(--adm-surface)]">
+                        <tr key={item.id} className="border-t border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">
                           <td className="px-3 py-3">
                             <p className="font-semibold text-[var(--adm-text)]">{item.caseNumber}</p>
                             <p className="text-[11px] text-[var(--adm-text-muted)]">{item.title || "Névtelen ügy"}</p>
@@ -714,15 +746,15 @@ export function Dashboard() {
               ) : null}
             </article>
 
-            <article className="rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface-raised)] shadow-[0_1px_0_rgba(21,32,26,0.06)]">
-              <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-4 py-3">
-                <h2 className="font-serif text-[22px] text-[var(--adm-text)]">Csapatmunka board — előnézet</h2>
-                <Link href="/tasks" className="rounded-md border border-[var(--adm-border-strong)] bg-[var(--adm-surface)] px-2 py-1 text-xs font-semibold text-[var(--adm-green-800)] hover:bg-[var(--adm-sand-100)]">Teljes board</Link>
+            <article className="adm-panel overflow-hidden">
+              <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-5 py-3">
+                <h3 className="adm-heading text-[20px]">Csapatmunka board — előnézet</h3>
+                <Link href="/tasks" className="adm-link-button px-3 py-1.5 text-xs">Teljes board</Link>
               </div>
-              <div className="overflow-x-auto p-3">
+              <div className="overflow-x-auto p-4">
                 <div className="grid min-w-[860px] grid-cols-4 gap-3 xl:min-w-0">
                   {["Előkészítés", "Review", "Javítás", "Átadásra kész"].map((col) => (
-                    <div key={col} className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2">
+                    <div key={col} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
                       <p className="text-[11px] font-semibold text-[var(--adm-text)]">{col}</p>
                       <div className="mt-2 space-y-2">
                         {tasks
@@ -757,46 +789,36 @@ export function Dashboard() {
             </article>
           </div>
 
-          <aside className="col-span-12 space-y-3 xl:col-span-3">
-            <article className="rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface-raised)] p-3 shadow-[0_1px_0_rgba(21,32,26,0.06)]">
-              <h3 className="border-b border-[var(--adm-border)] pb-2 font-serif text-[22px] text-[var(--adm-text)]">Gyors műveletek</h3>
-              <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
-                <Link href="/cases?newCase=1" className="rounded border border-[var(--adm-border-strong)] bg-[var(--adm-surface)] px-2 py-2 text-center font-semibold text-[var(--adm-green-800)]">Új ügy</Link>
-                <Link href="/reviews" className="rounded border border-[var(--adm-border-strong)] bg-[var(--adm-surface)] px-2 py-2 text-center font-semibold text-[var(--adm-green-800)]">Review sor</Link>
-                <Link href={activeCase ? `/cases/${activeCase.id}/documents` : "/cases"} className="rounded border border-[var(--adm-border-strong)] bg-[var(--adm-surface)] px-2 py-2 text-center font-semibold text-[var(--adm-green-800)]">Dokumentum feltöltés</Link>
-                <button type="button" disabled className="cursor-not-allowed rounded border border-dashed border-[var(--adm-border-strong)] bg-[var(--adm-ivory-100)] px-2 py-2 text-center font-semibold text-[var(--adm-text-soft)]" title="Hamarosan">Munkaóra rögzítés · Hamarosan</button>
-              </div>
-            </article>
-
-            <article className="rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface-raised)] p-3 shadow-[0_1px_0_rgba(21,32,26,0.06)]">
-              <h3 className="border-b border-[var(--adm-border)] pb-2 font-serif text-[22px] text-[var(--adm-text)]">Mai & holnapi határidők</h3>
-              <div className="mt-2 space-y-2 text-xs">
+          <aside className="grid content-start gap-5">
+            <article className="adm-panel p-5">
+              <h3 className="border-b border-[var(--adm-border)] pb-3 font-serif text-[20px] text-[var(--adm-text)]">Mai & holnapi határidők</h3>
+              <div className="mt-3 space-y-2 text-xs">
                 {upcomingDeadlines.length === 0 ? <EmptyState title="Nincs közeli határidő" subtitle="A mai és holnapi határidők itt fognak gyűlni." /> : null}
                 {upcomingDeadlines.map((task) => (
-                  <div key={task.id} className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2">
+                  <Link key={task.id} href={`/tasks?taskId=${task.id}`} className="block rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2 hover:bg-white">
                     <p className="font-semibold text-[var(--adm-text)]">{task.title}</p>
                     <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{displayDate(task.dueDate)} · {task.case?.caseNumber || "Feladat"}</p>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </article>
 
-            <article className="rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface-raised)] p-3 shadow-[0_1px_0_rgba(21,32,26,0.06)]">
-              <h3 className="border-b border-[var(--adm-border)] pb-2 font-serif text-[22px] text-[var(--adm-text)]">Legutóbbi dokumentumok</h3>
-              <div className="mt-2 space-y-2 text-xs">
+            <article className="adm-panel p-5">
+              <h3 className="border-b border-[var(--adm-border)] pb-3 font-serif text-[20px] text-[var(--adm-text)]">Legutóbbi dokumentumok</h3>
+              <div className="mt-3 space-y-2 text-xs">
                 {recentDocuments.length === 0 ? <EmptyState title="Nincs dokumentum előzmény" subtitle="A legfrissebb feltöltések és módosítások itt jelennek meg." /> : null}
                 {recentDocuments.map((item) => (
-                  <div key={item.id} className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2">
+                  <Link key={item.id} href={item.caseId ? `/documents/compare?caseId=${item.caseId}` : "/documents/compare"} className="block rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2 hover:bg-white">
                     <p className="font-semibold text-[var(--adm-text)]">{mapRecentDocLabel(item.type || item.text)}</p>
                     <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{displayDateTimeShort(item.timestamp)}</p>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </article>
 
-            <article className="rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface-raised)] p-3 shadow-[0_1px_0_rgba(21,32,26,0.06)]">
-              <h3 className="border-b border-[var(--adm-border)] pb-2 font-serif text-[22px] text-[var(--adm-text)]">Hírek / jogi-piaci jelzések</h3>
-              <div className="mt-2 space-y-2 text-xs">
+            <article className="adm-panel p-5">
+              <h3 className="border-b border-[var(--adm-border)] pb-3 font-serif text-[20px] text-[var(--adm-text)]">Hírek / jogi-piaci jelzések</h3>
+              <div className="mt-3 space-y-2 text-xs">
                 {legalNews.isLoading ? <p className="text-[var(--adm-text-soft)]">Hírfeed betöltése...</p> : null}
                 {!legalNews.isLoading && (legalNews.error || legalSignals.length === 0) ? (
                   <div className="rounded border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-2 text-[var(--adm-text-muted)]">

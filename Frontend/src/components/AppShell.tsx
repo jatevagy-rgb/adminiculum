@@ -66,7 +66,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
   ) : (
     <div className="text-xs text-[#7B776D]">Nincs elérhető tartalom ebben a szekcióban.</div>
   );
-  const shouldFrameBody = !children && !isSignalOps;
+  const shouldFrameBody = !children && !isSignalOps && section !== "dashboard";
 
   return (
     <div
@@ -88,7 +88,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
           uiPack={uiPack}
         />
 
-        <main className={`flex-1 overflow-y-auto app-shell-main ${isSignalOps ? "bg-[#0B1220] p-6" : "adm-shell-bg p-4 lg:p-5"}`}>
+        <main className={`flex-1 overflow-y-auto app-shell-main ${isSignalOps ? "bg-[#0B1220] p-6" : section === "dashboard" ? "adm-shell-bg p-0" : "adm-shell-bg p-4 lg:p-5"}`}>
           <div className={`${shouldFrameBody ? "adm-page-frame mx-auto max-w-[1480px] p-4 lg:p-5" : "h-full min-h-0"}`}>
             {shellBody}
           </div>

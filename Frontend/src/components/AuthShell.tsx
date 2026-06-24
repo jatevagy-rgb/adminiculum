@@ -32,15 +32,16 @@ export function AuthShell({
   return (
     <div className="auth-page">
       <div className="auth-frame">
-        <div className="auth-brandbar">Adminiculum: Enterprise Authentication Portal</div>
+        <div className="auth-brandbar">Adminiculum · belső ügyvédi munkatér</div>
 
         <div className="auth-shell">
           <section className="auth-brand-panel">
             <div>
               <div className="auth-wordmark">Adminiculum</div>
-              <div className="auth-brand-title">Lex Architectura</div>
+              <div className="auth-brand-title">Belépés a jogi munkapadba.</div>
               <p className="auth-brand-copy">
-                The architectural manuscript of legal systems. Precision, tradition, and digital permanence.
+                Az Adminiculum belső ügyvédi munkafelület. Belépés csak jóváhagyott irodai
+                Microsoft-fiókkal.
               </p>
             </div>
 
@@ -63,34 +64,12 @@ export function AuthShell({
                 </div>
               )}
 
-              <div className="auth-form-grid">
-                <label className="auth-field">
-                  <span>Email address</span>
-                  <input type="email" placeholder="attorney@adminiculum.law" disabled />
-                </label>
-
-                <div className="auth-password-row">
-                  <label className="auth-field">
-                    <span>Password</span>
-                    <input type="password" value="........" readOnly disabled />
-                  </label>
-                  <button type="button" className="auth-inline-link" disabled>
-                    Forgot password?
-                  </button>
-                </div>
-              </div>
-
-              <button type="button" className="auth-primary-button" disabled>
-                Sign in
-              </button>
-
-              <div className="auth-divider">Enterprise authentication</div>
-
               <button
                 type="button"
                 className="auth-microsoft-button"
                 onClick={onMicrosoftSignIn}
                 disabled={microsoftDisabled}
+                style={{ marginTop: 28 }}
               >
                 <span className="auth-microsoft-badge" aria-hidden="true">
                   <span className="ms-box ms-red" />
@@ -101,12 +80,29 @@ export function AuthShell({
                 <span>{microsoftLabel}</span>
               </button>
 
+              <p className="auth-helper">
+                Belépés csak jóváhagyott irodai Microsoft-fiókkal. Nincs nyilvános regisztráció és
+                nincs ügyfél-hozzáférés ezen a felületen. Ha nem tud belépni, forduljon a
+                rendszergazdához.
+              </p>
+
+              <div className="auth-states">
+                <div className="auth-state">
+                  <strong>Lejárt munkamenet</strong>
+                  Kérjük, jelentkezzen be újra a Microsoft-fiókkal.
+                </div>
+                <div className="auth-state">
+                  <strong>Jogosultság hiányzik</strong>
+                  A Microsoft-fiók nem rendelkezik Adminiculum-hozzáféréssel.
+                </div>
+              </div>
+
               {showDevSignIn && onDevSignIn && (
                 <button
                   type="button"
                   className="auth-primary-button"
                   onClick={onDevSignIn}
-                  style={{ marginTop: 10 }}
+                  style={{ marginTop: 14 }}
                 >
                   Sign in (Local Dev)
                 </button>
@@ -124,7 +120,7 @@ export function AuthShell({
         </div>
 
         <div className="auth-footer-row">
-          <span>© 2024 Adminiculum Legal Systems. All rights reserved.</span>
+          <span>© {new Date().getFullYear()} Adminiculum · belső ügyvédi munkatér</span>
           <div className="auth-footer-links">
             <span>Terms of service</span>
             <span>Privacy policy</span>
