@@ -3542,6 +3542,17 @@ export async function updateHandoffPackage(
   );
 }
 
+export async function archiveHandoffPackage(
+  id: string
+): Promise<LawyerHandoffPackageRecord> {
+  return fetchApi<LawyerHandoffPackageRecord>(
+    `/handoff-packages/${encodeURIComponent(id)}/archive`,
+    {
+      method: 'POST',
+    }
+  );
+}
+
 export async function reviewHandoffPackage(
   id: string,
   payload: ReviewLawyerHandoffPackagePayload

@@ -1169,7 +1169,15 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       />
                     </div>
                   ) : null}
-                  {caseRecord && <HandoffPackagePanel caseId={caseRecord.id} refreshKey={handoffPanelRefreshKey} />}
+                  {caseRecord && (
+                    <HandoffPackagePanel
+                      caseId={caseRecord.id}
+                      refreshKey={handoffPanelRefreshKey}
+                      sourceDocumentId={selectedUploadedDocument?.id || null}
+                      generatedContractId={!selectedUploadedDocument ? selectedGeneratedContract?.id || null : null}
+                      contextLabel={activeTitle || undefined}
+                    />
+                  )}
                   {handoffPackageMessage && <p className="rounded bg-[#EEF5E7] p-2 text-[12px] font-semibold text-[#23472F]">{handoffPackageMessage}</p>}
                   {handoffPackageError && <p className="rounded bg-[#FFF5F3] p-2 text-[12px] font-semibold text-[#8B2A2A]">{handoffPackageError}</p>}
                 </aside>

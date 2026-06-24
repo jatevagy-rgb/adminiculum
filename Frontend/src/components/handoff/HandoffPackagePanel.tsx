@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from "react";
 import {
+  ApiError,
+  archiveHandoffPackage,
+  createCaseHandoffPackage,
   listCaseHandoffPackages,
   updateHandoffPackage,
   type LawyerHandoffPackageRecord,
@@ -11,6 +14,10 @@ import {
 type HandoffPackagePanelProps = {
   caseId: string;
   refreshKey?: number;
+  sourceDocumentId?: string | null;
+  generatedContractId?: string | null;
+  initialSummary?: string;
+  contextLabel?: string;
 };
 
 const STATUS_LABELS: Record<LawyerHandoffStatus, string> = {
@@ -87,10 +94,29 @@ function getNextAction(pkg: LawyerHandoffPackageRecord): string {
   }
 }
 
-export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePanelProps) {
+function getHandoffErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 403) return "Jogosultság hiányzik az átadási csomag művelethez.";
+    if (error.status === 501) return "A funkció jelenleg nem elérhető ebben a környezetben.";
+    if (error.status === 404) return "Az átadási csomag vagy kapcsolódó ügy nem található.";
+  }
+  return "A művelet nem sikerült. Próbáld újra később.";
+}
+
+export function HandoffPackagePanel({
+  caseId,
+  refreshKey = 0,
+  sourceDocumentId,
+  generatedContractId,
+  initialSummary,
+  contextLabel,
+}: HandoffPackagePanelProps) {
   const [packages, setPackages] = useState<LawyerHandoffPackageRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isCreatingPackage, setIsCreatingPackage] = useState(false);
+  const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
   const [summaryDraft, setSummaryDraft] = useState("");
@@ -98,6 +124,10 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
   const [summaryMessage, setSummaryMessage] = useState<string | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [submittingPackageId, setSubmittingPackageId] = useState<string | null>(null);
+  const [archivingPackageId, setArchivingPackageId] = useState<string | null>(null);
+
+  const hasDocumentContext = Boolean(sourceDocumentId || generatedContractId);
+  const activePackages = packages.filter((pkg) => pkg.status !== "ARCHIVED");
 
   useEffect(() => {
     if (!caseId) {
@@ -112,7 +142,7 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
     listCaseHandoffPackages(caseId)
       .then((data) => {
         if (!cancelled) {
-          setPackages(data);
+          setPackages(data.filter((pkg) => pkg.status !== "ARCHIVED"));
         }
       })
       .catch((err) => {
@@ -152,14 +182,42 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
     setSummaryError(null);
     try {
       const updated = await updateHandoffPackage(pkgId, { preparerSummary: summaryDraft });
-      setPackages((prev) => prev.map((p) => (p.id === pkgId ? updated : p)));
+      setPackages((prev) => prev.map((p) => (p.id === pkgId ? updated : p)).filter((p) => p.status !== "ARCHIVED"));
       setEditingPackageId(null);
       setSummaryDraft("");
       setSummaryMessage("Előkészítő összefoglaló mentve.");
-    } catch {
-      setSummaryError("Nem sikerült menteni az összefoglalót.");
+    } catch (err) {
+      setSummaryError(getHandoffErrorMessage(err));
     } finally {
       setIsSavingSummary(false);
+    }
+  };
+
+  const handleCreateDraft = async () => {
+    if (!hasDocumentContext) {
+      setCreateError("Válassz ügyhöz tartozó dokumentumot az átadási csomag létrehozásához.");
+      return;
+    }
+
+    setIsCreatingPackage(true);
+    setCreateMessage(null);
+    setCreateError(null);
+    setSummaryMessage(null);
+    setSummaryError(null);
+
+    try {
+      const created = await createCaseHandoffPackage(caseId, {
+        sourceDocumentId: sourceDocumentId || undefined,
+        generatedContractId: generatedContractId || undefined,
+        preparerSummary: initialSummary?.trim() || undefined,
+        packageType: "STANDARD",
+      });
+      setPackages((prev) => [created, ...prev.filter((pkg) => pkg.id !== created.id && pkg.status !== "ARCHIVED")]);
+      setCreateMessage("Átadási csomag piszkozatként létrehozva.");
+    } catch (err) {
+      setCreateError(getHandoffErrorMessage(err));
+    } finally {
+      setIsCreatingPackage(false);
     }
   };
 
@@ -169,12 +227,32 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
     setSubmittingPackageId(pkgId);
     try {
       const updated = await updateHandoffPackage(pkgId, { status: "SUBMITTED" });
-      setPackages((prev) => prev.map((p) => (p.id === pkgId ? updated : p)));
+      setPackages((prev) => prev.map((p) => (p.id === pkgId ? updated : p)).filter((p) => p.status !== "ARCHIVED"));
       setSummaryMessage("Leadási csomag beküldve ügyvédi review-ra.");
-    } catch {
-      setSummaryError("Nem sikerült beküldeni a leadási csomagot.");
+    } catch (err) {
+      setSummaryError(getHandoffErrorMessage(err));
     } finally {
       setSubmittingPackageId(null);
+    }
+  };
+
+  const handleArchivePackage = async (pkg: LawyerHandoffPackageRecord) => {
+    const confirmed = window.confirm(
+      "Archiválod ezt az átadási csomagot? Az audit miatt megmarad, de az aktív listából eltűnik."
+    );
+    if (!confirmed) return;
+
+    setArchivingPackageId(pkg.id);
+    setSummaryMessage(null);
+    setSummaryError(null);
+    try {
+      await archiveHandoffPackage(pkg.id);
+      setPackages((prev) => prev.filter((item) => item.id !== pkg.id));
+      setSummaryMessage("Átadási csomag archiválva. Az audit miatt megmarad, de az aktív listából eltűnt.");
+    } catch (err) {
+      setSummaryError(getHandoffErrorMessage(err));
+    } finally {
+      setArchivingPackageId(null);
     }
   };
 
@@ -197,34 +275,65 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
       <div className="flex items-center gap-2 mb-4">
         <span className="material-symbols-outlined text-lg text-[#06190d] hidden">folder_special</span>
         <h3 className="text-xs font-bold uppercase tracking-widest text-[#06190d]">
-          Leadási csomag
+          Átadási csomagok
         </h3>
       </div>
       <p className="text-[10px] text-[#514D45] mb-2">Ügyvédi review-ra előkészített belső munkacsomag.</p>
+      {contextLabel ? (
+        <p className="mb-2 rounded border border-[#EEE7D9] bg-white px-2 py-1 text-[9px] text-[#514D45]">
+          Kapcsolt munkadokumentum: <span className="font-semibold">{contextLabel}</span>
+        </p>
+      ) : null}
       <p className="text-[9px] text-[#7B776D] mb-3 italic">
         Ez a csomag előkészítő munkairat. Ügyvédi jóváhagyás nélkül nem minősül végleges jogi állásfoglalásnak.
       </p>
 
+      <div className="mb-3 rounded border border-[#EEE7D9] bg-white p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-[10px] font-bold text-[#1F2821]">Új átadási csomag</p>
+            <p className="mt-1 text-[9px] text-[#7B776D]">
+              {hasDocumentContext
+                ? "A kiválasztott ügy- és dokumentumkörnyezetből piszkozat készíthető."
+                : "Válassz munkadokumentumot a dokumentumtárban vagy a szerződés-workspace-ben a létrehozáshoz."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleCreateDraft}
+            disabled={!hasDocumentContext || isCreatingPackage}
+            className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[#1F4A33] text-[#FBF6E7] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isCreatingPackage ? "Létrehozás..." : "Mentés piszkozatként"}
+          </button>
+        </div>
+        {createMessage ? <p className="mt-2 text-[9px] font-semibold text-[#23472F]">{createMessage}</p> : null}
+        {createError ? <p className="mt-2 text-[9px] font-semibold text-[#ba1a1a]">{createError}</p> : null}
+      </div>
+
       {isLoading && (
-        <p className="text-[10px] text-[#7B776D] italic py-2">Leadási csomag betöltése…</p>
+        <p className="text-[10px] text-[#7B776D] italic py-2">Átadási csomagok betöltése…</p>
       )}
 
       {error && (
         <p className="text-[10px] text-[#ba1a1a] py-2">{error}</p>
       )}
 
-      {!isLoading && !error && packages.length === 0 && (
+      {!isLoading && !error && activePackages.length === 0 && (
         <div className="text-center py-6 border border-[#EEE7D9] bg-[#F6F2E8]">
           <span className="material-symbols-outlined text-2xl text-[#c3c8c1]">inbox</span>
           <p className="text-[11px] text-[#514D45] mt-2">
-            Még nincs leadási csomag ehhez az ügyhöz.
+            Nincs aktív átadási csomag ehhez az ügyhöz.
+          </p>
+          <p className="mt-1 text-[9px] text-[#7B776D]">
+            Az archivált csomagok az audit miatt megmaradnak, de az aktív listában nem jelennek meg.
           </p>
         </div>
       )}
 
-      {!isLoading && !error && packages.length > 0 && (
+      {!isLoading && !error && activePackages.length > 0 && (
         <div className="space-y-3">
-          {packages.map((pkg) => {
+          {activePackages.map((pkg) => {
             const pkgMissing = getMissingItems(pkg);
             const hasMissingMandatory = pkgMissing.length > 0;
             const canPkgSubmit = canSubmit(pkg);
@@ -414,6 +523,14 @@ export function HandoffPackagePanel({ caseId, refreshKey = 0 }: HandoffPackagePa
                           {submittingPackageId === pkg.id ? "Beküldés..." : "Beküldés ügyvédi review-ra"}
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => handleArchivePackage(pkg)}
+                        disabled={archivingPackageId === pkg.id}
+                        className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border border-[#D8CDB6] bg-[#FBF9F3] text-[#7B5E2E] hover:bg-[#F6F2E8] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {archivingPackageId === pkg.id ? "Archiválás..." : "Archiválás"}
+                      </button>
                     </div>
                     <details className="mt-1">
                       <summary className="text-[9px] text-[#7B776D] cursor-pointer">További műveletek</summary>

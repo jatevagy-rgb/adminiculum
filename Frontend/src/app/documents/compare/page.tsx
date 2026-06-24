@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import { DocumentEditorShell } from "@/components/documents/DocumentEditorShell";
+import { HandoffPackagePanel } from "@/components/handoff/HandoffPackagePanel";
 import {
   TipTapEditorExperimental,
   type TipTapEditorActiveState,
@@ -2623,6 +2624,23 @@ return (
                     </p>
                   </div>
                 </details>
+
+                {activeCaseId ? (
+                  <HandoffPackagePanel
+                    caseId={activeCaseId}
+                    sourceDocumentId={selectedDocument?.kind === "document" ? selectedDocument.id : null}
+                    generatedContractId={selectedDocument?.kind === "contract" ? selectedDocument.id : null}
+                    initialSummary={reviewHandoffDraft.trim() || generatedReviewHandoffText}
+                    contextLabel={selectedDocument?.fileName || selectedDocument?.title || undefined}
+                  />
+                ) : (
+                  <section className="rounded-[10px] border border-[#D8CFB6] bg-[#FFFDF7] p-4 text-[#1F2821]">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Átadási csomagok</p>
+                    <p className="mt-2 text-[11px] leading-5 text-[#6D6A62]">
+                      Ügykörnyezet nélkül csak a helyi átadási munkaszöveg használható. Válassz ügyhöz tartozó dokumentumot a backend csomagkezeléshez.
+                    </p>
+                  </section>
+                )}
 
                 <section className="space-y-3 rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-4 text-[#1F2821]">
                   <div className="flex items-start justify-between gap-3">
