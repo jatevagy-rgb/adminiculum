@@ -66,8 +66,8 @@ function CaseHandoffPageContent({ params }: CaseHandoffPageProps) {
   }, [caseId]);
 
   return (
-    <main className="min-h-screen adm-shell-bg text-[var(--adm-green-800)]">
-      <div className="mx-auto flex w-full max-w-[1440px]">
+    <main className="min-h-screen adm-board-page text-[var(--adm-green-800)]">
+      <div className="mx-auto flex w-full max-w-[1500px]">
         <CaseWorkspaceNav
           caseId={caseId}
           caseNumber={caseInfo?.caseNumber}
@@ -77,49 +77,49 @@ function CaseHandoffPageContent({ params }: CaseHandoffPageProps) {
           helperText="Leadási csomag nézet: belső review-előkészítés ügyvédi munkafolyamathoz."
         />
 
-        <section className="flex-1 p-5 lg:p-7">
+        <section className="flex-1 p-5 lg:p-6">
           <div className="mb-4 flex flex-wrap gap-2">
             <Link
               href={`/cases/${encodeURIComponent(caseId)}`}
-              className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-green-800)] hover:bg-[#F2E8D6]"
+              className="adm-link-button px-3 py-1.5 text-xs"
             >
               ← Vissza az ügyhöz
             </Link>
             <Link
               href={`/cases/${encodeURIComponent(caseId)}/documents`}
-              className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-green-800)] hover:bg-[#F2E8D6]"
+              className="adm-link-button px-3 py-1.5 text-xs"
             >
               ← Vissza a Dokumentumtárba
             </Link>
             <Link
               href={`/documents/compare?caseId=${encodeURIComponent(caseId)}`}
-              className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-green-800)] hover:bg-[#F2E8D6]"
+              className="adm-link-button px-3 py-1.5 text-xs"
             >
               Szerződés-workspace
             </Link>
             <Link
               href={`/cases/${encodeURIComponent(caseId)}/communications`}
-              className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-green-800)] hover:bg-[#F2E8D6]"
+              className="adm-link-button px-3 py-1.5 text-xs"
             >
               Kommunikáció
             </Link>
             <Link
               href={`/time-entries?caseId=${encodeURIComponent(caseId)}`}
-              className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-green-800)] hover:bg-[#F2E8D6]"
+              className="adm-link-button px-3 py-1.5 text-xs"
             >
               Munkaórák
             </Link>
             <Link
               href="/reviews"
-              className="rounded border border-[var(--adm-ochre-500)] bg-[var(--adm-ochre-500)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#9C7723]"
+              className="adm-link-button adm-link-button-primary px-3 py-1.5 text-xs"
             >
               Review sor
             </Link>
           </div>
 
-          <header className="mb-5 rounded-[var(--adm-radius-lg)] border border-[var(--adm-border)] bg-[var(--adm-surface-raised)] p-5 shadow-[var(--adm-shadow-sm)]">
+          <header className="adm-board-hero mb-5 p-5">
             <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--adm-text-muted)]">Output workflow</p>
-            <h1 className="text-2xl text-[var(--adm-green-800)]" style={{ fontFamily: "var(--font-newsreader)" }}>
+            <h1 className="mt-1 font-serif text-[34px] leading-tight text-[var(--adm-green-800)]">
               Leadási csomag
             </h1>
             <p className="mt-2 text-sm text-[var(--adm-text-muted)]">

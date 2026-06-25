@@ -45,9 +45,9 @@ function SettingsPageContent() {
   const [reviewTaskSuggestions] = useState<boolean>(getPreference("reviewTaskSuggestions"));
   
   return (
-    <div className={`flex-1 overflow-y-auto settings-surface ${p.bg}`}>
-      <div className="mx-auto grid max-w-6xl gap-6 p-8 lg:grid-cols-[240px_minmax(0,1fr)]">
-        <aside className={`${p.bgCard} border ${p.border} rounded p-4 lg:sticky lg:top-6 lg:self-start`}>
+    <div className={`flex-1 overflow-y-auto settings-surface adm-board-page`}>
+      <div className="adm-board-container grid max-w-[1280px] gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <aside className={`${p.bgCard} border ${p.border} rounded-[var(--adm-radius-lg)] p-4 lg:sticky lg:top-6 lg:self-start`}>
           <p className={`text-[10px] font-bold uppercase tracking-[0.18em] ${p.textMuted}`}>Beállítások navigáció</p>
           <nav className="mt-4 space-y-2 text-xs">
             {[
@@ -83,7 +83,7 @@ function SettingsPageContent() {
           </p>
         </div>
         <div className="grid gap-6">
-          <section id="profile" className={`${p.bgCard} border ${p.border} rounded p-6 scroll-mt-6`}>
+          <section id="profile" className={`${p.bgCard} border ${p.border} rounded-[var(--adm-radius-lg)] p-5 scroll-mt-6`}>
             <h2 className={`text-lg font-semibold ${p.textDark} mb-3`}>Profil</h2>
             <div className="grid md:grid-cols-3 gap-3 text-xs">
               <div className={`border ${p.borderLight} p-3`}>
@@ -102,7 +102,7 @@ function SettingsPageContent() {
             <p className={`text-xs ${p.textMuted} mt-3`}>A felhasználói adatok kezelése későbbi patchben.</p>
           </section>
 
-          <section id="appearance" className={`${p.bgCard} border ${p.border} rounded p-6 scroll-mt-6`}>
+          <section id="appearance" className={`${p.bgCard} border ${p.border} rounded-[var(--adm-radius-lg)] p-5 scroll-mt-6`}>
             <div className="flex items-center justify-between gap-2 mb-3">
               <h2 className={`text-lg font-semibold ${p.textDark}`}>Megjelenés</h2>
               <span className={`text-[10px] px-2 py-1 ${p.bgAlt} ${p.textMuted}`}>UI pack</span>
@@ -163,17 +163,17 @@ function SettingsPageContent() {
             </div>
           </section>
 
-          <section id="house-style" className={`${p.bgCard} border ${p.border} rounded p-6 scroll-mt-6`}>
+          <section id="house-style" className={`${p.bgCard} border ${p.border} rounded-[var(--adm-radius-lg)] p-5 scroll-mt-6`}>
             <h2 className={`text-lg font-semibold ${p.textDark} mb-2`}>Ügyfélprofil / house style alapértelmezések</h2>
             <p className={`text-xs ${p.textMuted} mb-4`}>
-              Az ügyfél-specifikus house style profilok az Ügyfelek oldalon kezelhetők. Ezek adják majd a külső AI promptok dokumentumstílus-, fejléc-, kétnyelvűségi és formázási kontextusát.
+              Az ügyfél-specifikus house style profilok az Ügyfelek oldalon kezelhetők. Ezek adják majd a külső promptok dokumentumstílus-, fejléc-, kétnyelvűségi és formázási kontextusát.
             </p>
             <Link href="/clients" className="inline-block px-3 py-2 text-xs border border-[var(--adm-ochre-500)] text-[#8B6B3A] bg-[var(--adm-surface)] hover:bg-[#f5ecd8]">
               Ügyfelek megnyitása
             </Link>
           </section>
 
-          <section id="integrations" className={`${p.bgCard} border ${p.border} rounded p-6 scroll-mt-6`}>
+          <section id="integrations" className={`${p.bgCard} border ${p.border} rounded-[var(--adm-radius-lg)] p-5 scroll-mt-6`}>
             <h2 className={`text-lg font-semibold ${p.textDark} mb-2`}>Integrációk</h2>
             <div className="grid md:grid-cols-2 gap-3 text-xs">
               <div className={`border ${p.borderLight} p-3`}>
@@ -187,10 +187,10 @@ function SettingsPageContent() {
             </div>
           </section>
 
-          <section id="security" className={`${p.bgCard} border ${p.border} rounded p-6 scroll-mt-6`}>
+          <section id="security" className={`${p.bgCard} border ${p.border} rounded-[var(--adm-radius-lg)] p-5 scroll-mt-6`}>
             <h2 className={`text-lg font-semibold ${p.textDark} mb-2`}>Adatkezelés / biztonság</h2>
             <p className={`text-xs ${p.textMuted} mb-2`}>
-              Külső AI promptok másolhatók, de Adminiculum nem hív automatikusan külső AI-t.
+              Külső promptok másolhatók, de Adminiculum nem hív automatikusan külső eszközt.
             </p>
             <p className={`text-xs ${p.textMuted} mb-4`}>
               Review feladatjavaslatok helyi állapota: {reviewTaskSuggestions ? "engedélyezve" : "kikapcsolva"}.
@@ -203,9 +203,9 @@ function SettingsPageContent() {
           <section className={`${p.bgSection} border ${p.border} rounded p-4`}>
             <h3 className={`text-xs font-semibold ${p.textDark} mb-2`}>Kapcsolódó felületek</h3>
             <div className="flex flex-wrap gap-2">
-              <Link href="/reviews" className="px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Review sor megnyitása</Link>
-              <Link href="/clause-library" className="px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Záradék könyvtár</Link>
-              <Link href="/clients" className="px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Ügyfelek megnyitása</Link>
+              <Link href="/reviews" className="adm-link-button px-3 py-2 text-xs">Review sor megnyitása</Link>
+              <Link href="/clause-library" className="adm-link-button px-3 py-2 text-xs">Záradék könyvtár</Link>
+              <Link href="/clients" className="adm-link-button px-3 py-2 text-xs">Ügyfelek megnyitása</Link>
             </div>
           </section>
         </div>

@@ -129,8 +129,8 @@ function NotificationsPageContent() {
   };
 
   return (
-    <main className="min-h-screen adm-shell-bg px-6 py-8 lg:px-10">
-      <section className="mx-auto w-full max-w-6xl rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-6 shadow-sm">
+    <main className="min-h-screen adm-board-page px-5 py-6 lg:px-8">
+      <section className="adm-board-container max-w-[1180px]">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--adm-border)] pb-4">
           <div>
             <h1 className="text-2xl text-[var(--adm-green-800)]" style={{ fontFamily: "var(--font-newsreader)" }}>

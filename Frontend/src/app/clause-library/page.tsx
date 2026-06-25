@@ -134,9 +134,9 @@ function ClauseLibraryPageContent() {
   const isFeatureDisabled = Boolean(featureDisabledMessage);
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-[#F3EBD4]">
-      <div className="mx-auto max-w-[1520px] space-y-4 px-4 py-4 xl:px-6">
-        <section className="rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-4">
+    <div className="min-h-0 flex-1 overflow-y-auto adm-board-page">
+      <div className="adm-board-container max-w-[1520px] space-y-4">
+        <section className="adm-board-hero p-4">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 rounded-[5px] border border-[#1F4A33] bg-[#1F4A33] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#F4EFDB]">
@@ -152,7 +152,7 @@ function ClauseLibraryPageContent() {
             <div className="grid gap-2 rounded-[8px] border border-[#D8CFB6] bg-white p-3 text-[11px] text-[#514D45] sm:grid-cols-3">
               <div>
                 <p className="font-semibold text-[#1F2821]">Adatforrás</p>
-                <p className="mt-1">{isFeatureDisabled ? "Feature flag letiltva" : "Valós Clause Library endpoint"}</p>
+                <p className="mt-1">{isFeatureDisabled ? "Foundation állapot" : "Backend-wired clause endpoint"}</p>
               </div>
               <div>
                 <p className="font-semibold text-[#1F2821]">Beszúrás</p>
@@ -160,7 +160,7 @@ function ClauseLibraryPageContent() {
               </div>
               <div>
                 <p className="font-semibold text-[#1F2821]">Későbbi munkamód</p>
-                <p className="mt-1">Prompt / workflow előkészítés, nem aktív generálás</p>
+                <p className="mt-1">Külső prompt workflow előkészítés, nem automatikus generálás</p>
               </div>
             </div>
           </div>
@@ -168,7 +168,7 @@ function ClauseLibraryPageContent() {
 
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-4">
-            <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-4">
+            <section className="adm-board-panel p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="font-serif text-xl font-medium text-[#1F2821]">Szűrés és keresés</h2>
                 <AdminStatusPill tone={isFeatureDisabled ? "gold" : "green"}>
@@ -256,7 +256,7 @@ function ClauseLibraryPageContent() {
               </label>
             </section>
 
-            <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-4">
+            <section className="adm-board-panel p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h2 className="font-serif text-xl font-medium text-[#1F2821]">Záradéklista</h2>
@@ -286,7 +286,7 @@ function ClauseLibraryPageContent() {
                   </p>
                 </div>
               ) : isLoading ? (
-                <p className="mt-3 text-xs text-[#7B776D]">Klauzulatár betöltése...</p>
+                <p className="mt-3 text-xs text-[#7B776D]">Klauzulatár betöltése…</p>
               ) : clauses.length === 0 ? (
                 <div className="mt-3 rounded-[8px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] p-4">
                   <p className="text-sm font-semibold text-[#1F2821]">Még nincs jóváhagyott klauzula.</p>
@@ -348,7 +348,7 @@ function ClauseLibraryPageContent() {
           </div>
 
           <aside className="space-y-4">
-            <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-4">
+            <section className="adm-board-panel p-4">
               <h2 className="font-serif text-xl font-medium text-[#1F2821]">Záradék részletei</h2>
               {!selectedClause ? (
                 <div className="mt-3 rounded-[8px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] p-4 text-[11px] text-[#6D6A62]">
@@ -381,7 +381,7 @@ function ClauseLibraryPageContent() {
               )}
             </section>
 
-            <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-4">
+            <section className="adm-board-panel p-4">
               <h2 className="font-serif text-xl font-medium text-[#1F2821]">Kapcsolódó munkamódok</h2>
               <div className="mt-3 space-y-2">
                 {[

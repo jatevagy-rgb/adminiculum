@@ -259,51 +259,41 @@ export default function ClientDetailPage() {
   }
 
   return (
-    <div className="flex-1 flex min-h-0">
-      <aside className="w-56 border-r border-[var(--adm-border)] bg-[var(--adm-ivory-100)] flex flex-col">
-        <div className="p-4 border-b border-[var(--adm-border)]"><p className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)]">Navigáció</p></div>
-        <nav className="flex-1 p-2 space-y-1">
-          <Link href="/cases" className="block px-3 py-2 text-xs text-[var(--adm-text-muted)] hover:bg-[var(--adm-ivory-200)] rounded">Ügyek</Link>
-          <Link href="/clients" className="block px-3 py-2 text-xs text-white bg-[var(--adm-ochre-500)] rounded">Ügyfelek</Link>
-          <Link href={`/clients/${clientId}/workgroups`} className="block px-3 py-2 text-xs text-[var(--adm-text-muted)] hover:bg-[var(--adm-ivory-200)] rounded">Munkacsoportok</Link>
-        </nav>
-        <div className="p-3 border-t border-[var(--adm-border)]"><Link href="/" className="block px-3 py-2 text-xs text-[var(--adm-text-muted)] hover:bg-[var(--adm-ivory-200)] rounded">Műszerfal</Link></div>
-      </aside>
-
-      <main className="flex-1 overflow-y-auto border-r border-[var(--adm-border)]">
-        <div className="max-w-6xl mx-auto p-8 space-y-6">
-          <header className="border border-[var(--adm-border)] bg-white p-6">
+    <div className="flex-1 min-h-0 overflow-y-auto adm-board-page">
+      <div className="adm-board-container grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <main className="min-w-0 space-y-5">
+          <header className="adm-board-hero p-5 lg:p-6">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-full bg-[var(--adm-ochre-500)] text-white flex items-center justify-center text-2xl font-serif">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--adm-green-800)] text-2xl font-serif text-white shadow-[0_14px_30px_rgba(31,74,51,0.18)]">
                   {client.name?.charAt(0)?.toUpperCase() || "?"}
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)]">Ügyfél dosszié</p>
-                  <h1 className="text-2xl font-serif text-[var(--adm-text)] mt-1">{client.name}</h1>
-                  <p className="text-xs text-[var(--adm-text-muted)] mt-1">Kapcsolt ügyek, dokumentumok és kommunikációk operatív nézete</p>
+                   <h1 className="mt-1 font-serif text-[32px] leading-tight text-[var(--adm-text)]">{client.name}</h1>
+                  <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Kapcsolt ügyek, dokumentumok és kommunikációk belső operatív nézete</p>
                 </div>
               </div>
 
               <div className="flex gap-2">
-                <button onClick={openEditClient} className="px-4 py-2 border border-[var(--adm-border)] text-xs text-[var(--adm-text-muted)] hover:bg-[var(--adm-ivory-100)] rounded">
+                <button onClick={openEditClient} className="adm-link-button px-4 py-2 text-xs">
                   Ügyfél szerkesztése
                 </button>
-                <button onClick={() => setShowNewCaseModal(true)} className="px-4 py-2 bg-[var(--adm-ochre-500)] text-white text-xs rounded hover:bg-[#B8911F]">
+                <button onClick={() => setShowNewCaseModal(true)} className="adm-link-button adm-link-button-primary px-4 py-2 text-xs">
                   Új ügy
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
-              <div className="border border-[var(--adm-border)] bg-[var(--adm-ivory-100)] p-3"><p className="text-lg font-serif">{dossierStats.activeCases}</p><p className="text-[10px] text-[var(--adm-text-muted)]">Aktív ügy</p></div>
-              <div className="border border-[var(--adm-border)] bg-[var(--adm-ivory-100)] p-3"><p className="text-lg font-serif">{dossierStats.totalCases}</p><p className="text-[10px] text-[var(--adm-text-muted)]">Összes ügy</p></div>
-              <div className="border border-[var(--adm-border)] bg-[var(--adm-ivory-100)] p-3"><p className="text-lg font-serif">{dossierStats.documents}</p><p className="text-[10px] text-[var(--adm-text-muted)]">Friss dokumentum</p></div>
-              <div className="border border-[var(--adm-border)] bg-[var(--adm-ivory-100)] p-3"><p className="text-lg font-serif">{dossierStats.communications}</p><p className="text-[10px] text-[var(--adm-text-muted)]">Friss kommunikáció</p></div>
+            <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.activeCases}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Aktív ügy</p></div>
+              <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.totalCases}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Összes ügy</p></div>
+              <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.documents}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Friss dokumentum</p></div>
+              <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.communications}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Friss kommunikáció</p></div>
             </div>
           </header>
 
-          <section className="border border-[var(--adm-border)] bg-white p-6">
+          <section className="adm-board-panel p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold text-[var(--adm-text)]">Kapcsolt ügyek</h2>
               <span className="text-[10px] text-[var(--adm-text-muted)]">{cases.length} ügy</span>
@@ -316,14 +306,14 @@ export default function ClientDetailPage() {
             )}
 
             {cases.length === 0 ? (
-              <div className="p-4 border border-dashed border-[var(--adm-border)] text-xs text-[var(--adm-text-soft)]">
+              <div className="rounded-xl border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-xs text-[var(--adm-text-soft)]">
                 <p>Ehhez az ügyfélhez még nincs kapcsolt ügy.</p>
                 <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Új ügy indításával az ügylista és a dosszié automatikusan összekapcsolódik.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
-                  <thead className="bg-[var(--adm-ivory-100)] text-[var(--adm-text-muted)] uppercase tracking-[0.12em]">
+                  <thead className="text-[var(--adm-text-muted)] uppercase tracking-[0.12em]">
                     <tr>
                       <th className="p-3 text-left">Ügyszám</th>
                       <th className="p-3 text-left">Cím</th>
@@ -333,9 +323,9 @@ export default function ClientDetailPage() {
                       <th className="p-3 text-left">Művelet</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#EEE7D9]">
+                  <tbody>
                     {cases.map((item) => (
-                      <tr key={item.id} className="hover:bg-[var(--adm-surface)]">
+                      <tr key={item.id} className="adm-board-list-row">
                         <td className="p-3 font-mono text-[var(--adm-text-muted)]">{item.caseNumber}</td>
                         <td className="p-3 text-[var(--adm-text)]">
                           <p className="font-semibold">{item.title}</p>
@@ -355,18 +345,18 @@ export default function ClientDetailPage() {
             )}
           </section>
 
-          <section className="grid lg:grid-cols-2 gap-4">
-            <div className="border border-[var(--adm-border)] bg-white p-6">
+          <section className="grid gap-4 lg:grid-cols-2">
+            <div className="adm-board-panel p-5">
               <h2 className="text-sm font-semibold text-[var(--adm-text)] mb-4">Kapcsolt dokumentumok</h2>
               {documents.length === 0 ? (
-                <div className="p-4 border border-dashed border-[var(--adm-border)] text-xs text-[var(--adm-text-soft)]">
+                <div className="rounded-xl border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-xs text-[var(--adm-text-soft)]">
                   <p>Nincs elérhető kapcsolt dokumentum.</p>
                   <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Dokumentum feltöltés vagy generálás után itt jelennek meg a kapcsolt fájlok.</p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {documents.map((doc) => (
-                    <Link key={doc.id} href={`/cases/${doc.caseId}/documents`} className="block p-3 border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">
+                    <Link key={doc.id} href={`/cases/${doc.caseId}/documents`} className="adm-board-list-row block p-3">
                       <p className="text-xs font-semibold text-[var(--adm-text)] truncate">{doc.fileName}</p>
                       <p className="text-[10px] text-[var(--adm-text-muted)] mt-1">{doc.caseNumber} · {doc.documentType || "Dokumentum"} · {formatDate(doc.createdAt)}</p>
                     </Link>
@@ -375,10 +365,10 @@ export default function ClientDetailPage() {
               )}
             </div>
 
-            <div className="border border-[var(--adm-border)] bg-white p-6">
+            <div className="adm-board-panel p-5">
               <h2 className="text-sm font-semibold text-[var(--adm-text)] mb-4">Kapcsolt kommunikációk</h2>
               {communications.length === 0 ? (
-                <div className="p-4 border border-dashed border-[var(--adm-border)] text-xs text-[var(--adm-text-soft)]">
+                <div className="rounded-xl border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-xs text-[var(--adm-text-soft)]">
                   <p>Nincs kapcsolt kommunikációs esemény.</p>
                   <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Az ügy- és ügyfélszintű kommunikációk itt egyesítve jelennek meg.</p>
                 </div>
@@ -388,7 +378,7 @@ export default function ClientDetailPage() {
                     <Link
                       key={comm.id}
                       href={comm.caseId ? `/cases/${comm.caseId}/communications` : `/clients/${clientId}`}
-                      className="block p-3 border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]"
+                      className="adm-board-list-row block p-3"
                     >
                       <p className="text-xs font-semibold text-[var(--adm-text)] truncate">{comm.subject || "Kommunikációs bejegyzés"}</p>
                       <p className="text-[10px] text-[var(--adm-text-muted)] mt-1">{comm.type} · {comm.senderName || comm.senderEmail || "Ismeretlen feladó"} · {formatDate(comm.createdAt)}</p>
@@ -398,14 +388,13 @@ export default function ClientDetailPage() {
               )}
             </div>
           </section>
-        </div>
       </main>
 
-      <aside className="w-80 bg-white overflow-y-auto">
-        <div className="p-4 space-y-4">
+      <aside className="min-w-0 space-y-4">
+        <div className="adm-board-panel p-4">
           <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)]">Ügyfélazonosság és kapcsolódó adatok</h2>
 
-          <div className="border border-[var(--adm-border)] p-3 space-y-2 text-xs">
+          <div className="mt-3 space-y-2 rounded-xl border border-[var(--adm-border)] bg-white/70 p-3 text-xs">
             <p><span className="text-[var(--adm-text-muted)]">Email:</span> {client.email || "—"}</p>
             <p><span className="text-[var(--adm-text-muted)]">Telefon:</span> {client.phone || "—"}</p>
             <p><span className="text-[var(--adm-text-muted)]">Cím:</span> {client.address || "—"}</p>
@@ -415,20 +404,20 @@ export default function ClientDetailPage() {
             <p><span className="text-[var(--adm-text-muted)]">Kapcsolattartó:</span> {client.contactPerson || "—"}</p>
           </div>
 
-          <div className="pt-2 border-t border-[var(--adm-border)]">
+          <div className="mt-4 border-t border-[var(--adm-border)] pt-3">
             <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Gyors műveletek</h3>
             <div className="space-y-1">
-              <button onClick={() => setShowNewCaseModal(true)} className="w-full text-left px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Új ügy indítása</button>
-              <button onClick={openEditClient} className="w-full text-left px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Ügyféladat szerkesztése</button>
-              <Link href={`/clients/${clientId}/workgroups`} className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Munkacsoportok</Link>
+              <button onClick={() => setShowNewCaseModal(true)} className="adm-link-button w-full px-3 py-2 text-left text-xs">Új ügy indítása</button>
+              <button onClick={openEditClient} className="adm-link-button w-full px-3 py-2 text-left text-xs">Ügyféladat szerkesztése</button>
+              <Link href={`/clients/${clientId}/workgroups`} className="adm-link-button block px-3 py-2 text-xs">Munkacsoportok</Link>
             </div>
           </div>
 
-          <section id="house-style" className="pt-2 border-t border-[var(--adm-border)] scroll-mt-24">
+          <section id="house-style" className="mt-4 scroll-mt-24 border-t border-[var(--adm-border)] pt-3">
             <div className="rounded border border-[#DCCCA6] bg-[var(--adm-sand-100)] p-3">
               <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)] mb-1">House style</h3>
               <p className="text-[10px] text-[var(--adm-text-muted)]">
-                Ügyfél-specifikus dokumentumstílus és külső AI prompt-copy instrukciós kontextus.
+                Ügyfél-specifikus dokumentumstílus és külső prompt-copy instrukciós kontextus.
               </p>
             </div>
             <div className="mt-3">
@@ -437,6 +426,7 @@ export default function ClientDetailPage() {
           </section>
         </div>
       </aside>
+      </div>
 
       {showNewCaseModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

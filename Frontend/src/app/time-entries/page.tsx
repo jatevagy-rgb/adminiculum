@@ -1032,7 +1032,7 @@ function TimeEntriesPageContent() {
 
   return (
     <div className="flex-1 p-2 md:p-4 time-entries-surface bg-[var(--adm-surface)]">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-6 rounded-xl border border-[var(--adm-border)] bg-white p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-6 rounded-xl adm-board-panel-tight p-4">
             <div>
               <h1 className="text-2xl font-serif text-[var(--adm-text)]">Munkaórák</h1>
               <p className="text-sm text-[var(--adm-text-muted)] mt-1">Munkaóra-rögzítés és elszámolási munkapad</p>
@@ -1081,16 +1081,16 @@ function TimeEntriesPageContent() {
                 Az időrögzítés az ügyhöz kapcsolt munkacsomaghoz történik, ha elérhető.
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Link href={`/cases/${deepLinkedCaseId}/documents`} className="px-2 py-1 text-[10px] border border-[var(--adm-border)] bg-white text-[var(--adm-text)] rounded hover:bg-[var(--adm-ivory-100)]">
+                <Link href={`/cases/${deepLinkedCaseId}/documents`} className="px-2 py-1 text-[10px] adm-board-panel-tight text-[var(--adm-text)] rounded hover:bg-[var(--adm-ivory-100)]">
                   Dokumentumtár
                 </Link>
-                <Link href={`/cases/${deepLinkedCaseId}/communications`} className="px-2 py-1 text-[10px] border border-[var(--adm-border)] bg-white text-[var(--adm-text)] rounded hover:bg-[var(--adm-ivory-100)]">
+                <Link href={`/cases/${deepLinkedCaseId}/communications`} className="px-2 py-1 text-[10px] adm-board-panel-tight text-[var(--adm-text)] rounded hover:bg-[var(--adm-ivory-100)]">
                   Kommunikáció
                 </Link>
                 <Link href={`/documents/compare?caseId=${deepLinkedCaseId}`} className="px-2 py-1 text-[10px] border border-[var(--adm-ochre-500)] bg-[var(--adm-ochre-500)] text-white rounded hover:bg-[#9C7723]">
                   Szerződés-workspace
                 </Link>
-                <Link href={`/cases/${deepLinkedCaseId}/handoff`} className="px-2 py-1 text-[10px] border border-[var(--adm-border)] bg-white text-[var(--adm-text)] rounded hover:bg-[var(--adm-ivory-100)]">
+                <Link href={`/cases/${deepLinkedCaseId}/handoff`} className="px-2 py-1 text-[10px] adm-board-panel-tight text-[var(--adm-text)] rounded hover:bg-[var(--adm-ivory-100)]">
                   Leadási csomag
                 </Link>
               </div>
@@ -1586,7 +1586,7 @@ function TimeEntriesPageContent() {
             </div>
           ) : (
             <div className="grid lg:grid-cols-[300px_minmax(0,1fr)] gap-4">
-              <div className="border border-[var(--adm-border)] bg-white rounded p-3 h-fit">
+              <div className="adm-board-panel-tight rounded p-3 h-fit">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Ügyfelek</p>
                 <p className="text-[10px] text-[var(--adm-text-soft)] mb-3">Összes munkaóra ügyfelenként</p>
                 <div className="space-y-2">

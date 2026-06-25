@@ -420,8 +420,8 @@ function ReviewsPageContent() {
 
   return (
     <div className={`flex-1 flex min-h-0 reviews-surface ${p.bg}`}>
-      <main className={`flex-1 overflow-y-auto border-r reviews-main ${p.border}`}>
-        <div className="max-w-5xl mx-auto p-8">
+      <main className={`flex-1 overflow-y-auto adm-board-page reviews-main ${p.border}`}>
+        <div className="adm-board-container max-w-[1320px]">
           <h1 className={`text-2xl font-serif ${p.textDark} mb-1`}>Review sor</h1>
           <p className={`text-xs ${p.textMuted} mb-2`}>Jóváhagyásra vagy visszaküldésre váró munkapéldányok és feladatok.</p>
           <p className="text-[10px] text-[var(--adm-text-muted)] mb-4">Dokumentumtár → Szerződés-workspace → Leadási csomag → Review sor. Batch jóváhagyás későbbi patchben.</p>
@@ -494,7 +494,7 @@ function ReviewsPageContent() {
               <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Próbáld újra, vagy nyisd meg az ügyeket és dokumentumokat közvetlenül.</p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 <button type="button" onClick={loadReviewQueue} className="rounded border border-[#8B3A3A] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#8B3A3A] hover:bg-[#FFF0ED]">Újrapróbálás</button>
-                <Link href="/cases" className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ügyek megnyitása</Link>
+                <Link href="/cases" className="rounded adm-board-panel-tight px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ügyek megnyitása</Link>
               </div>
             </div>
           ) : filtered.length === 0 ? (
@@ -857,7 +857,7 @@ function ReviewsPageContent() {
                       Kollaborátorok előre sorolva a kiosztáshoz.
                     </p>
                     <select
-                      className="w-full px-2 py-2 border border-[var(--adm-border)] bg-white text-xs"
+                      className="w-full px-2 py-2 adm-board-panel-tight text-xs"
                       value={reviewSelectedAssignee}
                       onChange={(e) => {
                         const newAssigneeId = e.target.value;
@@ -898,7 +898,7 @@ function ReviewsPageContent() {
                 <Link href={selected.openHref} className="block px-3 py-2 text-xs border border-[#1F4A33] bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] text-center font-semibold hover:bg-[#173824]">
                   Review megnyitása
                 </Link>
-                <Link href={`/cases/${selected.caseId}/documents`} className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)] text-center">
+                <Link href={`/cases/${selected.caseId}/documents`} className="adm-link-button block px-3 py-2 text-xs text-center">
                   Dokumentumtár
                 </Link>
                 <Link href={`/cases/${selected.caseId}/handoff`} className="block px-3 py-2 text-xs border border-[var(--adm-ochre-500)] bg-[var(--adm-sand-100)] text-[#7B5E2E] hover:bg-[#f5ecd8] text-center">
@@ -910,7 +910,7 @@ function ReviewsPageContent() {
                       ? `/tasks?taskId=${selected.taskId}`
                       : selected.fallbackHref
                   }
-                  className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)] text-center"
+                  className="adm-link-button block px-3 py-2 text-xs text-center"
                 >
                   Kapcsolt workflow nézet
                 </Link>
@@ -920,11 +920,11 @@ function ReviewsPageContent() {
                       ? `/documents/compare?caseId=${encodeURIComponent(selected.caseId)}&documentId=${encodeURIComponent(selected.documentId)}`
                       : `/documents/compare?caseId=${encodeURIComponent(selected.caseId)}`
                   }
-                  className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)] text-center"
+                  className="adm-link-button block px-3 py-2 text-xs text-center"
                 >
                   Szerződés-workspace
                 </Link>
-                <Link href={`/cases/${selected.caseId}`} className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)] text-center">
+                <Link href={`/cases/${selected.caseId}`} className="adm-link-button block px-3 py-2 text-xs text-center">
                   Ügy megnyitása
                 </Link>
               </div>
@@ -947,10 +947,10 @@ function ReviewsPageContent() {
           <div className="pt-2 border-t border-[var(--adm-border)]">
             <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Kapcsolt felületek</h3>
             <div className="space-y-1">
-              <Link href="/tasks" className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Feladatok</Link>
-              <Link href="/notifications" className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Értesítések</Link>
-              <Link href="/documents/compare" className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Verzió-összevetés</Link>
-              <Link href="/cases" className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Ügylista</Link>
+              <Link href="/tasks" className="adm-link-button block px-3 py-2 text-xs">Feladatok</Link>
+              <Link href="/notifications" className="adm-link-button block px-3 py-2 text-xs">Értesítések</Link>
+              <Link href="/documents/compare" className="adm-link-button block px-3 py-2 text-xs">Verzió-összevetés</Link>
+              <Link href="/cases" className="adm-link-button block px-3 py-2 text-xs">Ügylista</Link>
             </div>
           </div>
         </div>

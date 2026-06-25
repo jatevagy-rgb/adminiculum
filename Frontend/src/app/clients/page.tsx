@@ -210,19 +210,26 @@ function ClientsPageContent() {
     const hasProfile = fillStatus !== "none";
     const hasHeader = Boolean(profile?.headerAssetPath);
     return (
-      <AdminPanel key={client.id} className="overflow-hidden p-4 shadow-[var(--adm-shadow-sm)]">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+      <AdminPanel key={client.id} className="adm-board-list-row overflow-hidden p-4">
+        <div className="flex flex-col gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-serif text-2xl font-medium leading-tight text-[var(--adm-text)]">{profile?.officialName || display.name}</h2>
               {primary ? <AdminBadge tone="gold">Alap ügyfél</AdminBadge> : <AdminBadge tone="neutral">Ügyfél</AdminBadge>}
             </div>
             <p className="mt-1 text-sm text-[#3D4842]">Rövid név: <b>{profile?.shortName || (coreKey(client) === "blackbelt" ? "BlackBelt" : coreKey(client) === "saubermacher" ? "Saubermacher" : coreKey(client) === "balintfy" ? "Bálintfy" : display.name)}</b></p>
-            <div className="mt-3 grid gap-2 text-xs text-[#3D4842] md:grid-cols-2 xl:grid-cols-4">
-              <p>Székhely: <b>{profile?.registeredSeat || display.address || "Nincs megadva"}</b></p>
-              <p>Adószám: <b>{profile?.taxNumber || display.taxNumber || "Nincs megadva"}</b></p>
-              <p>Cégjegyzékszám / nyilvántartási szám: <b>{profile?.registrationNumber || display.companyRegistrationNumber || "Nincs megadva"}</b></p>
-              <p>Kapcsolattartó: <b>{profile?.contactPerson || display.contactPerson || display.authorizedRepresentative || "Nincs megadva"}</b></p>
+            <div className="mt-3 grid gap-2 text-xs text-[#3D4842] sm:grid-cols-2">
+              {[
+                ["Székhely", profile?.registeredSeat || display.address || "Nincs megadva"],
+                ["Adószám", profile?.taxNumber || display.taxNumber || "Nincs megadva"],
+                ["Nyilvántartás", profile?.registrationNumber || display.companyRegistrationNumber || "Nincs megadva"],
+                ["Kapcsolattartó", profile?.contactPerson || display.contactPerson || display.authorizedRepresentative || "Nincs megadva"],
+              ].map(([label, value]) => (
+                <p key={label} className="rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-3 py-2">
+                  <span className="block text-[9px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">{label}</span>
+                  <b className="mt-1 block font-semibold text-[var(--adm-text)]">{value}</b>
+                </p>
+              ))}
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <AdminStatusPill tone={fillStatus === "filled" ? "green" : fillStatus === "partial" ? "gold" : "neutral"}>
@@ -234,7 +241,7 @@ function ClientsPageContent() {
               A house style profil dokumentumformátumot, fejléc/arculati elvárásokat és ügyfél-specifikus instrukciókat ad a prompt-copy workflow-hoz.
             </p>
           </div>
-          <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap xl:max-w-[360px] xl:justify-end">
+          <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-[rgba(22,32,26,0.10)] pt-3 sm:grid-cols-4">
             <Link href={`/clients/${client.id}`} className="inline-flex items-center justify-center rounded-[5px] border border-[#173824] bg-[var(--adm-green-800)] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#173824]">Ügyfél dosszié</Link>
             <Link href={`/clients/${client.id}#house-style`} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">House style</Link>
             <Link href={`/cases?newCase=1&clientId=${encodeURIComponent(client.id)}`} className="inline-flex items-center justify-center rounded-[5px] border border-[#8E6A1B] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">+ Új ügy</Link>
@@ -247,25 +254,25 @@ function ClientsPageContent() {
 
   return (
     <div className="flex min-h-0 flex-1 adm-shell-bg text-[var(--adm-text)]">
-      <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1420px] space-y-5 p-5 lg:p-7">
-          <div className="flex flex-col gap-4 rounded-[var(--adm-radius-lg)] border border-[rgba(22,32,26,0.10)] bg-white p-5 shadow-[var(--adm-shadow-sm)] md:flex-row md:items-center md:justify-between">
+      <main className="flex-1 overflow-y-auto adm-board-page">
+        <div className="adm-board-container space-y-5">
+          <div className="adm-board-hero flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Ügyfelek</p>
-              <h1 className="mt-1 font-serif text-4xl font-medium text-[var(--adm-text)]">Ügyfelek</h1>
-              <p className="mt-1 text-sm text-[#3D4842]">Ügyfélkapcsolatok, house style profilok és ügyindítás.</p>
+              <h1 className="mt-1 font-serif text-[34px] font-medium leading-tight text-[var(--adm-text)]">Ügyfelek és house style dossziék</h1>
+              <p className="mt-1 max-w-3xl text-[13px] leading-5 text-[#3D4842]">Ügyfélkapcsolatok, valós house style profilok és ügyindítás belső ügyvédi munkához.</p>
             </div>
             <AdminButton variant="primary" onClick={handleCreate}>+ Új ügyfél</AdminButton>
           </div>
 
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,0.9fr)]">
-            <AdminPanel className="p-4">
+            <AdminPanel className="adm-board-panel-tight p-4">
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Lista fókusz</p>
               <p className="mt-2 text-[11px] leading-5 text-[#3D4842]">
                 A fő ügyindítási lista alapértelmezetten a kiemelt pilot ügyfelekre szűkít: BlackBelt, Saubermacher és Bálintfy. Más ügyfelek nem törlődnek.
               </p>
             </AdminPanel>
-            <AdminPanel className="p-4">
+            <AdminPanel className="adm-board-panel-tight p-4">
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">House style termékérték</p>
               <ul className="mt-2 space-y-1 text-[11px] text-[#3D4842]">
                 <li>Dokumentumstílus, címsor- és számozási szabályok ügyfelenként.</li>
@@ -273,9 +280,9 @@ function ClientsPageContent() {
                 <li>Ügyfél-specifikus nyelvi és fordítási irányok követése.</li>
               </ul>
             </AdminPanel>
-            <AdminPanel className="p-4">
+            <AdminPanel className="adm-board-rail p-4">
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Külső prompt workflow</p>
-              <p className="mt-2 text-[11px] leading-5 text-[#3D4842]">
+              <p className="mt-2 text-[11px] leading-5 text-[var(--adm-ivory-100)]/75">
                 Az Adminiculum nem futtat automatikusan külső eszközt. A house style panel instrukciós kontextust ad, amit a felhasználó szükség esetén promptként másolhat át.
               </p>
             </AdminPanel>
@@ -303,7 +310,9 @@ function ClientsPageContent() {
             <>
               <section className="space-y-3">
                 <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Kiemelt ügyfelek</h2>
-                {visibleGroups.primary.length > 0 ? visibleGroups.primary.map((client) => renderClientCard(client, true)) : <AdminPanel className="p-4 text-sm text-[var(--adm-text-muted)]">Még nincs ügyfél.</AdminPanel>}
+                <div className="grid gap-3 xl:grid-cols-2">
+                  {visibleGroups.primary.length > 0 ? visibleGroups.primary.map((client) => renderClientCard(client, true)) : <AdminPanel className="p-4 text-sm text-[var(--adm-text-muted)]">Még nincs ügyfél.</AdminPanel>}
+                </div>
               </section>
 
               <section className="space-y-3">
@@ -311,7 +320,7 @@ function ClientsPageContent() {
                   {showOtherClients ? "▾" : "▸"} Egyéb / teszt ügyfelek ({visibleGroups.other.length})
                 </button>
                 <p className="text-[11px] text-[var(--adm-text-muted)]">Ezek az ügyfelek nincsenek törölve; alapértelmezés szerint nem jelennek meg az ügyindítási listában.</p>
-                {showOtherClients ? <div className="space-y-3">{visibleGroups.other.map((client) => renderClientCard(client, false))}</div> : null}
+                {showOtherClients ? <div className="grid gap-3 xl:grid-cols-2">{visibleGroups.other.map((client) => renderClientCard(client, false))}</div> : null}
               </section>
             </>
           )}
@@ -320,7 +329,7 @@ function ClientsPageContent() {
 
       {showModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#16201A]/70 p-4">
-          <div className="max-h-[calc(100vh-48px)] w-full max-w-md overflow-hidden rounded-lg bg-white shadow-xl">
+          <div className="max-h-[calc(100vh-64px)] w-full max-w-xl overflow-hidden rounded-[22px] bg-white shadow-xl">
             <div className="border-b border-[var(--adm-border)] bg-[#082817] p-5 text-[#F4EFDB]">
               <h2 className="font-serif text-2xl font-medium">{editingClient ? "Ügyfél szerkesztése" : "Új ügyfél"}</h2>
             </div>

@@ -873,22 +873,22 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       <CaseWorkspaceNav caseId={canonicalCaseId} caseNumber={displayCaseId} title={displayMatterName} clientName={displayClient} activeTab="documents" activeDocumentId={activeDocument?.id} helperText="Dokumentumtár, szerkesztő és leadási csomag egy ügy-munkaterületen." />
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <main className="flex-1 overflow-y-auto adm-shell-bg p-4 lg:p-5">
-          <section className="mx-auto flex max-w-[1500px] flex-col gap-4">
+        <main className="flex-1 overflow-y-auto adm-board-page p-4 lg:p-5">
+          <section className="mx-auto flex max-w-[1540px] flex-col gap-4">
             {actionResult && (
               <div className={`rounded-[10px] border p-3 text-sm font-medium ${actionResult.type === "success" ? "border-[#D9E3CC] bg-[var(--adm-sage-100)] text-[var(--adm-green-800)]" : "border-[#F2DAD6] bg-[var(--adm-terracotta-100)] text-[var(--adm-terracotta-700)]"}`}>
                 {actionResult.message}
               </div>
             )}
 
-            <header className="overflow-hidden rounded-[18px] border border-[rgba(22,32,26,0.14)] bg-[var(--adm-surface)] shadow-[0_18px_45px_rgba(31,74,51,0.10)]">
-              <div className="flex flex-col gap-5 border-b border-[rgba(22,32,26,0.12)] bg-white px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
+            <header className="adm-board-hero overflow-hidden">
+              <div className="flex flex-col gap-5 border-b border-[rgba(22,32,26,0.12)] bg-white/75 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--adm-green-800)]">
                     Ügy munkaterület <span className="mx-2 text-[var(--adm-ochre-500)]">/</span> Dokumentumtár
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-3">
-                    <h1 className="font-serif text-4xl font-semibold leading-tight text-[var(--adm-text)]">Dokumentumtár</h1>
+                    <h1 className="font-serif text-[34px] font-semibold leading-tight text-[var(--adm-text)]">Dokumentumtár</h1>
                     <span className="rounded-full border border-[#D8C58E] bg-[var(--adm-sand-100)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[#6D5418]">
                       {totalLedgerDocuments} irat · {activeDocument ? "kiválasztott munkadokumentum" : "nincs kiválasztva"}
                     </span>
@@ -903,7 +903,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   </AdminButton>
                 </div>
               </div>
-              <div className="grid gap-3 bg-[var(--adm-sand-100)] px-5 py-3 text-[12px] text-[#3D4842] md:grid-cols-3">
+              <div className="adm-board-strip grid gap-3 rounded-none border-x-0 border-b-0 bg-[var(--adm-sand-100)] px-5 py-3 text-[12px] text-[#3D4842] md:grid-cols-3">
                 <p><span className="font-bold text-[var(--adm-green-800)]">Kiválasztott dokumentum:</span> {selectedDocumentActionLabel}</p>
                 <p><span className="font-bold text-[var(--adm-green-800)]">Ügyfélprofil:</span> {clientHouseStyle ? (houseStyleHasContent ? "house style elérhető" : "profil részleges") : "nincs profil"}</p>
                 <p><span className="font-bold text-[var(--adm-green-800)]">Leadási csomag:</span> jobb oldali panelen kezelhető</p>
@@ -917,9 +917,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
             {isInitialLoading ? (
               <AdminPanel className="p-10 text-center text-sm text-[var(--adm-text-muted)]">Dokumentumok betöltése...</AdminPanel>
             ) : (
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)_380px]">
-                <aside className="overflow-hidden rounded-[18px] border border-[rgba(22,32,26,0.16)] bg-[var(--adm-sand-100)] shadow-[0_16px_38px_rgba(31,74,51,0.08)]">
-                  <div className="border-b border-[rgba(22,32,26,0.14)] bg-[var(--adm-green-800)] p-5 text-white">
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)_410px]">
+                <aside className="adm-board-rail overflow-hidden">
+                  <div className="border-b border-white/10 bg-transparent p-5 text-white">
                     <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#D8C58E]">Dokumentum ledger</p>
                     <h2 className="mt-1 font-serif text-3xl font-semibold">Iratok</h2>
                     <p className="mt-2 text-[12px] leading-relaxed text-[#E9E2C7]">
@@ -1010,12 +1010,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   </div>
                 </aside>
 
-                <section className="min-w-0 overflow-hidden rounded-[22px] border border-[rgba(22,32,26,0.16)] bg-white shadow-[0_20px_55px_rgba(31,74,51,0.10)]">
-                  <div className="flex gap-4 border-b border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-5">
+                <section className="adm-board-panel min-w-0 overflow-hidden">
+                  <div className="flex gap-4 border-b border-[rgba(22,32,26,0.12)] bg-white/70 p-5">
                     <div className="mt-1 h-16 w-1.5 rounded-full bg-[var(--adm-ochre-500)]" />
                     <div className="min-w-0 flex-1">
                       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--adm-green-800)]">Munkadokumentum</p>
-                      <h2 className="mt-2 truncate font-serif text-4xl font-semibold leading-tight text-[var(--adm-text)]">{activeTitle || "Nincs még munkadokumentum"}</h2>
+                      <h2 className="mt-2 truncate font-serif text-[34px] font-semibold leading-tight text-[var(--adm-text)]">{activeTitle || "Nincs még munkadokumentum"}</h2>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <AdminBadge tone={activeDocument ? "gold" : "neutral"}>{selectedDocumentTypeLabel}</AdminBadge>
                         <AdminBadge tone={activeDocument ? "green" : "neutral"}>{selectedStatusLabel}</AdminBadge>
@@ -1028,7 +1028,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     </div>
                   </div>
 
-                  <div className="space-y-5 p-5">
+                  <div className="space-y-4 p-5">
                     {!activeDocument ? (
                       <div className="rounded-[18px] border border-dashed border-[rgba(31,74,51,0.24)] bg-[var(--adm-surface)] p-8 text-center">
                         <h3 className="font-serif text-3xl font-semibold text-[var(--adm-text)]">Nincs még kiválasztott dokumentum</h3>

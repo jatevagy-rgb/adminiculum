@@ -401,8 +401,8 @@ function TasksPageContent() {
 
   return (
     <div className="flex-1 flex min-h-0">
-      <main className="flex-1 overflow-y-auto border-r border-[var(--adm-border)]">
-        <div className="max-w-5xl mx-auto p-8">
+      <main className="flex-1 overflow-y-auto adm-board-page">
+        <div className="adm-board-container max-w-[1320px]">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="text-2xl font-serif text-[var(--adm-text)]">Feladatok és határidők</h1>
@@ -420,7 +420,7 @@ function TasksPageContent() {
             </button>
           </div>
 
-          <section className="mb-4 grid gap-3 border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+          <section className="adm-board-hero mb-4 grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_300px]">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Home Office feladatindító</p>
               <h2 className="mt-1 font-serif text-xl font-medium text-[var(--adm-text)]">Itt válaszd ki a következő operatív lépést</h2>
@@ -428,17 +428,17 @@ function TasksPageContent() {
                 A feladatlista valós ügyhöz kötött teendőket mutat, munkaprioritás szerint rendezve. A határidőket és az ügyvédi kontextust továbbra is külön kell mérlegelni.
               </p>
               <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[var(--adm-text-muted)]">
-                <span className="rounded-full border border-[var(--adm-border)] bg-white px-3 py-1">Nyitott feladatok: {taskEntrypointStats.openTasks}</span>
-                <span className="rounded-full border border-[var(--adm-border)] bg-white px-3 py-1">Nincs felelős: {taskEntrypointStats.unassignedTasks}</span>
+                <span className="rounded-full adm-board-panel-tight px-3 py-1">Nyitott feladatok: {taskEntrypointStats.openTasks}</span>
+                <span className="rounded-full adm-board-panel-tight px-3 py-1">Nincs felelős: {taskEntrypointStats.unassignedTasks}</span>
                 <span className="rounded-full border border-[#E6C987] bg-[var(--adm-sand-100)] px-3 py-1">Ma esedékes: {taskEntrypointStats.dueToday}</span>
               </div>
             </div>
-            <div className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+            <div className="rounded-[10px] adm-board-panel-tight p-3">
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Gyors folytatás</p>
               <p className="mt-1 text-[11px] leading-5 text-[var(--adm-text-muted)]">Válassz feladatot a jobb oldali kontextushoz, vagy nyisd meg az ügylistát, ha ügyből indulnál.</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Link href="/cases" className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ügyek megnyitása</Link>
-                <Link href="/documents/compare" className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Dokumentum-review</Link>
+                <Link href="/cases" className="rounded adm-board-panel-tight px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ügyek megnyitása</Link>
+                <Link href="/documents/compare" className="rounded adm-board-panel-tight px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Dokumentum-review</Link>
               </div>
             </div>
           </section>
@@ -452,7 +452,7 @@ function TasksPageContent() {
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 <button onClick={loadTasksWorkspace} className="rounded border border-[#8B3A3A] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#8B3A3A] hover:bg-[#FFF0ED]">Újrapróbálás</button>
                 <button onClick={() => setShowCreateModal(true)} className="rounded bg-[var(--adm-green-950)] px-3 py-1.5 text-[11px] font-semibold text-white">Új feladat</button>
-                <Link href="/cases" className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ügyek megnyitása</Link>
+                <Link href="/cases" className="rounded adm-board-panel-tight px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ügyek megnyitása</Link>
               </div>
             </div>
           ) : filteredTasks.length === 0 ? (
@@ -461,11 +461,11 @@ function TasksPageContent() {
               <p>{tasks.length === 0 ? "Új feladat létrehozásához válassz ügyet, majd add meg a feladat címét és határidejét." : "Módosítsd a szűrőket, vagy nyisd meg az ügylistát másik munkafolyamat választásához."}</p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 <button onClick={() => setShowCreateModal(true)} className="rounded bg-[var(--adm-green-950)] px-3 py-1.5 text-[11px] font-semibold text-white">Új feladat</button>
-                <Link href="/cases" className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ügyek megnyitása</Link>
+                <Link href="/cases" className="rounded adm-board-panel-tight px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ügyek megnyitása</Link>
               </div>
             </div>
           ) : (
-            <div className="border border-[var(--adm-border)] bg-white overflow-hidden">
+            <div className="adm-board-panel-tight overflow-hidden">
               <table className="w-full text-left">
                 <thead className="bg-[var(--adm-ivory-100)] border-b border-[var(--adm-border)]">
                   <tr className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)]">
@@ -650,33 +650,33 @@ function TasksPageContent() {
           <div className="border-t border-[var(--adm-border)] pt-4">
             <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Kapcsolt munkafolyamatok</h3>
             <div className="space-y-1">
-              <Link href="/reviews" className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Review sor</Link>
-              <Link href="/notifications" className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Értesítések</Link>
+              <Link href="/reviews" className="adm-link-button block px-3 py-2 text-xs">Review sor</Link>
+              <Link href="/notifications" className="adm-link-button block px-3 py-2 text-xs">Értesítések</Link>
               <Link
                 href={selectedTask ? `/documents/compare?caseId=${encodeURIComponent(selectedTask.case.id)}` : "/documents/compare"}
-                className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]"
+                className="adm-link-button block px-3 py-2 text-xs"
               >
                 Szerződés-workspace
               </Link>
               <Link
                 href={selectedTask ? `/cases/${selectedTask.case.id}/documents` : "/cases"}
-                className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]"
+                className="adm-link-button block px-3 py-2 text-xs"
               >
                 Dokumentumtár
               </Link>
               <Link
                 href={selectedTask ? `/cases/${selectedTask.case.id}/communications` : "/cases"}
-                className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]"
+                className="adm-link-button block px-3 py-2 text-xs"
               >
                 Kommunikáció
               </Link>
               <Link
                 href={selectedTask ? `/cases/${selectedTask.case.id}/handoff` : "/cases"}
-                className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]"
+                className="adm-link-button block px-3 py-2 text-xs"
               >
                 Leadási csomag
               </Link>
-              <Link href="/time-entries" className="block px-3 py-2 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Munkaórák</Link>
+              <Link href="/time-entries" className="adm-link-button block px-3 py-2 text-xs">Munkaórák</Link>
             </div>
           </div>
         </div>

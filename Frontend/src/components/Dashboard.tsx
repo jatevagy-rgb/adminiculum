@@ -450,25 +450,25 @@ export function Dashboard() {
   const greetingName = currentUser?.name || "dr. Hubay Máté";
 
   return (
-    <div className="adm-dash-stage min-h-full px-3 pb-7 pt-3 sm:px-5 xl:px-7">
-      <div className="mx-auto w-full max-w-[1480px] space-y-3.5">
+    <div className="adm-dash-stage min-h-full px-3 pb-5 pt-3 sm:px-5 xl:px-6">
+      <div className="mx-auto w-full max-w-[1500px] space-y-3">
         {/* 1 + 2 — Command-center hero with dark "Mai működési kép" status column */}
         <section className="adm-command-hero">
-          <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="flex min-h-[230px] flex-col justify-between p-5 lg:p-6">
+          <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_330px]">
+            <div className="flex min-h-[188px] flex-col justify-between p-4.5 lg:p-5">
               <div>
                 <p className="adm-kicker">Adminiculum · Műszerfal</p>
-                <h1 className="adm-hero-title mt-2.5 max-w-4xl text-[clamp(34px,4.5vw,54px)] leading-[0.98]">
+                <h1 className="adm-hero-title mt-2 max-w-4xl text-[clamp(30px,4vw,46px)] leading-[0.98]">
                   Jogi munkapad a mai ügyekhez.
                 </h1>
-                <p className="mt-3 max-w-2xl text-[13.5px] leading-6 text-[var(--adm-text-muted)]">
+                <p className="mt-2.5 max-w-3xl text-[13px] leading-5 text-[var(--adm-text-muted)]">
                   Jó reggelt, {greetingName}. Ez a command center meglévő ügyadatokból, feladatokból és
                   dokumentumjelzésekből állítja össze a munkanézetet. Csak a rendszerben ténylegesen elérhető
                   jelzések jelennek meg.
                 </p>
               </div>
 
-              <div className="mt-4">
+              <div className="mt-3">
                 {error ? (
                   <div className="mb-4 rounded-[var(--adm-radius-sm)] border border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] px-3 py-2 text-xs text-[var(--adm-terracotta-700)]">
                     {error}
@@ -479,45 +479,45 @@ export function Dashboard() {
                   </div>
                 ) : null}
                 <div className="flex flex-wrap gap-2 text-xs">
-                  <Link href="/cases?newCase=1" className="adm-link-button adm-link-button-primary px-4 py-3">
+                  <Link href="/cases?newCase=1" className="adm-link-button adm-link-button-primary px-3.5 py-2.5">
                     Új ügy
                   </Link>
                   <Link
                     href={activeCase ? `/cases/${activeCase.id}/documents` : "/cases"}
-                    className="adm-link-button px-4 py-3 text-[#6B4B14]"
+                    className="adm-link-button px-3.5 py-2.5 text-[#6B4B14]"
                   >
                     Dokumentum feltöltés
                   </Link>
-                  <Link href="/reviews" className="adm-link-button px-4 py-3">
+                  <Link href="/reviews" className="adm-link-button px-3.5 py-2.5">
                     Review sor
                   </Link>
                 </div>
               </div>
             </div>
 
-            <aside className="adm-dark-status flex flex-col gap-2.5 border-t border-white/10 p-4 xl:border-l xl:border-t-0">
+            <aside className="adm-dark-status flex flex-col gap-2 border-t border-white/10 p-3.5 xl:border-l xl:border-t-0">
               <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[var(--adm-sage-300)]">
                 Mai működési kép
               </p>
-              <div className="grid grid-cols-3 gap-3 xl:grid-cols-1">
-                <div className="adm-stat-box p-3">
-                  <p className="font-serif text-[34px] leading-none">{waitingTasks.length}</p>
-                  <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-sage-300)]">Rám váró teendő</p>
-                  <p className="mt-1 text-[11px] leading-4 text-[var(--adm-ivory-100)]/70">
+              <div className="grid grid-cols-3 gap-2 xl:grid-cols-1">
+                <div className="adm-stat-box p-2.5">
+                  <p className="font-serif text-[28px] leading-none">{waitingTasks.length}</p>
+                  <p className="mt-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-sage-300)]">Rám váró teendő</p>
+                  <p className="mt-1 text-[10.5px] leading-4 text-[var(--adm-ivory-100)]/70">
                     {waitingTasks.length === 0 ? "Nincs betöltött teendő." : "Meglévő feladatlistából számolva."}
                   </p>
                 </div>
-                <div className="adm-stat-box p-3">
-                  <p className="font-serif text-[34px] leading-none">{reviewDocumentCount}</p>
-                  <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-sage-300)]">Review jelzés</p>
-                  <p className="mt-1 text-[11px] leading-4 text-[var(--adm-ivory-100)]/70">
+                <div className="adm-stat-box p-2.5">
+                  <p className="font-serif text-[28px] leading-none">{reviewDocumentCount}</p>
+                  <p className="mt-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-sage-300)]">Review jelzés</p>
+                  <p className="mt-1 text-[10.5px] leading-4 text-[var(--adm-ivory-100)]/70">
                     {reviewDocumentCount === 0 ? "Nincs ellenőrzésre váró dokumentum." : "Dashboard/review adatokból számolva."}
                   </p>
                 </div>
-                <div className="adm-stat-box p-3">
-                  <p className="font-serif text-[34px] leading-none">{localWorkspaceDraftCount}</p>
-                  <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-sage-300)]">Helyi vázlat</p>
-                  <p className="mt-1 text-[11px] leading-4 text-[var(--adm-ivory-100)]/70">
+                <div className="adm-stat-box p-2.5">
+                  <p className="font-serif text-[28px] leading-none">{localWorkspaceDraftCount}</p>
+                  <p className="mt-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-sage-300)]">Helyi vázlat</p>
+                  <p className="mt-1 text-[10.5px] leading-4 text-[var(--adm-ivory-100)]/70">
                     {localWorkspaceDraftCount === 0 ? "Nincs helyi böngészős vázlat." : "Csak ezen az eszközön mentett helyi vázlat."}
                   </p>
                 </div>
@@ -527,7 +527,7 @@ export function Dashboard() {
         </section>
 
         {/* 3 — KPI / status strip */}
-        <section className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
+        <section className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
           <KpiCard label="Rám vár" value={kpis.waiting} tone="gold" zeroHint="Nincs nyitott tétel" />
           <KpiCard label="Tőlem függ" value={kpis.depends} tone="ink" zeroHint="Nincs blokkolt tétel" />
           <KpiCard label="Review alatt" value={kpis.review} tone="purple" zeroHint="Nincs review alatt" />
@@ -537,13 +537,13 @@ export function Dashboard() {
         </section>
 
         {/* 4 + 5 — Dominant "Itt folytasd" workbench + review/handoff side column */}
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.75fr)]">
-          <article className="adm-panel p-5 lg:p-6">
+        <section className="grid gap-3.5 xl:grid-cols-[minmax(0,1.52fr)_minmax(320px,0.68fr)]">
+          <article className="adm-panel p-4 lg:p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="adm-kicker">Elsődleges munkasor</p>
-                <h2 className="adm-heading mt-1 text-[30px] leading-tight">Itt folytasd</h2>
-                <p className="mt-2 max-w-3xl text-[12.5px] leading-5 text-[var(--adm-text-muted)]">
+                <h2 className="adm-heading mt-1 text-[28px] leading-tight">Itt folytasd</h2>
+                <p className="mt-1.5 max-w-3xl text-[12px] leading-5 text-[var(--adm-text-muted)]">
                   Meglévő feladatokból, ügyekből, dokumentumjelzésekből és helyi böngészős vázlatokból adott
                   nyitási javaslat. A pontos priorizálás későbbi backend-alapú fejlesztés.
                 </p>
@@ -563,12 +563,12 @@ export function Dashboard() {
               </div>
             ) : null}
 
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="mt-3 grid gap-2.5 md:grid-cols-2">
               {nextWorkCards.map((card) => (
                 <Link
                   key={card.id}
                   href={card.href}
-                  className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 transition-colors hover:border-[var(--adm-border-strong)] hover:bg-white"
+                  className="adm-board-list-row p-3.5"
                 >
                   <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#6B4B14]">{card.label}</p>
                   <p className="mt-1 text-sm font-semibold text-[var(--adm-text)]">{card.title}</p>
@@ -579,8 +579,8 @@ export function Dashboard() {
             </div>
           </article>
 
-          <aside className="grid content-start gap-4">
-            <article className="adm-panel p-5">
+          <aside className="grid content-start gap-3.5">
+            <article className="adm-panel p-4">
               <p className="adm-kicker">Review / handoff</p>
               <h3 className="adm-heading mt-1 text-[24px]">Mai sor</h3>
               {loading ? <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Betöltés...</p> : null}
