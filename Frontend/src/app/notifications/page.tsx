@@ -130,10 +130,11 @@ function NotificationsPageContent() {
 
   return (
     <main className="min-h-screen adm-board-page px-5 py-6 lg:px-8">
-      <section className="adm-board-container max-w-[1180px]">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--adm-border)] pb-4">
+      <section className="adm-board-container max-w-[1180px] space-y-4">
+        <div className="adm-board-hero flex flex-wrap items-center justify-between gap-3 p-4">
           <div>
-            <h1 className="text-2xl text-[var(--adm-green-800)]" style={{ fontFamily: "var(--font-newsreader)" }}>
+            <p className="adm-kicker">Munkajelzések</p>
+            <h1 className="mt-1 font-serif text-[32px] leading-tight text-[var(--adm-text)]">
               Értesítések
             </h1>
             <p className="mt-1 text-sm text-[var(--adm-text-muted)]">Munkajelzések ügyekhez, dokumentumokhoz és review feladatokhoz.</p>
@@ -146,7 +147,7 @@ function NotificationsPageContent() {
               type="button"
               onClick={handleMarkAllRead}
               disabled={isLoading || isMarkingAll || notifications.length === 0 || unreadCount === 0}
-              className="rounded-lg border border-[var(--adm-green-800)] px-3 py-2 text-xs font-semibold text-[var(--adm-green-800)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-green-800)] px-3 py-2 text-xs font-semibold text-[var(--adm-green-800)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isMarkingAll ? "Összes jelölése..." : "Összes olvasottnak jelölése"}
             </button>
@@ -154,27 +155,27 @@ function NotificationsPageContent() {
         </div>
 
         {isLoading ? (
-          <div className="mt-5 rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface)] px-5 py-8 text-center">
+          <div className="adm-board-empty">
             <p className="font-serif text-lg text-[var(--adm-green-800)]">Értesítések betöltése...</p>
             <p className="mt-2 text-sm text-[var(--adm-text-muted)]">A munkajelzések összegyűjtése folyamatban van.</p>
           </div>
         ) : error ? (
-          <div className="mt-5 rounded-xl border border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] px-5 py-8 text-center">
+          <div className="adm-board-empty border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)]">
             <p className="font-serif text-lg text-[var(--adm-terracotta-700)]">{error}</p>
             <p className="mt-2 text-sm text-[var(--adm-text-muted)]">A kapcsolódó ügyek és feladatok továbbra is megnyithatók a fő navigációból.</p>
-            <button type="button" onClick={loadNotifications} className="mt-4 rounded-lg border border-[#8F3D32] bg-white px-3 py-2 text-xs font-semibold text-[var(--adm-terracotta-700)] hover:bg-[#FFF0ED]">Újrapróbálás</button>
+            <button type="button" onClick={loadNotifications} className="mt-4 rounded-[var(--adm-radius-sm)] border border-[#8F3D32] bg-white px-3 py-2 text-xs font-semibold text-[var(--adm-terracotta-700)] hover:bg-[#FFF0ED]">Újrapróbálás</button>
           </div>
         ) : sortedNotifications.length === 0 ? (
-          <div className="mt-5 rounded-xl border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] px-5 py-10 text-center">
+          <div className="adm-board-empty">
             <p className="font-serif text-lg text-[var(--adm-green-800)]">Nincs új értesítés.</p>
             <p className="mt-2 text-sm text-[var(--adm-text-muted)]">Az új ügy-, dokumentum- és review-jelzések itt jelennek meg.</p>
           </div>
         ) : (
-          <ul className="mt-4 space-y-3">
+          <ul className="space-y-2">
             {sortedNotifications.map((item) => (
               <li
                 key={item.id}
-                className={`rounded-xl border p-4 ${
+                className={`adm-board-list-row p-3.5 ${
                   item.isRead
                     ? "border-[var(--adm-border)] bg-[var(--adm-surface)]"
                     : "border-[#D5B56A] bg-[#FFF7E3]"

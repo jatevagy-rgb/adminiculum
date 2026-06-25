@@ -422,13 +422,16 @@ function ReviewsPageContent() {
     <div className={`flex-1 flex min-h-0 reviews-surface ${p.bg}`}>
       <main className={`flex-1 overflow-y-auto adm-board-page reviews-main ${p.border}`}>
         <div className="adm-board-container max-w-[1320px]">
-          <h1 className={`text-2xl font-serif ${p.textDark} mb-1`}>Review sor</h1>
-          <p className={`text-xs ${p.textMuted} mb-2`}>Jóváhagyásra vagy visszaküldésre váró munkapéldányok és feladatok.</p>
-          <p className="text-[10px] text-[var(--adm-text-muted)] mb-4">Dokumentumtár → Szerződés-workspace → Leadási csomag → Review sor. Batch jóváhagyás későbbi patchben.</p>
+          <div className="adm-board-hero mb-4 p-4">
+            <p className="adm-kicker">Jóváhagyási munkasor</p>
+            <h1 className={`mt-1 text-[32px] leading-tight font-serif ${p.textDark}`}>Review sor</h1>
+            <p className={`mt-1 text-xs ${p.textMuted}`}>Jóváhagyásra vagy visszaküldésre váró munkapéldányok és feladatok.</p>
+            <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">Dokumentumtár → Szerződés-workspace → Leadási csomag → Review sor. Batch jóváhagyás későbbi patchben.</p>
+          </div>
 
           {/* Queue statistics bar */}
           {!isLoading && queueStats.total > 0 && (
-            <div className={`mb-4 flex flex-wrap gap-3 p-3 ${isSignalTiles ? "bg-slate-800 border-slate-600" : "bg-[var(--adm-ivory-100)] border-[var(--adm-border)]"} border rounded`}>
+            <div className={`mb-4 flex flex-wrap gap-3 p-3 ${isSignalTiles ? "bg-slate-800 border-slate-600" : "adm-board-panel-tight"} border rounded`}>
               <div className="flex items-center gap-1.5">
                 <span className="text-sm font-semibold text-[var(--adm-text)]">{queueStats.total}</span>
                 <span className="text-[10px] text-[var(--adm-text-muted)]">összes</span>
@@ -460,36 +463,36 @@ function ReviewsPageContent() {
             </div>
           )}
 
-          <div className="mb-4 grid md:grid-cols-5 gap-2">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Keresés" className={`w-full px-2 py-2 border text-xs bg-white ${p.border} ${p.textDark}`} />
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={`w-full px-2 py-2 border text-xs bg-white ${p.border} ${p.textDark}`}>
+          <div className="adm-board-panel-tight mb-4 grid gap-2 p-3 md:grid-cols-5">
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Keresés" className={`adm-board-field w-full px-2 py-2 text-xs ${p.textDark}`} />
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={`adm-board-field w-full px-2 py-2 text-xs ${p.textDark}`}>
               <option value="all">Minden státusz</option>
               {statuses.map((status) => {
                 const cfg = getStatusConfig(status);
                 return <option key={status} value={status}>{cfg.label}</option>;
               })}
             </select>
-            <select value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)} className={`w-full px-2 py-2 border text-xs bg-white ${p.border} ${p.textDark}`}>
+            <select value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)} className={`adm-board-field w-full px-2 py-2 text-xs ${p.textDark}`}>
               <option value="all">Minden felelős</option>
               {assignees.map((assignee) => (
                 <option key={assignee} value={assignee}>{assignee}</option>
               ))}
             </select>
-            <select value={caseFilter} onChange={(e) => setCaseFilter(e.target.value)} className={`w-full px-2 py-2 border text-xs bg-white ${p.border} ${p.textDark}`}>
+            <select value={caseFilter} onChange={(e) => setCaseFilter(e.target.value)} className={`adm-board-field w-full px-2 py-2 text-xs ${p.textDark}`}>
               <option value="all">Minden ügy</option>
               {cases.map((c) => (
                 <option key={c.id} value={c.id}>{c.label}</option>
               ))}
             </select>
-            <label className={`flex items-center gap-2 text-xs px-2 border bg-white ${p.border} ${p.textDark}`}>
+            <label className={`adm-board-field flex items-center gap-2 px-2 text-xs ${p.textDark}`}>
               <input type="checkbox" checked={urgentOnly} onChange={(e) => setUrgentOnly(e.target.checked)} />
               Csak sürgős
             </label>
           </div>
           {isLoading ? (
-            <div className="py-12 text-center text-xs text-[var(--adm-text-muted)]">Review sor betöltése…</div>
+            <div className="adm-board-empty text-xs text-[var(--adm-text-muted)]">Review sor betöltése…</div>
           ) : error ? (
-            <div className="border border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] px-5 py-10 text-center">
+            <div className="adm-board-empty border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)]">
               <p className="font-serif text-lg text-[#8B3A3A]">{error}</p>
               <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Próbáld újra, vagy nyisd meg az ügyeket és dokumentumokat közvetlenül.</p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
@@ -498,7 +501,7 @@ function ReviewsPageContent() {
               </div>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="border border-dashed border-[var(--adm-border)] px-5 py-12 text-center text-xs text-[var(--adm-text-muted)]">
+            <div className="adm-board-empty text-xs text-[var(--adm-text-muted)]">
               <p className="font-serif text-lg text-[var(--adm-text)]">{queue.length === 0 ? "Nincs review-ra váró dokumentum." : "Nincs találat a kiválasztott szűrőkkel."}</p>
               <p className="mt-2 text-[11px] text-[var(--adm-text-muted)]">
                 {queue.length === 0

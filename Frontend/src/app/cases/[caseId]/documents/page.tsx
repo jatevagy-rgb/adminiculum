@@ -933,7 +933,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{uploadedDocuments.length}</span>
                       </div>
                       {uploadedDocuments.length === 0 ? (
-                        <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[var(--adm-surface)] p-3 text-[12px] text-[var(--adm-text-muted)]">Nincs feltöltött dokumentum.</p>
+                        <p className="adm-board-empty min-h-[110px] p-3 text-[12px] text-[var(--adm-text-muted)]">Nincs feltöltött dokumentum.</p>
                       ) : uploadedDocuments.map((doc) => {
                         const isSelected = selectedLedgerItem?.kind === "uploaded" && selectedLedgerItem.item.id === doc.id;
                         return (
@@ -957,7 +957,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{modifiedWorkingCopyCount}</span>
                       </div>
                       {modifiedWorkingCopies.length === 0 ? (
-                        <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[var(--adm-surface)] p-3 text-[12px] text-[var(--adm-text-muted)]">Nincs módosított munkapéldány.</p>
+                        <p className="adm-board-empty min-h-[110px] p-3 text-[12px] text-[var(--adm-text-muted)]">Nincs módosított munkapéldány.</p>
                       ) : modifiedWorkingCopies.map((doc) => {
                         const isSelected = selectedLedgerItem?.kind === "uploaded" && selectedLedgerItem.item.id === doc.id;
                         return (
@@ -980,7 +980,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{generatedDocumentCount}</span>
                       </div>
                       {generatedLedgerItems.length === 0 ? (
-                        <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[var(--adm-surface)] p-3 text-[12px] text-[var(--adm-text-muted)]">Nincs generált dokumentum.</p>
+                        <p className="adm-board-empty min-h-[110px] p-3 text-[12px] text-[var(--adm-text-muted)]">Nincs generált dokumentum.</p>
                       ) : generatedLedgerItems.map((contract) => {
                         const isSelected = selectedLedgerItem?.kind === "generated" && selectedLedgerItem.item.id === contract.id;
                         return (
@@ -1003,7 +1003,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyvédi leadási csomagok</h3>
                         <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{handoffPackageCountLabel}</span>
                       </div>
-                      <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[var(--adm-surface)] p-3 text-[12px] text-[var(--adm-text-muted)]">
+                      <p className="adm-board-empty min-h-[110px] p-3 text-[12px] text-[var(--adm-text-muted)]">
                         A leadási csomagok a jobb oldali ügyvédi csomag panelen kezelhetők.
                       </p>
                     </section>
@@ -1030,7 +1030,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
                   <div className="space-y-4 p-5">
                     {!activeDocument ? (
-                      <div className="rounded-[18px] border border-dashed border-[rgba(31,74,51,0.24)] bg-[var(--adm-surface)] p-8 text-center">
+                      <div className="adm-board-empty p-8 text-center">
                         <h3 className="font-serif text-3xl font-semibold text-[var(--adm-text)]">Nincs még kiválasztott dokumentum</h3>
                         <p className="mx-auto mt-2 max-w-md text-sm text-[#3D4842]">Kezdéshez tölts fel egy dokumentumot, vagy válassz egy iratot a bal oldali listából.</p>
                         <div className="mt-5 flex flex-wrap justify-center gap-2">
@@ -1039,7 +1039,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       </div>
                     ) : (
                       <>
-                        <div className="rounded-[16px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-4">
+                        <div className="rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-4">
                           <h3 className="font-serif text-xl font-semibold text-[var(--adm-text)]">
                             {selectedUploadedDocument?.documentType === 'MODIFIED_WORKING_COPY' ? 'Munkapéldány' : selectedGeneratedContract ? 'Generált dokumentum' : 'Kiválasztott dokumentum'}
                           </h3>
@@ -1052,7 +1052,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           </p>
                         </div>
 
-                        <div className="rounded-[16px] border border-[rgba(22,32,26,0.12)] bg-white p-4">
+                        <div className="rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-4">
                           <div className="flex flex-col gap-3">
                             <div>
                               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Dokumentum összefoglaló</p>

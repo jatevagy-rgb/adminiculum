@@ -93,13 +93,13 @@ const GROUPS: Array<{ title: string; fields: Array<{ key: FieldKey; label: strin
     ],
   },
   {
-    title: "Prompt / AI instrukciók",
+    title: "Prompt instrukciók",
     fields: [
       { key: "preferredTone", label: "Preferált hangnem", type: "textarea" },
       { key: "prohibitedWording", label: "Tiltott megfogalmazások", type: "textarea" },
       { key: "reusablePromptInstructions", label: "Újrahasználható prompt-instrukciók", type: "textarea" },
       { key: "wordFormattingInstructions", label: "Word formázási instrukciók", type: "textarea" },
-      { key: "externalAiInstructions", label: "Külső AI eszköz megjegyzések", type: "textarea" },
+      { key: "externalAiInstructions", label: "Külső prompt eszköz megjegyzések", type: "textarea" },
     ],
   },
   {

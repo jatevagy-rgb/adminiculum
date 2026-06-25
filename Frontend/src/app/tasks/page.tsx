@@ -403,9 +403,10 @@ function TasksPageContent() {
     <div className="flex-1 flex min-h-0">
       <main className="flex-1 overflow-y-auto adm-board-page">
         <div className="adm-board-container max-w-[1320px]">
-          <div className="flex items-center justify-between mb-6">
+          <div className="adm-board-hero mb-4 flex items-center justify-between gap-4 p-4">
             <div>
-              <h1 className="text-2xl font-serif text-[var(--adm-text)]">Feladatok és határidők</h1>
+              <p className="adm-kicker">Operatív munkasor</p>
+              <h1 className="mt-1 font-serif text-[32px] leading-tight text-[var(--adm-text)]">Feladatok és határidők</h1>
               <p className="text-xs text-[var(--adm-text-muted)] mt-1">{filteredTasks.length} feladat a szűrés szerint</p>
               <p className="text-[10px] text-[var(--adm-text-soft)] mt-1">Operatív munkasor: teendők, review alatti elemek és határidős feladatok.</p>
               {deepLinkedTaskId && (
@@ -414,28 +415,28 @@ function TasksPageContent() {
             </div>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2 bg-[var(--adm-green-950)] text-white text-xs uppercase tracking-[0.2em] hover:bg-[#243D2D]"
+              className="rounded-[var(--adm-radius-sm)] px-4 py-2 bg-[var(--adm-green-950)] text-white text-xs uppercase tracking-[0.2em] hover:bg-[#243D2D]"
             >
               + Új feladat
             </button>
           </div>
 
-          <section className="adm-board-hero mb-4 grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <section className="adm-board-panel-tight mb-4 grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_300px]">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Home Office feladatindító</p>
               <h2 className="mt-1 font-serif text-xl font-medium text-[var(--adm-text)]">Itt válaszd ki a következő operatív lépést</h2>
               <p className="mt-2 text-xs leading-5 text-[var(--adm-text-muted)]">
                 A feladatlista valós ügyhöz kötött teendőket mutat, munkaprioritás szerint rendezve. A határidőket és az ügyvédi kontextust továbbra is külön kell mérlegelni.
               </p>
-              <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[var(--adm-text-muted)]">
-                <span className="rounded-full adm-board-panel-tight px-3 py-1">Nyitott feladatok: {taskEntrypointStats.openTasks}</span>
-                <span className="rounded-full adm-board-panel-tight px-3 py-1">Nincs felelős: {taskEntrypointStats.unassignedTasks}</span>
-                <span className="rounded-full border border-[#E6C987] bg-[var(--adm-sand-100)] px-3 py-1">Ma esedékes: {taskEntrypointStats.dueToday}</span>
+              <div className="adm-board-tabs mt-3 text-[11px] text-[var(--adm-text-muted)]">
+                <span className="adm-board-tab adm-board-tab-active">Nyitott: {taskEntrypointStats.openTasks}</span>
+                <span className="adm-board-tab">Nincs felelős: {taskEntrypointStats.unassignedTasks}</span>
+                <span className="adm-board-tab">Ma esedékes: {taskEntrypointStats.dueToday}</span>
               </div>
             </div>
-            <div className="rounded-[10px] adm-board-panel-tight p-3">
+            <div className="adm-board-rail p-3">
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Gyors folytatás</p>
-              <p className="mt-1 text-[11px] leading-5 text-[var(--adm-text-muted)]">Válassz feladatot a jobb oldali kontextushoz, vagy nyisd meg az ügylistát, ha ügyből indulnál.</p>
+              <p className="mt-1 text-[11px] leading-5 text-[var(--adm-ivory-100)]/75">Válassz feladatot a jobb oldali kontextushoz, vagy nyisd meg az ügylistát, ha ügyből indulnál.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Link href="/cases" className="rounded adm-board-panel-tight px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ügyek megnyitása</Link>
                 <Link href="/documents/compare" className="rounded adm-board-panel-tight px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Dokumentum-review</Link>
@@ -444,9 +445,9 @@ function TasksPageContent() {
           </section>
 
           {isLoading ? (
-            <div className="py-10 text-center text-xs text-[var(--adm-text-muted)]">Feladatok betöltése...</div>
+            <div className="adm-board-empty text-xs text-[var(--adm-text-muted)]">Feladatok betöltése...</div>
           ) : error ? (
-            <div className="border border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] px-5 py-8 text-center">
+            <div className="adm-board-empty border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)]">
               <p className="font-serif text-lg text-[#7A2F2F]">{error}</p>
               <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Próbáld újra, vagy indulj egy meglévő ügyből.</p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
@@ -456,7 +457,7 @@ function TasksPageContent() {
               </div>
             </div>
           ) : filteredTasks.length === 0 ? (
-            <div className="space-y-2 border border-dashed border-[var(--adm-border)] px-5 py-10 text-center text-xs text-[var(--adm-text-muted)]">
+            <div className="adm-board-empty space-y-2 text-xs text-[var(--adm-text-muted)]">
               <p className="font-serif text-lg text-[var(--adm-text)]">{tasks.length === 0 ? "Nincs betöltött feladat." : "Nincs találat a kiválasztott szűrőkkel."}</p>
               <p>{tasks.length === 0 ? "Új feladat létrehozásához válassz ügyet, majd add meg a feladat címét és határidejét." : "Módosítsd a szűrőket, vagy nyisd meg az ügylistát másik munkafolyamat választásához."}</p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">

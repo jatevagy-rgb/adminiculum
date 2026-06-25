@@ -149,18 +149,18 @@ function ClauseLibraryPageContent() {
                 </p>
               </div>
             </div>
-            <div className="grid gap-2 rounded-[8px] border border-[#D8CFB6] bg-white p-3 text-[11px] text-[#514D45] sm:grid-cols-3">
+            <div className="adm-board-rail grid gap-2 p-3 text-[11px] sm:grid-cols-3">
               <div>
-                <p className="font-semibold text-[#1F2821]">Adatforrás</p>
-                <p className="mt-1">{isFeatureDisabled ? "Foundation állapot" : "Backend-wired clause endpoint"}</p>
+                <p className="font-semibold text-[var(--adm-ivory-50)]">Adatforrás</p>
+                <p className="mt-1 text-[var(--adm-ivory-100)]/75">{isFeatureDisabled ? "Foundation állapot" : "Backend végpont"}</p>
               </div>
               <div>
-                <p className="font-semibold text-[#1F2821]">Beszúrás</p>
-                <p className="mt-1">Későbbi patchben aktiválható</p>
+                <p className="font-semibold text-[var(--adm-ivory-50)]">Beszúrás</p>
+                <p className="mt-1 text-[var(--adm-ivory-100)]/75">Későbbi patchben aktiválható</p>
               </div>
               <div>
-                <p className="font-semibold text-[#1F2821]">Későbbi munkamód</p>
-                <p className="mt-1">Külső prompt workflow előkészítés, nem automatikus generálás</p>
+                <p className="font-semibold text-[var(--adm-ivory-50)]">Későbbi munkamód</p>
+                <p className="mt-1 text-[var(--adm-ivory-100)]/75">Külső prompt workflow előkészítés, nem automatikus generálás</p>
               </div>
             </div>
           </div>
@@ -270,12 +270,10 @@ function ClauseLibraryPageContent() {
               </div>
 
               {featureDisabledMessage ? (
-                <div className="mt-3 rounded-[8px] border border-[#E8DFC9] bg-[#FBF6E7] p-4">
+                <div className="adm-board-empty mt-3">
                   <p className="text-sm font-semibold text-[#1F2821]">A záradékkönyvtár jelenleg nincs bekapcsolva.</p>
                   <p className="mt-2 text-[11px] text-[#514D45]">
-                    Ebben a környezetben a Clause Library feature flag le van tiltva. Aktiváláshoz szükséges:
-                    {" "}
-                    <code>ENABLE_CLAUSE_LIBRARY=true</code>
+                    Ez egy előkészített foundation felület. Az aktív záradéktár későbbi backend engedélyezés és jogosultsági ellenőrzés után használható.
                   </p>
                 </div>
               ) : error ? (
@@ -286,9 +284,9 @@ function ClauseLibraryPageContent() {
                   </p>
                 </div>
               ) : isLoading ? (
-                <p className="mt-3 text-xs text-[#7B776D]">Klauzulatár betöltése…</p>
+                <div className="adm-board-empty mt-3 text-xs text-[#7B776D]">Klauzulatár betöltése…</div>
               ) : clauses.length === 0 ? (
-                <div className="mt-3 rounded-[8px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] p-4">
+                <div className="adm-board-empty mt-3">
                   <p className="text-sm font-semibold text-[#1F2821]">Még nincs jóváhagyott klauzula.</p>
                   <p className="mt-2 text-[11px] text-[#6D6A62]">
                     A klauzulatár feltöltése és jóváhagyási workflow-ja későbbi patchben aktiválható.
@@ -351,7 +349,7 @@ function ClauseLibraryPageContent() {
             <section className="adm-board-panel p-4">
               <h2 className="font-serif text-xl font-medium text-[#1F2821]">Záradék részletei</h2>
               {!selectedClause ? (
-                <div className="mt-3 rounded-[8px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] p-4 text-[11px] text-[#6D6A62]">
+                <div className="adm-board-empty mt-3 text-[11px] text-[#6D6A62]">
                   Válassz ki egy záradékot a listából a részletek megnyitásához.
                 </div>
               ) : (

@@ -117,27 +117,35 @@ function CaseHandoffPageContent({ params }: CaseHandoffPageProps) {
             </Link>
           </div>
 
-          <header className="adm-board-hero mb-5 p-5">
-            <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--adm-text-muted)]">Output workflow</p>
-            <h1 className="mt-1 font-serif text-[34px] leading-tight text-[var(--adm-green-800)]">
-              Leadási csomag
-            </h1>
-            <p className="mt-2 text-sm text-[var(--adm-text-muted)]">
-              Ügyvédi review-ra előkészített belső munkacsomag.
-            </p>
-            <p className="mt-2 rounded border border-[var(--adm-border-strong)] bg-[var(--adm-sand-100)] px-3 py-2 text-xs text-[#7B5E2E]">
-              Ez a csomag előkészítő munkairat. Ügyvédi jóváhagyás nélkül nem minősül végleges jogi állásfoglalásnak.
-            </p>
-            <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">
-              Dokumentumtár → Szerződés-workspace → Leadási csomag → Review sor
-            </p>
-            {isLoading ? (
-              <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Ügyadatok betöltése…</p>
-            ) : caseInfo ? (
-              <p className="mt-3 text-xs text-[var(--adm-text-muted)]">
-                {caseInfo.caseNumber} · {caseInfo.title}
+          <header className="adm-board-hero mb-5 grid gap-0 overflow-hidden lg:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="p-5">
+              <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--adm-text-muted)]">Output workflow</p>
+              <h1 className="mt-1 font-serif text-[40px] leading-tight text-[var(--adm-green-800)]">
+                Leadási csomag
+              </h1>
+              <p className="mt-2 text-sm text-[var(--adm-text-muted)]">
+                Ügyvédi review-ra előkészített belső munkacsomag.
               </p>
-            ) : null}
+              <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">
+                Dokumentumtár → Szerződés-workspace → Leadási csomag → Review sor
+              </p>
+              {isLoading ? (
+                <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Ügyadatok betöltése…</p>
+              ) : caseInfo ? (
+                <p className="mt-3 text-xs text-[var(--adm-text-muted)]">
+                  {caseInfo.caseNumber} · {caseInfo.title}
+                </p>
+              ) : null}
+            </div>
+            <aside className="adm-board-rail rounded-none border-0 p-5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-sage-300)]">Státusz</p>
+              <p className="mt-2 text-[12px] leading-5 text-[var(--adm-ivory-100)]/80">
+                Ez a csomag előkészítő munkairat. Ügyvédi jóváhagyás nélkül nem minősül végleges jogi állásfoglalásnak.
+              </p>
+              <p className="mt-4 rounded-[var(--adm-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-[10px] text-[var(--adm-ivory-100)]/70">
+                Nincs külső megosztás, megnyitási követés vagy ügyfélkapcsolati funkció ezen a felületen.
+              </p>
+            </aside>
           </header>
 
           <HandoffPackagePanel caseId={caseId} />

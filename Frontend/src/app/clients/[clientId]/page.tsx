@@ -244,13 +244,13 @@ export default function ClientDetailPage() {
   }, [cases, documents.length, communications.length]);
 
   if (isLoading) {
-    return <div className="flex-1 flex items-center justify-center text-xs text-[var(--adm-text-muted)]">Ügyfél dosszié betöltése...</div>;
+    return <div className="flex-1 adm-board-page p-6"><div className="adm-board-empty text-xs text-[var(--adm-text-muted)]">Ügyfél dosszié betöltése...</div></div>;
   }
 
   if (!client || error) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
+      <div className="flex-1 adm-board-page p-6">
+        <div className="adm-board-empty">
           <p className="text-xs text-[var(--adm-terracotta-700)] mb-3">{error || "Az ügyfél nem található."}</p>
           <Link href="/clients" className="text-xs text-[var(--adm-ochre-500)] hover:underline">Vissza az ügyfelekhez</Link>
         </div>
@@ -265,7 +265,7 @@ export default function ClientDetailPage() {
           <header className="adm-board-hero p-5 lg:p-6">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--adm-green-800)] text-2xl font-serif text-white shadow-[0_14px_30px_rgba(31,74,51,0.18)]">
+                <div className="flex h-14 w-14 items-center justify-center rounded-[var(--adm-radius-md)] bg-[var(--adm-green-800)] text-2xl font-serif text-white shadow-[0_8px_20px_rgba(31,74,51,0.14)]">
                   {client.name?.charAt(0)?.toUpperCase() || "?"}
                 </div>
                 <div>
@@ -306,7 +306,7 @@ export default function ClientDetailPage() {
             )}
 
             {cases.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-xs text-[var(--adm-text-soft)]">
+              <div className="adm-board-empty min-h-[130px] p-4 text-xs text-[var(--adm-text-soft)]">
                 <p>Ehhez az ügyfélhez még nincs kapcsolt ügy.</p>
                 <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Új ügy indításával az ügylista és a dosszié automatikusan összekapcsolódik.</p>
               </div>
@@ -349,7 +349,7 @@ export default function ClientDetailPage() {
             <div className="adm-board-panel p-5">
               <h2 className="text-sm font-semibold text-[var(--adm-text)] mb-4">Kapcsolt dokumentumok</h2>
               {documents.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-xs text-[var(--adm-text-soft)]">
+                <div className="adm-board-empty min-h-[130px] p-4 text-xs text-[var(--adm-text-soft)]">
                   <p>Nincs elérhető kapcsolt dokumentum.</p>
                   <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Dokumentum feltöltés vagy generálás után itt jelennek meg a kapcsolt fájlok.</p>
                 </div>
@@ -368,7 +368,7 @@ export default function ClientDetailPage() {
             <div className="adm-board-panel p-5">
               <h2 className="text-sm font-semibold text-[var(--adm-text)] mb-4">Kapcsolt kommunikációk</h2>
               {communications.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-xs text-[var(--adm-text-soft)]">
+                <div className="adm-board-empty min-h-[130px] p-4 text-xs text-[var(--adm-text-soft)]">
                   <p>Nincs kapcsolt kommunikációs esemény.</p>
                   <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Az ügy- és ügyfélszintű kommunikációk itt egyesítve jelennek meg.</p>
                 </div>
@@ -394,7 +394,7 @@ export default function ClientDetailPage() {
         <div className="adm-board-panel p-4">
           <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)]">Ügyfélazonosság és kapcsolódó adatok</h2>
 
-          <div className="mt-3 space-y-2 rounded-xl border border-[var(--adm-border)] bg-white/70 p-3 text-xs">
+          <div className="mt-3 space-y-2 rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white/70 p-3 text-xs">
             <p><span className="text-[var(--adm-text-muted)]">Email:</span> {client.email || "—"}</p>
             <p><span className="text-[var(--adm-text-muted)]">Telefon:</span> {client.phone || "—"}</p>
             <p><span className="text-[var(--adm-text-muted)]">Cím:</span> {client.address || "—"}</p>
@@ -430,9 +430,9 @@ export default function ClientDetailPage() {
 
       {showNewCaseModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div className="p-6 border-b border-[var(--adm-border)]"><h2 className="text-lg font-serif text-[var(--adm-text)]">Új ügy</h2></div>
-            <div className="p-6 space-y-4">
+          <div className="adm-wizard-modal w-full max-w-md mx-4">
+            <div className="adm-wizard-header p-6 border-b"><h2 className="text-lg font-serif text-[var(--adm-text)]">Új ügy</h2></div>
+            <div className="adm-wizard-body p-6 space-y-4">
               <div>
                 <label className="block text-xs text-[var(--adm-text-muted)] mb-1">Ügytípus</label>
                 <select value={caseFormData.matterType} onChange={(e) => setCaseFormData({ ...caseFormData, matterType: e.target.value })} className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm">
@@ -505,7 +505,7 @@ export default function ClientDetailPage() {
                 </div>
               ) : null}
             </div>
-            <div className="p-6 border-t border-[var(--adm-border)] flex justify-end gap-2">
+            <div className="adm-wizard-footer p-6 border-t flex justify-end gap-2">
               <button onClick={() => setShowNewCaseModal(false)} className="px-4 py-2 text-xs border border-[var(--adm-border)] rounded">Mégsem</button>
               <button onClick={handleCreateCase} disabled={isSavingCase} className="px-4 py-2 text-xs bg-[var(--adm-ochre-500)] text-white rounded disabled:opacity-50">{isSavingCase ? "Létrehozás..." : "Létrehozás"}</button>
             </div>
@@ -515,9 +515,9 @@ export default function ClientDetailPage() {
 
       {showEditModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-[var(--adm-border)]"><h2 className="text-lg font-serif text-[var(--adm-text)]">Ügyfél szerkesztése</h2></div>
-            <div className="p-6 space-y-3">
+          <div className="adm-wizard-modal w-full max-w-md mx-4">
+            <div className="adm-wizard-header p-6 border-b"><h2 className="text-lg font-serif text-[var(--adm-text)]">Ügyfél szerkesztése</h2></div>
+            <div className="adm-wizard-body p-6 space-y-3">
               {[
                 ["Név", "name"],
                 ["Email", "email"],
@@ -561,7 +561,7 @@ export default function ClientDetailPage() {
                 <textarea value={editFormData.address || ""} onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })} rows={2} className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm" />
               </div>
             </div>
-            <div className="p-6 border-t border-[var(--adm-border)] flex justify-end gap-2">
+            <div className="adm-wizard-footer p-6 border-t flex justify-end gap-2">
               <button onClick={() => setShowEditModal(false)} className="px-4 py-2 text-xs border border-[var(--adm-border)] rounded">Mégsem</button>
               <button onClick={handleSaveClient} disabled={isSavingClient || !editFormData.name?.trim()} className="px-4 py-2 text-xs bg-[var(--adm-ochre-500)] text-white rounded disabled:opacity-50">{isSavingClient ? "Mentés..." : "Mentés"}</button>
             </div>

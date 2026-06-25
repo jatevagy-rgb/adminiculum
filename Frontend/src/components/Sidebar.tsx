@@ -184,10 +184,10 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
   };
 
   return (
-    <aside className={`${collapsed ? "w-20" : "w-[232px]"} min-h-screen ${isSignal ? "bg-[#111827]" : "adm-sidebar"} text-white flex flex-col transition-[width] duration-150`}>
-      <div className={`${collapsed ? "px-3" : "px-4"} py-4 border-b ${isSignal ? "border-[#1F2937]" : "border-white/10"}`}>
+    <aside className={`${collapsed ? "w-20" : "w-[260px]"} min-h-screen ${isSignal ? "bg-[#111827]" : "adm-sidebar"} text-white flex flex-col transition-[width] duration-150`}>
+      <div className={`${collapsed ? "px-3" : "px-5"} py-5 border-b ${isSignal ? "border-[#1F2937]" : "border-white/10"}`}>
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-white/15 bg-[var(--adm-ivory-100)] p-1 shadow-[0_10px_24px_rgba(0,0,0,0.16)]">
+          <div className="flex h-11 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[var(--adm-radius-md)] border border-white/15 bg-[var(--adm-ivory-100)] p-1 shadow-[0_8px_18px_rgba(0,0,0,0.14)]">
             <Image
               src="/brand/adminiculum-logo.png"
               alt="Adminiculum logó"
@@ -199,14 +199,14 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
           </div>
           {!collapsed && (
             <div>
-              <h1 className="font-serif text-[21px] leading-none text-[var(--adm-ivory-50)]">Adminiculum</h1>
-              <p className={`mt-1 text-[10px] uppercase tracking-[0.18em] ${isSignal ? "text-[#6B7280]" : "text-[var(--adm-sage-300)]"}`}>Jogi munkapad</p>
+              <h1 className="font-serif text-[22px] leading-none text-[var(--adm-ivory-50)]">Adminiculum</h1>
+              <p className={`mt-1 text-[9.5px] uppercase tracking-[0.22em] ${isSignal ? "text-[#6B7280]" : "text-[var(--adm-sage-300)]"}`}>Legal ops</p>
             </div>
           )}
         </div>
         <button
           onClick={toggleCollapsed}
-          className={`mt-4 h-8 w-full rounded-[8px] border bg-white/5 text-[12px] transition-colors hover:bg-white/10 hover:text-white ${isSignal ? "border-[#1F2937] text-[#9CA3AF]" : "border-white/10 text-[var(--adm-ivory-50)]/70"}`}
+          className={`mt-5 h-8 w-full rounded-[var(--adm-radius-sm)] border bg-white/5 text-[12px] transition-colors hover:bg-white/10 hover:text-white ${isSignal ? "border-[#1F2937] text-[#9CA3AF]" : "border-white/10 text-[var(--adm-ivory-50)]/70"}`}
           title={collapsed ? "Sidebar kinyitása" : "Sidebar összecsukása"}
           type="button"
         >
@@ -214,7 +214,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
         </button>
       </div>
 
-      <nav className={`${collapsed ? "px-2" : "px-2.5"} flex-1 py-3 space-y-2`}>
+      <nav className={`${collapsed ? "px-2" : "px-3"} flex-1 py-3 space-y-3`}>
         {navGroups.map((group) => (
           <div key={group.id} className="space-y-1">
             {!collapsed && (
@@ -243,7 +243,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
                 <button
                   key={nav.id}
                   onClick={() => router.push(routeMap[nav.id] || "/")}
-                  className={`relative w-full flex items-center ${collapsed ? "justify-center" : "gap-2.5"} rounded-[10px] px-3 py-2 text-[12.5px] font-medium transition-colors duration-150 ${
+                  className={`relative w-full flex items-center ${collapsed ? "justify-center" : "gap-2.5"} rounded-[var(--adm-radius-sm)] px-3 py-2 text-[12.5px] font-medium transition-colors duration-150 ${
                     isActive
                       ? `${isSignal ? "text-white bg-[#0B1220]" : "text-[var(--adm-ivory-50)] bg-white/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] before:absolute before:left-[-5px] before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r before:bg-[var(--adm-ochre-500)]"}`
                       : `${isSignal ? "text-[#9CA3AF] hover:text-white hover:bg-[#0B1220]" : "text-[var(--adm-ivory-50)]/76 hover:text-[var(--adm-ivory-50)] hover:bg-white/6"}`
@@ -282,7 +282,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
         )}
         <button
           onClick={() => router.push("/cases?newCase=1")}
-          className={`w-full rounded-[10px] text-xs font-semibold uppercase ${collapsed ? "tracking-normal" : "tracking-[0.16em]"} py-2.5 transition-colors ${isSignal ? "bg-[#22D3EE] text-[#0B1220] hover:bg-[#06B6D4]" : "bg-[var(--adm-ochre-500)] text-[var(--adm-green-950)] hover:bg-[var(--adm-sand-300)]"}`}
+          className={`w-full rounded-[var(--adm-radius-sm)] text-xs font-semibold uppercase ${collapsed ? "tracking-normal" : "tracking-[0.16em]"} py-2.5 transition-colors ${isSignal ? "bg-[#22D3EE] text-[#0B1220] hover:bg-[#06B6D4]" : "bg-[var(--adm-ochre-500)] text-[var(--adm-green-950)] hover:bg-[var(--adm-sand-300)]"}`}
           type="button"
           title="Új ügy"
         >

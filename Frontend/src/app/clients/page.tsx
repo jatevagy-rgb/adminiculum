@@ -256,13 +256,17 @@ function ClientsPageContent() {
     <div className="flex min-h-0 flex-1 adm-shell-bg text-[var(--adm-text)]">
       <main className="flex-1 overflow-y-auto adm-board-page">
         <div className="adm-board-container space-y-5">
-          <div className="adm-board-hero flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
+          <div className="adm-board-hero grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_260px]">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Ügyfelek</p>
-              <h1 className="mt-1 font-serif text-[34px] font-medium leading-tight text-[var(--adm-text)]">Ügyfelek és house style dossziék</h1>
+              <h1 className="mt-1 font-serif text-[38px] font-medium leading-tight text-[var(--adm-text)]">Ügyfelek és house style dossziék</h1>
               <p className="mt-1 max-w-3xl text-[13px] leading-5 text-[#3D4842]">Ügyfélkapcsolatok, valós house style profilok és ügyindítás belső ügyvédi munkához.</p>
             </div>
-            <AdminButton variant="primary" onClick={handleCreate}>+ Új ügyfél</AdminButton>
+            <div className="adm-board-rail flex flex-col justify-between gap-3 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-sage-300)]">Dosszié művelet</p>
+              <p className="text-[11px] leading-5 text-[var(--adm-ivory-100)]/75">Új ügyfél rögzítése után innen indítható a kapcsolt ügy és a house style kitöltése.</p>
+              <AdminButton variant="gold" onClick={handleCreate}>+ Új ügyfél</AdminButton>
+            </div>
           </div>
 
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,0.9fr)]">
@@ -305,7 +309,7 @@ function ClientsPageContent() {
           ) : null}
 
           {isLoading ? (
-            <AdminPanel className="p-10 text-center text-sm text-[var(--adm-text-muted)]">Ügyfelek betöltése…</AdminPanel>
+            <AdminPanel className="adm-board-empty text-sm text-[var(--adm-text-muted)]">Ügyfelek betöltése…</AdminPanel>
           ) : (
             <>
               <section className="space-y-3">
@@ -329,11 +333,11 @@ function ClientsPageContent() {
 
       {showModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#16201A]/70 p-4">
-          <div className="max-h-[calc(100vh-64px)] w-full max-w-xl overflow-hidden rounded-[22px] bg-white shadow-xl">
-            <div className="border-b border-[var(--adm-border)] bg-[#082817] p-5 text-[#F4EFDB]">
+          <div className="adm-wizard-modal w-full max-w-xl">
+            <div className="adm-wizard-header border-b bg-[#082817] p-5 text-[#F4EFDB]">
               <h2 className="font-serif text-2xl font-medium">{editingClient ? "Ügyfél szerkesztése" : "Új ügyfél"}</h2>
             </div>
-            <div className="max-h-[calc(100vh-190px)] space-y-4 overflow-y-auto p-6">
+            <div className="adm-wizard-body space-y-4 p-6">
               {[
                 ["name", "Hivatalos név", "text"],
                 ["email", "Email", "email"],
@@ -353,7 +357,7 @@ function ClientsPageContent() {
                 <textarea value={formData.address || ""} onChange={(event) => setFormData({ ...formData, address: event.target.value })} rows={3} className="mt-2 w-full rounded border border-[var(--adm-border)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--adm-text)] focus:outline-none focus:border-[#082817]" />
               </label>
             </div>
-            <div className="flex justify-end gap-3 border-t border-[var(--adm-border)] bg-[var(--adm-sand-100)] p-4">
+            <div className="adm-wizard-footer flex justify-end gap-3 border-t p-4">
               <AdminButton variant="ghost" onClick={() => setShowModal(false)} disabled={isSaving}>Mégse</AdminButton>
               <AdminButton variant="primary" onClick={handleSave} disabled={isSaving || !formData.name?.trim()}>{isSaving ? "Mentés..." : "Mentés"}</AdminButton>
             </div>

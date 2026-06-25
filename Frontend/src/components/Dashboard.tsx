@@ -74,13 +74,13 @@ function kpiDot(tone: KpiCardProps["tone"]) {
 
 function KpiCard({ label, value, tone, zeroHint }: KpiCardProps) {
   return (
-    <div className={`rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] border-l-4 px-3.5 py-3 shadow-[var(--adm-shadow-sm)] ${kpiTone(tone)}`}>
+    <div className={`rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] border-l-4 px-3 py-2.5 shadow-[var(--adm-shadow-sm)] ${kpiTone(tone)}`}>
       <p className="flex items-center gap-2 text-[9.5px] font-bold uppercase tracking-[0.15em] text-[var(--adm-text-muted)]">
         <span className={`h-2 w-2 rounded-full ${kpiDot(tone)}`} />
         {label}
       </p>
-      <p className="mt-1.5 font-serif text-[34px] leading-none text-[var(--adm-text)]">{value}</p>
-      <p className="mt-1 text-[10px] leading-4 text-[var(--adm-text-muted)]">{value === 0 ? zeroHint : "Aktív tétel"}</p>
+      <p className="mt-1 font-serif text-[28px] leading-none text-[var(--adm-text)]">{value}</p>
+      <p className="mt-0.5 text-[10px] leading-4 text-[var(--adm-text-muted)]">{value === 0 ? zeroHint : "Aktív tétel"}</p>
     </div>
   );
 }
@@ -177,8 +177,7 @@ function workflowPill(label: string, state: "ok" | "progress" | "review" | "miss
 
 function EmptyState({ title, subtitle }: { title: string; subtitle: string }) {
   return (
-    <div className="rounded-[var(--adm-radius-md)] border border-dashed border-[var(--adm-border-strong)] bg-[var(--adm-surface)] p-5 text-center">
-      <div className="mx-auto mb-2 h-8 w-8 rounded-full border border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)]" />
+    <div className="adm-board-empty min-h-[150px] p-4 text-center">
       <p className="text-xs font-semibold text-[var(--adm-text)]">{title}</p>
       <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{subtitle}</p>
     </div>
@@ -451,20 +450,19 @@ export function Dashboard() {
 
   return (
     <div className="adm-dash-stage min-h-full px-3 pb-5 pt-3 sm:px-5 xl:px-6">
-      <div className="mx-auto w-full max-w-[1500px] space-y-3">
+      <div className="mx-auto w-full max-w-[1440px] space-y-3">
         {/* 1 + 2 — Command-center hero with dark "Mai működési kép" status column */}
         <section className="adm-command-hero">
-          <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_330px]">
-            <div className="flex min-h-[188px] flex-col justify-between p-4.5 lg:p-5">
+          <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_318px]">
+            <div className="flex min-h-[156px] flex-col justify-between p-[18px] lg:p-5">
               <div>
                 <p className="adm-kicker">Adminiculum · Műszerfal</p>
-                <h1 className="adm-hero-title mt-2 max-w-4xl text-[clamp(30px,4vw,46px)] leading-[0.98]">
-                  Jogi munkapad a mai ügyekhez.
+                <h1 className="adm-hero-title mt-1.5 max-w-4xl text-[clamp(34px,4.4vw,58px)] leading-[0.92]">
+                  Műszerfal
                 </h1>
-                <p className="mt-2.5 max-w-3xl text-[13px] leading-5 text-[var(--adm-text-muted)]">
-                  Jó reggelt, {greetingName}. Ez a command center meglévő ügyadatokból, feladatokból és
-                  dokumentumjelzésekből állítja össze a munkanézetet. Csak a rendszerben ténylegesen elérhető
-                  jelzések jelennek meg.
+                <p className="mt-2 max-w-3xl text-[12.5px] leading-5 text-[var(--adm-text-muted)]">
+                  Jó reggelt, {greetingName}. Ügyek, teendők, review jelzések és helyi vázlatok egy sűrű
+                  belső operációs nézetben — csak ténylegesen elérhető adatokból.
                 </p>
               </div>
 
@@ -478,7 +476,7 @@ export function Dashboard() {
                     {warnings.slice(0, 2).join(" ")}
                   </div>
                 ) : null}
-                <div className="flex flex-wrap gap-2 text-xs">
+                <div className="adm-board-tabs flex-wrap text-xs">
                   <Link href="/cases?newCase=1" className="adm-link-button adm-link-button-primary px-3.5 py-2.5">
                     Új ügy
                   </Link>
@@ -490,6 +488,9 @@ export function Dashboard() {
                   </Link>
                   <Link href="/reviews" className="adm-link-button px-3.5 py-2.5">
                     Review sor
+                  </Link>
+                  <Link href="/tasks" className="adm-link-button px-3.5 py-2.5">
+                    Mai sor
                   </Link>
                 </div>
               </div>
@@ -542,13 +543,13 @@ export function Dashboard() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="adm-kicker">Elsődleges munkasor</p>
-                <h2 className="adm-heading mt-1 text-[28px] leading-tight">Itt folytasd</h2>
+                <h2 className="adm-heading mt-1 text-[32px] leading-tight">Itt folytasd</h2>
                 <p className="mt-1.5 max-w-3xl text-[12px] leading-5 text-[var(--adm-text-muted)]">
                   Meglévő feladatokból, ügyekből, dokumentumjelzésekből és helyi böngészős vázlatokból adott
                   nyitási javaslat. A pontos priorizálás későbbi backend-alapú fejlesztés.
                 </p>
               </div>
-              <span className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1 text-[11px] font-semibold text-[#6B4B14]">
+              <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1 text-[11px] font-semibold text-[#6B4B14]">
                 {nextWorkCards.length} javaslat
               </span>
             </div>
@@ -563,12 +564,12 @@ export function Dashboard() {
               </div>
             ) : null}
 
-            <div className="mt-3 grid gap-2.5 md:grid-cols-2">
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
               {nextWorkCards.map((card) => (
                 <Link
                   key={card.id}
                   href={card.href}
-                  className="adm-board-list-row p-3.5"
+                  className="adm-board-list-row p-3"
                 >
                   <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#6B4B14]">{card.label}</p>
                   <p className="mt-1 text-sm font-semibold text-[var(--adm-text)]">{card.title}</p>

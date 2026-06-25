@@ -287,11 +287,11 @@ export function HandoffPackagePanel({
           Kapcsolt munkadokumentum: <span className="font-semibold">{contextLabel}</span>
         </p>
       ) : null}
-      <p className="mb-3 rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-ivory-100)] px-3 py-2 text-[10px] leading-4 text-[var(--adm-text-muted)]">
+      <p className="mb-3 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-ivory-100)] px-3 py-2 text-[10px] leading-4 text-[var(--adm-text-muted)]">
         Ez a csomag előkészítő munkairat. Ügyvédi jóváhagyás nélkül nem minősül végleges jogi állásfoglalásnak.
       </p>
 
-      <div className="mb-3 rounded-[18px] border border-[var(--adm-border)] bg-white p-3.5 shadow-[var(--adm-shadow-sm)]">
+      <div className="mb-3 adm-board-panel-tight p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-[11px] font-bold text-[var(--adm-text)]">Új átadási csomag</p>
@@ -305,7 +305,7 @@ export function HandoffPackagePanel({
             type="button"
             onClick={handleCreateDraft}
             disabled={!hasDocumentContext || isCreatingPackage}
-            className="rounded rounded-[8px] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="rounded-[var(--adm-radius-sm)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {isCreatingPackage ? "Létrehozás..." : "Mentés piszkozatként"}
           </button>
@@ -323,7 +323,7 @@ export function HandoffPackagePanel({
       )}
 
       {!isLoading && !error && activePackages.length === 0 && (
-        <div className="rounded-[18px] border border-dashed border-[var(--adm-border)] bg-[var(--adm-ivory-100)] px-4 py-7 text-center">
+        <div className="adm-board-empty min-h-[150px] px-4 py-5 text-center">
           <span className="material-symbols-outlined text-2xl text-[#c3c8c1]">inbox</span>
           <p className="text-[11px] text-[var(--adm-text-muted)] mt-2">
             Nincs aktív átadási csomag ehhez az ügyhöz.
@@ -366,7 +366,7 @@ export function HandoffPackagePanel({
                 </div>
 
                 {/* Csomag tartalma */}
-                <div className="rounded-[12px] border border-[var(--adm-border)] bg-[#FAFAF8] p-3 mb-2">
+                <div className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-[#FAFAF8] p-3 mb-2">
                   <p className="text-[9px] font-bold uppercase tracking-widest text-[var(--adm-text-muted)] mb-1">Csomag tartalma</p>
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
@@ -480,14 +480,14 @@ export function HandoffPackagePanel({
                       <button
                         onClick={() => handleSaveSummary(pkg.id)}
                         disabled={isSavingSummary}
-                        className="rounded-[8px] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="rounded-[var(--adm-radius-sm)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {isSavingSummary ? "Mentés..." : "Mentés"}
                       </button>
                       <button
                         onClick={cancelEditing}
                         disabled={isSavingSummary}
-                        className="rounded-[8px] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border border-[#c3c8c1] text-[var(--adm-text-muted)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="rounded-[var(--adm-radius-sm)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border border-[#c3c8c1] text-[var(--adm-text-muted)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         Mégse
                       </button>
@@ -521,7 +521,7 @@ export function HandoffPackagePanel({
                         <button
                           onClick={() => handleSubmitForReview(pkg.id)}
                           disabled={submittingPackageId === pkg.id || submitDisabled}
-                          className="rounded-[8px] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[var(--adm-ochre-500)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          className="rounded-[var(--adm-radius-sm)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[var(--adm-ochre-500)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                           {submittingPackageId === pkg.id ? "Beküldés..." : "Beküldés ügyvédi review-ra"}
                         </button>
@@ -530,7 +530,7 @@ export function HandoffPackagePanel({
                         type="button"
                         onClick={() => handleArchivePackage(pkg)}
                         disabled={archivingPackageId === pkg.id}
-                        className="rounded-[8px] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border border-[var(--adm-border)] bg-[var(--adm-surface)] text-[#7B5E2E] hover:bg-[var(--adm-ivory-100)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="rounded-[var(--adm-radius-sm)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border border-[var(--adm-border)] bg-[var(--adm-surface)] text-[#7B5E2E] hover:bg-[var(--adm-ivory-100)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {archivingPackageId === pkg.id ? "Archiválás..." : "Archiválás"}
                       </button>
