@@ -373,12 +373,31 @@ select {
   min-height: 600px;
 }
 
+.auth-wordmark-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 56px;
+}
+
+.auth-logo-mark {
+  display: flex;
+  width: 46px;
+  height: 58px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(244, 240, 232, 0.2);
+  border-radius: 14px;
+  background: rgba(244, 240, 232, 0.95);
+  padding: 6px;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.18);
+}
+
 .auth-wordmark {
   font-family: Georgia, 'Times New Roman', serif;
   font-size: 24px;
   font-weight: 700;
   color: var(--adm-ivory-50);
-  margin-bottom: 72px;
 }
 
 .auth-brand-title,
@@ -681,6 +700,10 @@ select {
   .auth-title,
   .auth-brand-title {
     font-size: 32px;
+  }
+
+  .auth-wordmark-row {
+    margin-bottom: 32px;
   }
 
   .auth-footer-row {

@@ -187,13 +187,13 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
     <aside className={`${collapsed ? "w-20" : "w-[232px]"} min-h-screen ${isSignal ? "bg-[#111827]" : "adm-sidebar"} text-white flex flex-col transition-[width] duration-150`}>
       <div className={`${collapsed ? "px-3" : "px-4"} py-4 border-b ${isSignal ? "border-[#1F2937]" : "border-white/10"}`}>
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-[var(--adm-ivory-100)] shadow-[0_10px_24px_rgba(0,0,0,0.16)]">
+          <div className="flex h-11 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-white/15 bg-[var(--adm-ivory-100)] p-1 shadow-[0_10px_24px_rgba(0,0,0,0.16)]">
             <Image
               src="/brand/adminiculum-logo.png"
               alt="Adminiculum logó"
               width={36}
               height={45}
-              className="h-full w-full object-contain"
+              className="h-full w-full object-contain drop-shadow-[0_1px_0_rgba(255,255,255,0.35)]"
               priority
             />
           </div>

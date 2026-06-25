@@ -159,8 +159,8 @@ function ClauseLibraryPageContent() {
                 <p className="mt-1">Későbbi patchben aktiválható</p>
               </div>
               <div>
-                <p className="font-semibold text-[#1F2821]">AI generálás</p>
-                <p className="mt-1">Nem része ennek a foundation körnek</p>
+                <p className="font-semibold text-[#1F2821]">Későbbi munkamód</p>
+                <p className="mt-1">Prompt / workflow előkészítés, nem aktív generálás</p>
               </div>
             </div>
           </div>

@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 type AuthShellProps = {
   title: string;
   subtitle: string;
@@ -37,7 +39,19 @@ export function AuthShell({
         <div className="auth-shell">
           <section className="auth-brand-panel">
             <div>
-              <div className="auth-wordmark">Adminiculum</div>
+              <div className="auth-wordmark-row">
+                <span className="auth-logo-mark">
+                  <Image
+                    src="/brand/adminiculum-logo.png"
+                    alt="Adminiculum logó"
+                    width={46}
+                    height={58}
+                    className="h-full w-full object-contain"
+                    priority
+                  />
+                </span>
+                <span className="auth-wordmark">Adminiculum</span>
+              </div>
               <div className="auth-brand-title">Belépés a jogi munkapadba.</div>
               <p className="auth-brand-copy">
                 Az Adminiculum belső ügyvédi munkafelület. Belépés csak jóváhagyott irodai

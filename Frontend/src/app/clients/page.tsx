@@ -210,15 +210,15 @@ function ClientsPageContent() {
     const hasProfile = fillStatus !== "none";
     const hasHeader = Boolean(profile?.headerAssetPath);
     return (
-      <AdminPanel key={client.id} className="overflow-hidden p-4">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <AdminPanel key={client.id} className="overflow-hidden p-4 shadow-[var(--adm-shadow-sm)]">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-serif text-2xl font-medium leading-tight text-[var(--adm-text)]">{profile?.officialName || display.name}</h2>
               {primary ? <AdminBadge tone="gold">Alap ügyfél</AdminBadge> : <AdminBadge tone="neutral">Ügyfél</AdminBadge>}
             </div>
             <p className="mt-1 text-sm text-[#3D4842]">Rövid név: <b>{profile?.shortName || (coreKey(client) === "blackbelt" ? "BlackBelt" : coreKey(client) === "saubermacher" ? "Saubermacher" : coreKey(client) === "balintfy" ? "Bálintfy" : display.name)}</b></p>
-            <div className="mt-3 grid gap-2 text-xs text-[#3D4842] sm:grid-cols-2">
+            <div className="mt-3 grid gap-2 text-xs text-[#3D4842] md:grid-cols-2 xl:grid-cols-4">
               <p>Székhely: <b>{profile?.registeredSeat || display.address || "Nincs megadva"}</b></p>
               <p>Adószám: <b>{profile?.taxNumber || display.taxNumber || "Nincs megadva"}</b></p>
               <p>Cégjegyzékszám / nyilvántartási szám: <b>{profile?.registrationNumber || display.companyRegistrationNumber || "Nincs megadva"}</b></p>
@@ -234,7 +234,7 @@ function ClientsPageContent() {
               A house style profil dokumentumformátumot, fejléc/arculati elvárásokat és ügyfél-specifikus instrukciókat ad a prompt-copy workflow-hoz.
             </p>
           </div>
-          <div className="flex shrink-0 flex-wrap gap-2">
+          <div className="flex shrink-0 flex-wrap gap-2 xl:max-w-[360px] xl:justify-end">
             <Link href={`/clients/${client.id}`} className="inline-flex items-center justify-center rounded-[5px] border border-[#173824] bg-[var(--adm-green-800)] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#173824]">Ügyfél dosszié</Link>
             <Link href={`/clients/${client.id}#house-style`} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">House style</Link>
             <Link href={`/cases?newCase=1&clientId=${encodeURIComponent(client.id)}`} className="inline-flex items-center justify-center rounded-[5px] border border-[#8E6A1B] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">+ Új ügy</Link>
@@ -248,8 +248,8 @@ function ClientsPageContent() {
   return (
     <div className="flex min-h-0 flex-1 adm-shell-bg text-[var(--adm-text)]">
       <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-5xl space-y-5 p-8">
-          <div className="flex flex-col gap-4 border border-[rgba(22,32,26,0.10)] bg-white p-5 md:flex-row md:items-center md:justify-between">
+        <div className="mx-auto max-w-[1420px] space-y-5 p-5 lg:p-7">
+          <div className="flex flex-col gap-4 rounded-[var(--adm-radius-lg)] border border-[rgba(22,32,26,0.10)] bg-white p-5 shadow-[var(--adm-shadow-sm)] md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Ügyfelek</p>
               <h1 className="mt-1 font-serif text-4xl font-medium text-[var(--adm-text)]">Ügyfelek</h1>
@@ -258,13 +258,13 @@ function ClientsPageContent() {
             <AdminButton variant="primary" onClick={handleCreate}>+ Új ügyfél</AdminButton>
           </div>
 
-          <AdminPanel className="p-4">
-            <p className="text-[11px] text-[#3D4842]">
-              A fő ügyindítási lista alapértelmezetten a kiemelt pilot ügyfelekre szűkít: BlackBelt, Saubermacher és Bálintfy. Más ügyfelek nem törlődnek.
-            </p>
-          </AdminPanel>
-
-          <div className="grid gap-3 lg:grid-cols-2">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,0.9fr)]">
+            <AdminPanel className="p-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Lista fókusz</p>
+              <p className="mt-2 text-[11px] leading-5 text-[#3D4842]">
+                A fő ügyindítási lista alapértelmezetten a kiemelt pilot ügyfelekre szűkít: BlackBelt, Saubermacher és Bálintfy. Más ügyfelek nem törlődnek.
+              </p>
+            </AdminPanel>
             <AdminPanel className="p-4">
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">House style termékérték</p>
               <ul className="mt-2 space-y-1 text-[11px] text-[#3D4842]">

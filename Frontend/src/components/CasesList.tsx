@@ -611,7 +611,7 @@ export function CasesList() {
 
   return (
     <section className="space-y-4">
-      <div className="grid gap-3 border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+      <div className="grid gap-3 rounded-[var(--adm-radius-lg)] border border-[var(--adm-border)] bg-[var(--adm-surface-raised)] p-4 shadow-[var(--adm-shadow-sm)] lg:grid-cols-[minmax(0,1fr)_260px]">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Home Office ügyindító</p>
           <h1 className="mt-1 font-serif text-2xl font-medium text-[var(--adm-text)]">Ügyek — itt válaszd ki, mivel folytatod</h1>
@@ -634,7 +634,7 @@ export function CasesList() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3 border border-[rgba(22,32,26,0.10)] bg-white p-4">
+      <div className="flex flex-wrap items-end gap-3 rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.10)] bg-white p-3 shadow-[var(--adm-shadow-sm)]">
         <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
           Szakterület
           <select value={practiceArea} onChange={(e) => setPracticeArea(e.target.value)} className="mt-2 block h-10 w-48 border border-[rgba(22,32,26,0.20)] bg-[var(--adm-surface)] px-2 text-xs text-[var(--adm-text)]">
@@ -661,7 +661,7 @@ export function CasesList() {
         <AdminButton variant="primary" onClick={() => setShowNewCaseModal(true)}>Új ügy létrehozása</AdminButton>
       </div>
 
-      <div className="overflow-hidden border border-[rgba(22,32,26,0.10)] bg-white">
+      <div className="overflow-hidden rounded-[var(--adm-radius-lg)] border border-[rgba(22,32,26,0.10)] bg-white shadow-[var(--adm-shadow-sm)]">
         {isLoadingCases ? (
           <div className="py-12 text-center text-xs text-[var(--adm-text-muted)]">Ügyek betöltése...</div>
         ) : caseLoadError ? (
@@ -673,32 +673,32 @@ export function CasesList() {
           <table className="w-full text-left">
             <thead className="border-b border-[rgba(22,32,26,0.10)] bg-[var(--adm-sand-100)]">
               <tr className="text-[10px] uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
-                <th className="px-4 py-3">Ügyszám</th>
-                <th className="px-4 py-3">Ügyfél</th>
-                <th className="px-4 py-3">Ügy címe</th>
-                <th className="px-4 py-3">Szakterület</th>
-                <th className="px-4 py-3">Státusz</th>
-                <th className="px-4 py-3">Felelős</th>
-                <th className="px-4 py-3">Munkaprioritás</th>
-                <th className="px-4 py-3">Művelet</th>
+                <th className="px-3 py-2.5">Ügyszám</th>
+                <th className="px-3 py-2.5">Ügyfél</th>
+                <th className="px-3 py-2.5">Ügy címe</th>
+                <th className="px-3 py-2.5">Szakterület</th>
+                <th className="px-3 py-2.5">Státusz</th>
+                <th className="px-3 py-2.5">Felelős</th>
+                <th className="px-3 py-2.5">Munkaprioritás</th>
+                <th className="px-3 py-2.5">Művelet</th>
               </tr>
             </thead>
             <tbody>
               {filteredCases.map((item) => (
                 <tr key={item.id} className="cursor-pointer border-b border-[var(--adm-border)] last:border-b-0 hover:bg-[var(--adm-surface)]" onClick={() => router.push(`/cases/${item.id}/documents`)}>
-                  <td className="px-4 py-4 text-xs font-semibold text-[var(--adm-text)]">{item.caseNumber}</td>
-                  <td className="px-4 py-4">
+                  <td className="px-3 py-3 text-xs font-semibold text-[var(--adm-text)]">{item.caseNumber}</td>
+                  <td className="px-3 py-3">
                     <div className="flex items-center gap-2">
                       <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: item.clientColor || getClientColor(item.clientName).bg }} />
                       <span className="text-sm text-[var(--adm-text)]">{item.clientName || "Nincs megadva"}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-sm text-[#3D4842]">{item.title}</td>
-                  <td className="px-4 py-4 text-sm text-[#3D4842]">{formatMatterType(item.matterType)}</td>
-                  <td className="px-4 py-4"><AdminStatusPill tone={item.status === "OPEN" ? "green" : "neutral"}>{statusLabel[item.status] || item.status}</AdminStatusPill></td>
-                  <td className="px-4 py-4 text-xs text-[#3D4842]">{item.assignedLawyer?.name || "Nincs hozzárendelve"}</td>
-                  <td className="px-4 py-4"><AdminBadge tone={deriveWorkPriorityLabel(item.priority) === "Magas" ? "amber" : "neutral"}>{deriveWorkPriorityLabel(item.priority)}</AdminBadge></td>
-                  <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-3 py-3 text-sm text-[#3D4842]">{item.title}</td>
+                  <td className="px-3 py-3 text-sm text-[#3D4842]">{formatMatterType(item.matterType)}</td>
+                  <td className="px-3 py-3"><AdminStatusPill tone={item.status === "OPEN" ? "green" : "neutral"}>{statusLabel[item.status] || item.status}</AdminStatusPill></td>
+                  <td className="px-3 py-3 text-xs text-[#3D4842]">{item.assignedLawyer?.name || "Nincs hozzárendelve"}</td>
+                  <td className="px-3 py-3"><AdminBadge tone={deriveWorkPriorityLabel(item.priority) === "Magas" ? "amber" : "neutral"}>{deriveWorkPriorityLabel(item.priority)}</AdminBadge></td>
+                  <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-wrap gap-2">
                       <AdminButton size="sm" variant="primary" onClick={() => router.push(`/cases/${item.id}`)}>Megnyitás</AdminButton>
                       <AdminButton size="sm" variant="neutral" onClick={() => router.push(`/cases/${item.id}/documents`)}>Dokumentumtár</AdminButton>
@@ -726,8 +726,8 @@ export function CasesList() {
 
       {showNewCaseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#16201A]/70 p-4 backdrop-blur-sm">
-          <div className="max-h-[calc(100vh-44px)] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b-[3px] border-[var(--adm-ochre-500)] bg-[var(--adm-green-800)] px-7 py-5 text-[#F4EFDB]">
+          <div className="flex max-h-[calc(100vh-32px)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b-[3px] border-[var(--adm-ochre-500)] bg-[var(--adm-green-800)] px-6 py-4 text-[#F4EFDB]">
               <div className="flex items-center gap-4">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--adm-ochre-500)] font-serif text-xl text-[var(--adm-ochre-500)]">A</div>
                 <div>
@@ -738,12 +738,12 @@ export function CasesList() {
               <button onClick={() => setShowNewCaseModal(false)} className="rounded-full border border-white/20 px-3 py-1 text-sm text-white/80 hover:text-white">Bezárás</button>
             </div>
 
-            <div className="max-h-[calc(100vh-190px)] overflow-y-auto px-7 pb-6">
-              <div className="mt-4 rounded-lg border border-[rgba(181,138,42,0.28)] bg-[var(--adm-sand-100)] px-4 py-3 text-xs text-[#4D5A53]">
+            <div className="flex-1 overflow-y-auto px-6 pb-4">
+              <div className="mt-3 rounded-lg border border-[rgba(181,138,42,0.28)] bg-[var(--adm-sand-100)] px-4 py-2.5 text-xs text-[#4D5A53]">
                 Ügyindítási munkafolyamat: töltsd ki a kötelező mezőket, majd állítsd be a résztvevőket és a munkatervet.
               </div>
-              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-5">
-                <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">1</span><h3 className="font-serif text-xl font-medium">Ügyfél</h3><span className="text-[11px] font-semibold text-[var(--adm-terracotta-700)]">kötelező</span></div>
+              <section className="mt-3 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-4">
+                <div className="mb-3 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">1</span><h3 className="font-serif text-xl font-medium">Ügyfél</h3><span className="text-[11px] font-semibold text-[var(--adm-terracotta-700)]">kötelező</span></div>
                 <p className="mb-4 text-xs text-[var(--adm-text-muted)]">Válassz meglévő ügyfelet, vagy rögzíts új ügyféladatot az ügyindításhoz.</p>
                 <div className="mb-4 inline-flex rounded-md border border-[rgba(22,32,26,0.20)] bg-[var(--adm-sand-100)] p-1">
                   <button onClick={() => setClientMode("existing")} className={`rounded px-4 py-1.5 text-xs font-semibold ${clientMode === "existing" ? "bg-[var(--adm-green-800)] text-[#F4EFDB]" : "text-[#3D4842]"}`}>Meglévő ügyfél</button>
@@ -805,7 +805,7 @@ export function CasesList() {
                 )}
               </section>
 
-              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-5">
+              <section className="mt-3 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-4">
                 <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">2</span><h3 className="font-serif text-xl font-medium">Ügy típusa</h3><span className="text-[11px] font-semibold text-[var(--adm-terracotta-700)]">kötelező</span></div>
                 <p className="mb-4 text-xs text-[var(--adm-text-muted)]">Nevezd meg röviden az ügyet, majd jelöld ki a legjobb ügytípus kategóriát.</p>
                 <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Ügy megnevezése<input value={newCaseData.description || ""} onChange={(e) => setNewCaseData({ ...newCaseData, description: e.target.value })} className="mt-2 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm normal-case tracking-normal" placeholder="pl. Meggyes utca 12. — ajándékozási szerződés" /></label>
@@ -815,14 +815,14 @@ export function CasesList() {
                 {newCaseData.matterType === "CUSTOM" ? <input value={customMatterType} onChange={(e) => setCustomMatterType(e.target.value)} className="mt-3 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm" placeholder="Saját ügytípus" /> : null}
               </section>
 
-              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-5">
+              <section className="mt-3 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-4">
                 <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">3</span><h3 className="font-serif text-xl font-medium">Ügyfél szerepe</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
                 <p className="mb-4 text-xs text-[var(--adm-text-muted)]">Állítsd be, milyen minőségben képviseled az ügyfelet ebben az ügyben.</p>
                 <div className="flex flex-wrap gap-2">{clientRoles.map((role) => <button key={role} onClick={() => setNewCaseData({ ...newCaseData, clientRole: role })} className={`rounded-full border px-3 py-1.5 text-xs ${newCaseData.clientRole === role ? "border-[#173824] bg-[var(--adm-green-800)] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{role}</button>)}</div>
                 {newCaseData.clientRole === "Egyéb / saját szerep" ? <input value={customClientRole} onChange={(e) => setCustomClientRole(e.target.value)} className="mt-3 w-full rounded border border-[rgba(22,32,26,0.20)] px-3 py-2 text-sm" placeholder="pl. társtulajdonos" /> : null}
               </section>
 
-              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-5">
+              <section className="mt-3 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-4">
                 <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">4</span><h3 className="font-serif text-xl font-medium">Határidő</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
                 <p className="mb-4 text-xs text-[var(--adm-text-muted)]">Rögzíts pontos határidőt vagy relatív időablakot, ha az ügy menete ezt igényli.</p>
                 <div className="grid grid-cols-2 gap-2 md:grid-cols-5">{[{ id: "none", label: "Nincs határidő" }, { id: "date", label: "Pontos dátum" }, { id: "days", label: "X nap múlva" }, { id: "hours", label: "X óra múlva" }, { id: "minutes", label: "X perc múlva" }].map((mode) => <button key={mode.id} onClick={() => updateDeadline(mode.id as DeadlineMode)} className={`rounded border p-3 text-left text-xs font-semibold ${deadlineMode === mode.id ? "border-[#173824] bg-[var(--adm-green-800)] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.20)] bg-white text-[#3D4842]"}`}>{mode.label}</button>)}</div>
@@ -832,7 +832,7 @@ export function CasesList() {
                 <div className="mt-3 rounded-md border border-[#C5D3C8] bg-[#E2E8DA] p-3 text-sm text-[var(--adm-green-800)]">Határidő: <b>{formatDeadlinePreview(newCaseData.deadline)}</b>{reminder !== "Nincs emlékeztető" ? ` — emlékeztető: ${reminder}` : ""}</div>
               </section>
 
-              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-5">
+              <section className="mt-3 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-4">
                 <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">5</span><h3 className="font-serif text-xl font-medium">Résztvevők</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
                 <p className="mb-4 text-xs text-[var(--adm-text-muted)]">Válaszd ki, kik dolgoznak együtt az ügyön és kik kerüljenek be a review-útvonalba.</p>
                 <div className="flex flex-wrap gap-2">
@@ -873,7 +873,7 @@ export function CasesList() {
                 <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Résztvevőket később is hozzáadhatsz az ügy oldaláról.</p>
               </section>
 
-              <section className="mt-4 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-5">
+              <section className="mt-3 rounded-xl border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-5 py-4">
                 <div className="mb-4 flex items-center gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#F2E4BD] bg-[rgba(181,138,42,0.10)] text-xs font-semibold text-[#8E6A1B]">6</span><h3 className="font-serif text-xl font-medium">Munkaterv / review-útvonal</h3><span className="text-[11px] text-[#A6AEA3]">opcionális</span></div>
                 <p className="mb-4 text-xs text-[var(--adm-text-muted)]">Építsd fel, ki milyen sorrendben dolgozik az ügyön.</p>
                 <div className="flex flex-wrap gap-2">
@@ -978,7 +978,7 @@ export function CasesList() {
               {createError ? <div className="mb-4 rounded border border-[#F2DAD6] bg-[#F2DAD6] p-3 text-xs font-semibold text-[var(--adm-terracotta-700)]">{createError}</div> : null}
             </div>
 
-            <div className="flex items-center justify-between gap-4 border-t border-[rgba(22,32,26,0.10)] bg-[var(--adm-sand-100)] px-7 py-4">
+            <div className="sticky bottom-0 z-10 flex items-center justify-between gap-4 border-t border-[rgba(22,32,26,0.10)] bg-[var(--adm-sand-100)] px-6 py-3 shadow-[0_-12px_28px_rgba(22,32,26,0.08)]">
               <p className="text-[11.5px] text-[var(--adm-text-muted)]">Az ügy létrehozása után a Dokumentumtárba lépünk, ahol feltöltheted az első iratot.</p>
               <div className="flex gap-2"><AdminButton variant="ghost" onClick={() => setShowNewCaseModal(false)}>Mégse</AdminButton><AdminButton variant="primary" size="lg" onClick={handleCreateCase} disabled={isCreating}>{isCreating ? "Létrehozás..." : "Ügy létrehozása"}</AdminButton></div>
             </div>
