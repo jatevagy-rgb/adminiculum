@@ -146,21 +146,20 @@ function mapTaskBucket(task: TaskItem): "review" | "waiting" | "depends" | "urge
   return "waiting";
 }
 
-function workflowPill(label: string, state: "ok" | "progress" | "review" | "missing") {
-  const tone =
-    state === "ok"
-      ? "bg-[#DCE8DE] text-[#2E6A4A]"
-      : state === "progress"
-      ? "bg-[#E3EAF3] text-[#3C5575]"
-      : state === "review"
-      ? "bg-[#E4DDF2] text-[#5B4499]"
-      : "bg-[var(--adm-ivory-100)] text-[var(--adm-text-soft)]";
-  return <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-semibold ${tone}`}>{label}</span>;
+function humanizeDashboardError(message: string): string {
+  const value = message.toLowerCase();
+  if (value.includes("authentication token") || value.includes("unauthorized") || value.includes("401")) {
+    return "A munkamenet frissítése szükséges. Jelentkezz be újra, vagy frissítsd az oldalt.";
+  }
+  if (value.includes("failed to fetch") || value.includes("network")) {
+    return "A dashboard adatai most nem érhetők el. Próbáld újra pár perc múlva.";
+  }
+  return "A dashboard fő adatai átmenetileg nem érhetők el.";
 }
 
 function EmptyState({ title, subtitle }: { title: string; subtitle: string }) {
   return (
-    <div className="adm-board-empty min-h-[150px] p-4 text-center">
+    <div className="adm-board-empty adm-board-empty-compact p-3 text-left">
       <p className="text-xs font-semibold text-[var(--adm-text)]">{title}</p>
       <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{subtitle}</p>
     </div>
@@ -227,7 +226,7 @@ export function Dashboard() {
         setError("A dashboard fő adatai nem érhetők el.");
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Hiba történt a dashboard betöltésekor.");
+      setError(humanizeDashboardError(e instanceof Error ? e.message : ""));
     } finally {
       setLoading(false);
     }
@@ -270,17 +269,6 @@ export function Dashboard() {
   const activeCase = cases[0] || null;
   const reviewQueue = tasks.filter((task) => mapTaskBucket(task) === "review").slice(0, 6);
 
-  const kpis = useMemo(() => {
-    const review = tasks.filter((task) => mapTaskBucket(task) === "review").length;
-    const urgent = tasks.filter((task) => mapTaskBucket(task) === "urgent").length;
-    const depends = tasks.filter((task) => mapTaskBucket(task) === "depends").length;
-    const waiting = tasks.filter((task) => mapTaskBucket(task) === "waiting").length;
-    const ready = tasks.filter((task) => mapTaskBucket(task) === "ready").length;
-    const done = tasks.filter((task) => mapTaskBucket(task) === "done").length;
-
-    return { waiting, depends, review, urgent, ready, done };
-  }, [tasks]);
-
   const upcomingDeadlines = useMemo(() => {
     return tasks
       .filter((task) => !!task.dueDate && mapTaskBucket(task) !== "done")
@@ -321,34 +309,6 @@ export function Dashboard() {
       })
       .slice(0, 3);
   }, [cases]);
-
-  const asyncHandoffItems = useMemo(() => {
-    const taskItems = openTasks.slice(0, 2).map((task) => ({
-      id: `task-${task.id}`,
-      title: task.title,
-      meta: task.case?.caseNumber ? `${task.case.caseNumber} · Feladat` : "Feladat",
-      detail: task.dueDate ? `Határidő: ${displayDate(task.dueDate)}` : "Nincs megadott határidő",
-      href: `/tasks?taskId=${task.id}`,
-    }));
-
-    const documentItems = recentDocuments.slice(0, 2).map((item) => ({
-      id: `document-${item.id}`,
-      title: mapRecentDocLabel(item.type || item.text),
-      meta: "Dokumentum aktivitás",
-      detail: displayDateTimeShort(item.timestamp),
-      href: item.caseId ? `/documents/compare?caseId=${item.caseId}` : "/documents/compare",
-    }));
-
-    const caseItems = attentionCases.slice(0, 2).map((caseItem) => ({
-      id: `case-${caseItem.id}`,
-      title: caseItem.title || caseItem.caseNumber,
-      meta: caseItem.caseNumber || "Ügy",
-      detail: caseItem.deadline ? `Határidő: ${displayDate(caseItem.deadline)}` : `Prioritás: ${caseItem.priority || "nincs megadva"}`,
-      href: `/cases/${caseItem.id}`,
-    }));
-
-    return [...taskItems, ...documentItems, ...caseItems].slice(0, 5);
-  }, [attentionCases, openTasks, recentDocuments]);
 
   const nextWorkCards = useMemo(() => {
     const focusTask = homeOfficeFocusTasks[0] || openTasks[0] || null;
@@ -416,7 +376,7 @@ export function Dashboard() {
   }, [attentionCases, cases, homeOfficeFocusTasks, localWorkspaceDraftCount, openTasks, recentDocuments]);
 
   const quickOpenLinks = [
-    { href: "/cases", label: "Ügyek", description: "Aktív ügyek áttekintése" },
+    { href: "/cases", label: "Ügyek", description: "Ügylista és ügyindítás" },
     { href: "/tasks", label: "Feladatok", description: "Rám váró feladatok" },
     { href: "/documents/compare", label: "Dokumentum-összehasonlítás", description: "Szerződés-workspace" },
     { href: "/litigation-workspace", label: "Peres munkatér", description: "Peres stratégiai térkép" },
@@ -434,42 +394,6 @@ export function Dashboard() {
     () => cases.filter((item) => String(item.status || "").toUpperCase() === "OPEN").length,
     [cases],
   );
-
-  // "Mai sor" — a mixed actionable queue (review + átadás + határidő), not a count duplicate.
-  const maiSorItems = useMemo(() => {
-    const items: Array<{ id: string; kind: string; title: string; detail: string; href: string }> = [];
-    const review = reviewQueue[0];
-    if (review) {
-      items.push({
-        id: `mai-review-${review.id}`,
-        kind: "Review",
-        title: review.title,
-        detail: `${review.case?.caseNumber || "Review tétel"} · Határidő: ${displayDate(review.dueDate)}`,
-        href: `/tasks?taskId=${review.id}`,
-      });
-    }
-    const readyTask = tasks.find((task) => mapTaskBucket(task) === "ready");
-    if (readyTask) {
-      items.push({
-        id: `mai-handoff-${readyTask.id}`,
-        kind: "Átadás",
-        title: readyTask.title,
-        detail: `${readyTask.case?.caseNumber || "Átadásra kész tétel"}`,
-        href: `/tasks?taskId=${readyTask.id}`,
-      });
-    }
-    const deadline = upcomingDeadlines.find((task) => mapTaskBucket(task) !== "review");
-    if (deadline) {
-      items.push({
-        id: `mai-deadline-${deadline.id}`,
-        kind: "Határidő",
-        title: deadline.title,
-        detail: `${displayDate(deadline.dueDate)} · ${deadline.case?.caseNumber || "Feladat"}`,
-        href: `/tasks?taskId=${deadline.id}`,
-      });
-    }
-    return items;
-  }, [reviewQueue, tasks, upcomingDeadlines]);
 
   // Communication intake foundation (OI1A) — derived from existing communications data only.
   // No Outlook/Graph connection; classification is a transparent heuristic, not a live feed.
@@ -496,6 +420,43 @@ export function Dashboard() {
   );
   const externalComms = useMemo(() => communicationSignals.filter((s) => s.audience === "external"), [communicationSignals]);
   const internalComms = useMemo(() => communicationSignals.filter((s) => s.audience === "internal"), [communicationSignals]);
+
+  // "Mai sor" — a mixed actionable queue (review + deadline + important communication), not a count duplicate.
+  const maiSorItems = useMemo(() => {
+    const items: Array<{ id: string; kind: string; title: string; detail: string; href: string }> = [];
+    const review = reviewQueue[0];
+    if (review) {
+      items.push({
+        id: `mai-review-${review.id}`,
+        kind: "Review",
+        title: review.title,
+        detail: `${review.case?.caseNumber || "Review tétel"} · Határidő: ${displayDate(review.dueDate)}`,
+        href: `/tasks?taskId=${review.id}`,
+      });
+    }
+    const deadline = upcomingDeadlines.find((task) => mapTaskBucket(task) !== "review");
+    if (deadline) {
+      items.push({
+        id: `mai-deadline-${deadline.id}`,
+        kind: "Határidő",
+        title: deadline.title,
+        detail: `${displayDate(deadline.dueDate)} · ${deadline.case?.caseNumber || "Feladat"}`,
+        href: `/tasks?taskId=${deadline.id}`,
+      });
+    }
+    const importantCommunication = externalComms.find((signal) => signal.requiresReview) || externalComms[0];
+    if (importantCommunication) {
+      items.push({
+        id: `mai-communication-${importantCommunication.id}`,
+        kind: "Kommunikáció",
+        title: importantCommunication.subject,
+        detail: `${importantCommunication.senderName || importantCommunication.senderEmail || "Külső fél"} · besorolás / válasz ellenőrzése`,
+        href: importantCommunication.proposedCaseId ? `/cases/${importantCommunication.proposedCaseId}/communications` : "/notifications",
+      });
+    }
+    return items;
+  }, [externalComms, reviewQueue, upcomingDeadlines]);
+
   // Foundation example list only — clearly labelled, not persisted, not live configuration.
   const watchedClientExamples = ["BlackBelt", "Saubermacher", "Bálintfy"];
 
@@ -591,9 +552,9 @@ export function Dashboard() {
           <KpiCard label="Nyitott ügyek" value={openCasesCount} tone="green" zeroHint="Nincs betöltött nyitott ügy" />
           <KpiCard label="Mai teendők" value={openTasks.length} tone="ink" zeroHint="Nincs nyitott teendő" />
           <KpiCard label="Közeli határidők" value={upcomingDeadlines.length} tone="amber" zeroHint="Nincs közeli határidő" />
-          <KpiCard label="Review jelzések" value={reviewDocumentCount} tone="navy" zeroHint="Nincs review jelzés" />
-          <KpiCard label="Átadási csomagok" value={kpis.ready} tone="sage" zeroHint="Nincs átadásra kész tétel" />
-          <KpiCard label="Helyi vázlatok" value={localWorkspaceDraftCount} tone="neutral" zeroHint="Nincs helyi vázlat" />
+          <KpiCard label="Review tételek" value={reviewDocumentCount} tone="navy" zeroHint="Nincs review tétel" />
+          <KpiCard label="Külső kommunikáció" value={externalComms.length} tone="gold" zeroHint="Nincs új külső jelzés" />
+          <KpiCard label="Belső kommunikáció" value={internalComms.length} tone="sage" zeroHint="Nincs új belső jelzés" />
         </section>
 
         {/* 4 + 5 — Dominant "Itt folytasd" workbench + review/handoff side column */}
@@ -687,31 +648,6 @@ export function Dashboard() {
               </div>
             </article>
 
-            <article className="adm-panel p-3.5">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="adm-heading text-[22px]">Gyors megnyitás</h3>
-                <span className="text-[11px] text-[var(--adm-text-muted)]">Munkaterületek</span>
-              </div>
-              <div className="mt-3 grid gap-2">
-                {quickOpenLinks.map((link, i) => {
-                  const marker = ["var(--adm-green-800)", "#14213D", "#FCA311", "var(--adm-sage-700)"][i % 4];
-                  return (
-                    <Link
-                      key={link.href}
-                      href={link.href}
-                      className="flex items-center gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2.5 hover:bg-[var(--adm-sand-100)]"
-                    >
-                      <span className="h-7 w-1 shrink-0 rounded-full" style={{ backgroundColor: marker }} />
-                      <span className="flex-1">
-                        <span className="block text-xs font-semibold text-[var(--adm-green-800)]">{link.label}</span>
-                        <span className="mt-0.5 block text-[10.5px] text-[var(--adm-text-muted)]">{link.description}</span>
-                      </span>
-                      <span className="text-[var(--adm-text-soft)]">→</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            </article>
           </aside>
         </section>
 
@@ -835,198 +771,89 @@ export function Dashboard() {
           </aside>
         </section>
 
-        {/* 7 — Lower support panels (lower visual weight) */}
-        <section className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.6fr)]">
-          <div className="space-y-5">
-            <article className="adm-panel adm-panel-accent-green p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+        {/* 7 — Compact support rail: useful dashboard signals only, no second case/task board */}
+        <section className="grid items-start gap-3 xl:grid-cols-[minmax(0,0.74fr)_minmax(0,0.86fr)_minmax(300px,0.56fr)]">
+          <article className="adm-panel adm-panel-accent-amber p-4">
+            <div className="flex items-start justify-between gap-3 border-b border-[var(--adm-border)] pb-3">
+              <div>
+                <p className="adm-kicker text-[#8A5A06]">Határidő</p>
+                <h3 className="adm-heading mt-0.5 text-[20px]">Közeli határidők</h3>
+              </div>
+              <Link href="/tasks" className="adm-link-button px-3 py-1.5 text-[11px]">Feladatok</Link>
+            </div>
+            <div className="mt-3 space-y-2 text-xs">
+              {upcomingDeadlines.length === 0 ? (
+                <EmptyState title="Nincs közeli határidő" subtitle="A mai és holnapi határidők kompakt jelzésként jelennek meg." />
+              ) : null}
+              {upcomingDeadlines.slice(0, 4).map((task) => (
+                <Link key={task.id} href={`/tasks?taskId=${task.id}`} className="block rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 border-l-[#FCA311] bg-[var(--adm-surface)] p-2.5 hover:bg-white">
+                  <p className="font-semibold text-[var(--adm-text)]">{task.title}</p>
+                  <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{displayDate(task.dueDate)} · {task.case?.caseNumber || "Feladat"}</p>
+                </Link>
+              ))}
+            </div>
+          </article>
+
+          <article className="adm-panel adm-panel-accent-navy p-4">
+            <div className="flex items-start justify-between gap-3 border-b border-[var(--adm-border)] pb-3">
+              <div>
+                <p className="adm-kicker text-[#14213D]">Dokumentum</p>
+                <h3 className="adm-heading mt-0.5 text-[20px]">Legutóbbi dokumentumok</h3>
+              </div>
+              <Link href="/documents/compare" className="adm-link-button px-3 py-1.5 text-[11px]">Workspace</Link>
+            </div>
+            <div className="mt-3 space-y-2 text-xs">
+              {recentDocuments.length === 0 ? (
+                <EmptyState title="Nincs dokumentum előzmény" subtitle="A legfrissebb feltöltések és módosítások itt jelennek meg." />
+              ) : null}
+              {recentDocuments.slice(0, 4).map((item) => (
+                <Link key={item.id} href={item.caseId ? `/documents/compare?caseId=${item.caseId}` : "/documents/compare"} className="flex items-start gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5 hover:bg-white">
+                  <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded bg-[#14213D]/10 text-[8px] font-bold uppercase tracking-tight text-[#14213D]">DOC</span>
+                  <span>
+                    <span className="block font-semibold text-[var(--adm-text)]">{mapRecentDocLabel(item.type || item.text)}</span>
+                    <span className="mt-0.5 block text-[11px] text-[var(--adm-text-muted)]">{displayDateTimeShort(item.timestamp)}</span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </article>
+
+          <div className="grid content-start gap-3">
+            <article className="adm-panel p-4">
+              <div className="flex items-center justify-between gap-2">
                 <div>
-                  <p className="adm-kicker text-[var(--adm-green-800)]">Átadások és aktivitás</p>
-                  <h3 className="adm-heading mt-1 text-[20px]">Aszinkron ügyátadás</h3>
-                  <p className="mt-1 max-w-2xl text-[11px] leading-5 text-[var(--adm-text-muted)]">
-                    Meglévő feladatokból, ügyadatokból, dokumentum aktivitásból és helyi böngészős vázlatokból
-                    összeállított munkafolyamat-nézet. Ez nem backend audit log.
-                  </p>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-center text-[10.5px]">
-                  <div className="rounded border border-[var(--adm-border)] border-t-2 border-t-[#14213D] bg-[var(--adm-surface)] px-2 py-1.5">
-                    <p className="font-serif text-[18px] leading-none text-[#14213D]">{openTasks.length}</p>
-                    <p className="mt-1 text-[var(--adm-text-muted)]">feladat</p>
-                  </div>
-                  <div className="rounded border border-[var(--adm-border)] border-t-2 border-t-[var(--adm-green-800)] bg-[var(--adm-surface)] px-2 py-1.5">
-                    <p className="font-serif text-[18px] leading-none text-[var(--adm-green-900)]">{attentionCases.length}</p>
-                    <p className="mt-1 text-[var(--adm-text-muted)]">ügy</p>
-                  </div>
-                  <div className="rounded border border-[var(--adm-border)] border-t-2 border-t-[#B7BEB6] bg-[var(--adm-surface)] px-2 py-1.5">
-                    <p className="font-serif text-[18px] leading-none text-[var(--adm-text)]">{localWorkspaceDraftCount}</p>
-                    <p className="mt-1 text-[var(--adm-text-muted)]">vázlat</p>
-                  </div>
+                  <p className="adm-kicker text-[var(--adm-green-800)]">Továbblépés</p>
+                  <h3 className="adm-heading mt-0.5 text-[20px]">Gyors megnyitás</h3>
                 </div>
               </div>
-              {loading ? <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Átadási nézet betöltése...</p> : null}
-              {!loading && asyncHandoffItems.length === 0 ? (
-                <p className="mt-3 rounded border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[11px] text-[var(--adm-text-muted)]">
-                  Nincs rögzített átadás. Nincs helyi böngészős munkavázlat.
-                </p>
-              ) : null}
-              <div className="mt-3 grid gap-2 md:grid-cols-2">
-                {asyncHandoffItems.slice(0, 4).map((item) => (
-                  <Link key={item.id} href={item.href} className="block rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 hover:bg-white">
-                    <p className="text-xs font-semibold text-[var(--adm-text)]">{item.title}</p>
-                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{item.meta} · {item.detail}</p>
-                  </Link>
-                ))}
+              <div className="mt-3 grid gap-2">
+                {quickOpenLinks.map((link, i) => {
+                  const marker = ["var(--adm-green-800)", "#14213D", "#FCA311", "#000000"][i % 4];
+                  return (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      className="flex items-center gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 hover:bg-[var(--adm-sand-100)]"
+                    >
+                      <span className="h-6 w-1 shrink-0 rounded-full" style={{ backgroundColor: marker }} />
+                      <span className="flex-1">
+                        <span className="block text-xs font-semibold text-[var(--adm-text)]">{link.label}</span>
+                        <span className="mt-0.5 block text-[10.5px] text-[var(--adm-text-muted)]">{link.description}</span>
+                      </span>
+                    </Link>
+                  );
+                })}
               </div>
             </article>
 
-            <article className="adm-panel adm-panel-accent-navy overflow-hidden">
-              <div className="flex items-center justify-between border-b border-[var(--adm-border)] bg-[#14213D]/[0.03] px-5 py-3">
-                <h3 className="adm-heading text-[22px]">Aktív ügyek</h3>
-                <Link href="/cases" className="adm-link-button px-3 py-1.5 text-xs">Összes ügy</Link>
-              </div>
-              {loading ? <p className="px-5 py-4 text-xs text-[var(--adm-text-muted)]">Ügyek betöltése...</p> : null}
-              {!loading && cases.length === 0 ? (
-                <div className="space-y-2 p-5">
-                  <EmptyState title="Még nincs aktív ügy" subtitle="Nyiss egy új ügyet, és itt azonnal megjelenik a dokumentumfolyamat állapota." />
-                  <div className="text-center">
-                    <Link href="/cases?newCase=1" className="adm-link-button adm-link-button-primary px-3 py-1.5 text-[11px]">Új ügy indítása</Link>
-                  </div>
-                </div>
-              ) : null}
-              {!loading && cases.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-left text-xs">
-                    <thead className="bg-[var(--adm-surface)] text-[10px] uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">
-                      <tr>
-                        <th className="px-3 py-2">Ügy</th>
-                        <th className="px-3 py-2">Ügyfél</th>
-                        <th className="px-3 py-2">Felelős</th>
-                        <th className="px-3 py-2">Dokumentum workflow</th>
-                        <th className="px-3 py-2">Akció</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cases.slice(0, 8).map((item) => (
-                        <tr key={item.id} className="border-t border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">
-                          <td className="px-3 py-3">
-                            <p className="font-semibold text-[var(--adm-text)]">{item.caseNumber}</p>
-                            <p className="text-[11px] text-[var(--adm-text-muted)]">{item.title || "Névtelen ügy"}</p>
-                          </td>
-                          <td className="px-3 py-3 text-[var(--adm-text)]">{item.clientName || "Nincs ügyfél"}</td>
-                          <td className="px-3 py-3">
-                            {item.assignedLawyer ? (
-                              <div className="inline-flex items-center gap-2">
-                                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#2E6A4A] text-[10px] font-bold text-white">
-                                  {initials(item.assignedLawyer.name)}
-                                </span>
-                                <span className="text-[11px] text-[var(--adm-text)]">{item.assignedLawyer.name}</span>
-                              </div>
-                            ) : (
-                              <span className="text-[11px] text-[var(--adm-text-soft)]">Nincs kijelölve</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-3">
-                            <div className="flex flex-wrap gap-1">
-                              {workflowPill("Eredeti", "ok")}
-                              {workflowPill("Módosított", "progress")}
-                              {workflowPill("Elemzés", "missing")}
-                              {workflowPill("Jóváhagyás", "review")}
-                            </div>
-                            <p className="mt-1 text-[10px] text-[var(--adm-text-soft)]">Nincs dokumentumállapot</p>
-                          </td>
-                          <td className="px-3 py-3">
-                            <div className="flex flex-wrap gap-1">
-                              <Link href={`/cases/${item.id}/documents`} className="rounded border border-[var(--adm-border-strong)] bg-white px-2 py-1 text-[11px] text-[var(--adm-green-800)]">Dokumentumtár</Link>
-                              <Link href={`/documents/compare?caseId=${item.id}`} className="rounded border border-[var(--adm-border-strong)] bg-white px-2 py-1 text-[11px] text-[var(--adm-green-800)]">Workspace</Link>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : null}
-            </article>
-
-            <article className="adm-panel overflow-hidden">
-              <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-5 py-3">
-                <h3 className="adm-heading text-[20px]">Csapatmunka board — előnézet</h3>
-                <Link href="/tasks" className="adm-link-button px-3 py-1.5 text-xs">Teljes board</Link>
-              </div>
-              <div className="overflow-x-auto p-4">
-                <div className="grid min-w-[860px] grid-cols-4 gap-3 xl:min-w-0">
-                  {["Előkészítés", "Review", "Javítás", "Átadásra kész"].map((col) => {
-                    const stageClass =
-                      col === "Review" ? "adm-stage-review" : col === "Javítás" ? "adm-stage-fix" : col === "Átadásra kész" ? "adm-stage-ready" : "adm-stage-prep";
-                    return (
-                    <div key={col} className="overflow-hidden rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)]">
-                      <p className={`adm-stage-head px-3 py-2 text-[11px] uppercase tracking-[0.1em] ${stageClass}`}>{col}</p>
-                      <div className="space-y-2 p-3">
-                        {tasks
-                          .filter((t) => {
-                            const bucket = mapTaskBucket(t);
-                            if (col === "Előkészítés") return bucket === "waiting";
-                            if (col === "Review") return bucket === "review";
-                            if (col === "Javítás") return bucket === "depends";
-                            return bucket === "ready";
-                          })
-                          .slice(0, 2)
-                          .map((t) => (
-                            <div key={t.id} className="rounded border border-[var(--adm-border)] bg-white p-2 text-[11px]">
-                              <p className="font-semibold text-[var(--adm-text)]">{t.title}</p>
-                              <p className="mt-1 text-[var(--adm-text-muted)]">{t.case?.caseNumber || "Feladat"}</p>
-                            </div>
-                          ))}
-                        {tasks.filter((t) => {
-                          const bucket = mapTaskBucket(t);
-                          if (col === "Előkészítés") return bucket === "waiting";
-                          if (col === "Review") return bucket === "review";
-                          if (col === "Javítás") return bucket === "depends";
-                          return bucket === "ready";
-                        }).length === 0 ? (
-                          <div className="rounded border border-dashed border-[var(--adm-border)] bg-[#F8F2E0] p-2 text-[10px] text-[var(--adm-text-soft)]">Nincs tétel ebben az oszlopban</div>
-                        ) : null}
-                      </div>
-                    </div>
-                    );
-                  })}
+            <article className="adm-panel adm-panel-accent-green p-4">
+              <div className="flex items-start gap-2 border-b border-[var(--adm-border)] pb-3">
+                <span className="mt-1 h-2.5 w-2.5 rounded-full bg-[var(--adm-green-800)]" />
+                <div>
+                  <p className="adm-kicker text-[var(--adm-green-800)]">Kitekintés</p>
+                  <h3 className="adm-heading mt-0.5 text-[20px]">Hírek / jogi-piaci jelzések</h3>
                 </div>
               </div>
-            </article>
-          </div>
-
-          <aside className="grid content-start gap-5">
-            <article className="adm-panel adm-panel-accent-amber p-5">
-              <h3 className="flex items-center gap-2 border-b border-[var(--adm-border)] pb-3 font-serif text-[20px] text-[var(--adm-text)]"><span className="h-2.5 w-2.5 rounded-full bg-[#FCA311]" />Mai &amp; holnapi határidők</h3>
-              <div className="mt-3 space-y-2 text-xs">
-                {upcomingDeadlines.length === 0 ? <EmptyState title="Nincs közeli határidő" subtitle="A mai és holnapi határidők itt fognak gyűlni." /> : null}
-                {upcomingDeadlines.map((task) => (
-                  <Link key={task.id} href={`/tasks?taskId=${task.id}`} className="block rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2 hover:bg-white">
-                    <p className="font-semibold text-[var(--adm-text)]">{task.title}</p>
-                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{displayDate(task.dueDate)} · {task.case?.caseNumber || "Feladat"}</p>
-                  </Link>
-                ))}
-              </div>
-            </article>
-
-            <article className="adm-panel adm-panel-accent-navy p-5">
-              <h3 className="flex items-center gap-2 border-b border-[var(--adm-border)] pb-3 font-serif text-[20px] text-[var(--adm-text)]"><span className="h-2.5 w-2.5 rounded-full bg-[#14213D]" />Legutóbbi dokumentumok</h3>
-              <div className="mt-3 space-y-2 text-xs">
-                {recentDocuments.length === 0 ? <EmptyState title="Nincs dokumentum előzmény" subtitle="A legfrissebb feltöltések és módosítások itt jelennek meg." /> : null}
-                {recentDocuments.map((item) => (
-                  <Link key={item.id} href={item.caseId ? `/documents/compare?caseId=${item.caseId}` : "/documents/compare"} className="flex items-start gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2 hover:bg-white">
-                    <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded bg-[#14213D]/10 text-[8px] font-bold uppercase tracking-tight text-[#14213D]">DOC</span>
-                    <span>
-                      <span className="block font-semibold text-[var(--adm-text)]">{mapRecentDocLabel(item.type || item.text)}</span>
-                      <span className="mt-0.5 block text-[11px] text-[var(--adm-text-muted)]">{displayDateTimeShort(item.timestamp)}</span>
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </article>
-
-            <article className="adm-panel adm-panel-accent-green p-5">
-              <h3 className="flex items-center gap-2 border-b border-[var(--adm-border)] pb-3 font-serif text-[20px] text-[var(--adm-text)]"><span className="h-2.5 w-2.5 rounded-full bg-[var(--adm-green-800)]" />Hírek / jogi-piaci jelzések</h3>
               <div className="mt-3 space-y-2 text-xs">
                 {legalNews.isLoading ? <p className="text-[var(--adm-text-soft)]">Hírfeed betöltése...</p> : null}
                 {!legalNews.isLoading && (legalNews.error || legalSignals.length === 0) ? (
@@ -1034,7 +861,7 @@ export function Dashboard() {
                     Előkészítés alatt — a hírfeed későbbi patchben aktiválható.
                   </div>
                 ) : null}
-                {legalSignals.map((article, index) => (
+                {legalSignals.slice(0, 2).map((article, index) => (
                   <div key={`${article.title}-${index}`} className="rounded border border-[var(--adm-border)] border-l-[3px] border-l-[var(--adm-green-800)] bg-[var(--adm-surface)] p-2">
                     <p className="font-semibold text-[var(--adm-text)]">{article.title}</p>
                     <p className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--adm-text-muted)]"><span className="inline-flex rounded-full bg-[var(--adm-sage-100)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--adm-green-800)]">{article.source}</span>{article.date}</p>
@@ -1047,7 +874,7 @@ export function Dashboard() {
                 ))}
               </div>
             </article>
-          </aside>
+          </div>
         </section>
       </div>
     </div>
