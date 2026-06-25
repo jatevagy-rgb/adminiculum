@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import {
   getCases,
   getCommunications,
@@ -39,24 +39,27 @@ type KpiCardProps = {
   zeroHint: string;
 };
 
-type KpiToneStyle = { bar: string; dot: string; surface: string; num: string };
+type KpiToneStyle = { accent: string; bar: string; dot: string; surface: string; num: string };
 
 const KPI_STYLES: Record<KpiCardProps["tone"], KpiToneStyle> = {
-  green: { bar: "bg-[var(--adm-green-800)]", dot: "bg-[var(--adm-green-800)]", surface: "bg-[#F3F7F2]", num: "text-[var(--adm-green-900)]" },
-  sage: { bar: "bg-[var(--adm-sage-700)]", dot: "bg-[var(--adm-sage-700)]", surface: "bg-[#F2F6F0]", num: "text-[var(--adm-green-900)]" },
-  navy: { bar: "bg-[#14213D]", dot: "bg-[#14213D]", surface: "bg-[#F0F2F7]", num: "text-[#14213D]" },
-  ink: { bar: "bg-[#243044]", dot: "bg-[#243044]", surface: "bg-[#F1F3F6]", num: "text-[#243044]" },
-  amber: { bar: "bg-[#FCA311]", dot: "bg-[#FCA311]", surface: "bg-[#FFF6E6]", num: "text-[#8A5A06]" },
-  gold: { bar: "bg-[var(--adm-ochre-500)]", dot: "bg-[var(--adm-ochre-500)]", surface: "bg-[#FBF5E8]", num: "text-[#6B4B14]" },
-  purple: { bar: "bg-[#5B4499]", dot: "bg-[#5B4499]", surface: "bg-[#F4F1FA]", num: "text-[#5B4499]" },
-  red: { bar: "bg-[var(--adm-terracotta-700)]", dot: "bg-[var(--adm-terracotta-700)]", surface: "bg-[#FBF0ED]", num: "text-[var(--adm-terracotta-700)]" },
-  neutral: { bar: "bg-[#B7BEB6]", dot: "bg-[#B7BEB6]", surface: "bg-[#F6F6F4]", num: "text-[var(--adm-text)]" },
+  green: { accent: "#1f4a33", bar: "bg-[var(--adm-green-800)]", dot: "bg-[var(--adm-green-800)]", surface: "bg-[#F3F7F2]", num: "text-[var(--adm-green-900)]" },
+  sage: { accent: "#6f7d68", bar: "bg-[var(--adm-sage-700)]", dot: "bg-[var(--adm-sage-700)]", surface: "bg-[#F2F6F0]", num: "text-[var(--adm-green-900)]" },
+  navy: { accent: "#14213D", bar: "bg-[#14213D]", dot: "bg-[#14213D]", surface: "bg-[#F0F2F7]", num: "text-[#14213D]" },
+  ink: { accent: "#000000", bar: "bg-[#000000]", dot: "bg-[#000000]", surface: "bg-[#F1F3F6]", num: "text-[#000000]" },
+  amber: { accent: "#FCA311", bar: "bg-[#FCA311]", dot: "bg-[#FCA311]", surface: "bg-[#FFF6E6]", num: "text-[#8A5A06]" },
+  gold: { accent: "#B47A10", bar: "bg-[#B47A10]", dot: "bg-[#B47A10]", surface: "bg-[#FBF5E8]", num: "text-[#6B4B14]" },
+  purple: { accent: "#5B4499", bar: "bg-[#5B4499]", dot: "bg-[#5B4499]", surface: "bg-[#F4F1FA]", num: "text-[#5B4499]" },
+  red: { accent: "#9B4A3E", bar: "bg-[var(--adm-terracotta-700)]", dot: "bg-[var(--adm-terracotta-700)]", surface: "bg-[#FBF0ED]", num: "text-[var(--adm-terracotta-700)]" },
+  neutral: { accent: "#E5E5E5", bar: "bg-[#E5E5E5]", dot: "bg-[#B7BEB6]", surface: "bg-[#F6F6F4]", num: "text-[var(--adm-text)]" },
 };
 
 function KpiCard({ label, value, tone, zeroHint }: KpiCardProps) {
   const s = KPI_STYLES[tone];
   return (
-    <div className={`relative overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] ${s.surface} px-3 pb-2.5 pt-3 shadow-[var(--adm-shadow-sm)]`}>
+    <div
+      className={`adm-kpi-cell relative overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] ${s.surface} px-3 pb-2.5 pl-4 pt-3 shadow-[var(--adm-shadow-sm)]`}
+      style={{ "--adm-kpi-accent": s.accent } as CSSProperties}
+    >
       <span className={`absolute inset-x-0 top-0 h-1 ${s.bar}`} />
       <p className="flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">
         <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
@@ -559,7 +562,7 @@ export function Dashboard() {
 
         {/* 4 + 5 — Dominant "Itt folytasd" workbench + review/handoff side column */}
         <section className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.38fr)_minmax(330px,0.72fr)]">
-          <article className={`adm-panel adm-panel-primary adm-panel-accent-green ${isSparseFocus ? "p-4" : "p-4 lg:p-5"}`}>
+          <article className={`adm-panel adm-panel-primary adm-panel-accent-green adm-focus-panel ${isSparseFocus ? "p-4 pl-5" : "p-4 pl-5 lg:p-5 lg:pl-6"}`}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="adm-kicker text-[var(--adm-green-800)]">Elsődleges munkasor</p>
@@ -603,15 +606,15 @@ export function Dashboard() {
           </article>
 
           <aside className="grid content-start gap-3">
-            <article className="adm-panel adm-panel-accent-amber p-3.5">
+            <article className="adm-panel adm-panel-accent-amber adm-daily-panel p-3.5">
               <p className="adm-kicker text-[#8A5A06]">Mai sor</p>
-              <h3 className="adm-heading mt-1 text-[24px]">Review · átadás · határidő</h3>
+              <h3 className="adm-heading mt-1 text-[24px]">Review · határidő · kommunikáció</h3>
               {loading ? <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Betöltés...</p> : null}
               {!loading && maiSorItems.length === 0 ? (
                 <div className="mt-3 space-y-2">
                   <div className="adm-board-empty adm-board-empty-compact">
                     <p className="text-xs font-semibold text-[var(--adm-text)]">Üres a mai sor</p>
-                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Review-, átadási és határidős tételek itt jelennek meg.</p>
+                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Review-, határidős és fontos kommunikációs tételek itt jelennek meg.</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Link href="/reviews" className="adm-link-button px-3 py-2 text-[11px]">Review sor</Link>
@@ -685,7 +688,7 @@ export function Dashboard() {
             </div>
 
             <div className="grid gap-3 p-4 md:grid-cols-2 lg:px-5">
-              <div className="rounded-[var(--adm-radius-sm)] border border-[#14213D]/15 border-l-[3px] border-l-[#14213D] bg-[#14213D]/[0.025] p-3">
+              <div className="adm-signal-card rounded-[var(--adm-radius-sm)] border-l-[3px] border-l-[#14213D] p-3">
                 <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#14213D]"><span className="h-1.5 w-1.5 rounded-full bg-[#14213D]" />Külső</p>
                 {externalComms.length === 0 ? (
                   <div className="mt-2 adm-board-empty adm-board-empty-compact">
@@ -707,7 +710,7 @@ export function Dashboard() {
                   </div>
                 )}
               </div>
-              <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-green-800)]/15 border-l-[3px] border-l-[var(--adm-green-800)] bg-[var(--adm-green-800)]/[0.025] p-3">
+              <div className="adm-signal-card rounded-[var(--adm-radius-sm)] border-l-[3px] border-l-[var(--adm-green-800)] p-3">
                 <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--adm-green-800)]" />Belső</p>
                 {internalComms.length === 0 ? (
                   <div className="mt-2 adm-board-empty adm-board-empty-compact">
@@ -734,7 +737,7 @@ export function Dashboard() {
           </article>
 
           <aside className="grid content-start gap-3">
-            <article className="adm-panel adm-panel-accent-green p-3.5">
+            <article className="adm-panel adm-panel-accent-green adm-rail-panel p-3.5">
               <p className="adm-kicker text-[var(--adm-green-800)]">Figyelt ügyfelek</p>
               <h3 className="adm-heading mt-0.5 text-[20px]">Kiemelt ügyfélkör</h3>
               <p className="mt-1.5 text-[11px] leading-5 text-[var(--adm-text-muted)]">
@@ -752,7 +755,7 @@ export function Dashboard() {
               </div>
             </article>
 
-            <article className="adm-panel adm-panel-accent-amber p-3.5">
+            <article className="adm-panel adm-panel-accent-amber adm-rail-panel p-3.5">
               <div className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 rounded-full bg-[#FCA311]" />
                 <h3 className="adm-heading text-[20px]">Válaszra vár</h3>
@@ -773,7 +776,7 @@ export function Dashboard() {
 
         {/* 7 — Compact support rail: useful dashboard signals only, no second case/task board */}
         <section className="grid items-start gap-3 xl:grid-cols-[minmax(0,0.74fr)_minmax(0,0.86fr)_minmax(300px,0.56fr)]">
-          <article className="adm-panel adm-panel-accent-amber p-4">
+          <article className="adm-panel adm-panel-accent-amber adm-rail-panel p-4">
             <div className="flex items-start justify-between gap-3 border-b border-[var(--adm-border)] pb-3">
               <div>
                 <p className="adm-kicker text-[#8A5A06]">Határidő</p>
@@ -794,7 +797,7 @@ export function Dashboard() {
             </div>
           </article>
 
-          <article className="adm-panel adm-panel-accent-navy p-4">
+          <article className="adm-panel adm-panel-accent-navy adm-rail-panel p-4">
             <div className="flex items-start justify-between gap-3 border-b border-[var(--adm-border)] pb-3">
               <div>
                 <p className="adm-kicker text-[#14213D]">Dokumentum</p>
@@ -819,7 +822,7 @@ export function Dashboard() {
           </article>
 
           <div className="grid content-start gap-3">
-            <article className="adm-panel p-4">
+            <article className="adm-panel adm-rail-panel p-4">
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <p className="adm-kicker text-[var(--adm-green-800)]">Továbblépés</p>
@@ -846,7 +849,7 @@ export function Dashboard() {
               </div>
             </article>
 
-            <article className="adm-panel adm-panel-accent-green p-4">
+            <article className="adm-panel adm-panel-accent-green adm-rail-panel p-4">
               <div className="flex items-start gap-2 border-b border-[var(--adm-border)] pb-3">
                 <span className="mt-1 h-2.5 w-2.5 rounded-full bg-[var(--adm-green-800)]" />
                 <div>

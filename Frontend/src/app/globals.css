@@ -354,14 +354,14 @@ select {
 }
 
 .adm-board-empty-compact {
-  min-height: 104px;
-  padding: 16px;
+  min-height: 64px;
+  place-items: start;
+  padding: 12px 14px;
+  text-align: left;
 }
 
 .adm-board-empty-compact::before {
-  width: 26px;
-  height: 26px;
-  margin-bottom: 8px;
+  display: none;
 }
 
 .adm-board-empty::before {
@@ -602,7 +602,7 @@ select {
 }
 
 .adm-dark-status {
-  background: linear-gradient(180deg, var(--adm-green-950) 0%, var(--adm-green-900) 100%);
+  background: linear-gradient(180deg, #14213d 0%, #0b1324 100%);
   color: var(--adm-ivory-50);
 }
 
@@ -641,6 +641,68 @@ select {
 
 .adm-panel-accent-amber {
   border-top: 3px solid #fca311;
+}
+
+.adm-kpi-cell {
+  isolation: isolate;
+  min-height: 104px;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.adm-kpi-cell::after {
+  content: "";
+  position: absolute;
+  inset-block: 10px;
+  left: 0;
+  width: 4px;
+  border-radius: 0 999px 999px 0;
+  background: var(--adm-kpi-accent, #14213d);
+  opacity: 0.82;
+}
+
+.adm-kpi-cell:hover {
+  border-color: color-mix(in srgb, var(--adm-kpi-accent, #14213d) 38%, var(--adm-border));
+  box-shadow: 0 14px 32px rgba(20, 33, 61, 0.10);
+  transform: translateY(-1px);
+}
+
+.adm-focus-panel {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(244, 249, 244, 0.94)),
+    radial-gradient(circle at 96% 12%, rgba(0, 52, 43, 0.11), transparent 17rem);
+}
+
+.adm-focus-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 8px;
+  background: linear-gradient(180deg, var(--adm-green-800), var(--adm-green-950));
+}
+
+.adm-focus-panel > * {
+  position: relative;
+}
+
+.adm-daily-panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 248, 232, 0.86));
+}
+
+.adm-signal-card {
+  border: 1px solid rgba(20, 33, 61, 0.10);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 248, 249, 0.92));
+}
+
+.adm-rail-panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 249, 245, 0.92));
 }
 
 .adm-stage-head {
