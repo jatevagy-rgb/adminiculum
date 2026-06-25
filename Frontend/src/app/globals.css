@@ -427,13 +427,13 @@ select {
 
 .adm-wizard-modal {
   display: flex;
-  max-height: min(90vh, 780px);
+  max-height: calc(100vh - 64px);
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--adm-border);
   border-radius: var(--adm-radius-lg);
   background: var(--adm-ivory-50);
-  box-shadow: var(--adm-shadow-shell);
+  box-shadow: 0 32px 90px rgba(13, 28, 20, 0.34);
 }
 
 .adm-wizard-header,
@@ -446,37 +446,109 @@ select {
 .adm-wizard-body {
   min-height: 0;
   overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.adm-wizard-body::-webkit-scrollbar {
+  width: 10px;
+}
+
+.adm-wizard-body::-webkit-scrollbar-track {
+  background: rgba(244, 239, 219, 0.64);
+}
+
+.adm-wizard-body::-webkit-scrollbar-thumb {
+  border: 3px solid rgba(244, 239, 219, 0.64);
+  border-radius: 999px;
+  background: rgba(31, 74, 51, 0.34);
 }
 
 .adm-wizard-step {
+  position: relative;
   display: flex;
-  min-height: 42px;
+  min-height: 30px;
   align-items: center;
-  gap: 8px;
-  border: 1px solid var(--adm-border);
-  border-radius: var(--adm-radius-sm);
-  background: rgba(255, 255, 255, 0.72);
-  padding: 8px 10px;
+  gap: 7px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  padding: 5px 7px;
   line-height: 1.15;
 }
 
 .adm-wizard-step-active {
-  border-color: rgba(181, 138, 42, 0.52);
-  background: var(--adm-sand-100);
+  background: rgba(181, 138, 42, 0.14);
   color: var(--adm-green-900);
 }
 
 .adm-wizard-step-index {
   display: grid;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   flex: none;
   place-items: center;
+  border: 1px solid rgba(22, 32, 26, 0.16);
   border-radius: 999px;
-  background: var(--adm-green-900);
-  color: var(--adm-ivory-50);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--adm-text-muted);
   font-size: 10px;
   font-weight: 800;
+}
+
+.adm-wizard-step-active .adm-wizard-step-index,
+.adm-wizard-step-complete .adm-wizard-step-index {
+  border-color: var(--adm-green-800);
+  background: var(--adm-green-800);
+  color: var(--adm-ivory-50);
+}
+
+.adm-wizard-step-current {
+  box-shadow: inset 0 0 0 1px rgba(181, 138, 42, 0.36);
+}
+
+.adm-wizard-section {
+  border: 1px solid rgba(22, 32, 26, 0.10);
+  border-radius: var(--adm-radius-md);
+  background: rgba(255, 255, 255, 0.88);
+  padding: 14px 16px;
+  box-shadow: var(--adm-shadow-sm);
+}
+
+.adm-wizard-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.adm-wizard-section-number {
+  display: flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #F2E4BD;
+  border-radius: 999px;
+  background: rgba(181, 138, 42, 0.10);
+  color: #8E6A1B;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.adm-wizard-chip {
+  border-radius: 999px;
+  border: 1px solid rgba(22, 32, 26, 0.18);
+  background: rgba(255, 255, 255, 0.88);
+  padding: 6px 10px;
+  color: #3D4842;
+  font-size: 12px;
+  line-height: 1.1;
+}
+
+.adm-wizard-chip-active {
+  border-color: #173824;
+  background: var(--adm-green-800);
+  color: var(--adm-ivory-50);
 }
 
 .adm-modal-field {
