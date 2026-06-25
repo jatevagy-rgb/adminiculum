@@ -34,7 +34,7 @@ type NewsFeedResult = {
 type KpiCardProps = {
   label: string;
   value: number;
-  tone: "green" | "gold" | "purple" | "red" | "sage" | "ink";
+  tone: "green" | "gold" | "purple" | "red" | "sage" | "ink" | "navy" | "amber" | "neutral";
   zeroHint: string;
 };
 
@@ -50,6 +50,12 @@ function kpiTone(tone: KpiCardProps["tone"]) {
       return "border-l-[var(--adm-terracotta-700)] bg-[var(--adm-surface)]";
     case "sage":
       return "border-l-[var(--adm-sage-700)] bg-[var(--adm-surface)]";
+    case "navy":
+      return "border-l-[#14213D] bg-[var(--adm-surface)]";
+    case "amber":
+      return "border-l-[#FCA311] bg-[var(--adm-surface)]";
+    case "neutral":
+      return "border-l-[#B7BEB6] bg-[var(--adm-surface)]";
     default:
       return "border-l-[var(--adm-text)] bg-[var(--adm-surface)]";
   }
@@ -67,6 +73,12 @@ function kpiDot(tone: KpiCardProps["tone"]) {
       return "bg-[var(--adm-terracotta-700)]";
     case "sage":
       return "bg-[var(--adm-sage-700)]";
+    case "navy":
+      return "bg-[#14213D]";
+    case "amber":
+      return "bg-[#FCA311]";
+    case "neutral":
+      return "bg-[#B7BEB6]";
     default:
       return "bg-[var(--adm-text)]";
   }
@@ -326,13 +338,6 @@ export function Dashboard() {
       .slice(0, 3);
   }, [tasks]);
 
-  const waitingTasks = useMemo(() => {
-    return tasks.filter((task) => {
-      const bucket = mapTaskBucket(task);
-      return bucket === "waiting" || bucket === "urgent" || bucket === "depends";
-    });
-  }, [tasks]);
-
   const reviewDocumentCount = stats?.stats.inReview ?? reviewQueue.length;
 
   const openTasks = useMemo(() => tasks.filter((task) => mapTaskBucket(task) !== "done"), [tasks]);
@@ -449,6 +454,52 @@ export function Dashboard() {
   const greetingName = currentUser?.name || "dr. Hubay Máté";
   const isSparseFocus = nextWorkCards.length <= 1;
 
+  // System / work-session state for the dark "Mai működési kép" panel (not a KPI duplicate).
+  const taskListAvailable = !warnings.includes("Feladatlista átmenetileg nem érhető el.");
+  const documentSignalCount = recentDocuments.length;
+
+  // KPI rubrikák — distinct categories, existing computed counts only.
+  const openCasesCount = useMemo(
+    () => cases.filter((item) => String(item.status || "").toUpperCase() === "OPEN").length,
+    [cases],
+  );
+
+  // "Mai sor" — a mixed actionable queue (review + átadás + határidő), not a count duplicate.
+  const maiSorItems = useMemo(() => {
+    const items: Array<{ id: string; kind: string; title: string; detail: string; href: string }> = [];
+    const review = reviewQueue[0];
+    if (review) {
+      items.push({
+        id: `mai-review-${review.id}`,
+        kind: "Review",
+        title: review.title,
+        detail: `${review.case?.caseNumber || "Review tétel"} · Határidő: ${displayDate(review.dueDate)}`,
+        href: `/tasks?taskId=${review.id}`,
+      });
+    }
+    const readyTask = tasks.find((task) => mapTaskBucket(task) === "ready");
+    if (readyTask) {
+      items.push({
+        id: `mai-handoff-${readyTask.id}`,
+        kind: "Átadás",
+        title: readyTask.title,
+        detail: `${readyTask.case?.caseNumber || "Átadásra kész tétel"}`,
+        href: `/tasks?taskId=${readyTask.id}`,
+      });
+    }
+    const deadline = upcomingDeadlines.find((task) => mapTaskBucket(task) !== "review");
+    if (deadline) {
+      items.push({
+        id: `mai-deadline-${deadline.id}`,
+        kind: "Határidő",
+        title: deadline.title,
+        detail: `${displayDate(deadline.dueDate)} · ${deadline.case?.caseNumber || "Feladat"}`,
+        href: `/tasks?taskId=${deadline.id}`,
+      });
+    }
+    return items;
+  }, [reviewQueue, tasks, upcomingDeadlines]);
+
   return (
     <div className="adm-dash-stage min-h-full px-3 pb-5 pt-3 sm:px-5 xl:px-6">
       <div className="mx-auto w-full max-w-[1440px] space-y-3">
@@ -462,8 +513,7 @@ export function Dashboard() {
                   Műszerfal
                 </h1>
                 <p className="mt-2 max-w-3xl text-[12.5px] leading-5 text-[var(--adm-text-muted)]">
-                  Jó reggelt, {greetingName}. Ügyek, teendők, review jelzések és helyi vázlatok egy sűrű
-                  belső operációs nézetben — csak ténylegesen elérhető adatokból.
+                  Jó reggelt, {greetingName}. Mai ügyek, teendők, review-jelzések és dokumentumaktivitás egy helyen.
                 </p>
               </div>
 
@@ -501,41 +551,50 @@ export function Dashboard() {
               <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[var(--adm-sage-300)]">
                 Mai működési kép
               </p>
+              <p className="text-[10.5px] leading-4 text-[var(--adm-ivory-100)]/60">
+                Munkamenet- és rendszerállapot — nem munkaszámláló.
+              </p>
               <div className="grid grid-cols-3 gap-2 xl:grid-cols-1">
-                <div className="adm-stat-box p-2">
-                  <p className="font-serif text-[24px] leading-none">{waitingTasks.length}</p>
-                  <p className="mt-1 text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-sage-300)]">Rám váró teendő</p>
-                  <p className="mt-1 text-[10.5px] leading-4 text-[var(--adm-ivory-100)]/70">
-                    {waitingTasks.length === 0 ? "Nincs betöltött teendő." : "Meglévő feladatlistából számolva."}
-                  </p>
+                <div className="adm-stat-box flex items-center justify-between gap-2 p-2.5">
+                  <div>
+                    <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-sage-300)]">Feladatlista</p>
+                    <p className="mt-0.5 text-[11px] leading-4 text-[var(--adm-ivory-100)]/80">
+                      {loading ? "Betöltés…" : taskListAvailable ? "Elérhető" : "Átmenetileg nem elérhető"}
+                    </p>
+                  </div>
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${loading ? "bg-[var(--adm-sage-300)]" : taskListAvailable ? "bg-[#7FBA8B]" : "bg-[#FCA311]"}`} />
                 </div>
-                <div className="adm-stat-box p-2">
-                  <p className="font-serif text-[24px] leading-none">{reviewDocumentCount}</p>
-                  <p className="mt-1 text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-sage-300)]">Review jelzés</p>
-                  <p className="mt-1 text-[10.5px] leading-4 text-[var(--adm-ivory-100)]/70">
-                    {reviewDocumentCount === 0 ? "Nincs ellenőrzésre váró dokumentum." : "Dashboard/review adatokból számolva."}
-                  </p>
+                <div className="adm-stat-box flex items-center justify-between gap-2 p-2.5">
+                  <div>
+                    <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-sage-300)]">Dokumentumfigyelés</p>
+                    <p className="mt-0.5 text-[11px] leading-4 text-[var(--adm-ivory-100)]/80">
+                      {documentSignalCount === 0 ? "Nincs új jelzés" : `${documentSignalCount} jelzés`}
+                    </p>
+                  </div>
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${documentSignalCount === 0 ? "bg-[var(--adm-sage-300)]" : "bg-[#FCA311]"}`} />
                 </div>
-                <div className="adm-stat-box p-2">
-                  <p className="font-serif text-[24px] leading-none">{localWorkspaceDraftCount}</p>
-                  <p className="mt-1 text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-sage-300)]">Helyi vázlat</p>
-                  <p className="mt-1 text-[10.5px] leading-4 text-[var(--adm-ivory-100)]/70">
-                    {localWorkspaceDraftCount === 0 ? "Nincs helyi böngészős vázlat." : "Csak ezen az eszközön mentett helyi vázlat."}
-                  </p>
+                <div className="adm-stat-box flex items-center justify-between gap-2 p-2.5">
+                  <div>
+                    <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-sage-300)]">Helyi munkamenet</p>
+                    <p className="mt-0.5 text-[11px] leading-4 text-[var(--adm-ivory-100)]/80">
+                      {localWorkspaceDraftCount === 0 ? "Nincs helyi vázlat" : `${localWorkspaceDraftCount} helyi vázlat`}
+                    </p>
+                  </div>
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${localWorkspaceDraftCount === 0 ? "bg-[var(--adm-sage-300)]" : "bg-[#7FBA8B]"}`} />
                 </div>
               </div>
             </aside>
           </div>
         </section>
 
-        {/* 3 — KPI / status strip */}
+        {/* 3 — KPI / rubrika strip (distinct categories, real counts only) */}
         <section className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-          <KpiCard label="Rám vár" value={kpis.waiting} tone="gold" zeroHint="Nincs nyitott tétel" />
-          <KpiCard label="Tőlem függ" value={kpis.depends} tone="ink" zeroHint="Nincs blokkolt tétel" />
-          <KpiCard label="Review alatt" value={kpis.review} tone="purple" zeroHint="Nincs review alatt" />
-          <KpiCard label="Sürgős ma" value={kpis.urgent} tone="red" zeroHint="Nincs sürgős határidő" />
-          <KpiCard label="Átadásra kész" value={kpis.ready} tone="sage" zeroHint="Nincs átadásra kész" />
-          <KpiCard label="Kész ezen a héten" value={kpis.done} tone="green" zeroHint="Még nincs lezárt tétel" />
+          <KpiCard label="Nyitott ügyek" value={openCasesCount} tone="green" zeroHint="Nincs betöltött nyitott ügy" />
+          <KpiCard label="Mai teendők" value={openTasks.length} tone="ink" zeroHint="Nincs nyitott teendő" />
+          <KpiCard label="Közeli határidők" value={upcomingDeadlines.length} tone="amber" zeroHint="Nincs közeli határidő" />
+          <KpiCard label="Review jelzések" value={reviewDocumentCount} tone="navy" zeroHint="Nincs review jelzés" />
+          <KpiCard label="Átadási csomagok" value={kpis.ready} tone="sage" zeroHint="Nincs átadásra kész tétel" />
+          <KpiCard label="Helyi vázlatok" value={localWorkspaceDraftCount} tone="neutral" zeroHint="Nincs helyi vázlat" />
         </section>
 
         {/* 4 + 5 — Dominant "Itt folytasd" workbench + review/handoff side column */}
@@ -575,7 +634,9 @@ export function Dashboard() {
                   <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#6B4B14]">{card.label}</p>
                   <p className="mt-1 text-sm font-semibold text-[var(--adm-text)]">{card.title}</p>
                   <p className="mt-1 text-[11px] leading-4 text-[var(--adm-text-muted)]">{card.detail}</p>
-                  <p className="mt-2 text-[11px] font-semibold text-[var(--adm-green-800)]">{card.action}</p>
+                  <span className="mt-2.5 inline-flex items-center gap-1 rounded-[var(--adm-radius-sm)] bg-[var(--adm-green-800)] px-3 py-1.5 text-[11px] font-bold text-[var(--adm-ivory-50)]">
+                    Folytatás <span aria-hidden="true">→</span>
+                  </span>
                 </Link>
               ))}
             </div>
@@ -583,34 +644,41 @@ export function Dashboard() {
 
           <aside className="grid content-start gap-3">
             <article className="adm-panel p-3.5">
-              <p className="adm-kicker">Review / handoff</p>
-              <h3 className="adm-heading mt-1 text-[24px]">Mai sor</h3>
+              <p className="adm-kicker">Mai sor</p>
+              <h3 className="adm-heading mt-1 text-[24px]">Review · átadás · határidő</h3>
               {loading ? <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Betöltés...</p> : null}
-              {!loading && reviewQueue.length === 0 ? (
+              {!loading && maiSorItems.length === 0 ? (
                 <div className="mt-3 space-y-2">
                   <div className="adm-board-empty adm-board-empty-compact">
-                    <p className="text-xs font-semibold text-[var(--adm-text)]">Még nincs review tétel</p>
-                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">A beérkező dokumentumok és feladatok itt jelennek meg.</p>
+                    <p className="text-xs font-semibold text-[var(--adm-text)]">Üres a mai sor</p>
+                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Review-, átadási és határidős tételek itt jelennek meg.</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Link href="/reviews" className="adm-link-button px-3 py-2 text-[11px]">Teljes review sor</Link>
+                    <Link href="/reviews" className="adm-link-button px-3 py-2 text-[11px]">Review sor</Link>
                     <Link href="/cases?newCase=1" className="adm-link-button adm-link-button-primary px-3 py-2 text-[11px]">Új ügy</Link>
                   </div>
                 </div>
               ) : null}
               <div className="mt-3 space-y-2">
-                {reviewQueue.map((task) => (
-                  <Link
-                    key={task.id}
-                    href={`/tasks?taskId=${task.id}`}
-                    className="block rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 hover:bg-white"
-                  >
-                    <p className="text-xs font-semibold text-[var(--adm-text)]">{task.title}</p>
-                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">
-                      {task.case?.caseNumber ? `${task.case.caseNumber} · Ügy review` : "Review tétel"} · Határidő: {displayDate(task.dueDate)}
-                    </p>
-                  </Link>
-                ))}
+                {maiSorItems.map((item) => {
+                  const kindClass =
+                    item.kind === "Review"
+                      ? "bg-[#E1E6F0] text-[#14213D]"
+                      : item.kind === "Határidő"
+                      ? "bg-[#FCE7C3] text-[#8a5a06]"
+                      : "bg-[var(--adm-sage-100)] text-[var(--adm-green-800)]";
+                  return (
+                    <Link
+                      key={item.id}
+                      href={item.href}
+                      className="block rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 hover:bg-white"
+                    >
+                      <span className={`inline-flex rounded px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.12em] ${kindClass}`}>{item.kind}</span>
+                      <p className="mt-1.5 text-xs font-semibold text-[var(--adm-text)]">{item.title}</p>
+                      <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{item.detail}</p>
+                    </Link>
+                  );
+                })}
               </div>
             </article>
 

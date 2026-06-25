@@ -19,10 +19,10 @@ export function LoginScreen({ onSignIn, onDevSignIn, showDevSignIn = false, disa
       title="Adminiculum"
       subtitle={
         isExpired
-          ? "A biztonságos munkamenet lejárt. Jelentkezzen be újra az irodai Microsoft-fiókkal a munkatér eléréséhez."
-          : "Folytatáshoz jelentkezzen be az irodai Microsoft / Entra ID fiókkal."
+          ? "A munkamenet lejárt. Jelentkezzen be újra Microsoft-fiókkal."
+          : "Jelentkezzen be Microsoft-fiókkal."
       }
-      eyebrow={isExpired ? "Munkamenet-biztonsági jelzés" : "Belső ügyvédi munkatér"}
+      eyebrow={isExpired ? "Munkamenet lejárt" : "Bejelentkezés"}
       notice={
         isExpired
           ? {
@@ -43,10 +43,6 @@ export function LoginScreen({ onSignIn, onDevSignIn, showDevSignIn = false, disa
       onMicrosoftSignIn={onSignIn}
       onDevSignIn={onDevSignIn}
       showDevSignIn={showDevSignIn}
-    >
-      <p className="auth-support-copy">
-        A Microsoft Entra ID az egyetlen belépési útvonal. Nincs e-mail/jelszó alapú belépés ezen a felületen.
-      </p>
-    </AuthShell>
+    />
   );
 }

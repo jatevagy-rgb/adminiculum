@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useEffect, useState } from "react";
 
 type AuthShellProps = {
   title: string;
@@ -19,10 +20,17 @@ type AuthShellProps = {
   children?: React.ReactNode;
 };
 
+const LEGAL_QUOTES: Array<{ text: string; author: string }> = [
+  { text: "A jog élete nem logika volt, hanem tapasztalat.", author: "Oliver Wendell Holmes Jr." },
+  { text: "Az igazságot nem rohammal kell bevenni; lassú lépésekkel kell megközelíteni.", author: "Benjamin N. Cardozo" },
+  { text: "A szabadság az emberek szívében él.", author: "Learned Hand" },
+  { text: "A napfény a legjobb fertőtlenítőszer.", author: "Louis D. Brandeis" },
+];
+
 export function AuthShell({
   title,
   subtitle,
-  eyebrow = "Enterprise authentication",
+  eyebrow = "Bejelentkezés",
   notice,
   microsoftLabel,
   microsoftDisabled,
@@ -31,11 +39,17 @@ export function AuthShell({
   showDevSignIn = false,
   children,
 }: AuthShellProps) {
+  // Hydration-safe rotation: server + first client render show quote 0, then pick by day after mount.
+  const [quoteIndex, setQuoteIndex] = useState(0);
+  useEffect(() => {
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+    setQuoteIndex(dayOfYear % LEGAL_QUOTES.length);
+  }, []);
+  const quote = LEGAL_QUOTES[quoteIndex];
+
   return (
     <div className="auth-page">
       <div className="auth-frame">
-        <div className="auth-brandbar">Adminiculum · belső ügyvédi munkatér</div>
-
         <div className="auth-shell">
           <section className="auth-brand-panel">
             <div>
@@ -52,17 +66,13 @@ export function AuthShell({
                 </span>
                 <span className="auth-wordmark">Adminiculum</span>
               </div>
-              <div className="auth-brand-title">Belépés a jogi munkapadba.</div>
-              <p className="auth-brand-copy">
-                Az Adminiculum belső ügyvédi munkafelület. Belépés csak jóváhagyott irodai
-                Microsoft-fiókkal.
-              </p>
+              <div className="auth-brand-title">Belépés</div>
             </div>
 
-            <div className="auth-brand-footer">
-              <div className="auth-brand-footer-label">Security protocol</div>
-              <div className="auth-brand-footer-copy">&quot;Verba volant, scripta manent.&quot;</div>
-            </div>
+            <figure className="auth-quote">
+              <blockquote className="auth-quote-text">{quote.text}</blockquote>
+              <figcaption className="auth-quote-author">— {quote.author}</figcaption>
+            </figure>
           </section>
 
           <section className="auth-content-panel">
@@ -83,7 +93,7 @@ export function AuthShell({
                 className="auth-microsoft-button"
                 onClick={onMicrosoftSignIn}
                 disabled={microsoftDisabled}
-                style={{ marginTop: 28 }}
+                style={{ marginTop: 24 }}
               >
                 <span className="auth-microsoft-badge" aria-hidden="true">
                   <span className="ms-box ms-red" />
@@ -94,20 +104,23 @@ export function AuthShell({
                 <span>{microsoftLabel}</span>
               </button>
 
-              <p className="auth-helper">
-                Belépés csak jóváhagyott irodai Microsoft-fiókkal. Nincs nyilvános regisztráció és
-                nincs ügyfél-hozzáférés ezen a felületen. Ha nem tud belépni, forduljon a
-                rendszergazdához.
-              </p>
+              <div className="auth-entry-list">
+                <button
+                  type="button"
+                  className="auth-entry"
+                  onClick={onMicrosoftSignIn}
+                  disabled={microsoftDisabled}
+                >
+                  <span className="auth-entry-title">Külsős ügyvédként lépek be</span>
+                  <span className="auth-entry-sub">Meghívott külsős jogászok is Microsoft-fiókkal lépnek be.</span>
+                </button>
 
-              <div className="auth-states">
-                <div className="auth-state">
-                  <strong>Lejárt munkamenet</strong>
-                  Kérjük, jelentkezzen be újra a Microsoft-fiókkal.
-                </div>
-                <div className="auth-state">
-                  <strong>Jogosultság hiányzik</strong>
-                  A Microsoft-fiók nem rendelkezik Adminiculum-hozzáféréssel.
+                <div className="auth-entry auth-entry-disabled" aria-disabled="true">
+                  <span className="auth-entry-title">
+                    Ügyfélportál
+                    <span className="auth-entry-tag">Hamarosan</span>
+                  </span>
+                  <span className="auth-entry-sub">Külön, hitelesített ügyfélfelület — később, ezen a felületen nem elérhető.</span>
                 </div>
               </div>
 
@@ -123,23 +136,15 @@ export function AuthShell({
               )}
 
               {children}
-
-              <div className="auth-meta-row">
-                <span>v 2.4.0-legal</span>
-                <span>Privacy policy</span>
-                <span>Legal terms</span>
-              </div>
             </div>
           </section>
         </div>
 
         <div className="auth-footer-row">
-          <span>© {new Date().getFullYear()} Adminiculum · belső ügyvédi munkatér</span>
+          <span>© {new Date().getFullYear()} Adminiculum</span>
           <div className="auth-footer-links">
-            <span>Terms of service</span>
-            <span>Privacy policy</span>
-            <span>Security</span>
-            <span>Contact support</span>
+            <span>Adatvédelem</span>
+            <span>Biztonság</span>
           </div>
         </div>
       </div>
