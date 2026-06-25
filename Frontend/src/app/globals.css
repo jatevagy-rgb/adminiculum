@@ -625,6 +625,84 @@ select {
   background: var(--adm-surface);
 }
 
+/* UIR6E — dashboard panel hierarchy + workflow stage accents */
+.adm-panel-primary {
+  border-color: rgba(20, 33, 61, 0.16);
+  box-shadow: var(--adm-shadow-md);
+}
+
+.adm-panel-accent-navy {
+  border-top: 3px solid #14213d;
+}
+
+.adm-panel-accent-green {
+  border-top: 3px solid var(--adm-green-800);
+}
+
+.adm-panel-accent-amber {
+  border-top: 3px solid #fca311;
+}
+
+.adm-stage-head {
+  border-radius: var(--adm-radius-sm) var(--adm-radius-sm) 0 0;
+  font-weight: 700;
+}
+
+.adm-stage-prep {
+  background: #eef1ed;
+  color: #3f4b3f;
+  border-bottom: 2px solid #b7beb6;
+}
+
+.adm-stage-review {
+  background: #eaeef6;
+  color: #14213d;
+  border-bottom: 2px solid #14213d;
+}
+
+.adm-stage-fix {
+  background: #fff3dd;
+  color: #8a5a06;
+  border-bottom: 2px solid #fca311;
+}
+
+.adm-stage-ready {
+  background: #e9f2ea;
+  color: var(--adm-green-900);
+  border-bottom: 2px solid var(--adm-green-800);
+}
+
+.adm-watch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid var(--adm-border-strong);
+  background: var(--adm-surface);
+  color: var(--adm-green-800);
+}
+
+.adm-watch-chip::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--adm-green-700);
+}
+
+.adm-watch-chip-muted {
+  border-style: dashed;
+  color: var(--adm-text-muted);
+  background: var(--adm-ivory-100);
+}
+
+.adm-watch-chip-muted::before {
+  background: var(--adm-text-soft);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Internal Microsoft / Entra login helpers (UIR4B)                            */
 /* -------------------------------------------------------------------------- */
