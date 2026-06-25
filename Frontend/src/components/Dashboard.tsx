@@ -35,22 +35,23 @@ type NewsFeedResult = {
 type KpiCardProps = {
   label: string;
   value: number;
-  tone: "green" | "gold" | "purple" | "red" | "sage" | "ink" | "navy" | "amber" | "neutral";
+  tone: "green" | "navy" | "petrol" | "cyan" | "yellow" | "amber" | "orange" | "red" | "darkRed" | "neutral";
   zeroHint: string;
 };
 
 type KpiToneStyle = { accent: string; bar: string; dot: string; surface: string; num: string };
 
 const KPI_STYLES: Record<KpiCardProps["tone"], KpiToneStyle> = {
-  green: { accent: "#1f4a33", bar: "bg-[var(--adm-green-800)]", dot: "bg-[var(--adm-green-800)]", surface: "bg-[#F3F7F2]", num: "text-[var(--adm-green-900)]" },
-  sage: { accent: "#6f7d68", bar: "bg-[var(--adm-sage-700)]", dot: "bg-[var(--adm-sage-700)]", surface: "bg-[#F2F6F0]", num: "text-[var(--adm-green-900)]" },
-  navy: { accent: "#14213D", bar: "bg-[#14213D]", dot: "bg-[#14213D]", surface: "bg-[#F0F2F7]", num: "text-[#14213D]" },
-  ink: { accent: "#000000", bar: "bg-[#000000]", dot: "bg-[#000000]", surface: "bg-[#F1F3F6]", num: "text-[#000000]" },
-  amber: { accent: "#FCA311", bar: "bg-[#FCA311]", dot: "bg-[#FCA311]", surface: "bg-[#FFF6E6]", num: "text-[#8A5A06]" },
-  gold: { accent: "#B47A10", bar: "bg-[#B47A10]", dot: "bg-[#B47A10]", surface: "bg-[#FBF5E8]", num: "text-[#6B4B14]" },
-  purple: { accent: "#5B4499", bar: "bg-[#5B4499]", dot: "bg-[#5B4499]", surface: "bg-[#F4F1FA]", num: "text-[#5B4499]" },
-  red: { accent: "#9B4A3E", bar: "bg-[var(--adm-terracotta-700)]", dot: "bg-[var(--adm-terracotta-700)]", surface: "bg-[#FBF0ED]", num: "text-[var(--adm-terracotta-700)]" },
-  neutral: { accent: "#E5E5E5", bar: "bg-[#E5E5E5]", dot: "bg-[#B7BEB6]", surface: "bg-[#F6F6F4]", num: "text-[var(--adm-text)]" },
+  green: { accent: "#014337", bar: "bg-[var(--adm-green-800)]", dot: "bg-[var(--adm-green-800)]", surface: "bg-[#EAF3EE]", num: "text-[var(--adm-green-900)]" },
+  navy: { accent: "#023047", bar: "bg-[var(--adm-blue-950)]", dot: "bg-[var(--adm-blue-950)]", surface: "bg-[#E8F0F4]", num: "text-[var(--adm-blue-950)]" },
+  petrol: { accent: "#126782", bar: "bg-[var(--adm-blue-700)]", dot: "bg-[var(--adm-blue-700)]", surface: "bg-[#E5F2F6]", num: "text-[var(--adm-blue-700)]" },
+  cyan: { accent: "#219EBC", bar: "bg-[var(--adm-blue-500)]", dot: "bg-[var(--adm-blue-500)]", surface: "bg-[#E6F6FA]", num: "text-[var(--adm-blue-700)]" },
+  yellow: { accent: "#FFB703", bar: "bg-[var(--adm-warm-400)]", dot: "bg-[var(--adm-warm-400)]", surface: "bg-[#FFF3CB]", num: "text-[var(--adm-warm-600)]" },
+  amber: { accent: "#FD9E02", bar: "bg-[var(--adm-warm-500)]", dot: "bg-[var(--adm-warm-500)]", surface: "bg-[#FFF0D7]", num: "text-[var(--adm-warm-600)]" },
+  orange: { accent: "#FB8500", bar: "bg-[var(--adm-warm-600)]", dot: "bg-[var(--adm-warm-600)]", surface: "bg-[#FFEADA]", num: "text-[#8A3E00]" },
+  red: { accent: "#9E2A2B", bar: "bg-[var(--adm-critical-600)]", dot: "bg-[var(--adm-critical-600)]", surface: "bg-[#F8EAEA]", num: "text-[var(--adm-critical-600)]" },
+  darkRed: { accent: "#540B0E", bar: "bg-[var(--adm-critical-950)]", dot: "bg-[var(--adm-critical-950)]", surface: "bg-[#F1E4E5]", num: "text-[var(--adm-critical-950)]" },
+  neutral: { accent: "#E5E5E5", bar: "bg-[var(--adm-neutral-100)]", dot: "bg-[#A7ADB2]", surface: "bg-[#F4F5F6]", num: "text-[var(--adm-text)]" },
 };
 
 function KpiCard({ label, value, tone, zeroHint }: KpiCardProps) {
@@ -511,7 +512,7 @@ export function Dashboard() {
             </div>
 
             <aside className="adm-dark-status flex flex-col gap-2 border-t border-white/10 p-3 xl:border-l xl:border-t-0">
-              <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[var(--adm-sage-300)]">
+              <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[var(--adm-blue-100)]">
                 Mai működési kép
               </p>
               <p className="text-[10.5px] leading-4 text-[var(--adm-ivory-100)]/60">
@@ -520,30 +521,30 @@ export function Dashboard() {
               <div className="grid grid-cols-3 gap-2 xl:grid-cols-1">
                 <div className="adm-stat-box flex items-center justify-between gap-2 p-2.5">
                   <div>
-                    <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-sage-300)]">Feladatlista</p>
+                    <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-blue-100)]">Feladatlista</p>
                     <p className="mt-0.5 text-[11px] leading-4 text-[var(--adm-ivory-100)]/80">
                       {loading ? "Betöltés…" : taskListAvailable ? "Elérhető" : "Átmenetileg nem elérhető"}
                     </p>
                   </div>
-                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${loading ? "bg-[var(--adm-sage-300)]" : taskListAvailable ? "bg-[#7FBA8B]" : "bg-[#FCA311]"}`} />
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${loading ? "bg-[var(--adm-blue-100)]" : taskListAvailable ? "bg-[var(--adm-blue-500)]" : "bg-[var(--adm-warm-600)]"}`} />
                 </div>
                 <div className="adm-stat-box flex items-center justify-between gap-2 p-2.5">
                   <div>
-                    <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-sage-300)]">Dokumentumfigyelés</p>
+                    <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-blue-100)]">Dokumentumfigyelés</p>
                     <p className="mt-0.5 text-[11px] leading-4 text-[var(--adm-ivory-100)]/80">
                       {documentSignalCount === 0 ? "Nincs új jelzés" : `${documentSignalCount} jelzés`}
                     </p>
                   </div>
-                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${documentSignalCount === 0 ? "bg-[var(--adm-sage-300)]" : "bg-[#FCA311]"}`} />
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${documentSignalCount === 0 ? "bg-[var(--adm-blue-100)]" : "bg-[var(--adm-warm-400)]"}`} />
                 </div>
                 <div className="adm-stat-box flex items-center justify-between gap-2 p-2.5">
                   <div>
-                    <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-sage-300)]">Helyi munkamenet</p>
+                    <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-blue-100)]">Helyi munkamenet</p>
                     <p className="mt-0.5 text-[11px] leading-4 text-[var(--adm-ivory-100)]/80">
                       {localWorkspaceDraftCount === 0 ? "Nincs helyi vázlat" : `${localWorkspaceDraftCount} helyi vázlat`}
                     </p>
                   </div>
-                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${localWorkspaceDraftCount === 0 ? "bg-[var(--adm-sage-300)]" : "bg-[#7FBA8B]"}`} />
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${localWorkspaceDraftCount === 0 ? "bg-[var(--adm-blue-100)]" : "bg-[var(--adm-blue-500)]"}`} />
                 </div>
               </div>
             </aside>
@@ -553,11 +554,11 @@ export function Dashboard() {
         {/* 3 — KPI / rubrika strip (distinct categories, real counts only) */}
         <section className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
           <KpiCard label="Nyitott ügyek" value={openCasesCount} tone="green" zeroHint="Nincs betöltött nyitott ügy" />
-          <KpiCard label="Mai teendők" value={openTasks.length} tone="ink" zeroHint="Nincs nyitott teendő" />
-          <KpiCard label="Közeli határidők" value={upcomingDeadlines.length} tone="amber" zeroHint="Nincs közeli határidő" />
+          <KpiCard label="Mai teendők" value={openTasks.length} tone="orange" zeroHint="Nincs nyitott teendő" />
+          <KpiCard label="Közeli határidők" value={upcomingDeadlines.length} tone="yellow" zeroHint="Nincs közeli határidő" />
           <KpiCard label="Review tételek" value={reviewDocumentCount} tone="navy" zeroHint="Nincs review tétel" />
-          <KpiCard label="Külső kommunikáció" value={externalComms.length} tone="gold" zeroHint="Nincs új külső jelzés" />
-          <KpiCard label="Belső kommunikáció" value={internalComms.length} tone="sage" zeroHint="Nincs új belső jelzés" />
+          <KpiCard label="Külső kommunikáció" value={externalComms.length} tone="cyan" zeroHint="Nincs új külső jelzés" />
+          <KpiCard label="Belső kommunikáció" value={internalComms.length} tone="petrol" zeroHint="Nincs új belső jelzés" />
         </section>
 
         {/* 4 + 5 — Dominant "Itt folytasd" workbench + review/handoff side column */}
@@ -594,7 +595,7 @@ export function Dashboard() {
                   href={card.href}
                   className="adm-board-list-row border-l-4 border-l-[var(--adm-green-800)] p-3"
                 >
-                  <span className="inline-flex rounded-full bg-[var(--adm-sage-100)] px-2.5 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.13em] text-[var(--adm-green-800)]">{card.label}</span>
+                  <span className="inline-flex rounded-full bg-[#EAF3EE] px-2.5 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.13em] text-[var(--adm-green-800)]">{card.label}</span>
                   <p className="mt-1.5 text-sm font-semibold text-[var(--adm-text)]">{card.title}</p>
                   <p className="mt-1 text-[11px] leading-4 text-[var(--adm-text-muted)]">{card.detail}</p>
                   <span className="mt-2.5 inline-flex items-center gap-1 rounded-[var(--adm-radius-sm)] bg-[var(--adm-green-800)] px-3 py-1.5 text-[11px] font-bold text-[var(--adm-ivory-50)]">
@@ -607,7 +608,7 @@ export function Dashboard() {
 
           <aside className="grid content-start gap-3">
             <article className="adm-panel adm-panel-accent-amber adm-daily-panel p-3.5">
-              <p className="adm-kicker text-[#8A5A06]">Mai sor</p>
+              <p className="adm-kicker text-[var(--adm-warm-600)]">Mai sor</p>
               <h3 className="adm-heading mt-1 text-[24px]">Review · határidő · kommunikáció</h3>
               {loading ? <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Betöltés...</p> : null}
               {!loading && maiSorItems.length === 0 ? (
@@ -626,16 +627,16 @@ export function Dashboard() {
                 {maiSorItems.map((item) => {
                   const kindClass =
                     item.kind === "Review"
-                      ? "bg-[#E1E6F0] text-[#14213D]"
+                      ? "bg-[#E8F0F4] text-[var(--adm-blue-950)]"
                       : item.kind === "Határidő"
-                      ? "bg-[#FCE7C3] text-[#8a5a06]"
-                      : "bg-[var(--adm-sage-100)] text-[var(--adm-green-800)]";
+                      ? "bg-[#FFF3CB] text-[#8a5a06]"
+                      : "bg-[#E6F6FA] text-[var(--adm-blue-700)]";
                   const kindBorder =
                     item.kind === "Review"
-                      ? "border-l-[#14213D]"
+                      ? "border-l-[var(--adm-blue-950)]"
                       : item.kind === "Határidő"
-                      ? "border-l-[#FCA311]"
-                      : "border-l-[var(--adm-green-800)]";
+                      ? "border-l-[var(--adm-warm-400)]"
+                      : "border-l-[var(--adm-blue-500)]";
                   return (
                     <Link
                       key={item.id}
@@ -657,39 +658,39 @@ export function Dashboard() {
         {/* 6 — Communication watcher foundation (OI1A) */}
         <section className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.7fr)]">
           <article className="adm-panel adm-panel-primary overflow-hidden">
-            <div className="flex flex-wrap items-start justify-between gap-3 border-b-[3px] border-[#14213D] bg-[#14213D]/[0.03] px-4 py-3 lg:px-5">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b-[3px] border-[var(--adm-blue-500)] bg-[var(--adm-blue-100)]/20 px-4 py-3 lg:px-5">
               <div>
-                <p className="adm-kicker text-[#14213D]">Kommunikáció</p>
+                <p className="adm-kicker text-[var(--adm-blue-700)]">Kommunikáció</p>
                 <h3 className="adm-heading mt-0.5 text-[24px] leading-tight">Kommunikációs figyelő</h3>
               </div>
-              <span className="rounded-[var(--adm-radius-sm)] border border-[#14213D]/25 bg-[#14213D]/5 px-3 py-1 text-[10.5px] font-semibold text-[#14213D]">
+              <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-500)]/30 bg-[var(--adm-blue-100)]/35 px-3 py-1 text-[10.5px] font-semibold text-[var(--adm-blue-700)]">
                 Foundation · Outlook előkészítés
               </span>
             </div>
 
             {/* Communication rubrikák (distinct from the main KPI strip) */}
             <div className="grid grid-cols-2 gap-2 px-4 pt-3 md:grid-cols-4 lg:px-5">
-              <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 border-l-[#14213D] bg-[var(--adm-surface)] px-3 py-2">
+              <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 border-l-[var(--adm-blue-500)] bg-white px-3 py-2">
                 <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Külső kommunikáció</p>
                 <p className="mt-0.5 font-serif text-[24px] leading-none text-[var(--adm-text)]">{externalComms.length}</p>
               </div>
-              <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 border-l-[var(--adm-green-800)] bg-[var(--adm-surface)] px-3 py-2">
+              <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 border-l-[var(--adm-blue-700)] bg-white px-3 py-2">
                 <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Belső kommunikáció</p>
                 <p className="mt-0.5 font-serif text-[24px] leading-none text-[var(--adm-text)]">{internalComms.length}</p>
               </div>
-              <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 border-l-[#FCA311] bg-[var(--adm-surface)] px-3 py-2">
+              <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 border-l-[var(--adm-warm-400)] bg-white px-3 py-2">
                 <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Válaszra vár</p>
                 <p className="mt-0.5 font-serif text-[24px] leading-none text-[var(--adm-text-soft)]">—</p>
               </div>
-              <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 border-l-[#B7BEB6] bg-[var(--adm-surface)] px-3 py-2">
+              <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 border-l-[var(--adm-neutral-100)] bg-white px-3 py-2">
                 <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Figyelt ügyfelek</p>
                 <p className="mt-0.5 font-serif text-[24px] leading-none text-[var(--adm-text-soft)]">{watchedClientExamples.length}<span className="ml-1 align-middle text-[10px] font-sans text-[var(--adm-text-muted)]">példa</span></p>
               </div>
             </div>
 
             <div className="grid gap-3 p-4 md:grid-cols-2 lg:px-5">
-              <div className="adm-signal-card rounded-[var(--adm-radius-sm)] border-l-[3px] border-l-[#14213D] p-3">
-                <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#14213D]"><span className="h-1.5 w-1.5 rounded-full bg-[#14213D]" />Külső</p>
+              <div className="adm-signal-card rounded-[var(--adm-radius-sm)] border-l-[3px] border-l-[var(--adm-blue-500)] p-3">
+                <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-blue-700)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--adm-blue-500)]" />Külső</p>
                 {externalComms.length === 0 ? (
                   <div className="mt-2 adm-board-empty adm-board-empty-compact">
                     <p className="text-xs font-semibold text-[var(--adm-text)]">Nincs új külső kommunikáció.</p>
@@ -710,8 +711,8 @@ export function Dashboard() {
                   </div>
                 )}
               </div>
-              <div className="adm-signal-card rounded-[var(--adm-radius-sm)] border-l-[3px] border-l-[var(--adm-green-800)] p-3">
-                <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--adm-green-800)]" />Belső</p>
+              <div className="adm-signal-card rounded-[var(--adm-radius-sm)] border-l-[3px] border-l-[var(--adm-blue-700)] p-3">
+                <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-blue-700)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--adm-blue-700)]" />Belső</p>
                 {internalComms.length === 0 ? (
                   <div className="mt-2 adm-board-empty adm-board-empty-compact">
                     <p className="text-xs font-semibold text-[var(--adm-text)]">Nincs új belső kommunikáció.</p>
@@ -757,15 +758,15 @@ export function Dashboard() {
 
             <article className="adm-panel adm-panel-accent-amber adm-rail-panel p-3.5">
               <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-[#FCA311]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[var(--adm-warm-400)]" />
                 <h3 className="adm-heading text-[20px]">Válaszra vár</h3>
               </div>
               <div className="mt-2.5 space-y-2">
-                <div className="rounded-[var(--adm-radius-sm)] border border-[#FCA311]/25 border-l-[3px] border-l-[#FCA311] bg-[#FFF7E8] p-2.5">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#8A5A06]">Tőlünk várnak választ</p>
+                <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-warm-400)]/35 border-l-[3px] border-l-[var(--adm-warm-400)] bg-[#FFF3CB] p-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-warm-600)]">Tőlünk várnak választ</p>
                   <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Foundation állapot — a válaszra váró jelzés az Outlook-bekötés után aktiválható.</p>
                 </div>
-                <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-[3px] border-l-[#B7BEB6] bg-[var(--adm-surface)] p-2.5">
+                <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-[3px] border-l-[var(--adm-neutral-100)] bg-white p-2.5">
                   <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Mi várunk válaszra</p>
                   <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Foundation állapot — kimenő kommunikáció követése későbbi fejlesztés.</p>
                 </div>
@@ -779,7 +780,7 @@ export function Dashboard() {
           <article className="adm-panel adm-panel-accent-amber adm-rail-panel p-4">
             <div className="flex items-start justify-between gap-3 border-b border-[var(--adm-border)] pb-3">
               <div>
-                <p className="adm-kicker text-[#8A5A06]">Határidő</p>
+                <p className="adm-kicker text-[var(--adm-warm-600)]">Határidő</p>
                 <h3 className="adm-heading mt-0.5 text-[20px]">Közeli határidők</h3>
               </div>
               <Link href="/tasks" className="adm-link-button px-3 py-1.5 text-[11px]">Feladatok</Link>
@@ -789,7 +790,7 @@ export function Dashboard() {
                 <EmptyState title="Nincs közeli határidő" subtitle="A mai és holnapi határidők kompakt jelzésként jelennek meg." />
               ) : null}
               {upcomingDeadlines.slice(0, 4).map((task) => (
-                <Link key={task.id} href={`/tasks?taskId=${task.id}`} className="block rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 border-l-[#FCA311] bg-[var(--adm-surface)] p-2.5 hover:bg-white">
+                <Link key={task.id} href={`/tasks?taskId=${task.id}`} className="block rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 border-l-[var(--adm-warm-400)] bg-white p-2.5 hover:bg-[#FFF9E8]">
                   <p className="font-semibold text-[var(--adm-text)]">{task.title}</p>
                   <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{displayDate(task.dueDate)} · {task.case?.caseNumber || "Feladat"}</p>
                 </Link>
@@ -800,7 +801,7 @@ export function Dashboard() {
           <article className="adm-panel adm-panel-accent-navy adm-rail-panel p-4">
             <div className="flex items-start justify-between gap-3 border-b border-[var(--adm-border)] pb-3">
               <div>
-                <p className="adm-kicker text-[#14213D]">Dokumentum</p>
+                <p className="adm-kicker text-[var(--adm-blue-950)]">Dokumentum</p>
                 <h3 className="adm-heading mt-0.5 text-[20px]">Legutóbbi dokumentumok</h3>
               </div>
               <Link href="/documents/compare" className="adm-link-button px-3 py-1.5 text-[11px]">Workspace</Link>
@@ -810,8 +811,8 @@ export function Dashboard() {
                 <EmptyState title="Nincs dokumentum előzmény" subtitle="A legfrissebb feltöltések és módosítások itt jelennek meg." />
               ) : null}
               {recentDocuments.slice(0, 4).map((item) => (
-                <Link key={item.id} href={item.caseId ? `/documents/compare?caseId=${item.caseId}` : "/documents/compare"} className="flex items-start gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5 hover:bg-white">
-                  <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded bg-[#14213D]/10 text-[8px] font-bold uppercase tracking-tight text-[#14213D]">DOC</span>
+                <Link key={item.id} href={item.caseId ? `/documents/compare?caseId=${item.caseId}` : "/documents/compare"} className="flex items-start gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white p-2.5 hover:bg-[#EEF6FA]">
+                  <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded bg-[var(--adm-blue-950)]/10 text-[8px] font-bold uppercase tracking-tight text-[var(--adm-blue-950)]">DOC</span>
                   <span>
                     <span className="block font-semibold text-[var(--adm-text)]">{mapRecentDocLabel(item.type || item.text)}</span>
                     <span className="mt-0.5 block text-[11px] text-[var(--adm-text-muted)]">{displayDateTimeShort(item.timestamp)}</span>
@@ -831,12 +832,12 @@ export function Dashboard() {
               </div>
               <div className="mt-3 grid gap-2">
                 {quickOpenLinks.map((link, i) => {
-                  const marker = ["var(--adm-green-800)", "#14213D", "#FCA311", "#000000"][i % 4];
+                  const marker = ["var(--adm-green-800)", "var(--adm-blue-950)", "var(--adm-warm-500)", "#000000"][i % 4];
                   return (
                     <Link
                       key={link.href}
                       href={link.href}
-                      className="flex items-center gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 hover:bg-[var(--adm-sand-100)]"
+                      className="flex items-center gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-2 hover:bg-[var(--adm-blue-100)]/25"
                     >
                       <span className="h-6 w-1 shrink-0 rounded-full" style={{ backgroundColor: marker }} />
                       <span className="flex-1">
@@ -867,7 +868,7 @@ export function Dashboard() {
                 {legalSignals.slice(0, 2).map((article, index) => (
                   <div key={`${article.title}-${index}`} className="rounded border border-[var(--adm-border)] border-l-[3px] border-l-[var(--adm-green-800)] bg-[var(--adm-surface)] p-2">
                     <p className="font-semibold text-[var(--adm-text)]">{article.title}</p>
-                    <p className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--adm-text-muted)]"><span className="inline-flex rounded-full bg-[var(--adm-sage-100)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--adm-green-800)]">{article.source}</span>{article.date}</p>
+                    <p className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--adm-text-muted)]"><span className="inline-flex rounded-full bg-[var(--adm-blue-100)]/45 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--adm-blue-700)]">{article.source}</span>{article.date}</p>
                     {article.url ? (
                       <a href={article.url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">
                         Megnyitás
