@@ -344,13 +344,24 @@ select {
 .adm-board-empty {
   display: grid;
   place-items: center;
-  min-height: 190px;
+  min-height: 150px;
   border: 1px dashed var(--adm-border-strong);
   border-radius: var(--adm-radius-lg);
   background:
     linear-gradient(180deg, rgba(255,255,255,0.72), rgba(251,249,244,0.74));
   padding: 24px;
   text-align: center;
+}
+
+.adm-board-empty-compact {
+  min-height: 104px;
+  padding: 16px;
+}
+
+.adm-board-empty-compact::before {
+  width: 26px;
+  height: 26px;
+  margin-bottom: 8px;
 }
 
 .adm-board-empty::before {
@@ -371,6 +382,26 @@ select {
   border-radius: var(--adm-radius-md);
   background: rgba(255, 255, 255, 0.62);
   padding: 4px;
+}
+
+.adm-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border: 1px solid var(--adm-border);
+  border-radius: var(--adm-radius-md);
+  background: rgba(255, 255, 255, 0.64);
+  padding: 5px;
+}
+
+.adm-action-secondary {
+  border-color: rgba(83, 99, 91, 0.20);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--adm-text-muted);
+}
+
+.adm-action-secondary:hover {
+  color: var(--adm-green-800);
 }
 
 .adm-board-tab {
@@ -396,7 +427,7 @@ select {
 
 .adm-wizard-modal {
   display: flex;
-  max-height: min(86vh, 760px);
+  max-height: min(90vh, 780px);
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--adm-border);
@@ -418,12 +449,47 @@ select {
 }
 
 .adm-wizard-step {
-  border-left: 3px solid var(--adm-border);
-  padding-left: 10px;
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--adm-border);
+  border-radius: var(--adm-radius-sm);
+  background: rgba(255, 255, 255, 0.72);
+  padding: 8px 10px;
+  line-height: 1.15;
 }
 
 .adm-wizard-step-active {
-  border-left-color: var(--adm-ochre-500);
+  border-color: rgba(181, 138, 42, 0.52);
+  background: var(--adm-sand-100);
+  color: var(--adm-green-900);
+}
+
+.adm-wizard-step-index {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--adm-green-900);
+  color: var(--adm-ivory-50);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.adm-modal-field {
+  border: 1px solid rgba(22, 32, 26, 0.18);
+  border-radius: var(--adm-radius-sm);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--adm-text);
+  outline: none;
+}
+
+.adm-modal-field:focus {
+  border-color: rgba(0, 52, 43, 0.44);
+  box-shadow: 0 0 0 3px rgba(0, 52, 43, 0.07);
 }
 
 .adm-link-button-primary {

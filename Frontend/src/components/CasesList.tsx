@@ -629,12 +629,12 @@ export function CasesList() {
             <span className="adm-board-tab">Lezárt ügyek</span>
           </div>
         </div>
-        <div className="adm-board-rail flex flex-col justify-center gap-2 p-4">
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Mit intézz először?</p>
-          <p className="text-[11px] leading-5 text-[var(--adm-ivory-100)]/75">Nyiss meg egy ügyet a Dokumentumtárhoz, vagy menj a feladatlistára, ha kiosztott teendőből folytatnád.</p>
-          <div className="flex flex-wrap gap-2">
-            <AdminButton size="xs" variant="primary" onClick={() => setShowNewCaseModal(true)}>Új ügy</AdminButton>
-            <AdminButton size="xs" variant="neutral" onClick={() => router.push("/tasks")}>Feladatok</AdminButton>
+        <div className="adm-board-rail flex flex-col justify-center gap-3 p-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-sage-300)]">Munkasorrend</p>
+          <p className="text-[11px] leading-5 text-[var(--adm-ivory-100)]/75">Új ügyet a szűrősor elsődleges gombja indít. Ez a panel a folytatási irányokat tartja külön.</p>
+          <div className="grid gap-1.5 text-[11px]">
+            <button type="button" onClick={() => router.push("/tasks")} className="rounded-[var(--adm-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-left font-semibold text-[var(--adm-ivory-50)] hover:bg-white/10">Feladatokból folytatom</button>
+            <button type="button" onClick={() => router.push("/reviews")} className="rounded-[var(--adm-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-left font-semibold text-[var(--adm-ivory-50)] hover:bg-white/10">Review sorból indulok</button>
           </div>
         </div>
       </div>
@@ -662,8 +662,10 @@ export function CasesList() {
             <option value="Magas">Magas</option>
           </select>
         </label>
-        <AdminButton className="ml-auto" variant="neutral" onClick={() => { setPracticeArea("all"); setClientName(""); setWorkPriorityFilter("all"); }}>Szűrők törlése</AdminButton>
-        <AdminButton variant="primary" onClick={() => setShowNewCaseModal(true)}>Új ügy létrehozása</AdminButton>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <AdminButton variant="neutral" onClick={() => { setPracticeArea("all"); setClientName(""); setWorkPriorityFilter("all"); }}>Szűrők törlése</AdminButton>
+          <AdminButton variant="primary" onClick={() => setShowNewCaseModal(true)}>Új ügy létrehozása</AdminButton>
+        </div>
       </div>
 
       <div className="adm-board-panel overflow-hidden p-3">
@@ -748,10 +750,11 @@ export function CasesList() {
                 <div className="rounded-lg border border-[rgba(181,138,42,0.28)] bg-[var(--adm-sand-100)] px-4 py-2 text-xs text-[#4D5A53]">
                 Ügyindítási munkafolyamat: töltsd ki a kötelező mezőket, majd állítsd be a résztvevőket és a munkatervet.
                 </div>
-                <div className="mt-3 grid gap-2 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--adm-text-muted)] md:grid-cols-6">
+                <div className="mt-3 grid gap-2 text-[10px] font-semibold uppercase tracking-[0.10em] text-[var(--adm-text-muted)] md:grid-cols-6">
                   {["Ügyfél", "Ügy típusa", "Szerep", "Határidő", "Résztvevők", "Munkaterv"].map((step, index) => (
                     <span key={step} className={`adm-wizard-step ${index < 2 ? "adm-wizard-step-active text-[var(--adm-green-800)]" : ""}`}>
-                      {index + 1}. {step}
+                      <span className="adm-wizard-step-index">{index + 1}</span>
+                      <span>{step}</span>
                     </span>
                   ))}
                 </div>
@@ -789,11 +792,11 @@ export function CasesList() {
                       {showOtherClients ? "Egyéb / teszt ügyfelek elrejtése" : "Egyéb / teszt ügyfelek megjelenítése"}
                     </button>
                     {selectedClient ? (
-                      <article className="mt-4 grid grid-cols-[48px_1fr] gap-4 rounded-lg border border-[rgba(22,32,26,0.10)] border-l-4 border-l-[#1F4A33] bg-[var(--adm-surface)] p-4">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--adm-green-800)] font-serif text-xl text-[#F4EFDB]">{selectedClient.name.slice(0, 1).toUpperCase()}</div>
+                      <article className="mt-3 grid grid-cols-[38px_1fr] gap-3 rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.10)] border-l-4 border-l-[#1F4A33] bg-[var(--adm-surface)] p-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-[var(--adm-radius-sm)] bg-[var(--adm-green-800)] font-serif text-lg text-[#F4EFDB]">{selectedClient.name.slice(0, 1).toUpperCase()}</div>
                         <div>
-                          <div className="flex flex-wrap items-center gap-2"><h4 className="font-serif text-xl font-medium">{hydrateCoreClient(selectedClient).name}</h4><AdminBadge tone="green">{getCoreClientKey(selectedClient) ? "Kiemelt ügyfél" : selectedClient.taxNumber || selectedClient.companyRegistrationNumber ? "Cég" : "Ügyfél"}</AdminBadge></div>
-                          <div className="mt-2 grid grid-cols-1 gap-1 text-xs text-[#3D4842] md:grid-cols-2">
+                          <div className="flex flex-wrap items-center gap-2"><h4 className="font-serif text-lg font-medium leading-tight">{hydrateCoreClient(selectedClient).name}</h4><AdminBadge tone="green">{getCoreClientKey(selectedClient) ? "Kiemelt ügyfél" : selectedClient.taxNumber || selectedClient.companyRegistrationNumber ? "Cég" : "Ügyfél"}</AdminBadge></div>
+                          <div className="mt-1.5 grid grid-cols-1 gap-x-4 gap-y-0.5 text-[11px] text-[#3D4842] md:grid-cols-2">
                             <p>Kapcsolattartó: <b>{hydrateCoreClient(selectedClient).contactPerson || selectedClient.authorizedRepresentative || "Nincs megadva"}</b></p>
                             <p>Email: <b>{hydrateCoreClient(selectedClient).email || "Nincs megadva"}</b></p>
                             <p>Telefon: <b>{hydrateCoreClient(selectedClient).phone || "Nincs megadva"}</b></p>

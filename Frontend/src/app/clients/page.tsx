@@ -256,7 +256,7 @@ function ClientsPageContent() {
     <div className="flex min-h-0 flex-1 adm-shell-bg text-[var(--adm-text)]">
       <main className="flex-1 overflow-y-auto adm-board-page">
         <div className="adm-board-container space-y-5">
-          <div className="adm-board-hero grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_260px]">
+          <div className="adm-board-hero grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_300px]">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Ügyfelek</p>
               <h1 className="mt-1 font-serif text-[38px] font-medium leading-tight text-[var(--adm-text)]">Ügyfelek és house style dossziék</h1>
@@ -269,7 +269,7 @@ function ClientsPageContent() {
             </div>
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,0.9fr)]">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_300px]">
             <AdminPanel className="adm-board-panel-tight p-4">
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Lista fókusz</p>
               <p className="mt-2 text-[11px] leading-5 text-[#3D4842]">
@@ -333,11 +333,22 @@ function ClientsPageContent() {
 
       {showModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#16201A]/70 p-4">
-          <div className="adm-wizard-modal w-full max-w-xl">
-            <div className="adm-wizard-header border-b bg-[#082817] p-5 text-[#F4EFDB]">
-              <h2 className="font-serif text-2xl font-medium">{editingClient ? "Ügyfél szerkesztése" : "Új ügyfél"}</h2>
+          <div className="adm-wizard-modal w-full max-w-2xl">
+            <div className="adm-wizard-header flex items-start justify-between gap-4 border-b bg-[#082817] p-5 text-[#F4EFDB]">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-ochre-500)]">Ügyfél dosszié</p>
+                <h2 className="mt-1 font-serif text-[28px] font-medium leading-tight">{editingClient ? "Ügyfél szerkesztése" : "Új ügyfél rögzítése"}</h2>
+                <p className="mt-1 max-w-lg text-[12px] leading-5 text-[var(--adm-ivory-100)]/72">
+                  Belső ügyindításhoz és house style előkészítéshez szükséges alapadatok. Nincs nyilvános hozzáférés vagy külső ügyfélkapcsolat.
+                </p>
+              </div>
+              <button type="button" onClick={() => setShowModal(false)} className="rounded-[var(--adm-radius-sm)] border border-white/20 px-3 py-1 text-sm text-white/80 hover:text-white">Bezárás</button>
             </div>
-            <div className="adm-wizard-body space-y-4 p-6">
+            <div className="adm-wizard-body p-5">
+              <div className="mb-4 rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-[var(--adm-sand-100)] px-4 py-3 text-[11px] leading-5 text-[var(--adm-text-muted)]">
+                A hivatalos név kötelező. A többi mező később is pontosítható az ügyfél dossziéban.
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
               {[
                 ["name", "Hivatalos név", "text"],
                 ["email", "Email", "email"],
@@ -349,17 +360,21 @@ function ClientsPageContent() {
               ].map(([key, label, type]) => (
                 <label key={key} className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">
                   {label}{key === "name" ? <span className="text-[var(--adm-terracotta-700)]"> *</span> : null}
-                  <input type={type} value={String(formData[key as keyof CreateClientData] || "")} onChange={(event) => setFormData({ ...formData, [key]: event.target.value })} className="mt-2 w-full rounded border border-[var(--adm-border)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--adm-text)] focus:outline-none focus:border-[#082817]" />
+                  <input type={type} value={String(formData[key as keyof CreateClientData] || "")} onChange={(event) => setFormData({ ...formData, [key]: event.target.value })} className="adm-modal-field mt-2 w-full px-3 py-2 text-sm normal-case tracking-normal" />
                 </label>
               ))}
-              <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">
+              <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)] md:col-span-2">
                 Székhely / cím
-                <textarea value={formData.address || ""} onChange={(event) => setFormData({ ...formData, address: event.target.value })} rows={3} className="mt-2 w-full rounded border border-[var(--adm-border)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--adm-text)] focus:outline-none focus:border-[#082817]" />
+                <textarea value={formData.address || ""} onChange={(event) => setFormData({ ...formData, address: event.target.value })} rows={3} className="adm-modal-field mt-2 w-full px-3 py-2 text-sm normal-case tracking-normal" />
               </label>
+              </div>
             </div>
-            <div className="adm-wizard-footer flex justify-end gap-3 border-t p-4">
-              <AdminButton variant="ghost" onClick={() => setShowModal(false)} disabled={isSaving}>Mégse</AdminButton>
-              <AdminButton variant="primary" onClick={handleSave} disabled={isSaving || !formData.name?.trim()}>{isSaving ? "Mentés..." : "Mentés"}</AdminButton>
+            <div className="adm-wizard-footer flex flex-col gap-3 border-t p-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-[11px] text-[var(--adm-text-muted)]">Mentés után a dosszié és az ügyindítási kapcsolódás azonnal használható.</p>
+              <div className="flex justify-end gap-3">
+                <AdminButton variant="ghost" onClick={() => setShowModal(false)} disabled={isSaving}>Mégse</AdminButton>
+                <AdminButton variant="primary" onClick={handleSave} disabled={isSaving || !formData.name?.trim()}>{isSaving ? "Mentés..." : "Mentés"}</AdminButton>
+              </div>
             </div>
           </div>
         </div>
