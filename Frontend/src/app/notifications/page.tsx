@@ -138,6 +138,11 @@ function NotificationsPageContent() {
               Értesítések
             </h1>
             <p className="mt-1 text-sm text-[var(--adm-text-muted)]">Munkajelzések ügyekhez, dokumentumokhoz és review feladatokhoz.</p>
+            <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em]">
+              <span className="rounded-full border border-[var(--adm-green-800)]/30 bg-[var(--adm-surface)] px-2.5 py-0.5 text-[var(--adm-green-800)]">Rendszeresemény · aktív</span>
+              <span className="rounded-full border border-[#14213D]/30 bg-[#14213D]/5 px-2.5 py-0.5 text-[#14213D]">Külső kommunikáció · Outlook-bekötés után</span>
+              <span className="rounded-full border border-[var(--adm-border-strong)] bg-[var(--adm-ivory-100)] px-2.5 py-0.5 text-[var(--adm-text-muted)]">Belső jelzés</span>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1 text-xs font-semibold text-[#5A4A2A]">

@@ -16,6 +16,7 @@ import {
   type DashboardStats,
   type TaskItem,
 } from "@/lib/api";
+import { toCommunicationSignal, type CommunicationSignal } from "@/lib/communicationIntake";
 
 type NewsArticle = {
   title: string;
@@ -500,6 +501,34 @@ export function Dashboard() {
     return items;
   }, [reviewQueue, tasks, upcomingDeadlines]);
 
+  // Communication intake foundation (OI1A) — derived from existing communications data only.
+  // No Outlook/Graph connection; classification is a transparent heuristic, not a live feed.
+  const communicationSignals = useMemo<CommunicationSignal[]>(
+    () =>
+      communications.map((item) =>
+        toCommunicationSignal({
+          id: item.id,
+          type: item.type,
+          subject: item.subject,
+          senderName: item.senderName,
+          senderEmail: item.senderEmail,
+          recipientEmail: item.recipientEmail,
+          summary: item.summary,
+          caseId: item.caseId,
+          clientId: item.clientId,
+          createdAt: item.createdAt,
+          case: item.case,
+          client: item.client ? { id: item.client.id, name: item.client.name } : null,
+          attachmentCount: item._count?.attachments,
+        }),
+      ),
+    [communications],
+  );
+  const externalComms = useMemo(() => communicationSignals.filter((s) => s.audience === "external"), [communicationSignals]);
+  const internalComms = useMemo(() => communicationSignals.filter((s) => s.audience === "internal"), [communicationSignals]);
+  // Foundation example list only — clearly labelled, not persisted, not live configuration.
+  const watchedClientExamples = ["BlackBelt", "Saubermacher", "Bálintfy"];
+
   return (
     <div className="adm-dash-stage min-h-full px-3 pb-5 pt-3 sm:px-5 xl:px-6">
       <div className="mx-auto w-full max-w-[1440px] space-y-3">
@@ -706,7 +735,129 @@ export function Dashboard() {
           </aside>
         </section>
 
-        {/* 6 — Lower support panels (lower visual weight) */}
+        {/* 6 — Communication watcher foundation (OI1A) */}
+        <section className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.7fr)]">
+          <article className="adm-panel overflow-hidden">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b-[3px] border-[#14213D] px-4 py-3 lg:px-5">
+              <div>
+                <p className="adm-kicker text-[#14213D]">Kommunikáció</p>
+                <h3 className="adm-heading mt-0.5 text-[24px] leading-tight">Kommunikációs figyelő</h3>
+              </div>
+              <span className="rounded-[var(--adm-radius-sm)] border border-[#14213D]/25 bg-[#14213D]/5 px-3 py-1 text-[10.5px] font-semibold text-[#14213D]">
+                Foundation · Outlook előkészítés
+              </span>
+            </div>
+
+            {/* Communication rubrikák (distinct from the main KPI strip) */}
+            <div className="grid grid-cols-2 gap-2 px-4 pt-3 md:grid-cols-4 lg:px-5">
+              <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 border-l-[#14213D] bg-[var(--adm-surface)] px-3 py-2">
+                <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Külső kommunikáció</p>
+                <p className="mt-0.5 font-serif text-[24px] leading-none text-[var(--adm-text)]">{externalComms.length}</p>
+              </div>
+              <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 border-l-[var(--adm-green-800)] bg-[var(--adm-surface)] px-3 py-2">
+                <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Belső kommunikáció</p>
+                <p className="mt-0.5 font-serif text-[24px] leading-none text-[var(--adm-text)]">{internalComms.length}</p>
+              </div>
+              <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 border-l-[#FCA311] bg-[var(--adm-surface)] px-3 py-2">
+                <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Válaszra vár</p>
+                <p className="mt-0.5 font-serif text-[24px] leading-none text-[var(--adm-text-soft)]">—</p>
+              </div>
+              <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 border-l-[#B7BEB6] bg-[var(--adm-surface)] px-3 py-2">
+                <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Figyelt ügyfelek</p>
+                <p className="mt-0.5 font-serif text-[24px] leading-none text-[var(--adm-text-soft)]">{watchedClientExamples.length}<span className="ml-1 align-middle text-[10px] font-sans text-[var(--adm-text-muted)]">példa</span></p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 p-4 md:grid-cols-2 lg:px-5">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#14213D]">Külső</p>
+                {externalComms.length === 0 ? (
+                  <div className="mt-2 adm-board-empty adm-board-empty-compact">
+                    <p className="text-xs font-semibold text-[var(--adm-text)]">Nincs új külső kommunikáció.</p>
+                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Ügyfélüzenetek, ellenoldali levelek, hatósági/bírósági jelzések, partneri válaszok.</p>
+                  </div>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {externalComms.slice(0, 4).map((sig) => (
+                      <div key={sig.id} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5">
+                        <p className="text-xs font-semibold text-[var(--adm-text)]">{sig.subject}</p>
+                        <p className="mt-0.5 text-[10.5px] text-[var(--adm-text-muted)]">
+                          {sig.senderName || sig.senderEmail || "Külső fél"}{sig.receivedAt ? ` · ${displayDateTimeShort(sig.receivedAt)}` : ""}
+                          {sig.hasAttachments ? " · 📎" : ""}
+                        </p>
+                        {sig.requiresReview ? <p className="mt-1 text-[10px] font-semibold text-[#8a5a06]">Besorolás javasolt (ügyfél/ügy)</p> : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Belső</p>
+                {internalComms.length === 0 ? (
+                  <div className="mt-2 adm-board-empty adm-board-empty-compact">
+                    <p className="text-xs font-semibold text-[var(--adm-text)]">Nincs új belső kommunikáció.</p>
+                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Belső megjegyzések, review-visszajelzések, átadási kommentek, kolléga kérdései.</p>
+                  </div>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {internalComms.slice(0, 4).map((sig) => (
+                      <div key={sig.id} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5">
+                        <p className="text-xs font-semibold text-[var(--adm-text)]">{sig.subject}</p>
+                        <p className="mt-0.5 text-[10.5px] text-[var(--adm-text-muted)]">
+                          {sig.senderName || sig.senderEmail || "Belső"}{sig.receivedAt ? ` · ${displayDateTimeShort(sig.receivedAt)}` : ""}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <p className="border-t border-[var(--adm-border)] px-4 py-2.5 text-[10.5px] text-[var(--adm-text-muted)] lg:px-5">
+              Outlook-integráció későbbi, jóváhagyott Microsoft Graph bekötéssel aktiválható. A jelenlegi nézet a meglévő kommunikációs adatokból dolgozik.
+            </p>
+          </article>
+
+          <aside className="grid content-start gap-3">
+            <article className="adm-panel p-3.5">
+              <p className="adm-kicker">Figyelt ügyfelek</p>
+              <h3 className="adm-heading mt-0.5 text-[20px]">Kiemelt ügyfélkör</h3>
+              <p className="mt-1.5 text-[11px] leading-5 text-[var(--adm-text-muted)]">
+                Későbbi beállításban kiválasztható, mely ügyfelek kommunikációja és aktivitása jelenjen meg kiemelten.
+              </p>
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                {watchedClientExamples.map((name) => (
+                  <span key={name} className="rounded-full border border-[var(--adm-border-strong)] bg-[var(--adm-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--adm-green-800)]">
+                    {name}
+                  </span>
+                ))}
+                <span className="rounded-full bg-[var(--adm-ivory-100)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">példa</span>
+              </div>
+              <div className="mt-3 adm-board-empty adm-board-empty-compact">
+                <p className="text-[11px] font-semibold text-[var(--adm-text)]">Figyelt ügyfelek aktivitása</p>
+                <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">A figyelt ügyfelekhez kapcsolódó új kommunikációk, dokumentumok és határidők itt jelennek meg.</p>
+              </div>
+            </article>
+
+            <article className="adm-panel p-3.5">
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-[#FCA311]" />
+                <h3 className="adm-heading text-[20px]">Válaszra vár</h3>
+              </div>
+              <div className="mt-2.5 space-y-2">
+                <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Tőlünk várnak választ</p>
+                  <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Foundation állapot — a válaszra váró jelzés az Outlook-bekötés után aktiválható.</p>
+                </div>
+                <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Mi várunk válaszra</p>
+                  <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Foundation állapot — kimenő kommunikáció követése későbbi fejlesztés.</p>
+                </div>
+              </div>
+            </article>
+          </aside>
+        </section>
+
+        {/* 7 — Lower support panels (lower visual weight) */}
         <section className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.6fr)]">
           <div className="space-y-5">
             <article className="adm-panel p-5">
