@@ -269,30 +269,33 @@ export function HandoffPackagePanel({
 
   return (
     <section
-      className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4"
+      className="rounded-[var(--adm-radius-lg)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 shadow-[var(--adm-shadow-sm)]"
       aria-label="Ügyvédi leadási csomagok"
     >
-      <div className="flex items-center gap-2 mb-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
         <span className="material-symbols-outlined text-lg text-[var(--adm-green-950)] hidden">folder_special</span>
         <h3 className="text-xs font-bold uppercase tracking-widest text-[var(--adm-green-950)]">
           Átadási csomagok
         </h3>
+        <span className="rounded-full border border-[var(--adm-border)] bg-white px-2 py-0.5 text-[10px] font-semibold text-[var(--adm-text-muted)]">
+          {activePackages.length} aktív
+        </span>
       </div>
-      <p className="text-[10px] text-[var(--adm-text-muted)] mb-2">Ügyvédi review-ra előkészített belső munkacsomag.</p>
+      <p className="mb-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">Ügyvédi review-ra előkészített belső munkacsomag.</p>
       {contextLabel ? (
         <p className="mb-2 rounded border border-[var(--adm-border)] bg-white px-2 py-1 text-[9px] text-[var(--adm-text-muted)]">
           Kapcsolt munkadokumentum: <span className="font-semibold">{contextLabel}</span>
         </p>
       ) : null}
-      <p className="text-[9px] text-[var(--adm-text-muted)] mb-3 italic">
+      <p className="mb-3 rounded border border-[var(--adm-border)] bg-[var(--adm-ivory-100)] px-2 py-1.5 text-[10px] leading-4 text-[var(--adm-text-muted)]">
         Ez a csomag előkészítő munkairat. Ügyvédi jóváhagyás nélkül nem minősül végleges jogi állásfoglalásnak.
       </p>
 
-      <div className="mb-3 rounded border border-[var(--adm-border)] bg-white p-3">
+      <div className="mb-3 rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="text-[10px] font-bold text-[var(--adm-text)]">Új átadási csomag</p>
-            <p className="mt-1 text-[9px] text-[var(--adm-text-muted)]">
+            <p className="text-[11px] font-bold text-[var(--adm-text)]">Új átadási csomag</p>
+            <p className="mt-1 text-[10px] leading-4 text-[var(--adm-text-muted)]">
               {hasDocumentContext
                 ? "A kiválasztott ügy- és dokumentumkörnyezetből piszkozat készíthető."
                 : "Válassz munkadokumentumot a dokumentumtárban vagy a szerződés-workspace-ben a létrehozáshoz."}
@@ -302,7 +305,7 @@ export function HandoffPackagePanel({
             type="button"
             onClick={handleCreateDraft}
             disabled={!hasDocumentContext || isCreatingPackage}
-            className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="rounded px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {isCreatingPackage ? "Létrehozás..." : "Mentés piszkozatként"}
           </button>
@@ -320,7 +323,7 @@ export function HandoffPackagePanel({
       )}
 
       {!isLoading && !error && activePackages.length === 0 && (
-        <div className="text-center py-6 border border-[var(--adm-border)] bg-[var(--adm-ivory-100)]">
+        <div className="rounded-[var(--adm-radius-md)] border border-dashed border-[var(--adm-border)] bg-[var(--adm-ivory-100)] py-6 text-center">
           <span className="material-symbols-outlined text-2xl text-[#c3c8c1]">inbox</span>
           <p className="text-[11px] text-[var(--adm-text-muted)] mt-2">
             Nincs aktív átadási csomag ehhez az ügyhöz.
@@ -343,7 +346,7 @@ export function HandoffPackagePanel({
             return (
               <div
                 key={pkg.id}
-                className="border border-[var(--adm-border)] bg-white p-3 rounded-lg"
+                className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-3 shadow-[var(--adm-shadow-sm)]"
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <p className="text-xs font-bold text-[var(--adm-green-950)]">

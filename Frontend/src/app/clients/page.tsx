@@ -234,7 +234,7 @@ function ClientsPageContent() {
               A house style profil dokumentumformátumot, fejléc/arculati elvárásokat és ügyfél-specifikus instrukciókat ad a prompt-copy workflow-hoz.
             </p>
           </div>
-          <div className="flex shrink-0 flex-wrap gap-2 xl:max-w-[360px] xl:justify-end">
+          <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap xl:max-w-[360px] xl:justify-end">
             <Link href={`/clients/${client.id}`} className="inline-flex items-center justify-center rounded-[5px] border border-[#173824] bg-[var(--adm-green-800)] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#173824]">Ügyfél dosszié</Link>
             <Link href={`/clients/${client.id}#house-style`} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">House style</Link>
             <Link href={`/cases?newCase=1&clientId=${encodeURIComponent(client.id)}`} className="inline-flex items-center justify-center rounded-[5px] border border-[#8E6A1B] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">+ Új ügy</Link>
@@ -274,9 +274,9 @@ function ClientsPageContent() {
               </ul>
             </AdminPanel>
             <AdminPanel className="p-4">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Külső AI workflow</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Külső prompt workflow</p>
               <p className="mt-2 text-[11px] leading-5 text-[#3D4842]">
-                Az Adminiculum nem futtat automatikusan külső AI-t. A house style panel instrukciós kontextust ad, amit a felhasználó promptként másolhat át.
+                Az Adminiculum nem futtat automatikusan külső eszközt. A house style panel instrukciós kontextust ad, amit a felhasználó szükség esetén promptként másolhat át.
               </p>
             </AdminPanel>
           </div>

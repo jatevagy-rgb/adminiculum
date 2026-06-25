@@ -917,7 +917,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
             {isInitialLoading ? (
               <AdminPanel className="p-10 text-center text-sm text-[var(--adm-text-muted)]">Dokumentumok betöltése...</AdminPanel>
             ) : (
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)_360px]">
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)_380px]">
                 <aside className="overflow-hidden rounded-[18px] border border-[rgba(22,32,26,0.16)] bg-[var(--adm-sand-100)] shadow-[0_16px_38px_rgba(31,74,51,0.08)]">
                   <div className="border-b border-[rgba(22,32,26,0.14)] bg-[var(--adm-green-800)] p-5 text-white">
                     <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#D8C58E]">Dokumentum ledger</p>
@@ -1069,7 +1069,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   </div>
                 </section>
 
-                <aside className="space-y-4">
+                <aside className="space-y-3">
                   <AdminPanel className="overflow-hidden border-[rgba(22,32,26,0.14)] bg-[var(--adm-surface)]">
                     <div className="bg-[var(--adm-green-800)] p-4 text-white">
                       <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#D8C58E]">Akciók</p>

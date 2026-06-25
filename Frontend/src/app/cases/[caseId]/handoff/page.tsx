@@ -67,7 +67,7 @@ function CaseHandoffPageContent({ params }: CaseHandoffPageProps) {
 
   return (
     <main className="min-h-screen adm-shell-bg text-[var(--adm-green-800)]">
-      <div className="mx-auto flex w-full max-w-[1400px]">
+      <div className="mx-auto flex w-full max-w-[1440px]">
         <CaseWorkspaceNav
           caseId={caseId}
           caseNumber={caseInfo?.caseNumber}
@@ -77,7 +77,7 @@ function CaseHandoffPageContent({ params }: CaseHandoffPageProps) {
           helperText="Leadási csomag nézet: belső review-előkészítés ügyvédi munkafolyamathoz."
         />
 
-        <section className="flex-1 p-6 lg:p-8">
+        <section className="flex-1 p-5 lg:p-7">
           <div className="mb-4 flex flex-wrap gap-2">
             <Link
               href={`/cases/${encodeURIComponent(caseId)}`}
@@ -117,7 +117,7 @@ function CaseHandoffPageContent({ params }: CaseHandoffPageProps) {
             </Link>
           </div>
 
-          <header className="mb-6 rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-5">
+          <header className="mb-5 rounded-[var(--adm-radius-lg)] border border-[var(--adm-border)] bg-[var(--adm-surface-raised)] p-5 shadow-[var(--adm-shadow-sm)]">
             <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--adm-text-muted)]">Output workflow</p>
             <h1 className="text-2xl text-[var(--adm-green-800)]" style={{ fontFamily: "var(--font-newsreader)" }}>
               Leadási csomag

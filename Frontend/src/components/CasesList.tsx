@@ -680,7 +680,7 @@ export function CasesList() {
                 <th className="px-3 py-2.5">Státusz</th>
                 <th className="px-3 py-2.5">Felelős</th>
                 <th className="px-3 py-2.5">Munkaprioritás</th>
-                <th className="px-3 py-2.5">Művelet</th>
+                <th className="px-3 py-2.5 text-right">Művelet</th>
               </tr>
             </thead>
             <tbody>
@@ -699,9 +699,9 @@ export function CasesList() {
                   <td className="px-3 py-3 text-xs text-[#3D4842]">{item.assignedLawyer?.name || "Nincs hozzárendelve"}</td>
                   <td className="px-3 py-3"><AdminBadge tone={deriveWorkPriorityLabel(item.priority) === "Magas" ? "amber" : "neutral"}>{deriveWorkPriorityLabel(item.priority)}</AdminBadge></td>
                   <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex flex-wrap gap-2">
-                      <AdminButton size="sm" variant="primary" onClick={() => router.push(`/cases/${item.id}`)}>Megnyitás</AdminButton>
-                      <AdminButton size="sm" variant="neutral" onClick={() => router.push(`/cases/${item.id}/documents`)}>Dokumentumtár</AdminButton>
+                    <div className="flex flex-wrap justify-end gap-1.5">
+                      <AdminButton className="min-w-[92px] justify-center" size="sm" variant="primary" onClick={() => router.push(`/cases/${item.id}`)}>Megnyitás</AdminButton>
+                      <AdminButton className="min-w-[112px] justify-center" size="sm" variant="neutral" onClick={() => router.push(`/cases/${item.id}/documents`)}>Dokumentumtár</AdminButton>
                     </div>
                   </td>
                 </tr>
@@ -978,9 +978,9 @@ export function CasesList() {
               {createError ? <div className="mb-4 rounded border border-[#F2DAD6] bg-[#F2DAD6] p-3 text-xs font-semibold text-[var(--adm-terracotta-700)]">{createError}</div> : null}
             </div>
 
-            <div className="sticky bottom-0 z-10 flex items-center justify-between gap-4 border-t border-[rgba(22,32,26,0.10)] bg-[var(--adm-sand-100)] px-6 py-3 shadow-[0_-12px_28px_rgba(22,32,26,0.08)]">
-              <p className="text-[11.5px] text-[var(--adm-text-muted)]">Az ügy létrehozása után a Dokumentumtárba lépünk, ahol feltöltheted az első iratot.</p>
-              <div className="flex gap-2"><AdminButton variant="ghost" onClick={() => setShowNewCaseModal(false)}>Mégse</AdminButton><AdminButton variant="primary" size="lg" onClick={handleCreateCase} disabled={isCreating}>{isCreating ? "Létrehozás..." : "Ügy létrehozása"}</AdminButton></div>
+            <div className="sticky bottom-0 z-10 flex flex-col gap-3 border-t border-[rgba(22,32,26,0.10)] bg-[var(--adm-sand-100)] px-6 py-3 shadow-[0_-12px_28px_rgba(22,32,26,0.08)] sm:flex-row sm:items-center sm:justify-between">
+              <p className="max-w-xl text-[11.5px] leading-5 text-[var(--adm-text-muted)]">Az ügy létrehozása után a Dokumentumtárba lépünk, ahol feltöltheted az első iratot.</p>
+              <div className="flex shrink-0 justify-end gap-2"><AdminButton variant="ghost" onClick={() => setShowNewCaseModal(false)}>Mégse</AdminButton><AdminButton variant="primary" size="lg" onClick={handleCreateCase} disabled={isCreating}>{isCreating ? "Létrehozás..." : "Ügy létrehozása"}</AdminButton></div>
             </div>
           </div>
         </div>

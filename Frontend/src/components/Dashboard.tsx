@@ -74,13 +74,13 @@ function kpiDot(tone: KpiCardProps["tone"]) {
 
 function KpiCard({ label, value, tone, zeroHint }: KpiCardProps) {
   return (
-    <div className={`rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] border-l-4 px-4 py-4 shadow-[var(--adm-shadow-sm)] ${kpiTone(tone)}`}>
-      <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">
+    <div className={`rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] border-l-4 px-3.5 py-3 shadow-[var(--adm-shadow-sm)] ${kpiTone(tone)}`}>
+      <p className="flex items-center gap-2 text-[9.5px] font-bold uppercase tracking-[0.15em] text-[var(--adm-text-muted)]">
         <span className={`h-2 w-2 rounded-full ${kpiDot(tone)}`} />
         {label}
       </p>
-      <p className="mt-2 font-serif text-[40px] leading-none text-[var(--adm-text)]">{value}</p>
-      <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{value === 0 ? zeroHint : "Aktív tétel"}</p>
+      <p className="mt-1.5 font-serif text-[34px] leading-none text-[var(--adm-text)]">{value}</p>
+      <p className="mt-1 text-[10px] leading-4 text-[var(--adm-text-muted)]">{value === 0 ? zeroHint : "Aktív tétel"}</p>
     </div>
   );
 }
@@ -450,25 +450,25 @@ export function Dashboard() {
   const greetingName = currentUser?.name || "dr. Hubay Máté";
 
   return (
-    <div className="adm-dash-stage min-h-full px-3 pb-8 pt-3 sm:px-5 xl:px-7">
-      <div className="mx-auto w-full max-w-[1480px] space-y-4">
+    <div className="adm-dash-stage min-h-full px-3 pb-7 pt-3 sm:px-5 xl:px-7">
+      <div className="mx-auto w-full max-w-[1480px] space-y-3.5">
         {/* 1 + 2 — Command-center hero with dark "Mai működési kép" status column */}
         <section className="adm-command-hero">
           <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="flex min-h-[250px] flex-col justify-between p-5 lg:p-7">
+            <div className="flex min-h-[230px] flex-col justify-between p-5 lg:p-6">
               <div>
                 <p className="adm-kicker">Adminiculum · Műszerfal</p>
-                <h1 className="adm-hero-title mt-3 max-w-4xl text-[clamp(36px,5vw,58px)] leading-[0.98]">
+                <h1 className="adm-hero-title mt-2.5 max-w-4xl text-[clamp(34px,4.5vw,54px)] leading-[0.98]">
                   Jogi munkapad a mai ügyekhez.
                 </h1>
-                <p className="mt-4 max-w-2xl text-[14px] leading-6 text-[var(--adm-text-muted)]">
+                <p className="mt-3 max-w-2xl text-[13.5px] leading-6 text-[var(--adm-text-muted)]">
                   Jó reggelt, {greetingName}. Ez a command center meglévő ügyadatokból, feladatokból és
                   dokumentumjelzésekből állítja össze a munkanézetet. Csak a rendszerben ténylegesen elérhető
                   jelzések jelennek meg.
                 </p>
               </div>
 
-              <div className="mt-5">
+              <div className="mt-4">
                 {error ? (
                   <div className="mb-4 rounded-[var(--adm-radius-sm)] border border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] px-3 py-2 text-xs text-[var(--adm-terracotta-700)]">
                     {error}
@@ -495,7 +495,7 @@ export function Dashboard() {
               </div>
             </div>
 
-            <aside className="adm-dark-status flex flex-col gap-3 border-t border-white/10 p-5 xl:border-l xl:border-t-0">
+            <aside className="adm-dark-status flex flex-col gap-2.5 border-t border-white/10 p-4 xl:border-l xl:border-t-0">
               <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[var(--adm-sage-300)]">
                 Mai működési kép
               </p>
