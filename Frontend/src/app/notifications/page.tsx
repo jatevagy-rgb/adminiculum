@@ -1,16 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
-import {
-  getNotifications,
-  getUnreadNotificationsCount,
-  markAllNotificationsRead,
-  markNotificationRead,
-  type NotificationItem,
-  type NotificationType,
-} from "@/lib/api";
 
 const filters = [
   "Összes",
@@ -44,40 +35,7 @@ const filterTone: Record<string, string> = {
   "Feladathoz kapcsolt": "var(--adm-blue-950)",
 };
 
-const typeLabels: Record<NotificationType, string> = {
-  TASK_ASSIGNED: "Feladat kiosztva",
-  TASK_DUE_SOON: "Közelgő határidő",
-  TASK_OVERDUE: "Lejárt feladat",
-  CASE_ASSIGNED: "Ügy hozzárendelve",
-  CASE_STATUS_CHANGED: "Ügyállapot változott",
-  DOCUMENT_UPLOADED: "Dokumentum feltöltve",
-  DOCUMENT_APPROVED: "Dokumentum jóváhagyva",
-  COMMENT_ADDED: "Megjegyzés érkezett",
-  REVIEW_REQUESTED: "Review kérve",
-  REVIEW_COMPLETED: "Review lezárva",
-  TIME_LOGGED: "Munkaóra rögzítve",
-  SYSTEM: "Rendszerértesítés",
-};
-
-const formatDateTime = (iso: string) => {
-  try {
-    return new Date(iso).toLocaleString("hu-HU", { dateStyle: "short", timeStyle: "short" });
-  } catch {
-    return iso;
-  }
-};
-
-const resolveLinkContextLabel = (link?: string | null): string => {
-  if (!link) return "Kapcsolódó elem nem elérhető";
-  if (/^\/cases\/[^/]+\/documents/.test(link)) return "Kapcsolódó dokumentum";
-  if (/^\/cases\/[^/]+\/handoff/.test(link)) return "Kapcsolódó leadási csomag";
-  if (/^\/cases\/[^/]+\/communications/.test(link)) return "Kapcsolódó ügykommunikáció";
-  if (/^\/cases\/[^/]+$/.test(link)) return "Kapcsolódó ügy";
-  if (/^\/documents\/compare/.test(link)) return "Kapcsolódó workspace";
-  if (/^\/reviews/.test(link)) return "Kapcsolódó review";
-  if (/^\/time-entries/.test(link)) return "Kapcsolódó munkaóra";
-  return "Kapcsolódó elem";
-};
+const communicationColumns = ["Feladó / forrás", "Tárgy / jelzés", "Ügyfél / ügy", "Státusz", "Idő"];
 
 export default function NotificationsPage() {
   return (
@@ -89,34 +47,6 @@ export default function NotificationsPage() {
 
 function CommunicationWorkspace() {
   const [activeFilter, setActiveFilter] = useState(filters[0]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [isMarkingAll, setIsMarkingAll] = useState(false);
-  const [markingId, setMarkingId] = useState<string | null>(null);
-
-  const loadNotifications = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const [listResult, unreadResult] = await Promise.all([
-        getNotifications(100, 0),
-        getUnreadNotificationsCount(),
-      ]);
-      setNotifications(listResult.notifications);
-      setUnreadCount(unreadResult.unreadCount);
-    } catch (err) {
-      console.error("Notification load failed:", err);
-      setError("A rendszeresemények most nem érhetők el.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadNotifications();
-  }, []);
 
   useEffect(() => {
     const view = new URLSearchParams(window.location.search).get("view") || "all";
@@ -124,48 +54,8 @@ function CommunicationWorkspace() {
     setActiveFilter(nextFilter);
   }, []);
 
-  const sortedNotifications = useMemo(
-    () =>
-      [...notifications].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      ),
-    [notifications],
-  );
-
-  const visibleNotifications = sortedNotifications.slice(0, 6);
-
-  const handleMarkRead = async (notificationId: string) => {
-    setMarkingId(notificationId);
-    try {
-      await markNotificationRead(notificationId);
-      setNotifications((current) =>
-        current.map((item) => (item.id === notificationId ? { ...item, isRead: true } : item)),
-      );
-      setUnreadCount((current) => Math.max(0, current - 1));
-    } catch (err) {
-      console.error("Mark notification as read failed:", err);
-      setError("A művelet sikertelen.");
-    } finally {
-      setMarkingId(null);
-    }
-  };
-
-  const handleMarkAllRead = async () => {
-    setIsMarkingAll(true);
-    try {
-      await markAllNotificationsRead();
-      setNotifications((current) => current.map((item) => ({ ...item, isRead: true })));
-      setUnreadCount(0);
-    } catch (err) {
-      console.error("Mark all notifications as read failed:", err);
-      setError("A művelet sikertelen.");
-    } finally {
-      setIsMarkingAll(false);
-    }
-  };
-
   return (
-    <main className="adm-dash-stage min-h-screen px-3 pb-5 pt-3 sm:px-5 xl:px-6">
+    <main className="adm-dash-stage min-h-screen px-3 pb-4 pt-3 sm:px-5 xl:px-6">
       <section className="mx-auto w-full max-w-[1440px] space-y-3">
         <header className="adm-panel adm-panel-primary overflow-hidden">
           <div className="flex flex-wrap items-start justify-between gap-3 border-b-[3px] border-[var(--adm-blue-500)] bg-white px-4 py-3 lg:px-5">
@@ -175,15 +65,10 @@ function CommunicationWorkspace() {
               <p className="mt-1 max-w-3xl text-[12px] leading-5 text-[var(--adm-text-muted)]">
                 Levelek, belső jelzések, válaszállapotok és ügyhöz kapcsolható kommunikáció.
               </p>
-              <p className="mt-1 max-w-3xl text-[11px] leading-4 text-[var(--adm-text-soft)]">
-                Élő Outlook/Graph-bekötés nincs aktiválva.
-              </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-500)]/30 bg-[var(--adm-blue-100)]/35 px-3 py-1 text-[10.5px] font-semibold text-[var(--adm-blue-700)]">
-                Outlook később
-              </span>
-            </div>
+            <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-500)]/30 bg-[var(--adm-blue-100)]/35 px-3 py-1 text-[10.5px] font-semibold text-[var(--adm-blue-700)]">
+              Outlook később
+            </span>
           </div>
 
           <nav className="flex gap-1 overflow-x-auto bg-[var(--adm-surface)] px-4 py-2.5 lg:px-5" aria-label="Kommunikációs szűrők">
@@ -221,7 +106,7 @@ function CommunicationWorkspace() {
             countLabel="0/8"
             capacityLabel="Kapacitás: 8 levélelőnézet"
             emptyTitle="Nincs új külső kommunikáció."
-            emptyText="Később itt jelenik meg a feladó, tárgy, ügyfél/ügy és válaszállapot."
+            emptyText="A bejövő és kimenő külső levelek itt rendezhetők ügyfélhez, ügyhöz és válaszállapothoz."
           />
           <CommunicationPanel
             title="Belső kommunikáció"
@@ -229,146 +114,54 @@ function CommunicationWorkspace() {
             countLabel="0/8"
             capacityLabel="Kapacitás: 8 belső jelzés"
             emptyTitle="Nincs új belső kommunikáció."
-            emptyText="Később itt jelennek meg a belső jelzések, átadási kommentek és review-visszajelzések."
+            emptyText="A belső jelzések, átadási kommentek és review-visszajelzések itt sorolhatók munkába."
           />
         </section>
 
-        <section className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.7fr)_minmax(300px,0.7fr)]">
-          <article className="adm-panel adm-panel-accent-navy p-4">
-            <p className="adm-kicker text-[var(--adm-blue-950)]">Munkába rendezés</p>
-            <h2 className="adm-heading mt-1 text-[21px]">Besorolás</h2>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {["Levél/jelzés", "Ügyfél", "Ügy", "Feladat", "Dokumentum / review"].map((step, index) => (
-                <span key={step} className="inline-flex items-center gap-2">
-                  <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-950)]/20 bg-white px-2.5 py-1 text-[10.5px] font-bold text-[var(--adm-blue-950)]">
-                    {step}
-                  </span>
-                  {index < 4 ? <span className="text-[var(--adm-text-soft)]">→</span> : null}
-                </span>
-              ))}
-            </div>
-            <p className="mt-3 text-[11.5px] leading-5 text-[var(--adm-text-muted)]">
-              A besorolás később megjegyezhető lesz.
-            </p>
-          </article>
-
-          <article className="adm-panel adm-panel-accent-amber p-4">
-            <p className="adm-kicker text-[var(--adm-warm-600)]">Válasz</p>
-            <h2 className="adm-heading mt-1 text-[21px]">Válaszállapot</h2>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-              <ReplyLane label="Tőlünk várnak választ" />
-              <ReplyLane label="Mi várunk válaszra" />
-            </div>
-            <p className="mt-3 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-warm-400)]/45 bg-[#FFF8E2] p-2.5 text-[11px] font-semibold text-[var(--adm-text-muted)]">
-              Nincs nyitott válaszállapot.
-            </p>
-          </article>
-
-          <article className="adm-panel p-4" style={{ borderTop: "3px solid var(--adm-blue-950)" }}>
-            <p className="adm-kicker text-[var(--adm-blue-950)]">Feladat</p>
-            <h2 className="adm-heading mt-1 text-[21px]">Feladathoz kapcsolás</h2>
-            <p className="mt-2 text-[11.5px] leading-5 text-[var(--adm-text-muted)]">
-              Feladatkiadáskor a releváns levél vagy szál később a feladathoz kapcsolható.
-            </p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {["Levél / szál", "Feladat", "Ügy", "Felelős"].map((item) => (
-                <span key={item} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2.5 py-2 text-[11px] font-bold text-[var(--adm-text)]">
-                  {item}
-                </span>
-              ))}
-            </div>
-          </article>
-        </section>
-
         <section className="adm-panel overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--adm-border)] bg-white px-4 py-3 lg:px-5">
-            <div>
-              <p className="adm-kicker text-[var(--adm-green-800)]">Rendszer</p>
-              <h2 className="adm-heading mt-0.5 text-[19px]">Rendszerjelzések</h2>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1 text-[11px] font-semibold text-[var(--adm-text-muted)]">
-                Olvasatlan: {unreadCount}
-              </span>
-              <button
-                type="button"
-                onClick={handleMarkAllRead}
-                disabled={isLoading || isMarkingAll || notifications.length === 0 || unreadCount === 0}
-                className="adm-link-button px-3 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isMarkingAll ? "Jelölés..." : "Összes olvasott"}
-              </button>
-            </div>
+          <div className="border-b border-[var(--adm-border)] bg-white px-4 py-3 lg:px-5">
+            <p className="adm-kicker text-[var(--adm-blue-950)]">Munkába rendezés</p>
+            <h2 className="adm-heading mt-0.5 text-[22px]">Kommunikáció feldolgozása</h2>
           </div>
-
-          <div className="p-4 lg:px-5">
-            {isLoading ? (
-              <div className="adm-board-empty adm-board-empty-compact">
-                <p className="text-xs font-semibold text-[var(--adm-text)]">Rendszerjelzések betöltése...</p>
-                <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">A rendszeresemények lekérése folyamatban van.</p>
-              </div>
-            ) : error ? (
-              <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] p-3">
-                <p className="text-xs font-semibold text-[var(--adm-terracotta-700)]">{error}</p>
-                <button type="button" onClick={loadNotifications} className="adm-link-button mt-2 px-3 py-2 text-[11px]">
-                  Újrapróbálás
-                </button>
-              </div>
-            ) : visibleNotifications.length === 0 ? (
-              <div className="adm-board-empty adm-board-empty-compact">
-                <p className="text-xs font-semibold text-[var(--adm-text)]">Nincs új rendszerjelzés.</p>
-              </div>
-            ) : (
-              <ul className="grid gap-2">
-                {visibleNotifications.map((item) => (
-                  <li
-                    key={item.id}
-                    className={`rounded-[var(--adm-radius-sm)] border border-l-4 p-3 ${
-                      item.isRead
-                        ? "border-[var(--adm-border)] border-l-[var(--adm-blue-950)] bg-white"
-                        : "border-[#F1CB64] border-l-[var(--adm-warm-500)] bg-[#FFF8E2]"
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="rounded bg-[var(--adm-ivory-200)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--adm-text-muted)]">
-                            {typeLabels[item.type] || "Értesítés"}
-                          </span>
-                          {!item.isRead ? (
-                            <span className="rounded bg-[var(--adm-warm-500)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-white">
-                              Olvasatlan
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="mt-1 text-sm font-semibold text-[var(--adm-text)]">{item.title}</p>
-                        <p className="mt-0.5 text-xs text-[var(--adm-text-muted)]">{item.message}</p>
-                        <p className="mt-1 text-[10.5px] text-[var(--adm-text-soft)]">
-                          {resolveLinkContextLabel(item.link)} · {formatDateTime(item.createdAt)}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 flex-wrap gap-2">
-                        {item.link ? (
-                          <a href={item.link} className="adm-link-button px-3 py-2 text-[11px]">
-                            Megnyitás
-                          </a>
-                        ) : null}
-                        {!item.isRead ? (
-                          <button
-                            type="button"
-                            onClick={() => handleMarkRead(item.id)}
-                            disabled={markingId === item.id}
-                            className="adm-link-button adm-link-button-primary px-3 py-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {markingId === item.id ? "Mentés..." : "Olvasott"}
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  </li>
+          <div className="grid gap-3 p-3 lg:grid-cols-[1.15fr_0.9fr_0.95fr] lg:p-4">
+            <WorkflowTool accent="var(--adm-blue-950)" kicker="Besorolás" title="Ügyhöz rendezés">
+              <div className="flex flex-wrap items-center gap-2">
+                {["Levél/jelzés", "Ügyfél", "Ügy", "Feladat"].map((step, index) => (
+                  <span key={step} className="inline-flex items-center gap-2">
+                    <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-950)]/20 bg-white px-2.5 py-1 text-[10.5px] font-bold text-[var(--adm-blue-950)]">
+                      {step}
+                    </span>
+                    {index < 3 ? <span className="text-[var(--adm-text-soft)]">→</span> : null}
+                  </span>
                 ))}
-              </ul>
-            )}
+              </div>
+              <p className="mt-3 text-[11.5px] font-semibold text-[var(--adm-text-muted)]">
+                A besorolás később megjegyezhető lesz.
+              </p>
+            </WorkflowTool>
+
+            <WorkflowTool accent="var(--adm-warm-500)" kicker="Válaszállapot" title="Válasz követése">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                <ReplyLane label="Tőlünk várnak választ" />
+                <ReplyLane label="Mi várunk válaszra" />
+              </div>
+              <p className="mt-3 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-warm-400)]/45 bg-[#FFF8E2] px-3 py-2 text-[11px] font-semibold text-[var(--adm-text-muted)]">
+                Nincs nyitott válaszállapot.
+              </p>
+            </WorkflowTool>
+
+            <WorkflowTool accent="var(--adm-blue-700)" kicker="Feladathoz kapcsolás" title="Munka kiadása">
+              <div className="grid grid-cols-2 gap-2">
+                {["Levél / szál", "Feladat", "Ügy", "Felelős"].map((item) => (
+                  <span key={item} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-2.5 py-2 text-[11px] font-bold text-[var(--adm-text)]">
+                    {item}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-3 text-[11.5px] font-semibold text-[var(--adm-text-muted)]">
+                Feladatkiadáskor a releváns levél vagy szál kapcsolható lesz.
+              </p>
+            </WorkflowTool>
           </div>
         </section>
       </section>
@@ -392,20 +185,49 @@ function CommunicationPanel({
   emptyText: string;
 }) {
   return (
-    <article className="adm-panel overflow-hidden">
-      <div className="flex items-center justify-between gap-2 px-4 py-3 text-white" style={{ background: accent }}>
-        <h2 className="adm-heading text-[22px] text-white">{title}</h2>
+    <article className="adm-panel flex min-h-[340px] flex-col overflow-hidden">
+      <div className="flex items-center justify-between gap-2 px-4 py-4 text-white" style={{ background: accent }}>
+        <h2 className="adm-heading text-[24px] text-white">{title}</h2>
         <span className="rounded-[var(--adm-radius-sm)] border border-white/25 bg-white/15 px-2.5 py-1 text-[10px] font-bold text-white">
           {countLabel}
         </span>
       </div>
-      <div className="p-4">
-        <div className="rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
-          <p className="text-xs font-semibold text-[var(--adm-text)]">{emptyTitle}</p>
-          <p className="mt-1 text-[11px] leading-4 text-[var(--adm-text-muted)]">{emptyText}</p>
+      <div className="flex flex-1 flex-col p-4">
+        <div className="grid grid-cols-[1.05fr_1.2fr_1fr_0.75fr_0.55fr] overflow-hidden rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white">
+          {communicationColumns.map((column) => (
+            <div key={column} className="border-r border-[var(--adm-border)] px-2.5 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--adm-text-soft)] last:border-r-0">
+              {column}
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex min-h-[155px] flex-1 items-center rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
+          <div>
+            <p className="text-xs font-semibold text-[var(--adm-text)]">{emptyTitle}</p>
+            <p className="mt-1 max-w-xl text-[11px] leading-4 text-[var(--adm-text-muted)]">{emptyText}</p>
+          </div>
         </div>
         <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">{capacityLabel}</p>
       </div>
+    </article>
+  );
+}
+
+function WorkflowTool({
+  accent,
+  kicker,
+  title,
+  children,
+}: {
+  accent: string;
+  kicker: string;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <article className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3" style={{ borderTop: `3px solid ${accent}` }}>
+      <p className="adm-kicker" style={{ color: accent }}>{kicker}</p>
+      <h3 className="adm-heading mt-1 text-[18px]">{title}</h3>
+      <div className="mt-3">{children}</div>
     </article>
   );
 }
