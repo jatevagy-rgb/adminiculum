@@ -664,37 +664,16 @@ select {
 
 .adm-kpi-cell {
   isolation: isolate;
-  min-height: 112px;
-  border-color: color-mix(in srgb, var(--adm-kpi-accent, var(--adm-blue-950)) 28%, rgba(2, 48, 71, 0.10));
+  min-height: 104px;
+  border-color: color-mix(in srgb, var(--adm-kpi-accent, var(--adm-blue-950)) 32%, rgba(2, 48, 71, 0.12));
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease,
     transform 160ms ease;
 }
 
-.adm-kpi-cell::after {
-  content: "";
-  position: absolute;
-  inset-block: 10px;
-  left: 0;
-  width: 6px;
-  border-radius: 0 999px 999px 0;
-  background: var(--adm-kpi-accent, #14213d);
-  opacity: 0.95;
-}
-
-.adm-kpi-cell::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--adm-kpi-accent, var(--adm-blue-950)) 17%, transparent), transparent 56%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.70), rgba(255, 255, 255, 0.42));
-}
-
 .adm-kpi-cell:hover {
-  border-color: color-mix(in srgb, var(--adm-kpi-accent, var(--adm-blue-950)) 52%, rgba(2, 48, 71, 0.16));
+  border-color: color-mix(in srgb, var(--adm-kpi-accent, var(--adm-blue-950)) 60%, rgba(2, 48, 71, 0.16));
   box-shadow: 0 18px 38px rgba(2, 48, 71, 0.12);
   transform: translateY(-1px);
 }
