@@ -202,22 +202,6 @@ function CommRow({ sig, family }: { sig: CommunicationSignal; family: "external"
   );
 }
 
-// Intentional empty workbench slot — shows the future row structure without fake data.
-function CommFoundationRow({ family }: { family: "external" | "internal" }) {
-  const rail = family === "external" ? "#219EBC" : "#0A5A45";
-  return (
-    <div className="flex items-stretch gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5">
-      <span className="w-1.5 shrink-0 rounded-full opacity-35" style={{ backgroundColor: rail }} />
-      <div className="min-w-0 flex-1">
-        <p className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">Feladó · Tárgy · Ügyfél · Státusz</p>
-        <p className="mt-0.5 text-[10px] text-[var(--adm-text-muted)]">Outlook-bekötés után jelenik meg.</p>
-      </div>
-      <span className="shrink-0 self-center rounded-full border border-[var(--adm-border-strong)] px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-[0.08em] text-[var(--adm-text-soft)]">Foundation</span>
-    </div>
-  );
-}
-
-// Future-ready news / legal-signal row (real data: title, source, category tag, open action).
 function NewsRow({ article }: { article: NewsArticle }) {
   return (
     <div className="flex items-start gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-[3px] border-l-[var(--adm-green-800)] bg-white p-2.5">
@@ -234,18 +218,6 @@ function NewsRow({ article }: { article: NewsArticle }) {
           Megnyitás
         </a>
       ) : null}
-    </div>
-  );
-}
-
-function NewsFoundationRow() {
-  return (
-    <div className="flex items-center gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-[3px] border-l-[var(--adm-green-800)]/40 bg-[var(--adm-surface)] p-2.5">
-      <div className="min-w-0 flex-1">
-        <p className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">Jogi jelzés · Forrás · Kategória</p>
-        <p className="mt-0.5 text-[10px] text-[var(--adm-text-muted)]">További jelzések a hírfeed aktiválásakor.</p>
-      </div>
-      <span className="shrink-0 rounded-full border border-[var(--adm-border-strong)] px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-[0.08em] text-[var(--adm-text-soft)]">Foundation</span>
     </div>
   );
 }
@@ -479,8 +451,6 @@ export function Dashboard() {
     [cases],
   );
 
-  // Communication intake foundation (OI1A) — derived from existing communications data only.
-  // No Outlook/Graph connection; classification is a transparent heuristic, not a live feed.
   const communicationSignals = useMemo<CommunicationSignal[]>(
     () =>
       communications.map((item) =>
@@ -505,7 +475,6 @@ export function Dashboard() {
   const externalComms = useMemo(() => communicationSignals.filter((s) => s.audience === "external"), [communicationSignals]);
   const internalComms = useMemo(() => communicationSignals.filter((s) => s.audience === "internal"), [communicationSignals]);
 
-  // "Mai sor" — a mixed actionable queue (review + deadline + important communication), not a count duplicate.
   const maiSorItems = useMemo(() => {
     const items: Array<{ id: string; kind: string; title: string; detail: string; href: string }> = [];
     const review = reviewQueue[0];
@@ -541,14 +510,11 @@ export function Dashboard() {
     return items;
   }, [externalComms, reviewQueue, upcomingDeadlines]);
 
-  // Foundation example list only — clearly labelled, not persisted, not live configuration.
   const watchedClientExamples = ["BlackBelt", "Saubermacher", "Bálintfy"];
-  // Real client-linked communication, if any (foundation preview of future per-client sorting).
   const clientLinkedComms = useMemo(
     () => communicationSignals.filter((s) => s.proposedClientName).slice(0, 4),
     [communicationSignals],
   );
-  // Agenda foundation built from real deadline tasks (no live calendar claim).
   const agendaItems = useMemo(
     () =>
       upcomingDeadlines.slice(0, 5).map((task) => ({
@@ -560,16 +526,6 @@ export function Dashboard() {
       })),
     [upcomingDeadlines],
   );
-  // Escalation/risk from real urgent (due ≤ today) tasks only — no fabricated risk.
-  const escalationItems = useMemo(
-    () =>
-      tasks
-        .filter((task) => mapTaskBucket(task) === "urgent")
-        .slice(0, 4)
-        .map((task) => ({ id: task.id, title: task.title, caseNumber: task.case?.caseNumber || "Feladat", date: task.dueDate })),
-    [tasks],
-  );
-
   return (
     <div className="adm-dash-stage min-h-full px-3 pb-4 pt-3 sm:px-5 xl:px-6">
       <div className="mx-auto w-full max-w-[1440px] space-y-2.5">
@@ -675,12 +631,11 @@ export function Dashboard() {
                 <p className="adm-kicker text-[var(--adm-green-800)]">Elsődleges munkasor</p>
                 <h2 className="adm-heading mt-1 text-[28px] leading-tight">Itt folytasd</h2>
                 <p className="mt-1 max-w-3xl text-[11.5px] leading-5 text-[var(--adm-text-muted)]">
-                  Meglévő feladatokból, ügyekből, dokumentumjelzésekből és helyi böngészős vázlatokból adott
-                  nyitási javaslat. A pontos priorizálás későbbi backend-alapú fejlesztés.
+                  A legjobb következő nyitási pont a jelenlegi ügyekből, feladatokból és dokumentumjelzésekből.
                 </p>
               </div>
               <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1 text-[11px] font-semibold text-[#6B4B14]">
-                {nextWorkCards.length} javaslat
+                {nextWorkCards.length === 0 ? "Nincs javaslat" : "Következő lépés"}
               </span>
             </div>
 
@@ -689,7 +644,7 @@ export function Dashboard() {
               <div className="mt-4">
                 <EmptyState
                   title="Nincs kiemelt fókuszfeladat"
-                  subtitle="Nincs helyi böngészős munkavázlat vagy betöltött prioritás. A dashboard üres állapotban is megtartja a command-center szerkezetet."
+                  subtitle="Nincs olyan betöltött ügy, feladat vagy dokumentumjelzés, amely most külön figyelmet kér."
                 />
               </div>
             ) : null}
@@ -722,10 +677,6 @@ export function Dashboard() {
                   <div className="adm-board-empty adm-board-empty-compact">
                     <p className="text-xs font-semibold text-[var(--adm-text)]">Üres a mai sor</p>
                     <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Review-, határidős és fontos kommunikációs tételek itt jelennek meg.</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Link href="/reviews" className="adm-link-button px-3 py-2 text-[11px]">Review sor</Link>
-                    <Link href="/cases?newCase=1" className="adm-link-button adm-link-button-primary px-3 py-2 text-[11px]">Új ügy</Link>
                   </div>
                 </div>
               ) : null}
@@ -770,7 +721,7 @@ export function Dashboard() {
                 <h3 className="adm-heading mt-0.5 text-[24px] leading-tight">Kommunikációs figyelő</h3>
               </div>
               <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-500)]/30 bg-[var(--adm-blue-100)]/35 px-3 py-1 text-[10.5px] font-semibold text-[var(--adm-blue-700)]">
-                Foundation · Outlook előkészítés
+                {Math.min(communicationSignals.length, 16)}/16 jelzés
               </span>
             </div>
 
@@ -781,13 +732,14 @@ export function Dashboard() {
                   <span className="text-[9.5px] font-semibold text-[var(--adm-text-soft)]">{Math.min(externalComms.length, 8)}/8</span>
                 </div>
                 {externalComms.length === 0 ? (
-                  <p className="mt-1.5 text-[10.5px] leading-4 text-[var(--adm-text-muted)]">Nincs új külső kommunikáció. Ügyfélüzenetek, ellenoldali levelek, hatósági/bírósági jelzések, partneri válaszok.</p>
+                  <div className="mt-2 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-white/75 p-2.5">
+                    <p className="text-[10.5px] leading-4 text-[var(--adm-text-muted)]">Nincs új külső kommunikáció. A lista később legfeljebb 8 levélelőnézetet mutat: feladó, tárgy, ügyfél/ügy, státusz.</p>
+                  </div>
                 ) : null}
-                <div className="mt-2 space-y-1.5">
+                <div className={externalComms.length > 0 ? "mt-2 space-y-1.5" : "hidden"}>
                   {externalComms.slice(0, 8).map((sig) => <CommRow key={sig.id} sig={sig} family="external" />)}
-                  {Array.from({ length: Math.max(0, 8 - Math.min(externalComms.length, 8)) }).map((_, i) => <CommFoundationRow key={`ext-found-${i}`} family="external" />)}
                 </div>
-                <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Kapacitás: 8 sor · Outlook előkészítés</p>
+                <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Kapacitás: 8 levélelőnézet</p>
               </div>
               <div className="adm-signal-card rounded-[var(--adm-radius-sm)] border-l-[3px] border-l-[var(--adm-blue-700)] p-3">
                 <div className="flex items-center justify-between gap-2">
@@ -795,18 +747,16 @@ export function Dashboard() {
                   <span className="text-[9.5px] font-semibold text-[var(--adm-text-soft)]">{Math.min(internalComms.length, 8)}/8</span>
                 </div>
                 {internalComms.length === 0 ? (
-                  <p className="mt-1.5 text-[10.5px] leading-4 text-[var(--adm-text-muted)]">Nincs új belső kommunikáció. Belső megjegyzések, review-visszajelzések, átadási kommentek, kolléga kérdései.</p>
+                  <div className="mt-2 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-white/75 p-2.5">
+                    <p className="text-[10.5px] leading-4 text-[var(--adm-text-muted)]">Nincs új belső kommunikáció. A lista később legfeljebb 8 belső jelzést mutat: feladó, tárgy, ügy/ügyfél, státusz.</p>
+                  </div>
                 ) : null}
-                <div className="mt-2 space-y-1.5">
+                <div className={internalComms.length > 0 ? "mt-2 space-y-1.5" : "hidden"}>
                   {internalComms.slice(0, 8).map((sig) => <CommRow key={sig.id} sig={sig} family="internal" />)}
-                  {Array.from({ length: Math.max(0, 8 - Math.min(internalComms.length, 8)) }).map((_, i) => <CommFoundationRow key={`int-found-${i}`} family="internal" />)}
                 </div>
-                <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Kapacitás: 8 sor · Outlook előkészítés</p>
+                <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Kapacitás: 8 belső jelzés</p>
               </div>
             </div>
-            <p className="border-t border-[var(--adm-border)] px-4 py-2.5 text-[10.5px] text-[var(--adm-text-muted)] lg:px-5">
-              Outlook-integráció később, jóváhagyott Microsoft Graph bekötéssel aktiválható. A jelenlegi nézet a meglévő kommunikációs adatokból dolgozik.
-            </p>
           </article>
         </section>
 
@@ -827,60 +777,17 @@ export function Dashboard() {
               {legalNews.isLoading ? <p className="text-xs text-[var(--adm-text-soft)]">Hírfeed betöltése...</p> : null}
               {!legalNews.isLoading && (legalNews.error || legalSignals.length === 0) ? (
                 <p className="rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5 text-[11px] text-[var(--adm-text-muted)]">
-                  Előkészítés alatt — a hírfeed későbbi patchben aktiválható. A lista 8 jogi jelzés megjelenítésére készül.
+                  Nincs elérhető jogi-piaci jelzés a jelenlegi nézetben.
                 </p>
               ) : null}
               <div className="grid gap-1.5 md:grid-cols-2">
                 {legalSignals.slice(0, 8).map((article, index) => <NewsRow key={`${article.title}-${index}`} article={article} />)}
-                {legalSignals.length > 0 ? Array.from({ length: Math.max(0, 6 - Math.min(legalSignals.length, 8)) }).map((_, i) => <NewsFoundationRow key={`news-found-${i}`} />) : null}
               </div>
               <p className="mt-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Kapacitás: 8 jogi jelzés · valós forrásokból</p>
             </div>
           </article>
 
           <aside className="grid content-start gap-3">
-            <article className="adm-panel adm-panel-accent-amber adm-rail-panel p-3.5">
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-[var(--adm-warm-400)]" />
-                <h3 className="adm-heading text-[20px]">Válaszra vár</h3>
-              </div>
-              <div className="mt-2.5 space-y-2">
-                <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-warm-400)]/35 border-l-[3px] border-l-[var(--adm-warm-400)] bg-[#FFF3CB] p-2.5">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-warm-600)]">Tőlünk várnak választ</p>
-                  <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Foundation állapot — a válaszra váró jelzés az Outlook-bekötés után aktiválható.</p>
-                </div>
-                <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-[3px] border-l-[var(--adm-neutral-100)] bg-white p-2.5">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Mi várunk válaszra</p>
-                  <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Foundation állapot — kimenő kommunikáció követése későbbi fejlesztés.</p>
-                </div>
-              </div>
-            </article>
-
-            <article className="adm-panel overflow-hidden">
-              <div className="flex items-center justify-between gap-2 px-3.5 py-2.5" style={{ background: "#9E2A2B", color: "#FFFFFF" }}>
-                <h3 className="font-serif text-[19px] leading-none">Kockázat / eszkaláció</h3>
-                <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-bold text-white">{escalationItems.length}</span>
-              </div>
-              <div className="space-y-2 p-3.5">
-                {escalationItems.length === 0 ? (
-                  <div className="rounded-[var(--adm-radius-sm)] border border-[#9E2A2B]/20 border-l-[3px] border-l-[#9E2A2B]/45 bg-[#FBF1F1] p-2.5">
-                    <p className="text-[11px] font-semibold text-[var(--adm-text)]">Nincs nyitott kockázati vagy eszkalációs jelzés.</p>
-                    <p className="mt-1 text-[11px] leading-4 text-[var(--adm-text-muted)]">Blokkolók, lejárt határidők, sikertelen adatkapcsolatok és megválaszolatlan sürgős tételek itt jelennek meg.</p>
-                  </div>
-                ) : (
-                  escalationItems.map((item) => (
-                    <Link key={item.id} href={`/tasks?taskId=${item.id}`} className="block rounded-[var(--adm-radius-sm)] border border-[#9E2A2B]/25 border-l-4 border-l-[#9E2A2B] bg-[#FBF1F1] p-2.5 hover:bg-[#F8E7E7]">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--adm-text)]">{item.title}</p>
-                        <span className="shrink-0 rounded-full bg-[#9E2A2B] px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-[0.08em] text-white">Sürgős</span>
-                      </div>
-                      <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{displayDate(item.date)} · {item.caseNumber}</p>
-                    </Link>
-                  ))
-                )}
-              </div>
-            </article>
-
             <article className="adm-panel adm-rail-panel p-3.5" style={{ borderTop: "3px solid var(--adm-blue-500)" }}>
               <p className="adm-kicker text-[var(--adm-blue-700)]">Kiemelt ügyfélkör</p>
               <h3 className="adm-heading mt-0.5 text-[20px]">Ügyfélhez sorolt kommunikáció</h3>
@@ -888,25 +795,12 @@ export function Dashboard() {
                 {watchedClientExamples.map((name) => (
                   <span key={name} className="adm-watch-chip">{name}</span>
                 ))}
-                <span className="adm-watch-chip adm-watch-chip-muted">példa</span>
               </div>
               <div className="mt-3 space-y-1.5">
                 {clientLinkedComms.length === 0 ? (
-                  <>
-                    <p className="text-[10.5px] leading-4 text-[var(--adm-text-muted)]">
-                      Az automatikus ügyfélhez rendelés későbbi kommunikációs munkafolyamat. A dashboard itt fogja mutatni a kiemelt ügyfelekhez tartozó friss leveleket és jelzéseket.
-                    </p>
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <div key={`client-found-${i}`} className="flex items-stretch gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2.5 py-2">
-                        <span className="w-1.5 shrink-0 rounded-full bg-[var(--adm-blue-500)] opacity-40" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">Ügyfél · Feladó · Tárgy · Státusz</p>
-                          <p className="text-[10px] text-[var(--adm-text-muted)]">Ügyfélhez sorolt levél itt jelenik meg.</p>
-                        </div>
-                        <span className="shrink-0 self-center rounded-full border border-[var(--adm-border-strong)] px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-[0.08em] text-[var(--adm-text-soft)]">Megnyitás</span>
-                      </div>
-                    ))}
-                  </>
+                  <p className="rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5 text-[10.5px] leading-4 text-[var(--adm-text-muted)]">
+                    Nincs ügyfélhez sorolt kommunikáció a jelenlegi nézetben. A későbbi kommunikációs munkafolyamat itt fogja mutatni a kiemelt ügyfelekhez rendelt friss leveleket.
+                  </p>
                 ) : (
                   clientLinkedComms.map((sig) => (
                     <div key={sig.id} className="flex items-start gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-[3px] border-l-[var(--adm-blue-500)] bg-white p-2.5">
