@@ -22,6 +22,18 @@ const filters = [
   "Feladathoz kapcsolt",
 ];
 
+const filterViews: Record<string, string> = {
+  Összes: "all",
+  Külső: "external",
+  Belső: "internal",
+  "Válaszra vár": "replies",
+  "Ügyfélhez sorolt": "clients",
+  "Ügyhöz sorolt": "cases",
+  "Feladathoz kapcsolt": "tasks",
+};
+
+const viewFilters = Object.fromEntries(Object.entries(filterViews).map(([label, view]) => [view, label]));
+
 const typeLabels: Record<NotificationType, string> = {
   TASK_ASSIGNED: "Feladat kiosztva",
   TASK_DUE_SOON: "Közelgő határidő",
@@ -96,6 +108,12 @@ function CommunicationWorkspace() {
     loadNotifications();
   }, []);
 
+  useEffect(() => {
+    const view = new URLSearchParams(window.location.search).get("view") || "all";
+    const nextFilter = viewFilters[view] || filters[0];
+    setActiveFilter(nextFilter);
+  }, []);
+
   const sortedNotifications = useMemo(
     () =>
       [...notifications].sort(
@@ -165,7 +183,12 @@ function CommunicationWorkspace() {
                 <button
                   key={filter}
                   type="button"
-                  onClick={() => setActiveFilter(filter)}
+                  onClick={() => {
+                    setActiveFilter(filter);
+                    const view = filterViews[filter];
+                    const url = view === "all" ? "/notifications" : `/notifications?view=${view}`;
+                    window.history.replaceState(null, "", url);
+                  }}
                   className={`shrink-0 rounded-[var(--adm-radius-sm)] border px-3 py-1.5 text-[11px] font-bold ${
                     isActive
                       ? "border-[var(--adm-blue-500)] bg-[var(--adm-blue-500)] text-white"

@@ -47,7 +47,7 @@ type KpiToneStyle = { bg: string; ink: string; light: boolean };
 const KPI_STYLES: Record<KpiCardProps["tone"], KpiToneStyle> = {
   petrol: { bg: "#126782", ink: "#FFFFFF", light: false },
   navy: { bg: "#023047", ink: "#FFFFFF", light: false },
-  cyan: { bg: "#1B8BA6", ink: "#FFFFFF", light: false },
+  cyan: { bg: "#219EBC", ink: "#FFFFFF", light: false },
   green: { bg: "#0A5A45", ink: "#FFFFFF", light: false },
   amber: { bg: "#FD9E02", ink: "#3E2400", light: true },
   yellow: { bg: "#FFB703", ink: "#4A3300", light: true },
@@ -504,7 +504,7 @@ export function Dashboard() {
         kind: "Kommunikáció",
         title: importantCommunication.subject,
         detail: `${importantCommunication.senderName || importantCommunication.senderEmail || "Külső fél"} · besorolás / válasz ellenőrzése`,
-        href: importantCommunication.proposedCaseId ? `/cases/${importantCommunication.proposedCaseId}/communications` : "/notifications",
+        href: "/notifications?view=external",
       });
     }
     return items;
@@ -619,8 +619,8 @@ export function Dashboard() {
           <KpiCard label="Mai teendők" value={openTasks.length} tone="amber" zeroHint="Nincs nyitott teendő" href="/tasks" />
           <KpiCard label="Közeli határidők" value={upcomingDeadlines.length} tone="yellow" zeroHint="Nincs közeli határidő" href="/deadlines" />
           <KpiCard label="Review tételek" value={reviewDocumentCount} tone="navy" zeroHint="Nincs review tétel" href="/reviews" />
-          <KpiCard label="Külső kommunikáció" value={externalComms.length} tone="cyan" zeroHint="Nincs új külső jelzés" href="/notifications" />
-          <KpiCard label="Belső kommunikáció" value={internalComms.length} tone="green" zeroHint="Nincs új belső jelzés" href="/notifications" />
+          <KpiCard label="Külső kommunikáció" value={externalComms.length} tone="cyan" zeroHint="Nincs új külső jelzés" href="/notifications?view=external" />
+          <KpiCard label="Belső kommunikáció" value={internalComms.length} tone="petrol" zeroHint="Nincs új belső jelzés" href="/notifications?view=internal" />
         </section>
 
         {/* 4 + 5 — Dominant "Itt folytasd" workbench + review/handoff side column */}
@@ -720,9 +720,14 @@ export function Dashboard() {
                 <p className="adm-kicker text-[var(--adm-blue-700)]">Kommunikáció</p>
                 <h3 className="adm-heading mt-0.5 text-[24px] leading-tight">Kommunikációs figyelő</h3>
               </div>
-              <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-500)]/30 bg-[var(--adm-blue-100)]/35 px-3 py-1 text-[10.5px] font-semibold text-[var(--adm-blue-700)]">
-                {Math.min(communicationSignals.length, 16)}/16 jelzés
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-500)]/30 bg-[var(--adm-blue-100)]/35 px-3 py-1 text-[10.5px] font-semibold text-[var(--adm-blue-700)]">
+                  {Math.min(communicationSignals.length, 16)}/16 jelzés
+                </span>
+                <Link href="/notifications" className="adm-link-button px-3 py-1.5 text-[11px]">
+                  Munkatér
+                </Link>
+              </div>
             </div>
 
             <div className="grid gap-3 p-4 md:grid-cols-2 lg:px-5">
@@ -789,8 +794,15 @@ export function Dashboard() {
 
           <aside className="grid content-start gap-3">
             <article className="adm-panel adm-rail-panel p-3.5" style={{ borderTop: "3px solid var(--adm-blue-500)" }}>
-              <p className="adm-kicker text-[var(--adm-blue-700)]">Kiemelt ügyfélkör</p>
-              <h3 className="adm-heading mt-0.5 text-[20px]">Ügyfélhez sorolt kommunikáció</h3>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="adm-kicker text-[var(--adm-blue-700)]">Kiemelt ügyfélkör</p>
+                  <h3 className="adm-heading mt-0.5 text-[20px]">Ügyfélhez sorolt kommunikáció</h3>
+                </div>
+                <Link href="/notifications?view=clients" className="adm-link-button px-2.5 py-1.5 text-[10.5px]">
+                  Munkatér
+                </Link>
+              </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {watchedClientExamples.map((name) => (
                   <span key={name} className="adm-watch-chip">{name}</span>
