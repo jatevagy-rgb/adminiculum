@@ -541,9 +541,9 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                         {comm.caseId && (
                             <span className="text-[9px] text-[#10B981]">Ügyhöz kapcsolva</span>
                         )}
-                        {comm._count?.relatedTasks ? (
+                        {comm.sourceTaskCount ? (
                           <span className="text-[9px] text-[#F59E0B]">
-                            {comm._count.relatedTasks} feladat
+                            {comm.sourceTaskCount} feladat
                           </span>
                         ) : null}
                       </div>

@@ -610,8 +610,8 @@ export function CaseDetail({ params }: CaseDetailProps) {
       .filter((item) => !!item.createdAt)
       .map((item) => {
         const isNote = item.type === 'NOTE';
-        const notePreview = isNote && item.content
-          ? item.content.length > 80 ? item.content.slice(0, 80) + '…' : item.content
+        const notePreview = isNote && item.contentPreview
+          ? item.contentPreview.length > 80 ? item.contentPreview.slice(0, 80) + '…' : item.contentPreview
           : null;
         // Enrich NOTE events with author name when available; non-NOTE keep existing logic
         const noteDescription = notePreview

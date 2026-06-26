@@ -2098,25 +2098,28 @@ export async function deleteAutomationSuppression(id: string): Promise<{ success
 export interface CommunicationItem {
   id: string;
   type: 'EMAIL' | 'PHONE' | 'MEETING' | 'LETTER' | 'NOTE';
-  subject: string;
+  subject: string | null;
   senderName: string | null;
   senderEmail: string | null;
   recipientName: string | null;
   recipientEmail: string | null;
-  content: string | null;
   summary: string | null;
+  contentPreview: string | null;
   caseId: string | null;
   clientId: string | null;
   documentId: string | null;
+  createdById: string;
   createdAt: string;
   updatedAt: string;
+  attachmentCount: number;
+  sourceTaskCount: number;
   case?: { id: string; caseNumber: string; title: string } | null;
   client?: { id: string; name: string; email: string } | null;
   createdBy?: { id: string; name: string; email: string };
-  _count?: { attachments: number; relatedTasks: number };
 }
 
 export interface CommunicationDetail extends CommunicationItem {
+  content: string | null;
   attachments: CommunicationAttachment[];
   relatedTasks: TaskListItem[];
   timelineEvents: CommunicationTimelineEventItem[];

@@ -524,7 +524,7 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
                 <div className="space-y-2 max-h-60 overflow-y-auto">{documentNotes.map((note) => (
                   <div key={note.id} className={`rounded-lg p-3 border-l-2 ${isSignal ? "bg-[#0B1220] border-cyan-800" : "bg-white border-indigo-200"}`}>
                     <div className="flex justify-between items-start mb-1"><p className={`text-[11px] font-semibold ${pal.text}`}>{note.subject || "Belső megjegyzés"}</p><p className={`text-[10px] ${pal.label}`}>{note.createdAt ? new Date(note.createdAt).toLocaleDateString("hu-HU") : ""}</p></div>
-                    <p className={`text-[11px] ${pal.label}`}>{note.content}</p>
+                    <p className={`text-[11px] ${pal.label}`}>{note.contentPreview}</p>
                     {note.createdBy && <p className={`text-[10px] mt-1 ${pal.label}`}>— {note.createdBy.name}</p>}
                   </div>
                 ))}</div>

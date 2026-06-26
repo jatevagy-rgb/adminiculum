@@ -467,7 +467,7 @@ export function Dashboard() {
           createdAt: item.createdAt,
           case: item.case,
           client: item.client ? { id: item.client.id, name: item.client.name } : null,
-          attachmentCount: item._count?.attachments,
+          attachmentCount: item.attachmentCount,
         }),
       ),
     [communications],

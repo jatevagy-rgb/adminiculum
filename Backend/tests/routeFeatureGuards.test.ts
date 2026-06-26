@@ -28,6 +28,24 @@ jest.mock('../src/prisma/prisma.service', () => ({
     document: {
       findUnique: jest.fn(),
     },
+    communication: {
+      findMany: jest.fn(),
+      count: jest.fn(),
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
+    },
+    communicationAttachment: {
+      findMany: jest.fn(),
+      create: jest.fn(),
+    },
+    task: {
+      findMany: jest.fn(),
+      create: jest.fn(),
+    },
+    timelineEvent: {
+      create: jest.fn(),
+    },
     lawyerHandoffPackage: {
       findUnique: jest.fn(),
       findMany: jest.fn(),
@@ -131,6 +149,11 @@ describe('database foundation route guards', () => {
     delete process.env.ENABLE_TIMESHEET_REPORT_PERSISTENCE;
     delete process.env.ENABLE_HANDOFF_PACKAGES;
     delete process.env.ENABLE_CLIENT_PORTAL;
+
+    (prisma.communication.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.communication.count as jest.Mock).mockResolvedValue(0);
+    (prisma.communicationAttachment.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.task.findMany as jest.Mock).mockResolvedValue([]);
   });
 
   it('keeps authentication ahead of the document review guard', async () => {
@@ -200,6 +223,116 @@ describe('database foundation route guards', () => {
     expect(writeResponse.body).toMatchObject({
       code: 'FEATURE_NOT_AVAILABLE',
       feature: 'LAWYER_HANDOFF_PACKAGES',
+    });
+  });
+
+  it('keeps authentication ahead of the read-only communications list', async () => {
+    const response = await requestJson(createApp(), 'GET', '/communications', false);
+
+    expect(response.status).toBe(401);
+    expect(prisma.communication.findMany).not.toHaveBeenCalled();
+  });
+
+  it('allows authenticated read-only communications list when persistence is disabled', async () => {
+    const createdAt = new Date('2026-06-26T10:00:00.000Z');
+    const updatedAt = new Date('2026-06-26T10:05:00.000Z');
+    (prisma.communication.findMany as jest.Mock).mockResolvedValue([
+      {
+        id: 'communication-1',
+        type: 'EMAIL',
+        subject: 'Client question',
+        senderName: 'Client Sender',
+        senderEmail: 'client@example.com',
+        recipientName: 'Lawyer',
+        recipientEmail: 'lawyer@example.test',
+        content: '  This is a longer raw message body that should only be exposed as a compact preview.  ',
+        summary: 'Client asks a question.',
+        caseId: 'case-1',
+        clientId: 'client-1',
+        documentId: null,
+        createdById: 'user-1',
+        createdAt,
+        updatedAt,
+      },
+    ]);
+    (prisma.communication.count as jest.Mock).mockResolvedValue(1);
+    (prisma.communicationAttachment.findMany as jest.Mock).mockResolvedValue([
+      { communicationId: 'communication-1' },
+    ]);
+    (prisma.task.findMany as jest.Mock).mockResolvedValue([
+      { sourceCommunicationId: 'communication-1' },
+      { sourceCommunicationId: 'communication-1' },
+    ]);
+
+    const response = await requestJson(createApp(), 'GET', '/communications?limit=8');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      communications: [
+        {
+          id: 'communication-1',
+          type: 'EMAIL',
+          subject: 'Client question',
+          senderName: 'Client Sender',
+          senderEmail: 'client@example.com',
+          recipientName: 'Lawyer',
+          recipientEmail: 'lawyer@example.test',
+          summary: 'Client asks a question.',
+          contentPreview: 'This is a longer raw message body that should only be exposed as a compact preview.',
+          caseId: 'case-1',
+          clientId: 'client-1',
+          documentId: null,
+          createdById: 'user-1',
+          createdAt: createdAt.toISOString(),
+          updatedAt: updatedAt.toISOString(),
+          attachmentCount: 1,
+          sourceTaskCount: 2,
+        },
+      ],
+      pagination: {
+        total: 1,
+        limit: 8,
+        offset: 0,
+      },
+    });
+    expect(process.env.ENABLE_COMMUNICATIONS_PERSISTENCE).toBeUndefined();
+  });
+
+  it('keeps mutating communication endpoints feature-gated when persistence is disabled', async () => {
+    const response = await requestJson(createApp(), 'POST', '/communications');
+
+    expect(response.status).toBe(501);
+    expect(response.body).toMatchObject({
+      status: 501,
+      code: 'FEATURE_NOT_AVAILABLE',
+      feature: 'COMMUNICATIONS',
+      reason: 'DATABASE_FOUNDATION_NOT_DEPLOYED',
+    });
+    expect(prisma.communication.create).not.toHaveBeenCalled();
+  });
+
+  it('clamps unsafe communications list limits and avoids relation includes', async () => {
+    const response = await requestJson(createApp(), 'GET', '/communications?limit=500&offset=bad');
+
+    expect(response.status).toBe(200);
+    expect(prisma.communication.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        take: 50,
+        skip: 0,
+        select: expect.objectContaining({
+          id: true,
+          type: true,
+          subject: true,
+          createdById: true,
+          createdAt: true,
+          updatedAt: true,
+        }),
+      })
+    );
+    expect((prisma.communication.findMany as jest.Mock).mock.calls[0][0]).not.toHaveProperty('include');
+    expect(response.body).toMatchObject({
+      communications: [],
+      pagination: { total: 0, limit: 50, offset: 0 },
     });
   });
 

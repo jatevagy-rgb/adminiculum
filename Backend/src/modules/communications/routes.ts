@@ -51,6 +51,32 @@ function logPrismaRouteError(route: string, error: unknown): void {
 
 type CommunicationType = 'EMAIL' | 'PHONE' | 'MEETING' | 'LETTER' | 'NOTE';
 
+type CommunicationListRow = {
+  id: string;
+  type: CommunicationType;
+  subject: string | null;
+  senderName: string | null;
+  senderEmail: string | null;
+  recipientName: string | null;
+  recipientEmail: string | null;
+  content: string | null;
+  summary: string | null;
+  caseId: string | null;
+  clientId: string | null;
+  documentId: string | null;
+  createdById: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type CommunicationListItem = Omit<CommunicationListRow, 'content' | 'createdAt' | 'updatedAt'> & {
+  contentPreview: string | null;
+  createdAt: string;
+  updatedAt: string;
+  attachmentCount: number;
+  sourceTaskCount: number;
+};
+
 interface CreateCommunicationInput {
   type: CommunicationType;
   subject: string;
@@ -63,6 +89,67 @@ interface CreateCommunicationInput {
   caseId?: string;
   clientId?: string;
   documentId?: string;
+}
+
+const DEFAULT_LIST_LIMIT = 20;
+const MAX_LIST_LIMIT = 50;
+const CONTENT_PREVIEW_LIMIT = 240;
+
+function parseNonNegativeInteger(value: unknown, fallback: number): number {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function parseListLimit(value: unknown): number {
+  const parsed = parseNonNegativeInteger(value, DEFAULT_LIST_LIMIT);
+  if (parsed === 0) return DEFAULT_LIST_LIMIT;
+  return Math.min(parsed, MAX_LIST_LIMIT);
+}
+
+function toContentPreview(content?: string | null): string | null {
+  if (!content) return null;
+  const compact = content.replace(/\s+/g, ' ').trim();
+  if (!compact) return null;
+  return compact.length > CONTENT_PREVIEW_LIMIT
+    ? `${compact.slice(0, CONTENT_PREVIEW_LIMIT - 1)}…`
+    : compact;
+}
+
+function mapCommunicationListItem(
+  row: CommunicationListRow,
+  attachmentCounts: Map<string, number>,
+  sourceTaskCounts: Map<string, number>
+): CommunicationListItem {
+  return {
+    id: row.id,
+    type: row.type,
+    subject: row.subject,
+    senderName: row.senderName,
+    senderEmail: row.senderEmail,
+    recipientName: row.recipientName,
+    recipientEmail: row.recipientEmail,
+    summary: row.summary,
+    contentPreview: toContentPreview(row.content),
+    caseId: row.caseId,
+    clientId: row.clientId,
+    documentId: row.documentId,
+    createdById: row.createdById,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    attachmentCount: attachmentCounts.get(row.id) || 0,
+    sourceTaskCount: sourceTaskCounts.get(row.id) || 0,
+  };
+}
+
+function countByKey<T extends Record<string, unknown>>(rows: T[], key: keyof T): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const value = row[key];
+    if (typeof value === 'string' && value) {
+      counts.set(value, (counts.get(value) || 0) + 1);
+    }
+  }
+  return counts;
 }
 
 // ============================================================================
@@ -87,13 +174,16 @@ async function createTimelineEvent(data: {
 }
 
 // ============================================================================
-// GET /api/v1/communications - List communications (case-scoped or all)
+// GET /api/v1/communications - authenticated read-only list contract.
+// This preview endpoint intentionally remains available without
+// ENABLE_COMMUNICATIONS_PERSISTENCE; mutating/detail operations below stay gated.
+// The response uses scalar Communication fields only and avoids fragile relation
+// includes so dashboard/workspace callers get a stable shape during DB drift.
 // ============================================================================
 
 router.get('/', authenticate, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.userId;
-    const { caseId, clientId, type, documentId, limit = '50', offset = '0' } = req.query;
+    const { caseId, clientId, type, documentId } = req.query;
 
     const where: any = {};
 
@@ -110,84 +200,62 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
       where.documentId = String(documentId);
     }
 
-    const take = parseInt(String(limit), 10);
-    const skip = parseInt(String(offset), 10);
+    const take = parseListLimit(req.query.limit);
+    const skip = parseNonNegativeInteger(req.query.offset, 0);
 
-    const loadCommunications = async (mode: 'full' | 'count-lite' | 'minimal') => {
-      if (mode === 'minimal') {
-        const rows = await prisma.communication.findMany({
-          where,
-          orderBy: { createdAt: 'desc' },
-          take,
-          skip,
-          select: {
-            id: true,
-            type: true,
-            subject: true,
-            senderName: true,
-            senderEmail: true,
-            recipientName: true,
-            recipientEmail: true,
-            content: true,
-            summary: true,
-            caseId: true,
-            clientId: true,
-            documentId: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        });
-        return rows.map((row) => ({
-          ...row,
-          _count: { attachments: 0, relatedTasks: 0 },
-        }));
-      }
-
-      if (mode === 'full') {
-        return prisma.communication.findMany({
-          where,
-          orderBy: { createdAt: 'desc' },
-          take,
-          skip,
-          include: {
-            _count: {
-              select: { attachments: true, relatedTasks: true }
-            }
-          }
-        });
-      }
-
-      // Fallback for staging schema drift: keep communications list available even if
-      // a relation used by _count is temporarily missing.
-      return prisma.communication.findMany({
+    let rows: CommunicationListRow[] = [];
+    try {
+      rows = await prisma.communication.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         take,
         skip,
-        include: {
-          _count: {
-            select: { attachments: true }
-          }
-        }
-      });
-    };
-
-    let communications: any[] = [];
-    try {
-      communications = await loadCommunications('full');
+        select: {
+          id: true,
+          type: true,
+          subject: true,
+          senderName: true,
+          senderEmail: true,
+          recipientName: true,
+          recipientEmail: true,
+          content: true,
+          summary: true,
+          caseId: true,
+          clientId: true,
+          documentId: true,
+          createdById: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }) as CommunicationListRow[];
     } catch (error) {
-      logPrismaRouteError('GET /communications full-query', error);
+      logPrismaRouteError('GET /communications scalar-list-query', error);
+      rows = [];
+    }
+
+    const rowIds = rows.map((row) => row.id);
+    let attachmentCounts = new Map<string, number>();
+    let sourceTaskCounts = new Map<string, number>();
+
+    if (rowIds.length > 0) {
       try {
-        communications = await loadCommunications('count-lite');
-      } catch (fallbackError) {
-        logPrismaRouteError('GET /communications count-lite-query', fallbackError);
-        try {
-          communications = await loadCommunications('minimal');
-        } catch (minimalError) {
-          logPrismaRouteError('GET /communications minimal-query', minimalError);
-          // Staging-safe fallback: keep dashboard operational with empty list shape.
-          communications = [];
-        }
+        const attachments = await prisma.communicationAttachment.findMany({
+          where: { communicationId: { in: rowIds } },
+          select: { communicationId: true },
+        });
+        attachmentCounts = countByKey(attachments, 'communicationId');
+      } catch (error) {
+        logPrismaRouteError('GET /communications attachment-counts', error);
+      }
+
+      try {
+        const tasks = await prisma.task.findMany({
+          where: { sourceCommunicationId: { in: rowIds } } as any,
+          select: { sourceCommunicationId: true } as any,
+        });
+        sourceTaskCounts = countByKey(tasks as Array<{ sourceCommunicationId?: string | null }>, 'sourceCommunicationId');
+      } catch (error) {
+        logPrismaRouteError('GET /communications source-task-counts', error);
       }
     }
 
@@ -196,12 +264,11 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
       total = await prisma.communication.count({ where });
     } catch (countError) {
       logPrismaRouteError('GET /communications count-total', countError);
-      // Fallback when schema drift or data mismatch prevents count.
-      total = communications.length;
+      total = rows.length;
     }
 
     res.json({
-      communications,
+      communications: rows.map((row) => mapCommunicationListItem(row, attachmentCounts, sourceTaskCounts)),
       pagination: {
         total,
         limit: take,
