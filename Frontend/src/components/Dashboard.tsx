@@ -170,6 +170,79 @@ function EmptyState({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
+// Future-ready communication row (real data shape: sender, subject, metadata, status chip).
+function CommRow({ sig, family }: { sig: CommunicationSignal; family: "external" | "internal" }) {
+  const rail = family === "external" ? "var(--adm-blue-500)" : "var(--adm-blue-700)";
+  return (
+    <div className="flex items-start gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white p-2.5">
+      <span className="mt-0.5 h-8 w-1 shrink-0 rounded-full" style={{ backgroundColor: rail }} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[11px] font-semibold text-[var(--adm-text)]">
+          {sig.senderName || sig.senderEmail || (family === "external" ? "Külső fél" : "Belső")}
+        </p>
+        <p className="truncate text-xs font-semibold text-[var(--adm-text)]">{sig.subject}</p>
+        <p className="mt-0.5 truncate text-[10px] text-[var(--adm-text-muted)]">
+          {sig.receivedAt ? displayDateTimeShort(sig.receivedAt) : "Nincs időbélyeg"}{sig.hasAttachments ? " · 📎" : ""}
+        </p>
+      </div>
+      {sig.requiresReview ? (
+        <span className="shrink-0 rounded-full bg-[#FFF3CB] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-[var(--adm-warm-600)]">Besorolás</span>
+      ) : (
+        <span className="shrink-0 rounded-full bg-[var(--adm-blue-100)]/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-[var(--adm-blue-700)]">
+          {family === "external" ? "Külső" : "Belső"}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Honest foundation slot — demonstrates the future row structure without fake data.
+function CommFoundationRow() {
+  return (
+    <div className="flex items-center gap-2.5 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-white/50 px-2.5 py-2 opacity-70">
+      <span className="h-8 w-1 shrink-0 rounded-full bg-[var(--adm-neutral-100)]" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Feladó · Tárgy</p>
+        <p className="text-[10px] text-[var(--adm-text-soft)]">Outlook-bekötés után jelenik meg.</p>
+      </div>
+      <span className="shrink-0 rounded-full border border-dashed border-[var(--adm-border-strong)] px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-[0.08em] text-[var(--adm-text-soft)]">Állapot</span>
+    </div>
+  );
+}
+
+// Future-ready news / legal-signal row (real data: title, source, category tag, open action).
+function NewsRow({ article }: { article: NewsArticle }) {
+  return (
+    <div className="flex items-start gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-[3px] border-l-[var(--adm-green-800)] bg-white p-2.5">
+      <div className="min-w-0 flex-1">
+        <p className="line-clamp-2 text-xs font-semibold text-[var(--adm-text)]">{article.title}</p>
+        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-[var(--adm-text-muted)]">
+          <span className="inline-flex rounded-full bg-[var(--adm-blue-100)]/45 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-[var(--adm-blue-700)]">{article.source || "Forrás"}</span>
+          <span className="inline-flex rounded-full bg-[var(--adm-green-800)]/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-[var(--adm-green-800)]">Jogi jelzés</span>
+          <span>{article.date}</span>
+        </p>
+      </div>
+      {article.url ? (
+        <a href={article.url} target="_blank" rel="noreferrer" className="shrink-0 self-center rounded-[var(--adm-radius-sm)] border border-[var(--adm-border-strong)] px-2.5 py-1 text-[10px] font-semibold text-[var(--adm-green-800)] hover:bg-[var(--adm-blue-100)]/20">
+          Megnyitás
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+function NewsFoundationRow() {
+  return (
+    <div className="flex items-center gap-2.5 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-white/50 px-2.5 py-2 opacity-70">
+      <div className="min-w-0 flex-1">
+        <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Jogi jelzés · Forrás</p>
+        <p className="text-[10px] text-[var(--adm-text-soft)]">További jelzések a hírfeed aktiválásakor.</p>
+      </div>
+      <span className="shrink-0 rounded-full border border-dashed border-[var(--adm-border-strong)] px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-[0.08em] text-[var(--adm-text-soft)]">Megnyitás</span>
+    </div>
+  );
+}
+
 export function Dashboard() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [communications, setCommunications] = useState<CommunicationItem[]>([]);
@@ -289,7 +362,7 @@ export function Dashboard() {
 
   const legalSignals = useMemo(() => {
     if (!legalNews.articles.length) return [];
-    return legalNews.articles.filter(isLegalSignal).slice(0, 3);
+    return legalNews.articles.filter(isLegalSignal).slice(0, 8);
   }, [legalNews.articles]);
 
   const homeOfficeFocusTasks = useMemo(() => {
@@ -655,8 +728,8 @@ export function Dashboard() {
           </aside>
         </section>
 
-        {/* 6 — Communication watcher foundation (OI1A) */}
-        <section className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.7fr)]">
+        {/* 6 — Kommunikációs figyelő: dominant full-width workbench (8 external + 8 internal capacity) */}
+        <section>
           <article className="adm-panel adm-panel-primary overflow-hidden">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b-[3px] border-[var(--adm-blue-500)] bg-[var(--adm-blue-100)]/20 px-4 py-3 lg:px-5">
               <div>
@@ -690,72 +763,69 @@ export function Dashboard() {
 
             <div className="grid gap-3 p-4 md:grid-cols-2 lg:px-5">
               <div className="adm-signal-card rounded-[var(--adm-radius-sm)] border-l-[3px] border-l-[var(--adm-blue-500)] p-3">
-                <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-blue-700)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--adm-blue-500)]" />Külső</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-blue-700)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--adm-blue-500)]" />Külső kommunikáció</p>
+                  <span className="text-[9.5px] font-semibold text-[var(--adm-text-soft)]">{Math.min(externalComms.length, 8)}/8</span>
+                </div>
                 {externalComms.length === 0 ? (
-                  <div className="mt-2 adm-board-empty adm-board-empty-compact">
-                    <p className="text-xs font-semibold text-[var(--adm-text)]">Nincs új külső kommunikáció.</p>
-                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Ügyfélüzenetek, ellenoldali levelek, hatósági/bírósági jelzések, partneri válaszok.</p>
-                  </div>
-                ) : (
-                  <div className="mt-2 space-y-2">
-                    {externalComms.slice(0, 4).map((sig) => (
-                      <div key={sig.id} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5">
-                        <p className="text-xs font-semibold text-[var(--adm-text)]">{sig.subject}</p>
-                        <p className="mt-0.5 text-[10.5px] text-[var(--adm-text-muted)]">
-                          {sig.senderName || sig.senderEmail || "Külső fél"}{sig.receivedAt ? ` · ${displayDateTimeShort(sig.receivedAt)}` : ""}
-                          {sig.hasAttachments ? " · 📎" : ""}
-                        </p>
-                        {sig.requiresReview ? <p className="mt-1 text-[10px] font-semibold text-[#8a5a06]">Besorolás javasolt (ügyfél/ügy)</p> : null}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                  <p className="mt-1.5 text-[10.5px] leading-4 text-[var(--adm-text-muted)]">Nincs új külső kommunikáció. Ügyfélüzenetek, ellenoldali levelek, hatósági/bírósági jelzések, partneri válaszok.</p>
+                ) : null}
+                <div className="mt-2 space-y-1.5">
+                  {externalComms.slice(0, 8).map((sig) => <CommRow key={sig.id} sig={sig} family="external" />)}
+                  {Array.from({ length: Math.max(0, 6 - Math.min(externalComms.length, 8)) }).map((_, i) => <CommFoundationRow key={`ext-found-${i}`} />)}
+                </div>
+                <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Kapacitás: 8 sor · Outlook előkészítés</p>
               </div>
               <div className="adm-signal-card rounded-[var(--adm-radius-sm)] border-l-[3px] border-l-[var(--adm-blue-700)] p-3">
-                <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-blue-700)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--adm-blue-700)]" />Belső</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-blue-700)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--adm-blue-700)]" />Belső kommunikáció</p>
+                  <span className="text-[9.5px] font-semibold text-[var(--adm-text-soft)]">{Math.min(internalComms.length, 8)}/8</span>
+                </div>
                 {internalComms.length === 0 ? (
-                  <div className="mt-2 adm-board-empty adm-board-empty-compact">
-                    <p className="text-xs font-semibold text-[var(--adm-text)]">Nincs új belső kommunikáció.</p>
-                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Belső megjegyzések, review-visszajelzések, átadási kommentek, kolléga kérdései.</p>
-                  </div>
-                ) : (
-                  <div className="mt-2 space-y-2">
-                    {internalComms.slice(0, 4).map((sig) => (
-                      <div key={sig.id} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5">
-                        <p className="text-xs font-semibold text-[var(--adm-text)]">{sig.subject}</p>
-                        <p className="mt-0.5 text-[10.5px] text-[var(--adm-text-muted)]">
-                          {sig.senderName || sig.senderEmail || "Belső"}{sig.receivedAt ? ` · ${displayDateTimeShort(sig.receivedAt)}` : ""}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                  <p className="mt-1.5 text-[10.5px] leading-4 text-[var(--adm-text-muted)]">Nincs új belső kommunikáció. Belső megjegyzések, review-visszajelzések, átadási kommentek, kolléga kérdései.</p>
+                ) : null}
+                <div className="mt-2 space-y-1.5">
+                  {internalComms.slice(0, 8).map((sig) => <CommRow key={sig.id} sig={sig} family="internal" />)}
+                  {Array.from({ length: Math.max(0, 6 - Math.min(internalComms.length, 8)) }).map((_, i) => <CommFoundationRow key={`int-found-${i}`} />)}
+                </div>
+                <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Kapacitás: 8 sor · Outlook előkészítés</p>
               </div>
             </div>
             <p className="border-t border-[var(--adm-border)] px-4 py-2.5 text-[10.5px] text-[var(--adm-text-muted)] lg:px-5">
-              Outlook-integráció későbbi, jóváhagyott Microsoft Graph bekötéssel aktiválható. A jelenlegi nézet a meglévő kommunikációs adatokból dolgozik.
+              Outlook-integráció később, jóváhagyott Microsoft Graph bekötéssel aktiválható. A jelenlegi nézet a meglévő kommunikációs adatokból dolgozik.
             </p>
+          </article>
+        </section>
+
+        {/* 7 — Hírek/jelzések (wide, 8-capacity) + attention/watch rail */}
+        <section className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.5fr)_minmax(300px,0.66fr)]">
+          <article className="adm-panel adm-panel-accent-green overflow-hidden">
+            <div className="flex items-start justify-between gap-3 border-b border-[var(--adm-border)] bg-[var(--adm-green-800)]/[0.04] px-4 py-3 lg:px-5">
+              <div className="flex items-start gap-2">
+                <span className="mt-1 h-2.5 w-2.5 rounded-full bg-[var(--adm-green-800)]" />
+                <div>
+                  <p className="adm-kicker text-[var(--adm-green-800)]">Kitekintés</p>
+                  <h3 className="adm-heading mt-0.5 text-[22px]">Hírek / jogi-piaci jelzések</h3>
+                </div>
+              </div>
+              <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-1 text-[10.5px] font-semibold text-[var(--adm-text-muted)]">{Math.min(legalSignals.length, 8)}/8 jelzés</span>
+            </div>
+            <div className="p-4 lg:px-5">
+              {legalNews.isLoading ? <p className="text-xs text-[var(--adm-text-soft)]">Hírfeed betöltése...</p> : null}
+              {!legalNews.isLoading && (legalNews.error || legalSignals.length === 0) ? (
+                <p className="rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5 text-[11px] text-[var(--adm-text-muted)]">
+                  Előkészítés alatt — a hírfeed későbbi patchben aktiválható. A lista 8 jogi jelzés megjelenítésére készül.
+                </p>
+              ) : null}
+              <div className="grid gap-1.5 md:grid-cols-2">
+                {legalSignals.slice(0, 8).map((article, index) => <NewsRow key={`${article.title}-${index}`} article={article} />)}
+                {legalSignals.length > 0 ? Array.from({ length: Math.max(0, 6 - Math.min(legalSignals.length, 8)) }).map((_, i) => <NewsFoundationRow key={`news-found-${i}`} />) : null}
+              </div>
+              <p className="mt-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Kapacitás: 8 jogi jelzés · valós forrásokból</p>
+            </div>
           </article>
 
           <aside className="grid content-start gap-3">
-            <article className="adm-panel adm-panel-accent-green adm-rail-panel p-3.5">
-              <p className="adm-kicker text-[var(--adm-green-800)]">Figyelt ügyfelek</p>
-              <h3 className="adm-heading mt-0.5 text-[20px]">Kiemelt ügyfélkör</h3>
-              <p className="mt-1.5 text-[11px] leading-5 text-[var(--adm-text-muted)]">
-                Későbbi beállításban kiválasztható, mely ügyfelek kommunikációja és aktivitása jelenjen meg kiemelten.
-              </p>
-              <div className="mt-2.5 flex flex-wrap gap-1.5">
-                {watchedClientExamples.map((name) => (
-                  <span key={name} className="adm-watch-chip">{name}</span>
-                ))}
-                <span className="adm-watch-chip adm-watch-chip-muted">példa</span>
-              </div>
-              <div className="mt-3 adm-board-empty adm-board-empty-compact">
-                <p className="text-[11px] font-semibold text-[var(--adm-text)]">Figyelt ügyfelek aktivitása</p>
-                <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">A figyelt ügyfelekhez kapcsolódó új kommunikációk, dokumentumok és határidők itt jelennek meg.</p>
-              </div>
-            </article>
-
             <article className="adm-panel adm-panel-accent-amber adm-rail-panel p-3.5">
               <div className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 rounded-full bg-[var(--adm-warm-400)]" />
@@ -772,11 +842,25 @@ export function Dashboard() {
                 </div>
               </div>
             </article>
+
+            <article className="adm-panel adm-panel-accent-green adm-rail-panel p-3.5">
+              <p className="adm-kicker text-[var(--adm-green-800)]">Figyelt ügyfelek</p>
+              <h3 className="adm-heading mt-0.5 text-[20px]">Kiemelt ügyfélkör</h3>
+              <p className="mt-1.5 text-[11px] leading-5 text-[var(--adm-text-muted)]">
+                Későbbi beállításban kiválasztható, mely ügyfelek kommunikációja és aktivitása jelenjen meg kiemelten.
+              </p>
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                {watchedClientExamples.map((name) => (
+                  <span key={name} className="adm-watch-chip">{name}</span>
+                ))}
+                <span className="adm-watch-chip adm-watch-chip-muted">példa</span>
+              </div>
+            </article>
           </aside>
         </section>
 
-        {/* 7 — Compact support rail: useful dashboard signals only, no second case/task board */}
-        <section className="grid items-start gap-3 xl:grid-cols-[minmax(0,0.74fr)_minmax(0,0.86fr)_minmax(300px,0.56fr)]">
+        {/* 8 — Compact support rail: deadlines, recent documents, quick open */}
+        <section className="grid items-start gap-3 xl:grid-cols-3">
           <article className="adm-panel adm-panel-accent-amber adm-rail-panel p-4">
             <div className="flex items-start justify-between gap-3 border-b border-[var(--adm-border)] pb-3">
               <div>
@@ -822,63 +906,32 @@ export function Dashboard() {
             </div>
           </article>
 
-          <div className="grid content-start gap-3">
-            <article className="adm-panel adm-rail-panel p-4">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="adm-kicker text-[var(--adm-green-800)]">Továbblépés</p>
-                  <h3 className="adm-heading mt-0.5 text-[20px]">Gyors megnyitás</h3>
-                </div>
+          <article className="adm-panel adm-rail-panel p-4">
+            <div className="flex items-center justify-between gap-2 border-b border-[var(--adm-border)] pb-3">
+              <div>
+                <p className="adm-kicker text-[var(--adm-green-800)]">Továbblépés</p>
+                <h3 className="adm-heading mt-0.5 text-[20px]">Gyors megnyitás</h3>
               </div>
-              <div className="mt-3 grid gap-2">
-                {quickOpenLinks.map((link, i) => {
-                  const marker = ["var(--adm-green-800)", "var(--adm-blue-950)", "var(--adm-warm-500)", "#000000"][i % 4];
-                  return (
-                    <Link
-                      key={link.href}
-                      href={link.href}
-                      className="flex items-center gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-2 hover:bg-[var(--adm-blue-100)]/25"
-                    >
-                      <span className="h-6 w-1 shrink-0 rounded-full" style={{ backgroundColor: marker }} />
-                      <span className="flex-1">
-                        <span className="block text-xs font-semibold text-[var(--adm-text)]">{link.label}</span>
-                        <span className="mt-0.5 block text-[10.5px] text-[var(--adm-text-muted)]">{link.description}</span>
-                      </span>
-                    </Link>
-                  );
-                })}
-              </div>
-            </article>
-
-            <article className="adm-panel adm-panel-accent-green adm-rail-panel p-4">
-              <div className="flex items-start gap-2 border-b border-[var(--adm-border)] pb-3">
-                <span className="mt-1 h-2.5 w-2.5 rounded-full bg-[var(--adm-green-800)]" />
-                <div>
-                  <p className="adm-kicker text-[var(--adm-green-800)]">Kitekintés</p>
-                  <h3 className="adm-heading mt-0.5 text-[20px]">Hírek / jogi-piaci jelzések</h3>
-                </div>
-              </div>
-              <div className="mt-3 space-y-2 text-xs">
-                {legalNews.isLoading ? <p className="text-[var(--adm-text-soft)]">Hírfeed betöltése...</p> : null}
-                {!legalNews.isLoading && (legalNews.error || legalSignals.length === 0) ? (
-                  <div className="rounded border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-2 text-[var(--adm-text-muted)]">
-                    Előkészítés alatt — a hírfeed későbbi patchben aktiválható.
-                  </div>
-                ) : null}
-                {legalSignals.slice(0, 2).map((article, index) => (
-                  <div key={`${article.title}-${index}`} className="rounded border border-[var(--adm-border)] border-l-[3px] border-l-[var(--adm-green-800)] bg-[var(--adm-surface)] p-2">
-                    <p className="font-semibold text-[var(--adm-text)]">{article.title}</p>
-                    <p className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--adm-text-muted)]"><span className="inline-flex rounded-full bg-[var(--adm-blue-100)]/45 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--adm-blue-700)]">{article.source}</span>{article.date}</p>
-                    {article.url ? (
-                      <a href={article.url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">
-                        Megnyitás
-                      </a>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </article>
-          </div>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {quickOpenLinks.map((link, i) => {
+                const marker = ["var(--adm-green-800)", "var(--adm-blue-950)", "var(--adm-warm-500)", "#000000"][i % 4];
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="flex items-center gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-2 hover:bg-[var(--adm-blue-100)]/25"
+                  >
+                    <span className="h-6 w-1 shrink-0 rounded-full" style={{ backgroundColor: marker }} />
+                    <span className="flex-1">
+                      <span className="block text-xs font-semibold text-[var(--adm-text)]">{link.label}</span>
+                      <span className="mt-0.5 block text-[10.5px] text-[var(--adm-text-muted)]">{link.description}</span>
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </article>
         </section>
       </div>
     </div>
