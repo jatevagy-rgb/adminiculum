@@ -165,6 +165,9 @@ function CommunicationWorkspace() {
               <p className="mt-1 max-w-3xl text-[12px] leading-5 text-[var(--adm-text-muted)]">
                 Levelek, belső jelzések és ügyhöz kapcsolható kommunikáció egy helyen.
               </p>
+              <p className="mt-1 max-w-3xl text-[11px] leading-4 text-[var(--adm-text-soft)]">
+                A jelenlegi nézet a kommunikációs munkafolyamat szerkezetét készíti elő; élő Outlook/Graph-bekötést nem jelez.
+              </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-500)]/30 bg-[var(--adm-blue-100)]/35 px-3 py-1 text-[10.5px] font-semibold text-[var(--adm-blue-700)]">
@@ -264,6 +267,27 @@ function CommunicationWorkspace() {
               ))}
             </div>
           </article>
+        </section>
+
+        <section className="adm-panel overflow-hidden">
+          <div className="border-b border-[var(--adm-border)] bg-white px-4 py-3 lg:px-5">
+            <p className="adm-kicker text-[var(--adm-blue-950)]">Adatmodell</p>
+            <h2 className="adm-heading mt-0.5 text-[21px]">Kommunikációs szerkezet</h2>
+          </div>
+          <div className="grid gap-2 p-4 md:grid-cols-5 lg:px-5">
+            {[
+              { label: "Communication", detail: "üzenet / jegyzet" },
+              { label: "Thread", detail: "kommunikációs szál" },
+              { label: "Classification", detail: "ügyfél / ügy / feladat" },
+              { label: "Assignment", detail: "feladathoz kapcsolás" },
+              { label: "Rule", detail: "megjegyzett döntés" },
+            ].map((item) => (
+              <div key={item.label} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-blue-950)]">{item.label}</p>
+                <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{item.detail}</p>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="adm-panel overflow-hidden">
