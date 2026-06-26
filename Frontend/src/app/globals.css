@@ -662,29 +662,52 @@ select {
   border-top: 3px solid var(--adm-warm-500);
 }
 
-.adm-kpi-tile {
-  position: relative;
-  isolation: isolate;
-  min-height: 110px;
+/* Work-section tiles — the whole tile surface is color-owned (background set inline). */
+.adm-work-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 108px;
+  padding: 12px 13px;
   border-radius: var(--adm-radius-md);
-  border: 1px solid color-mix(in srgb, var(--adm-kpi-deep, #022538) 70%, #000 8%);
-  background: linear-gradient(155deg, var(--adm-kpi-accent, #157e9c) 0%, var(--adm-kpi-deep, #0c4f65) 100%);
-  box-shadow: 0 12px 28px rgba(2, 48, 71, 0.16);
-  overflow: hidden;
+  box-shadow: 0 12px 28px rgba(2, 48, 71, 0.18);
   transition: transform 160ms ease, box-shadow 160ms ease;
 }
 
-.adm-kpi-tile::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(circle at 88% 0%, rgba(255, 255, 255, 0.18), transparent 58%);
+.adm-work-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 44px rgba(2, 48, 71, 0.28);
 }
 
-.adm-kpi-tile:hover {
-  box-shadow: 0 20px 44px rgba(2, 48, 71, 0.26);
-  transform: translateY(-2px);
+.adm-work-tile__label {
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  opacity: 0.92;
+}
+
+.adm-work-tile__body {
+  margin-top: auto;
+  border-radius: 10px;
+  border: 1px solid;
+  padding: 7px 10px 8px;
+}
+
+.adm-work-tile__count {
+  display: block;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 32px;
+  line-height: 1;
+}
+
+.adm-work-tile__caption {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.3;
+  opacity: 0.9;
 }
 
 .adm-focus-panel {

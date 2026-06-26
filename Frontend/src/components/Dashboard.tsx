@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   getCases,
   getCommunications,
@@ -40,35 +40,34 @@ type KpiCardProps = {
   href: string;
 };
 
-type KpiToneStyle = { accent: string; deep: string; ink: string };
+type KpiToneStyle = { bg: string; ink: string; light: boolean };
 
-// Fully colored tiles: solid accent field (gradient accent→deep), readable ink.
+// Color-owned tiles: the whole tile background IS the semantic color (set inline so no
+// class rule can repaint it pale). A translucent inner panel holds the count.
 const KPI_STYLES: Record<KpiCardProps["tone"], KpiToneStyle> = {
-  green: { accent: "#0A5A45", deep: "#013728", ink: "#FFFFFF" },
-  navy: { accent: "#0A4763", deep: "#022538", ink: "#FFFFFF" },
-  petrol: { accent: "#157E9C", deep: "#0C4F65", ink: "#FFFFFF" },
-  cyan: { accent: "#3DAFCB", deep: "#1B7E98", ink: "#04303D" },
-  yellow: { accent: "#FFC22E", deep: "#E59A00", ink: "#4A3300" },
-  amber: { accent: "#FD9E02", deep: "#D27E00", ink: "#3E2400" },
-  orange: { accent: "#FB8500", deep: "#C96500", ink: "#FFFFFF" },
-  red: { accent: "#9E2A2B", deep: "#6E1718", ink: "#FFFFFF" },
-  darkRed: { accent: "#7A1418", deep: "#540B0E", ink: "#FFFFFF" },
-  neutral: { accent: "#E5E5E5", deep: "#C8CBCD", ink: "#2A2F33" },
+  petrol: { bg: "#126782", ink: "#FFFFFF", light: false },
+  navy: { bg: "#023047", ink: "#FFFFFF", light: false },
+  cyan: { bg: "#1B8BA6", ink: "#FFFFFF", light: false },
+  green: { bg: "#0A5A45", ink: "#FFFFFF", light: false },
+  amber: { bg: "#FD9E02", ink: "#3E2400", light: true },
+  yellow: { bg: "#FFB703", ink: "#4A3300", light: true },
+  orange: { bg: "#FB8500", ink: "#FFFFFF", light: false },
+  red: { bg: "#9E2A2B", ink: "#FFFFFF", light: false },
+  darkRed: { bg: "#540B0E", ink: "#FFFFFF", light: false },
+  neutral: { bg: "#E5E5E5", ink: "#2A2F33", light: true },
 };
 
 function KpiCard({ label, value, tone, zeroHint, href }: KpiCardProps) {
   const s = KPI_STYLES[tone];
+  const panelBg = s.light ? "rgba(0,0,0,0.07)" : "rgba(255,255,255,0.15)";
+  const panelBorder = s.light ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.26)";
   return (
-    <Link
-      href={href}
-      className="adm-kpi-tile flex flex-col justify-between p-3"
-      style={{ "--adm-kpi-accent": s.accent, "--adm-kpi-deep": s.deep, color: s.ink } as CSSProperties}
-    >
-      <p className="text-[9.5px] font-bold uppercase tracking-[0.13em] opacity-85">{label}</p>
-      <div>
-        <p className="font-serif text-[34px] leading-none">{value}</p>
-        <p className="mt-1 text-[10px] leading-3 opacity-80">{value === 0 ? zeroHint : "Aktív tétel"}</p>
-      </div>
+    <Link href={href} className="adm-work-tile" style={{ background: s.bg, color: s.ink }}>
+      <span className="adm-work-tile__label">{label}</span>
+      <span className="adm-work-tile__body" style={{ background: panelBg, borderColor: panelBorder }}>
+        <span className="adm-work-tile__count">{value}</span>
+        <span className="adm-work-tile__caption">{value === 0 ? zeroHint : "Aktív tétel"}</span>
+      </span>
     </Link>
   );
 }
@@ -572,8 +571,8 @@ export function Dashboard() {
   );
 
   return (
-    <div className="adm-dash-stage min-h-full px-3 pb-5 pt-3 sm:px-5 xl:px-6">
-      <div className="mx-auto w-full max-w-[1440px] space-y-3">
+    <div className="adm-dash-stage min-h-full px-3 pb-4 pt-3 sm:px-5 xl:px-6">
+      <div className="mx-auto w-full max-w-[1440px] space-y-2.5">
         {/* 1 + 2 — Command-center hero with dark "Mai működési kép" status column */}
         <section className="adm-command-hero">
           <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_318px]">
@@ -857,15 +856,12 @@ export function Dashboard() {
               </div>
             </article>
 
-            <article className="adm-panel adm-rail-panel overflow-hidden" style={{ borderTop: "3px solid #9E2A2B" }}>
-              <div className="flex items-center justify-between gap-2 px-3.5 pt-3.5">
-                <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#9E2A2B]" />
-                  <h3 className="adm-heading text-[20px]">Kockázat / eszkaláció</h3>
-                </div>
-                <span className="rounded-full bg-[#F4DADA] px-2 py-0.5 text-[10px] font-bold text-[#9E2A2B]">{escalationItems.length}</span>
+            <article className="adm-panel overflow-hidden">
+              <div className="flex items-center justify-between gap-2 px-3.5 py-2.5" style={{ background: "#9E2A2B", color: "#FFFFFF" }}>
+                <h3 className="font-serif text-[19px] leading-none">Kockázat / eszkaláció</h3>
+                <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-bold text-white">{escalationItems.length}</span>
               </div>
-              <div className="space-y-2 p-3.5 pt-2.5">
+              <div className="space-y-2 p-3.5">
                 {escalationItems.length === 0 ? (
                   <div className="rounded-[var(--adm-radius-sm)] border border-[#9E2A2B]/20 border-l-[3px] border-l-[#9E2A2B]/45 bg-[#FBF1F1] p-2.5">
                     <p className="text-[11px] font-semibold text-[var(--adm-text)]">Nincs nyitott kockázati vagy eszkalációs jelzés.</p>
@@ -901,13 +897,13 @@ export function Dashboard() {
                       Az automatikus ügyfélhez rendelés későbbi kommunikációs munkafolyamat. A dashboard itt fogja mutatni a kiemelt ügyfelekhez tartozó friss leveleket és jelzéseket.
                     </p>
                     {Array.from({ length: 3 }).map((_, i) => (
-                      <div key={`client-found-${i}`} className="flex items-center gap-2.5 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-white/50 px-2.5 py-2 opacity-70">
-                        <span className="h-7 w-1 shrink-0 rounded-full bg-[var(--adm-blue-500)]/40" />
+                      <div key={`client-found-${i}`} className="flex items-stretch gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2.5 py-2">
+                        <span className="w-1.5 shrink-0 rounded-full bg-[var(--adm-blue-500)] opacity-40" />
                         <div className="min-w-0 flex-1">
-                          <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Ügyfél · Feladó</p>
-                          <p className="text-[10px] text-[var(--adm-text-soft)]">Ügyfélhez sorolt levél itt jelenik meg.</p>
+                          <p className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">Ügyfél · Feladó · Tárgy · Státusz</p>
+                          <p className="text-[10px] text-[var(--adm-text-muted)]">Ügyfélhez sorolt levél itt jelenik meg.</p>
                         </div>
-                        <span className="shrink-0 rounded-full border border-dashed border-[var(--adm-border-strong)] px-2 py-0.5 text-[8.5px] font-bold uppercase text-[var(--adm-text-soft)]">Megnyitás</span>
+                        <span className="shrink-0 self-center rounded-full border border-[var(--adm-border-strong)] px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-[0.08em] text-[var(--adm-text-soft)]">Megnyitás</span>
                       </div>
                     ))}
                   </>
