@@ -123,7 +123,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
   const navLabelMap: Record<string, string> = {
     dashboard: "Műszerfal",
     tasks: "Feladatok",
-    notifications: "Értesítések",
+    notifications: "Kommunikáció",
     reviews: "Review sor",
     cases: "Ügyek",
     "clause-library": "Záradék könyvtár",

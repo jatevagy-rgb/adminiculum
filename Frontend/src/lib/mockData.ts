@@ -267,7 +267,7 @@ export const navItems = [
   { id: 'tasks', label: 'Feladatok', icon: 'briefcase' },
   { id: 'reviews', label: 'Review sor', icon: 'file' },
   { id: 'documents-compare', label: 'Verzió-összevetés', icon: 'file' },
-  { id: 'notifications', label: 'Értesítések', icon: 'bell' },
+  { id: 'notifications', label: 'Kommunikáció', icon: 'bell' },
   { id: 'time-entries', label: 'Munkaórák', icon: 'clock' },
   { id: 'clients', label: 'Ügyfelek', icon: 'file' },
   { id: 'calendar', label: 'Határidők', icon: 'calendar' },

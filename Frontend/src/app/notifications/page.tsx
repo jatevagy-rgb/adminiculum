@@ -34,6 +34,16 @@ const filterViews: Record<string, string> = {
 
 const viewFilters = Object.fromEntries(Object.entries(filterViews).map(([label, view]) => [view, label]));
 
+const filterTone: Record<string, string> = {
+  Összes: "var(--adm-blue-950)",
+  Külső: "var(--adm-blue-500)",
+  Belső: "var(--adm-blue-700)",
+  "Válaszra vár": "var(--adm-warm-500)",
+  "Ügyfélhez sorolt": "var(--adm-blue-500)",
+  "Ügyhöz sorolt": "var(--adm-blue-700)",
+  "Feladathoz kapcsolt": "var(--adm-blue-950)",
+};
+
 const typeLabels: Record<NotificationType, string> = {
   TASK_ASSIGNED: "Feladat kiosztva",
   TASK_DUE_SOON: "Közelgő határidő",
@@ -163,25 +173,23 @@ function CommunicationWorkspace() {
               <p className="adm-kicker text-[var(--adm-blue-700)]">Kommunikáció</p>
               <h1 className="adm-heading mt-1 text-[28px] leading-tight">Kommunikációs munkatér</h1>
               <p className="mt-1 max-w-3xl text-[12px] leading-5 text-[var(--adm-text-muted)]">
-                Levelek, belső jelzések és ügyhöz kapcsolható kommunikáció egy helyen.
+                Levelek, belső jelzések, válaszállapotok és ügyhöz kapcsolható kommunikáció.
               </p>
               <p className="mt-1 max-w-3xl text-[11px] leading-4 text-[var(--adm-text-soft)]">
-                A jelenlegi nézet a kommunikációs munkafolyamat szerkezetét készíti elő; élő Outlook/Graph-bekötést nem jelez.
+                Élő Outlook/Graph-bekötés nincs aktiválva.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-500)]/30 bg-[var(--adm-blue-100)]/35 px-3 py-1 text-[10.5px] font-semibold text-[var(--adm-blue-700)]">
-                Foundation · Outlook később
+                Outlook később
               </span>
-              <Link href="/cases" className="adm-link-button px-3 py-2 text-[11px]">
-                Ügyek megnyitása
-              </Link>
             </div>
           </div>
 
-          <nav className="flex gap-1.5 overflow-x-auto px-4 py-2.5 lg:px-5" aria-label="Kommunikációs szűrők">
+          <nav className="flex gap-1 overflow-x-auto bg-[var(--adm-surface)] px-4 py-2.5 lg:px-5" aria-label="Kommunikációs szűrők">
             {filters.map((filter) => {
               const isActive = activeFilter === filter;
+              const tone = filterTone[filter] || "var(--adm-blue-500)";
               return (
                 <button
                   key={filter}
@@ -192,11 +200,12 @@ function CommunicationWorkspace() {
                     const url = view === "all" ? "/notifications" : `/notifications?view=${view}`;
                     window.history.replaceState(null, "", url);
                   }}
-                  className={`shrink-0 rounded-[var(--adm-radius-sm)] border px-3 py-1.5 text-[11px] font-bold ${
-                    isActive
-                      ? "border-[var(--adm-blue-500)] bg-[var(--adm-blue-500)] text-white"
-                      : "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)] hover:bg-white"
-                  }`}
+                  className="shrink-0 rounded-[var(--adm-radius-sm)] border px-3 py-1.5 text-[11px] font-bold transition-colors"
+                  style={{
+                    borderColor: isActive ? tone : "var(--adm-border)",
+                    background: isActive ? tone : "#FFFFFF",
+                    color: isActive ? "#FFFFFF" : "var(--adm-text-muted)",
+                  }}
                 >
                   {filter}
                 </button>
@@ -210,24 +219,26 @@ function CommunicationWorkspace() {
             title="Külső kommunikáció"
             accent="var(--adm-blue-500)"
             countLabel="0/8"
-            emptyTitle="Nincs megjeleníthető külső kommunikáció a jelenlegi nézetben."
-            emptyText="A lista később legfeljebb 8 levélelőnézetet mutat: feladó, tárgy, ügyfél/ügy, státusz."
+            capacityLabel="Kapacitás: 8 levélelőnézet"
+            emptyTitle="Nincs új külső kommunikáció."
+            emptyText="Később itt jelenik meg a feladó, tárgy, ügyfél/ügy és válaszállapot."
           />
           <CommunicationPanel
             title="Belső kommunikáció"
             accent="var(--adm-blue-700)"
             countLabel="0/8"
-            emptyTitle="Nincs megjeleníthető belső kommunikáció a jelenlegi nézetben."
-            emptyText="A lista később belső jelzéseket, átadási kommenteket és review-visszajelzéseket mutat."
+            capacityLabel="Kapacitás: 8 belső jelzés"
+            emptyTitle="Nincs új belső kommunikáció."
+            emptyText="Később itt jelennek meg a belső jelzések, átadási kommentek és review-visszajelzések."
           />
         </section>
 
         <section className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.7fr)_minmax(300px,0.7fr)]">
           <article className="adm-panel adm-panel-accent-navy p-4">
-            <p className="adm-kicker text-[var(--adm-blue-950)]">Besorolás</p>
-            <h2 className="adm-heading mt-1 text-[21px]">Besorolási munkafolyamat</h2>
+            <p className="adm-kicker text-[var(--adm-blue-950)]">Munkába rendezés</p>
+            <h2 className="adm-heading mt-1 text-[21px]">Besorolás</h2>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {["Kommunikáció", "Ügyfél", "Ügy", "Feladat", "Dokumentum / review"].map((step, index) => (
+              {["Levél/jelzés", "Ügyfél", "Ügy", "Feladat", "Dokumentum / review"].map((step, index) => (
                 <span key={step} className="inline-flex items-center gap-2">
                   <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-950)]/20 bg-white px-2.5 py-1 text-[10.5px] font-bold text-[var(--adm-blue-950)]">
                     {step}
@@ -237,7 +248,7 @@ function CommunicationWorkspace() {
               ))}
             </div>
             <p className="mt-3 text-[11.5px] leading-5 text-[var(--adm-text-muted)]">
-              A kommunikáció később ügyfélhez, ügyhöz és feladathoz kapcsolható. A besorolási döntések megjegyezhetők lesznek.
+              A besorolás később megjegyezhető lesz.
             </p>
           </article>
 
@@ -248,7 +259,7 @@ function CommunicationWorkspace() {
               <ReplyLane label="Tőlünk várnak választ" />
               <ReplyLane label="Mi várunk válaszra" />
             </div>
-            <p className="mt-3 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-warm-400)]/45 bg-[#FFF8E2] p-2.5 text-[11px] text-[var(--adm-text-muted)]">
+            <p className="mt-3 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-warm-400)]/45 bg-[#FFF8E2] p-2.5 text-[11px] font-semibold text-[var(--adm-text-muted)]">
               Nincs nyitott válaszállapot.
             </p>
           </article>
@@ -257,10 +268,10 @@ function CommunicationWorkspace() {
             <p className="adm-kicker text-[var(--adm-blue-950)]">Feladat</p>
             <h2 className="adm-heading mt-1 text-[21px]">Feladathoz kapcsolás</h2>
             <p className="mt-2 text-[11.5px] leading-5 text-[var(--adm-text-muted)]">
-              Feladatkiadáskor később kapcsolható lesz releváns levél vagy kommunikációs szál.
+              Feladatkiadáskor a releváns levél vagy szál később a feladathoz kapcsolható.
             </p>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              {["Kommunikáció", "Feladat", "Ügy", "Felelős"].map((item) => (
+              {["Levél / szál", "Feladat", "Ügy", "Felelős"].map((item) => (
                 <span key={item} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2.5 py-2 text-[11px] font-bold text-[var(--adm-text)]">
                   {item}
                 </span>
@@ -270,31 +281,10 @@ function CommunicationWorkspace() {
         </section>
 
         <section className="adm-panel overflow-hidden">
-          <div className="border-b border-[var(--adm-border)] bg-white px-4 py-3 lg:px-5">
-            <p className="adm-kicker text-[var(--adm-blue-950)]">Adatmodell</p>
-            <h2 className="adm-heading mt-0.5 text-[21px]">Kommunikációs szerkezet</h2>
-          </div>
-          <div className="grid gap-2 p-4 md:grid-cols-5 lg:px-5">
-            {[
-              { label: "Communication", detail: "üzenet / jegyzet" },
-              { label: "Thread", detail: "kommunikációs szál" },
-              { label: "Classification", detail: "ügyfél / ügy / feladat" },
-              { label: "Assignment", detail: "feladathoz kapcsolás" },
-              { label: "Rule", detail: "megjegyzett döntés" },
-            ].map((item) => (
-              <div key={item.label} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-blue-950)]">{item.label}</p>
-                <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{item.detail}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="adm-panel overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--adm-border)] bg-white px-4 py-3 lg:px-5">
             <div>
-              <p className="adm-kicker text-[var(--adm-green-800)]">Rendszeresemények</p>
-              <h2 className="adm-heading mt-0.5 text-[21px]">Aktív értesítési sor</h2>
+              <p className="adm-kicker text-[var(--adm-green-800)]">Rendszer</p>
+              <h2 className="adm-heading mt-0.5 text-[19px]">Rendszerjelzések</h2>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1 text-[11px] font-semibold text-[var(--adm-text-muted)]">
@@ -314,7 +304,7 @@ function CommunicationWorkspace() {
           <div className="p-4 lg:px-5">
             {isLoading ? (
               <div className="adm-board-empty adm-board-empty-compact">
-                <p className="text-xs font-semibold text-[var(--adm-text)]">Értesítések betöltése...</p>
+                <p className="text-xs font-semibold text-[var(--adm-text)]">Rendszerjelzések betöltése...</p>
                 <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">A rendszeresemények lekérése folyamatban van.</p>
               </div>
             ) : error ? (
@@ -326,8 +316,7 @@ function CommunicationWorkspace() {
               </div>
             ) : visibleNotifications.length === 0 ? (
               <div className="adm-board-empty adm-board-empty-compact">
-                <p className="text-xs font-semibold text-[var(--adm-text)]">Nincs új értesítés.</p>
-                <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Az ügy-, dokumentum- és review-jelzések itt jelennek meg.</p>
+                <p className="text-xs font-semibold text-[var(--adm-text)]">Nincs új rendszerjelzés.</p>
               </div>
             ) : (
               <ul className="grid gap-2">
@@ -391,20 +380,22 @@ function CommunicationPanel({
   title,
   accent,
   countLabel,
+  capacityLabel,
   emptyTitle,
   emptyText,
 }: {
   title: string;
   accent: string;
   countLabel: string;
+  capacityLabel: string;
   emptyTitle: string;
   emptyText: string;
 }) {
   return (
     <article className="adm-panel overflow-hidden">
-      <div className="flex items-center justify-between gap-2 border-b border-[var(--adm-border)] bg-white px-4 py-3" style={{ borderTop: `3px solid ${accent}` }}>
-        <h2 className="adm-heading text-[22px]">{title}</h2>
-        <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2.5 py-1 text-[10px] font-bold text-[var(--adm-text-soft)]">
+      <div className="flex items-center justify-between gap-2 px-4 py-3 text-white" style={{ background: accent }}>
+        <h2 className="adm-heading text-[22px] text-white">{title}</h2>
+        <span className="rounded-[var(--adm-radius-sm)] border border-white/25 bg-white/15 px-2.5 py-1 text-[10px] font-bold text-white">
           {countLabel}
         </span>
       </div>
@@ -413,6 +404,7 @@ function CommunicationPanel({
           <p className="text-xs font-semibold text-[var(--adm-text)]">{emptyTitle}</p>
           <p className="mt-1 text-[11px] leading-4 text-[var(--adm-text-muted)]">{emptyText}</p>
         </div>
+        <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">{capacityLabel}</p>
       </div>
     </article>
   );

@@ -44,7 +44,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
     "case-detail": "Ügy részletei",
     generation: "Dokumentum generálás",
     tasks: "Feladatok",
-    notifications: "Értesítések",
+    notifications: "Kommunikáció",
     reviews: "Review sor",
     clients: "Ügyfelek",
     "documents-compare": "Dokumentum összevetés",
