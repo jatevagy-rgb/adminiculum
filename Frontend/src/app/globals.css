@@ -662,20 +662,29 @@ select {
   border-top: 3px solid var(--adm-warm-500);
 }
 
-.adm-kpi-cell {
+.adm-kpi-tile {
+  position: relative;
   isolation: isolate;
-  min-height: 104px;
-  border-color: color-mix(in srgb, var(--adm-kpi-accent, var(--adm-blue-950)) 32%, rgba(2, 48, 71, 0.12));
-  transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
+  min-height: 110px;
+  border-radius: var(--adm-radius-md);
+  border: 1px solid color-mix(in srgb, var(--adm-kpi-deep, #022538) 70%, #000 8%);
+  background: linear-gradient(155deg, var(--adm-kpi-accent, #157e9c) 0%, var(--adm-kpi-deep, #0c4f65) 100%);
+  box-shadow: 0 12px 28px rgba(2, 48, 71, 0.16);
+  overflow: hidden;
+  transition: transform 160ms ease, box-shadow 160ms ease;
 }
 
-.adm-kpi-cell:hover {
-  border-color: color-mix(in srgb, var(--adm-kpi-accent, var(--adm-blue-950)) 60%, rgba(2, 48, 71, 0.16));
-  box-shadow: 0 18px 38px rgba(2, 48, 71, 0.12);
-  transform: translateY(-1px);
+.adm-kpi-tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 88% 0%, rgba(255, 255, 255, 0.18), transparent 58%);
+}
+
+.adm-kpi-tile:hover {
+  box-shadow: 0 20px 44px rgba(2, 48, 71, 0.26);
+  transform: translateY(-2px);
 }
 
 .adm-focus-panel {

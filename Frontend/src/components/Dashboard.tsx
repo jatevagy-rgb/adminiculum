@@ -37,39 +37,39 @@ type KpiCardProps = {
   value: number;
   tone: "green" | "navy" | "petrol" | "cyan" | "yellow" | "amber" | "orange" | "red" | "darkRed" | "neutral";
   zeroHint: string;
+  href: string;
 };
 
-type KpiToneStyle = { accent: string; headText: string; surface: string; num: string };
+type KpiToneStyle = { accent: string; deep: string; ink: string };
 
+// Fully colored tiles: solid accent field (gradient accent→deep), readable ink.
 const KPI_STYLES: Record<KpiCardProps["tone"], KpiToneStyle> = {
-  green: { accent: "#014337", headText: "#FFFFFF", surface: "bg-[#EAF3EE]", num: "text-[var(--adm-green-900)]" },
-  navy: { accent: "#023047", headText: "#FFFFFF", surface: "bg-[#E8F0F4]", num: "text-[var(--adm-blue-950)]" },
-  petrol: { accent: "#126782", headText: "#FFFFFF", surface: "bg-[#E5F2F6]", num: "text-[var(--adm-blue-700)]" },
-  cyan: { accent: "#219EBC", headText: "#06323F", surface: "bg-[#E6F6FA]", num: "text-[var(--adm-blue-700)]" },
-  yellow: { accent: "#FFB703", headText: "#5A3E00", surface: "bg-[#FFF3CB]", num: "text-[var(--adm-warm-600)]" },
-  amber: { accent: "#FD9E02", headText: "#5A3E00", surface: "bg-[#FFF0D7]", num: "text-[var(--adm-warm-600)]" },
-  orange: { accent: "#FB8500", headText: "#4A2600", surface: "bg-[#FFEADA]", num: "text-[#8A3E00]" },
-  red: { accent: "#9E2A2B", headText: "#FFFFFF", surface: "bg-[#F8EAEA]", num: "text-[var(--adm-critical-600)]" },
-  darkRed: { accent: "#540B0E", headText: "#FFFFFF", surface: "bg-[#F1E4E5]", num: "text-[var(--adm-critical-950)]" },
-  neutral: { accent: "#E5E5E5", headText: "#2A2F33", surface: "bg-[#F4F5F6]", num: "text-[var(--adm-text)]" },
+  green: { accent: "#0A5A45", deep: "#013728", ink: "#FFFFFF" },
+  navy: { accent: "#0A4763", deep: "#022538", ink: "#FFFFFF" },
+  petrol: { accent: "#157E9C", deep: "#0C4F65", ink: "#FFFFFF" },
+  cyan: { accent: "#3DAFCB", deep: "#1B7E98", ink: "#04303D" },
+  yellow: { accent: "#FFC22E", deep: "#E59A00", ink: "#4A3300" },
+  amber: { accent: "#FD9E02", deep: "#D27E00", ink: "#3E2400" },
+  orange: { accent: "#FB8500", deep: "#C96500", ink: "#FFFFFF" },
+  red: { accent: "#9E2A2B", deep: "#6E1718", ink: "#FFFFFF" },
+  darkRed: { accent: "#7A1418", deep: "#540B0E", ink: "#FFFFFF" },
+  neutral: { accent: "#E5E5E5", deep: "#C8CBCD", ink: "#2A2F33" },
 };
 
-function KpiCard({ label, value, tone, zeroHint }: KpiCardProps) {
+function KpiCard({ label, value, tone, zeroHint, href }: KpiCardProps) {
   const s = KPI_STYLES[tone];
   return (
-    <div
-      className="adm-kpi-cell relative flex flex-col overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-[var(--adm-shadow-sm)]"
-      style={{ "--adm-kpi-accent": s.accent } as CSSProperties}
+    <Link
+      href={href}
+      className="adm-kpi-tile flex flex-col justify-between p-3"
+      style={{ "--adm-kpi-accent": s.accent, "--adm-kpi-deep": s.deep, color: s.ink } as CSSProperties}
     >
-      <div className="flex items-center gap-1.5 px-3 py-1.5" style={{ backgroundColor: s.accent }}>
-        <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: s.headText, opacity: 0.85 }} />
-        <p className="text-[9px] font-bold uppercase tracking-[0.12em]" style={{ color: s.headText }}>{label}</p>
+      <p className="text-[9.5px] font-bold uppercase tracking-[0.13em] opacity-85">{label}</p>
+      <div>
+        <p className="font-serif text-[34px] leading-none">{value}</p>
+        <p className="mt-1 text-[10px] leading-3 opacity-80">{value === 0 ? zeroHint : "Aktív tétel"}</p>
       </div>
-      <div className={`flex-1 px-3 pb-2.5 pt-2 ${s.surface}`}>
-        <p className={`font-serif text-[30px] leading-none ${value === 0 ? "text-[var(--adm-text-soft)]" : s.num}`}>{value}</p>
-        <p className="mt-0.5 text-[10px] leading-4 text-[var(--adm-text-muted)]">{value === 0 ? zeroHint : "Aktív tétel"}</p>
-      </div>
-    </div>
+    </Link>
   );
 }
 
@@ -173,40 +173,47 @@ function EmptyState({ title, subtitle }: { title: string; subtitle: string }) {
 
 // Future-ready communication row (real data shape: sender, subject, metadata, status chip).
 function CommRow({ sig, family }: { sig: CommunicationSignal; family: "external" | "internal" }) {
-  const rail = family === "external" ? "var(--adm-blue-500)" : "var(--adm-blue-700)";
+  const rail = family === "external" ? "#219EBC" : "#0A5A45";
+  const sender = sig.senderName || sig.senderEmail || (family === "external" ? "Külső fél" : "Belső");
+  const tag = sig.proposedClientName || sig.proposedCaseTitle || (sig.proposedCaseId ? "Ügyhöz rendelve" : null);
   return (
-    <div className="flex items-start gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white p-2.5">
-      <span className="mt-0.5 h-8 w-1 shrink-0 rounded-full" style={{ backgroundColor: rail }} />
+    <div className="flex items-stretch gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white p-2.5 shadow-[0_1px_0_rgba(2,48,71,0.04)] transition-colors hover:bg-[#F7FBFD]">
+      <span className="w-1.5 shrink-0 rounded-full" style={{ backgroundColor: rail }} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[11px] font-semibold text-[var(--adm-text)]">
-          {sig.senderName || sig.senderEmail || (family === "external" ? "Külső fél" : "Belső")}
-        </p>
-        <p className="truncate text-xs font-semibold text-[var(--adm-text)]">{sig.subject}</p>
-        <p className="mt-0.5 truncate text-[10px] text-[var(--adm-text-muted)]">
-          {sig.receivedAt ? displayDateTimeShort(sig.receivedAt) : "Nincs időbélyeg"}{sig.hasAttachments ? " · 📎" : ""}
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="truncate text-[11px] font-bold text-[var(--adm-text)]">{sender}</p>
+          <span className="shrink-0 text-[9px] text-[var(--adm-text-soft)]">{sig.receivedAt ? displayDateTimeShort(sig.receivedAt) : ""}</span>
+        </div>
+        <p className="mt-0.5 truncate text-xs font-semibold text-[var(--adm-text)]">{sig.subject}</p>
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          {tag ? (
+            <span className="inline-flex max-w-[140px] truncate rounded-full bg-[var(--adm-blue-100)]/45 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.06em] text-[var(--adm-blue-700)]">{tag}</span>
+          ) : (
+            <span className="inline-flex rounded-full bg-[var(--adm-ivory-100)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.06em] text-[var(--adm-text-soft)]">Nincs ügyfél/ügy</span>
+          )}
+          {sig.hasAttachments ? <span className="inline-flex rounded-full bg-[var(--adm-ivory-100)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.06em] text-[var(--adm-text-muted)]">Melléklet</span> : null}
+          {sig.requiresReview ? (
+            <span className="ml-auto inline-flex rounded-full bg-[#FFF3CB] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.06em] text-[var(--adm-warm-600)]">Besorolás</span>
+          ) : (
+            <span className="ml-auto inline-flex rounded-full bg-[#E7F6EA] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.06em] text-[var(--adm-green-800)]">Besorolva</span>
+          )}
+        </div>
       </div>
-      {sig.requiresReview ? (
-        <span className="shrink-0 rounded-full bg-[#FFF3CB] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-[var(--adm-warm-600)]">Besorolás</span>
-      ) : (
-        <span className="shrink-0 rounded-full bg-[var(--adm-blue-100)]/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-[var(--adm-blue-700)]">
-          {family === "external" ? "Külső" : "Belső"}
-        </span>
-      )}
     </div>
   );
 }
 
-// Honest foundation slot — demonstrates the future row structure without fake data.
-function CommFoundationRow() {
+// Intentional empty workbench slot — shows the future row structure without fake data.
+function CommFoundationRow({ family }: { family: "external" | "internal" }) {
+  const rail = family === "external" ? "#219EBC" : "#0A5A45";
   return (
-    <div className="flex items-center gap-2.5 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-white/50 px-2.5 py-2 opacity-70">
-      <span className="h-8 w-1 shrink-0 rounded-full bg-[var(--adm-neutral-100)]" />
+    <div className="flex items-stretch gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5">
+      <span className="w-1.5 shrink-0 rounded-full opacity-35" style={{ backgroundColor: rail }} />
       <div className="min-w-0 flex-1">
-        <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Feladó · Tárgy</p>
-        <p className="text-[10px] text-[var(--adm-text-soft)]">Outlook-bekötés után jelenik meg.</p>
+        <p className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">Feladó · Tárgy · Ügyfél · Státusz</p>
+        <p className="mt-0.5 text-[10px] text-[var(--adm-text-muted)]">Outlook-bekötés után jelenik meg.</p>
       </div>
-      <span className="shrink-0 rounded-full border border-dashed border-[var(--adm-border-strong)] px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-[0.08em] text-[var(--adm-text-soft)]">Állapot</span>
+      <span className="shrink-0 self-center rounded-full border border-[var(--adm-border-strong)] px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-[0.08em] text-[var(--adm-text-soft)]">Foundation</span>
     </div>
   );
 }
@@ -234,12 +241,12 @@ function NewsRow({ article }: { article: NewsArticle }) {
 
 function NewsFoundationRow() {
   return (
-    <div className="flex items-center gap-2.5 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-white/50 px-2.5 py-2 opacity-70">
+    <div className="flex items-center gap-2.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-[3px] border-l-[var(--adm-green-800)]/40 bg-[var(--adm-surface)] p-2.5">
       <div className="min-w-0 flex-1">
-        <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Jogi jelzés · Forrás</p>
-        <p className="text-[10px] text-[var(--adm-text-soft)]">További jelzések a hírfeed aktiválásakor.</p>
+        <p className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">Jogi jelzés · Forrás · Kategória</p>
+        <p className="mt-0.5 text-[10px] text-[var(--adm-text-muted)]">További jelzések a hírfeed aktiválásakor.</p>
       </div>
-      <span className="shrink-0 rounded-full border border-dashed border-[var(--adm-border-strong)] px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-[0.08em] text-[var(--adm-text-soft)]">Megnyitás</span>
+      <span className="shrink-0 rounded-full border border-[var(--adm-border-strong)] px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-[0.08em] text-[var(--adm-text-soft)]">Foundation</span>
     </div>
   );
 }
@@ -554,6 +561,15 @@ export function Dashboard() {
       })),
     [upcomingDeadlines],
   );
+  // Escalation/risk from real urgent (due ≤ today) tasks only — no fabricated risk.
+  const escalationItems = useMemo(
+    () =>
+      tasks
+        .filter((task) => mapTaskBucket(task) === "urgent")
+        .slice(0, 4)
+        .map((task) => ({ id: task.id, title: task.title, caseNumber: task.case?.caseNumber || "Feladat", date: task.dueDate })),
+    [tasks],
+  );
 
   return (
     <div className="adm-dash-stage min-h-full px-3 pb-5 pt-3 sm:px-5 xl:px-6">
@@ -561,18 +577,18 @@ export function Dashboard() {
         {/* 1 + 2 — Command-center hero with dark "Mai működési kép" status column */}
         <section className="adm-command-hero">
           <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_318px]">
-            <div className="flex min-h-[156px] flex-col justify-between p-[18px] lg:p-5">
+            <div className="flex min-h-[118px] flex-col justify-between p-4 lg:px-5 lg:py-4">
               <div>
                 <p className="adm-kicker">Adminiculum · Műszerfal</p>
-                <h1 className="adm-hero-title mt-1.5 max-w-4xl text-[clamp(34px,4.4vw,58px)] leading-[0.92]">
+                <h1 className="adm-hero-title mt-1 max-w-4xl text-[clamp(30px,3.6vw,46px)] leading-[0.94]">
                   Műszerfal
                 </h1>
-                <p className="mt-2 max-w-3xl text-[12.5px] leading-5 text-[var(--adm-text-muted)]">
+                <p className="mt-1.5 max-w-3xl text-[12px] leading-4 text-[var(--adm-text-muted)]">
                   Jó reggelt, {greetingName}. Mai ügyek, teendők, review-jelzések és dokumentumaktivitás egy helyen.
                 </p>
               </div>
 
-              <div className="mt-3">
+              <div className="mt-2.5">
                 {error ? (
                   <div className="mb-4 rounded-[var(--adm-radius-sm)] border border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] px-3 py-2 text-xs text-[var(--adm-terracotta-700)]">
                     {error}
@@ -642,14 +658,14 @@ export function Dashboard() {
           </div>
         </section>
 
-        {/* 3 — KPI / rubrika strip (distinct categories, real counts only) */}
-        <section className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-          <KpiCard label="Nyitott ügyek" value={openCasesCount} tone="green" zeroHint="Nincs betöltött nyitott ügy" />
-          <KpiCard label="Mai teendők" value={openTasks.length} tone="orange" zeroHint="Nincs nyitott teendő" />
-          <KpiCard label="Közeli határidők" value={upcomingDeadlines.length} tone="yellow" zeroHint="Nincs közeli határidő" />
-          <KpiCard label="Review tételek" value={reviewDocumentCount} tone="navy" zeroHint="Nincs review tétel" />
-          <KpiCard label="Külső kommunikáció" value={externalComms.length} tone="cyan" zeroHint="Nincs új külső jelzés" />
-          <KpiCard label="Belső kommunikáció" value={internalComms.length} tone="petrol" zeroHint="Nincs új belső jelzés" />
+        {/* 3 — Work-section tile dock: fully colored semantic navigation tiles */}
+        <section className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
+          <KpiCard label="Nyitott ügyek" value={openCasesCount} tone="petrol" zeroHint="Nincs betöltött nyitott ügy" href="/cases" />
+          <KpiCard label="Mai teendők" value={openTasks.length} tone="amber" zeroHint="Nincs nyitott teendő" href="/tasks" />
+          <KpiCard label="Közeli határidők" value={upcomingDeadlines.length} tone="yellow" zeroHint="Nincs közeli határidő" href="/deadlines" />
+          <KpiCard label="Review tételek" value={reviewDocumentCount} tone="navy" zeroHint="Nincs review tétel" href="/reviews" />
+          <KpiCard label="Külső kommunikáció" value={externalComms.length} tone="cyan" zeroHint="Nincs új külső jelzés" href="/notifications" />
+          <KpiCard label="Belső kommunikáció" value={internalComms.length} tone="green" zeroHint="Nincs új belső jelzés" href="/notifications" />
         </section>
 
         {/* 4 + 5 — Dominant "Itt folytasd" workbench + review/handoff side column */}
@@ -770,7 +786,7 @@ export function Dashboard() {
                 ) : null}
                 <div className="mt-2 space-y-1.5">
                   {externalComms.slice(0, 8).map((sig) => <CommRow key={sig.id} sig={sig} family="external" />)}
-                  {Array.from({ length: Math.max(0, 6 - Math.min(externalComms.length, 8)) }).map((_, i) => <CommFoundationRow key={`ext-found-${i}`} />)}
+                  {Array.from({ length: Math.max(0, 8 - Math.min(externalComms.length, 8)) }).map((_, i) => <CommFoundationRow key={`ext-found-${i}`} family="external" />)}
                 </div>
                 <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Kapacitás: 8 sor · Outlook előkészítés</p>
               </div>
@@ -784,7 +800,7 @@ export function Dashboard() {
                 ) : null}
                 <div className="mt-2 space-y-1.5">
                   {internalComms.slice(0, 8).map((sig) => <CommRow key={sig.id} sig={sig} family="internal" />)}
-                  {Array.from({ length: Math.max(0, 6 - Math.min(internalComms.length, 8)) }).map((_, i) => <CommFoundationRow key={`int-found-${i}`} />)}
+                  {Array.from({ length: Math.max(0, 8 - Math.min(internalComms.length, 8)) }).map((_, i) => <CommFoundationRow key={`int-found-${i}`} family="internal" />)}
                 </div>
                 <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Kapacitás: 8 sor · Outlook előkészítés</p>
               </div>
@@ -838,6 +854,34 @@ export function Dashboard() {
                   <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Mi várunk válaszra</p>
                   <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Foundation állapot — kimenő kommunikáció követése későbbi fejlesztés.</p>
                 </div>
+              </div>
+            </article>
+
+            <article className="adm-panel adm-rail-panel overflow-hidden" style={{ borderTop: "3px solid #9E2A2B" }}>
+              <div className="flex items-center justify-between gap-2 px-3.5 pt-3.5">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#9E2A2B]" />
+                  <h3 className="adm-heading text-[20px]">Kockázat / eszkaláció</h3>
+                </div>
+                <span className="rounded-full bg-[#F4DADA] px-2 py-0.5 text-[10px] font-bold text-[#9E2A2B]">{escalationItems.length}</span>
+              </div>
+              <div className="space-y-2 p-3.5 pt-2.5">
+                {escalationItems.length === 0 ? (
+                  <div className="rounded-[var(--adm-radius-sm)] border border-[#9E2A2B]/20 border-l-[3px] border-l-[#9E2A2B]/45 bg-[#FBF1F1] p-2.5">
+                    <p className="text-[11px] font-semibold text-[var(--adm-text)]">Nincs nyitott kockázati vagy eszkalációs jelzés.</p>
+                    <p className="mt-1 text-[11px] leading-4 text-[var(--adm-text-muted)]">Blokkolók, lejárt határidők, sikertelen adatkapcsolatok és megválaszolatlan sürgős tételek itt jelennek meg.</p>
+                  </div>
+                ) : (
+                  escalationItems.map((item) => (
+                    <Link key={item.id} href={`/tasks?taskId=${item.id}`} className="block rounded-[var(--adm-radius-sm)] border border-[#9E2A2B]/25 border-l-4 border-l-[#9E2A2B] bg-[#FBF1F1] p-2.5 hover:bg-[#F8E7E7]">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--adm-text)]">{item.title}</p>
+                        <span className="shrink-0 rounded-full bg-[#9E2A2B] px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-[0.08em] text-white">Sürgős</span>
+                      </div>
+                      <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{displayDate(item.date)} · {item.caseNumber}</p>
+                    </Link>
+                  ))
+                )}
               </div>
             </article>
 
