@@ -2,6 +2,60 @@
 
 Status: read-only audit. No Prisma schema changes, migration files, runtime code, seed data, Azure config changes, or deployments were made.
 
+## COMM5D Deployed Azure DB Proof Update
+
+COMM5D obtained read-only deployed DB schema proof from inside the running backend App Service using Kudu with an Azure bearer token and a pure Node PostgreSQL protocol probe. No package was installed, no file was written, and no migration command was run.
+
+Sanitized deployed DB target:
+
+- host: `adminiculum.postgres.database.azure.com`;
+- database: `adminiculum`;
+- schema: `public`;
+- PostgreSQL: `15.17`;
+- app service user reported by PostgreSQL: `HubayGyula`.
+
+Direct SQL from the workstation still timed out, which is consistent with firewall/network access. Kudu basic publishing credentials returned `401`, but Kudu bearer-token command execution worked. The deployed package did not expose `pg`, `@prisma/client`, or Prisma CLI modules to ad-hoc scripts, so the proof used Node built-ins only.
+
+Deployed communication object proof:
+
+| Object | Deployed DB Found | COMM5D finding |
+|---|---:|---|
+| `communications` table | No | Missing from deployed DB. |
+| `communication_attachments` table | No | Missing from deployed DB. |
+| `tasks.sourceCommunicationId` column | No | Missing from deployed `tasks`. |
+| `CommunicationType` enum | No | Missing from deployed DB. |
+| `communication_threads` table | No | No collision. |
+| `communication_classifications` table | No | No collision. |
+| `communication_assignments` table | No | No collision. |
+| `communication_rules` table | No | No collision. |
+
+Deployed task table proof:
+
+- `tasks` exists;
+- `tasks` has current workflow columns such as `stuckReason`, `maturityStage`, `complexityScore`, `riskScore`, `lastProgressAt`, and `stuckSince`;
+- `tasks` does not have `sourceCommunicationId`;
+- deployed task FKs include `assignedById`, `assignedToId`, `caseId`, and `matterId`;
+- deployed task indexes include `tasks_complexityScore_idx`, `tasks_maturityStage_idx`, `tasks_riskScore_idx`, and `tasks_stuckReason_idx`.
+
+Deployed `_prisma_migrations` proof by name only:
+
+| Migration name | Applied |
+|---|---:|
+| `20260211153100_baseline` | true |
+| `20260212180000_add_workload_tracking` | false |
+| `20260212180000_add_workload_tracking` | true |
+| `20260302142000_add_kb_learning_escalation` | false |
+| `20260622150000_add_lawyer_handoff_packages_foundation` | true |
+
+No deployed migration name references communication objects. The deployed DB shape is materially behind or divergent from the local Prisma communication baseline.
+
+COMM5D recommendation:
+
+- do not create the COMM5B next-layer migration yet;
+- first create a communication baseline reconciliation plan for deployed DB;
+- the next real migration must include or precede the baseline objects `communications`, `communication_attachments`, `CommunicationType`, and `tasks.sourceCommunicationId`;
+- split baseline reconciliation from the later `CommunicationThread` / classification / assignment / rule migration.
+
 ## 1. Audit Scope
 
 This audit reviews the current communication-related database shape before creating any real migration for the next communication model layer.
@@ -12,15 +66,17 @@ Compared inputs:
 - existing folders under `Backend/prisma/migrations/`;
 - `docs/communication-workspace-migration-draft-review.md`;
 - read-only SQL introspection against the reachable database from `Backend/.env`;
-- read-only Azure metadata for the deployed backend and PostgreSQL resources.
+- read-only Azure metadata for the deployed backend and PostgreSQL resources;
+- COMM5D read-only Kudu bearer-token introspection against the deployed DB.
 
-Important limitation:
+Important access note:
 
 - direct SQL access to the deployed Azure PostgreSQL database from this workstation timed out;
-- Kudu command execution against the backend App Service returned `401`;
-- no Azure firewall, networking, app setting, or deployment change was made to work around this.
+- Kudu basic publishing credentials returned `401`;
+- Kudu bearer-token command execution worked and provided deployed DB metadata proof;
+- no Azure firewall, networking, app setting, or deployment change was made.
 
-Therefore, the table-level findings below are verified against the reachable local `Backend/.env` target, not the deployed production/staging database.
+Therefore, this document now separates the COMM5C local DB findings from the COMM5D deployed Azure DB proof.
 
 ## 2. Audit Method
 
@@ -38,7 +94,8 @@ Commands used were read-only:
   - `pg_type` / `pg_enum`;
 - `az webapp list`;
 - `az webapp config appsettings list`;
-- `az postgres flexible-server list`.
+- `az postgres flexible-server list`;
+- Kudu bearer-token command execution with a pure Node PostgreSQL protocol metadata probe.
 
 Commands explicitly not run:
 
@@ -71,7 +128,7 @@ Read-only Azure metadata showed:
   - `adminiculum.postgres.database.azure.com`;
   - `adminiculum-bp3-rc1b-clone.postgres.database.azure.com`.
 
-The backend App Service has a `DATABASE_URL` setting, but direct SQL access from this workstation timed out on the Azure PostgreSQL endpoint.
+The backend App Service has a `DATABASE_URL` setting. Direct SQL access from this workstation timed out on the Azure PostgreSQL endpoint, but Kudu bearer-token execution from inside the App Service successfully reached the deployed DB.
 
 ## 4. DB Objects Found
 
@@ -183,18 +240,20 @@ Risk:
 - an environment created only from the tracked migration history may not reconstruct the same communication baseline;
 - before applying a real migration, the team should decide whether to preserve this as accepted historical drift or introduce a baseline/repair migration strategy for new environments.
 
-### Deployed DB Verification Gap
+### Deployed DB Verification Result
 
-The deployed DB could not be introspected from this workstation:
+COMM5D proved the deployed DB shape from inside the backend App Service:
 
 - Azure App Service metadata confirms the backend has `DATABASE_URL`;
-- direct DB connection timed out;
-- Kudu command execution returned `401`.
+- direct workstation DB connection still timed out;
+- Kudu basic publishing credentials returned `401`;
+- Kudu bearer-token execution worked;
+- deployed DB is missing the local communication baseline objects.
 
 Risk:
 
-- local findings should not be treated as proof of deployed DB shape;
-- COMM5D should not apply a real migration until deployed DB introspection succeeds from an allowed network path or App Service command path.
+- local findings must not be treated as deployed DB shape;
+- the next real migration must first reconcile the missing deployed communication baseline before adding COMM5B's next-layer models.
 
 ## 8. Naming and Collision Risks
 
@@ -307,7 +366,7 @@ COMM5B intentionally proposed scalar-first new tables without broad target FKs.
 
 That remains the safer recommendation because:
 
-- deployed DB shape is not yet verified;
+- deployed DB is verified to be missing the communication baseline;
 - historical migration drift exists;
 - target IDs may be nullable and optional;
 - future classification/assignment rows may initially reference several target domains;
@@ -334,9 +393,14 @@ Split the migration work into smaller steps.
 
 Recommended split:
 
-1. **COMM5D drift unblock**: obtain deployed DB introspection from an allowed network path or Kudu/App Service command path.
-2. **COMM5E baseline decision**: decide how to handle missing communication baseline in migration history.
-3. **COMM5F additive schema migration**:
+1. **COMM5E baseline reconciliation design**: decide how to introduce missing deployed baseline objects.
+2. **COMM5F communication baseline migration**:
+   - add `CommunicationType`;
+   - add `communications`;
+   - add `communication_attachments`;
+   - add nullable `tasks.sourceCommunicationId`;
+   - add baseline communication indexes/FKs only after SQL review.
+3. **COMM5G next-layer additive schema migration**:
    - add nullable `Communication.threadId`;
    - add nullable `Communication.direction`;
    - add proposed enums;
@@ -345,36 +409,36 @@ Recommended split:
    - add `communication_assignments`;
    - add `communication_rules`;
    - avoid broad target FKs.
-4. **COMM5G backend contract extension**:
+4. **COMM5H backend contract extension**:
    - expose optional persisted fields only after migration exists;
    - keep mutating/detail routes gated unless explicitly enabled.
-5. **COMM5H UI claim update**:
+5. **COMM5I UI claim update**:
    - show reply/classification/workflow states only when backed by persisted data.
 
-Do not combine drift unblock, baseline repair, additive schema migration, backend behavior, and frontend claims in one deployment.
+Do not combine baseline repair, next-layer schema migration, backend behavior, and frontend claims in one deployment.
 
 ## 14. Final COMM5D Recommendation
 
 Do not create or apply the real communication migration yet.
 
-Recommended COMM5D should be a deployed-DB introspection unblock, not a schema migration:
+Recommended next task should be baseline reconciliation design, not the COMM5B next-layer migration:
 
 ```text
-Adminiculum — COMM5D deployed DB introspection unblock for communication migration
+Adminiculum — COMM5E communication baseline reconciliation design
 
 Goal:
-Obtain read-only communication-related schema introspection from the deployed Azure PostgreSQL database.
+Design the smallest safe deployed-DB baseline migration needed before the COMM5B next-layer communication model can be created.
 
 Strict rules:
 Do not modify Azure config, Prisma schema, migrations, runtime code, package files, auth, or client portal.
-Do not run migration commands.
+Do not create or apply migrations yet.
 Do not run destructive SQL.
 
-Use an approved network path or App Service/Kudu command path that can access the deployed DATABASE_URL.
-Return only sanitized metadata: table names, columns, indexes, FKs, enum names/values, row counts.
+Use the COMM5D proof: deployed Azure DB lacks `communications`, `communication_attachments`, `CommunicationType`, and `tasks.sourceCommunicationId`.
+Return a docs-only baseline migration plan and split recommendation.
 ```
 
-If deployed DB introspection becomes available and matches the local findings, proceed to a separate additive migration-generation task.
+After baseline reconciliation is designed and reviewed, create the actual baseline migration as a separate task before the next-layer thread/classification/assignment/rule migration.
 
 ## 15. Safety Confirmation
 
