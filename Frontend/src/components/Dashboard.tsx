@@ -170,9 +170,9 @@ function EmptyState({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-// Future-ready communication row (real data shape: sender, subject, metadata, status chip).
+// Read-only communication row (real data shape: sender, subject, metadata, status chip).
 function CommRow({ sig, family }: { sig: CommunicationSignal; family: "external" | "internal" }) {
-  const rail = family === "external" ? "#219EBC" : "#0A5A45";
+  const rail = family === "external" ? "#219EBC" : "#126782";
   const sender = sig.senderName || sig.senderEmail || (family === "external" ? "Külső fél" : "Belső");
   const tag = sig.proposedClientName || sig.proposedCaseTitle || (sig.proposedCaseId ? "Ügyhöz rendelve" : null);
   return (
@@ -503,7 +503,7 @@ export function Dashboard() {
         id: `mai-communication-${importantCommunication.id}`,
         kind: "Kommunikáció",
         title: importantCommunication.subject,
-        detail: `${importantCommunication.senderName || importantCommunication.senderEmail || "Külső fél"} · besorolás / válasz ellenőrzése`,
+        detail: `${importantCommunication.senderName || importantCommunication.senderEmail || "Külső fél"} · kommunikációs munkatér`,
         href: "/notifications?view=external",
       });
     }
@@ -811,7 +811,7 @@ export function Dashboard() {
               <div className="mt-3 space-y-1.5">
                 {clientLinkedComms.length === 0 ? (
                   <p className="rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5 text-[10.5px] leading-4 text-[var(--adm-text-muted)]">
-                    Nincs ügyfélhez sorolt kommunikáció a jelenlegi nézetben. A későbbi kommunikációs munkafolyamat itt fogja mutatni a kiemelt ügyfelekhez rendelt friss leveleket.
+                    Nincs ügyfélhez sorolt kommunikáció a jelenlegi nézetben. Itt csak valós ügyfélkapcsolattal érkező read-only tételek jelennek meg.
                   </p>
                 ) : (
                   clientLinkedComms.map((sig) => (
