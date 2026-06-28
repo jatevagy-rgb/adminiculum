@@ -738,7 +738,7 @@ export function Dashboard() {
                 </div>
                 {externalComms.length === 0 ? (
                   <div className="mt-2 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-white/75 p-2.5">
-                    <p className="text-[10.5px] leading-4 text-[var(--adm-text-muted)]">Nincs új külső kommunikáció. A lista később legfeljebb 8 levélelőnézetet mutat: feladó, tárgy, ügyfél/ügy, státusz.</p>
+                    <p className="text-[10.5px] leading-4 text-[var(--adm-text-muted)]">Nincs új külső kommunikáció. A panel legfeljebb 8 levélelőnézetet mutat: feladó, tárgy, ügyfél/ügy, státusz.</p>
                   </div>
                 ) : null}
                 <div className={externalComms.length > 0 ? "mt-2 space-y-1.5" : "hidden"}>
@@ -753,7 +753,7 @@ export function Dashboard() {
                 </div>
                 {internalComms.length === 0 ? (
                   <div className="mt-2 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-white/75 p-2.5">
-                    <p className="text-[10.5px] leading-4 text-[var(--adm-text-muted)]">Nincs új belső kommunikáció. A lista később legfeljebb 8 belső jelzést mutat: feladó, tárgy, ügy/ügyfél, státusz.</p>
+                    <p className="text-[10.5px] leading-4 text-[var(--adm-text-muted)]">Nincs új belső kommunikáció. A panel legfeljebb 8 belső jelzést mutat: feladó, tárgy, ügy/ügyfél, státusz.</p>
                   </div>
                 ) : null}
                 <div className={internalComms.length > 0 ? "mt-2 space-y-1.5" : "hidden"}>
