@@ -40,6 +40,7 @@ const filterTone: Record<string, string> = {
 const communicationColumns = ["Feladó / forrás", "Tárgy / jelzés", "Ügyfél / ügy", "Státusz", "Idő"];
 
 const COMMUNICATION_LIST_LIMIT = 50;
+type CommunicationAudience = "external" | "internal";
 
 export default function NotificationsPage() {
   return (
@@ -100,10 +101,8 @@ function CommunicationWorkspace() {
     () => filteredCommunications.filter((item) => classifyCommunicationAudience(item) === "internal"),
     [filteredCommunications],
   );
-  const replyView = filterViews[activeFilter] === "replies";
-  const panelEmptyText = replyView
-    ? "A read-only lista nem tartalmaz megbízható válaszállapot-mezőt, ezért itt csak később jelennek meg tételek."
-    : undefined;
+  const externalEmpty = getPanelEmptyCopy("external", activeFilter);
+  const internalEmpty = getPanelEmptyCopy("internal", activeFilter);
 
   return (
     <main className="adm-dash-stage min-h-screen px-3 pb-4 pt-3 sm:px-5 xl:px-6">
@@ -164,8 +163,8 @@ function CommunicationWorkspace() {
             capacityLabel="Kapacitás: 8 levélelőnézet"
             items={externalCommunications.slice(0, 8)}
             isLoading={isLoading}
-            emptyTitle="Nincs új külső kommunikáció."
-            emptyText={panelEmptyText || "A bejövő és kimenő külső levelek itt rendezhetők ügyfélhez, ügyhöz és válaszállapothoz."}
+            emptyTitle={externalEmpty.title}
+            emptyText={externalEmpty.text}
           />
           <CommunicationPanel
             title="Belső kommunikáció"
@@ -174,8 +173,8 @@ function CommunicationWorkspace() {
             capacityLabel="Kapacitás: 8 belső jelzés"
             items={internalCommunications.slice(0, 8)}
             isLoading={isLoading}
-            emptyTitle="Nincs új belső kommunikáció."
-            emptyText={panelEmptyText || "A belső jelzések, átadási kommentek és review-visszajelzések itt sorolhatók munkába."}
+            emptyTitle={internalEmpty.title}
+            emptyText={internalEmpty.text}
           />
         </section>
 
@@ -207,7 +206,7 @@ function CommunicationWorkspace() {
                 <ReplyLane label="Mi várunk válaszra" />
               </div>
               <p className="mt-3 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-warm-400)]/45 bg-[#FFF8E2] px-3 py-2 text-[11px] font-semibold text-[var(--adm-text-muted)]">
-                Nincs nyitott válaszállapot.
+                A read-only lista nem tartalmaz válaszállapot-mezőt. Követéshez későbbi perzisztált kommunikációs modell kell.
               </p>
             </WorkflowTool>
 
@@ -277,7 +276,7 @@ function CommunicationPanel({
             </div>
           </div>
         ) : (
-          <ul className="mt-3 grid gap-1.5">
+          <ul className="mt-3 grid gap-2">
             {items.map((item) => (
               <CommunicationRow key={item.id} item={item} />
             ))}
@@ -290,25 +289,44 @@ function CommunicationPanel({
 }
 
 function CommunicationRow({ item }: { item: CommunicationItem }) {
-  const source = item.senderName || item.senderEmail || item.recipientName || item.recipientEmail || "Belső bejegyzés";
+  const source = item.senderName || item.senderEmail || item.recipientName || item.recipientEmail || "Nincs megadott forrás";
+  const contactLine = formatContactLine(item);
   const subject = item.subject || item.summary || item.contentPreview || "Nincs tárgy";
   const linkedContext = formatLinkedContext(item);
-  const status = formatStatus(item);
+  const statusBadges = formatStatusBadges(item);
   const preview = item.summary || item.contentPreview;
+  const timestamp = formatDateShort(item.createdAt);
 
   return (
-    <li className="grid gap-2 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white p-2.5 text-[11px] text-[var(--adm-text)] md:grid-cols-[1.05fr_1.2fr_1fr_0.75fr_0.55fr]">
-      <div className="min-w-0">
-        <p className="truncate font-semibold">{source}</p>
-        <p className="mt-0.5 text-[10px] uppercase tracking-[0.08em] text-[var(--adm-text-soft)]">{item.type}</p>
+    <li className="grid gap-2 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white p-3 text-[11px] text-[var(--adm-text)] shadow-[0_1px_0_rgba(2,48,71,0.04)] md:grid-cols-[1.05fr_1.35fr_0.9fr_0.8fr_0.55fr] md:items-start">
+      <div className="min-w-0 space-y-1">
+        <p className="truncate text-[12px] font-bold text-[var(--adm-text)]">{source}</p>
+        <p className="truncate text-[10.5px] text-[var(--adm-text-muted)]">{contactLine}</p>
+        <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">{formatCommunicationType(item.type)}</p>
       </div>
-      <div className="min-w-0">
-        <p className="truncate font-semibold">{subject}</p>
-        {preview ? <p className="mt-0.5 line-clamp-1 text-[10.5px] text-[var(--adm-text-muted)]">{preview}</p> : null}
+      <div className="min-w-0 space-y-1">
+        <p className="truncate text-[12px] font-bold text-[var(--adm-blue-950)]">{subject}</p>
+        {preview ? <p className="line-clamp-2 text-[10.5px] leading-4 text-[var(--adm-text-muted)]">{preview}</p> : null}
+        <p className="truncate text-[9.5px] font-semibold uppercase tracking-[0.08em] text-[var(--adm-text-soft)]">
+          Létrehozó: {item.createdById ? "rögzített" : "nincs adat"}
+        </p>
       </div>
-      <p className="min-w-0 truncate text-[var(--adm-text-muted)]">{linkedContext}</p>
-      <p className="min-w-0 truncate font-semibold text-[var(--adm-blue-700)]">{status}</p>
-      <p className="whitespace-nowrap text-[var(--adm-text-soft)]">{formatDateShort(item.createdAt)}</p>
+      <p className="min-w-0 truncate rounded-[var(--adm-radius-sm)] bg-[var(--adm-surface)] px-2 py-1.5 font-semibold text-[var(--adm-text-muted)]">
+        {linkedContext}
+      </p>
+      <div className="flex min-w-0 flex-wrap gap-1">
+        {statusBadges.map((badge) => (
+          <span
+            key={badge}
+            className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-1 text-[9.5px] font-bold text-[var(--adm-blue-700)]"
+          >
+            {badge}
+          </span>
+        ))}
+      </div>
+      <time className="whitespace-nowrap text-[10.5px] font-semibold text-[var(--adm-text-soft)]" dateTime={item.createdAt}>
+        {timestamp}
+      </time>
     </li>
   );
 }
@@ -337,7 +355,7 @@ function ReplyLane({ label }: { label: string }) {
   return (
     <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-warm-400)]/35 bg-white px-3 py-2">
       <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-warm-600)]">{label}</p>
-      <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">0 tétel</p>
+      <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Későbbi állapotmodell</p>
     </div>
   );
 }
@@ -353,7 +371,7 @@ function applyWorkspaceFilter(items: CommunicationItem[], activeFilter: string):
   return items;
 }
 
-function classifyCommunicationAudience(item: CommunicationItem): "external" | "internal" {
+function classifyCommunicationAudience(item: CommunicationItem): CommunicationAudience {
   return classifyAudience({
     id: item.id,
     type: item.type,
@@ -361,6 +379,55 @@ function classifyCommunicationAudience(item: CommunicationItem): "external" | "i
     recipientEmail: item.recipientEmail,
     clientId: item.clientId,
   });
+}
+
+function getPanelEmptyCopy(audience: CommunicationAudience, activeFilter: string): { title: string; text: string } {
+  const isExternal = audience === "external";
+  const channel = isExternal ? "külső" : "belső";
+  const view = filterViews[activeFilter] || "all";
+
+  if (view === "replies") {
+    return {
+      title: `Nincs megjeleníthető ${channel} válaszállapot.`,
+      text: "A jelenlegi read-only lista nem tartalmaz megbízható válaszállapot-mezőt. Ha erre munkafolyamat épül, későbbi perzisztált kommunikációs modell szükséges.",
+    };
+  }
+
+  if (view === "clients") {
+    return {
+      title: `Nincs ügyfélhez sorolt ${channel} kommunikáció.`,
+      text: "Csak olyan read-only tételek jelennek meg itt, amelyek valós clientId mezővel érkeznek.",
+    };
+  }
+
+  if (view === "cases") {
+    return {
+      title: `Nincs ügyhöz sorolt ${channel} kommunikáció.`,
+      text: "Csak olyan tételek jelennek meg itt, amelyek valós caseId mezővel érkeznek.",
+    };
+  }
+
+  if (view === "tasks") {
+    return {
+      title: `Nincs feladathoz kapcsolt ${channel} kommunikáció.`,
+      text: "A lista csak a read-only szerződésben kapott sourceTaskCount alapján jelez feladatkapcsolatot.",
+    };
+  }
+
+  return {
+    title: `Nincs új ${channel} kommunikáció.`,
+    text: isExternal
+      ? "A bejövő és kimenő külső tételek itt jelennek meg, ha a read-only lista valós rekordot ad vissza."
+      : "A belső jelzések és review-visszajelzések itt jelennek meg, ha a read-only lista valós rekordot ad vissza.",
+  };
+}
+
+function formatContactLine(item: CommunicationItem): string {
+  if (item.senderEmail && item.recipientEmail) return `${item.senderEmail} → ${item.recipientEmail}`;
+  if (item.senderEmail) return item.senderEmail;
+  if (item.recipientEmail) return `Címzett: ${item.recipientEmail}`;
+  if (item.recipientName) return `Címzett: ${item.recipientName}`;
+  return "Kapcsolati adat nélkül";
 }
 
 function formatLinkedContext(item: CommunicationItem): string {
@@ -371,15 +438,28 @@ function formatLinkedContext(item: CommunicationItem): string {
   return "Nincs besorolva";
 }
 
-function formatStatus(item: CommunicationItem): string {
-  if (item.sourceTaskCount > 0) return `${item.sourceTaskCount} feladat`;
-  if (item.attachmentCount > 0) return `${item.attachmentCount} melléklet`;
-  if (item.clientId || item.caseId) return "Besorolva";
-  return "Rendezésre vár";
+function formatStatusBadges(item: CommunicationItem): string[] {
+  const badges: string[] = [];
+  if (item.sourceTaskCount > 0) badges.push(`${item.sourceTaskCount} feladat`);
+  if (item.attachmentCount > 0) badges.push(`${item.attachmentCount} melléklet`);
+  if (item.clientId || item.caseId || item.documentId) badges.push("Kapcsolt");
+  if (badges.length === 0) badges.push("Read-only");
+  return badges;
+}
+
+function formatCommunicationType(type: CommunicationItem["type"]): string {
+  const labels: Record<CommunicationItem["type"], string> = {
+    EMAIL: "E-mail",
+    PHONE: "Telefon",
+    MEETING: "Megbeszélés",
+    LETTER: "Levél",
+    NOTE: "Jegyzet",
+  };
+  return labels[type] || type;
 }
 
 function formatDateShort(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("hu-HU", { month: "2-digit", day: "2-digit" });
+  return date.toLocaleString("hu-HU", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
