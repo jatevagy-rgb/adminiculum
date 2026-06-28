@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
+import { getCommunications, type CommunicationItem } from "@/lib/api";
+import { classifyAudience } from "@/lib/communicationIntake";
 
 const filters = [
   "Összes",
@@ -37,6 +39,8 @@ const filterTone: Record<string, string> = {
 
 const communicationColumns = ["Feladó / forrás", "Tárgy / jelzés", "Ügyfél / ügy", "Státusz", "Idő"];
 
+const COMMUNICATION_LIST_LIMIT = 50;
+
 export default function NotificationsPage() {
   return (
     <AuthenticatedApp section="notifications">
@@ -47,12 +51,59 @@ export default function NotificationsPage() {
 
 function CommunicationWorkspace() {
   const [activeFilter, setActiveFilter] = useState(filters[0]);
+  const [communications, setCommunications] = useState<CommunicationItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     const view = new URLSearchParams(window.location.search).get("view") || "all";
     const nextFilter = viewFilters[view] || filters[0];
     setActiveFilter(nextFilter);
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadReadOnlyCommunications() {
+      setIsLoading(true);
+      setLoadError(null);
+      try {
+        const result = await getCommunications({ limit: COMMUNICATION_LIST_LIMIT });
+        if (!mounted) return;
+        setCommunications(Array.isArray(result.communications) ? result.communications : []);
+      } catch (error) {
+        console.error("Read-only communications load failed:", error);
+        if (!mounted) return;
+        setCommunications([]);
+        setLoadError("A kommunikációs lista most nem érhető el. A munkatér üres állapotban marad.");
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    }
+
+    loadReadOnlyCommunications();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const filteredCommunications = useMemo(
+    () => applyWorkspaceFilter(communications, activeFilter),
+    [activeFilter, communications],
+  );
+  const externalCommunications = useMemo(
+    () => filteredCommunications.filter((item) => classifyCommunicationAudience(item) === "external"),
+    [filteredCommunications],
+  );
+  const internalCommunications = useMemo(
+    () => filteredCommunications.filter((item) => classifyCommunicationAudience(item) === "internal"),
+    [filteredCommunications],
+  );
+  const replyView = filterViews[activeFilter] === "replies";
+  const panelEmptyText = replyView
+    ? "A read-only lista nem tartalmaz megbízható válaszállapot-mezőt, ezért itt csak később jelennek meg tételek."
+    : undefined;
 
   return (
     <main className="adm-dash-stage min-h-screen px-3 pb-4 pt-3 sm:px-5 xl:px-6">
@@ -63,11 +114,11 @@ function CommunicationWorkspace() {
               <p className="adm-kicker text-[var(--adm-blue-700)]">Kommunikáció</p>
               <h1 className="adm-heading mt-1 text-[28px] leading-tight">Kommunikációs munkatér</h1>
               <p className="mt-1 max-w-3xl text-[12px] leading-5 text-[var(--adm-text-muted)]">
-                Levelek, belső jelzések, válaszállapotok és ügyhöz kapcsolható kommunikáció.
+                Levelek, belső jelzések és ügyhöz kapcsolható kommunikáció read-only listában.
               </p>
             </div>
             <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-500)]/30 bg-[var(--adm-blue-100)]/35 px-3 py-1 text-[10.5px] font-semibold text-[var(--adm-blue-700)]">
-              Outlook később
+              Read-only lista
             </span>
           </div>
 
@@ -99,22 +150,32 @@ function CommunicationWorkspace() {
           </nav>
         </header>
 
+        {loadError ? (
+          <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-2 text-[11px] font-semibold text-[var(--adm-text-muted)]">
+            {loadError}
+          </div>
+        ) : null}
+
         <section className="grid gap-3 xl:grid-cols-2">
           <CommunicationPanel
             title="Külső kommunikáció"
             accent="var(--adm-blue-500)"
-            countLabel="0/8"
+            countLabel={`${Math.min(externalCommunications.length, 8)}/8`}
             capacityLabel="Kapacitás: 8 levélelőnézet"
+            items={externalCommunications.slice(0, 8)}
+            isLoading={isLoading}
             emptyTitle="Nincs új külső kommunikáció."
-            emptyText="A bejövő és kimenő külső levelek itt rendezhetők ügyfélhez, ügyhöz és válaszállapothoz."
+            emptyText={panelEmptyText || "A bejövő és kimenő külső levelek itt rendezhetők ügyfélhez, ügyhöz és válaszállapothoz."}
           />
           <CommunicationPanel
             title="Belső kommunikáció"
             accent="var(--adm-blue-700)"
-            countLabel="0/8"
+            countLabel={`${Math.min(internalCommunications.length, 8)}/8`}
             capacityLabel="Kapacitás: 8 belső jelzés"
+            items={internalCommunications.slice(0, 8)}
+            isLoading={isLoading}
             emptyTitle="Nincs új belső kommunikáció."
-            emptyText="A belső jelzések, átadási kommentek és review-visszajelzések itt sorolhatók munkába."
+            emptyText={panelEmptyText || "A belső jelzések, átadási kommentek és review-visszajelzések itt sorolhatók munkába."}
           />
         </section>
 
@@ -174,6 +235,8 @@ function CommunicationPanel({
   accent,
   countLabel,
   capacityLabel,
+  items,
+  isLoading,
   emptyTitle,
   emptyText,
 }: {
@@ -181,6 +244,8 @@ function CommunicationPanel({
   accent: string;
   countLabel: string;
   capacityLabel: string;
+  items: CommunicationItem[];
+  isLoading: boolean;
   emptyTitle: string;
   emptyText: string;
 }) {
@@ -200,15 +265,51 @@ function CommunicationPanel({
             </div>
           ))}
         </div>
-        <div className="mt-3 flex min-h-[155px] flex-1 items-center rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
-          <div>
-            <p className="text-xs font-semibold text-[var(--adm-text)]">{emptyTitle}</p>
-            <p className="mt-1 max-w-xl text-[11px] leading-4 text-[var(--adm-text-muted)]">{emptyText}</p>
+        {isLoading ? (
+          <div className="mt-3 flex min-h-[155px] flex-1 items-center rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
+            <p className="text-xs font-semibold text-[var(--adm-text-muted)]">Kommunikációs lista betöltése…</p>
           </div>
-        </div>
+        ) : items.length === 0 ? (
+          <div className="mt-3 flex min-h-[155px] flex-1 items-center rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
+            <div>
+              <p className="text-xs font-semibold text-[var(--adm-text)]">{emptyTitle}</p>
+              <p className="mt-1 max-w-xl text-[11px] leading-4 text-[var(--adm-text-muted)]">{emptyText}</p>
+            </div>
+          </div>
+        ) : (
+          <ul className="mt-3 grid gap-1.5">
+            {items.map((item) => (
+              <CommunicationRow key={item.id} item={item} />
+            ))}
+          </ul>
+        )}
         <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">{capacityLabel}</p>
       </div>
     </article>
+  );
+}
+
+function CommunicationRow({ item }: { item: CommunicationItem }) {
+  const source = item.senderName || item.senderEmail || item.recipientName || item.recipientEmail || "Belső bejegyzés";
+  const subject = item.subject || item.summary || item.contentPreview || "Nincs tárgy";
+  const linkedContext = formatLinkedContext(item);
+  const status = formatStatus(item);
+  const preview = item.summary || item.contentPreview;
+
+  return (
+    <li className="grid gap-2 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white p-2.5 text-[11px] text-[var(--adm-text)] md:grid-cols-[1.05fr_1.2fr_1fr_0.75fr_0.55fr]">
+      <div className="min-w-0">
+        <p className="truncate font-semibold">{source}</p>
+        <p className="mt-0.5 text-[10px] uppercase tracking-[0.08em] text-[var(--adm-text-soft)]">{item.type}</p>
+      </div>
+      <div className="min-w-0">
+        <p className="truncate font-semibold">{subject}</p>
+        {preview ? <p className="mt-0.5 line-clamp-1 text-[10.5px] text-[var(--adm-text-muted)]">{preview}</p> : null}
+      </div>
+      <p className="min-w-0 truncate text-[var(--adm-text-muted)]">{linkedContext}</p>
+      <p className="min-w-0 truncate font-semibold text-[var(--adm-blue-700)]">{status}</p>
+      <p className="whitespace-nowrap text-[var(--adm-text-soft)]">{formatDateShort(item.createdAt)}</p>
+    </li>
   );
 }
 
@@ -239,4 +340,46 @@ function ReplyLane({ label }: { label: string }) {
       <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">0 tétel</p>
     </div>
   );
+}
+
+function applyWorkspaceFilter(items: CommunicationItem[], activeFilter: string): CommunicationItem[] {
+  const view = filterViews[activeFilter] || "all";
+  if (view === "external") return items.filter((item) => classifyCommunicationAudience(item) === "external");
+  if (view === "internal") return items.filter((item) => classifyCommunicationAudience(item) === "internal");
+  if (view === "clients") return items.filter((item) => Boolean(item.clientId));
+  if (view === "cases") return items.filter((item) => Boolean(item.caseId));
+  if (view === "tasks") return items.filter((item) => item.sourceTaskCount > 0);
+  if (view === "replies") return [];
+  return items;
+}
+
+function classifyCommunicationAudience(item: CommunicationItem): "external" | "internal" {
+  return classifyAudience({
+    id: item.id,
+    type: item.type,
+    senderEmail: item.senderEmail,
+    recipientEmail: item.recipientEmail,
+    clientId: item.clientId,
+  });
+}
+
+function formatLinkedContext(item: CommunicationItem): string {
+  if (item.clientId && item.caseId) return "Ügyfél + ügy";
+  if (item.clientId) return "Ügyfélhez sorolt";
+  if (item.caseId) return "Ügyhöz sorolt";
+  if (item.documentId) return "Dokumentumhoz kapcsolt";
+  return "Nincs besorolva";
+}
+
+function formatStatus(item: CommunicationItem): string {
+  if (item.sourceTaskCount > 0) return `${item.sourceTaskCount} feladat`;
+  if (item.attachmentCount > 0) return `${item.attachmentCount} melléklet`;
+  if (item.clientId || item.caseId) return "Besorolva";
+  return "Rendezésre vár";
+}
+
+function formatDateShort(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("hu-HU", { month: "2-digit", day: "2-digit" });
 }
