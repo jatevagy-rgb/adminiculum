@@ -20,6 +20,23 @@ type ReviewDecision = "approved" | "needs_changes" | "send_back_to_generation" |
 
 type ReviewPageProps = { params: Promise<{ caseId: string; documentId: string }> };
 
+const REVIEW_STATUS_LABELS: Record<string, string> = {
+  PENDING: "Függőben",
+  APPROVED: "Jóváhagyva",
+  REJECTED: "Elutasítva",
+  SUBMITTED: "Beküldve",
+  DRAFT: "Piszkozat",
+  GENERATED: "Piszkozat",
+  IN_REVIEW: "Review alatt",
+  FINAL: "Kész",
+};
+
+const formatReviewStatus = (status?: string | null): string => {
+  const key = String(status || "").trim().toUpperCase();
+  if (!key || key === "UNKNOWN") return "Nincs állapotadat";
+  return REVIEW_STATUS_LABELS[key] || status || "Nincs állapotadat";
+};
+
 export default function ReviewPageContent({ params }: ReviewPageProps) {
   const resolvedParams = use(params);
   const router = useRouter();
@@ -75,11 +92,12 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
   const checklistItems = contracts.map((c) => ({ id: c.id, label: c.title || c.templateName || "Document", status: c.isFinalRevision ? "FINAL" : c.status }));
   const completedChecklist = checklistItems.filter((i) => i.status === "FINAL" || i.status === "APPROVED").length;
   const getReviewOutcome = () => {
-    if (!reviewDocument) return { status: "UNKNOWN", label: "Unknown", variant: "default" as const };
-    if (reviewDocument.status === "APPROVED" || reviewDocument.isFinalRevision) return { status: "APPROVED", label: "APPROVED — READY FOR FINALIZATION", variant: "success" as const };
-    if (reviewDocument.status === "REJECTED") return { status: "REJECTED", label: "REJECTED — CHANGES REQUIRED", variant: "error" as const };
-    if (reviewDocument.status === "IN_REVIEW" || reviewDocument.status === "SUBMITTED") return { status: "IN_REVIEW", label: "IN REVIEW — PENDING DECISION", variant: "warning" as const };
-    return { status: reviewDocument.status, label: `${reviewDocument.status} — REVIEW REQUIRED`, variant: "default" as const };
+    if (!reviewDocument) return { status: "UNKNOWN", label: "Nincs állapotadat", helper: "A dokumentum státusza még nem érhető el.", variant: "default" as const };
+    const statusKey = String(reviewDocument.status || "").toUpperCase();
+    if (statusKey === "APPROVED" || reviewDocument.isFinalRevision) return { status: "APPROVED", label: "Jóváhagyva", helper: "Készen áll a véglegesítésre.", variant: "success" as const };
+    if (statusKey === "REJECTED") return { status: "REJECTED", label: "Elutasítva", helper: "Módosítás vagy átdolgozás szükséges.", variant: "error" as const };
+    if (statusKey === "IN_REVIEW" || statusKey === "SUBMITTED") return { status: "IN_REVIEW", label: "Review alatt", helper: "Ügyvédi döntésre vár.", variant: "warning" as const };
+    return { status: reviewDocument.status, label: formatReviewStatus(reviewDocument.status), helper: "Review döntésre vár.", variant: "default" as const };
   };
   const outcome = getReviewOutcome();
   const isPendingDecision = reviewDocument?.status === "GENERATED" || reviewDocument?.status === "IN_REVIEW";
@@ -322,7 +340,7 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
             <div className="flex justify-between"><span className={pal.label}>Fájl</span><span className="font-medium truncate max-w-[160px]">{reviewDocument?.fileName || "—"}</span></div>
             <div className="flex justify-between"><span className={pal.label}>Verzió</span><span className="font-medium">{reviewDocument?.revisionNumber ? `v${reviewDocument.revisionNumber}` : "v1"}{reviewDocument?.isCurrentRevision ? " (Current)" : ""}</span></div>
             <div className="flex justify-between"><span className={pal.label}>Generálva</span><span className="font-medium">{reviewDocument?.generatedAt ? new Date(reviewDocument.generatedAt).toLocaleDateString("hu-HU") : "—"}</span></div>
-            <div className="flex justify-between"><span className={pal.label}>Státusz</span><span className="font-bold">{reviewDocument?.status || "—"}</span></div>
+            <div className="flex justify-between"><span className={pal.label}>Státusz</span><span className="font-bold">{formatReviewStatus(reviewDocument?.status)}</span></div>
             {isEditedRevision && <p className="text-[10px] text-[var(--adm-blue-700)]">Szerkesztett verzió</p>}
             {revisionSourceTitle && <p className={`text-[10px] ${pal.label}`}>Forrás: {revisionSourceTitle}</p>}
             <div className="flex items-center gap-1.5 mt-1">
@@ -372,7 +390,7 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
           </span>
           <div className="flex-1 min-w-0">
             <h1 className={`text-lg font-semibold ${isSignal ? "text-[var(--adm-border)]" : "text-[var(--adm-text)]"}`}>{outcome.label}</h1>
-            <p className={`text-[10px] ${pal.label}`}>Review workflow status{reviewDocument?.generatedAt && ` · ${new Date(reviewDocument.generatedAt).toLocaleDateString("hu-HU")}`}</p>
+            <p className={`text-[10px] ${pal.label}`}>Review munkafolyamat · {outcome.helper}{reviewDocument?.generatedAt && ` · ${new Date(reviewDocument.generatedAt).toLocaleDateString("hu-HU")}`}</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button onClick={handleDownload} disabled={isDownloading} className={`px-3 py-1.5 text-[11px] font-bold border transition-colors ${isSignal ? "border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[var(--adm-border)] text-[var(--adm-text-muted)] hover:bg-[var(--adm-surface)]"} disabled:opacity-40`}>{isDownloading ? "..." : "DOCX"}</button>
@@ -410,7 +428,7 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
 
       {/* Review rationale */}
       <Panel uiPack={uiPack} className={`${isSignal ? "p-5" : "p-6"}`}>
-        <SectionBlock title="Review értékelés" subtitle={reviewDocument?.status || "Státusz betöltése..."} uiPack={uiPack}>
+        <SectionBlock title="Review értékelés" subtitle={reviewDocument ? formatReviewStatus(reviewDocument.status) : "Státusz betöltése..."} uiPack={uiPack}>
           {(reviewNotesData?.overallNote || reviewDocument?.revisionNote || decisionRationale) ? (
             <blockquote className={`text-sm leading-relaxed border-l-2 ${isSignal ? "border-cyan-700 text-[#D6E2F2] pl-4" : "border-[var(--adm-blue-500)] text-[var(--adm-text)] pl-4"}`}>
               "{reviewNotesData?.overallNote || reviewDocument?.revisionNote || decisionRationale}"
@@ -441,7 +459,7 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
       <Panel uiPack={uiPack} className={`${isSignal ? "p-5" : "p-6"}`}>
         <SectionBlock title="Dokumentumcsomag" subtitle={`${completedChecklist} / ${contracts.length} kész`} uiPack={uiPack}>
           {checklistItems.length > 0 ? (
-            <ul className="space-y-2">{checklistItems.map((item) => (<li key={item.id} className={`flex items-center justify-between text-[11px] py-1.5 border-b ${isSignal ? "border-[#1E293B]/60" : "border-[var(--adm-border)]"}`}><span className={pal.textDark}>{item.label}</span><span className={`font-bold text-[10px] ${item.status === "FINAL" ? (isSignal ? "text-emerald-400" : "text-emerald-600") : pal.label}`}>{item.status === "FINAL" ? "✓ KÉSZ" : item.status}</span></li>))}</ul>
+            <ul className="space-y-2">{checklistItems.map((item) => (<li key={item.id} className={`flex items-center justify-between text-[11px] py-1.5 border-b ${isSignal ? "border-[#1E293B]/60" : "border-[var(--adm-border)]"}`}><span className={pal.textDark}>{item.label}</span><span className={`font-bold text-[10px] ${item.status === "FINAL" ? (isSignal ? "text-emerald-400" : "text-emerald-600") : pal.label}`}>{item.status === "FINAL" ? "✓ KÉSZ" : formatReviewStatus(item.status)}</span></li>))}</ul>
           ) : <p className={`text-[11px] italic ${pal.label}`}>Nincs dokumentum a csomagban.</p>}
         </SectionBlock>
       </Panel>
