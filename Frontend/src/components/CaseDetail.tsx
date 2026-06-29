@@ -1381,7 +1381,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     ))}
                   </div>
                 ) : (
-                  <div className="border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-4 text-xs text-[#7A8479]">Még nincs rögzített ügyesemény.</div>
+                  <div className="border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-4 text-xs text-[#7A8479]">Még nincs rögzített ügyesemény. A dokumentum-feltöltés, az anonimizálás, a feladat- és review-lépések, valamint a belső megjegyzések automatikusan ügyeseményként jelennek meg itt.</div>
                 )}
               </div>
 
@@ -1399,7 +1399,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-3 border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-4 text-[11px] text-[#7A8479]">Még nincs kiválasztott dokumentum.</div>
+                  <div className="mt-3 border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-4 text-[11px] text-[#7A8479]">Még nincs kiválasztott dokumentum. Válassz egy iratot az ÜGYFÉL DOKUMENTUMAI listából a dokumentum-review és a peres munkatér megnyitásához.</div>
                 )}
               </div>
             </section>
