@@ -40,17 +40,17 @@ type CaseDetailProps = {
 };
 
 const statusChip: Record<string, string> = {
-  "Client Input": "bg-[#EFE9DC] text-[#6B675D] border-[#D7D0C3]",
-  Draft: "bg-[#EAF0E7] text-[#2C4A35] border-[#BFD1C3]",
-  "In Review": "bg-[#F6F1E3] text-[#67572A] border-[#DCCEA0]",
-  Approved: "bg-[#E2EDE5] text-[#23472F] border-[#A6C0AF]",
-  ARCHIVED: "bg-[#F3F4F6] text-[#64748B] border-[#E5E7EB]",
+  "Client Input": "bg-[var(--adm-surface)] text-[var(--adm-text-muted)] border-[var(--adm-border)]",
+  Draft: "bg-[#EAF0E7] text-[var(--adm-green-800)] border-[#BFD1C3]",
+  "In Review": "bg-[var(--adm-surface)] text-[var(--adm-ochre-500)] border-[var(--adm-border)]",
+  Approved: "bg-[#E2EDE5] text-[var(--adm-green-800)] border-[#A6C0AF]",
+  ARCHIVED: "bg-[var(--adm-surface)] text-[var(--adm-text-muted)] border-[var(--adm-border)]",
 };
 
 const docStatusBadge: Record<string, string> = {
-  'Ready': 'bg-[#E2EDE5] text-[#23472F] border-[#A6C0AF]',
+  'Ready': 'bg-[#E2EDE5] text-[var(--adm-green-800)] border-[#A6C0AF]',
   'Review Needed': 'bg-[#FEF2F2] text-[#DC2626] border-[#FECACA]',
-  'Archived': 'bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]',
+  'Archived': 'bg-[var(--adm-surface)] text-[var(--adm-text-muted)] border-[var(--adm-border)]',
 };
 
 const TASK_STATUS_LABELS: Record<string, string> = {
@@ -121,16 +121,16 @@ const getWorkflowStatusLabel = (status?: string | null): string => {
 };
 
 const getTaskDueDateTone = (dueDate?: string | null): string => {
-  if (!dueDate) return "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]";
+  if (!dueDate) return "bg-[var(--adm-surface)] text-[var(--adm-text-muted)] border-[var(--adm-border)]";
   const due = new Date(dueDate);
-  if (Number.isNaN(due.getTime())) return "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]";
+  if (Number.isNaN(due.getTime())) return "bg-[var(--adm-surface)] text-[var(--adm-text-muted)] border-[var(--adm-border)]";
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const tomorrowStart = todayStart + 24 * 60 * 60 * 1000;
   const dueTs = due.getTime();
   if (dueTs < todayStart) return "bg-[#FEF2F2] text-[#8b3a3a] border-[#d4b8b8]";
-  if (dueTs < tomorrowStart) return "bg-[#fff8e1] text-[#8a6a00] border-[#f9c74f]";
-  return "bg-[#E2EDE5] text-[#23472F] border-[#A6C0AF]";
+  if (dueTs < tomorrowStart) return "bg-[var(--adm-surface)] text-[var(--adm-ochre-500)] border-[#f9c74f]";
+  return "bg-[#E2EDE5] text-[var(--adm-green-800)] border-[#A6C0AF]";
 };
 export function CaseDetail({ params }: CaseDetailProps) {
   const resolvedParams = use(params);
@@ -667,7 +667,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
     generation: 'bg-[#FEF3C7] text-[#92400E] border-[#FCD34D]',
     task: 'bg-[#ECFDF5] text-[#047857] border-[#A7F3D0]',
     deadline: 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]',
-    communication: 'bg-[#F3F4F6] text-[#4B5563] border-[#E5E7EB]',
+    communication: 'bg-[var(--adm-surface)] text-[var(--adm-text)] border-[var(--adm-border)]',
   };
 
   // Type-specific icon background colors (matches chip colors for visual coherence)
@@ -677,7 +677,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
     generation: 'bg-[#92400E]',
     task: 'bg-[#047857]',
     deadline: 'bg-[#B91C1C]',
-    communication: 'bg-[#4B5563]',
+    communication: 'bg-[var(--adm-text)]',
   };
 
   // Type-specific icons per event category
@@ -1172,10 +1172,10 @@ export function CaseDetail({ params }: CaseDetailProps) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-lg text-[#6B655B]">Az ügy nem található</p>
+          <p className="text-lg text-[var(--adm-text-muted)]">Az ügy nem található</p>
           <button 
             onClick={() => router.push('/cases')}
-            className="mt-4 px-4 py-2 bg-[#C9A227] text-white rounded hover:bg-[#B8911F]"
+            className="mt-4 px-4 py-2 bg-[var(--adm-ochre-500)] text-white rounded hover:bg-[var(--adm-ochre-500)]"
           >
             Vissza az ügylistához
           </button>
@@ -1185,8 +1185,8 @@ export function CaseDetail({ params }: CaseDetailProps) {
   }
 
   return (
-    <div className="flex-1 min-h-0 overflow-hidden bg-[#D5CBA8]">
-      <div className="mx-auto flex h-full max-w-[1480px] flex-col overflow-hidden border-x border-[rgba(22,32,26,0.12)] bg-[#EFE7CF] shadow-[0_24px_60px_rgba(22,32,26,0.16)]">
+    <div className="flex-1 min-h-0 overflow-hidden bg-[var(--adm-border)]">
+      <div className="mx-auto flex h-full max-w-[1480px] flex-col overflow-hidden border-x border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] shadow-[0_24px_60px_rgba(22,32,26,0.16)]">
         <CaseWorkspaceNav
           caseId={canonicalCaseId}
           caseNumber={displayCaseNumber}
@@ -1202,61 +1202,61 @@ export function CaseDetail({ params }: CaseDetailProps) {
             <section className="border border-[rgba(22,32,26,0.10)] bg-white p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#8E6A1B]">ÜGY MUNKATERÜLET</p>
-                  <h1 className="mt-1 font-serif text-[32px] leading-tight text-[#16201A]">{displayTitle}</h1>
-                  <p className="mt-2 text-[12px] text-[#7A8479]">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-ochre-500)]">ÜGY MUNKATERÜLET</p>
+                  <h1 className="mt-1 font-serif text-[32px] leading-tight text-[var(--adm-text)]">{displayTitle}</h1>
+                  <p className="mt-2 text-[12px] text-[var(--adm-text-muted)]">
                     {displayCaseNumber} · {displayMatterType}
                   </p>
                 </div>
-                <span className={`shrink-0 rounded-[3px] border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${statusChip[caseRecord?.status || 'Draft'] || 'border-[#D8CDB6] bg-[#FBF6E7] text-[#3D4842]'}`}>
+                <span className={`shrink-0 rounded-[3px] border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${statusChip[caseRecord?.status || 'Draft'] || 'border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text)]'}`}>
                   {getCaseStatusLabel(caseRecord?.status)}
                 </span>
               </div>
 
               <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                <div className="border border-[#E5DCBE] bg-[#FBF6E7] p-3">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Ügyfél</p>
-                  <p className="mt-1 text-[13px] font-semibold text-[#16201A]">{displayClient}</p>
+                <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Ügyfél</p>
+                  <p className="mt-1 text-[13px] font-semibold text-[var(--adm-text)]">{displayClient}</p>
                 </div>
-                <div className="relative border border-[#E5DCBE] bg-[#FBF6E7] p-3">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Felelős ügyvéd</p>
+                <div className="relative border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Felelős ügyvéd</p>
                   {assignedLawyer ? (
                     <>
-                      <p className="mt-1 text-[13px] font-semibold text-[#16201A]">{assignedLawyer.name}</p>
-                      <p className="text-[10px] text-[#7A8479]">{assignedLawyer.email}</p>
+                      <p className="mt-1 text-[13px] font-semibold text-[var(--adm-text)]">{assignedLawyer.name}</p>
+                      <p className="text-[10px] text-[var(--adm-text-muted)]">{assignedLawyer.email}</p>
                     </>
                   ) : (
-                    <button onClick={() => { setShowAssignDropdown(!showAssignDropdown); loadAvailableUsers(); }} className="mt-1 text-[11px] font-semibold text-[#8E6A1B]">
+                    <button onClick={() => { setShowAssignDropdown(!showAssignDropdown); loadAvailableUsers(); }} className="mt-1 text-[11px] font-semibold text-[var(--adm-ochre-500)]">
                       + Felelős ügyvéd hozzárendelése
                     </button>
                   )}
                   {showAssignDropdown && (
-                    <div className="absolute left-3 top-full z-50 mt-1 max-h-48 w-64 overflow-y-auto border border-[#DDD7CA] bg-white shadow-lg">
+                    <div className="absolute left-3 top-full z-50 mt-1 max-h-48 w-64 overflow-y-auto border border-[var(--adm-border)] bg-white shadow-lg">
                       {isLoadingUsers ? (
-                        <p className="p-2 text-xs text-[#7B776D]">Felhasználók betöltése...</p>
+                        <p className="p-2 text-xs text-[var(--adm-text-muted)]">Felhasználók betöltése...</p>
                       ) : availableUsers.length > 0 ? (
                         availableUsers.map((user) => (
-                          <button key={user.id} onClick={() => handleAssignLawyer(user.id)} disabled={isAssigning} className="w-full border-b border-[#ECE6DA] p-2 text-left text-xs hover:bg-[#FBF9F3] disabled:opacity-50">
-                            <p className="font-medium text-[#1F2821]">{user.name}</p>
-                            <p className="text-[10px] text-[#7B776D]">{user.email}</p>
+                          <button key={user.id} onClick={() => handleAssignLawyer(user.id)} disabled={isAssigning} className="w-full border-b border-[var(--adm-border)] p-2 text-left text-xs hover:bg-[var(--adm-surface)] disabled:opacity-50">
+                            <p className="font-medium text-[var(--adm-text)]">{user.name}</p>
+                            <p className="text-[10px] text-[var(--adm-text-muted)]">{user.email}</p>
                           </button>
                         ))
                       ) : (
-                        <p className="p-2 text-xs text-[#7B776D]">Nincs elérhető felhasználó</p>
+                        <p className="p-2 text-xs text-[var(--adm-text-muted)]">Nincs elérhető felhasználó</p>
                       )}
                     </div>
                   )}
                 </div>
-                <div className="border border-[#E5DCBE] bg-[#FBF6E7] p-3">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Résztvevők</p>
-                  <p className="mt-1 text-[13px] font-semibold text-[#16201A]">{collaborators.length || 0} résztvevő</p>
+                <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Résztvevők</p>
+                  <p className="mt-1 text-[13px] font-semibold text-[var(--adm-text)]">{collaborators.length || 0} résztvevő</p>
                   {!isArchived && (
                     <div className="relative">
-                      <button onClick={() => { setShowCollaboratorDropdown(!showCollaboratorDropdown); loadAvailableUsers(); }} className="mt-1 text-[10px] font-semibold text-[#8E6A1B]">+ Résztvevő hozzáadása</button>
+                      <button onClick={() => { setShowCollaboratorDropdown(!showCollaboratorDropdown); loadAvailableUsers(); }} className="mt-1 text-[10px] font-semibold text-[var(--adm-ochre-500)]">+ Résztvevő hozzáadása</button>
                       {showCollaboratorDropdown && (
-                        <div className="absolute left-0 top-full z-50 mt-1 w-72 border border-[#DDD7CA] bg-white shadow-lg">
-                          <div className="border-b border-[#ECE6DA] p-2">
-                            <select value={collaboratorRole} onChange={(e) => setCollaboratorRole(e.target.value)} className="w-full border border-[#DDD7CA] bg-white px-2 py-1 text-[10px]">
+                        <div className="absolute left-0 top-full z-50 mt-1 w-72 border border-[var(--adm-border)] bg-white shadow-lg">
+                          <div className="border-b border-[var(--adm-border)] p-2">
+                            <select value={collaboratorRole} onChange={(e) => setCollaboratorRole(e.target.value)} className="w-full border border-[var(--adm-border)] bg-white px-2 py-1 text-[10px]">
                               <option value="COLLABORATOR">Résztvevő</option>
                               <option value="REVIEWER">Ellenőrző</option>
                               <option value="ASSISTANT">Asszisztens</option>
@@ -1266,9 +1266,9 @@ export function CaseDetail({ params }: CaseDetailProps) {
                             {availableUsers
                               .filter(u => u.id !== assignedLawyer?.id && !collaborators.some(c => c.userId === u.id))
                               .map((user) => (
-                                <button key={user.id} onClick={() => handleAddCollaborator(user.id)} disabled={isAddingCollaborator} className="w-full border-b border-[#ECE6DA] p-2 text-left text-[10px] hover:bg-[#FBF9F3] disabled:opacity-50">
-                                  <p className="font-medium text-[#1F2821]">{user.name}</p>
-                                  <p className="text-[9px] text-[#7B776D]">{user.email}</p>
+                                <button key={user.id} onClick={() => handleAddCollaborator(user.id)} disabled={isAddingCollaborator} className="w-full border-b border-[var(--adm-border)] p-2 text-left text-[10px] hover:bg-[var(--adm-surface)] disabled:opacity-50">
+                                  <p className="font-medium text-[var(--adm-text)]">{user.name}</p>
+                                  <p className="text-[9px] text-[var(--adm-text-muted)]">{user.email}</p>
                                 </button>
                               ))}
                           </div>
@@ -1277,45 +1277,45 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     </div>
                   )}
                 </div>
-                <div className="border border-[#E5DCBE] bg-[#FBF6E7] p-3">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Határidő</p>
+                <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Határidő</p>
                   {isEditingDeadline ? (
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <input type="date" value={deadlineInput} onChange={(e) => setDeadlineInput(e.target.value)} className="border border-[#DDD7CA] bg-white px-2 py-1 text-xs" />
-                      <button onClick={handleSaveDeadline} disabled={isSavingDeadline} className="bg-[#1F4A33] px-2 py-1 text-[10px] text-white disabled:opacity-50">{isSavingDeadline ? '...' : 'Mentés'}</button>
-                      <button onClick={handleCancelDeadline} className="border border-[#DDD7CA] px-2 py-1 text-[10px] text-[#514D45]">Mégse</button>
+                      <input type="date" value={deadlineInput} onChange={(e) => setDeadlineInput(e.target.value)} className="border border-[var(--adm-border)] bg-white px-2 py-1 text-xs" />
+                      <button onClick={handleSaveDeadline} disabled={isSavingDeadline} className="bg-[var(--adm-green-800)] px-2 py-1 text-[10px] text-white disabled:opacity-50">{isSavingDeadline ? '...' : 'Mentés'}</button>
+                      <button onClick={handleCancelDeadline} className="border border-[var(--adm-border)] px-2 py-1 text-[10px] text-[var(--adm-text)]">Mégse</button>
                     </div>
                   ) : (
                     <div className="mt-1 flex items-center gap-2">
-                      <p className="text-[13px] font-semibold text-[#16201A]">{caseRecord?.deadline ? new Date(caseRecord.deadline).toLocaleDateString('hu-HU', { dateStyle: 'medium' }) : 'Nincs megadva'}</p>
-                      {!isArchived && <button onClick={startEditingDeadline} className="text-[10px] font-semibold text-[#8E6A1B]">{caseRecord?.deadline ? 'Módosítás' : '+ Hozzáadás'}</button>}
+                      <p className="text-[13px] font-semibold text-[var(--adm-text)]">{caseRecord?.deadline ? new Date(caseRecord.deadline).toLocaleDateString('hu-HU', { dateStyle: 'medium' }) : 'Nincs megadva'}</p>
+                      {!isArchived && <button onClick={startEditingDeadline} className="text-[10px] font-semibold text-[var(--adm-ochre-500)]">{caseRecord?.deadline ? 'Módosítás' : '+ Hozzáadás'}</button>}
                     </div>
                   )}
                 </div>
-                <div className="border border-[#E5DCBE] bg-[#FBF6E7] p-3">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Ügyfél szerepe</p>
+                <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Ügyfél szerepe</p>
                   {isEditingClientRole ? (
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <select value={clientRoleInput} onChange={(e) => setClientRoleInput(e.target.value)} className="border border-[#DDD7CA] bg-white px-2 py-1 text-xs">
+                      <select value={clientRoleInput} onChange={(e) => setClientRoleInput(e.target.value)} className="border border-[var(--adm-border)] bg-white px-2 py-1 text-xs">
                         <option value="">Nincs megadva</option>
                         <option value="MEGBIZÓ">Megbízó</option>
                         <option value="ELLENÉRTDEKŰ FÉL">Ellenérdekű fél</option>
                         <option value="PARTNER">Partner</option>
                         <option value="EGYÉB">Egyéb</option>
                       </select>
-                      <button onClick={handleSaveClientRole} className="bg-[#1F4A33] px-2 py-1 text-[10px] text-white">Mentés</button>
-                      <button onClick={handleCancelClientRole} className="border border-[#DDD7CA] px-2 py-1 text-[10px] text-[#514D45]">Mégse</button>
+                      <button onClick={handleSaveClientRole} className="bg-[var(--adm-green-800)] px-2 py-1 text-[10px] text-white">Mentés</button>
+                      <button onClick={handleCancelClientRole} className="border border-[var(--adm-border)] px-2 py-1 text-[10px] text-[var(--adm-text)]">Mégse</button>
                     </div>
                   ) : (
                     <div className="mt-1 flex items-center gap-2">
-                      <p className="text-[13px] font-semibold text-[#16201A]">{caseRecord?.clientRole || 'Nincs megadva'}</p>
-                      {!isArchived && <button onClick={handleEditClientRole} className="text-[10px] font-semibold text-[#8E6A1B]">{caseRecord?.clientRole ? 'Módosítás' : '+ Hozzáadás'}</button>}
+                      <p className="text-[13px] font-semibold text-[var(--adm-text)]">{caseRecord?.clientRole || 'Nincs megadva'}</p>
+                      {!isArchived && <button onClick={handleEditClientRole} className="text-[10px] font-semibold text-[var(--adm-ochre-500)]">{caseRecord?.clientRole ? 'Módosítás' : '+ Hozzáadás'}</button>}
                     </div>
                   )}
                 </div>
-                <div className="border border-[#E5DCBE] bg-[#FBF6E7] p-3">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">Szakterület</p>
-                  <p className="mt-1 text-[13px] font-semibold text-[#16201A]">{displayMatterType}</p>
+                <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Szakterület</p>
+                  <p className="mt-1 text-[13px] font-semibold text-[var(--adm-text)]">{displayMatterType}</p>
                 </div>
               </div>
             </section>
@@ -1331,14 +1331,14 @@ export function CaseDetail({ params }: CaseDetailProps) {
                   disabled={action.disabled}
                   className={`border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                     action.tone === 'primary'
-                      ? 'border-[#173824] bg-[#1F4A33] text-[#F4EFDB] hover:bg-[#173824]'
+                      ? 'border-[var(--adm-green-900)] bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:bg-[var(--adm-green-900)]'
                       : action.tone === 'gold'
-                        ? 'border-[#8E6A1B] bg-[#B58A2A] text-white hover:bg-[#8E6A1B]'
-                        : 'border-[#E5DCBE] bg-white text-[#16201A] hover:bg-[#FBF6E7]'
+                        ? 'border-[var(--adm-ochre-500)] bg-[var(--adm-ochre-500)] text-white hover:bg-[var(--adm-ochre-500)]'
+                        : 'border-[var(--adm-border)] bg-white text-[var(--adm-text)] hover:bg-[var(--adm-surface)]'
                   }`}
                 >
                   <p className="text-[12px] font-semibold">{action.title}</p>
-                  <p className={`mt-2 text-[11px] leading-relaxed ${action.tone === 'paper' ? 'text-[#7A8479]' : 'text-current opacity-80'}`}>{action.helper}</p>
+                  <p className={`mt-2 text-[11px] leading-relaxed ${action.tone === 'paper' ? 'text-[var(--adm-text-muted)]' : 'text-current opacity-80'}`}>{action.helper}</p>
                 </button>
               ))}
             </section>
@@ -1346,179 +1346,179 @@ export function CaseDetail({ params }: CaseDetailProps) {
             <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
               <div className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
                 <div className="mb-3 flex items-center justify-between">
-                  <h2 className="font-serif text-[18px] text-[#16201A]">ÜGY TÖRTÉNETE</h2>
+                  <h2 className="font-serif text-[18px] text-[var(--adm-text)]">ÜGY TÖRTÉNETE</h2>
                   <div className="flex items-center gap-3">
-                    <span className="text-[10px] text-[#7A8479]">{caseStoryEvents.length} esemény</span>
-                    {!isArchived && <button onClick={() => setIsAddingNote(true)} className="text-[10px] font-semibold text-[#8E6A1B]">+ Belső megjegyzés</button>}
+                    <span className="text-[10px] text-[var(--adm-text-muted)]">{caseStoryEvents.length} esemény</span>
+                    {!isArchived && <button onClick={() => setIsAddingNote(true)} className="text-[10px] font-semibold text-[var(--adm-ochre-500)]">+ Belső megjegyzés</button>}
                   </div>
                 </div>
                 {isAddingNote && (
-                  <div className="mb-4 border border-[#E5DCBE] bg-[#FBF6E7] p-3">
-                    <p className="mb-2 text-[10px] text-[#7B776D]">Új belső megjegyzés</p>
-                    <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="Írja be a megjegyzést..." rows={3} className="w-full resize-none border border-[#DDD7CA] bg-white px-3 py-2 text-xs focus:border-[#B58A2A] focus:outline-none" />
+                  <div className="mb-4 border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                    <p className="mb-2 text-[10px] text-[var(--adm-text-muted)]">Új belső megjegyzés</p>
+                    <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="Írja be a megjegyzést..." rows={3} className="w-full resize-none border border-[var(--adm-border)] bg-white px-3 py-2 text-xs focus:border-[var(--adm-ochre-500)] focus:outline-none" />
                     <div className="mt-2 flex gap-2">
-                      <button onClick={handleAddCaseNote} disabled={!newNoteContent.trim() || isSavingNote} className="bg-[#B58A2A] px-3 py-1.5 text-[10px] text-white disabled:opacity-40">{isSavingNote ? 'Mentés...' : 'Mentés'}</button>
-                      <button onClick={() => { setIsAddingNote(false); setNewNoteContent(''); }} className="border border-[#DDD7CA] px-3 py-1.5 text-[10px] text-[#7B776D]">Mégse</button>
+                      <button onClick={handleAddCaseNote} disabled={!newNoteContent.trim() || isSavingNote} className="bg-[var(--adm-ochre-500)] px-3 py-1.5 text-[10px] text-white disabled:opacity-40">{isSavingNote ? 'Mentés...' : 'Mentés'}</button>
+                      <button onClick={() => { setIsAddingNote(false); setNewNoteContent(''); }} className="border border-[var(--adm-border)] px-3 py-1.5 text-[10px] text-[var(--adm-text-muted)]">Mégse</button>
                     </div>
                   </div>
                 )}
-                <p className="mb-4 text-[11px] text-[#7A8479]">Csak megtörtént, rögzített ügyesemények. Jövőbeli lépések a jobb oldali Következő lépés panelben jelennek meg.</p>
+                <p className="mb-4 text-[11px] text-[var(--adm-text-muted)]">Csak megtörtént, rögzített ügyesemények. Jövőbeli lépések a jobb oldali Következő lépés panelben jelennek meg.</p>
                 {latestStoryEvents.length > 0 ? (
                   <div className="space-y-3 border-l border-[#D9E3CC] pl-4">
                     {latestStoryEvents.map((event) => (
                       <div key={event.id} className="relative">
-                        <span className="absolute left-[-21px] top-1 h-3 w-3 rounded-full border border-[#B58A2A] bg-[#FBF6E7]" />
+                        <span className="absolute left-[-21px] top-1 h-3 w-3 rounded-full border border-[var(--adm-ochre-500)] bg-[var(--adm-surface)]" />
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-[13px] font-semibold text-[#16201A]">{event.title}</p>
-                          <span className="border border-[#E5DCBE] bg-[#FBF6E7] px-1.5 py-0.5 text-[9px] text-[#3D4842]">{event.sourceLabel}</span>
+                          <p className="text-[13px] font-semibold text-[var(--adm-text)]">{event.title}</p>
+                          <span className="border border-[var(--adm-border)] bg-[var(--adm-surface)] px-1.5 py-0.5 text-[9px] text-[var(--adm-text)]">{event.sourceLabel}</span>
                         </div>
-                        {event.description && <p className="mt-1 text-[11px] leading-relaxed text-[#3D4842]">{event.description}</p>}
+                        {event.description && <p className="mt-1 text-[11px] leading-relaxed text-[var(--adm-text)]">{event.description}</p>}
                         <div className="mt-1 flex items-center gap-2">
-                          <span className="text-[10px] text-[#7A8479]">{new Date(event.timestamp).toLocaleString('hu-HU', { dateStyle: 'short', timeStyle: 'short' })}</span>
-                          {event.link && <button onClick={() => router.push(event.link as string)} className="text-[10px] font-semibold text-[#8E6A1B]">{event.linkLabel || 'Kapcsolódó nézet megnyitása'}</button>}
+                          <span className="text-[10px] text-[var(--adm-text-muted)]">{new Date(event.timestamp).toLocaleString('hu-HU', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                          {event.link && <button onClick={() => router.push(event.link as string)} className="text-[10px] font-semibold text-[var(--adm-ochre-500)]">{event.linkLabel || 'Kapcsolódó nézet megnyitása'}</button>}
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-4 text-xs text-[#7A8479]">Még nincs rögzített ügyesemény. A dokumentum-feltöltés, az anonimizálás, a feladat- és review-lépések, valamint a belső megjegyzések automatikusan ügyeseményként jelennek meg itt.</div>
+                  <div className="border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-xs text-[var(--adm-text-muted)]">Még nincs rögzített ügyesemény. A dokumentum-feltöltés, az anonimizálás, a feladat- és review-lépések, valamint a belső megjegyzések automatikusan ügyeseményként jelennek meg itt.</div>
                 )}
               </div>
 
               <div className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
-                <h3 className="font-serif text-[17px] text-[#16201A]">Kiválasztott dokumentum</h3>
+                <h3 className="font-serif text-[17px] text-[var(--adm-text)]">Kiválasztott dokumentum</h3>
                 {activeDocument ? (
-                  <div className="mt-3 border border-[#E5DCBE] bg-[#FBF6E7] p-3">
-                    <p className="truncate text-[13px] font-semibold text-[#16201A]">{activeDocument.name}</p>
-                    <p className="mt-1 text-[10px] text-[#7A8479]">{activeDocument.type} {activeDocument.version ? `· ${activeDocument.version}` : ''} · {activeDocument.date}</p>
+                  <div className="mt-3 border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                    <p className="truncate text-[13px] font-semibold text-[var(--adm-text)]">{activeDocument.name}</p>
+                    <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{activeDocument.type} {activeDocument.version ? `· ${activeDocument.version}` : ''} · {activeDocument.date}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <button onClick={() => router.push(documentWorkspaceHref)} className="bg-[#1F4A33] px-3 py-1.5 text-[10px] font-semibold text-[#F4EFDB]">Dokumentum-review</button>
-                      <button onClick={() => router.push(litigationWorkspaceHref)} className="border border-[#D8CDB6] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#3D4842]">{activeDocument ? 'Peres munkatér' : 'Dokumentumtár'}</button>
-                      <button onClick={() => handleDocumentClick(activeDocument)} disabled={isDownloading === activeDocument.id} className="border border-[#D8CDB6] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#3D4842]">{isDownloading === activeDocument.id ? '...' : 'Letöltés'}</button>
-                      <button onClick={() => handleAnonymizeDocument(activeDocument)} className="border border-[#D8CDB6] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#3D4842]">Anonimizálás</button>
+                      <button onClick={() => router.push(documentWorkspaceHref)} className="bg-[var(--adm-green-800)] px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-ivory-50)]">Dokumentum-review</button>
+                      <button onClick={() => router.push(litigationWorkspaceHref)} className="border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text)]">{activeDocument ? 'Peres munkatér' : 'Dokumentumtár'}</button>
+                      <button onClick={() => handleDocumentClick(activeDocument)} disabled={isDownloading === activeDocument.id} className="border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text)]">{isDownloading === activeDocument.id ? '...' : 'Letöltés'}</button>
+                      <button onClick={() => handleAnonymizeDocument(activeDocument)} className="border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text)]">Anonimizálás</button>
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-3 border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-4 text-[11px] text-[#7A8479]">Még nincs kiválasztott dokumentum. Válassz egy iratot az ÜGYFÉL DOKUMENTUMAI listából a dokumentum-review és a peres munkatér megnyitásához.</div>
+                  <div className="mt-3 border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[11px] text-[var(--adm-text-muted)]">Még nincs kiválasztott dokumentum. Válassz egy iratot az ÜGYFÉL DOKUMENTUMAI listából a dokumentum-review és a peres munkatér megnyitásához.</div>
                 )}
               </div>
             </section>
 
             {!isArchived && assignedLawyer && (
-              <section className="border border-[#F2E4BD] bg-[#FAEFCF] p-4">
-                <p className="text-[12px] font-semibold text-[#16201A]">Ügy lezárása</p>
-                <p className="mt-1 text-[11px] text-[#3D4842]">Az ügy lezárható. Az archiválás befejezettként jelöli az ügyet.</p>
-                <button onClick={() => setShowCompleteConfirm(true)} className="mt-3 bg-[#1F4A33] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#F4EFDB]">Lezárás és archiválás</button>
+              <section className="border border-[#F2E4BD] bg-[var(--adm-sand-100)] p-4">
+                <p className="text-[12px] font-semibold text-[var(--adm-text)]">Ügy lezárása</p>
+                <p className="mt-1 text-[11px] text-[var(--adm-text)]">Az ügy lezárható. Az archiválás befejezettként jelöli az ügyet.</p>
+                <button onClick={() => setShowCompleteConfirm(true)} className="mt-3 bg-[var(--adm-green-800)] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-ivory-50)]">Lezárás és archiválás</button>
               </section>
             )}
 
             {isArchived && (
-              <section className="border border-[#E5DCBE] bg-[#FBF6E7] p-4">
-                <p className="text-[12px] font-semibold text-[#16201A]">Archivált ügy</p>
-                <p className="mt-1 text-[11px] text-[#3D4842]">Ez az ügy befejezett és archivált. Az aktív műveletek le vannak tiltva.</p>
+              <section className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
+                <p className="text-[12px] font-semibold text-[var(--adm-text)]">Archivált ügy</p>
+                <p className="mt-1 text-[11px] text-[var(--adm-text)]">Ez az ügy befejezett és archivált. Az aktív műveletek le vannak tiltva.</p>
               </section>
             )}
           </div>
         </main>
 
-        <aside className="w-[352px] shrink-0 overflow-y-auto border-l border-[#D5CBA8] bg-[#F7F0D9] p-4">
+        <aside className="w-[352px] shrink-0 overflow-y-auto border-l border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
           <div className="space-y-4">
-            <section className="rounded-[8px] border border-[#173824] bg-[#1F4A33] p-4 text-[#F4EFDB] shadow-[0_6px_16px_rgba(31,74,51,0.20)]">
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#B58A2A]">KÖVETKEZŐ LÉPÉS</p>
+            <section className="rounded-[8px] border border-[var(--adm-green-900)] bg-[var(--adm-green-800)] p-4 text-[var(--adm-ivory-50)] shadow-[0_6px_16px_rgba(31,74,51,0.20)]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-ochre-500)]">KÖVETKEZŐ LÉPÉS</p>
               <h3 className="mt-2 font-serif text-[20px] leading-tight">{nextStep.title}</h3>
-              <p className="mt-2 text-[12px] leading-relaxed text-[#F4EFDB]/78">{nextStep.helper}</p>
-              <button onClick={nextStep.action} className="mt-3 w-full rounded-[5px] border border-[#8E6A1B] bg-[#B58A2A] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#8E6A1B]">{nextStep.label}</button>
+              <p className="mt-2 text-[12px] leading-relaxed text-[var(--adm-ivory-50)]/78">{nextStep.helper}</p>
+              <button onClick={nextStep.action} className="mt-3 w-full rounded-[5px] border border-[var(--adm-ochre-500)] bg-[var(--adm-ochre-500)] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[var(--adm-ochre-500)]">{nextStep.label}</button>
             </section>
 
-            <section className="border border-[#E5DCBE] bg-white p-3">
+            <section className="border border-[var(--adm-border)] bg-white p-3">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">ÜGY MUNKATERV</h3>
-                <span className="text-[10px] text-[#7A8479]">{workplanTasks.length}</span>
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">ÜGY MUNKATERV</h3>
+                <span className="text-[10px] text-[var(--adm-text-muted)]">{workplanTasks.length}</span>
               </div>
               {workplanTasks.length > 0 ? (
                 <div className="space-y-2">
                   {workplanTasks.slice(0, 4).map((task) => (
-                    <div key={task.id} className="border border-[#E5DCBE] bg-[#FBF6E7] p-2">
-                      <p className="text-[12px] font-semibold text-[#16201A]">{task.title}</p>
-                      <p className="mt-1 text-[10px] text-[#7A8479]">Felelős: {task.assignedTo?.name || 'Nincs kijelölve'}</p>
-                      <p className="mt-1 text-[10px] text-[#7A8479]">Státusz: {getTaskStatusLabel(task.status)}</p>
+                    <div key={task.id} className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2">
+                      <p className="text-[12px] font-semibold text-[var(--adm-text)]">{task.title}</p>
+                      <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">Felelős: {task.assignedTo?.name || 'Nincs kijelölve'}</p>
+                      <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">Státusz: {getTaskStatusLabel(task.status)}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-3 text-[11px] text-[#7A8479]">Még nincs munkaterv rögzítve.</p>
+                <p className="border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-[11px] text-[var(--adm-text-muted)]">Még nincs munkaterv rögzítve.</p>
               )}
             </section>
 
-            <section className="border border-[#E5DCBE] bg-white p-3">
+            <section className="border border-[var(--adm-border)] bg-white p-3">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">ÜGYFÉL DOKUMENTUMAI</h3>
-                <span className="text-[10px] text-[#7A8479]">{documents.length} fájl</span>
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">ÜGYFÉL DOKUMENTUMAI</h3>
+                <span className="text-[10px] text-[var(--adm-text-muted)]">{documents.length} fájl</span>
               </div>
               {uploadError && <div className="mb-2 border border-[#d4b8b8] bg-[#fef2f2] p-2 text-[10px] text-[#8b3a3a]">{uploadError}</div>}
-              {isUploading && <div className="mb-2 border border-[#E5DCBE] bg-[#FBF6E7] p-2 text-[10px] text-[#3D4842]">Dokumentum feltöltése...</div>}
+              {isUploading && <div className="mb-2 border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2 text-[10px] text-[var(--adm-text)]">Dokumentum feltöltése...</div>}
               {displayedDocs.length > 0 ? (
                 <div className="space-y-2">
                   {displayedDocs.map((doc) => (
-                    <div key={doc.id} className={`border p-2 ${highlightedTimelineId && doc.linkedTimelineId === highlightedTimelineId ? 'border-[#B58A2A] bg-[#FAEFCF]' : 'border-[#E5DCBE] bg-[#FBF6E7]'}`}>
-                      <p className="truncate text-[12px] font-semibold text-[#16201A]">{doc.name}</p>
-                      <p className="mt-1 text-[10px] text-[#7A8479]">{doc.type} {doc.version ? `· ${doc.version}` : ''}</p>
+                    <div key={doc.id} className={`border p-2 ${highlightedTimelineId && doc.linkedTimelineId === highlightedTimelineId ? 'border-[var(--adm-ochre-500)] bg-[var(--adm-sand-100)]' : 'border-[var(--adm-border)] bg-[var(--adm-surface)]'}`}>
+                      <p className="truncate text-[12px] font-semibold text-[var(--adm-text)]">{doc.name}</p>
+                      <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{doc.type} {doc.version ? `· ${doc.version}` : ''}</p>
                     </div>
                   ))}
-                  {hasMoreDocs && <button onClick={() => setShowAllDocs(!showAllDocs)} className="w-full border border-[#E5DCBE] py-2 text-[10px] font-semibold text-[#8E6A1B]">{showAllDocs ? 'Kevesebb megjelenítése' : `Összes dokumentum (${documents.length})`}</button>}
+                  {hasMoreDocs && <button onClick={() => setShowAllDocs(!showAllDocs)} className="w-full border border-[var(--adm-border)] py-2 text-[10px] font-semibold text-[var(--adm-ochre-500)]">{showAllDocs ? 'Kevesebb megjelenítése' : `Összes dokumentum (${documents.length})`}</button>}
                 </div>
               ) : (
-                <p className="border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-3 text-[11px] text-[#7A8479]">Még nincs ügyféldokumentum.</p>
+                <p className="border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-[11px] text-[var(--adm-text-muted)]">Még nincs ügyféldokumentum.</p>
               )}
             </section>
 
-            <section className="border border-[#E5DCBE] bg-white p-3">
-              <h3 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">DOKUMENTUM-REVIEW MEGNYITÁSA</h3>
-              <button onClick={() => router.push(documentWorkspaceHref)} className="w-full bg-[#1F4A33] px-3 py-2 text-[11px] font-semibold text-[#F4EFDB]">Ügy dokumentumainak review-ja</button>
-              <p className="mt-2 text-[10px] text-[#7A8479]">Ügyhöz szűrt dokumentumok, klauzulák és módosított munkapéldányok kezelése.</p>
+            <section className="border border-[var(--adm-border)] bg-white p-3">
+              <h3 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">DOKUMENTUM-REVIEW MEGNYITÁSA</h3>
+              <button onClick={() => router.push(documentWorkspaceHref)} className="w-full bg-[var(--adm-green-800)] px-3 py-2 text-[11px] font-semibold text-[var(--adm-ivory-50)]">Ügy dokumentumainak review-ja</button>
+              <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Ügyhöz szűrt dokumentumok, klauzulák és módosított munkapéldányok kezelése.</p>
             </section>
 
-            <details className="border border-[#E5DCBE] bg-white p-3">
-              <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">Külső AI promptok</summary>
+            <details className="border border-[var(--adm-border)] bg-white p-3">
+              <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Külső AI promptok</summary>
               {anonymousDocuments.length > 0 ? (
                 <div className="mt-3 space-y-2">
                   {anonymousDocuments.map((anonDoc) => (
-                    <div key={anonDoc.id} className="border border-[#E5DCBE] bg-[#FBF6E7] p-2">
-                      <p className="truncate text-[11px] font-semibold text-[#16201A]">{anonDoc.name || 'Anonimizált dokumentum'}</p>
-                      <button onClick={() => handleOpenRehydrate(anonDoc)} className="mt-2 border border-[#D8CDB6] bg-white px-2 py-1 text-[10px] text-[#3D4842]">AI válasz beillesztése</button>
+                    <div key={anonDoc.id} className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2">
+                      <p className="truncate text-[11px] font-semibold text-[var(--adm-text)]">{anonDoc.name || 'Anonimizált dokumentum'}</p>
+                      <button onClick={() => handleOpenRehydrate(anonDoc)} className="mt-2 border border-[var(--adm-border)] bg-white px-2 py-1 text-[10px] text-[var(--adm-text)]">AI válasz beillesztése</button>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="mt-3 text-[10px] leading-relaxed text-[#7A8479]">Adminiculum nem hív külső AI-t. A promptok másolható munkafolyamatként kezelhetők.</p>
+                <p className="mt-3 text-[10px] leading-relaxed text-[var(--adm-text-muted)]">Adminiculum nem hív külső AI-t. A promptok másolható munkafolyamatként kezelhetők.</p>
               )}
             </details>
 
-            <section className="border border-[#E5DCBE] bg-white p-3">
+            <section className="border border-[var(--adm-border)] bg-white p-3">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">FELADATOK</h3>
-                <span className="text-[10px] text-[#7A8479]">{openTasks.length}</span>
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">FELADATOK</h3>
+                <span className="text-[10px] text-[var(--adm-text-muted)]">{openTasks.length}</span>
               </div>
               {isLoadingTasks ? (
-                <p className="py-3 text-center text-[10px] text-[#7A8479]">Feladatok betöltése...</p>
+                <p className="py-3 text-center text-[10px] text-[var(--adm-text-muted)]">Feladatok betöltése...</p>
               ) : openTasks.length > 0 ? (
                 <div className="space-y-2">
                   {openTasks.slice(0, 4).map((task) => (
-                    <div key={task.id} className="border border-[#E5DCBE] bg-[#FBF6E7] p-2">
+                    <div key={task.id} className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="truncate text-[12px] font-semibold text-[#16201A]">{task.title}</p>
-                          <p className="mt-1 text-[10px] text-[#7A8479]">{task.assignedTo?.name || 'Nincs kijelölve'} · {getTaskStatusLabel(task.status)}</p>
+                          <p className="truncate text-[12px] font-semibold text-[var(--adm-text)]">{task.title}</p>
+                          <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{task.assignedTo?.name || 'Nincs kijelölve'} · {getTaskStatusLabel(task.status)}</p>
                         </div>
                         <span className={`shrink-0 border px-1.5 py-0.5 text-[9px] ${getTaskDueDateTone(task.dueDate)}`}>{task.dueDate ? new Date(task.dueDate).toLocaleDateString('hu-HU') : 'Nincs határidő'}</span>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        <button onClick={() => router.push(`/tasks?taskId=${task.id}`)} className="border border-[#D8CDB6] bg-white px-2 py-1 text-[9px] font-semibold text-[#3D4842]">Feladatlap</button>
-                        {(task.status === 'TODO' || task.status === 'ASSIGNED' || task.status === 'PENDING') && <button onClick={() => handleStartTask(task.id)} disabled={actionTaskId === task.id} className="bg-[#1F4A33] px-2 py-1 text-[9px] text-white disabled:opacity-50">{actionTaskId === task.id ? '...' : 'Indítás'}</button>}
-                        {task.status === 'IN_PROGRESS' && <button onClick={() => handleSubmitTask(task.id)} disabled={actionTaskId === task.id} className="bg-[#B58A2A] px-2 py-1 text-[9px] text-white disabled:opacity-50">{actionTaskId === task.id ? '...' : 'Beküldés'}</button>}
+                        <button onClick={() => router.push(`/tasks?taskId=${task.id}`)} className="border border-[var(--adm-border)] bg-white px-2 py-1 text-[9px] font-semibold text-[var(--adm-text)]">Feladatlap</button>
+                        {(task.status === 'TODO' || task.status === 'ASSIGNED' || task.status === 'PENDING') && <button onClick={() => handleStartTask(task.id)} disabled={actionTaskId === task.id} className="bg-[var(--adm-green-800)] px-2 py-1 text-[9px] text-white disabled:opacity-50">{actionTaskId === task.id ? '...' : 'Indítás'}</button>}
+                        {task.status === 'IN_PROGRESS' && <button onClick={() => handleSubmitTask(task.id)} disabled={actionTaskId === task.id} className="bg-[var(--adm-ochre-500)] px-2 py-1 text-[9px] text-white disabled:opacity-50">{actionTaskId === task.id ? '...' : 'Beküldés'}</button>}
                         {task.status === 'SUBMITTED' && (
                           <>
-                            <button onClick={() => handleCompleteTask(task.id, true)} disabled={actionTaskId === task.id} className="bg-[#1F4A33] px-2 py-1 text-[9px] text-white disabled:opacity-50">{actionTaskId === task.id ? '...' : 'Jóváhagyás'}</button>
+                            <button onClick={() => handleCompleteTask(task.id, true)} disabled={actionTaskId === task.id} className="bg-[var(--adm-green-800)] px-2 py-1 text-[9px] text-white disabled:opacity-50">{actionTaskId === task.id ? '...' : 'Jóváhagyás'}</button>
                             <button onClick={() => handleCompleteTask(task.id, false)} disabled={actionTaskId === task.id} className="border border-[#8B2A2A] bg-white px-2 py-1 text-[9px] text-[#8B2A2A] disabled:opacity-50">Elutasítás</button>
                           </>
                         )}
@@ -1527,37 +1527,37 @@ export function CaseDetail({ params }: CaseDetailProps) {
                   ))}
                 </div>
               ) : (
-                <p className="border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-3 text-[11px] text-[#7A8479]">Még nincs nyitott feladat ehhez az ügyhöz.</p>
+                <p className="border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-[11px] text-[var(--adm-text-muted)]">Még nincs nyitott feladat ehhez az ügyhöz.</p>
               )}
             </section>
 
-            <section className="border border-[#E5DCBE] bg-white p-3">
+            <section className="border border-[var(--adm-border)] bg-white p-3">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">BELSŐ JEGYZETEK / KOMMUNIKÁCIÓ</h3>
-                <span className="text-[10px] text-[#7A8479]">{communications.length}</span>
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">BELSŐ JEGYZETEK / KOMMUNIKÁCIÓ</h3>
+                <span className="text-[10px] text-[var(--adm-text-muted)]">{communications.length}</span>
               </div>
               {latestCommunication ? (
-                <div className="border border-[#E5DCBE] bg-[#FBF6E7] p-2">
-                  <p className="truncate text-[12px] font-semibold text-[#16201A]">{latestCommunication.subject || 'Nincs tárgy'}</p>
-                  <p className="mt-1 text-[10px] text-[#7A8479]">{latestCommunication.senderName || 'Ismeretlen feladó'} · {latestCommunication.createdAt ? new Date(latestCommunication.createdAt).toLocaleDateString('hu-HU') : ''}</p>
+                <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2">
+                  <p className="truncate text-[12px] font-semibold text-[var(--adm-text)]">{latestCommunication.subject || 'Nincs tárgy'}</p>
+                  <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{latestCommunication.senderName || 'Ismeretlen feladó'} · {latestCommunication.createdAt ? new Date(latestCommunication.createdAt).toLocaleDateString('hu-HU') : ''}</p>
                 </div>
               ) : (
-                <p className="border border-dashed border-[#E5DCBE] bg-[#FBF6E7] p-3 text-[11px] text-[#7A8479]">Még nincs rögzített kommunikáció.</p>
+                <p className="border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-[11px] text-[var(--adm-text-muted)]">Még nincs rögzített kommunikáció.</p>
               )}
-              <button onClick={() => router.push(`/cases/${canonicalCaseId}/communications`)} className="mt-3 w-full border border-[#D8CDB6] bg-white px-3 py-2 text-[10px] font-semibold text-[#3D4842]">Kommunikációs napló</button>
-              <p className="mt-2 text-[9px] text-[#7A8479]">Rögzített kommunikációk összefoglalója, nem élő postafiók.</p>
+              <button onClick={() => router.push(`/cases/${canonicalCaseId}/communications`)} className="mt-3 w-full border border-[var(--adm-border)] bg-white px-3 py-2 text-[10px] font-semibold text-[var(--adm-text)]">Kommunikációs napló</button>
+              <p className="mt-2 text-[9px] text-[var(--adm-text-muted)]">Rögzített kommunikációk összefoglalója, nem élő postafiók.</p>
             </section>
 
-            <details className="border border-[#E5DCBE] bg-white p-3">
-              <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">Munkafolyamat kontextus</summary>
-              <div className="mt-3 space-y-2 text-[10px] text-[#3D4842]">
+            <details className="border border-[var(--adm-border)] bg-white p-3">
+              <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Munkafolyamat kontextus</summary>
+              <div className="mt-3 space-y-2 text-[10px] text-[var(--adm-text)]">
                 <p>Aktuális lépés: <b>{currentWorkflowNode?.label || getWorkflowStatusLabel(workflowGraph?.currentStatus) || 'Nem elérhető'}</b></p>
                 <p>Felelős: <b>{primaryWorkflowTask?.assignedTo?.name || 'Még nincs felelős'}</b></p>
                 <p>Határidő: <b>{primaryWorkflowTask?.dueDate ? new Date(primaryWorkflowTask.dueDate).toLocaleDateString('hu-HU') : 'Nincs határidő'}</b></p>
                 {workflowGraph?.possibleTransitions?.length ? (
                   <div className="flex flex-wrap gap-1 pt-2">
                     {workflowGraph.possibleTransitions.map((status) => (
-                      <button key={status} onClick={() => handleWorkflowTransition(status)} disabled={isTransitioning || isArchived} className="bg-[#1F4A33] px-2 py-1 text-[9px] text-white disabled:opacity-50">
+                      <button key={status} onClick={() => handleWorkflowTransition(status)} disabled={isTransitioning || isArchived} className="bg-[var(--adm-green-800)] px-2 py-1 text-[9px] text-white disabled:opacity-50">
                         {isTransitioning ? '...' : getWorkflowStatusLabel(status)}
                       </button>
                     ))}
@@ -1611,7 +1611,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
       {/* Complete Case Confirmation Modal */}
       {showCompleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md shadow-2xl border border-[#e4e2dd]">
+          <div className="bg-white w-full max-w-md shadow-2xl border border-[var(--adm-border)]">
             <div className="bg-[#059669] px-6 py-4 flex justify-between items-center">
               <div>
                 <h2 className="text-lg font-['Newsreader'] font-bold text-white">Ügy lezárása és archiválása</h2>
@@ -1625,7 +1625,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
               </button>
             </div>
             <div className="p-6">
-              <p className="text-sm text-[#1F2821] mb-4">
+              <p className="text-sm text-[var(--adm-text)] mb-4">
                 Biztosan archiválni szeretné ezt az ügyet? Az ügy adatai megmaradnak, de befejezettként lesznek jelölve.
               </p>
               <div className="bg-[#FEF3C7] border border-[#FCD34D] p-3 mb-4">
@@ -1636,7 +1636,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setShowCompleteConfirm(false)}
-                  className="px-4 py-2 text-xs font-bold uppercase tracking-widest border border-[#c3c8c1]/20 text-[#434843] hover:bg-[#f5f3ee]"
+                  className="px-4 py-2 text-xs font-bold uppercase tracking-widest border border-[var(--adm-border)]/20 text-[var(--adm-text)] hover:bg-[var(--adm-surface)]"
                 >
                   Mégse
                 </button>
