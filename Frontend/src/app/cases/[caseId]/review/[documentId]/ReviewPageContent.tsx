@@ -65,7 +65,7 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const displayCaseId = caseRecord?.caseNumber || resolvedParams.caseId;
-  const displayMatterName = (caseRecord?.title && caseRecord.title !== "null" && caseRecord.title !== "null - null") ? caseRecord.title : "Document Review";
+  const displayMatterName = (caseRecord?.title && caseRecord.title !== "null" && caseRecord.title !== "null - null") ? caseRecord.title : "Ügynév nem érhető el";
   const displayClient = (caseRecord?.clientName && caseRecord.clientName !== "null") ? caseRecord.clientName : "";
   const canonicalCaseId = caseRecord?.id || resolvedParams.caseId;
   const sourceTitleMap = new Map<string, string>();
@@ -290,24 +290,25 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
   const leftRail = (
     <div className={`flex flex-col h-full ${isSignal ? "bg-[#0F172A]" : "bg-white"}`}>
       <div className={`p-4 border-b ${pal.border}`}>
-        <p className={`text-[10px] uppercase tracking-[0.2em] ${pal.label} mb-2`}>Case Context</p>
-        <p className={`text-[11px] font-semibold leading-tight ${pal.text}`}>{displayMatterName || "Matter name unavailable"}</p>
+        <p className={`text-[10px] uppercase tracking-[0.2em] ${pal.label} mb-2`}>Ügykörnyezet</p>
+        <p className={`text-[11px] font-semibold leading-tight ${pal.text}`}>{displayMatterName || "Ügynév nem érhető el"}</p>
         <p className={`text-[10px] ${pal.label} mt-1`}>{displayCaseId}</p>
         {displayClient && <p className={`text-[10px] ${pal.label} mt-1`}>{displayClient}</p>}
       </div>
       <nav className="flex-1 p-2 space-y-1">
         {[
-          { label: "Case Overview", href: `/cases/${canonicalCaseId}` },
-          { label: "Document Ledger", href: `/cases/${canonicalCaseId}/documents` },
-          { label: "Workspace", href: `/documents/compare?caseId=${canonicalCaseId}` },
+          { label: "Ügy áttekintése", href: `/cases/${canonicalCaseId}` },
+          { label: "Dokumentumtár", href: `/cases/${canonicalCaseId}/documents` },
+          { label: "Dokumentum-workspace", href: `/documents/compare?caseId=${canonicalCaseId}` },
           { label: "Verzió-összevetés", href: `/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(resolvedParams.documentId)}` },
+          { label: "Peres munkatér", href: `/litigation-workspace?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(resolvedParams.documentId)}` },
         ].map((item) => (
           <button key={item.href} onClick={() => router.push(item.href)} className={`w-full text-left px-3 py-2 text-[11px] font-medium rounded transition-colors ${pal.textDark} ${pal.bgHover}`}>{item.label}</button>
         ))}
       </nav>
       <div className={`p-3 border-t ${pal.border}`}>
-        <p className={`text-[10px] font-bold uppercase tracking-[0.2em] ${pal.label} mb-1`}>Active Document</p>
-        <p className={`text-[11px] font-semibold truncate ${pal.text}`}>{isLoading ? "..." : reviewDocument?.fileName || "Document Review"}</p>
+        <p className={`text-[10px] font-bold uppercase tracking-[0.2em] ${pal.label} mb-1`}>Aktív dokumentum</p>
+        <p className={`text-[11px] font-semibold truncate ${pal.text}`}>{isLoading ? "..." : reviewDocument?.fileName || "Dokumentum review"}</p>
       </div>
     </div>
   );
