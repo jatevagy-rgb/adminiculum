@@ -873,7 +873,7 @@ export function Dashboard() {
                 <p className="adm-kicker text-[var(--adm-blue-950)]">Dokumentum</p>
                 <h3 className="adm-heading mt-0.5 text-[20px]">Legutóbbi dokumentumok</h3>
               </div>
-              <Link href="/documents/compare" className="adm-link-button px-3 py-1.5 text-[11px]">Megnyitás</Link>
+              <Link href="/documents/compare" className="adm-link-button px-3 py-1.5 text-[11px]">Összevetés</Link>
             </div>
             <div className="mt-3 space-y-2 text-xs">
               {recentDocuments.length === 0 ? (
