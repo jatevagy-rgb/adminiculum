@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
+    "verify:prod-env": "node scripts/assert-production-bundle-env.js",
     "start": "next start -p 3000",
     "lint": "next lint"
   },

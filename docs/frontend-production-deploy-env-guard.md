@@ -29,6 +29,12 @@ NEXT_PUBLIC_BACKEND_BASE_URL=https://adminiculumbackend-b1-01.azurewebsites.net
 
 - Prefer the proven frontend-only deploy flow: build from the intended Git commit and use a frontend-only artifact derived from `git archive HEAD:Frontend` or the established production/Oryx path.
 - For manual Kudu deploys, verify the deployed bundle after upload and restart.
+- After `npm run build`, run the local production bundle guard:
+
+```text
+npm run verify:prod-env
+```
+
 - Grep deployed frontend bundles/source for accidental development targets:
 
 ```text
