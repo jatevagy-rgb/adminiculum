@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { getCommunications, type CommunicationItem } from "@/lib/api";
 import { classifyAudience } from "@/lib/communicationIntake";
@@ -327,7 +328,48 @@ function CommunicationRow({ item }: { item: CommunicationItem }) {
       <time className="whitespace-nowrap text-[10.5px] font-semibold text-[var(--adm-text-soft)]" dateTime={item.createdAt}>
         {timestamp}
       </time>
+      <CommunicationContextLinks item={item} />
     </li>
+  );
+}
+
+function CommunicationContextLinks({ item }: { item: CommunicationItem }) {
+  const links: Array<{ href: string; label: string }> = [];
+
+  if (item.caseId) {
+    links.push({ href: `/cases/${encodeURIComponent(item.caseId)}`, label: "Ügy megnyitása" });
+  }
+
+  if (item.clientId) {
+    links.push({ href: `/clients/${encodeURIComponent(item.clientId)}`, label: "Ügyfél megnyitása" });
+  }
+
+  if (item.caseId && item.documentId) {
+    const query = new URLSearchParams({ caseId: item.caseId, documentId: item.documentId });
+    links.push({ href: `/documents/compare?${query.toString()}`, label: "Dokumentum kontextus" });
+  }
+
+  if (links.length === 0 && item.sourceTaskCount === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5 md:col-span-5">
+      {links.map((link) => (
+        <Link
+          key={link.href}
+          href={link.href}
+          className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2.5 py-1 text-[9.5px] font-bold text-[var(--adm-blue-700)] transition-colors hover:border-[var(--adm-blue-500)] hover:bg-[var(--adm-blue-100)]/35"
+        >
+          {link.label}
+        </Link>
+      ))}
+      {item.sourceTaskCount > 0 ? (
+        <span className="rounded-full border border-dashed border-[var(--adm-border)] bg-white px-2.5 py-1 text-[9.5px] font-bold text-[var(--adm-text-muted)]">
+          Feladatkapcsolat: csak darabszám
+        </span>
+      ) : null}
+    </div>
   );
 }
 
