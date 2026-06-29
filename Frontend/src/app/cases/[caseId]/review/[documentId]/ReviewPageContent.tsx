@@ -275,15 +275,15 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
     accent: "text-cyan-400", accentBg: "bg-cyan-900/40 text-cyan-200",
     success: "bg-emerald-900/40 text-emerald-300", warning: "bg-amber-900/40 text-amber-300",
     danger: "bg-red-900/40 text-red-300",
-    label: "text-slate-400", card: "bg-[#111C2E] border-[#1E293B]",
+    label: "text-[var(--adm-text-muted)]", card: "bg-[#111C2E] border-[#1E293B]",
   } : {
-    bg: "bg-[#F5F7FB]", bgAlt: "bg-white", bgHover: "hover:bg-[#F0F4FF]",
-    bgSection: "bg-white", text: "text-[#1E293B]", textMuted: "text-[#64748B]", textDark: "text-[#334155]",
-    border: "border-[#E2E8F0]", borderLight: "border-[#F1F5F9]",
-    accent: "text-[#6366F1]", accentBg: "bg-indigo-50 text-indigo-700",
+    bg: "bg-[var(--adm-surface)]", bgAlt: "bg-white", bgHover: "hover:bg-[var(--adm-surface)]",
+    bgSection: "bg-white", text: "text-[var(--adm-text)]", textMuted: "text-[var(--adm-text-muted)]", textDark: "text-[var(--adm-text)]",
+    border: "border-[var(--adm-border)]", borderLight: "border-[var(--adm-border)]",
+    accent: "text-[var(--adm-blue-700)]", accentBg: "bg-[var(--adm-blue-100)]/30 text-[var(--adm-blue-700)]",
     success: "bg-emerald-50 text-emerald-800", warning: "bg-amber-50 text-amber-800",
     danger: "bg-red-50 text-red-700",
-    label: "text-slate-500", card: "bg-white border-[#E2E8F0]",
+    label: "text-[var(--adm-text-muted)]", card: "bg-white border-[var(--adm-border)]",
   };
 
   // ── Left rail ─────────────────────────────────────────────────────────────
@@ -323,7 +323,7 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
             <div className="flex justify-between"><span className={pal.label}>Verzió</span><span className="font-medium">{reviewDocument?.revisionNumber ? `v${reviewDocument.revisionNumber}` : "v1"}{reviewDocument?.isCurrentRevision ? " (Current)" : ""}</span></div>
             <div className="flex justify-between"><span className={pal.label}>Generálva</span><span className="font-medium">{reviewDocument?.generatedAt ? new Date(reviewDocument.generatedAt).toLocaleDateString("hu-HU") : "—"}</span></div>
             <div className="flex justify-between"><span className={pal.label}>Státusz</span><span className="font-bold">{reviewDocument?.status || "—"}</span></div>
-            {isEditedRevision && <p className="text-[10px] text-indigo-400">Szerkesztett verzió</p>}
+            {isEditedRevision && <p className="text-[10px] text-[var(--adm-blue-700)]">Szerkesztett verzió</p>}
             {revisionSourceTitle && <p className={`text-[10px] ${pal.label}`}>Forrás: {revisionSourceTitle}</p>}
             <div className="flex items-center gap-1.5 mt-1">
               {reviewDocument?.spItemId ? (<><span className="material-symbols-outlined text-sm text-emerald-400">cloud_done</span><span className="text-emerald-400 text-[10px] font-bold">SharePoint szinkronizálva</span></>) : (<><span className="material-symbols-outlined text-sm text-red-400">cloud_off</span><span className="text-red-400 text-[10px] font-bold">Nincs szinkronizálva</span></>)}
@@ -332,18 +332,18 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
         </SectionBlock>
         <SectionBlock title="Munkafolyamat" uiPack={uiPack}>
           <div className="space-y-2">
-            <button onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(resolvedParams.documentId)}`)} className={`w-full px-3 py-2 text-[11px] font-bold border transition-colors ${isSignal ? "border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[#E2E8F0] text-[#475569] hover:bg-[#F8FAFC]"}`}>Verzió-összevetés</button>
-            <button onClick={() => router.push(`/cases/${canonicalCaseId}/review/${resolvedParams.documentId}/edit`)} className={`w-full px-3 py-2 text-[11px] font-bold border transition-colors ${isSignal ? "border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[#E2E8F0] text-[#475569] hover:bg-[#F8FAFC]"}`}>Szerkesztés</button>
+            <button onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(canonicalCaseId)}&documentId=${encodeURIComponent(resolvedParams.documentId)}`)} className={`w-full px-3 py-2 text-[11px] font-bold border transition-colors ${isSignal ? "border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[var(--adm-border)] text-[var(--adm-text-muted)] hover:bg-[var(--adm-surface)]"}`}>Verzió-összevetés</button>
+            <button onClick={() => router.push(`/cases/${canonicalCaseId}/review/${resolvedParams.documentId}/edit`)} className={`w-full px-3 py-2 text-[11px] font-bold border transition-colors ${isSignal ? "border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[var(--adm-border)] text-[var(--adm-text-muted)] hover:bg-[var(--adm-surface)]"}`}>Szerkesztés</button>
           </div>
         </SectionBlock>
         <SectionBlock title="Előzmények" uiPack={uiPack}>
           <div className="relative space-y-4 pl-4">
-            <div className={`absolute left-[3px] top-1 bottom-2 w-[1px] ${isSignal ? "bg-[#1E293B]" : "bg-[#E2E8F0]"}`} />
+            <div className={`absolute left-[3px] top-1 bottom-2 w-[1px] ${isSignal ? "bg-[#1E293B]" : "bg-[var(--adm-border)]"}`} />
             {(timeline.length > 0 ? timeline.slice(0, 5) : [{ id: "gen", description: "Dokumentum generálva", createdAt: reviewDocument?.generatedAt } as TimelineEventItem]).map((event, idx) => {
               const isPrimary = idx === 0;
               return (
                 <div key={event.id ?? idx} className={`relative ${isPrimary ? "" : "opacity-60"}`}>
-                  <span className={`absolute -left-[21px] top-1 w-1.5 h-1.5 rounded-full ${isSignal ? "bg-cyan-400" : "bg-indigo-400"}`} />
+                  <span className={`absolute -left-[21px] top-1 w-1.5 h-1.5 rounded-full ${isSignal ? "bg-cyan-400" : "bg-[var(--adm-blue-700)]"}`} />
                   <p className={`text-[10px] font-semibold leading-tight ${pal.text}`}>{event.description || (event as { typeLabel?: string }).typeLabel || event.type || "Esemény"}</p>
                   <p className={`text-[9px] ${pal.label}`}>{event.createdAt ? new Date(event.createdAt).toLocaleString("hu-HU") : ""}</p>
                 </div>
@@ -365,25 +365,25 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
       )}
 
       {/* Outcome banner */}
-      <div className={`rounded-xl border px-${isSignal ? "5" : "8"} py-${isSignal ? "4" : "5"} ${outcome.variant === "success" ? (isSignal ? "bg-emerald-900/30 border-emerald-700" : "bg-emerald-50 border-emerald-200") : outcome.variant === "error" ? (isSignal ? "bg-red-900/30 border-red-700" : "bg-red-50 border-red-200") : outcome.variant === "warning" ? (isSignal ? "bg-amber-900/30 border-amber-700" : "bg-amber-50 border-amber-200") : (isSignal ? "bg-[#111C2E] border-[#1E293B]" : "bg-white border-[#E2E8F0]")}`}>
+      <div className={`rounded-xl border px-${isSignal ? "5" : "8"} py-${isSignal ? "4" : "5"} ${outcome.variant === "success" ? (isSignal ? "bg-emerald-900/30 border-emerald-700" : "bg-emerald-50 border-emerald-200") : outcome.variant === "error" ? (isSignal ? "bg-red-900/30 border-red-700" : "bg-red-50 border-red-200") : outcome.variant === "warning" ? (isSignal ? "bg-amber-900/30 border-amber-700" : "bg-amber-50 border-amber-200") : (isSignal ? "bg-[#111C2E] border-[#1E293B]" : "bg-white border-[var(--adm-border)]")}`}>
         <div className="flex items-center gap-4">
-          <span className={`material-symbols-outlined text-2xl ${isSignal ? "text-cyan-400" : "text-indigo-500"}`} style={{ fontVariationSettings: "'FILL' 1" }}>
+          <span className={`material-symbols-outlined text-2xl ${isSignal ? "text-cyan-400" : "text-[var(--adm-blue-700)]"}`} style={{ fontVariationSettings: "'FILL' 1" }}>
             {outcome.variant === "success" ? "verified" : outcome.variant === "error" ? "cancel" : "pending"}
           </span>
           <div className="flex-1 min-w-0">
-            <h1 className={`text-lg font-semibold ${isSignal ? "text-[#F1F5F9]" : "text-[#1E293B]"}`}>{outcome.label}</h1>
+            <h1 className={`text-lg font-semibold ${isSignal ? "text-[var(--adm-border)]" : "text-[var(--adm-text)]"}`}>{outcome.label}</h1>
             <p className={`text-[10px] ${pal.label}`}>Review workflow status{reviewDocument?.generatedAt && ` · ${new Date(reviewDocument.generatedAt).toLocaleDateString("hu-HU")}`}</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <button onClick={handleDownload} disabled={isDownloading} className={`px-3 py-1.5 text-[11px] font-bold border transition-colors ${isSignal ? "border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[#E2E8F0] text-[#475569] hover:bg-[#F8FAFC]"} disabled:opacity-40`}>{isDownloading ? "..." : "DOCX"}</button>
-            {reviewDocument?.spWebUrl ? (<button onClick={() => window.open(reviewDocument.spWebUrl!, "_blank")} className={`px-3 py-1.5 text-[11px] font-bold border transition-colors ${isSignal ? "border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[#E2E8F0] text-[#475569] hover:bg-[#F8FAFC]"}`}>SP</button>) : (<button onClick={handleSharePointUpload} disabled={isUploadingToSP} className={`px-3 py-1.5 text-[11px] font-bold border transition-colors ${isSignal ? "border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[#E2E8F0] text-[#475569] hover:bg-[#F8FAFC]"} disabled:opacity-40`}>{isUploadingToSP ? "..." : "Sync"}</button>)}
+            <button onClick={handleDownload} disabled={isDownloading} className={`px-3 py-1.5 text-[11px] font-bold border transition-colors ${isSignal ? "border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[var(--adm-border)] text-[var(--adm-text-muted)] hover:bg-[var(--adm-surface)]"} disabled:opacity-40`}>{isDownloading ? "..." : "DOCX"}</button>
+            {reviewDocument?.spWebUrl ? (<button onClick={() => window.open(reviewDocument.spWebUrl!, "_blank")} className={`px-3 py-1.5 text-[11px] font-bold border transition-colors ${isSignal ? "border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[var(--adm-border)] text-[var(--adm-text-muted)] hover:bg-[var(--adm-surface)]"}`}>SP</button>) : (<button onClick={handleSharePointUpload} disabled={isUploadingToSP} className={`px-3 py-1.5 text-[11px] font-bold border transition-colors ${isSignal ? "border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[var(--adm-border)] text-[var(--adm-text-muted)] hover:bg-[var(--adm-surface)]"} disabled:opacity-40`}>{isUploadingToSP ? "..." : "Sync"}</button>)}
           </div>
         </div>
         {(isEditedRevision || reviewDocument?.revisionNumber) && (
           <div className="flex gap-2 mt-3">
-            {isEditedRevision && <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isSignal ? "bg-indigo-900/40 text-indigo-300" : "bg-indigo-50 text-indigo-700 border border-indigo-200"}`}>Szerkesztett verzió</span>}
-            {reviewDocument?.revisionNumber && <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isSignal ? "bg-[#1E293B] text-[#94A3B8]" : "bg-slate-100 text-slate-600"}`}>Revision {reviewDocument.revisionNumber}</span>}
-            {revisionSourceTitle && <span className={`text-[10px] px-2 py-0.5 rounded ${isSignal ? "text-slate-500" : "text-slate-400"}`}>Forrás: {revisionSourceTitle}</span>}
+            {isEditedRevision && <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isSignal ? "bg-indigo-900/40 text-indigo-300" : "bg-[var(--adm-blue-100)]/30 text-[var(--adm-blue-700)] border border-[var(--adm-blue-100)]"}`}>Szerkesztett verzió</span>}
+            {reviewDocument?.revisionNumber && <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isSignal ? "bg-[#1E293B] text-[#94A3B8]" : "bg-[var(--adm-surface)] text-[var(--adm-text-muted)]"}`}>Revision {reviewDocument.revisionNumber}</span>}
+            {revisionSourceTitle && <span className={`text-[10px] px-2 py-0.5 rounded ${isSignal ? "text-slate-500" : "text-[var(--adm-text-muted)]"}`}>Forrás: {revisionSourceTitle}</span>}
           </div>
         )}
       </div>
@@ -395,14 +395,14 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
             <div><p className={`text-sm font-semibold ${pal.text}`}>Dokumentum jóváhagyva</p><p className={`text-[11px] ${pal.label}`}>Készen áll a véglegesítésre</p></div>
             <div className="flex gap-2 flex-wrap">
               {!reviewDocument?.isFinalRevision && <button onClick={handleFinalize} disabled={isFinalizing} className={`px-4 py-2 text-[11px] font-bold transition-colors ${isSignal ? "bg-emerald-700 text-emerald-200 hover:bg-emerald-600 disabled:opacity-40" : "bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40"}`}>{isFinalizing ? "..." : reviewDocument?.isFinalRevision ? "Véglegesítve" : "Véglegesítés"}</button>}
-              <button onClick={handleBackToReview} disabled={isBackToReview} className={`px-4 py-2 text-[11px] font-bold border transition-colors ${isSignal ? "border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[#E2E8F0] text-[#475569] hover:bg-[#F8FAFC]"} disabled:opacity-40`}>{isBackToReview ? "..." : "Vissza review-ra"}</button>
+              <button onClick={handleBackToReview} disabled={isBackToReview} className={`px-4 py-2 text-[11px] font-bold border transition-colors ${isSignal ? "border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[var(--adm-border)] text-[var(--adm-text-muted)] hover:bg-[var(--adm-surface)]"} disabled:opacity-40`}>{isBackToReview ? "..." : "Vissza review-ra"}</button>
               {showRejectPanel ? (<><button onClick={() => { setShowRejectPanel(false); setRejectReason(""); }} className={`px-3 py-2 text-[11px] font-bold border transition-colors ${isSignal ? "border-red-800 text-red-400 hover:bg-red-900/40" : "border-red-200 text-red-600 hover:bg-red-50"}`}>Mégse</button><button onClick={handleRejectApproval} disabled={isRejectingApproval || !rejectReason.trim()} className={`px-3 py-2 text-[11px] font-bold transition-colors ${isSignal ? "bg-red-800 text-red-200 hover:bg-red-700 disabled:opacity-40" : "bg-red-600 text-white hover:bg-red-700 disabled:opacity-40"}`}>{isRejectingApproval ? "..." : "Elutasítás megerősítése"}</button></>) : (<button onClick={() => setShowRejectPanel(true)} className={`px-4 py-2 text-[11px] font-bold border transition-colors ${isSignal ? "border-red-800 text-red-400 hover:bg-red-900/40" : "border-red-200 text-red-600 hover:bg-red-50"}`}>Jóváhagyás elutasítása</button>)}
             </div>
           </div>
           {showRejectPanel && (
             <div className={`mt-4 p-4 rounded-lg ${isSignal ? "bg-red-900/30 border border-red-800" : "bg-red-50 border border-red-200"}`}>
               <p className={`text-[11px] font-bold mb-2 ${isSignal ? "text-red-300" : "text-red-700"}`}>Elutasítás indoka (kötelező)</p>
-              <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Indok..." className={`w-full h-16 border rounded-lg px-3 py-2 text-sm resize-none ${isSignal ? "bg-[#0B1220] border-red-800 text-[#D6E2F2]" : "bg-white border-red-200 text-[#1E293B]"}`} />
+              <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Indok..." className={`w-full h-16 border rounded-lg px-3 py-2 text-sm resize-none ${isSignal ? "bg-[#0B1220] border-red-800 text-[#D6E2F2]" : "bg-white border-red-200 text-[var(--adm-text)]"}`} />
             </div>
           )}
         </Panel>
@@ -412,7 +412,7 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
       <Panel uiPack={uiPack} className={`${isSignal ? "p-5" : "p-6"}`}>
         <SectionBlock title="Review értékelés" subtitle={reviewDocument?.status || "Státusz betöltése..."} uiPack={uiPack}>
           {(reviewNotesData?.overallNote || reviewDocument?.revisionNote || decisionRationale) ? (
-            <blockquote className={`text-sm leading-relaxed border-l-2 ${isSignal ? "border-cyan-700 text-[#D6E2F2] pl-4" : "border-indigo-300 text-[#334155] pl-4"}`}>
+            <blockquote className={`text-sm leading-relaxed border-l-2 ${isSignal ? "border-cyan-700 text-[#D6E2F2] pl-4" : "border-[var(--adm-blue-500)] text-[var(--adm-text)] pl-4"}`}>
               "{reviewNotesData?.overallNote || reviewDocument?.revisionNote || decisionRationale}"
             </blockquote>
           ) : (
@@ -427,8 +427,8 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
           <SectionBlock title="Záradék elemzés" uiPack={uiPack}>
             <div className="grid gap-3 text-[11px] grid-cols-3">
               {(["detected", "missing", "suggested"] as const).map((cat) => (
-                <div key={cat} className={`rounded-lg p-3 ${isSignal ? "bg-[#0B1220] border border-[#1E293B]" : "bg-slate-50 border border-[#E2E8F0]"}`}>
-                  <p className={`text-[10px] uppercase tracking-widest font-bold mb-2 ${isSignal ? "text-slate-500" : "text-slate-400"}`}>{cat}</p>
+                <div key={cat} className={`rounded-lg p-3 ${isSignal ? "bg-[#0B1220] border border-[#1E293B]" : "bg-[var(--adm-surface)] border border-[var(--adm-border)]"}`}>
+                  <p className={`text-[10px] uppercase tracking-widest font-bold mb-2 ${isSignal ? "text-slate-500" : "text-[var(--adm-text-muted)]"}`}>{cat}</p>
                   {clauseGuidance[cat]?.length ? (<ul className="space-y-1">{clauseGuidance[cat].slice(0, 4).map((item) => (<li key={item.clauseId} className={`${cat === "missing" ? (isSignal ? "text-red-400" : "text-red-600") : pal.text} truncate`}>• {item.title}</li>))}</ul>) : <p className={`italic ${pal.label}`}>—</p>}
                 </div>
               ))}
@@ -441,7 +441,7 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
       <Panel uiPack={uiPack} className={`${isSignal ? "p-5" : "p-6"}`}>
         <SectionBlock title="Dokumentumcsomag" subtitle={`${completedChecklist} / ${contracts.length} kész`} uiPack={uiPack}>
           {checklistItems.length > 0 ? (
-            <ul className="space-y-2">{checklistItems.map((item) => (<li key={item.id} className={`flex items-center justify-between text-[11px] py-1.5 border-b ${isSignal ? "border-[#1E293B]/60" : "border-[#F1F5F9]"}`}><span className={pal.textDark}>{item.label}</span><span className={`font-bold text-[10px] ${item.status === "FINAL" ? (isSignal ? "text-emerald-400" : "text-emerald-600") : pal.label}`}>{item.status === "FINAL" ? "✓ KÉSZ" : item.status}</span></li>))}</ul>
+            <ul className="space-y-2">{checklistItems.map((item) => (<li key={item.id} className={`flex items-center justify-between text-[11px] py-1.5 border-b ${isSignal ? "border-[#1E293B]/60" : "border-[var(--adm-border)]"}`}><span className={pal.textDark}>{item.label}</span><span className={`font-bold text-[10px] ${item.status === "FINAL" ? (isSignal ? "text-emerald-400" : "text-emerald-600") : pal.label}`}>{item.status === "FINAL" ? "✓ KÉSZ" : item.status}</span></li>))}</ul>
           ) : <p className={`text-[11px] italic ${pal.label}`}>Nincs dokumentum a csomagban.</p>}
         </SectionBlock>
       </Panel>
@@ -458,8 +458,8 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
                 { key: "rejected", label: "Elutasítva", icon: "cancel", color: "red" },
               ] as const).map(({ key, label, icon, color }) => (
                 <button key={key} onClick={() => { setSelectedDecision(key); setDecisionError(null); }} disabled={isDeciding}
-                  className={`p-3 border rounded-lg text-left transition-all ${selectedDecision === key ? (color === "emerald" ? (isSignal ? "border-emerald-500 bg-emerald-900/50 text-emerald-300" : "border-emerald-500 bg-emerald-50 text-emerald-800") : color === "amber" ? (isSignal ? "border-amber-500 bg-amber-900/50 text-amber-300" : "border-amber-500 bg-amber-50 text-amber-800") : color === "red" ? (isSignal ? "border-red-500 bg-red-900/50 text-red-300" : "border-red-500 bg-red-50 text-red-800") : (isSignal ? "border-slate-500 bg-[#1E293B] text-[#CBD5E1]" : "border-slate-400 bg-slate-50 text-slate-700")) : (isSignal ? "border-[#1E293B] bg-[#0B1220] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[#E2E8F0] bg-white text-[#475569] hover:bg-[#F8FAFC]")} disabled:opacity-50`}>
-                  <span className={`material-symbols-outlined text-lg block mb-1 ${isSignal ? "text-cyan-400" : "text-indigo-500"}`}>{icon}</span>
+                  className={`p-3 border rounded-lg text-left transition-all ${selectedDecision === key ? (color === "emerald" ? (isSignal ? "border-emerald-500 bg-emerald-900/50 text-emerald-300" : "border-emerald-500 bg-emerald-50 text-emerald-800") : color === "amber" ? (isSignal ? "border-amber-500 bg-amber-900/50 text-amber-300" : "border-amber-500 bg-amber-50 text-amber-800") : color === "red" ? (isSignal ? "border-red-500 bg-red-900/50 text-red-300" : "border-red-500 bg-red-50 text-red-800") : (isSignal ? "border-slate-500 bg-[#1E293B] text-[#CBD5E1]" : "border-[var(--adm-border-strong)] bg-[var(--adm-surface)] text-[var(--adm-text)]")) : (isSignal ? "border-[#1E293B] bg-[#0B1220] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[var(--adm-border)] bg-white text-[var(--adm-text-muted)] hover:bg-[var(--adm-surface)]")} disabled:opacity-50`}>
+                  <span className={`material-symbols-outlined text-lg block mb-1 ${isSignal ? "text-cyan-400" : "text-[var(--adm-blue-700)]"}`}>{icon}</span>
                   <span className="text-[11px] font-bold">{label}</span>
                 </button>
               ))}
@@ -467,12 +467,12 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
             <div className="mb-4">
               <label className={`block text-[11px] font-bold uppercase tracking-wider mb-2 ${pal.label}`}>Indoklás {selectedDecision === "rejected" ? "* (kötelező)" : selectedDecision === "needs_changes" ? " (javasolt)" : ""}</label>
               <textarea value={decisionRationale} onChange={(e) => setDecisionRationale(e.target.value)} placeholder="Írd be az indoklást..."
-                className={`w-full h-20 border rounded-lg px-3 py-2 text-sm resize-none ${isSignal ? "bg-[#0B1220] border-[#1E293B] text-[#D6E2F2] focus:border-cyan-700" : "bg-white border-[#E2E8F0] text-[#1E293B] focus:border-indigo-400"} focus:outline-none`} />
+                className={`w-full h-20 border rounded-lg px-3 py-2 text-sm resize-none ${isSignal ? "bg-[#0B1220] border-[#1E293B] text-[#D6E2F2] focus:border-cyan-700" : "bg-white border-[var(--adm-border)] text-[var(--adm-text)] focus:border-[var(--adm-blue-500)]"} focus:outline-none`} />
             </div>
             {decisionError && (<div className={`mb-4 p-3 rounded-lg text-[11px] ${isSignal ? "bg-red-900/40 border border-red-800 text-red-300" : "bg-red-50 border border-red-200 text-red-700"}`}>{decisionError}</div>)}
             <div className="flex gap-2">
-              <button onClick={executeDecision} disabled={!selectedDecision || isDeciding} className={`px-5 py-2.5 text-[11px] font-bold uppercase tracking-wider transition-colors ${isSignal ? "bg-cyan-700 text-cyan-200 hover:bg-cyan-600 disabled:opacity-40" : "bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40"} disabled:cursor-not-allowed`}>{isDeciding ? "Feldolgozás..." : "Döntés rögzítése"}</button>
-              {selectedDecision && <button onClick={resetDecisionPanel} disabled={isDeciding} className={`px-4 py-2.5 text-[11px] font-bold border uppercase tracking-wider transition-colors ${isSignal ? "border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[#E2E8F0] text-[#475569] hover:bg-[#F8FAFC]"} disabled:opacity-40`}>Mégse</button>}
+              <button onClick={executeDecision} disabled={!selectedDecision || isDeciding} className={`px-5 py-2.5 text-[11px] font-bold uppercase tracking-wider transition-colors ${isSignal ? "bg-cyan-700 text-cyan-200 hover:bg-cyan-600 disabled:opacity-40" : "bg-[var(--adm-blue-700)] text-white hover:bg-[var(--adm-blue-950)] disabled:opacity-40"} disabled:cursor-not-allowed`}>{isDeciding ? "Feldolgozás..." : "Döntés rögzítése"}</button>
+              {selectedDecision && <button onClick={resetDecisionPanel} disabled={isDeciding} className={`px-4 py-2.5 text-[11px] font-bold border uppercase tracking-wider transition-colors ${isSignal ? "border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[var(--adm-border)] text-[var(--adm-text-muted)] hover:bg-[var(--adm-surface)]"} disabled:opacity-40`}>Mégse</button>}
             </div>
           </SectionBlock>
         </Panel>
@@ -486,14 +486,14 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
             <div className="flex-1 min-w-0">
               <h3 className={`text-sm font-semibold mb-1 ${pal.text}`}>Következő lépés: Feladat létrehozása</h3>
               <p className={`text-[11px] mb-3 ${pal.label}`}>Az így létrehozott feladat az aktuális ügyhöz kapcsolódik.</p>
-              <div className={`rounded-lg p-3 mb-3 ${isSignal ? "bg-[#0B1220] border border-[#1E293B]" : "bg-slate-50 border border-[#E2E8F0]"}`}>
+              <div className={`rounded-lg p-3 mb-3 ${isSignal ? "bg-[#0B1220] border border-[#1E293B]" : "bg-[var(--adm-surface)] border border-[var(--adm-border)]"}`}>
                 <p className={`text-[11px] font-bold mb-1 ${suggestedTask.priority === "URGENT" ? "text-red-400" : suggestedTask.priority === "HIGH" ? "text-amber-400" : pal.label}`}>{suggestedTask.priority} · {suggestedTask.type}</p>
                 <p className={`text-sm font-semibold ${pal.text}`}>{suggestedTask.title}</p>
                 <p className={`text-[11px] mt-1 ${pal.label}`}>{suggestedTask.description}</p>
               </div>
               <div className="mb-3">
                 <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${pal.label}`}>Felelős</label>
-                <select value={selectedTaskAssignee} onChange={(e) => setSelectedTaskAssignee(e.target.value)} className={`w-full border rounded-lg px-3 py-2 text-[11px] ${isSignal ? "bg-[#0B1220] border-[#1E293B] text-[#D6E2F2]" : "bg-white border-[#E2E8F0] text-[#1E293B]"}`}>
+                <select value={selectedTaskAssignee} onChange={(e) => setSelectedTaskAssignee(e.target.value)} className={`w-full border rounded-lg px-3 py-2 text-[11px] ${isSignal ? "bg-[#0B1220] border-[#1E293B] text-[#D6E2F2]" : "bg-white border-[var(--adm-border)] text-[var(--adm-text)]"}`}>
                   <option value="">— Nincs kiválasztva —</option>
                   {collaboratorCandidates.length > 0 && (<optgroup label="Résztvevők">{collaboratorCandidates.map((c) => <option key={c.id} value={c.id}>{(c as CaseCollaborator & { name?: string }).name || c.id}</option>)}</optgroup>)}
                   {userCandidates.length > 0 && (<optgroup label="Munkatársak">{userCandidates.map((u) => <option key={u.id} value={u.id}>{u.name || u.email || u.id}</option>)}</optgroup>)}
@@ -501,7 +501,7 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
               </div>
               <div className="flex gap-2">
                 <button onClick={handleCreateSuggestedTask} disabled={isCreatingTask || taskCreated} className={`px-4 py-2 text-[11px] font-bold transition-colors ${isSignal ? "bg-emerald-800 text-emerald-200 hover:bg-emerald-700 disabled:opacity-40" : "bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40"}`}>{isCreatingTask ? "..." : taskCreated ? "✓ Létrehozva" : "Feladat létrehozása"}</button>
-                <button onClick={dismissTaskSuggestion} disabled={isCreatingTask} className={`px-4 py-2 text-[11px] font-bold border transition-colors ${isSignal ? "border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[#E2E8F0] text-[#475569] hover:bg-[#F8FAFC]"}`}>Mégse</button>
+                <button onClick={dismissTaskSuggestion} disabled={isCreatingTask} className={`px-4 py-2 text-[11px] font-bold border transition-colors ${isSignal ? "border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]" : "border-[var(--adm-border)] text-[var(--adm-text-muted)] hover:bg-[var(--adm-surface)]"}`}>Mégse</button>
               </div>
             </div>
           </div>
@@ -512,18 +512,18 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
       <Panel uiPack={uiPack} className={`${isSignal ? "p-5" : "p-6"}`}>
         <SectionBlock title="Belső megjegyzések" subtitle={`${documentNotes.length} megjegyzés`} uiPack={uiPack}
           actions={<button onClick={() => setShowNotes(!showNotes)} className={`text-[10px] font-bold uppercase tracking-wider ${pal.label} hover:${pal.text} transition-colors`}>{showNotes ? "Elrejtés ▲" : "Megnyitás ▼"}</button>}
-          className={isSignal ? "text-[#94A3B8]" : "text-[#64748B]"}>
+          className={isSignal ? "text-[#94A3B8]" : "text-[var(--adm-text-muted)]"}>
           {showNotes && (
             <>
-              <div className={`rounded-lg p-4 mb-3 ${isSignal ? "bg-[#0B1220] border border-[#1E293B]" : "bg-slate-50 border border-[#E2E8F0]"}`}>
-                <input type="text" value={newNoteSubject} onChange={(e) => setNewNoteSubject(e.target.value)} placeholder="Tárgy (opcionális)" className={`w-full border rounded px-3 py-1.5 text-[11px] mb-2 ${isSignal ? "bg-[#0B1220] border-[#1E293B] text-[#D6E2F2]" : "bg-white border-[#E2E8F0] text-[#1E293B]"}`} />
-                <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="Belső megjegyzés..." rows={3} className={`w-full border rounded px-3 py-2 text-[11px] resize-none ${isSignal ? "bg-[#0B1220] border-[#1E293B] text-[#D6E2F2]" : "bg-white border-[#E2E8F0] text-[#1E293B]"}`} />
+              <div className={`rounded-lg p-4 mb-3 ${isSignal ? "bg-[#0B1220] border border-[#1E293B]" : "bg-[var(--adm-surface)] border border-[var(--adm-border)]"}`}>
+                <input type="text" value={newNoteSubject} onChange={(e) => setNewNoteSubject(e.target.value)} placeholder="Tárgy (opcionális)" className={`w-full border rounded px-3 py-1.5 text-[11px] mb-2 ${isSignal ? "bg-[#0B1220] border-[#1E293B] text-[#D6E2F2]" : "bg-white border-[var(--adm-border)] text-[var(--adm-text)]"}`} />
+                <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="Belső megjegyzés..." rows={3} className={`w-full border rounded px-3 py-2 text-[11px] resize-none ${isSignal ? "bg-[#0B1220] border-[#1E293B] text-[#D6E2F2]" : "bg-white border-[var(--adm-border)] text-[var(--adm-text)]"}`} />
                 {noteError && <p className={`text-[10px] mt-1 ${isSignal ? "text-red-400" : "text-red-600"}`}>{noteError}</p>}
-                <div className="flex justify-end mt-2"><button onClick={handleAddNote} disabled={isAddingNote || !newNoteContent.trim()} className={`px-3 py-1.5 text-[11px] font-bold transition-colors ${isSignal ? "bg-cyan-800 text-cyan-200 hover:bg-cyan-700 disabled:opacity-40" : "bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40"}`}>{isAddingNote ? "..." : "Hozzáadás"}</button></div>
+                <div className="flex justify-end mt-2"><button onClick={handleAddNote} disabled={isAddingNote || !newNoteContent.trim()} className={`px-3 py-1.5 text-[11px] font-bold transition-colors ${isSignal ? "bg-cyan-800 text-cyan-200 hover:bg-cyan-700 disabled:opacity-40" : "bg-[var(--adm-blue-700)] text-white hover:bg-[var(--adm-blue-950)] disabled:opacity-40"}`}>{isAddingNote ? "..." : "Hozzáadás"}</button></div>
               </div>
               {documentNotes.length === 0 ? (<p className={`text-[11px] italic text-center py-3 ${pal.label}`}>Még nincs megjegyzés.</p>) : (
                 <div className="space-y-2 max-h-60 overflow-y-auto">{documentNotes.map((note) => (
-                  <div key={note.id} className={`rounded-lg p-3 border-l-2 ${isSignal ? "bg-[#0B1220] border-cyan-800" : "bg-white border-indigo-200"}`}>
+                  <div key={note.id} className={`rounded-lg p-3 border-l-2 ${isSignal ? "bg-[#0B1220] border-cyan-800" : "bg-white border-[var(--adm-blue-100)]"}`}>
                     <div className="flex justify-between items-start mb-1"><p className={`text-[11px] font-semibold ${pal.text}`}>{note.subject || "Belső megjegyzés"}</p><p className={`text-[10px] ${pal.label}`}>{note.createdAt ? new Date(note.createdAt).toLocaleDateString("hu-HU") : ""}</p></div>
                     <p className={`text-[11px] ${pal.label}`}>{note.contentPreview}</p>
                     {note.createdBy && <p className={`text-[10px] mt-1 ${pal.label}`}>— {note.createdBy.name}</p>}
