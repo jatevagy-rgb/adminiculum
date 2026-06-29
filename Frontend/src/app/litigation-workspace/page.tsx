@@ -1006,6 +1006,15 @@ function isWorkspaceStep(step: string | undefined): step is LitigationWorkspaceS
   return step === "intake" || step === "strategy" || step === "assembly";
 }
 
+const WORKSPACE_MODE_LABELS: Record<string, string> = {
+  "pleading-workflow": "Peres beadvány",
+};
+
+function formatWorkspaceMode(mode: string): string {
+  if (!mode) return "Peres beadvány";
+  return WORKSPACE_MODE_LABELS[mode] || mode.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function WorkflowHeader({
   caseId,
   documentId,
@@ -1072,19 +1081,19 @@ function WorkflowHeader({
         <div className="grid gap-2 rounded-[8px] border border-[#D8CFB6] bg-white p-3 text-[11px] text-[#514D45] sm:grid-cols-5">
           <div>
             <p className="font-semibold text-[#1F2821]">Ügy száma</p>
-            <p className="mt-1 break-all">{caseNumber || "Hiányzik"}</p>
+            <p className="mt-1 break-all">{caseNumber || "Nincs megadva"}</p>
           </div>
           <div>
-            <p className="font-semibold text-[#1F2821]">Dokumentum</p>
-            <p className="mt-1 break-all">{documentName || documentId || "Hiányzik"}</p>
+            <p className="font-semibold text-[#1F2821]">Ellenfél irata</p>
+            <p className="mt-1 break-all">{documentName || documentId || "Nincs kiválasztva"}</p>
           </div>
           <div>
             <p className="font-semibold text-[#1F2821]">Ügyfél</p>
             <p className="mt-1 break-all">{clientName || "Ügyféladat nem érhető el"}</p>
           </div>
           <div>
-            <p className="font-semibold text-[#1F2821]">Mód</p>
-            <p className="mt-1 break-all">{mode}</p>
+            <p className="font-semibold text-[#1F2821]">Munkafolyamat</p>
+            <p className="mt-1 break-all">{formatWorkspaceMode(mode)}</p>
           </div>
           <div>
             <p className="font-semibold text-[#1F2821]">Státusz</p>
@@ -1101,9 +1110,19 @@ function MissingContextState() {
     <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-4">
       <AdminSectionHeader
         eyebrow="Hiányzó ügykörnyezet"
-        title="Válassz ügyet és ellenfél iratát a peres stratégiai térkép indításához."
-        subtitle="Ez a munkafolyamat csak caseId és documentId kontextussal értelmezhető. A célindítás: ügy megnyitása, ellenfél feltöltött iratának kiválasztása, majd peres munkaterület indítása."
-        action={<AdminStatusPill tone="gold">Case + document kell</AdminStatusPill>}
+        title="Válassz ügyet és ellenfél iratát a peres munkaterület indításához."
+        subtitle="A peres munkaterület ügyhöz és egy feltöltött ellenfél-irathoz kötött. Nyiss meg egy ügyet, válaszd ki az ellenfél iratát a Dokumentumtárban, majd onnan indítsd a peres munkaterületet."
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/cases"
+              className="inline-flex items-center justify-center rounded-[6px] border border-[#1F4A33] bg-[#1F4A33] px-3 py-2 text-[12px] font-semibold text-[#F4EFDB] transition-colors hover:bg-[#163524]"
+            >
+              Ügyek megnyitása
+            </Link>
+            <AdminStatusPill tone="gold">Ügy + irat szükséges</AdminStatusPill>
+          </div>
+        }
       />
     </section>
   );
