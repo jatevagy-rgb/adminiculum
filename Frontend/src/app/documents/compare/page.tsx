@@ -299,7 +299,7 @@ const localReviewTypeLabel: Record<LocalReviewMarkType, string> = {
 const localReviewToneClass: Record<LocalReviewMarkType, string> = {
   highlight: "border-[#BFDDBF] bg-[#EEF8ED] text-[#1E6A34]",
   comment: "border-[#C8D8F0] bg-[#F1F6FE] text-[#244B7A]",
-  replacement: "border-[#E6C987] bg-[#FAEFCF] text-[#7A5A1F]",
+  replacement: "border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)] text-[var(--adm-ochre-500)]",
   deletion: "border-[#E5C3C3] bg-[#FFF1F1] text-[#8B2A2A]",
 };
 
@@ -1780,17 +1780,17 @@ const filteredClauseTools = useMemo(() => {
     }
 
     return (
-      <div className="rounded-[10px] border border-[#E7DECB] bg-[#FCFAF4] px-5 py-4">
+      <div className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-5 py-4">
         <div className="mb-2 flex items-center justify-between gap-3">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Review-hivatkozások</p>
-            <p className="mt-1 text-[11px] text-[#6D6A62]">A kijelölt helyi kiemelések és megjegyzés-horgonyok itt jelennek meg. Ez nem Word változáskövetés.</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Review-hivatkozások</p>
+            <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">A kijelölt helyi kiemelések és megjegyzés-horgonyok itt jelennek meg. Ez nem Word változáskövetés.</p>
           </div>
-          <span className="rounded-full border border-[#DDD7CA] bg-white px-2 py-1 text-[10px] font-semibold text-[#514D45]">
+          <span className="rounded-full border border-[var(--adm-border)] bg-white px-2 py-1 text-[10px] font-semibold text-[var(--adm-text)]">
             {resolvedLocalReviewMarks.filter((mark) => mark.isResolved).length} helyi review-jel
           </span>
         </div>
-        <div className="max-h-[240px] overflow-y-auto whitespace-pre-wrap rounded-[8px] border border-[#EFE8D8] bg-white px-4 py-3 font-serif text-[15px] leading-7 text-[#2A312C]">
+        <div className="max-h-[240px] overflow-y-auto whitespace-pre-wrap rounded-[8px] border border-[var(--adm-surface)] bg-white px-4 py-3 font-serif text-[15px] leading-7 text-[var(--adm-text)]">
           {segments.map((segment) =>
             segment.mark ? (
               <button
@@ -1798,7 +1798,7 @@ const filteredClauseTools = useMemo(() => {
                 type="button"
                 onClick={() => focusAnchor(segment.mark?.id || "", segment.mark?.type === "comment" ? "comments" : "review")}
                 className={`rounded-[3px] border px-0.5 text-left transition-colors hover:brightness-[0.98] ${localReviewToneClass[segment.mark.type]} ${
-                  activeAnchorId === segment.mark.id ? "ring-2 ring-[#8E6B2E]/30" : ""
+                  activeAnchorId === segment.mark.id ? "ring-2 ring-[var(--adm-ochre-500)]/30" : ""
                 }`}
                 title={`${localReviewTypeLabel[segment.mark.type]} — kattints a kapcsolódó panelhez`}
               >
@@ -2292,35 +2292,35 @@ const filteredClauseTools = useMemo(() => {
   };
 
 return (
-    <div className="flex min-h-0 flex-1 flex-col bg-[#F3EBD4]">
+    <div className="flex min-h-0 flex-1 flex-col bg-[var(--adm-surface)]">
       <main className="min-w-0 flex-1 overflow-y-auto">
         <div className="space-y-3 p-4 xl:p-5">
-          <header className="rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] px-4 py-3 shadow-sm">
+          <header className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-4 py-3 shadow-sm">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   {activeCaseId ? (
                     <Link
                       href={`/cases/${encodeURIComponent(activeCaseId)}/documents`}
-                      className="inline-flex items-center justify-center rounded-[5px] border border-[#D7CCB0] bg-white px-3 py-1.5 text-[11px] font-semibold leading-none text-[#16201A] transition-colors hover:bg-[#F6F2E8]"
+                      className="inline-flex items-center justify-center rounded-[5px] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-semibold leading-none text-[var(--adm-text)] transition-colors hover:bg-[var(--adm-surface)]"
                     >
                       ← Dokumentumtár
                     </Link>
                   ) : null}
-                  <h1 className="min-w-0 max-w-full truncate font-serif text-[22px] font-medium leading-tight text-[#1F2821]">
+                  <h1 className="min-w-0 max-w-full truncate font-serif text-[22px] font-medium leading-tight text-[var(--adm-text)]">
                     {getWorkspaceDocumentTitle()}
                   </h1>
-                  <span className="rounded-full border border-[#DDD7CA] bg-white px-2.5 py-1 text-[10px] font-semibold text-[#514D45]">
+                  <span className="rounded-full border border-[var(--adm-border)] bg-white px-2.5 py-1 text-[10px] font-semibold text-[var(--adm-text)]">
                     Helyi munkapéldány
                   </span>
-                  <span className="rounded-full border border-[#DDD7CA] bg-[#FBF9F3] px-2.5 py-1 text-[10px] font-semibold text-[#514D45]">
+                  <span className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2.5 py-1 text-[10px] font-semibold text-[var(--adm-text)]">
                     {workspaceBacklinkStatusLabel}
                   </span>
                 </div>
-                <p className="text-[11px] text-[#6D6A62]">
-                  Ügy: <span className="font-semibold text-[#1F2821]">{selectedDocument?.caseNumber || "—"}</span>
-                  {" · "}Ügyfél: <span className="font-semibold text-[#1F2821]">{selectedDocument?.caseClientName || "—"}</span>
-                  {" · "}Feladat: <span className="font-semibold text-[#1F2821]">ügyvédi review</span>
+                <p className="text-[11px] text-[var(--adm-text-muted)]">
+                  Ügy: <span className="font-semibold text-[var(--adm-text)]">{selectedDocument?.caseNumber || "—"}</span>
+                  {" · "}Ügyfél: <span className="font-semibold text-[var(--adm-text)]">{selectedDocument?.caseClientName || "—"}</span>
+                  {" · "}Feladat: <span className="font-semibold text-[var(--adm-text)]">ügyvédi review</span>
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap items-start gap-2 lg:max-w-[420px] lg:justify-end">
@@ -2338,22 +2338,22 @@ return (
                 {activeCaseId ? (
                   <Link
                     href={`/cases/${encodeURIComponent(activeCaseId)}/handoff`}
-                    className="inline-flex items-center justify-center rounded-[5px] border border-[#D7CCB0] bg-white px-4 py-2 text-[13px] font-semibold leading-none text-[#16201A] transition-colors hover:border-[#16201A] hover:bg-[#FBF6E7]"
+                    className="inline-flex items-center justify-center rounded-[5px] border border-[var(--adm-border)] bg-white px-4 py-2 text-[13px] font-semibold leading-none text-[var(--adm-text)] transition-colors hover:border-[var(--adm-text)] hover:bg-[var(--adm-surface)]"
                   >
                     Leadási csomag
                   </Link>
                 ) : null}
               </div>
             </div>
-            <details className="mt-3 rounded-[8px] border border-[#E7DECB] bg-white px-3 py-2">
-              <summary className="cursor-pointer text-[11px] font-semibold text-[#514D45]">Részletek</summary>
+            <details className="mt-3 rounded-[8px] border border-[var(--adm-border)] bg-white px-3 py-2">
+              <summary className="cursor-pointer text-[11px] font-semibold text-[var(--adm-text)]">Részletek</summary>
               <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(240px,1.2fr)_140px_160px_auto]">
-                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
+                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">
                   Dokumentum
                   <select
                     value={selectedDocument?.id || ""}
                     onChange={(e) => handleWorkspaceDocumentChange(e.target.value)}
-                    className="mt-2 w-full rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[#1F2821]"
+                    className="mt-2 w-full rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[var(--adm-text)]"
                   >
                     <option value="">Válassz dokumentumot</option>
                     {caseScopedDocuments.map((doc) => (
@@ -2363,25 +2363,25 @@ return (
                     ))}
                   </select>
                 </label>
-                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
+                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">
                   Forrás
                   <select
                     value={sourceFilter}
                     onChange={(e) => setSourceFilter(e.target.value)}
-                    className="mt-2 w-full rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[#1F2821]"
+                    className="mt-2 w-full rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[var(--adm-text)]"
                   >
                     <option value="all">Minden forrás</option>
                     <option value="GENERATED">Generált</option>
                     <option value="UPLOADED">Feltöltött</option>
                   </select>
                 </label>
-                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
+                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">
                   Keresés
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Fájlnév / cím"
-                    className="mt-2 w-full rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[#1F2821]"
+                    className="mt-2 w-full rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[var(--adm-text)]"
                   />
                 </label>
                 <div className="space-y-2">
@@ -2408,12 +2408,12 @@ return (
             </details>
           </header>
 
-          <section className="rounded-[10px] border border-[#D8CFB6] bg-[#FFFDF7] p-3">
+          <section className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7B776D]">Ügyvédi review mód</p>
-                <h2 className="mt-1 font-serif text-[20px] font-medium text-[#1F2821]">Mit ellenőrizz először?</h2>
-                <p className="mt-1 max-w-3xl text-[11px] leading-5 text-[#6D6A62]">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Ügyvédi review mód</p>
+                <h2 className="mt-1 font-serif text-[20px] font-medium text-[var(--adm-text)]">Mit ellenőrizz először?</h2>
+                <p className="mt-1 max-w-3xl text-[11px] leading-5 text-[var(--adm-text-muted)]">
                   Először válaszd ki az aktuális dokumentumot és az összevetési alapot, majd nézd át a munkapéldány szövegét,
                   a kijelöléshez kötött helyi review-jeleket és a blokk-szintű összevetést.
                 </p>
@@ -2422,14 +2422,14 @@ return (
                 <button
                   type="button"
                   onClick={() => setWorkspaceMainTab("edit")}
-                  className="rounded-[5px] border border-[#D7CCB0] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F4A33] hover:bg-[#FBF6E7]"
+                  className="rounded-[5px] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-green-800)] hover:bg-[var(--adm-surface)]"
                 >
                   Munkapéldány
                 </button>
                 <button
                   type="button"
                   onClick={() => setWorkspaceMainTab("review")}
-                  className="rounded-[5px] border border-[#D7CCB0] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F4A33] hover:bg-[#FBF6E7]"
+                  className="rounded-[5px] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-green-800)] hover:bg-[var(--adm-surface)]"
                 >
                   Review jelek
                 </button>
@@ -2439,33 +2439,33 @@ return (
                     setWorkspaceMainTab("history");
                     activateCompareMode();
                   }}
-                  className="rounded-[5px] border border-[#D7CCB0] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1F4A33] hover:bg-[#FBF6E7]"
+                  className="rounded-[5px] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-green-800)] hover:bg-[var(--adm-surface)]"
                 >
                   Összehasonlítás
                 </button>
               </div>
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-3">
-              <div className="rounded-[8px] border border-[#E8DFC9] bg-white px-3 py-2">
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Munkapéldány</p>
-                <p className="mt-1 text-[11px] leading-4 text-[#514D45]">A szerkesztés és export a meglévő munkapéldány-logikát használja.</p>
+              <div className="rounded-[8px] border border-[var(--adm-border)] bg-white px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Munkapéldány</p>
+                <p className="mt-1 text-[11px] leading-4 text-[var(--adm-text)]">A szerkesztés és export a meglévő munkapéldány-logikát használja.</p>
               </div>
-              <div className="rounded-[8px] border border-[#E8DFC9] bg-white px-3 py-2">
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Összehasonlítás</p>
-                <p className="mt-1 text-[11px] leading-4 text-[#514D45]">Metaadat és elérhető blokk-szintű eltérések segítik a döntést.</p>
+              <div className="rounded-[8px] border border-[var(--adm-border)] bg-white px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Összehasonlítás</p>
+                <p className="mt-1 text-[11px] leading-4 text-[var(--adm-text)]">Metaadat és elérhető blokk-szintű eltérések segítik a döntést.</p>
               </div>
-              <div className="rounded-[8px] border border-[#E8DFC9] bg-white px-3 py-2">
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Helyi review</p>
-                <p className="mt-1 text-[11px] leading-4 text-[#514D45]">
+              <div className="rounded-[8px] border border-[var(--adm-border)] bg-white px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Helyi review</p>
+                <p className="mt-1 text-[11px] leading-4 text-[var(--adm-text)]">
                   Ez nem Word track changes, hanem Adminiculum review munkanézet. A tartós review napló későbbi backend-fejlesztés.
                 </p>
               </div>
             </div>
           </section>
 
-          <section className="rounded-[10px] border border-[#D8CFB6] bg-white px-3 py-2">
+          <section className="rounded-[10px] border border-[var(--adm-border)] bg-white px-3 py-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap gap-1 rounded-[8px] border border-[#EEE7D9] bg-[#FBF9F3] p-1">
+              <div className="flex flex-wrap gap-1 rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-1">
                 {([
                   { key: "edit", label: "Szerkesztés" },
                   { key: "review", label: "Review" },
@@ -2486,15 +2486,15 @@ return (
                     }}
                     className={`rounded-[6px] px-2.5 py-1 text-[11px] font-semibold ${
                       workspaceMainTab === tab.key
-                        ? "bg-[#1F4A33] text-[#F4EFDB]"
-                        : "text-[#514D45] hover:bg-white hover:text-[#1F2821]"
+                        ? "bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)]"
+                        : "text-[var(--adm-text)] hover:bg-white hover:text-[var(--adm-text)]"
                     }`}
                   >
                     {tab.label}
                   </button>
                 ))}
               </div>
-              <div className="text-[11px] text-[#6D6A62]">
+              <div className="text-[11px] text-[var(--adm-text-muted)]">
                 {workspaceMainTab === "edit"
                   ? "Szerkeszthető munkapéldány"
                   : workspaceMainTab === "review"
@@ -2511,16 +2511,16 @@ return (
           {error && <div className="p-3 text-xs bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a]">{error}</div>}
 
               {isLoading ? (
-<div className="py-12 text-center text-xs text-[#7B776D]">Szerződés-workspace betöltése...</div>
+<div className="py-12 text-center text-xs text-[var(--adm-text-muted)]">Szerződés-workspace betöltése...</div>
           ) : !selectedDocument ? (
             <div className="flex flex-col items-center justify-center gap-6 py-16">
               <div className="text-center">
-                <h3 className="font-serif text-2xl font-medium text-[#1F2821]">Nincs betöltött dokumentum-ellenőrzés.</h3>
-                <p className="mt-2 max-w-sm text-sm text-[#7B776D]">
+                <h3 className="font-serif text-2xl font-medium text-[var(--adm-text)]">Nincs betöltött dokumentum-ellenőrzés.</h3>
+                <p className="mt-2 max-w-sm text-sm text-[var(--adm-text-muted)]">
                   A review munkanézet használatához válassz meglévő dokumentumot, vagy tölts fel újat a Dokumentumtárban.
                 </p>
                 {caseScopedDocuments.length > 0 ? (
-                  <p className="mt-2 text-xs text-[#5F675F]">
+                  <p className="mt-2 text-xs text-[var(--adm-text-muted)]">
                     Ehhez az ügyhöz elérhető {caseScopedDocuments.length} dokumentum. Válassz egyet az alábbi gyorslistából.
                   </p>
                 ) : null}
@@ -2532,7 +2532,7 @@ return (
                       key={`${doc.kind}-${doc.id}`}
                       type="button"
                       onClick={() => handleWorkspaceDocumentChange(doc.id)}
-                      className="inline-flex items-center justify-center rounded-[5px] border border-[#D8CDB6] bg-white px-3 py-2 text-xs font-semibold text-[#16201A] transition-colors hover:border-[#B58A2A] hover:bg-[#FBF6E7]"
+                      className="inline-flex items-center justify-center rounded-[5px] border border-[var(--adm-border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--adm-text)] transition-colors hover:border-[var(--adm-ochre-500)] hover:bg-[var(--adm-surface)]"
                     >
                       {doc.fileName}
                     </button>
@@ -2542,19 +2542,19 @@ return (
               <div className="flex flex-wrap gap-3 justify-center">
                 <a
                   href={requestedCaseId ? `/cases/${encodeURIComponent(requestedCaseId)}/documents` : '/cases'}
-                  className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-5 py-2.5 text-[13px] font-semibold text-[#16201A] transition-colors hover:border-[#16201A] hover:bg-[#FBF6E7]"
+                  className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-5 py-2.5 text-[13px] font-semibold text-[var(--adm-text)] transition-colors hover:border-[var(--adm-text)] hover:bg-[var(--adm-surface)]"
                 >
                   Vissza a Dokumentumtárba
                 </a>
                 <a
                   href={requestedCaseId ? `/cases/${encodeURIComponent(requestedCaseId)}/documents` : '/cases'}
-                  className="inline-flex items-center justify-center rounded-[5px] border border-[#1F4A33] bg-[#1F4A33] px-5 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#2A5C44]"
+                  className="inline-flex items-center justify-center rounded-[5px] border border-[var(--adm-green-800)] bg-[var(--adm-green-800)] px-5 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#2A5C44]"
                 >
                   Dokumentum kiválasztása
                 </a>
                 <a
                   href={requestedCaseId ? `/cases/${encodeURIComponent(requestedCaseId)}/documents` : '/cases'}
-                  className="inline-flex items-center justify-center rounded-[5px] border border-[#B58A2A] bg-[#FBF6E7] px-5 py-2.5 text-[13px] font-semibold text-[#6C5120] transition-colors hover:bg-[#F2E7C4]"
+                  className="inline-flex items-center justify-center rounded-[5px] border border-[var(--adm-ochre-500)] bg-[var(--adm-surface)] px-5 py-2.5 text-[13px] font-semibold text-[var(--adm-ochre-500)] transition-colors hover:bg-[var(--adm-sand-100)]"
                 >
                   Dokumentum feltöltése
                 </a>
@@ -2564,29 +2564,29 @@ return (
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
               <aside className="order-2 min-w-0 space-y-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
                 {editorNotice ? (
-                  <div className="flex items-start justify-between gap-3 rounded-[8px] border border-[#A6C0AF] bg-[#E2EDE5] p-3 text-[11px] text-[#23472F]">
+                  <div className="flex items-start justify-between gap-3 rounded-[8px] border border-[#A6C0AF] bg-[#E2EDE5] p-3 text-[11px] text-[var(--adm-green-800)]">
                     <p className="font-semibold">{editorNotice}</p>
-                    <button type="button" onClick={() => setEditorNotice(null)} className="text-sm font-bold leading-none text-[#23472F]" aria-label="Értesítés bezárása">
+                    <button type="button" onClick={() => setEditorNotice(null)} className="text-sm font-bold leading-none text-[var(--adm-green-800)]" aria-label="Értesítés bezárása">
                       ×
                     </button>
                   </div>
                 ) : null}
 
-                <details className="group rounded-[10px] border border-[#D8CFB6] bg-[#FFFDF7] text-[#1F2821]">
+                <details className="group rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text)]">
                   <summary className="flex cursor-pointer list-none items-start justify-between gap-3 p-4 marker:hidden">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Ügyvédi átadás</p>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Ügyvédi átadás</p>
                       <h2 className="mt-1 font-serif text-lg font-medium">Review átadási csomag</h2>
-                      <p className="mt-1 text-[11px] leading-5 text-[#6D6A62]">
+                      <p className="mt-1 text-[11px] leading-5 text-[var(--adm-text-muted)]">
                         Másolható helyi munkasegédlet kollégának vagy vezető ügyvédnek. Kinyitva szerkeszthető és másolható.
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <AdminStatusPill tone="gold">Helyi</AdminStatusPill>
-                      <span className="text-sm text-[#7B776D] transition-transform group-open:rotate-180" aria-hidden="true">⌄</span>
+                      <span className="text-sm text-[var(--adm-text-muted)] transition-transform group-open:rotate-180" aria-hidden="true">⌄</span>
                     </div>
                   </summary>
-                  <div className="space-y-3 border-t border-[#EEE7D9] px-4 pb-4 pt-3">
+                  <div className="space-y-3 border-t border-[var(--adm-border)] px-4 pb-4 pt-3">
                     <textarea
                       value={reviewHandoffDraft}
                       onChange={(event) => {
@@ -2595,7 +2595,7 @@ return (
                         setReviewHandoffCopied(false);
                       }}
                       rows={10}
-                      className="min-h-[200px] w-full resize-y rounded-[8px] border border-[#D8CFB6] bg-white px-3 py-2 font-mono text-[11px] leading-5 text-[#1F2821] outline-none transition-colors focus:border-[#B58A2A] focus:ring-2 focus:ring-[#E6C987]/40"
+                      className="min-h-[200px] w-full resize-y rounded-[8px] border border-[var(--adm-border)] bg-white px-3 py-2 font-mono text-[11px] leading-5 text-[var(--adm-text)] outline-none transition-colors focus:border-[var(--adm-ochre-500)] focus:ring-2 focus:ring-[var(--adm-sand-300)]/40"
                       aria-label="Review átadási csomag helyi szövege"
                     />
                     <div className="flex flex-wrap items-center gap-2">
@@ -2619,7 +2619,7 @@ return (
                         Sablon frissítése
                       </AdminButton>
                     </div>
-                    <p className="rounded-[8px] border border-[#EEE7D9] bg-[#FBF9F3] px-3 py-2 text-[11px] leading-5 text-[#6D6A62]">
+                    <p className="rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">
                       Helyi munkasegédlet, nem backend review napló vagy Word változáskövetés; a tartós review-mentés későbbi fejlesztés.
                     </p>
                   </div>
@@ -2634,18 +2634,18 @@ return (
                     contextLabel={selectedDocument?.fileName || selectedDocument?.title || undefined}
                   />
                 ) : (
-                  <section className="rounded-[10px] border border-[#D8CFB6] bg-[#FFFDF7] p-4 text-[#1F2821]">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Átadási csomagok</p>
-                    <p className="mt-2 text-[11px] leading-5 text-[#6D6A62]">
+                  <section className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[var(--adm-text)]">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Átadási csomagok</p>
+                    <p className="mt-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">
                       Ügykörnyezet nélkül csak a helyi átadási munkaszöveg használható. Válassz ügyhöz tartozó dokumentumot a backend csomagkezeléshez.
                     </p>
                   </section>
                 )}
 
-                <section className="space-y-3 rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-4 text-[#1F2821]">
+                <section className="space-y-3 rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[var(--adm-text)]">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h2 className="font-serif text-lg font-medium text-[#1F2821]">
+                      <h2 className="font-serif text-lg font-medium text-[var(--adm-text)]">
                         {workspaceMainTab === "edit"
                           ? "Szerkesztés"
                           : workspaceMainTab === "review"
@@ -2656,7 +2656,7 @@ return (
                                 ? "Klauzulák"
                                 : "Előzmények"}
                       </h2>
-                      <p className="mt-1 text-[11px] text-[#6D6A62]">
+                      <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">
                         Jobb oldali támogatópanelek. A fő fókusz a munkapéldányon marad.
                       </p>
                     </div>
@@ -2665,20 +2665,20 @@ return (
 
                   {workspaceMainTab === "edit" ? (
                     <>
-                      <div className="rounded-[8px] border border-[#DDD7CA] bg-white p-3">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Dokumentumállapot</p>
-                        <div className="mt-2 space-y-2 text-[11px] text-[#514D45]">
-                          <p><span className="font-semibold text-[#1F2821]">Dokumentumtípus:</span> {getWorkspaceDocumentKindLabel()}</p>
-                          <p><span className="font-semibold text-[#1F2821]">Szövegforrás:</span> {workspaceTextSourceLabel}</p>
-                          <p><span className="font-semibold text-[#1F2821]">Verzió:</span> v{selectedDocument?.revisionNumber || 1}</p>
+                      <div className="rounded-[8px] border border-[var(--adm-border)] bg-white p-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Dokumentumállapot</p>
+                        <div className="mt-2 space-y-2 text-[11px] text-[var(--adm-text)]">
+                          <p><span className="font-semibold text-[var(--adm-text)]">Dokumentumtípus:</span> {getWorkspaceDocumentKindLabel()}</p>
+                          <p><span className="font-semibold text-[var(--adm-text)]">Szövegforrás:</span> {workspaceTextSourceLabel}</p>
+                          <p><span className="font-semibold text-[var(--adm-text)]">Verzió:</span> v{selectedDocument?.revisionNumber || 1}</p>
                         </div>
-                        <div className={`mt-3 rounded-[6px] border px-3 py-2 text-[11px] font-semibold ${isDraftDirty ? "border-[#E6C987] bg-[#FAEFCF] text-[#7A5A1F]" : "border-[#D9E6D9] bg-[#F5FAF5] text-[#2F5A37]"}`}>
+                        <div className={`mt-3 rounded-[6px] border px-3 py-2 text-[11px] font-semibold ${isDraftDirty ? "border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)] text-[var(--adm-ochre-500)]" : "border-[#D9E6D9] bg-[#F5FAF5] text-[#2F5A37]"}`}>
                           {isDraftDirty ? "Nem mentett helyi módosítások." : "A helyi munkapéldány szerkeszthető, de nem Word változáskövetés."}
                         </div>
                         {workspaceSaveState.type ? (
                           <div className={`mt-3 rounded-[6px] border px-3 py-2 text-[11px] font-semibold ${
                             workspaceSaveState.type === "success"
-                              ? "border-[#A6C0AF] bg-[#E2EDE5] text-[#23472F]"
+                              ? "border-[#A6C0AF] bg-[#E2EDE5] text-[var(--adm-green-800)]"
                               : "border-[#F2DAD6] bg-[#FFF5F3] text-[#8B2A2A]"
                           }`}>
                             {workspaceSaveState.message}
@@ -2687,33 +2687,33 @@ return (
                       </div>
 
                       {isTipTapPreviewEnabled ? (
-                        <div className="rounded-[8px] border border-[#E6C987] bg-[#FAEFCF] p-3">
+                        <div className="rounded-[8px] border border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)] p-3">
                           <div className="flex items-center justify-between gap-2">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7A5A1F]">Aktív szerkesztési mód</p>
-                            <span className="rounded-full border border-[#B28B2E] bg-white px-2 py-0.5 text-[10px] font-semibold text-[#5A4317]">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-ochre-500)]">Aktív szerkesztési mód</p>
+                            <span className="rounded-full border border-[var(--adm-ochre-500)] bg-white px-2 py-0.5 text-[10px] font-semibold text-[var(--adm-ochre-500)]">
                               Kísérleti formázott szerkesztő
                             </span>
                           </div>
-                          <p className="mt-2 text-[11px] leading-5 text-[#6C5120]">
+                          <p className="mt-2 text-[11px] leading-5 text-[var(--adm-ochre-500)]">
                             A kijelöléshez kapcsolt review-javaslatok a dokumentum vásznán jelennek meg, helyben maradnak, és nem kerülnek szerveroldali mentésre.
                           </p>
-                          <div className="mt-3 rounded-[6px] border border-[#D8CFB6] bg-white/80 px-3 py-2 text-[11px] text-[#514D45]">
+                          <div className="mt-3 rounded-[6px] border border-[var(--adm-border)] bg-white/80 px-3 py-2 text-[11px] text-[var(--adm-text)]">
                             {tipTapPreviewDraft === editorDraft
                               ? "A formázott szerkesztő szövege jelenleg megegyezik a munkapéldánnyal."
                               : "Átvétel szükséges, ha a formázott szerkesztő szövegét a munkapéldányban is használni szeretnéd."}
                           </div>
                         </div>
                       ) : (
-                        <div className="rounded-[8px] border border-[#DDD7CA] bg-white p-3">
+                        <div className="rounded-[8px] border border-[var(--adm-border)] bg-white p-3">
                           <div className="flex items-center justify-between gap-2">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Kijelölés</p>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Kijelölés</p>
                             {hasTextSelection ? (
                               <span className="rounded-full border border-[#BFDDBF] bg-[#EEF8ED] px-2 py-0.5 text-[10px] font-semibold text-[#1E6A34]">
                                 {selectionSnapshot?.text.trim().length || 0} karakter kijelölve
                               </span>
                             ) : null}
                           </div>
-                          <p className="mt-2 text-[11px] text-[#6D6A62]">
+                          <p className="mt-2 text-[11px] text-[var(--adm-text-muted)]">
                             {hasTextSelection
                               ? `Kijelölt részlet: „${getSelectionExcerpt(selectionSnapshot?.text || "", 120)}”`
                               : "Jelölj ki szöveget a művelethez."}
@@ -2723,7 +2723,7 @@ return (
                               type="button"
                               onClick={handleHighlightSelection}
                               disabled={!hasTextSelection}
-                              className="rounded-[5px] border border-[#BFDDBF] bg-[#EEF8ED] px-2.5 py-1 text-[10px] font-semibold text-[#1E6A34] disabled:cursor-not-allowed disabled:border-[#DDD7CA] disabled:bg-[#FBF9F3] disabled:text-[#8B877E]"
+                              className="rounded-[5px] border border-[#BFDDBF] bg-[#EEF8ED] px-2.5 py-1 text-[10px] font-semibold text-[#1E6A34] disabled:cursor-not-allowed disabled:border-[var(--adm-border)] disabled:bg-[var(--adm-surface)] disabled:text-[var(--adm-text-muted)]"
                             >
                               Kiemelés
                             </button>
@@ -2731,7 +2731,7 @@ return (
                               type="button"
                               onClick={openAnchoredCommentComposer}
                               disabled={!hasTextSelection}
-                              className="rounded-[5px] border border-[#C8D8F0] bg-[#F1F6FE] px-2.5 py-1 text-[10px] font-semibold text-[#244B7A] disabled:cursor-not-allowed disabled:border-[#DDD7CA] disabled:bg-[#FBF9F3] disabled:text-[#8B877E]"
+                              className="rounded-[5px] border border-[#C8D8F0] bg-[#F1F6FE] px-2.5 py-1 text-[10px] font-semibold text-[#244B7A] disabled:cursor-not-allowed disabled:border-[var(--adm-border)] disabled:bg-[var(--adm-surface)] disabled:text-[var(--adm-text-muted)]"
                             >
                               Megjegyzés
                             </button>
@@ -2739,7 +2739,7 @@ return (
                               type="button"
                               onClick={() => openProposedChangeComposer("replacement")}
                               disabled={!hasTextSelection}
-                              className="rounded-[5px] border border-[#E6C987] bg-[#FAEFCF] px-2.5 py-1 text-[10px] font-semibold text-[#7A5A1F] disabled:cursor-not-allowed disabled:border-[#DDD7CA] disabled:bg-[#FBF9F3] disabled:text-[#8B877E]"
+                              className="rounded-[5px] border border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)] px-2.5 py-1 text-[10px] font-semibold text-[var(--adm-ochre-500)] disabled:cursor-not-allowed disabled:border-[var(--adm-border)] disabled:bg-[var(--adm-surface)] disabled:text-[var(--adm-text-muted)]"
                             >
                               Cserejavaslat
                             </button>
@@ -2747,7 +2747,7 @@ return (
                               type="button"
                               onClick={() => openProposedChangeComposer("deletion")}
                               disabled={!hasTextSelection}
-                              className="rounded-[5px] border border-[#E5C3C3] bg-[#FFF1F1] px-2.5 py-1 text-[10px] font-semibold text-[#8B2A2A] disabled:cursor-not-allowed disabled:border-[#DDD7CA] disabled:bg-[#FBF9F3] disabled:text-[#8B877E]"
+                              className="rounded-[5px] border border-[#E5C3C3] bg-[#FFF1F1] px-2.5 py-1 text-[10px] font-semibold text-[#8B2A2A] disabled:cursor-not-allowed disabled:border-[var(--adm-border)] disabled:bg-[var(--adm-surface)] disabled:text-[var(--adm-text-muted)]"
                             >
                               Törlési javaslat
                             </button>
@@ -2759,10 +2759,10 @@ return (
 
                   {workspaceMainTab === "review" ? (
                     <>
-                      <div className="rounded-[8px] border border-[#DDD7CA] bg-white p-3">
+                      <div className="rounded-[8px] border border-[var(--adm-border)] bg-white p-3">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Review nézet</p>
-                          <div className="flex flex-wrap gap-1 rounded-[8px] border border-[#EEE7D9] bg-[#FBF9F3] p-1">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Review nézet</p>
+                          <div className="flex flex-wrap gap-1 rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-1">
                             {([
                               { key: "modified", label: "Módosításokkal" },
                               { key: "clean", label: "Tiszta" },
@@ -2778,7 +2778,7 @@ return (
                                   }
                                 }}
                                 className={`rounded-[6px] px-2 py-1 text-[10px] font-semibold ${
-                                  reviewLens === option.key ? "bg-[#1F4A33] text-[#F4EFDB]" : "text-[#514D45] hover:bg-white"
+                                  reviewLens === option.key ? "bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)]" : "text-[var(--adm-text)] hover:bg-white"
                                 }`}
                               >
                                 {option.label}
@@ -2788,7 +2788,7 @@ return (
                         </div>
                         <div className="mt-3 grid grid-cols-2 gap-2">
                           {[
-                            { label: "Függőben", value: reviewProgress.pending, tone: "border-[#E6C987] bg-[#FAEFCF] text-[#7A5A1F]" },
+                            { label: "Függőben", value: reviewProgress.pending, tone: "border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)] text-[var(--adm-ochre-500)]" },
                             { label: "Elfogadva", value: reviewProgress.accepted, tone: "border-[#BFDDBF] bg-[#EEF8ED] text-[#1E6A34]" },
                             { label: "Elutasítva", value: reviewProgress.rejected, tone: "border-[#E5C3C3] bg-[#FFF1F1] text-[#8B2A2A]" },
                             { label: "Ügyvéd által szerkesztve", value: reviewProgress.lawyerEdited, tone: "border-[#D9CFEA] bg-[#F6F1FD] text-[#63428E]" },
@@ -2800,15 +2800,15 @@ return (
                           ))}
                         </div>
                         {!hasReviewProgress ? (
-                          <p className="mt-3 rounded-[6px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] p-3 text-[11px] text-[#7B776D]">
+                          <p className="mt-3 rounded-[6px] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-[11px] text-[var(--adm-text-muted)]">
                             Még nincs feldolgozható módosítás.
                           </p>
                         ) : null}
                       </div>
 
                       {composerMode === "replacement" || composerMode === "deletion" ? (
-                        <div className={`rounded-[8px] border p-3 ${composerMode === "replacement" ? "border-[#E6C987] bg-[#FFF9EC]" : "border-[#E5C3C3] bg-[#FFF8F7]"}`}>
-                          <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${composerMode === "replacement" ? "text-[#7A5A1F]" : "text-[#8B2A2A]"}`}>
+                        <div className={`rounded-[8px] border p-3 ${composerMode === "replacement" ? "border-[var(--adm-sand-300)] bg-[var(--adm-surface)]" : "border-[#E5C3C3] bg-[#FFF8F7]"}`}>
+                          <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${composerMode === "replacement" ? "text-[var(--adm-ochre-500)]" : "text-[#8B2A2A]"}`}>
                             {editingReviewMarkId
                               ? composerMode === "replacement"
                                 ? "Szövegcsere-javaslat szerkesztése"
@@ -2817,7 +2817,7 @@ return (
                                 ? "Szövegcsere-javaslat"
                                 : "Törlési javaslat"}
                           </p>
-                          <p className="mt-2 text-[11px] text-[#514D45]">
+                          <p className="mt-2 text-[11px] text-[var(--adm-text)]">
                             Horgonyzott kijelölés: „{getSelectionExcerpt(selectionSnapshot?.text || "", 120) || "Nincs kijelölés"}”
                           </p>
                           {composerMode === "replacement" ? (
@@ -2826,7 +2826,7 @@ return (
                               onChange={(e) => setComposerDraft(e.target.value)}
                               rows={4}
                               placeholder="Írd be a javasolt csere-szöveget."
-                              className="mt-3 w-full rounded-[6px] border border-[#DDD7CA] bg-white px-3 py-2 text-xs text-[#1F2821] outline-none focus:border-[#63428E]"
+                              className="mt-3 w-full rounded-[6px] border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)] outline-none focus:border-[#63428E]"
                             />
                           ) : null}
                           <div className="mt-3 flex flex-wrap gap-2">
@@ -2837,7 +2837,7 @@ return (
                               Mégse
                             </AdminButton>
                           </div>
-                          <p className="mt-2 text-[10px] text-[#7B776D]">Helyi döntés — mentés későbbi patchben.</p>
+                          <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Helyi döntés — mentés későbbi patchben.</p>
                         </div>
                       ) : null}
 
@@ -2847,7 +2847,7 @@ return (
                             <div
                               key={mark.id}
                               className={`w-full rounded-[8px] border bg-white p-3 text-left transition-colors ${localReviewToneClass[mark.type]} ${
-                                activeAnchorId === mark.id ? "ring-2 ring-[#8E6B2E]/30" : ""
+                                activeAnchorId === mark.id ? "ring-2 ring-[var(--adm-ochre-500)]/30" : ""
                               }`}
                             >
                               <button type="button" onClick={() => focusAnchor(mark.id, "review")} className="w-full text-left">
@@ -2901,13 +2901,13 @@ return (
                       ) : null}
 
                       {proposedChanges.length > 0 ? (
-                        <div className="rounded-[8px] border border-[#DDD7CA] bg-white p-3">
-                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Javasolt módosítások</p>
+                        <div className="rounded-[8px] border border-[var(--adm-border)] bg-white p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Javasolt módosítások</p>
                           <div className="mt-3 space-y-2">
                             {proposedChanges.map((item) => (
-                              <div key={item.id} className="rounded-[6px] border border-[#EEE7D9] bg-[#FBF9F3] p-3">
-                                <div className="flex flex-wrap items-center gap-2 text-[10px] text-[#7B776D]">
-                                  <span className="rounded-full border border-[#DDD7CA] bg-white px-2 py-0.5">
+                              <div key={item.id} className="rounded-[6px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                                <div className="flex flex-wrap items-center gap-2 text-[10px] text-[var(--adm-text-muted)]">
+                                  <span className="rounded-full border border-[var(--adm-border)] bg-white px-2 py-0.5">
                                     {item.type === "addition"
                                       ? "Hozzáadás"
                                       : item.type === "deletion"
@@ -2920,8 +2920,8 @@ return (
                                   <span>•</span>
                                   <span>{formatDateTime(item.timestamp)}</span>
                                 </div>
-                                <p className="mt-2 whitespace-pre-wrap text-[11px] text-[#514D45]">{item.text}</p>
-                                <p className="mt-2 text-[11px] text-[#7B776D]">{item.explanation}</p>
+                                <p className="mt-2 whitespace-pre-wrap text-[11px] text-[var(--adm-text)]">{item.text}</p>
+                                <p className="mt-2 text-[11px] text-[var(--adm-text-muted)]">{item.explanation}</p>
                               </div>
                             ))}
                           </div>
@@ -2940,13 +2940,13 @@ return (
                           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#6B7E9A]">
                             {editingReviewMarkId ? "Horgonyzott megjegyzés szerkesztése" : "Horgonyzott megjegyzés"}
                           </p>
-                          <p className="mt-2 text-[11px] text-[#514D45]">Kijelölt idézet: „{getSelectionExcerpt(selectionSnapshot?.text || "", 120) || "Nincs kijelölés"}”</p>
+                          <p className="mt-2 text-[11px] text-[var(--adm-text)]">Kijelölt idézet: „{getSelectionExcerpt(selectionSnapshot?.text || "", 120) || "Nincs kijelölés"}”</p>
                           <textarea
                             value={composerDraft}
                             onChange={(e) => setComposerDraft(e.target.value)}
                             rows={4}
                             placeholder="Írd ide a horgonyzott megjegyzést."
-                            className="mt-3 w-full rounded-[6px] border border-[#DDD7CA] bg-white px-3 py-2 text-xs text-[#1F2821] outline-none focus:border-[#244B7A]"
+                            className="mt-3 w-full rounded-[6px] border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)] outline-none focus:border-[#244B7A]"
                           />
                           <div className="mt-3 flex flex-wrap gap-2">
                             <AdminButton size="xs" variant="primary" onClick={handleSubmitAnchoredComment}>
@@ -2964,7 +2964,7 @@ return (
                         onChange={(e) => setLocalCommentDraft(e.target.value)}
                         rows={4}
                         placeholder="Általános helyi megjegyzés ehhez a munkapéldányhoz."
-                        className="w-full rounded-[6px] border border-[#DDD7CA] bg-white px-3 py-2 text-xs text-[#1F2821] outline-none focus:border-[#1F4A33]"
+                        className="w-full rounded-[6px] border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)] outline-none focus:border-[var(--adm-green-800)]"
                       />
                       <div className="flex flex-wrap gap-2">
                         <AdminButton size="xs" variant="primary" onClick={handleAddLocalComment} disabled={!localCommentDraft.trim()}>
@@ -2978,14 +2978,14 @@ return (
                               key={comment.id}
                               type="button"
                               onClick={() => focusAnchor(comment.linkedMarkId || comment.id, "comments")}
-                              className={`w-full rounded-[6px] border p-3 text-left text-[11px] text-[#514D45] transition-colors ${
+                              className={`w-full rounded-[6px] border p-3 text-left text-[11px] text-[var(--adm-text)] transition-colors ${
                                 activeAnchorId === (comment.linkedMarkId || comment.id)
                                   ? "border-[#8CB4E6] bg-[#F3F8FF] ring-2 ring-[#D8E6FA]"
                                   : "border-[#E6EDF8] bg-white"
                               }`}
                             >
                               <div className="flex flex-wrap items-center gap-2 text-[10px] text-[#6B7E9A]">
-                                <span className="font-semibold text-[#1F2821]">{comment.authorLabel}</span>
+                                <span className="font-semibold text-[var(--adm-text)]">{comment.authorLabel}</span>
                                 <span>•</span>
                                 <span>{formatDateTime(comment.createdAt)}</span>
                                 <span className="rounded-full border border-[#D5E3F5] bg-[#F1F6FE] px-2 py-0.5 text-[10px]">
@@ -3002,7 +3002,7 @@ return (
                           ))}
                         </div>
                       ) : (
-                        <p className="text-[11px] text-[#7B776D]">Még nincs megjegyzés ehhez a munkapéldányhoz.</p>
+                        <p className="text-[11px] text-[var(--adm-text-muted)]">Még nincs megjegyzés ehhez a munkapéldányhoz.</p>
                       )}
                     </section>
                   ) : null}
@@ -3014,33 +3014,33 @@ return (
                         value={toolSearch}
                         onChange={(e) => setToolSearch(e.target.value)}
                         placeholder="Keress klauzulát…"
-                        className="w-full rounded-[6px] border border-[#D7CCB0] bg-white px-3 py-2 text-xs text-[#1F2821]"
+                        className="w-full rounded-[6px] border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
                       />
                       {filteredClauseTools.length === 0 ? (
-                        <p className="rounded-[5px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] p-3 text-xs text-[#9C9890]">Nincs találat a klauzulák között.</p>
+                        <p className="rounded-[5px] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-xs text-[var(--adm-text-muted)]">Nincs találat a klauzulák között.</p>
                       ) : (
                         <div className="space-y-2">
                           {filteredClauseTools.map((clause) => (
-                            <div key={clause.id} className="rounded-[6px] border border-[#EEE7D9] bg-white p-3">
+                            <div key={clause.id} className="rounded-[6px] border border-[var(--adm-border)] bg-white p-3">
                               <div className="space-y-1">
-                                <h4 className="text-sm font-semibold text-[#1F2821]">{clause.title}</h4>
-                                <p className="text-[11px] text-[#7B776D]">{clause.description}</p>
+                                <h4 className="text-sm font-semibold text-[var(--adm-text)]">{clause.title}</h4>
+                                <p className="text-[11px] text-[var(--adm-text-muted)]">{clause.description}</p>
                               </div>
                               <div className="mt-2 flex flex-wrap gap-1.5">
                                 {clause.tags.map((tag) => (
-                                  <span key={`${clause.id}-${tag}`} className="rounded-full border border-[#DDD7CA] bg-[#FBF9F3] px-2 py-0.5 text-[10px] text-[#514D45]">
+                                  <span key={`${clause.id}-${tag}`} className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-0.5 text-[10px] text-[var(--adm-text)]">
                                     {tag}
                                   </span>
                                 ))}
                               </div>
                               {expandedToolId === clause.id ? (
-                                <div className="mt-3 space-y-2 rounded-[6px] border border-[#DDD7CA] bg-[#FBF9F3] p-3">
-                                  <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-[#514D45]">{clause.text}</p>
+                                <div className="mt-3 space-y-2 rounded-[6px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                                  <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-[var(--adm-text)]">{clause.text}</p>
                                   <div className="flex flex-wrap items-center gap-2">
                                     <AdminButton size="xs" variant="neutral" onClick={() => handleInsertClauseIntoDraft(clause.text)}>
                                       Beszúrás
                                     </AdminButton>
-                                    <span className="text-[10px] text-[#7B776D]">Helyi beszúrás — mentés külön szükséges.</span>
+                                    <span className="text-[10px] text-[var(--adm-text-muted)]">Helyi beszúrás — mentés külön szükséges.</span>
                                   </div>
                                 </div>
                               ) : null}
@@ -3058,14 +3058,14 @@ return (
 
                   {workspaceMainTab === "history" ? (
                     <section className="space-y-3">
-                      <div className="rounded-[8px] border border-[#DDD7CA] bg-white p-3">
-                        <p className="text-sm font-semibold text-[#1F2821]">Előzmények és technikai összevetés</p>
-                        <p className="mt-1 text-[11px] text-[#7B776D]">Ez a nézet audit- és technikai célra marad elérhető. Nem ez a szerződés-workspace elsődleges workflow-ja.</p>
+                      <div className="rounded-[8px] border border-[var(--adm-border)] bg-white p-3">
+                        <p className="text-sm font-semibold text-[var(--adm-text)]">Előzmények és technikai összevetés</p>
+                        <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Ez a nézet audit- és technikai célra marad elérhető. Nem ez a szerződés-workspace elsődleges workflow-ja.</p>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <AdminButton size="xs" variant="neutral" onClick={activateCompareMode}>
                             Technikai összevetés megnyitása
                           </AdminButton>
-                          <span className="rounded-full border border-[#DDD7CA] bg-[#FBF9F3] px-2 py-1 text-[10px] text-[#514D45]">
+                          <span className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-1 text-[10px] text-[var(--adm-text)]">
                             {selectedBaseline ? "Alapdokumentum kiválasztva" : "Nincs összevetési alap"}
                           </span>
                         </div>
@@ -3090,7 +3090,7 @@ return (
                   badges={
                     <>
                       {workspaceMainTab === "review" ? (
-                        <span className="rounded-full border border-[#DDD7CA] bg-white px-2 py-1 text-[10px] font-semibold text-[#514D45]">
+                        <span className="rounded-full border border-[var(--adm-border)] bg-white px-2 py-1 text-[10px] font-semibold text-[var(--adm-text)]">
                           {reviewLens === "modified" ? "Módosításokkal" : reviewLens === "clean" ? "Tiszta nézet" : "Eredeti nézet"}
                         </span>
                       ) : null}
@@ -3099,7 +3099,7 @@ return (
                   toolbar={
                     <div className="grid w-full gap-3">
                       {workspaceSaveState.type === "success" ? (
-                        <div className="rounded-[6px] border border-[#A6C0AF] bg-[#E2EDE5] px-3 py-2 text-[11px] font-semibold text-[#23472F]">
+                        <div className="rounded-[6px] border border-[#A6C0AF] bg-[#E2EDE5] px-3 py-2 text-[11px] font-semibold text-[var(--adm-green-800)]">
                           {workspaceSaveState.message}
                         </div>
                       ) : workspaceSaveState.type === "error" ? (
@@ -3107,15 +3107,15 @@ return (
                           {workspaceSaveState.message}
                         </div>
                       ) : null}
-                      <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-[#D8CFB6] bg-[#FFFDF8] px-3 py-2">
-                        <div className="flex rounded-[999px] border border-[#D8CFB6] bg-[#F7F2E6] p-0.5">
+                      <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2">
+                        <div className="flex rounded-[999px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-0.5">
                           <button
                             type="button"
                             onClick={() => {
                               if (isTipTapPreviewEnabled) toggleTipTapPreview();
                             }}
                             className={`rounded-[999px] px-3 py-1.5 text-[10px] font-semibold transition ${
-                              !isTipTapPreviewEnabled ? "bg-[#1F4A33] text-[#F4EFDB] shadow-sm" : "text-[#514D45] hover:bg-white"
+                              !isTipTapPreviewEnabled ? "bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] shadow-sm" : "text-[var(--adm-text)] hover:bg-white"
                             }`}
                             aria-pressed={!isTipTapPreviewEnabled}
                           >
@@ -3127,7 +3127,7 @@ return (
                               if (!isTipTapPreviewEnabled) toggleTipTapPreview();
                             }}
                             className={`rounded-[999px] px-3 py-1.5 text-[10px] font-semibold transition ${
-                              isTipTapPreviewEnabled ? "bg-[#FAEFCF] text-[#5A4317] shadow-sm" : "text-[#514D45] hover:bg-white"
+                              isTipTapPreviewEnabled ? "bg-[var(--adm-sand-100)] text-[var(--adm-ochre-500)] shadow-sm" : "text-[var(--adm-text)] hover:bg-white"
                             }`}
                             aria-pressed={isTipTapPreviewEnabled}
                           >
@@ -3139,17 +3139,17 @@ return (
                             type="button"
                             onClick={syncTipTapPreviewToWorkingDraft}
                             disabled={tipTapPreviewDraft === editorDraft}
-                            className="rounded-[999px] border border-[#1F4A33] bg-[#1F4A33] px-3 py-1.5 text-[10px] font-semibold text-[#F4EFDB] transition hover:bg-[#173827] disabled:cursor-not-allowed disabled:border-[#D8CFB6] disabled:bg-[#EFE9DA] disabled:text-[#9C9890]"
+                            className="rounded-[999px] border border-[var(--adm-green-800)] bg-[var(--adm-green-800)] px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-ivory-50)] transition hover:bg-[var(--adm-green-900)] disabled:cursor-not-allowed disabled:border-[var(--adm-border)] disabled:bg-[var(--adm-surface)] disabled:text-[var(--adm-text-muted)]"
                           >
                             Formázott szöveg átvétele munkapéldányként
                           </button>
                         ) : null}
                       </div>
                       {isTipTapPreviewEnabled ? (
-                        <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2">
-                          <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C5120]">Formázás</span>
+                        <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2">
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--adm-ochre-500)]">Formázás</span>
                           {(["text-style", "structure", "list", "insert"] as const).map((group) => (
-                            <span key={group} className="flex items-center gap-1 rounded-[7px] border border-[#E7DECB] bg-white/80 px-1.5 py-1">
+                            <span key={group} className="flex items-center gap-1 rounded-[7px] border border-[var(--adm-border)] bg-white/80 px-1.5 py-1">
                               {tipTapToolbarItems
                                 .filter((item) => item.group === group)
                                 .map((item) => (
@@ -3160,8 +3160,8 @@ return (
                                     title={item.title}
                                     className={`rounded-[5px] border px-2.5 py-1 text-[10px] font-semibold transition ${
                                       item.active
-                                        ? "border-[#B28B2E] bg-[#FAEFCF] text-[#5A4317] shadow-sm"
-                                        : "border-transparent bg-white text-[#514D45] hover:border-[#B28B2E] hover:bg-[#FBF6E7]"
+                                        ? "border-[var(--adm-ochre-500)] bg-[var(--adm-sand-100)] text-[var(--adm-ochre-500)] shadow-sm"
+                                        : "border-transparent bg-white text-[var(--adm-text)] hover:border-[var(--adm-ochre-500)] hover:bg-[var(--adm-surface)]"
                                     }`}
                                   >
                                     {item.label}
@@ -3169,7 +3169,7 @@ return (
                                 ))}
                             </span>
                           ))}
-                          <span className="ml-auto text-[11px] text-[#7B776D]">
+                          <span className="ml-auto text-[11px] text-[var(--adm-text-muted)]">
                             Kijelölés: {tipTapSelection.empty ? "nincs kijelölés" : `${tipTapSelection.text.length} karakter`}
                           </span>
                         </div>
@@ -3177,7 +3177,7 @@ return (
                       {!isTipTapPreviewEnabled ? (
                         <div className="flex flex-wrap items-center gap-2">
                           {editorToolbarGroups.map((group) => (
-                            <div key={group.key} className="flex items-center gap-1 rounded-[8px] border border-[#E7DECB] bg-white px-1.5 py-1">
+                            <div key={group.key} className="flex items-center gap-1 rounded-[8px] border border-[var(--adm-border)] bg-white px-1.5 py-1">
                               {group.items.map((action) => (
                                 <button
                                   key={action.key}
@@ -3190,8 +3190,8 @@ return (
                                       ? "text-[#244B7A] hover:bg-[#F1F6FE]"
                                       : action.tone === "review"
                                         ? "text-[#63428E] hover:bg-[#F6F1FD]"
-                                        : "text-[#514D45] hover:bg-[#FBF9F3]"
-                                  } disabled:cursor-not-allowed disabled:text-[#9C9890]`}
+                                        : "text-[var(--adm-text)] hover:bg-[var(--adm-surface)]"
+                                  } disabled:cursor-not-allowed disabled:text-[var(--adm-text-muted)]`}
                                 >
                                   {action.label}
                                 </button>
@@ -3203,7 +3203,7 @@ return (
                     </div>
                   }
                   pageClassName="max-w-[1480px]"
-                  canvasClassName="min-h-[720px] bg-[#FFFDF8]"
+                  canvasClassName="min-h-[720px] bg-[var(--adm-surface)]"
                   textareaClassName="text-[16.5px]"
                   minHeightClassName="min-h-[680px]"
                   placeholder="Itt jelenik meg a valós kinyert dokumentumszöveg, az anonimizált szöveg vagy a helyi munkapéldány."
@@ -3224,13 +3224,13 @@ return (
                           legalInsertBodyPlaceholder="A szerződéses pont szövege."
                           placeholder="Kísérleti formázott előnézet a szerződés-workspace-ben."
                         />
-                        <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2 text-[11px] text-[#7B776D]">
+                        <div className="rounded-[8px] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[11px] text-[var(--adm-text-muted)]">
                           <div className="flex flex-wrap items-center gap-2">
                             <span>Szerkesztett szöveg: {tipTapPreviewDraft.length} karakter.</span>
                             <span>Átvétel után kerül a munkapéldányba.</span>
                           </div>
                           {!tipTapSelection.empty ? (
-                            <p className="mt-2 text-[#6C5120]">
+                            <p className="mt-2 text-[var(--adm-ochre-500)]">
                               Kijelölés: „{getSelectionExcerpt(tipTapSelection.text, 140)}”
                             </p>
                           ) : null}
@@ -3259,19 +3259,19 @@ return (
                   beforeEditor={
                     activeDraftText ? (
                       <div className="pt-1">
-                        <div className="border-b border-[#EEE7D9] pb-3">
+                        <div className="border-b border-[var(--adm-border)] pb-3">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="min-w-0 break-words font-serif text-[26px] font-medium leading-tight text-[#1F2821]">{getWorkspaceDocumentTitle()}</h3>
-                            <span className="rounded-full border border-[#DDD7CA] px-2 py-0.5 text-[10px] text-[#514D45]">{getWorkspaceDocumentKindLabel()}</span>
+                            <h3 className="min-w-0 break-words font-serif text-[26px] font-medium leading-tight text-[var(--adm-text)]">{getWorkspaceDocumentTitle()}</h3>
+                            <span className="rounded-full border border-[var(--adm-border)] px-2 py-0.5 text-[10px] text-[var(--adm-text)]">{getWorkspaceDocumentKindLabel()}</span>
                           </div>
-                          <p className="mt-2 text-[11px] text-[#7B776D]">
+                          <p className="mt-2 text-[11px] text-[var(--adm-text-muted)]">
                             Ügy: {selectedDocument?.caseNumber || "—"} · Verzió: v{selectedDocument?.revisionNumber || 1}
                             {selectedDocument?.id ? ` · Azonosító: ${selectedDocument.id.slice(0, 8)}` : ""}
                           </p>
                         </div>
                         <div className="pt-6">
                           {hasTextSelection ? (
-                            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[8px] border border-[#E6D5A6] bg-[#FCF4DB] px-3 py-2 text-[11px] text-[#6C5120]">
+                            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[8px] border border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)] px-3 py-2 text-[11px] text-[var(--adm-ochre-500)]">
                               <span className="font-semibold">Kijelölés:</span>
                               <span className="max-w-[420px] truncate">„{getSelectionExcerpt(selectionSnapshot?.text || "", 110)}”</span>
                               <button type="button" onClick={handleHighlightSelection} className="rounded-[5px] border border-[#BFDDBF] bg-[#EEF8ED] px-2 py-1 text-[10px] font-semibold text-[#1E6A34]">
@@ -3280,7 +3280,7 @@ return (
                               <button type="button" onClick={openAnchoredCommentComposer} className="rounded-[5px] border border-[#C8D8F0] bg-[#F1F6FE] px-2 py-1 text-[10px] font-semibold text-[#244B7A]">
                                 Megjegyzés
                               </button>
-                              <button type="button" onClick={() => openProposedChangeComposer("replacement")} className="rounded-[5px] border border-[#E6C987] bg-[#FAEFCF] px-2 py-1 text-[10px] font-semibold text-[#7A5A1F]">
+                              <button type="button" onClick={() => openProposedChangeComposer("replacement")} className="rounded-[5px] border border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)] px-2 py-1 text-[10px] font-semibold text-[var(--adm-ochre-500)]">
                                 Cserejavaslat
                               </button>
                               <button type="button" onClick={() => openProposedChangeComposer("deletion")} className="rounded-[5px] border border-[#E5C3C3] bg-[#FFF1F1] px-2 py-1 text-[10px] font-semibold text-[#8B2A2A]">
@@ -3288,7 +3288,7 @@ return (
                               </button>
                             </div>
                           ) : (
-                            <div className="mb-4 rounded-[8px] border border-dashed border-[#DDD7CA] bg-[#FBF9F3] px-3 py-2 text-[11px] text-[#7B776D]">
+                            <div className="mb-4 rounded-[8px] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[11px] text-[var(--adm-text-muted)]">
                               Jelölj ki szöveget a művelethez.
                             </div>
                           )}
@@ -3301,16 +3301,16 @@ return (
                     activeDraftText ? (
                       <>
                         {isDraftPreviewTruncated ? (
-                          <p className="mt-3 text-[11px] text-[#7B776D]">A hosszú dokumentum előnézete rövidítve jelenik meg.</p>
+                          <p className="mt-3 text-[11px] text-[var(--adm-text-muted)]">A hosszú dokumentum előnézete rövidítve jelenik meg.</p>
                         ) : null}
-                        <p className="mt-3 text-[10px] text-[#9C9890]">Bekezdések: {draftPreviewParagraphs.length}</p>
+                        <p className="mt-3 text-[10px] text-[var(--adm-text-muted)]">Bekezdések: {draftPreviewParagraphs.length}</p>
                       </>
                     ) : null
                   }
                   emptyState={
                     <div className="flex min-h-[520px] flex-col items-center justify-center text-center">
-                      <h3 className="font-serif text-2xl font-medium text-[#1F2821]">Szerkeszthető munkapéldány</h3>
-                      <p className="mt-3 max-w-xl text-sm leading-6 text-[#7B776D]">
+                      <h3 className="font-serif text-2xl font-medium text-[var(--adm-text)]">Szerkeszthető munkapéldány</h3>
+                      <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--adm-text-muted)]">
                         {isLoadingDocumentText
                           ? "A dokumentumszöveg betöltése folyamatban."
                           : documentTextReason
@@ -3324,7 +3324,7 @@ return (
                           <AdminButton variant="neutral" onClick={focusToolSearch}>
                             Klauzula keresése
                           </AdminButton>
-                          <Link href={getDocumentLedgerHref()} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-4 py-2 text-[13px] font-semibold leading-none text-[#16201A] transition-colors hover:border-[#16201A] hover:bg-[#FBF6E7]">
+                          <Link href={getDocumentLedgerHref()} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-4 py-2 text-[13px] font-semibold leading-none text-[var(--adm-text)] transition-colors hover:border-[var(--adm-text)] hover:bg-[var(--adm-surface)]">
                             Dokumentumtár
                           </Link>
                         </div>
@@ -3337,35 +3337,35 @@ return (
                 <details
                   id="history-tech-panel"
                   open={workspaceViewMode === "compare"}
-                  className={`scroll-mt-4 rounded-[10px] border bg-white p-4 ${workspaceViewMode === "compare" ? "border-[#B58A2A] ring-2 ring-[#F2E4BD]" : "border-[#D8CFB6]"}`}
+                  className={`scroll-mt-4 rounded-[10px] border bg-white p-4 ${workspaceViewMode === "compare" ? "border-[var(--adm-ochre-500)] ring-2 ring-[var(--adm-sand-300)]" : "border-[var(--adm-border)]"}`}
                 >
                   <summary className="cursor-pointer list-none">
                     <div className="flex items-center justify-between gap-4">
                       <div>
-                        <h2 className="text-sm font-semibold text-[#1F2821]">Előzmények és technikai összevetés</h2>
-                        <p className="mt-1 text-[11px] text-[#7B776D]">Audit és technikai ellenőrző nézet. Ez Adminiculumon belüli szöveg-összevetés, nem Word változáskövetés.</p>
+                        <h2 className="text-sm font-semibold text-[var(--adm-text)]">Előzmények és technikai összevetés</h2>
+                        <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Audit és technikai ellenőrző nézet. Ez Adminiculumon belüli szöveg-összevetés, nem Word változáskövetés.</p>
                       </div>
-                      <span className="rounded-full border border-[#DDD7CA] bg-[#FBF9F3] px-2 py-1 text-[10px] text-[#514D45]">
+                      <span className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-1 text-[10px] text-[var(--adm-text)]">
                         {workspaceViewMode === "compare" ? "Aktív technikai nézet" : "Másodlagos audit nézet"}
                       </span>
                     </div>
                   </summary>
                   <div className="mt-3 flex items-center justify-between gap-4">
-                    <p className="text-[11px] text-[#7B776D]">
+                    <p className="text-[11px] text-[var(--adm-text-muted)]">
                       Ha nincs kiválasztott alapdokumentum, a felület akkor is használható munkapéldányként.
                     </p>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setSelectedBaselineId(previousVersion?.id || null)}
                         disabled={!previousVersion}
-                        className="px-2 py-1 border border-[#DDD7CA] text-xs hover:bg-[#FBF9F3] disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-2 py-1 border border-[var(--adm-border)] text-xs hover:bg-[var(--adm-surface)] disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Közvetlen előző
                       </button>
                       <select
                         value={selectedBaseline?.id || ""}
                         onChange={(e) => setSelectedBaselineId(e.target.value || null)}
-                        className="px-2 py-1 border border-[#DDD7CA] text-xs"
+                        className="px-2 py-1 border border-[var(--adm-border)] text-xs"
                       >
                         <option value="">Nincs összevetési alap</option>
                         {baselineCandidates.map((candidate) => (
@@ -3377,65 +3377,65 @@ return (
                     </div>
                   </div>
 
-                <div className="mb-3 mt-3 p-3 border border-[#EEE7D9] bg-[#FBF9F3] space-y-2">
+                <div className="mb-3 mt-3 p-3 border border-[var(--adm-border)] bg-[var(--adm-surface)] space-y-2">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <h3 className="text-xs font-semibold text-[#1F2821]">Review folyamat</h3>
+                    <h3 className="text-xs font-semibold text-[var(--adm-text)]">Review folyamat</h3>
                     <div className="flex items-center gap-2 flex-wrap">
                       {selectedDocument.kind === "contract" && (
                         <Link
                           href={`/cases/${selectedDocument.caseId}/review/${selectedDocument.id}`}
-                          className="px-2 py-1 text-[10px] border border-[#DDD7CA] hover:bg-white"
+                          className="px-2 py-1 text-[10px] border border-[var(--adm-border)] hover:bg-white"
                         >
                           Review megnyitása
                         </Link>
                       )}
                       <Link
                         href={`/cases/${selectedDocument.caseId}/documents`}
-                        className="px-2 py-1 text-[10px] border border-[#DDD7CA] hover:bg-white"
+                        className="px-2 py-1 text-[10px] border border-[var(--adm-border)] hover:bg-white"
                       >
                         Ügy dokumentumai
                       </Link>
                       <Link
                         href={`/litigation-workspace?caseId=${encodeURIComponent(selectedDocument.caseId)}&documentId=${encodeURIComponent(selectedDocument.id)}`}
-                        className="px-2 py-1 text-[10px] border border-[#DDD7CA] hover:bg-white"
+                        className="px-2 py-1 text-[10px] border border-[var(--adm-border)] hover:bg-white"
                       >
                         Peres munkatér
                       </Link>
                       <button
                         onClick={() => handleDownload(selectedDocument)}
-                        className="px-2 py-1 text-[10px] border border-[#DDD7CA] hover:bg-white"
+                        className="px-2 py-1 text-[10px] border border-[var(--adm-border)] hover:bg-white"
                       >
                         Aktuális dokumentum letöltése
                       </button>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-2 text-[10px] text-[#514D45]">
-                    <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">Dokumentum státusz: {toReadableStatus(selectedDocument.status)}</span>
-                    <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">Forrás: {selectedDocument.source === "GENERATED" ? "Generált" : "Feltöltött"}</span>
-                    <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">Összevetési alap: {selectedBaseline ? "kiválasztva" : "nincs"}</span>
-                    <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">
+                  <div className="flex flex-wrap gap-2 text-[10px] text-[var(--adm-text)]">
+                    <span className="px-2 py-0.5 border border-[var(--adm-border)] bg-white">Dokumentum státusz: {toReadableStatus(selectedDocument.status)}</span>
+                    <span className="px-2 py-0.5 border border-[var(--adm-border)] bg-white">Forrás: {selectedDocument.source === "GENERATED" ? "Generált" : "Feltöltött"}</span>
+                    <span className="px-2 py-0.5 border border-[var(--adm-border)] bg-white">Összevetési alap: {selectedBaseline ? "kiválasztva" : "nincs"}</span>
+                    <span className="px-2 py-0.5 border border-[var(--adm-border)] bg-white">
                       Blokk-összevetés: {selectedDocument.kind === "contract" && !!comparisonData ? "elérhető" : "nem elérhető"}
                     </span>
-                    <span className="px-2 py-0.5 border border-[#DDD7CA] bg-white">Review feladatok: {reviewTaskCount}</span>
+                    <span className="px-2 py-0.5 border border-[var(--adm-border)] bg-white">Review feladatok: {reviewTaskCount}</span>
                   </div>
 
                   {!selectedBaseline ? (
-                    <p className="text-[11px] text-[#7B776D]">Válassz összevetési alapdokumentumot a pontosabb összevetéshez.</p>
+                    <p className="text-[11px] text-[var(--adm-text-muted)]">Válassz összevetési alapdokumentumot a pontosabb összevetéshez.</p>
                   ) : selectedDocument.kind !== "contract" ? (
-                    <p className="text-[11px] text-[#7B776D]">Ehhez a dokumentumtípushoz jelenleg metaadat alapú összevetés érhető el.</p>
+                    <p className="text-[11px] text-[var(--adm-text-muted)]">Ehhez a dokumentumtípushoz jelenleg metaadat alapú összevetés érhető el.</p>
                   ) : comparisonData ? (
-                    <p className="text-[11px] text-[#7B776D]">A blokk-szintű összevetés betöltve; folytatható a review.</p>
+                    <p className="text-[11px] text-[var(--adm-text-muted)]">A blokk-szintű összevetés betöltve; folytatható a review.</p>
                   ) : (
-                    <p className="text-[11px] text-[#7B776D]">A blokk-szintű összevetés betöltése folyamatban vagy nem érhető el.</p>
+                    <p className="text-[11px] text-[var(--adm-text-muted)]">A blokk-szintű összevetés betöltése folyamatban vagy nem érhető el.</p>
                   )}
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-3">
-                  <div className="p-3 border border-[#EEE7D9] bg-[#FBF9F3]">
-                    <p className="text-[10px] uppercase text-[#7B776D]">Aktuális dokumentum</p>
-                    <p className="text-sm font-semibold text-[#1F2821] mt-1 break-all">{selectedDocument.fileName}</p>
-                    <ul className="mt-2 text-[11px] text-[#514D45] space-y-1">
+                  <div className="p-3 border border-[var(--adm-border)] bg-[var(--adm-surface)]">
+                    <p className="text-[10px] uppercase text-[var(--adm-text-muted)]">Aktuális dokumentum</p>
+                    <p className="text-sm font-semibold text-[var(--adm-text)] mt-1 break-all">{selectedDocument.fileName}</p>
+                    <ul className="mt-2 text-[11px] text-[var(--adm-text)] space-y-1">
                       <li>Ügy: {selectedDocument.caseNumber} · {selectedDocument.caseTitle}</li>
                       <li>Ügyfél: {selectedDocument.caseClientName || "—"}</li>
                       <li>Forrás: {selectedDocument.source === "GENERATED" ? "Generált" : "Feltöltött"}</li>
@@ -3443,39 +3443,39 @@ return (
                       <li className="flex items-center gap-2">
                         Verzió: v{selectedDocument.revisionNumber || 1}
                         {selectedDocument.isCurrentRevision && (
-                            <span className="text-[9px] px-1.5 py-0.5 bg-[#d1e8d3] text-[#23472F] font-bold uppercase tracking-wide">Aktuális</span>
+                            <span className="text-[9px] px-1.5 py-0.5 bg-[#d1e8d3] text-[var(--adm-green-800)] font-bold uppercase tracking-wide">Aktuális</span>
                           )}
                           {selectedDocument.isFinalRevision && (
-                            <span className="text-[9px] px-1.5 py-0.5 bg-[#06190d] text-white font-bold uppercase tracking-wide">Végleges</span>
+                            <span className="text-[9px] px-1.5 py-0.5 bg-[var(--adm-text)] text-white font-bold uppercase tracking-wide">Végleges</span>
                           )}
                       </li>
                       <li>Frissítve: {formatDateTime(selectedDocument.updatedAt || selectedDocument.createdAt)}</li>
                     </ul>
                   </div>
 
-                  <div className="p-3 border border-[#EEE7D9] bg-white">
-                    <p className="text-[10px] uppercase text-[#7B776D]">Összevetési alapdokumentum</p>
+                  <div className="p-3 border border-[var(--adm-border)] bg-white">
+                    <p className="text-[10px] uppercase text-[var(--adm-text-muted)]">Összevetési alapdokumentum</p>
                     {!selectedBaseline ? (
                       <div className="mt-2 space-y-1">
-                        <p className="text-xs text-[#9C9890]">Nincs összevetési alap.</p>
-                        <p className="text-[11px] text-[#7B776D]">
+                        <p className="text-xs text-[var(--adm-text-muted)]">Nincs összevetési alap.</p>
+                        <p className="text-[11px] text-[var(--adm-text-muted)]">
                           Válassz korábbi verziót vagy ments egy módosított munkapéldányt.
                         </p>
                       </div>
                     ) : (
                       <>
-                        <p className="text-sm font-semibold text-[#1F2821] mt-1 break-all">{selectedBaseline.fileName}</p>
-                        <ul className="mt-2 text-[11px] text-[#514D45] space-y-1">
+                        <p className="text-sm font-semibold text-[var(--adm-text)] mt-1 break-all">{selectedBaseline.fileName}</p>
+                        <ul className="mt-2 text-[11px] text-[var(--adm-text)] space-y-1">
                           <li>Ügy: {selectedBaseline.caseNumber} · {selectedBaseline.caseTitle}</li>
                           <li>Forrás: {selectedBaseline.source === "GENERATED" ? "Generált" : "Feltöltött"}</li>
                           <li>Státusz: {toReadableStatus(selectedBaseline.status)}</li>
                           <li className="flex items-center gap-2">
                             <span>Verzió: v{selectedBaseline.revisionNumber || 1}</span>
                             {selectedBaseline.isCurrentRevision && (
-                              <span className="text-[9px] px-1.5 py-0.5 bg-[#d1e8d3] text-[#23472F] font-bold uppercase tracking-wide">Aktuális</span>
+                              <span className="text-[9px] px-1.5 py-0.5 bg-[#d1e8d3] text-[var(--adm-green-800)] font-bold uppercase tracking-wide">Aktuális</span>
                             )}
                             {selectedBaseline.isFinalRevision && (
-                              <span className="text-[9px] px-1.5 py-0.5 bg-[#06190d] text-white font-bold uppercase tracking-wide">Végleges</span>
+                              <span className="text-[9px] px-1.5 py-0.5 bg-[var(--adm-text)] text-white font-bold uppercase tracking-wide">Végleges</span>
                             )}
                           </li>
                           <li>Frissítve: {formatDateTime(selectedBaseline.updatedAt || selectedBaseline.createdAt)}</li>
@@ -3486,20 +3486,20 @@ return (
                   </div>
                 </div>
 
-                <div className="mt-3 p-3 border border-[#EEE7D9] bg-[#F6F2E8] text-xs text-[#514D45] space-y-1">
+                <div className="mt-3 p-3 border border-[var(--adm-border)] bg-[var(--adm-surface)] text-xs text-[var(--adm-text)] space-y-1">
                   {comparisonSummary.map((line, index) => (
                     <p key={`${line}-${index}`}>{line}</p>
                   ))}
                 </div>
 
-                <div className="mt-3 p-3 border border-[#EEE7D9] bg-white text-xs text-[#514D45] space-y-1">
-                  <p className="font-semibold text-[#1F2821]">Szöveg-összevetés állapota</p>
+                <div className="mt-3 p-3 border border-[var(--adm-border)] bg-white text-xs text-[var(--adm-text)] space-y-1">
+                  <p className="font-semibold text-[var(--adm-text)]">Szöveg-összevetés állapota</p>
                   {!selectedBaseline ? (
-                    <p className="text-[#7B776D]">
+                    <p className="text-[var(--adm-text-muted)]">
                       Jelenleg csak metaadat-összehasonlítás látszik. Szöveg-összevetéshez válassz alapdokumentumot.
                     </p>
                   ) : selectedDocument.kind !== "contract" ? (
-                    <p className="text-[#7B776D]">
+                    <p className="text-[var(--adm-text-muted)]">
                       A felület metaadat-összehasonlítást mutat; blokk-szintű szöveg-összevetés jelenleg csak támogatott szerződésrevíziók esetén érhető el.
                     </p>
                   ) : comparisonData ? (
@@ -3508,7 +3508,7 @@ return (
                       <span className="font-semibold">{comparisonData.summary.modified}</span>.
                     </p>
                   ) : (
-                    <p className="text-[#7B776D]">
+                    <p className="text-[var(--adm-text-muted)]">
                       A rendszer összehasonlítási adatot tölt. Ha nem érhető el blokk-adat, a nézet metaadat összevetésre korlátozódik.
                     </p>
                   )}
@@ -3516,33 +3516,33 @@ return (
                 </details>
                 ) : null}
 
-                <section className="border border-[#DDD7CA] bg-white p-4">
-                <h3 className="text-sm font-semibold text-[#1F2821] mb-2">Verziók és előzmények</h3>
+                <section className="border border-[var(--adm-border)] bg-white p-4">
+                <h3 className="text-sm font-semibold text-[var(--adm-text)] mb-2">Verziók és előzmények</h3>
                 {lineage.length === 0 ? (
-                  <p className="text-xs text-[#9C9890]">Nincs elérhető előzményadat.</p>
+                  <p className="text-xs text-[var(--adm-text-muted)]">Nincs elérhető előzményadat.</p>
                 ) : (
                   <div className="space-y-2">
                     {lineage.map((doc) => (
-                      <div key={`${doc.kind}-${doc.id}`} className="p-2 border border-[#EEE7D9] flex items-center justify-between gap-3">
+                      <div key={`${doc.kind}-${doc.id}`} className="p-2 border border-[var(--adm-border)] flex items-center justify-between gap-3">
                         <div>
-                          <p className="text-xs font-semibold text-[#1F2821]">{doc.fileName}</p>
-                          <p className="text-[10px] text-[#7B776D]">v{doc.revisionNumber || 1} · {toReadableStatus(doc.status)} · {doc.source === "GENERATED" ? "Generált" : "Feltöltött"} · {formatDateTime(doc.updatedAt || doc.createdAt)}</p>
+                          <p className="text-xs font-semibold text-[var(--adm-text)]">{doc.fileName}</p>
+                          <p className="text-[10px] text-[var(--adm-text-muted)]">v{doc.revisionNumber || 1} · {toReadableStatus(doc.status)} · {doc.source === "GENERATED" ? "Generált" : "Feltöltött"} · {formatDateTime(doc.updatedAt || doc.createdAt)}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           {doc.isCurrentRevision && (
-                            <span className="text-[9px] px-1.5 py-0.5 bg-[#d1e8d3] text-[#23472F]">Aktuális</span>
+                            <span className="text-[9px] px-1.5 py-0.5 bg-[#d1e8d3] text-[var(--adm-green-800)]">Aktuális</span>
                           )}
                           {doc.isFinalRevision && (
-                            <span className="text-[9px] px-1.5 py-0.5 bg-[#06190d] text-white">Végleges</span>
+                            <span className="text-[9px] px-1.5 py-0.5 bg-[var(--adm-text)] text-white">Végleges</span>
                           )}
                           {doc.id !== selectedDocument.id && (
-                            <button onClick={() => setSelectedBaselineId(doc.id)} className="px-2 py-1 text-[10px] border border-[#DDD7CA] hover:bg-[#FBF9F3]">
+                            <button onClick={() => setSelectedBaselineId(doc.id)} className="px-2 py-1 text-[10px] border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">
                               Összevetési alap
                             </button>
                           )}
-                          <Link href={`/cases/${doc.caseId}/documents`} className="px-2 py-1 text-[10px] border border-[#DDD7CA] hover:bg-[#FBF9F3]">Dokumentumok</Link>
+                          <Link href={`/cases/${doc.caseId}/documents`} className="px-2 py-1 text-[10px] border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Dokumentumok</Link>
                           {doc.kind === "contract" && (
-                            <Link href={`/cases/${doc.caseId}/review/${doc.id}`} className="px-2 py-1 text-[10px] border border-[#DDD7CA] hover:bg-[#FBF9F3]">Review</Link>
+                            <Link href={`/cases/${doc.caseId}/review/${doc.id}`} className="px-2 py-1 text-[10px] border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]">Review</Link>
                           )}
                         </div>
                       </div>
@@ -3551,15 +3551,15 @@ return (
                 )}
               </section>
 
-              <section className="border border-[#DDD7CA] bg-white p-4">
+              <section className="border border-[var(--adm-border)] bg-white p-4">
                 <div className="flex items-center justify-between gap-3 mb-3">
-                  <h3 className="text-sm font-semibold text-[#1F2821]">Blokk-szintű összehasonlítás</h3>
+                  <h3 className="text-sm font-semibold text-[var(--adm-text)]">Blokk-szintű összehasonlítás</h3>
                   <div className="flex items-center gap-2">
                     {selectedDocument?.kind === "contract" && (
                       <button
                         onClick={handleDownloadReviewSummary}
                         disabled={reviewSummaryDownloading}
-                        className="px-3 py-1.5 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3] disabled:opacity-50"
+                        className="px-3 py-1.5 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)] disabled:opacity-50"
                       >
                         {reviewSummaryDownloading ? "Exportálás..." : "Review összefoglaló exportálása"}
                       </button>
@@ -3568,7 +3568,7 @@ return (
                       <button
                         onClick={saveBlockNotes}
                         disabled={blockNotesSaving || comparisonLoading || reviewNotesLoading || !comparisonData}
-                        className="px-3 py-1.5 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3] disabled:opacity-50"
+                        className="px-3 py-1.5 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)] disabled:opacity-50"
                       >
                         {blockNotesSaving ? "Mentés..." : "Blokk megjegyzések mentése"}
                       </button>
@@ -3576,7 +3576,7 @@ return (
                     {selectedDocument?.kind === "contract" && (
                       <Link
                         href={`/cases/${selectedDocument.caseId}/review/${selectedDocument.id}`}
-                        className="px-3 py-1.5 text-xs border border-[#DDD7CA] hover:bg-[#FBF9F3]"
+                        className="px-3 py-1.5 text-xs border border-[var(--adm-border)] hover:bg-[var(--adm-surface)]"
                       >
                         Review megnyitása
                       </Link>
@@ -3588,7 +3588,7 @@ return (
                   <div
                     className={`mb-3 p-2 text-xs border ${
                       blockNotesSaveState.type === "success"
-                        ? "bg-[#E2EDE5] border-[#A6C0AF] text-[#23472F]"
+                        ? "bg-[#E2EDE5] border-[#A6C0AF] text-[var(--adm-green-800)]"
                         : "bg-[#FEF2F2] border-[#D4B8B8] text-[#8B3A3A]"
                     }`}
                   >
@@ -3597,28 +3597,28 @@ return (
                 )}
 
                 {selectedDocument?.kind !== "contract" ? (
-                  <p className="text-xs text-[#9C9890]">Blokk-szintű összevetés jelenleg csak támogatott szerződésrevíziókra érhető el.</p>
+                  <p className="text-xs text-[var(--adm-text-muted)]">Blokk-szintű összevetés jelenleg csak támogatott szerződésrevíziókra érhető el.</p>
                 ) : comparisonLoading ? (
-                  <p className="text-xs text-[#7B776D]">Összehasonlítás betöltése...</p>
+                  <p className="text-xs text-[var(--adm-text-muted)]">Összehasonlítás betöltése...</p>
                 ) : comparisonError ? (
                   <p className="text-xs text-[#8b3a3a]">{comparisonError}</p>
                 ) : !comparisonData ? (
-                  <p className="text-xs text-[#9C9890]">Nincs összehasonlítási adat.</p>
+                  <p className="text-xs text-[var(--adm-text-muted)]">Nincs összehasonlítási adat.</p>
                 ) : (
                   <>
-                    <div className="mb-3 p-3 border border-[#EEE7D9] bg-[#FBF9F3] text-xs text-[#514D45]">
+                    <div className="mb-3 p-3 border border-[var(--adm-border)] bg-[var(--adm-surface)] text-xs text-[var(--adm-text)]">
                       <p>
                         Forráskijelölés: <span className="font-semibold">{comparisonData.sourceSelection}</span> ·
                         Biztonság: <span className="font-semibold">{toReadableStatus(comparisonData.confidence)}</span>
                       </p>
-                      <p className="text-[11px] text-[#7B776D] mt-1">{comparisonData.confidenceReason}</p>
+                      <p className="text-[11px] text-[var(--adm-text-muted)] mt-1">{comparisonData.confidenceReason}</p>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        <span className="px-2 py-0.5 border border-[#DDD7CA]">Változatlan: {comparisonData.summary.unchanged}</span>
-                        <span className="px-2 py-0.5 border border-[#DDD7CA]">Módosított: {comparisonData.summary.modified}</span>
-                        <span className="px-2 py-0.5 border border-[#DDD7CA]">Hozzáadott: {comparisonData.summary.added}</span>
-                        <span className="px-2 py-0.5 border border-[#DDD7CA]">Eltávolított: {comparisonData.summary.removed}</span>
+                        <span className="px-2 py-0.5 border border-[var(--adm-border)]">Változatlan: {comparisonData.summary.unchanged}</span>
+                        <span className="px-2 py-0.5 border border-[var(--adm-border)]">Módosított: {comparisonData.summary.modified}</span>
+                        <span className="px-2 py-0.5 border border-[var(--adm-border)]">Hozzáadott: {comparisonData.summary.added}</span>
+                        <span className="px-2 py-0.5 border border-[var(--adm-border)]">Eltávolított: {comparisonData.summary.removed}</span>
                       </div>
-                      <p className="text-[9px] text-[#7B776D] italic mt-2">
+                      <p className="text-[9px] text-[var(--adm-text-muted)] italic mt-2">
                         Az összevetés döntéstámogatásra szolgál: metaadat és elérhető blokk-szintű különbségek alapján segíti a review lépéseket.
                       </p>
                     </div>
@@ -3629,60 +3629,60 @@ return (
                         const draft = blockNoteDrafts[blockKey] || { status: "OK" as BlockReviewStatus, title: "", note: "" };
                         const statusClass =
                           block.status === "unchanged"
-                            ? "bg-[#e4f4e6] text-[#23472F]"
+                            ? "bg-[#e4f4e6] text-[var(--adm-green-800)]"
                             : block.status === "modified"
-                              ? "bg-[#fff1c2] text-[#6a4b00]"
+                              ? "bg-[#fff1c2] text-[var(--adm-ochre-500)]"
                               : block.status === "added"
                                 ? "bg-[#dff1df] text-[#1e6a34]"
                                 : "bg-[#ffe0de] text-[#7a1e1e]";
 
                         return (
-                          <div key={block.id} className="border border-[#EEE7D9]">
-                            <div className="px-3 py-2 border-b border-[#EEE7D9] flex items-center justify-between">
+                          <div key={block.id} className="border border-[var(--adm-border)]">
+                            <div className="px-3 py-2 border-b border-[var(--adm-border)] flex items-center justify-between">
                               <span className={`text-[10px] uppercase font-bold px-2 py-0.5 ${statusClass}`}>{toReadableStatus(block.status)}</span>
-                              <span className="text-[10px] text-[#7B776D]">Illesztés: {toReadableStatus(block.matchStrategy)}</span>
+                              <span className="text-[10px] text-[var(--adm-text-muted)]">Illesztés: {toReadableStatus(block.matchStrategy)}</span>
                             </div>
                             <div className="grid md:grid-cols-2">
-                              <div className="p-3 border-r border-[#EEE7D9] bg-[#FBF9F3]">
-                                <p className="text-[10px] uppercase text-[#7B776D] mb-1">Forrás</p>
+                              <div className="p-3 border-r border-[var(--adm-border)] bg-[var(--adm-surface)]">
+                                <p className="text-[10px] uppercase text-[var(--adm-text-muted)] mb-1">Forrás</p>
                                 {block.sourceBlock ? (
                                   <>
-                                    <p className="text-xs font-semibold text-[#1F2821]">{block.sourceBlock.title || "—"}</p>
-                                    <p className="text-[11px] text-[#514D45] whitespace-pre-wrap mt-1">{block.sourceBlock.body || "—"}</p>
+                                    <p className="text-xs font-semibold text-[var(--adm-text)]">{block.sourceBlock.title || "—"}</p>
+                                    <p className="text-[11px] text-[var(--adm-text)] whitespace-pre-wrap mt-1">{block.sourceBlock.body || "—"}</p>
                                     {block.status === 'modified' && block.inlineDiff && (
-                                      <p className="text-[11px] text-[#514D45] whitespace-pre-wrap mt-2 border-t border-[#EEE7D9] pt-2">
+                                      <p className="text-[11px] text-[var(--adm-text)] whitespace-pre-wrap mt-2 border-t border-[var(--adm-border)] pt-2">
                                         {renderInlineSegments(block.inlineDiff.sourceSegments, 'source')}
                                       </p>
                                     )}
                                   </>
                                 ) : (
-                                  <p className="text-xs text-[#9C9890]">Nincs forrásblokk</p>
+                                  <p className="text-xs text-[var(--adm-text-muted)]">Nincs forrásblokk</p>
                                 )}
                               </div>
                               <div className="p-3 bg-white">
-                                <p className="text-[10px] uppercase text-[#7B776D] mb-1">Revízió</p>
+                                <p className="text-[10px] uppercase text-[var(--adm-text-muted)] mb-1">Revízió</p>
                                 {block.targetBlock ? (
                                   <>
-                                    <p className="text-xs font-semibold text-[#1F2821]">{block.targetBlock.title || "—"}</p>
-                                    <p className="text-[11px] text-[#514D45] whitespace-pre-wrap mt-1">{block.targetBlock.body || "—"}</p>
+                                    <p className="text-xs font-semibold text-[var(--adm-text)]">{block.targetBlock.title || "—"}</p>
+                                    <p className="text-[11px] text-[var(--adm-text)] whitespace-pre-wrap mt-1">{block.targetBlock.body || "—"}</p>
                                     {block.status === 'modified' && block.inlineDiff && (
-                                      <p className="text-[11px] text-[#514D45] whitespace-pre-wrap mt-2 border-t border-[#EEE7D9] pt-2">
+                                      <p className="text-[11px] text-[var(--adm-text)] whitespace-pre-wrap mt-2 border-t border-[var(--adm-border)] pt-2">
                                         {renderInlineSegments(block.inlineDiff.targetSegments, 'target')}
                                       </p>
                                     )}
                                   </>
                                 ) : (
-                                  <p className="text-xs text-[#9C9890]">Nincs revíziós blokk</p>
+                                  <p className="text-xs text-[var(--adm-text-muted)]">Nincs revíziós blokk</p>
                                 )}
                               </div>
                             </div>
-                            <div className="px-3 py-3 border-t border-[#EEE7D9] bg-[#FDFBF6] space-y-2">
+                            <div className="px-3 py-3 border-t border-[var(--adm-border)] bg-[var(--adm-surface)] space-y-2">
                               <div className="grid md:grid-cols-[180px_1fr] gap-2 items-center">
-                                <label className="text-[10px] uppercase text-[#7B776D]">Review státusz</label>
+                                <label className="text-[10px] uppercase text-[var(--adm-text-muted)]">Review státusz</label>
                                 <select
                                   value={draft.status}
                                   onChange={(e) => updateBlockDraft(blockKey, { status: e.target.value as BlockReviewStatus })}
-                                  className="w-full border border-[#DDD7CA] bg-white px-2 py-1 text-xs"
+                                  className="w-full border border-[var(--adm-border)] bg-white px-2 py-1 text-xs"
                                 >
                                   <option value="OK">Rendben</option>
                                   <option value="REVIEW_NEEDED">Review szükséges</option>
@@ -3690,22 +3690,22 @@ return (
                                 </select>
                               </div>
                               <div className="grid md:grid-cols-[180px_1fr] gap-2 items-center">
-                                <label className="text-[10px] uppercase text-[#7B776D]">Rövid cím</label>
+                                <label className="text-[10px] uppercase text-[var(--adm-text-muted)]">Rövid cím</label>
                                 <input
                                   value={draft.title}
                                   onChange={(e) => updateBlockDraft(blockKey, { title: e.target.value })}
                                   placeholder="Opcionális rövid cím"
-                                  className="w-full border border-[#DDD7CA] bg-white px-2 py-1 text-xs"
+                                  className="w-full border border-[var(--adm-border)] bg-white px-2 py-1 text-xs"
                                 />
                               </div>
                               <div className="grid md:grid-cols-[180px_1fr] gap-2">
-                                <label className="text-[10px] uppercase text-[#7B776D] pt-1">Megjegyzés</label>
+                                <label className="text-[10px] uppercase text-[var(--adm-text-muted)] pt-1">Megjegyzés</label>
                                 <textarea
                                   value={draft.note}
                                   onChange={(e) => updateBlockDraft(blockKey, { note: e.target.value })}
                                   rows={3}
                                   placeholder="Opcionális megjegyzés"
-                                  className="w-full border border-[#DDD7CA] bg-white px-2 py-1 text-xs resize-y"
+                                  className="w-full border border-[var(--adm-border)] bg-white px-2 py-1 text-xs resize-y"
                                 />
                               </div>
                             </div>
