@@ -1077,6 +1077,10 @@ export function CaseDetail({ params }: CaseDetailProps) {
   })();
 
   const activeDocument = documents[0] || null;
+  const documentWorkspaceHref = `/documents/compare?caseId=${canonicalCaseId}`;
+  const litigationWorkspaceHref = activeDocument
+    ? `/litigation-workspace?caseId=${canonicalCaseId}&documentId=${activeDocument.id}`
+    : `/cases/${canonicalCaseId}/documents`;
   const latestCommunication = communications[0] || null;
   const latestStoryEvents = [...caseStoryEvents]
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
@@ -1086,9 +1090,9 @@ export function CaseDetail({ params }: CaseDetailProps) {
   );
   const quickActions = [
     {
-      title: 'Szerződés-workspace',
-      helper: 'Munkapéldányok, klauzulák és szerkesztési műveletek.',
-      action: () => router.push(`/documents/compare?caseId=${canonicalCaseId}`),
+      title: 'Dokumentum-review',
+      helper: 'Ügyhöz szűrt dokumentumok, munkapéldányok és szerkesztési műveletek.',
+      action: () => router.push(documentWorkspaceHref),
       tone: 'primary',
     },
     {
@@ -1111,6 +1115,12 @@ export function CaseDetail({ params }: CaseDetailProps) {
       tone: 'paper',
     },
     {
+      title: activeDocument ? 'Peres munkatér' : 'Peres előkészítés',
+      helper: activeDocument ? 'A kiválasztott irattal indított peres elemzési munkafolyamat.' : 'Peres munkához előbb ügyhöz tartozó irat szükséges.',
+      action: () => router.push(litigationWorkspaceHref),
+      tone: 'paper',
+    },
+    {
       title: 'Munkaórák',
       helper: 'Case-aware időrögzítés és munkacsomag kapcsolás.',
       action: () => router.push(`/time-entries?caseId=${canonicalCaseId}`),
@@ -1127,27 +1137,34 @@ export function CaseDetail({ params }: CaseDetailProps) {
     ? {
         title: 'Archivált ügy',
         helper: 'Az ügy lezárt, aktív workflow-lépés nincs.',
-        label: 'Megtekintés',
+        label: 'Dokumentumtár megtekintése',
         action: () => router.push(`/cases/${canonicalCaseId}/documents`),
       }
-    : generatedContracts.length > 0
+    : primaryWorkflowTask
       ? {
-          title: 'Szerződés-workspace megnyitása',
+          title: primaryWorkflowTask.title,
+          helper: `${getTaskStatusLabel(primaryWorkflowTask.status)} · ${primaryWorkflowTask.assignedTo?.name || 'Nincs kijelölt felelős'} · ${primaryWorkflowTask.dueDate ? `Határidő: ${new Date(primaryWorkflowTask.dueDate).toLocaleDateString('hu-HU')}` : 'Nincs határidő'}`,
+          label: 'Feladat megnyitása',
+          action: () => router.push(`/tasks?taskId=${primaryWorkflowTask.id}`),
+        }
+      : generatedContracts.length > 0
+      ? {
+          title: 'Dokumentum-review folytatása',
           helper: 'A módosított dokumentumok és klauzulák kezelése a szerkesztőben folytatható.',
-          label: 'Workspace',
-          action: () => router.push(`/documents/compare?caseId=${canonicalCaseId}`),
+          label: 'Dokumentum-review megnyitása',
+          action: () => router.push(documentWorkspaceHref),
         }
       : documents.length > 0
         ? {
             title: 'Dokumentumtár megnyitása',
             helper: 'Feltöltött iratból anonimizálás, munkapéldány és leadási csomag indítható.',
-            label: 'Dokumentumtár',
+            label: 'Ügy dokumentumai',
             action: () => router.push(`/cases/${canonicalCaseId}/documents`),
           }
         : {
             title: 'Dokumentum feltöltése',
             helper: 'Az ügykezelés első lépése egy munkadokumentum feltöltése.',
-            label: 'Feltöltés',
+            label: 'Irat feltöltése',
             action: () => fileInputRef.current?.click(),
           };
 
@@ -1358,7 +1375,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                         {event.description && <p className="mt-1 text-[11px] leading-relaxed text-[#3D4842]">{event.description}</p>}
                         <div className="mt-1 flex items-center gap-2">
                           <span className="text-[10px] text-[#7A8479]">{new Date(event.timestamp).toLocaleString('hu-HU', { dateStyle: 'short', timeStyle: 'short' })}</span>
-                          {event.link && <button onClick={() => router.push(event.link as string)} className="text-[10px] font-semibold text-[#8E6A1B]">{event.linkLabel || 'Megnyitás'}</button>}
+                          {event.link && <button onClick={() => router.push(event.link as string)} className="text-[10px] font-semibold text-[#8E6A1B]">{event.linkLabel || 'Kapcsolódó nézet megnyitása'}</button>}
                         </div>
                       </div>
                     ))}
@@ -1375,7 +1392,8 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     <p className="truncate text-[13px] font-semibold text-[#16201A]">{activeDocument.name}</p>
                     <p className="mt-1 text-[10px] text-[#7A8479]">{activeDocument.type} {activeDocument.version ? `· ${activeDocument.version}` : ''} · {activeDocument.date}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <button onClick={() => router.push(`/documents/compare?caseId=${canonicalCaseId}`)} className="bg-[#1F4A33] px-3 py-1.5 text-[10px] font-semibold text-[#F4EFDB]">Workspace</button>
+                      <button onClick={() => router.push(documentWorkspaceHref)} className="bg-[#1F4A33] px-3 py-1.5 text-[10px] font-semibold text-[#F4EFDB]">Dokumentum-review</button>
+                      <button onClick={() => router.push(litigationWorkspaceHref)} className="border border-[#D8CDB6] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#3D4842]">{activeDocument ? 'Peres munkatér' : 'Dokumentumtár'}</button>
                       <button onClick={() => handleDocumentClick(activeDocument)} disabled={isDownloading === activeDocument.id} className="border border-[#D8CDB6] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#3D4842]">{isDownloading === activeDocument.id ? '...' : 'Letöltés'}</button>
                       <button onClick={() => handleAnonymizeDocument(activeDocument)} className="border border-[#D8CDB6] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#3D4842]">Anonimizálás</button>
                     </div>
@@ -1455,9 +1473,9 @@ export function CaseDetail({ params }: CaseDetailProps) {
             </section>
 
             <section className="border border-[#E5DCBE] bg-white p-3">
-              <h3 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">SZERZŐDÉS-WORKSPACE MEGNYITÁSA</h3>
-              <button onClick={() => router.push(`/documents/compare?caseId=${canonicalCaseId}`)} className="w-full bg-[#1F4A33] px-3 py-2 text-[11px] font-semibold text-[#F4EFDB]">Szerződés-workspace</button>
-              <p className="mt-2 text-[10px] text-[#7A8479]">Klauzulák, prompt-copy és módosított munkapéldányok kezelése.</p>
+              <h3 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[#7A8479]">DOKUMENTUM-REVIEW MEGNYITÁSA</h3>
+              <button onClick={() => router.push(documentWorkspaceHref)} className="w-full bg-[#1F4A33] px-3 py-2 text-[11px] font-semibold text-[#F4EFDB]">Ügy dokumentumainak review-ja</button>
+              <p className="mt-2 text-[10px] text-[#7A8479]">Ügyhöz szűrt dokumentumok, klauzulák és módosított munkapéldányok kezelése.</p>
             </section>
 
             <details className="border border-[#E5DCBE] bg-white p-3">
@@ -1495,6 +1513,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                         <span className={`shrink-0 border px-1.5 py-0.5 text-[9px] ${getTaskDueDateTone(task.dueDate)}`}>{task.dueDate ? new Date(task.dueDate).toLocaleDateString('hu-HU') : 'Nincs határidő'}</span>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1.5">
+                        <button onClick={() => router.push(`/tasks?taskId=${task.id}`)} className="border border-[#D8CDB6] bg-white px-2 py-1 text-[9px] font-semibold text-[#3D4842]">Feladatlap</button>
                         {(task.status === 'TODO' || task.status === 'ASSIGNED' || task.status === 'PENDING') && <button onClick={() => handleStartTask(task.id)} disabled={actionTaskId === task.id} className="bg-[#1F4A33] px-2 py-1 text-[9px] text-white disabled:opacity-50">{actionTaskId === task.id ? '...' : 'Indítás'}</button>}
                         {task.status === 'IN_PROGRESS' && <button onClick={() => handleSubmitTask(task.id)} disabled={actionTaskId === task.id} className="bg-[#B58A2A] px-2 py-1 text-[9px] text-white disabled:opacity-50">{actionTaskId === task.id ? '...' : 'Beküldés'}</button>}
                         {task.status === 'SUBMITTED' && (
