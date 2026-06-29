@@ -300,7 +300,7 @@ export function Dashboard() {
       } catch {
         setLegalNews({
           articles: [],
-          error: "Előkészítés alatt — a hírfeed későbbi patchben aktiválható.",
+          error: "A hírfeed most nem érhető el.",
           isLoading: false,
         });
       }
@@ -383,25 +383,25 @@ export function Dashboard() {
     if (focusTask) {
       cards.push({
         id: `next-task-${focusTask.id}`,
-        label: "Feladatlista",
+        label: "Első teendő",
         title: focusTask.title,
         detail: focusTask.dueDate
           ? `${focusTask.case?.caseNumber || "Feladat"} · Határidő: ${displayDate(focusTask.dueDate)}`
           : `${focusTask.case?.caseNumber || "Feladat"} · Nincs megadott határidő`,
-        href: "/tasks",
-        action: "Feladatok megnyitása",
+        href: `/tasks?taskId=${focusTask.id}`,
+        action: "Feladat megnyitása",
       });
     }
 
     if (focusCase) {
       cards.push({
         id: `next-case-${focusCase.id}`,
-        label: "Ügylista",
+        label: "Aktív ügy",
         title: focusCase.title || focusCase.caseNumber,
         detail: focusCase.deadline
           ? `${focusCase.caseNumber || "Ügy"} · Határidő: ${displayDate(focusCase.deadline)}`
           : `${focusCase.caseNumber || "Ügy"} · Meglévő ügyadatból`,
-        href: "/cases",
+        href: `/cases/${focusCase.id}`,
         action: "Ügy megnyitása",
       });
     }
@@ -412,7 +412,7 @@ export function Dashboard() {
         label: "Dokumentumjelzés",
         title: mapRecentDocLabel(focusDocument.type || focusDocument.text),
         detail: `Meglévő dokumentum aktivitás · ${displayDateTimeShort(focusDocument.timestamp)}`,
-        href: "/documents/compare",
+        href: focusDocument.caseId ? `/documents/compare?caseId=${focusDocument.caseId}` : "/documents/compare",
         action: "Dokumentum-ellenőrzés folytatása",
       });
     }
@@ -432,10 +432,10 @@ export function Dashboard() {
   }, [attentionCases, cases, homeOfficeFocusTasks, localWorkspaceDraftCount, openTasks, recentDocuments]);
 
   const quickOpenLinks = [
-    { href: "/cases", label: "Ügyek", description: "Ügylista és ügyindítás" },
-    { href: "/tasks", label: "Feladatok", description: "Rám váró feladatok" },
-    { href: "/documents/compare", label: "Dokumentum-összehasonlítás", description: "Szerződés-workspace" },
-    { href: "/litigation-workspace", label: "Peres munkatér", description: "Peres stratégiai térkép" },
+    { href: "/cases", label: "Ügyek", description: "Aktív ügyek és új ügy indítása" },
+    { href: "/tasks", label: "Feladatok", description: "Mai teendők és review sor" },
+    { href: "/documents/compare", label: "Dokumentum-review", description: "Összevetés és szerződésmunka" },
+    { href: "/litigation-workspace", label: "Peres munkatér", description: "Stratégiai peres jegyzetek" },
   ];
 
   const greetingName = currentUser?.name || "dr. Hubay Máté";
@@ -536,10 +536,10 @@ export function Dashboard() {
               <div>
                 <p className="adm-kicker">Adminiculum · Műszerfal</p>
                 <h1 className="adm-hero-title mt-1 max-w-4xl text-[clamp(30px,3.6vw,46px)] leading-[0.94]">
-                  Műszerfal
+                  Napi munkapad
                 </h1>
                 <p className="mt-1.5 max-w-3xl text-[12px] leading-4 text-[var(--adm-text-muted)]">
-                  Jó reggelt, {greetingName}. Mai ügyek, teendők, review-jelzések és dokumentumaktivitás egy helyen.
+                  Jó reggelt, {greetingName}. A következő ügy, feladat és dokumentumjelzés egyetlen munkasorban.
                 </p>
               </div>
 
@@ -561,7 +561,7 @@ export function Dashboard() {
                     href={activeCase ? `/cases/${activeCase.id}/documents` : "/cases"}
                     className="adm-link-button adm-action-secondary px-3.5 py-2.5"
                   >
-                    Dokumentum feltöltés
+                    Dokumentum feltöltése
                   </Link>
                   <Link href="/reviews" className="adm-link-button adm-action-secondary px-3.5 py-2.5">
                     Review sor
@@ -631,7 +631,7 @@ export function Dashboard() {
                 <p className="adm-kicker text-[var(--adm-green-800)]">Elsődleges munkasor</p>
                 <h2 className="adm-heading mt-1 text-[28px] leading-tight">Itt folytasd</h2>
                 <p className="mt-1 max-w-3xl text-[11.5px] leading-5 text-[var(--adm-text-muted)]">
-                  A legjobb következő nyitási pont a jelenlegi ügyekből, feladatokból és dokumentumjelzésekből.
+                  A legjobb következő nyitási pont: feladat, ügy vagy dokumentum — közvetlenül a megfelelő munkatérbe.
                 </p>
               </div>
               <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1 text-[11px] font-semibold text-[#6B4B14]">
@@ -660,7 +660,7 @@ export function Dashboard() {
                   <p className="mt-1.5 text-sm font-semibold text-[var(--adm-text)]">{card.title}</p>
                   <p className="mt-1 text-[11px] leading-4 text-[var(--adm-text-muted)]">{card.detail}</p>
                   <span className="mt-2.5 inline-flex items-center gap-1 rounded-[var(--adm-radius-sm)] bg-[var(--adm-green-800)] px-3 py-1.5 text-[11px] font-bold text-[var(--adm-ivory-50)]">
-                    Folytatás <span aria-hidden="true">→</span>
+                    {card.action} <span aria-hidden="true">→</span>
                   </span>
                 </Link>
               ))}
@@ -861,7 +861,7 @@ export function Dashboard() {
                       <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{displayDate(item.date)} · {item.caseNumber}</p>
                     </Link>
                   ))}
-                  <p className="text-[10px] text-[var(--adm-text-muted)]">Tárgyalások és belső egyeztetések naptári bekötése későbbi fejlesztés.</p>
+                  <p className="text-[10px] text-[var(--adm-text-muted)]">A lista a betöltött határidős feladatokra szűkül.</p>
                 </>
               )}
             </div>
@@ -873,7 +873,7 @@ export function Dashboard() {
                 <p className="adm-kicker text-[var(--adm-blue-950)]">Dokumentum</p>
                 <h3 className="adm-heading mt-0.5 text-[20px]">Legutóbbi dokumentumok</h3>
               </div>
-              <Link href="/documents/compare" className="adm-link-button px-3 py-1.5 text-[11px]">Workspace</Link>
+              <Link href="/documents/compare" className="adm-link-button px-3 py-1.5 text-[11px]">Megnyitás</Link>
             </div>
             <div className="mt-3 space-y-2 text-xs">
               {recentDocuments.length === 0 ? (
