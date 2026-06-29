@@ -482,8 +482,8 @@ export default function LitigationWorkspacePage() {
 
 function LitigationWorkspaceShellFallback() {
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-[#F3EBD4] p-4">
-      <div className="mx-auto max-w-[1640px] rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-4 text-[13px] text-[#6D6A62]">
+    <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--adm-surface)] p-4">
+      <div className="mx-auto max-w-[1640px] rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[13px] text-[var(--adm-text-muted)]">
         Peres workflow betöltése.
       </div>
     </div>
@@ -889,7 +889,7 @@ function LitigationWorkspacePageContent() {
   };
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-[#F3EBD4]">
+    <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--adm-surface)]">
       <div className="mx-auto max-w-[1640px] space-y-4 px-4 py-4 xl:px-6">
         <WorkflowHeader
           caseId={caseId}
@@ -1037,7 +1037,7 @@ function WorkflowHeader({
   caseContextError: string | null;
 }) {
   return (
-    <section className="rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-4">
+    <section className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -1045,8 +1045,8 @@ function WorkflowHeader({
             <AdminStatusPill tone="gold">Helyi vázlat — nincs szerveroldali mentés.</AdminStatusPill>
           </div>
           <div>
-            <h1 className="font-serif text-[30px] font-medium leading-tight text-[#1F2821]">Peres beadvány-munkafolyamat</h1>
-            <p className="mt-1 max-w-4xl text-[13px] text-[#6D6A62]">
+            <h1 className="font-serif text-[30px] font-medium leading-tight text-[var(--adm-text)]">Peres beadvány-munkafolyamat</h1>
+            <p className="mt-1 max-w-4xl text-[13px] text-[var(--adm-text-muted)]">
               Ügyhöz és feltöltött ellenfél-iratához kötött háromlépéses állítás-, válaszút- és szerkesztési munkaterület.
             </p>
           </div>
@@ -1055,48 +1055,48 @@ function WorkflowHeader({
               <>
                 <Link
                   href={`/cases/${encodeURIComponent(caseId)}`}
-                  className="inline-flex items-center justify-center rounded-[6px] border border-[#D8CFB6] bg-white px-3 py-2 text-[12px] font-semibold text-[#1F2821] transition-colors hover:border-[#1F4A33] hover:bg-[#F7F3E7]"
+                  className="inline-flex items-center justify-center rounded-[6px] border border-[var(--adm-border)] bg-white px-3 py-2 text-[12px] font-semibold text-[var(--adm-text)] transition-colors hover:border-[var(--adm-green-800)] hover:bg-[var(--adm-surface)]"
                 >
                   ← Ügy áttekintése
                 </Link>
                 <Link
                   href={`/cases/${encodeURIComponent(caseId)}/documents`}
-                  className="inline-flex items-center justify-center rounded-[6px] border border-[#D8CFB6] bg-white px-3 py-2 text-[12px] font-semibold text-[#1F2821] transition-colors hover:border-[#1F4A33] hover:bg-[#F7F3E7]"
+                  className="inline-flex items-center justify-center rounded-[6px] border border-[var(--adm-border)] bg-white px-3 py-2 text-[12px] font-semibold text-[var(--adm-text)] transition-colors hover:border-[var(--adm-green-800)] hover:bg-[var(--adm-surface)]"
                 >
                   ← Dokumentumtár
                 </Link>
               </>
             ) : (
-              <div className="rounded-[6px] border border-dashed border-[#D8CFB6] bg-white px-3 py-2 text-[11px] text-[#7B776D]">
+              <div className="rounded-[6px] border border-dashed border-[var(--adm-border)] bg-white px-3 py-2 text-[11px] text-[var(--adm-text-muted)]">
                 Az ügy áttekintése és a Dokumentumtár megnyitásához előbb ügyazonosító szükséges.
               </div>
             )}
           </div>
           {caseContextError ? (
-            <p className="rounded-[6px] border border-dashed border-[#D8CFB6] bg-white px-3 py-2 text-[11px] text-[#7B776D]">
+            <p className="rounded-[6px] border border-dashed border-[var(--adm-border)] bg-white px-3 py-2 text-[11px] text-[var(--adm-text-muted)]">
               {caseContextError}
             </p>
           ) : null}
         </div>
-        <div className="grid gap-2 rounded-[8px] border border-[#D8CFB6] bg-white p-3 text-[11px] text-[#514D45] sm:grid-cols-5">
+        <div className="grid gap-2 rounded-[8px] border border-[var(--adm-border)] bg-white p-3 text-[11px] text-[var(--adm-text)] sm:grid-cols-5">
           <div>
-            <p className="font-semibold text-[#1F2821]">Ügy száma</p>
+            <p className="font-semibold text-[var(--adm-text)]">Ügy száma</p>
             <p className="mt-1 break-all">{caseNumber || "Nincs megadva"}</p>
           </div>
           <div>
-            <p className="font-semibold text-[#1F2821]">Ellenfél irata</p>
+            <p className="font-semibold text-[var(--adm-text)]">Ellenfél irata</p>
             <p className="mt-1 break-all">{documentName || documentId || "Nincs kiválasztva"}</p>
           </div>
           <div>
-            <p className="font-semibold text-[#1F2821]">Ügyfél</p>
+            <p className="font-semibold text-[var(--adm-text)]">Ügyfél</p>
             <p className="mt-1 break-all">{clientName || "Ügyféladat nem érhető el"}</p>
           </div>
           <div>
-            <p className="font-semibold text-[#1F2821]">Munkafolyamat</p>
+            <p className="font-semibold text-[var(--adm-text)]">Munkafolyamat</p>
             <p className="mt-1 break-all">{formatWorkspaceMode(mode)}</p>
           </div>
           <div>
-            <p className="font-semibold text-[#1F2821]">Státusz</p>
+            <p className="font-semibold text-[var(--adm-text)]">Státusz</p>
             <p className="mt-1">{status}</p>
           </div>
         </div>
@@ -1107,7 +1107,7 @@ function WorkflowHeader({
 
 function MissingContextState() {
   return (
-    <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-4">
+    <section className="rounded-[10px] border border-[var(--adm-border)] bg-white p-4">
       <AdminSectionHeader
         eyebrow="Hiányzó ügykörnyezet"
         title="Válassz ügyet és ellenfél iratát a peres munkaterület indításához."
@@ -1116,7 +1116,7 @@ function MissingContextState() {
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/cases"
-              className="inline-flex items-center justify-center rounded-[6px] border border-[#1F4A33] bg-[#1F4A33] px-3 py-2 text-[12px] font-semibold text-[#F4EFDB] transition-colors hover:bg-[#163524]"
+              className="inline-flex items-center justify-center rounded-[6px] border border-[var(--adm-green-800)] bg-[var(--adm-green-800)] px-3 py-2 text-[12px] font-semibold text-[var(--adm-ivory-50)] transition-colors hover:bg-[var(--adm-green-900)]"
             >
               Ügyek megnyitása
             </Link>
@@ -1138,7 +1138,7 @@ function WorkflowNavigation({
   onNavigate: (step: LitigationWorkspaceStep) => void;
 }) {
   return (
-    <section className="rounded-[10px] border border-[#D8CFB6] bg-white p-4">
+    <section className="rounded-[10px] border border-[var(--adm-border)] bg-white p-4">
       <div className="grid gap-2 xl:grid-cols-3">
         {workspaceSteps.map((step, index) => {
           const active = currentStep === step.key;
@@ -1150,15 +1150,15 @@ function WorkflowNavigation({
               onClick={() => onNavigate(step.key)}
               className={`min-h-[92px] rounded-[8px] border p-3 text-left transition-colors ${
                 active
-                  ? "border-[#1F4A33] bg-[#1F4A33] text-[#F4EFDB]"
+                  ? "border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)]"
                   : completed
-                    ? "border-[#C6B681] bg-[#FBF6E7] text-[#1F2821] hover:bg-white"
-                    : "border-[#E7DECB] bg-[#FBF9F3] text-[#514D45] hover:bg-white"
+                    ? "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text)] hover:bg-white"
+                    : "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text)] hover:bg-white"
               }`}
             >
               <span className="text-[11px] font-bold uppercase tracking-[0.14em]">{step.label}</span>
               <span className="mt-2 block font-serif text-lg font-medium leading-tight">{step.title}</span>
-              <span className={`mt-1 block text-[11px] leading-5 ${active ? "text-[#F4EFDB]" : "text-[#6D6A62]"}`}>
+              <span className={`mt-1 block text-[11px] leading-5 ${active ? "text-[var(--adm-ivory-50)]" : "text-[var(--adm-text-muted)]"}`}>
                 {step.description}
               </span>
             </button>
@@ -1171,29 +1171,29 @@ function WorkflowNavigation({
 
 function LitigationWorkflowGuidance() {
   return (
-    <section className="rounded-[10px] border border-[#D8CFB6] bg-[#FFFDF7] px-4 py-3">
+    <section className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-4 py-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7B776D]">Peres stratégiai munkatér</p>
-          <h2 className="mt-1 font-serif text-[19px] font-medium text-[#1F2821]">Munkamódszer</h2>
-          <p className="mt-1 max-w-3xl text-[12px] leading-5 text-[#6D6A62]">
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Peres stratégiai munkatér</p>
+          <h2 className="mt-1 font-serif text-[19px] font-medium text-[var(--adm-text)]">Munkamódszer</h2>
+          <p className="mt-1 max-w-3xl text-[12px] leading-5 text-[var(--adm-text-muted)]">
             A munkafolyamat ellenoldali pontból saját válaszba, majd beadványrészbe vezet. A mentés böngésző-local jellegű;
             nincs backend peres review-napló, TipTap JSON mentés vagy Word változáskövetés.
           </p>
         </div>
         <AdminStatusPill tone="gold">Helyi vázlat · nem végleges beadvány</AdminStatusPill>
       </div>
-      <ul className="mt-3 grid gap-x-6 gap-y-2 border-t border-[#E7DECB] pt-3 text-[11px] leading-5 text-[#514D45] md:grid-cols-3">
+      <ul className="mt-3 grid gap-x-6 gap-y-2 border-t border-[var(--adm-border)] pt-3 text-[11px] leading-5 text-[var(--adm-text)] md:grid-cols-3">
         <li className="flex gap-2">
-          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#B58A2A]" />
+          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--adm-ochre-500)]" />
           <span>Rögzítsd az ellenfél iratából a rövid címmel azonosított, megválaszolandó pontokat.</span>
         </li>
         <li className="flex gap-2">
-          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#B58A2A]" />
+          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--adm-ochre-500)]" />
           <span>Kapcsolj hozzájuk rendezhető saját válaszblokkokat, majd építs belőlük szerkeszthető fejezeteket.</span>
         </li>
         <li className="flex gap-2">
-          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#B58A2A]" />
+          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--adm-ochre-500)]" />
           <span>Az előnézet és a .txt munkacsomag ügyvédi ellenőrzést és átadást segít, nem végleges benyújtást.</span>
         </li>
       </ul>
@@ -1288,7 +1288,7 @@ function IntakeWorkspace({
         placeholder={documentTextFallback}
         rows={20}
         pageClassName="max-w-[1180px]"
-        canvasClassName="min-h-[620px] bg-[#FFFDF8]"
+        canvasClassName="min-h-[620px] bg-[var(--adm-surface)]"
         textareaClassName="text-[16.5px]"
         minHeightClassName="min-h-[560px]"
         status={<AdminStatusPill tone={hasDocumentText ? "green" : "gold"}>{hasDocumentText ? "Szöveg elérhető" : "Nincs szöveg"}</AdminStatusPill>}
@@ -1311,17 +1311,17 @@ function IntakeWorkspace({
         }
         toolbar={
           <div className="grid w-full gap-3">
-            <div className="rounded-[8px] border border-[#D8CFB6] bg-white p-3">
+            <div className="rounded-[8px] border border-[var(--adm-border)] bg-white p-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Kiválasztott dokumentum</p>
-                  <h3 className="mt-1 break-words font-serif text-xl font-medium text-[#1F2821]">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Kiválasztott dokumentum</p>
+                  <h3 className="mt-1 break-words font-serif text-xl font-medium text-[var(--adm-text)]">
                     {isLoadingDocumentContext ? "Dokumentum betöltése..." : documentContext?.title || "Dokumentumadat nem érhető el"}
                   </h3>
                 </div>
               </div>
               {documentContextError ? (
-                <p className="mt-3 rounded-[6px] border border-dashed border-[#E5C3C3] bg-[#FFF7F4] px-3 py-2 text-[11px] text-[#7B776D]">
+                <p className="mt-3 rounded-[6px] border border-dashed border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] px-3 py-2 text-[11px] text-[var(--adm-text-muted)]">
                   {documentContextError}
                 </p>
               ) : null}
@@ -1330,25 +1330,25 @@ function IntakeWorkspace({
               value={sourceReference}
               onChange={(event) => onSourceReferenceChange(event.target.value)}
               placeholder="Forrás referencia: oldal / pont / bekezdés"
-              className="w-full rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs text-[#1F2821]"
+              className="w-full rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
             />
-            <div className="rounded-[8px] border border-[#D8CFB6] bg-white p-3">
+            <div className="rounded-[8px] border border-[var(--adm-border)] bg-white p-3">
               <div className="grid gap-2 lg:grid-cols-[1fr_minmax(180px,240px)]">
-                <label className="grid gap-1 text-[11px] font-semibold text-[#514D45]">
+                <label className="grid gap-1 text-[11px] font-semibold text-[var(--adm-text)]">
                   Rövid cím
                   <input
                     value={selectionOpponentTitle}
                     onChange={(event) => onSelectionOpponentTitleChange(event.target.value)}
                     placeholder="Pl. A munkaviszony alapvető körülményei"
-                    className="rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs font-normal text-[#1F2821]"
+                    className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs font-normal text-[var(--adm-text)]"
                   />
                 </label>
-                <label className="grid gap-1 text-[11px] font-semibold text-[#514D45]">
+                <label className="grid gap-1 text-[11px] font-semibold text-[var(--adm-text)]">
                   Pont jellege
                   <select
                     value={selectionOpponentType}
                     onChange={(event) => onSelectionOpponentTypeChange(event.target.value as OpponentBracketType)}
-                    className="rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs font-normal text-[#1F2821]"
+                    className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs font-normal text-[var(--adm-text)]"
                   >
                     {Object.entries(bracketTypeLabels).map(([value, label]) => (
                       <option key={value} value={value}>
@@ -1362,11 +1362,11 @@ function IntakeWorkspace({
                 </AdminButton>
               </div>
               {hasSelectedText ? (
-                <p className="mt-2 line-clamp-2 rounded-[6px] border border-[#E7DECB] bg-[#FBF9F3] px-3 py-2 text-[11px] text-[#514D45]">
+                <p className="mt-2 line-clamp-2 rounded-[6px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[11px] text-[var(--adm-text)]">
                   Kijelölt szöveg: „{selectedOpponentText}”
                 </p>
               ) : (
-                <p className="mt-2 rounded-[6px] border border-dashed border-[#D8CFB6] bg-[#FBF9F3] px-3 py-2 text-[11px] text-[#7B776D]">
+                <p className="mt-2 rounded-[6px] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[11px] text-[var(--adm-text-muted)]">
                   Jelölj ki szöveget az ellenfél iratából.
                 </p>
               )}
@@ -1436,23 +1436,23 @@ function OpponentBracketForm({
   onAddOpponentBracket: () => void;
 }) {
   return (
-    <div className="rounded-[8px] border border-[#E5C3C3] bg-[#FFF7F4] p-3">
+    <div className="rounded-[8px] border border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] p-3">
       <div className="grid gap-2">
-        <label className="grid gap-1 text-[11px] font-semibold text-[#514D45]">
+        <label className="grid gap-1 text-[11px] font-semibold text-[var(--adm-text)]">
           Rövid cím
           <input
             value={bracketDraft.title}
             onChange={(event) => onBracketDraftChange((prev) => ({ ...prev, title: event.target.value }))}
             placeholder="Pl. A munkaviszony alapvető körülményei"
-            className="rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs font-normal text-[#1F2821]"
+            className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs font-normal text-[var(--adm-text)]"
           />
         </label>
-        <label className="grid gap-1 text-[11px] font-semibold text-[#514D45]">
+        <label className="grid gap-1 text-[11px] font-semibold text-[var(--adm-text)]">
           Pont jellege
           <select
             value={bracketDraft.type}
             onChange={(event) => onBracketDraftChange((prev) => ({ ...prev, type: event.target.value as OpponentBracketType }))}
-            className="rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs font-normal text-[#1F2821]"
+            className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs font-normal text-[var(--adm-text)]"
           >
             {Object.entries(bracketTypeLabels).map(([value, label]) => (
               <option key={value} value={value}>
@@ -1466,37 +1466,37 @@ function OpponentBracketForm({
           onChange={(event) => onBracketDraftChange((prev) => ({ ...prev, quote: event.target.value }))}
           rows={4}
           placeholder="Idézet / forráshely az ellenfél iratából"
-          className="rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs text-[#1F2821]"
+          className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
         />
         <input
           value={bracketDraft.sourceRef}
           onChange={(event) => onBracketDraftChange((prev) => ({ ...prev, sourceRef: event.target.value }))}
           placeholder="Forráshely: oldal / pont / bekezdés"
-          className="rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs text-[#1F2821]"
+          className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
         />
         <input
           value={bracketDraft.legalBasis}
           onChange={(event) => onBracketDraftChange((prev) => ({ ...prev, legalBasis: event.target.value }))}
           placeholder="Hivatkozott jogalap"
-          className="rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs text-[#1F2821]"
+          className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
         />
         <input
           value={bracketDraft.evidence}
           onChange={(event) => onBracketDraftChange((prev) => ({ ...prev, evidence: event.target.value }))}
           placeholder="Hivatkozott bizonyíték"
-          className="rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs text-[#1F2821]"
+          className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
         />
         <input
           value={bracketDraft.requestedRelief}
           onChange={(event) => onBracketDraftChange((prev) => ({ ...prev, requestedRelief: event.target.value }))}
           placeholder="Követelt jogkövetkezmény"
-          className="rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs text-[#1F2821]"
+          className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
         />
         <div className="grid gap-2 sm:grid-cols-2">
           <select
             value={bracketDraft.risk}
             onChange={(event) => onBracketDraftChange((prev) => ({ ...prev, risk: event.target.value as OpponentBracket["risk"] }))}
-            className="rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs text-[#1F2821]"
+            className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
           >
             <option value="low">Kockázat: alacsony</option>
             <option value="medium">Kockázat: közepes</option>
@@ -1505,7 +1505,7 @@ function OpponentBracketForm({
           <select
             value={bracketDraft.status}
             onChange={(event) => onBracketDraftChange((prev) => ({ ...prev, status: event.target.value as OpponentBracketStatus }))}
-            className="rounded border border-[#DFCFC6] bg-white px-3 py-2 text-xs text-[#1F2821]"
+            className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
           >
             <option value="rögzítve">Státusz: rögzítve</option>
             <option value="válaszút kell">Státusz: válaszút kell</option>
@@ -1542,7 +1542,7 @@ function OpponentBracketList({
 }) {
   if (opponentBrackets.length === 0) {
     return (
-      <div className="rounded-[8px] border border-dashed border-[#DFCFC6] bg-[#FBF9F3] p-4 text-[12px] text-[#7B776D]">
+      <div className="rounded-[8px] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[12px] text-[var(--adm-text-muted)]">
         Még nincs kiemelt ellenoldali pont. Ezen a munkaterületen az ellenfél iratából kell rövid címmel rögzíteni a válaszolandó pontokat.
       </div>
     );
@@ -1550,7 +1550,7 @@ function OpponentBracketList({
 
   return (
     <div className="space-y-3">
-      <p className="rounded-[8px] border border-[#E7DECB] bg-[#FBF9F3] px-3 py-2 text-[11px] leading-5 text-[#7B776D]">
+      <p className="rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">
         A sorrend helyi vázlat, még nincs adatbázisba mentve.
       </p>
       {opponentBrackets.map((bracket, index) => {
@@ -1561,8 +1561,8 @@ function OpponentBracketList({
         return (
           <div
             key={bracket.id}
-            className={`relative rounded-[10px] border bg-white shadow-sm transition-colors before:absolute before:bottom-3 before:left-0 before:top-3 before:w-[4px] before:rounded-r-full before:bg-[#8F3131] ${
-              isActive ? "border-[#2D4A7C] ring-2 ring-[#C7D6EA]" : "border-[#E5C3C3]"
+            className={`relative rounded-[10px] border bg-white shadow-sm transition-colors before:absolute before:bottom-3 before:left-0 before:top-3 before:w-[4px] before:rounded-r-full before:bg-[var(--adm-terracotta-700)] ${
+              isActive ? "border-[var(--adm-blue-950)] ring-2 ring-[var(--adm-blue-100)]" : "border-[var(--adm-terracotta-100)]"
             }`}
           >
             <button
@@ -1578,25 +1578,25 @@ function OpponentBracketList({
                   <AdminBadge tone={linkedCount ? "blue" : "neutral"}>{linkedCount} válasz</AdminBadge>
                   {isActive ? <AdminBadge tone="blue">Kapcsolt fókusz</AdminBadge> : null}
                 </span>
-                <span className="mt-2 block truncate font-serif text-lg font-medium text-[#1F2821]">{bracket.title}</span>
-                <span className="mt-1 block truncate text-[11px] text-[#6D6A62]">
+                <span className="mt-2 block truncate font-serif text-lg font-medium text-[var(--adm-text)]">{bracket.title}</span>
+                <span className="mt-1 block truncate text-[11px] text-[var(--adm-text-muted)]">
                   {linkedCount > 0 ? `${linkedCount} kapcsolt saját válasz` : "Még nincs válasz ehhez az állításhoz."}
                 </span>
-                <span className="mt-1 block truncate text-[11px] text-[#8F6D62]">
+                <span className="mt-1 block truncate text-[11px] text-[var(--adm-text-muted)]">
                   {bracket.sourceRef || sourceReference || "Forráshely nincs megadva"} · {bracket.status}
                 </span>
               </span>
               <span className="flex shrink-0 items-center gap-2">
                 <AdminStatusPill tone={riskTone[bracket.risk]}>{riskLabel[bracket.risk]}</AdminStatusPill>
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#E5C3C3] bg-[#FFF8F5] text-[14px] font-semibold text-[#8F3131]">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] text-[14px] font-semibold text-[var(--adm-terracotta-700)]">
                   {isOpen ? "−" : "+"}
                 </span>
               </span>
             </button>
 
             {onMoveBracket ? (
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#F0DFD8] bg-[#FFFDFC] px-4 py-2 pl-6">
-                <p className="text-[11px] font-semibold text-[#6D6A62]">Helyi sorrend: {index + 1}</p>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--adm-terracotta-100)] bg-[var(--adm-surface)] px-4 py-2 pl-6">
+                <p className="text-[11px] font-semibold text-[var(--adm-text-muted)]">Helyi sorrend: {index + 1}</p>
                 <div className="flex flex-wrap gap-2">
                   <AdminButton variant="neutral" size="sm" onClick={() => onMoveBracket(bracket.id, "up")} disabled={index === 0}>
                     Mozgatás fel
@@ -1609,8 +1609,8 @@ function OpponentBracketList({
             ) : null}
 
             {onStartResponseForBracket ? (
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#F0DFD8] bg-[#FFFDFC] px-4 py-2 pl-6">
-                <p className="text-[11px] text-[#6D6A62]">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--adm-terracotta-100)] bg-[var(--adm-surface)] px-4 py-2 pl-6">
+                <p className="text-[11px] text-[var(--adm-text-muted)]">
                   {linkedCount > 0 ? `${linkedCount} saját válasz kapcsolódik ehhez.` : "Még nincs válasz ehhez az állításhoz."}
                 </p>
                 <AdminButton
@@ -1624,25 +1624,25 @@ function OpponentBracketList({
             ) : null}
 
             {isOpen ? (
-              <div className="border-t border-[#F0DFD8] px-4 pb-4 pl-6 pt-3">
-                <p className="rounded-[8px] border border-[#F0DFD8] bg-[#FFF8F5] px-3 py-2 text-[12px] italic text-[#6B4A44]">
+              <div className="border-t border-[var(--adm-terracotta-100)] px-4 pb-4 pl-6 pt-3">
+                <p className="rounded-[8px] border border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] px-3 py-2 text-[12px] italic text-[var(--adm-terracotta-700)]">
                   „{bracket.quote}”
                 </p>
-                <dl className="mt-3 grid gap-2 text-[11px] text-[#514D45] md:grid-cols-2">
+                <dl className="mt-3 grid gap-2 text-[11px] text-[var(--adm-text)] md:grid-cols-2">
                   <div>
-                    <dt className="font-semibold text-[#1F2821]">Forráshely</dt>
+                    <dt className="font-semibold text-[var(--adm-text)]">Forráshely</dt>
                     <dd>{bracket.sourceRef || sourceReference || "Nincs megadva"}</dd>
                   </div>
                   <div>
-                    <dt className="font-semibold text-[#1F2821]">Jogalap</dt>
+                    <dt className="font-semibold text-[var(--adm-text)]">Jogalap</dt>
                     <dd>{bracket.legalBasis || "Nincs megadva"}</dd>
                   </div>
                   <div>
-                    <dt className="font-semibold text-[#1F2821]">Bizonyíték</dt>
+                    <dt className="font-semibold text-[var(--adm-text)]">Bizonyíték</dt>
                     <dd>{bracket.evidence || "Nincs megadva"}</dd>
                   </div>
                   <div>
-                    <dt className="font-semibold text-[#1F2821]">Követelt jogkövetkezmény</dt>
+                    <dt className="font-semibold text-[var(--adm-text)]">Követelt jogkövetkezmény</dt>
                     <dd>{bracket.requestedRelief || "Nincs megadva"}</dd>
                   </div>
                 </dl>
@@ -1709,7 +1709,7 @@ function StrategyWorkspace({
           action={<AdminStatusPill tone="burgundy">{opponentBrackets.length} pont</AdminStatusPill>}
         />
         <div className="space-y-3 p-4">
-          <div className="rounded-[8px] border border-[#E7DECB] bg-[#FBF9F3] px-3 py-2 text-[11px] text-[#6D6A62]">
+          <div className="rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[11px] text-[var(--adm-text-muted)]">
             Egy állítás megnyitása kiemeli és automatikusan megnyitja a hozzá kapcsolt válaszblokkokat.
           </div>
           <OpponentBracketList
@@ -1736,10 +1736,10 @@ function StrategyWorkspace({
           action={<AdminStatusPill tone="green">{responseBlocks.length} válaszblokk</AdminStatusPill>}
         />
         <div className="space-y-3 p-4">
-          <div className="rounded-[8px] border border-[#E6D8AD] bg-[#FFF9E6] p-3">
+          <div className="rounded-[8px] border border-[var(--adm-sand-300)] bg-[var(--adm-terracotta-100)] p-3">
             <div className="grid gap-2">
               {responseDraft.relatedBracketIds.length > 0 ? (
-                <div className="rounded-[8px] border border-[#C7D6EA] bg-[#F3F7FC] px-3 py-2 text-[11px] text-[#2D4A7C]">
+                <div className="rounded-[8px] border border-[var(--adm-blue-100)] bg-[var(--adm-blue-100)] px-3 py-2 text-[11px] text-[var(--adm-blue-950)]">
                   <span className="font-semibold">Erre válaszol: </span>
                   {responseDraft.relatedBracketIds
                     .map((bracketId) => opponentBrackets.find((bracket) => bracket.id === bracketId)?.title)
@@ -1747,25 +1747,25 @@ function StrategyWorkspace({
                     .join(", ")}
                 </div>
               ) : (
-                <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-white px-3 py-2 text-[11px] text-[#7B776D]">
+                <div className="rounded-[8px] border border-dashed border-[var(--adm-border)] bg-white px-3 py-2 text-[11px] text-[var(--adm-text-muted)]">
                   Nincs ellenoldali állításhoz kapcsolva.
                 </div>
               )}
-              <label className="grid gap-1 text-[11px] font-semibold text-[#514D45]">
+              <label className="grid gap-1 text-[11px] font-semibold text-[var(--adm-text)]">
                 Válaszblokk címe
                 <input
                   value={responseDraft.title}
                   onChange={(event) => onResponseDraftChange((prev) => ({ ...prev, title: event.target.value }))}
                   placeholder="Pl. A munkavégzés helyének és díjazásának cáfolata"
-                  className="rounded border border-[#E3D6AA] bg-white px-3 py-2 text-xs font-normal text-[#1F2821]"
+                  className="rounded border border-[var(--adm-sand-300)] bg-white px-3 py-2 text-xs font-normal text-[var(--adm-text)]"
                 />
               </label>
-              <label className="grid gap-1 text-[11px] font-semibold text-[#514D45]">
+              <label className="grid gap-1 text-[11px] font-semibold text-[var(--adm-text)]">
                 Válasz jellege
                 <select
                   value={responseDraft.type}
                   onChange={(event) => onResponseDraftChange((prev) => ({ ...prev, type: event.target.value as ResponseBlock["type"] }))}
-                  className="rounded border border-[#E3D6AA] bg-white px-3 py-2 text-xs font-normal text-[#1F2821]"
+                  className="rounded border border-[var(--adm-sand-300)] bg-white px-3 py-2 text-xs font-normal text-[var(--adm-text)]"
                 >
                   {Object.entries(responseTypeLabels).map(([value, label]) => (
                     <option key={value} value={value}>
@@ -1779,13 +1779,13 @@ function StrategyWorkspace({
                 onChange={(event) => onResponseDraftChange((prev) => ({ ...prev, detail: event.target.value }))}
                 rows={6}
                 placeholder="Ténybeli cáfolat, bizonyíték, jogszabályhely, joggyakorlat, kifogás vagy saját narratíva"
-                className="rounded border border-[#E3D6AA] bg-white px-3 py-2 text-xs text-[#1F2821]"
+                className="rounded border border-[var(--adm-sand-300)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
               />
-              <div className="rounded-[6px] border border-[#E6D8AD] bg-white p-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Kapcsolódó ellenoldali állítások</p>
+              <div className="rounded-[6px] border border-[var(--adm-sand-300)] bg-white p-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Kapcsolódó ellenoldali állítások</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {opponentBrackets.length === 0 ? (
-                    <span className="text-[11px] text-[#7B776D]">Előbb az Ellenfél irata munkaterületen hozz létre állításokat.</span>
+                    <span className="text-[11px] text-[var(--adm-text-muted)]">Előbb az Ellenfél irata munkaterületen hozz létre állításokat.</span>
                   ) : (
                     opponentBrackets.map((bracket) => (
                       <button
@@ -1794,8 +1794,8 @@ function StrategyWorkspace({
                         onClick={() => onToggleBracketRelation(bracket.id)}
                         className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors ${
                           responseDraft.relatedBracketIds.includes(bracket.id)
-                            ? "border-[#2D4A7C] bg-[#EAEFF6] text-[#2D4A7C]"
-                            : "border-[#DDD7CA] bg-[#FBF9F3] text-[#514D45] hover:bg-white"
+                            ? "border-[var(--adm-blue-950)] bg-[var(--adm-blue-100)] text-[var(--adm-blue-950)]"
+                            : "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text)] hover:bg-white"
                         }`}
                       >
                         {bracket.title}
@@ -1811,12 +1811,12 @@ function StrategyWorkspace({
           </div>
 
           {responseBlocks.length === 0 ? (
-            <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FBF9F3] p-4 text-[12px] text-[#7B776D]">
+            <div className="rounded-[8px] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[12px] text-[var(--adm-text-muted)]">
               Még nincs saját válaszblokk. Ez a munkaterület az állításhoz kapcsolt válaszstratégia helye, nem kész jogi következtetés.
             </div>
           ) : (
             <div className="space-y-3">
-              <p className="rounded-[8px] border border-[#E7DECB] bg-[#FBF9F3] px-3 py-2 text-[11px] leading-5 text-[#7B776D]">
+              <p className="rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">
                 A sorrend helyi vázlat, még nincs adatbázisba mentve.
               </p>
               {responseBlocks.map((block, index) => {
@@ -1829,8 +1829,8 @@ function StrategyWorkspace({
                 return (
                   <div
                     key={block.id}
-                    className={`relative rounded-[10px] border bg-white shadow-sm transition-colors before:absolute before:bottom-3 before:left-0 before:top-3 before:w-[4px] before:rounded-r-full before:bg-[#1F4A33] ${
-                      isActive ? "border-[#2D4A7C] ring-2 ring-[#C7D6EA]" : "border-[#D8CFB6]"
+                    className={`relative rounded-[10px] border bg-white shadow-sm transition-colors before:absolute before:bottom-3 before:left-0 before:top-3 before:w-[4px] before:rounded-r-full before:bg-[var(--adm-green-800)] ${
+                      isActive ? "border-[var(--adm-blue-950)] ring-2 ring-[var(--adm-blue-100)]" : "border-[var(--adm-border)]"
                     }`}
                   >
                     <button
@@ -1846,18 +1846,18 @@ function StrategyWorkspace({
                           <AdminBadge tone={block.relatedBracketIds.length ? "blue" : "neutral"}>{block.relatedBracketIds.length} ellenoldali kapcsolat</AdminBadge>
                           {isActive ? <AdminBadge tone="blue">Kapcsolt fókusz</AdminBadge> : null}
                         </span>
-                        <span className="mt-2 block truncate font-serif text-lg font-medium text-[#1F2821]">{block.title}</span>
-                        <span className="mt-1 block truncate text-[11px] text-[#6D6A62]">
+                        <span className="mt-2 block truncate font-serif text-lg font-medium text-[var(--adm-text)]">{block.title}</span>
+                        <span className="mt-1 block truncate text-[11px] text-[var(--adm-text-muted)]">
                           {relatedTitles.length > 0 ? `Erre válaszol: ${relatedTitles.join(", ")}` : "Nincs ellenoldali állításhoz kapcsolva."}
                         </span>
                       </span>
-                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#D8CFB6] bg-[#FBF9F3] text-[14px] font-semibold text-[#1F4A33]">
+                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] text-[14px] font-semibold text-[var(--adm-green-800)]">
                         {isOpen ? "−" : "+"}
                       </span>
                     </button>
 
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#E7DECB] bg-[#FFFDFC] px-4 py-2 pl-6">
-                      <p className="text-[11px] font-semibold text-[#6D6A62]">Helyi sorrend: {index + 1}</p>
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--adm-border)] bg-[var(--adm-surface)] px-4 py-2 pl-6">
+                      <p className="text-[11px] font-semibold text-[var(--adm-text-muted)]">Helyi sorrend: {index + 1}</p>
                       <div className="flex flex-wrap gap-2">
                         <AdminButton variant="neutral" size="sm" onClick={() => onMoveResponseBlock(block.id, "up")} disabled={index === 0}>
                           Mozgatás fel
@@ -1869,8 +1869,8 @@ function StrategyWorkspace({
                     </div>
 
                     {isOpen ? (
-                      <div className="border-t border-[#E7DECB] px-4 pb-4 pl-6 pt-3">
-                        <p className="whitespace-pre-wrap rounded-[8px] border border-[#E7DECB] bg-[#FCFAF4] px-3 py-2 text-[12px] leading-6 text-[#514D45]">
+                      <div className="border-t border-[var(--adm-border)] px-4 pb-4 pl-6 pt-3">
+                        <p className="whitespace-pre-wrap rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[12px] leading-6 text-[var(--adm-text)]">
                           {block.detail}
                         </p>
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -2511,12 +2511,12 @@ function AssemblyWorkspace({
           action={<AdminStatusPill tone="violet">{generatedChapterSeeds.length} generált fejezet</AdminStatusPill>}
         />
         <div className="space-y-3 p-4">
-          <div className="rounded-[8px] border border-[#D8CFB6] bg-white p-3">
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Automatikus vázlat</p>
-            <p className="mt-2 text-[12px] leading-5 text-[#514D45]">
+          <div className="rounded-[8px] border border-[var(--adm-border)] bg-white p-3">
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Automatikus vázlat</p>
+            <p className="mt-2 text-[12px] leading-5 text-[var(--adm-text)]">
               A beadványszerkesztő a válaszblokkok címeiből és helyi sorrendjéből készít tiszta peres dokumentum-vázat. Hiányzó ügyadatnál kitöltendő jelölés marad.
             </p>
-            <p className="mt-2 text-[11px] leading-5 text-[#7B776D]">
+            <p className="mt-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">
               A sorrend helyi vázlat, még nincs adatbázisba mentve. A válaszblokkok külön is beilleszthetők a helyi beadványvázlatba; ez szerkeszthető szöveget ad hozzá, nem végleges iratmentés.
             </p>
             <AdminButton variant="gold" size="sm" onClick={onApplyGeneratedSkeleton} className="mt-3">
@@ -2524,21 +2524,21 @@ function AssemblyWorkspace({
             </AdminButton>
           </div>
 
-          <div className="rounded-[8px] border border-[#D8CFB6] bg-[#FFFDF8] p-3">
+          <div className="rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Helyi munkamenet</p>
-                <h3 className="mt-1 font-serif text-[15px] font-medium text-[#1F2821]">Helyi mentés</h3>
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Helyi munkamenet</p>
+                <h3 className="mt-1 font-serif text-[15px] font-medium text-[var(--adm-text)]">Helyi mentés</h3>
               </div>
               <AdminStatusPill tone={localDraftInfo.exists ? "gold" : "green"}>
                 {localDraftInfo.exists ? "Van helyi vázlat" : "Nincs helyi vázlat"}
               </AdminStatusPill>
             </div>
-            <p className="mt-2 text-[11px] leading-5 text-[#6D6A62]">
+            <p className="mt-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">
               Ez csak böngészőben tárolt helyi munkamenet. Nem adatbázisba mentés. Csak ezen az eszközön érhető el.
             </p>
             {localDraftInfo.exists ? (
-              <p className="mt-1 text-[11px] font-semibold text-[#6C5120]">
+              <p className="mt-1 text-[11px] font-semibold text-[var(--adm-ochre-500)]">
                 Van korábbi helyi vázlat ehhez a munkaterülethez. Utolsó helyi mentés: {formatLocalDraftSavedAt(localDraftInfo.savedAt)}.
               </p>
             ) : null}
@@ -2557,10 +2557,10 @@ function AssemblyWorkspace({
               <p
                 className={`mt-2 rounded-[6px] border px-3 py-2 text-[11px] leading-5 ${
                   localDraftMessageTone === "success"
-                    ? "border-[#D8E3D2] bg-[#F5FAF2] text-[#3F6B35]"
+                    ? "border-[var(--adm-sage-100)] bg-[var(--adm-surface)] text-[var(--adm-green-800)]"
                     : localDraftMessageTone === "error"
-                      ? "border-[#E5C3C3] bg-[#FFF7F4] text-[#8B2A2A]"
-                      : "border-[#E7DECB] bg-white text-[#6D6A62]"
+                      ? "border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] text-[var(--adm-terracotta-700)]"
+                      : "border-[var(--adm-border)] bg-white text-[var(--adm-text-muted)]"
                 }`}
               >
                 {localDraftMessage}
@@ -2584,22 +2584,22 @@ function AssemblyWorkspace({
             <PleadingPreviewPanel readiness={pleadingPreviewReadiness} copyState={pleadingPreviewCopyState} onCopyPreview={copyPleadingPreview} />
           </div>
 
-          <div className="rounded-[10px] border border-[#D8CFB6] bg-white p-3">
+          <div className="rounded-[10px] border border-[var(--adm-border)] bg-white p-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Beadvány munkacsomag</p>
-                <h3 className="mt-1 font-serif text-[16px] font-medium text-[#1F2821]">Ügyvédi munkacsomag</h3>
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Beadvány munkacsomag</p>
+                <h3 className="mt-1 font-serif text-[16px] font-medium text-[var(--adm-text)]">Ügyvédi munkacsomag</h3>
               </div>
               <AdminStatusPill tone="gold">Helyi munkacsomag</AdminStatusPill>
             </div>
-            <p className="mt-2 text-[11px] leading-5 text-[#6D6A62]">
+            <p className="mt-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">
               Ez nem végleges Word-export, hanem helyi munkacsomag másoláshoz vagy letöltéshez. Az adatbázisba mentés későbbi fejlesztés.
             </p>
-            <div className="mt-3 grid gap-2 rounded-[8px] border border-[#E7DECB] bg-[#FCFAF4] px-3 py-2 text-[11px] text-[#514D45]">
+            <div className="mt-3 grid gap-2 rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[11px] text-[var(--adm-text)]">
               <p className="font-semibold">
                 Tartalom: szerkeszthető beadványszöveg · kész és nyitott szakaszok · ellenőrzési pontok · megjegyzések · nyitott teendők.
               </p>
-              <p className="leading-5 text-[#7B776D]">
+              <p className="leading-5 text-[var(--adm-text-muted)]">
                 Nem exportál eredeti ellenoldali iratszöveget, tokent, titkot vagy alkalmazásbeállítást.
               </p>
             </div>
@@ -2612,25 +2612,25 @@ function AssemblyWorkspace({
               </AdminButton>
             </div>
             {handoffPackageCopyState === "success" ? (
-              <p className="mt-2 text-[11px] text-[#3F6B35]">A munkacsomag vágólapra másolva.</p>
+              <p className="mt-2 text-[11px] text-[var(--adm-green-800)]">A munkacsomag vágólapra másolva.</p>
             ) : null}
             {handoffPackageCopyState === "error" ? (
-              <p className="mt-2 text-[11px] text-[#8B2A2A]">A munkacsomag másolása nem sikerült ebben a böngészőkörnyezetben.</p>
+              <p className="mt-2 text-[11px] text-[var(--adm-terracotta-700)]">A munkacsomag másolása nem sikerült ebben a böngészőkörnyezetben.</p>
             ) : null}
             {handoffPackageDownloadState === "success" ? (
-              <p className="mt-2 text-[11px] text-[#3F6B35]">A .txt munkacsomag letöltése elindult.</p>
+              <p className="mt-2 text-[11px] text-[var(--adm-green-800)]">A .txt munkacsomag letöltése elindult.</p>
             ) : null}
             {handoffPackageDownloadState === "error" ? (
-              <p className="mt-2 text-[11px] text-[#8B2A2A]">A .txt munkacsomag letöltése nem sikerült ebben a böngészőkörnyezetben.</p>
+              <p className="mt-2 text-[11px] text-[var(--adm-terracotta-700)]">A .txt munkacsomag letöltése nem sikerült ebben a böngészőkörnyezetben.</p>
             ) : null}
           </div>
 
-          <div className="rounded-[8px] border border-[#D7CCB0] bg-[#FBF9F3] p-3">
+          <div className="rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
             <div className="grid gap-2">
               <select
                 value={outputTemplate}
                 onChange={(event) => onOutputTemplateChange(event.target.value as OutputTemplate)}
-                className="rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs text-[#1F2821]"
+                className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
               >
                 {Object.entries(outputTemplateLabels).map(([value, label]) => (
                   <option key={value} value={value}>
@@ -2642,31 +2642,31 @@ function AssemblyWorkspace({
                 value={chapterDraft.title}
                 onChange={(event) => onChapterDraftChange((prev) => ({ ...prev, title: event.target.value }))}
                 placeholder="Fejezet / saját érv címe"
-                className="rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs text-[#1F2821]"
+                className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
               />
               <textarea
                 value={chapterDraft.pleadingText}
                 onChange={(event) => onChapterDraftChange((prev) => ({ ...prev, pleadingText: event.target.value }))}
                 rows={5}
                 placeholder="Beadványba illeszthető fejezetszöveg"
-                className="rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs text-[#1F2821]"
+                className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
               />
               <input
                 value={chapterDraft.counterclaimDirection}
                 onChange={(event) => onChapterDraftChange((prev) => ({ ...prev, counterclaimDirection: event.target.value }))}
                 placeholder="Viszontkereseti / ellenkérelmi irány"
-                className="rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs text-[#1F2821]"
+                className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
               />
               <input
                 value={chapterDraft.requestedRelief}
                 onChange={(event) => onChapterDraftChange((prev) => ({ ...prev, requestedRelief: event.target.value }))}
                 placeholder="Kérelem / jogkövetkezmény"
-                className="rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs text-[#1F2821]"
+                className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
               />
               <select
                 value={chapterDraft.status}
                 onChange={(event) => onChapterDraftChange((prev) => ({ ...prev, status: event.target.value as ChapterBlock["status"] }))}
-                className="rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs text-[#1F2821]"
+                className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
               >
                 <option value="hiányos">Státusz: hiányos</option>
                 <option value="szerkeszthető">Státusz: szerkeszthető</option>
@@ -2679,13 +2679,13 @@ function AssemblyWorkspace({
           </div>
 
           {generatedChapterSeeds.length === 0 ? (
-            <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-white p-4 text-[12px] text-[#7B776D]">
+            <div className="rounded-[8px] border border-dashed border-[var(--adm-border)] bg-white p-4 text-[12px] text-[var(--adm-text-muted)]">
               A válaszútból még nincs átemelhető fejezet. A szerkesztő ilyenkor kitöltendő helyekkel előkészített vázat mutat.
             </div>
           ) : (
             <div className="space-y-2">
               {generatedChapterSeeds.map((chapter, index) => (
-                <div key={chapter.id} className="rounded-[8px] border border-[#E7DECB] bg-white p-3">
+                <div key={chapter.id} className="rounded-[8px] border border-[var(--adm-border)] bg-white p-3">
                   {(() => {
                     const isInserted = insertedChapterIds.has(chapter.id);
 
@@ -2696,10 +2696,10 @@ function AssemblyWorkspace({
                     <AdminBadge tone="neutral">{chapter.sourceLabel}</AdminBadge>
                     {isInserted ? <AdminBadge tone="gold">Beillesztve</AdminBadge> : <AdminBadge tone="neutral">Beadványrész lehet</AdminBadge>}
                   </div>
-                  <h3 className="mt-2 font-serif text-[15px] font-medium text-[#1F2821]">{chapter.title}</h3>
-                  <p className="mt-1 line-clamp-3 text-[11px] leading-5 text-[#6D6A62]">{chapter.body}</p>
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-[#E7DECB] bg-[#FCFAF4] px-3 py-2">
-                    <p className="text-[11px] leading-5 text-[#6D6A62]">
+                  <h3 className="mt-2 font-serif text-[15px] font-medium text-[var(--adm-text)]">{chapter.title}</h3>
+                  <p className="mt-1 line-clamp-3 text-[11px] leading-5 text-[var(--adm-text-muted)]">{chapter.body}</p>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2">
+                    <p className="text-[11px] leading-5 text-[var(--adm-text-muted)]">
                       {isInserted ? "Már szerepel a helyi beadványvázlatban" : "Válaszblokk → szerkeszthető beadványrész"}
                     </p>
                     <AdminButton variant={isInserted ? "neutral" : "gold"} size="sm" onClick={() => appendChapterToPleadingDraft(chapter)}>
@@ -2715,18 +2715,18 @@ function AssemblyWorkspace({
           )}
 
           {chapterBlocks.length === 0 ? (
-            <div className="rounded-[8px] border border-dashed border-[#DDD7CA] bg-white p-4 text-[12px] text-[#7B776D]">
+            <div className="rounded-[8px] border border-dashed border-[var(--adm-border)] bg-white p-4 text-[12px] text-[var(--adm-text-muted)]">
               Még nincs saját fejezetelem. Ez a panel a végső beadvány fejezeteinek előkészítése.
             </div>
           ) : (
             <div className="space-y-3">
               {chapterBlocks.map((chapter) => (
-                <div key={chapter.id} className="rounded-[10px] border border-[#DDD7CA] bg-white p-4 shadow-sm">
+                <div key={chapter.id} className="rounded-[10px] border border-[var(--adm-border)] bg-white p-4 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-2">
-                    <h3 className="font-serif text-lg font-medium text-[#1F2821]">{chapter.title}</h3>
+                    <h3 className="font-serif text-lg font-medium text-[var(--adm-text)]">{chapter.title}</h3>
                     <AdminStatusPill tone={chapterStatusTone[chapter.status]}>{chapter.status}</AdminStatusPill>
                   </div>
-                  <p className="mt-2 whitespace-pre-wrap text-[12px] leading-6 text-[#514D45]">{chapter.pleadingText}</p>
+                  <p className="mt-2 whitespace-pre-wrap text-[12px] leading-6 text-[var(--adm-text)]">{chapter.pleadingText}</p>
                 </div>
               ))}
             </div>
@@ -2763,13 +2763,13 @@ function AssemblyWorkspace({
                 legalInsertBodyPlaceholder="A beadványrész szövege."
                 placeholder="Kísérleti TipTap előnézet a peres beadvány szerkesztéséhez."
               />
-              <div className="rounded-[8px] border border-dashed border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2 text-[11px] text-[#7B776D]">
+              <div className="rounded-[8px] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[11px] text-[var(--adm-text-muted)]">
                 <div className="flex flex-wrap items-center gap-2">
                   <span>Szerkesztett beadványszöveg: {tipTapAssemblyDraft.length} karakter.</span>
                   <span>Átvétel után kerül a beadványvázlatba.</span>
                 </div>
                 {!tipTapSelection.empty ? (
-                  <p className="mt-2 text-[#6C5120]">
+                  <p className="mt-2 text-[var(--adm-ochre-500)]">
                     Kijelölés: „{getSelectionExcerpt(tipTapSelection.text, 140)}”
                   </p>
                 ) : null}
@@ -2793,7 +2793,7 @@ function AssemblyWorkspace({
           ) : undefined
         }
         pageClassName="max-w-[1180px]"
-        canvasClassName="min-h-[860px] bg-[#FFFDF8]"
+        canvasClassName="min-h-[860px] bg-[var(--adm-surface)]"
         textareaClassName="text-[16.5px]"
         minHeightClassName="min-h-[820px]"
         isDirty={editorWasTouched}
@@ -2813,15 +2813,15 @@ function AssemblyWorkspace({
         }
         toolbar={
           <div className="grid w-full gap-3">
-            <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-[#D8CFB6] bg-[#FFFDF8] px-3 py-2">
-              <div className="flex rounded-[999px] border border-[#D8CFB6] bg-[#F7F2E6] p-0.5">
+            <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2">
+              <div className="flex rounded-[999px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-0.5">
                 <button
                   type="button"
                   onClick={() => {
                     if (isTipTapAssemblyPreviewEnabled) toggleTipTapAssemblyPreview();
                   }}
                   className={`rounded-[999px] px-3 py-1.5 text-[10px] font-semibold transition ${
-                    !isTipTapAssemblyPreviewEnabled ? "bg-[#1F4A33] text-[#F4EFDB] shadow-sm" : "text-[#514D45] hover:bg-white"
+                    !isTipTapAssemblyPreviewEnabled ? "bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] shadow-sm" : "text-[var(--adm-text)] hover:bg-white"
                   }`}
                   aria-pressed={!isTipTapAssemblyPreviewEnabled}
                 >
@@ -2833,7 +2833,7 @@ function AssemblyWorkspace({
                     if (!isTipTapAssemblyPreviewEnabled) toggleTipTapAssemblyPreview();
                   }}
                   className={`rounded-[999px] px-3 py-1.5 text-[10px] font-semibold transition ${
-                    isTipTapAssemblyPreviewEnabled ? "bg-[#FAEFCF] text-[#5A4317] shadow-sm" : "text-[#514D45] hover:bg-white"
+                    isTipTapAssemblyPreviewEnabled ? "bg-[var(--adm-sand-100)] text-[var(--adm-ochre-500)] shadow-sm" : "text-[var(--adm-text)] hover:bg-white"
                   }`}
                   aria-pressed={isTipTapAssemblyPreviewEnabled}
                 >
@@ -2845,17 +2845,17 @@ function AssemblyWorkspace({
                   type="button"
                   onClick={syncTipTapAssemblyToPleadingDraft}
                   disabled={tipTapAssemblyDraft === pleadingEditorText}
-                  className="rounded-[999px] border border-[#1F4A33] bg-[#1F4A33] px-3 py-1.5 text-[10px] font-semibold text-[#F4EFDB] transition hover:bg-[#173827] disabled:cursor-not-allowed disabled:border-[#D8CFB6] disabled:bg-[#EFE9DA] disabled:text-[#9C9890]"
+                  className="rounded-[999px] border border-[var(--adm-green-800)] bg-[var(--adm-green-800)] px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-ivory-50)] transition hover:bg-[var(--adm-green-900)] disabled:cursor-not-allowed disabled:border-[var(--adm-border)] disabled:bg-[var(--adm-surface)] disabled:text-[var(--adm-text-muted)]"
                 >
                   TipTap szöveg átvétele beadványvázlatként
                 </button>
               ) : null}
             </div>
             {isTipTapAssemblyPreviewEnabled ? (
-              <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-[#D8CFB6] bg-[#FCFAF4] px-3 py-2">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6C5120]">Formázás</span>
+              <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--adm-ochre-500)]">Formázás</span>
                 {(["text-style", "structure", "list", "insert"] as const).map((group) => (
-                  <span key={group} className="flex items-center gap-1 rounded-[7px] border border-[#E7DECB] bg-white/80 px-1.5 py-1">
+                  <span key={group} className="flex items-center gap-1 rounded-[7px] border border-[var(--adm-border)] bg-white/80 px-1.5 py-1">
                     {tipTapToolbarItems
                       .filter((item) => item.group === group)
                       .map((item) => (
@@ -2866,8 +2866,8 @@ function AssemblyWorkspace({
                           title={item.title}
                           className={`rounded-[5px] border px-2.5 py-1 text-[10px] font-semibold transition ${
                             item.active
-                              ? "border-[#B28B2E] bg-[#FAEFCF] text-[#5A4317] shadow-sm"
-                              : "border-transparent bg-white text-[#514D45] hover:border-[#B28B2E] hover:bg-[#FBF6E7]"
+                              ? "border-[var(--adm-ochre-500)] bg-[var(--adm-sand-100)] text-[var(--adm-ochre-500)] shadow-sm"
+                              : "border-transparent bg-white text-[var(--adm-text)] hover:border-[var(--adm-ochre-500)] hover:bg-[var(--adm-surface)]"
                           }`}
                         >
                           {item.label}
@@ -2875,34 +2875,34 @@ function AssemblyWorkspace({
                       ))}
                   </span>
                 ))}
-                <span className="ml-auto text-[11px] text-[#7B776D]">
+                <span className="ml-auto text-[11px] text-[var(--adm-text-muted)]">
                   Kijelölés: {tipTapSelection.empty ? "nincs kijelölés" : `${tipTapSelection.text.length} karakter`}
                 </span>
               </div>
             ) : null}
-            <div className={`grid gap-3 rounded-[10px] border border-[#D8CFB6] bg-white text-[11px] text-[#514D45] md:grid-cols-3 ${isTipTapAssemblyPreviewEnabled ? "p-3" : "p-4"}`}>
+            <div className={`grid gap-3 rounded-[10px] border border-[var(--adm-border)] bg-white text-[11px] text-[var(--adm-text)] md:grid-cols-3 ${isTipTapAssemblyPreviewEnabled ? "p-3" : "p-4"}`}>
               <div>
-                <p className="font-semibold text-[#1F2821]">Forráslogika</p>
+                <p className="font-semibold text-[var(--adm-text)]">Forráslogika</p>
                 <p className="mt-1">{responseBlocks.length} saját válasz alapján előkészítve</p>
               </div>
               <div>
-                <p className="font-semibold text-[#1F2821]">Fejezetképzés</p>
+                <p className="font-semibold text-[var(--adm-text)]">Fejezetképzés</p>
                 <p className="mt-1">A válaszblokkok szerkesztett címe és helyi sorrendje szerint előkészítve</p>
               </div>
               <div>
-                <p className="font-semibold text-[#1F2821]">Mentés/export</p>
+                <p className="font-semibold text-[var(--adm-text)]">Mentés/export</p>
                 <p className="mt-1">Helyi vázlat; végleges iratmentés nincs bekötve</p>
               </div>
             </div>
-            <div className={`rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] ${isTipTapAssemblyPreviewEnabled ? "p-3" : "p-4"}`}>
+            <div className={`rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] ${isTipTapAssemblyPreviewEnabled ? "p-3" : "p-4"}`}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h3 className={`font-serif font-medium text-[#1F2821] ${isTipTapAssemblyPreviewEnabled ? "text-base" : "text-xl"}`}>Bálintfy ellenkérelem struktúra</h3>
-                  <p className="mt-1 text-[12px] text-[#6D6A62]">{outputTemplateLabels[outputTemplate]}</p>
+                  <h3 className={`font-serif font-medium text-[var(--adm-text)] ${isTipTapAssemblyPreviewEnabled ? "text-base" : "text-xl"}`}>Bálintfy ellenkérelem struktúra</h3>
+                  <p className="mt-1 text-[12px] text-[var(--adm-text-muted)]">{outputTemplateLabels[outputTemplate]}</p>
                 </div>
                 <AdminStatusPill tone="gold">Előkészítve</AdminStatusPill>
               </div>
-              <ol className={`grid gap-2 rounded-[8px] border border-[#E7DECB] bg-white text-[12px] text-[#514D45] md:grid-cols-2 ${isTipTapAssemblyPreviewEnabled ? "mt-3 max-h-24 overflow-hidden p-3" : "mt-4 p-4"}`}>
+              <ol className={`grid gap-2 rounded-[8px] border border-[var(--adm-border)] bg-white text-[12px] text-[var(--adm-text)] md:grid-cols-2 ${isTipTapAssemblyPreviewEnabled ? "mt-3 max-h-24 overflow-hidden p-3" : "mt-4 p-4"}`}>
                 {assemblyStructure.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
