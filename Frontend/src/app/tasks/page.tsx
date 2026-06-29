@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
@@ -239,6 +239,21 @@ function TasksPageContent() {
     [tasks, selectedTaskId]
   );
 
+  // Deep-link focus: which task was opened via /tasks?taskId=..., and whether it loaded.
+  const deepLinkedTask = useMemo(
+    () => (deepLinkedTaskId ? tasks.find((task) => task.id === deepLinkedTaskId) ?? null : null),
+    [tasks, deepLinkedTaskId],
+  );
+  const deepLinkMissing = Boolean(deepLinkedTaskId) && !isLoading && !deepLinkedTask;
+  const deepLinkRowRef = useRef<HTMLTableRowElement | null>(null);
+  const deepLinkScrolledRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkedTask && deepLinkRowRef.current && !deepLinkScrolledRef.current) {
+      deepLinkRowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      deepLinkScrolledRef.current = true;
+    }
+  }, [deepLinkedTask]);
+
   const selectedCreateCase = useMemo(
     () => cases.find((caseItem) => caseItem.id === createData.caseId) ?? null,
     [cases, createData.caseId]
@@ -409,9 +424,17 @@ function TasksPageContent() {
               <h1 className="mt-1 font-serif text-[32px] leading-tight text-[var(--adm-text)]">Feladatok és határidők</h1>
               <p className="text-xs text-[var(--adm-text-muted)] mt-1">{filteredTasks.length} feladat a szűrés szerint</p>
               <p className="text-[10px] text-[var(--adm-text-soft)] mt-1">Operatív munkasor: teendők, review alatti elemek és határidős feladatok.</p>
-              {deepLinkedTaskId && (
-                <p className="text-[10px] text-[#8B7355] mt-1">Deep-linkelt feladat nézet aktív.</p>
-              )}
+              {deepLinkedTask ? (
+                <p className="mt-2 inline-flex flex-wrap items-center gap-1.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)] px-2.5 py-1 text-[11px] text-[var(--adm-text)]">
+                  <span className="font-bold uppercase tracking-[0.12em] text-[#6B4B14]">Megnyitott feladat</span>
+                  <span className="font-semibold">{deepLinkedTask.title}</span>
+                  <span className="text-[var(--adm-text-muted)]">· {deepLinkedTask.case.caseNumber}</span>
+                </p>
+              ) : deepLinkMissing ? (
+                <p className="mt-2 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2.5 py-1 text-[11px] text-[var(--adm-text-muted)]">
+                  A hivatkozott feladat nem szerepel a betöltött listában — lehet, hogy lezárult, vagy másik felelőshöz tartozik.
+                </p>
+              ) : null}
             </div>
             <button
               onClick={() => setShowCreateModal(true)}
@@ -480,11 +503,20 @@ function TasksPageContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTasks.map((task) => (
+                  {filteredTasks.map((task) => {
+                    const isDeepLinked = task.id === deepLinkedTaskId;
+                    return (
                     <tr
                       key={task.id}
+                      ref={isDeepLinked ? deepLinkRowRef : undefined}
                       onClick={() => setSelectedTaskId(task.id)}
-                      className={`border-b border-[var(--adm-border)] cursor-pointer ${selectedTaskId === task.id ? "bg-[var(--adm-surface)]" : "hover:bg-[var(--adm-surface)]"}`}
+                      className={`border-b border-[var(--adm-border)] cursor-pointer ${
+                        isDeepLinked
+                          ? "bg-[var(--adm-sand-100)] shadow-[inset_4px_0_0_var(--adm-ochre-500)]"
+                          : selectedTaskId === task.id
+                            ? "bg-[var(--adm-surface)]"
+                            : "hover:bg-[var(--adm-surface)]"
+                      }`}
                     >
                       <td className="px-4 py-3">
                         <p className="text-sm font-semibold text-[var(--adm-text)]">{task.title}</p>
@@ -544,7 +576,8 @@ function TasksPageContent() {
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
