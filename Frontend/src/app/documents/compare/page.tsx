@@ -3395,6 +3395,12 @@ return (
                       >
                         Ügy dokumentumai
                       </Link>
+                      <Link
+                        href={`/litigation-workspace?caseId=${encodeURIComponent(selectedDocument.caseId)}&documentId=${encodeURIComponent(selectedDocument.id)}`}
+                        className="px-2 py-1 text-[10px] border border-[#DDD7CA] hover:bg-white"
+                      >
+                        Peres munkatér
+                      </Link>
                       <button
                         onClick={() => handleDownload(selectedDocument)}
                         className="px-2 py-1 text-[10px] border border-[#DDD7CA] hover:bg-white"
