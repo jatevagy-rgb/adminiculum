@@ -100,6 +100,22 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
     return { status: reviewDocument.status, label: formatReviewStatus(reviewDocument.status), helper: "Review döntésre vár.", variant: "default" as const };
   };
   const outcome = getReviewOutcome();
+  const outcomeIndicatorClass =
+    outcome.variant === "success"
+      ? isSignal
+        ? "border-emerald-500 bg-emerald-400/20"
+        : "border-emerald-600 bg-emerald-100"
+      : outcome.variant === "error"
+        ? isSignal
+          ? "border-red-500 bg-red-400/20"
+          : "border-red-600 bg-red-100"
+        : outcome.variant === "warning"
+          ? isSignal
+            ? "border-amber-500 bg-amber-400/20"
+            : "border-amber-600 bg-amber-100"
+          : isSignal
+            ? "border-cyan-500 bg-cyan-400/20"
+            : "border-[var(--adm-blue-700)] bg-[var(--adm-blue-100)]/40";
   const isPendingDecision = reviewDocument?.status === "GENERATED" || reviewDocument?.status === "IN_REVIEW";
   const isApproved = reviewDocument?.status === "APPROVED";
 
@@ -385,9 +401,7 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
       {/* Outcome banner */}
       <div className={`rounded-xl border px-${isSignal ? "5" : "8"} py-${isSignal ? "4" : "5"} ${outcome.variant === "success" ? (isSignal ? "bg-emerald-900/30 border-emerald-700" : "bg-emerald-50 border-emerald-200") : outcome.variant === "error" ? (isSignal ? "bg-red-900/30 border-red-700" : "bg-red-50 border-red-200") : outcome.variant === "warning" ? (isSignal ? "bg-amber-900/30 border-amber-700" : "bg-amber-50 border-amber-200") : (isSignal ? "bg-[#111C2E] border-[#1E293B]" : "bg-white border-[var(--adm-border)]")}`}>
         <div className="flex items-center gap-4">
-          <span className={`material-symbols-outlined text-2xl ${isSignal ? "text-cyan-400" : "text-[var(--adm-blue-700)]"}`} style={{ fontVariationSettings: "'FILL' 1" }}>
-            {outcome.variant === "success" ? "verified" : outcome.variant === "error" ? "cancel" : "pending"}
-          </span>
+          <span aria-hidden="true" className={`h-4 w-4 shrink-0 rounded-full border-2 ${outcomeIndicatorClass}`} />
           <div className="flex-1 min-w-0">
             <h1 className={`text-lg font-semibold ${isSignal ? "text-[var(--adm-border)]" : "text-[var(--adm-text)]"}`}>{outcome.label}</h1>
             <p className={`text-[10px] ${pal.label}`}>Review munkafolyamat · {outcome.helper}{reviewDocument?.generatedAt && ` · ${new Date(reviewDocument.generatedAt).toLocaleDateString("hu-HU")}`}</p>
