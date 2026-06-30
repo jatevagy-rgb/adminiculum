@@ -7,6 +7,7 @@ import {
   getCommunications,
   getCases,
   linkCommunicationToCase,
+  extractTaskFromCommunication,
   ApiError,
   type CommunicationItem,
   type CaseListItem,
@@ -147,6 +148,85 @@ function CommunicationWorkspace() {
     }
   };
 
+  // Manual lawyer task extraction from a communication that already has a case.
+  // Not AI, not automatic email processing — a human-entered task that the backend
+  // tags with sourceCommunicationId for later context.
+  const [taskTarget, setTaskTarget] = useState<CommunicationItem | null>(null);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [taskDueDate, setTaskDueDate] = useState("");
+  const [taskPriority, setTaskPriority] = useState("MEDIUM");
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
+  const [taskFeedback, setTaskFeedback] = useState<AssignFeedback | null>(null);
+  const [createdTaskId, setCreatedTaskId] = useState<string | null>(null);
+
+  const openTask = (item: CommunicationItem) => {
+    setTaskTarget(item);
+    setTaskTitle(item.subject ? `Feladat: ${item.subject}` : "");
+    setTaskDescription("");
+    setTaskDueDate("");
+    setTaskPriority("MEDIUM");
+    setTaskFeedback(null);
+    setCreatedTaskId(null);
+  };
+
+  const closeTask = () => {
+    if (isCreatingTask) return;
+    setTaskTarget(null);
+    setTaskFeedback(null);
+    setCreatedTaskId(null);
+  };
+
+  const submitTask = async () => {
+    if (!taskTarget || !taskTarget.caseId || !taskTitle.trim()) return;
+    setIsCreatingTask(true);
+    setTaskFeedback(null);
+    try {
+      const result = await extractTaskFromCommunication(taskTarget.id, {
+        title: taskTitle.trim(),
+        description: taskDescription.trim() || taskTarget.summary || undefined,
+        dueDate: taskDueDate || undefined,
+        priority: taskPriority,
+        caseId: taskTarget.caseId,
+      });
+      if (result?.success) {
+        // Honest local update: backend confirmed creation, so bump the count.
+        setCommunications((prev) =>
+          prev.map((item) =>
+            item.id === taskTarget.id ? { ...item, sourceTaskCount: item.sourceTaskCount + 1 } : item,
+          ),
+        );
+        // Only surface a task link when the response carries a real task id.
+        setCreatedTaskId(result.task?.id ?? null);
+        setTaskFeedback({
+          tone: "success",
+          message: result.task?.title ? `Feladat létrehozva: ${result.task.title}` : "Feladat létrehozva.",
+        });
+      } else {
+        setTaskFeedback({ tone: "error", message: "Nem sikerült feladatot létrehozni." });
+      }
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 501) {
+        setTaskFeedback({
+          tone: "info",
+          message: "A feladat létrehozása kommunikációból még nincs bekapcsolva ezen a környezeten.",
+        });
+      } else if (error instanceof ApiError && error.status === 401) {
+        setTaskFeedback({
+          tone: "error",
+          message: "A művelet nem érhető el. Jelentkezz be újra, majd próbáld újra.",
+        });
+      } else {
+        setTaskFeedback({
+          tone: "error",
+          message: "Nem sikerült feladatot létrehozni. Ellenőrizd a kapcsolatot vagy próbáld újra.",
+        });
+      }
+    } finally {
+      setIsCreatingTask(false);
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
 
@@ -251,6 +331,7 @@ function CommunicationWorkspace() {
             emptyTitle={externalEmpty.title}
             emptyText={externalEmpty.text}
             onAssign={openAssign}
+            onCreateTask={openTask}
           />
           <CommunicationPanel
             title="Belső kommunikáció"
@@ -262,6 +343,7 @@ function CommunicationWorkspace() {
             emptyTitle={internalEmpty.title}
             emptyText={internalEmpty.text}
             onAssign={openAssign}
+            onCreateTask={openTask}
           />
         </section>
 
@@ -326,7 +408,180 @@ function CommunicationWorkspace() {
           onSubmit={submitAssign}
         />
       ) : null}
+
+      {taskTarget ? (
+        <TaskFromCommunicationModal
+          target={taskTarget}
+          title={taskTitle}
+          description={taskDescription}
+          dueDate={taskDueDate}
+          priority={taskPriority}
+          onChangeTitle={setTaskTitle}
+          onChangeDescription={setTaskDescription}
+          onChangeDueDate={setTaskDueDate}
+          onChangePriority={setTaskPriority}
+          isCreating={isCreatingTask}
+          feedback={taskFeedback}
+          createdTaskId={createdTaskId}
+          onClose={closeTask}
+          onSubmit={submitTask}
+        />
+      ) : null}
     </main>
+  );
+}
+
+function TaskFromCommunicationModal({
+  target,
+  title,
+  description,
+  dueDate,
+  priority,
+  onChangeTitle,
+  onChangeDescription,
+  onChangeDueDate,
+  onChangePriority,
+  isCreating,
+  feedback,
+  createdTaskId,
+  onClose,
+  onSubmit,
+}: {
+  target: CommunicationItem;
+  title: string;
+  description: string;
+  dueDate: string;
+  priority: string;
+  onChangeTitle: (value: string) => void;
+  onChangeDescription: (value: string) => void;
+  onChangeDueDate: (value: string) => void;
+  onChangePriority: (value: string) => void;
+  isCreating: boolean;
+  feedback: AssignFeedback | null;
+  createdTaskId: string | null;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const subject = target.subject || target.summary || target.contentPreview || "Nincs tárgy";
+  const succeeded = feedback?.tone === "success";
+  const feedbackStyle =
+    feedback?.tone === "success"
+      ? "border-[var(--adm-blue-500)]/40 bg-[var(--adm-blue-100)]/35 text-[var(--adm-blue-700)]"
+      : feedback?.tone === "info"
+        ? "border-[var(--adm-warm-400)]/55 bg-[#FFF8E2] text-[var(--adm-warm-600)]"
+        : "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-md rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-[0_18px_40px_rgba(2,48,71,0.18)]">
+        <div className="border-b border-[var(--adm-border)] px-4 py-3">
+          <p className="adm-kicker text-[var(--adm-blue-700)]">Kézi feladatkiadás</p>
+          <h2 className="adm-heading mt-0.5 text-[18px]">Feladat kinyerése</h2>
+          <p className="mt-1 truncate text-[11px] text-[var(--adm-text-muted)]">{subject}</p>
+          {target.caseId ? (
+            <p className="mt-0.5 text-[10.5px] font-semibold text-[var(--adm-text-soft)]">
+              Ügyhöz kötött kommunikációból — a feladat ugyanahhoz az ügyhöz jön létre.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="space-y-3 px-4 py-3">
+          <div>
+            <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="task-title">
+              Feladat címe
+            </label>
+            <input
+              id="task-title"
+              value={title}
+              onChange={(event) => onChangeTitle(event.target.value)}
+              disabled={isCreating || succeeded}
+              placeholder="Feladat címe"
+              className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="task-description">
+              Leírás (opcionális)
+            </label>
+            <textarea
+              id="task-description"
+              value={description}
+              onChange={(event) => onChangeDescription(event.target.value)}
+              disabled={isCreating || succeeded}
+              rows={3}
+              className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="task-due">
+                Határidő (opcionális)
+              </label>
+              <input
+                id="task-due"
+                type="date"
+                value={dueDate}
+                onChange={(event) => onChangeDueDate(event.target.value)}
+                disabled={isCreating || succeeded}
+                className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="task-priority">
+                Prioritás
+              </label>
+              <select
+                id="task-priority"
+                value={priority}
+                onChange={(event) => onChangePriority(event.target.value)}
+                disabled={isCreating || succeeded}
+                className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
+              >
+                <option value="LOW">Alacsony</option>
+                <option value="MEDIUM">Közepes</option>
+                <option value="HIGH">Magas</option>
+                <option value="URGENT">Sürgős</option>
+              </select>
+            </div>
+          </div>
+
+          {feedback ? (
+            <p className={`rounded-[var(--adm-radius-sm)] border px-3 py-2 text-[11px] font-semibold ${feedbackStyle}`}>
+              {feedback.message}
+            </p>
+          ) : null}
+          {succeeded && createdTaskId ? (
+            <Link
+              href={`/tasks?taskId=${encodeURIComponent(createdTaskId)}`}
+              className="inline-flex rounded-full border border-[var(--adm-blue-500)]/45 bg-white px-2.5 py-1 text-[10.5px] font-bold text-[var(--adm-blue-700)] transition-colors hover:border-[var(--adm-blue-500)] hover:bg-[var(--adm-blue-100)]/35"
+            >
+              Feladat megnyitása
+            </Link>
+          ) : null}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-[var(--adm-border)] px-4 py-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isCreating}
+            className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-bold text-[var(--adm-text-muted)] disabled:opacity-50"
+          >
+            {succeeded ? "Bezárás" : "Mégsem"}
+          </button>
+          {succeeded ? null : (
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={!title.trim() || isCreating}
+              className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-700)] bg-[var(--adm-blue-700)] px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-50"
+            >
+              {isCreating ? "Létrehozás…" : "Feladat kinyerése"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -435,6 +690,7 @@ function CommunicationPanel({
   emptyTitle,
   emptyText,
   onAssign,
+  onCreateTask,
 }: {
   title: string;
   accent: string;
@@ -445,6 +701,7 @@ function CommunicationPanel({
   emptyTitle: string;
   emptyText: string;
   onAssign: (item: CommunicationItem) => void;
+  onCreateTask: (item: CommunicationItem) => void;
 }) {
   return (
     <article className="adm-panel flex min-h-[340px] flex-col overflow-hidden">
@@ -476,7 +733,7 @@ function CommunicationPanel({
         ) : (
           <ul className="mt-3 grid gap-2">
             {items.map((item) => (
-              <CommunicationRow key={item.id} item={item} onAssign={onAssign} />
+              <CommunicationRow key={item.id} item={item} onAssign={onAssign} onCreateTask={onCreateTask} />
             ))}
           </ul>
         )}
@@ -486,7 +743,15 @@ function CommunicationPanel({
   );
 }
 
-function CommunicationRow({ item, onAssign }: { item: CommunicationItem; onAssign: (item: CommunicationItem) => void }) {
+function CommunicationRow({
+  item,
+  onAssign,
+  onCreateTask,
+}: {
+  item: CommunicationItem;
+  onAssign: (item: CommunicationItem) => void;
+  onCreateTask: (item: CommunicationItem) => void;
+}) {
   const source = item.senderName || item.senderEmail || item.recipientName || item.recipientEmail || "Nincs megadott forrás";
   const contactLine = formatContactLine(item);
   const subject = item.subject || item.summary || item.contentPreview || "Nincs tárgy";
@@ -525,12 +790,20 @@ function CommunicationRow({ item, onAssign }: { item: CommunicationItem; onAssig
       <time className="whitespace-nowrap text-[10.5px] font-semibold text-[var(--adm-text-soft)]" dateTime={item.createdAt}>
         {timestamp}
       </time>
-      <CommunicationContextLinks item={item} onAssign={onAssign} />
+      <CommunicationContextLinks item={item} onAssign={onAssign} onCreateTask={onCreateTask} />
     </li>
   );
 }
 
-function CommunicationContextLinks({ item, onAssign }: { item: CommunicationItem; onAssign: (item: CommunicationItem) => void }) {
+function CommunicationContextLinks({
+  item,
+  onAssign,
+  onCreateTask,
+}: {
+  item: CommunicationItem;
+  onAssign: (item: CommunicationItem) => void;
+  onCreateTask: (item: CommunicationItem) => void;
+}) {
   const links: Array<{ href: string; label: string }> = [];
 
   if (item.caseId) {
@@ -593,6 +866,15 @@ function CommunicationContextLinks({ item, onAssign }: { item: CommunicationItem
           {link.label}
         </Link>
       ))}
+      {item.caseId ? (
+        <button
+          type="button"
+          onClick={() => onCreateTask(item)}
+          className="rounded-full border border-[var(--adm-blue-700)]/45 bg-white px-2.5 py-1 text-[9.5px] font-bold text-[var(--adm-blue-700)] transition-colors hover:border-[var(--adm-blue-700)] hover:bg-[var(--adm-blue-100)]/35"
+        >
+          Feladat kinyerése
+        </button>
+      ) : null}
       {item.sourceTaskCount > 0 ? (
         <span className="rounded-full border border-dashed border-[var(--adm-border)] bg-white px-2.5 py-1 text-[9.5px] font-bold text-[var(--adm-text-muted)]">
           Feladatkapcsolat: csak darabszám
