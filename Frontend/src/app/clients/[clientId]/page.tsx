@@ -486,7 +486,7 @@ export default function ClientDetailPage() {
                     {selectedCollaboratorIds.map((id) => {
                       const user = availableUsers.find((u) => u.id === id);
                       return (
-                        <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#8B5CF6] text-white text-[10px] rounded-full">
+                        <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[var(--adm-ochre-500)] text-white text-[10px] rounded-full">
                           {user?.name || id}
                           <button onClick={() => setSelectedCollaboratorIds(selectedCollaboratorIds.filter((cid) => cid !== id))} className="hover:text-white/70 ml-1">×</button>
                         </span>
