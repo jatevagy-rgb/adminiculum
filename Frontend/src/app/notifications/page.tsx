@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { getCommunications, type CommunicationItem } from "@/lib/api";
-import { classifyAudience } from "@/lib/communicationIntake";
+import { classifyAudience, toCommunicationSignal } from "@/lib/communicationIntake";
 
 const filters = [
   "Összes",
@@ -338,6 +338,7 @@ function CommunicationContextLinks({ item }: { item: CommunicationItem }) {
 
   if (item.caseId) {
     links.push({ href: `/cases/${encodeURIComponent(item.caseId)}`, label: "Ügy megnyitása" });
+    links.push({ href: `/cases/${encodeURIComponent(item.caseId)}/communications`, label: "Ügy kommunikációi" });
   }
 
   if (item.clientId) {
@@ -349,12 +350,34 @@ function CommunicationContextLinks({ item }: { item: CommunicationItem }) {
     links.push({ href: `/documents/compare?${query.toString()}`, label: "Dokumentum kontextus" });
   }
 
-  if (links.length === 0 && item.sourceTaskCount === 0) {
-    return null;
-  }
+  // Read-only triage signals derived purely from the record we already loaded.
+  // These are honest "jelzés" hints (suggestions), not provider sync, AI, or a persisted thread.
+  const signal = toCommunicationSignal({
+    id: item.id,
+    type: item.type,
+    subject: item.subject,
+    senderName: item.senderName,
+    senderEmail: item.senderEmail,
+    recipientEmail: item.recipientEmail,
+    summary: item.summary,
+    caseId: item.caseId,
+    clientId: item.clientId,
+    createdAt: item.createdAt,
+    attachmentCount: item.attachmentCount,
+  });
+  const directionLabel = signal.direction === "outgoing" ? "Kimenő" : "Bejövő";
+  const needsCase = !item.caseId;
 
   return (
-    <div className="flex flex-wrap gap-1.5 md:col-span-5">
+    <div className="flex flex-wrap items-center gap-1.5 md:col-span-5">
+      <span className="rounded-full border border-[var(--adm-border)] bg-white px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.08em] text-[var(--adm-text-soft)]">
+        Jelzés: {directionLabel}
+      </span>
+      {needsCase ? (
+        <span className="rounded-full border border-dashed border-[var(--adm-warm-400)]/55 bg-[#FFF8E2] px-2.5 py-1 text-[9.5px] font-bold text-[var(--adm-warm-600)]">
+          Még nincs ügyhöz rendelve
+        </span>
+      ) : null}
       {links.map((link) => (
         <Link
           key={link.href}
