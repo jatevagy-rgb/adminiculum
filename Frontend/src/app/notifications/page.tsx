@@ -3,7 +3,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
-import { getCommunications, type CommunicationItem } from "@/lib/api";
+import {
+  getCommunications,
+  getCases,
+  linkCommunicationToCase,
+  ApiError,
+  type CommunicationItem,
+  type CaseListItem,
+} from "@/lib/api";
 import { classifyAudience, toCommunicationSignal } from "@/lib/communicationIntake";
 
 const filters = [
@@ -51,17 +58,94 @@ export default function NotificationsPage() {
   );
 }
 
+type AssignFeedback = { tone: "success" | "error" | "info"; message: string };
+
 function CommunicationWorkspace() {
   const [activeFilter, setActiveFilter] = useState(filters[0]);
   const [communications, setCommunications] = useState<CommunicationItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Manual lawyer intake: assign an already-listed communication to an EXISTING case.
+  // Not email ingestion, not provider sync, not AI triage — a human-confirmed link only.
+  const [assignTarget, setAssignTarget] = useState<CommunicationItem | null>(null);
+  const [cases, setCases] = useState<CaseListItem[]>([]);
+  const [casesLoading, setCasesLoading] = useState(false);
+  const [casesLoaded, setCasesLoaded] = useState(false);
+  const [selectedCaseId, setSelectedCaseId] = useState("");
+  const [isLinking, setIsLinking] = useState(false);
+  const [assignFeedback, setAssignFeedback] = useState<AssignFeedback | null>(null);
+
   useEffect(() => {
     const view = new URLSearchParams(window.location.search).get("view") || "all";
     const nextFilter = viewFilters[view] || filters[0];
     setActiveFilter(nextFilter);
   }, []);
+
+  const openAssign = (item: CommunicationItem) => {
+    setAssignTarget(item);
+    setSelectedCaseId("");
+    setAssignFeedback(null);
+    if (casesLoaded || casesLoading) return;
+    setCasesLoading(true);
+    getCases(1, 200)
+      .then((response) => {
+        setCases(Array.isArray(response.data) ? response.data : []);
+        setCasesLoaded(true);
+      })
+      .catch((error) => {
+        console.error("Cases load for assignment failed:", error);
+        setAssignFeedback({
+          tone: "error",
+          message: "Az ügylista most nem érhető el. Próbáld újra később.",
+        });
+      })
+      .finally(() => setCasesLoading(false));
+  };
+
+  const closeAssign = () => {
+    if (isLinking) return;
+    setAssignTarget(null);
+    setSelectedCaseId("");
+    setAssignFeedback(null);
+  };
+
+  const submitAssign = async () => {
+    if (!assignTarget || !selectedCaseId) return;
+    setIsLinking(true);
+    setAssignFeedback(null);
+    try {
+      const result = await linkCommunicationToCase(assignTarget.id, selectedCaseId);
+      if (result?.success) {
+        // Honest local update: the backend confirmed the link, so reflect the new caseId.
+        setCommunications((prev) =>
+          prev.map((item) => (item.id === assignTarget.id ? { ...item, caseId: selectedCaseId } : item)),
+        );
+        setAssignFeedback({ tone: "success", message: result.message || "A kommunikáció ügyhöz rendelve." });
+      } else {
+        setAssignFeedback({ tone: "error", message: "Nem sikerült ügyhöz rendelni." });
+      }
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 501) {
+        setAssignFeedback({
+          tone: "info",
+          message: "Az ügyhöz rendelés még nincs bekapcsolva ezen a környezeten.",
+        });
+      } else if (error instanceof ApiError && error.status === 401) {
+        setAssignFeedback({
+          tone: "error",
+          message: "A művelet nem érhető el. Jelentkezz be újra, majd próbáld újra.",
+        });
+      } else {
+        setAssignFeedback({
+          tone: "error",
+          message: "Nem sikerült ügyhöz rendelni. Ellenőrizd a kapcsolatot vagy próbáld újra.",
+        });
+      }
+    } finally {
+      setIsLinking(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -166,6 +250,7 @@ function CommunicationWorkspace() {
             isLoading={isLoading}
             emptyTitle={externalEmpty.title}
             emptyText={externalEmpty.text}
+            onAssign={openAssign}
           />
           <CommunicationPanel
             title="Belső kommunikáció"
@@ -176,6 +261,7 @@ function CommunicationWorkspace() {
             isLoading={isLoading}
             emptyTitle={internalEmpty.title}
             emptyText={internalEmpty.text}
+            onAssign={openAssign}
           />
         </section>
 
@@ -226,7 +312,116 @@ function CommunicationWorkspace() {
           </div>
         </section>
       </section>
+
+      {assignTarget ? (
+        <AssignToCaseModal
+          target={assignTarget}
+          cases={cases}
+          casesLoading={casesLoading}
+          selectedCaseId={selectedCaseId}
+          onSelectCase={setSelectedCaseId}
+          isLinking={isLinking}
+          feedback={assignFeedback}
+          onClose={closeAssign}
+          onSubmit={submitAssign}
+        />
+      ) : null}
     </main>
+  );
+}
+
+function AssignToCaseModal({
+  target,
+  cases,
+  casesLoading,
+  selectedCaseId,
+  onSelectCase,
+  isLinking,
+  feedback,
+  onClose,
+  onSubmit,
+}: {
+  target: CommunicationItem;
+  cases: CaseListItem[];
+  casesLoading: boolean;
+  selectedCaseId: string;
+  onSelectCase: (caseId: string) => void;
+  isLinking: boolean;
+  feedback: AssignFeedback | null;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const subject = target.subject || target.summary || target.contentPreview || "Nincs tárgy";
+  const succeeded = feedback?.tone === "success";
+  const feedbackStyle =
+    feedback?.tone === "success"
+      ? "border-[var(--adm-blue-500)]/40 bg-[var(--adm-blue-100)]/35 text-[var(--adm-blue-700)]"
+      : feedback?.tone === "info"
+        ? "border-[var(--adm-warm-400)]/55 bg-[#FFF8E2] text-[var(--adm-warm-600)]"
+        : "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-md rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-[0_18px_40px_rgba(2,48,71,0.18)]">
+        <div className="border-b border-[var(--adm-border)] px-4 py-3">
+          <p className="adm-kicker text-[var(--adm-blue-700)]">Kézi besorolás</p>
+          <h2 className="adm-heading mt-0.5 text-[18px]">Meglévő ügyhöz rendelés</h2>
+          <p className="mt-1 truncate text-[11px] text-[var(--adm-text-muted)]">{subject}</p>
+        </div>
+
+        <div className="space-y-3 px-4 py-3">
+          <div>
+            <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="assign-case-select">
+              Ügy kiválasztása
+            </label>
+            <select
+              id="assign-case-select"
+              value={selectedCaseId}
+              onChange={(event) => onSelectCase(event.target.value)}
+              disabled={casesLoading || isLinking || succeeded}
+              className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
+            >
+              <option value="">{casesLoading ? "Ügyek betöltése…" : "Válassz ügyet…"}</option>
+              {cases.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.caseNumber} — {item.title}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[10.5px] text-[var(--adm-text-soft)]">
+              Csak meglévő ügyhöz rendelés. A besorolást a felelős jogász erősíti meg.
+            </p>
+          </div>
+
+          {feedback ? (
+            <p className={`rounded-[var(--adm-radius-sm)] border px-3 py-2 text-[11px] font-semibold ${feedbackStyle}`}>
+              {feedback.message}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-[var(--adm-border)] px-4 py-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isLinking}
+            className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-bold text-[var(--adm-text-muted)] disabled:opacity-50"
+          >
+            {succeeded ? "Bezárás" : "Mégsem"}
+          </button>
+          {succeeded ? null : (
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={!selectedCaseId || isLinking || casesLoading}
+              className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-700)] bg-[var(--adm-blue-700)] px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-50"
+            >
+              {isLinking ? "Rendezés…" : "Ügyhöz rendelés"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -239,6 +434,7 @@ function CommunicationPanel({
   isLoading,
   emptyTitle,
   emptyText,
+  onAssign,
 }: {
   title: string;
   accent: string;
@@ -248,6 +444,7 @@ function CommunicationPanel({
   isLoading: boolean;
   emptyTitle: string;
   emptyText: string;
+  onAssign: (item: CommunicationItem) => void;
 }) {
   return (
     <article className="adm-panel flex min-h-[340px] flex-col overflow-hidden">
@@ -279,7 +476,7 @@ function CommunicationPanel({
         ) : (
           <ul className="mt-3 grid gap-2">
             {items.map((item) => (
-              <CommunicationRow key={item.id} item={item} />
+              <CommunicationRow key={item.id} item={item} onAssign={onAssign} />
             ))}
           </ul>
         )}
@@ -289,7 +486,7 @@ function CommunicationPanel({
   );
 }
 
-function CommunicationRow({ item }: { item: CommunicationItem }) {
+function CommunicationRow({ item, onAssign }: { item: CommunicationItem; onAssign: (item: CommunicationItem) => void }) {
   const source = item.senderName || item.senderEmail || item.recipientName || item.recipientEmail || "Nincs megadott forrás";
   const contactLine = formatContactLine(item);
   const subject = item.subject || item.summary || item.contentPreview || "Nincs tárgy";
@@ -328,12 +525,12 @@ function CommunicationRow({ item }: { item: CommunicationItem }) {
       <time className="whitespace-nowrap text-[10.5px] font-semibold text-[var(--adm-text-soft)]" dateTime={item.createdAt}>
         {timestamp}
       </time>
-      <CommunicationContextLinks item={item} />
+      <CommunicationContextLinks item={item} onAssign={onAssign} />
     </li>
   );
 }
 
-function CommunicationContextLinks({ item }: { item: CommunicationItem }) {
+function CommunicationContextLinks({ item, onAssign }: { item: CommunicationItem; onAssign: (item: CommunicationItem) => void }) {
   const links: Array<{ href: string; label: string }> = [];
 
   if (item.caseId) {
@@ -377,6 +574,15 @@ function CommunicationContextLinks({ item }: { item: CommunicationItem }) {
         <span className="rounded-full border border-dashed border-[var(--adm-warm-400)]/55 bg-[#FFF8E2] px-2.5 py-1 text-[9.5px] font-bold text-[var(--adm-warm-600)]">
           Még nincs ügyhöz rendelve
         </span>
+      ) : null}
+      {needsCase ? (
+        <button
+          type="button"
+          onClick={() => onAssign(item)}
+          className="rounded-full border border-[var(--adm-blue-500)]/45 bg-white px-2.5 py-1 text-[9.5px] font-bold text-[var(--adm-blue-700)] transition-colors hover:border-[var(--adm-blue-500)] hover:bg-[var(--adm-blue-100)]/35"
+        >
+          Meglévő ügyhöz rendelés
+        </button>
       ) : null}
       {links.map((link) => (
         <Link
