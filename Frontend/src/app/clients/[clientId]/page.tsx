@@ -20,6 +20,7 @@ import {
   type User,
 } from "@/lib/api";
 import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePanel";
+import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 
 type DossierDocument = DocumentItem & { caseNumber: string; caseId: string };
 
@@ -47,6 +48,14 @@ const statusLabel = (status: string) => {
 };
 
 export default function ClientDetailPage() {
+  return (
+    <AuthenticatedApp section="clients">
+      <ClientDetailContent />
+    </AuthenticatedApp>
+  );
+}
+
+function ClientDetailContent() {
   const params = useParams();
   const router = useRouter();
   const clientId = (params?.clientId as string) || "";
@@ -435,7 +444,7 @@ export default function ClientDetailPage() {
             <div className="adm-wizard-body p-6 space-y-4">
               <div>
                 <label className="block text-xs text-[var(--adm-text-muted)] mb-1">Ügytípus</label>
-                <select value={caseFormData.matterType} onChange={(e) => setCaseFormData({ ...caseFormData, matterType: e.target.value })} className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm">
+                <select value={caseFormData.matterType} onChange={(e) => setCaseFormData({ ...caseFormData, matterType: e.target.value })} className="adm-modal-field w-full px-3 py-2 text-sm">
                   <option value="REAL_ESTATE_SALE">Ingatlan adásvétel</option>
                   <option value="LEASE">Bérlet</option>
                   <option value="EMPLOYMENT">Munkaviszony</option>
@@ -446,7 +455,7 @@ export default function ClientDetailPage() {
               </div>
               <div>
                 <label className="block text-xs text-[var(--adm-text-muted)] mb-1">Prioritás</label>
-                <select value={caseFormData.priority} onChange={(e) => setCaseFormData({ ...caseFormData, priority: e.target.value })} className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm">
+                <select value={caseFormData.priority} onChange={(e) => setCaseFormData({ ...caseFormData, priority: e.target.value })} className="adm-modal-field w-full px-3 py-2 text-sm">
                   <option value="LOW">Alacsony</option>
                   <option value="MEDIUM">Közepes</option>
                   <option value="HIGH">Magas</option>
@@ -454,7 +463,7 @@ export default function ClientDetailPage() {
               </div>
               <div>
                 <label className="block text-xs text-[var(--adm-text-muted)] mb-1">Határidő</label>
-                <input type="date" value={caseFormData.deadline || ""} onChange={(e) => setCaseFormData({ ...caseFormData, deadline: e.target.value })} className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm" />
+                <input type="date" value={caseFormData.deadline || ""} onChange={(e) => setCaseFormData({ ...caseFormData, deadline: e.target.value })} className="adm-modal-field w-full px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="block text-xs text-[var(--adm-text-muted)] mb-1">Résztvevők (opcionális)</label>
@@ -497,7 +506,7 @@ export default function ClientDetailPage() {
               </div>
               <div>
                 <label className="block text-xs text-[var(--adm-text-muted)] mb-1">Leírás</label>
-                <textarea value={caseFormData.description} onChange={(e) => setCaseFormData({ ...caseFormData, description: e.target.value })} rows={3} className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm" />
+                <textarea value={caseFormData.description} onChange={(e) => setCaseFormData({ ...caseFormData, description: e.target.value })} rows={3} className="adm-modal-field w-full px-3 py-2 text-sm" />
               </div>
               {caseCreateError ? (
                 <div className="rounded border border-[#f0d2cc] bg-[#fff4f2] px-3 py-2 text-xs text-[#8b3a3a]">
