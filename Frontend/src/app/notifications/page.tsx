@@ -6,12 +6,24 @@ import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import {
   getCommunications,
   getCases,
+  getClients,
   linkCommunicationToCase,
   extractTaskFromCommunication,
+  createCaseFromCommunication,
   ApiError,
   type CommunicationItem,
   type CaseListItem,
+  type Client,
 } from "@/lib/api";
+
+const CASE_MATTER_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "REAL_ESTATE_SALE", label: "Ingatlan adásvétel" },
+  { value: "LEASE", label: "Bérlet" },
+  { value: "EMPLOYMENT", label: "Munkaviszony" },
+  { value: "CORPORATE", label: "Cégjogi" },
+  { value: "LITIGATION", label: "Peres" },
+  { value: "OTHER", label: "Egyéb" },
+];
 import { classifyAudience, toCommunicationSignal } from "@/lib/communicationIntake";
 
 const filters = [
@@ -227,6 +239,135 @@ function CommunicationWorkspace() {
     }
   };
 
+  // Manual lawyer intake: create a NEW case from an unlinked communication.
+  // Wired ONLY to the atomic createCaseFromCommunication endpoint — the case
+  // create + communication link happen in one server-side transaction, so the
+  // old unsafe createCase()+linkCommunicationToCase() two-step is never used and
+  // an orphan case cannot be produced from the client.
+  const [createCaseTarget, setCreateCaseTarget] = useState<CommunicationItem | null>(null);
+  const [ccTitle, setCcTitle] = useState("");
+  const [ccMatterType, setCcMatterType] = useState("OTHER");
+  const [ccPriority, setCcPriority] = useState("MEDIUM");
+  const [ccDeadline, setCcDeadline] = useState("");
+  const [ccDescription, setCcDescription] = useState("");
+  const [ccClientId, setCcClientId] = useState("");
+  const [clients, setClients] = useState<Client[]>([]);
+  const [clientsLoading, setClientsLoading] = useState(false);
+  const [clientsLoaded, setClientsLoaded] = useState(false);
+  const [isCreatingCase, setIsCreatingCase] = useState(false);
+  const [ccFeedback, setCcFeedback] = useState<AssignFeedback | null>(null);
+  const [createdCaseId, setCreatedCaseId] = useState<string | null>(null);
+
+  const openCreateCase = (item: CommunicationItem) => {
+    setCreateCaseTarget(item);
+    setCcTitle(item.subject ? item.subject : "");
+    setCcMatterType("OTHER");
+    setCcPriority("MEDIUM");
+    setCcDeadline("");
+    setCcClientId("");
+    setCcDescription(
+      item.subject
+        ? `Kommunikációból indított ügy. Tárgy: ${item.subject}.`
+        : "Kommunikációból indított ügy.",
+    );
+    setCcFeedback(null);
+    setCreatedCaseId(null);
+    // A client FK is required server-side. If the communication has no clientId,
+    // load the client list so the lawyer can pick one (no fabricated linkage).
+    if (!item.clientId && !clientsLoaded && !clientsLoading) {
+      setClientsLoading(true);
+      getClients()
+        .then((response) => {
+          setClients(Array.isArray(response.data) ? response.data : []);
+          setClientsLoaded(true);
+        })
+        .catch((error) => {
+          console.error("Clients load for case creation failed:", error);
+          setCcFeedback({ tone: "error", message: "Az ügyféllista most nem érhető el. Próbáld újra később." });
+        })
+        .finally(() => setClientsLoading(false));
+    }
+  };
+
+  const closeCreateCase = () => {
+    if (isCreatingCase) return;
+    setCreateCaseTarget(null);
+    setCcFeedback(null);
+    setCreatedCaseId(null);
+  };
+
+  const submitCreateCase = async () => {
+    if (!createCaseTarget || !ccTitle.trim()) return;
+    const resolvedClientId = createCaseTarget.clientId || ccClientId;
+    if (!resolvedClientId) return;
+    setIsCreatingCase(true);
+    setCcFeedback(null);
+    try {
+      const result = await createCaseFromCommunication(createCaseTarget.id, {
+        title: ccTitle.trim(),
+        matterType: ccMatterType,
+        clientId: resolvedClientId,
+        priority: ccPriority,
+        deadline: ccDeadline || undefined,
+        description: ccDescription.trim() || undefined,
+      });
+      if (result?.success && result.case?.id) {
+        // Honest local update: backend committed case + link in one transaction.
+        const newCaseId = result.case.id;
+        setCommunications((prev) =>
+          prev.map((item) => (item.id === createCaseTarget.id ? { ...item, caseId: newCaseId } : item)),
+        );
+        setCreatedCaseId(newCaseId);
+        setCcFeedback({
+          tone: "success",
+          message: result.case.caseNumber
+            ? `Ügy létrehozva: ${result.case.caseNumber}`
+            : "Ügy létrehozva, a kommunikáció hozzárendelve.",
+        });
+      } else {
+        setCcFeedback({ tone: "error", message: "Nem sikerült új ügyet indítani." });
+      }
+    } catch (error) {
+      if (error instanceof ApiError) {
+        if (error.status === 501) {
+          setCcFeedback({
+            tone: "info",
+            message: "Az új ügy indítása kommunikációból még nincs bekapcsolva ezen a környezeten.",
+          });
+        } else if (error.status === 404) {
+          setCcFeedback({
+            tone: "info",
+            message: "Az új ügy indítása még nem érhető el ezen a backend verzión, vagy a kommunikáció már nem található.",
+          });
+        } else if (error.status === 409) {
+          setCcFeedback({
+            tone: "error",
+            message: "Ez a kommunikáció már ügyhöz van rendelve. Frissítse a listát.",
+          });
+        } else if (error.status === 400) {
+          setCcFeedback({ tone: "error", message: error.message || "Hiányzó vagy hibás ügyadatok." });
+        } else if (error.status === 401) {
+          setCcFeedback({
+            tone: "error",
+            message: "A művelet nem érhető el. Jelentkezz be újra, majd próbáld újra.",
+          });
+        } else {
+          setCcFeedback({
+            tone: "error",
+            message: "Nem sikerült új ügyet indítani. Ellenőrizd a kapcsolatot vagy próbáld újra.",
+          });
+        }
+      } else {
+        setCcFeedback({
+          tone: "error",
+          message: "Nem sikerült új ügyet indítani. Ellenőrizd a kapcsolatot vagy próbáld újra.",
+        });
+      }
+    } finally {
+      setIsCreatingCase(false);
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
 
@@ -332,6 +473,7 @@ function CommunicationWorkspace() {
             emptyText={externalEmpty.text}
             onAssign={openAssign}
             onCreateTask={openTask}
+            onCreateCase={openCreateCase}
           />
           <CommunicationPanel
             title="Belső kommunikáció"
@@ -344,6 +486,7 @@ function CommunicationWorkspace() {
             emptyText={internalEmpty.text}
             onAssign={openAssign}
             onCreateTask={openTask}
+            onCreateCase={openCreateCase}
           />
         </section>
 
@@ -427,7 +570,256 @@ function CommunicationWorkspace() {
           onSubmit={submitTask}
         />
       ) : null}
+
+      {createCaseTarget ? (
+        <CreateCaseFromCommunicationModal
+          target={createCaseTarget}
+          title={ccTitle}
+          matterType={ccMatterType}
+          priority={ccPriority}
+          deadline={ccDeadline}
+          description={ccDescription}
+          clientId={ccClientId}
+          clients={clients}
+          clientsLoading={clientsLoading}
+          onChangeTitle={setCcTitle}
+          onChangeMatterType={setCcMatterType}
+          onChangePriority={setCcPriority}
+          onChangeDeadline={setCcDeadline}
+          onChangeDescription={setCcDescription}
+          onChangeClientId={setCcClientId}
+          isCreating={isCreatingCase}
+          feedback={ccFeedback}
+          createdCaseId={createdCaseId}
+          onClose={closeCreateCase}
+          onSubmit={submitCreateCase}
+        />
+      ) : null}
     </main>
+  );
+}
+
+function CreateCaseFromCommunicationModal({
+  target,
+  title,
+  matterType,
+  priority,
+  deadline,
+  description,
+  clientId,
+  clients,
+  clientsLoading,
+  onChangeTitle,
+  onChangeMatterType,
+  onChangePriority,
+  onChangeDeadline,
+  onChangeDescription,
+  onChangeClientId,
+  isCreating,
+  feedback,
+  createdCaseId,
+  onClose,
+  onSubmit,
+}: {
+  target: CommunicationItem;
+  title: string;
+  matterType: string;
+  priority: string;
+  deadline: string;
+  description: string;
+  clientId: string;
+  clients: Client[];
+  clientsLoading: boolean;
+  onChangeTitle: (value: string) => void;
+  onChangeMatterType: (value: string) => void;
+  onChangePriority: (value: string) => void;
+  onChangeDeadline: (value: string) => void;
+  onChangeDescription: (value: string) => void;
+  onChangeClientId: (value: string) => void;
+  isCreating: boolean;
+  feedback: AssignFeedback | null;
+  createdCaseId: string | null;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const subject = target.subject || target.summary || target.contentPreview || "Nincs tárgy";
+  const succeeded = feedback?.tone === "success";
+  const hasOwnClient = Boolean(target.clientId);
+  const needsClientPick = !hasOwnClient;
+  const clientReady = hasOwnClient || Boolean(clientId);
+  const feedbackStyle =
+    feedback?.tone === "success"
+      ? "border-[var(--adm-blue-500)]/40 bg-[var(--adm-blue-100)]/35 text-[var(--adm-blue-700)]"
+      : feedback?.tone === "info"
+        ? "border-[var(--adm-warm-400)]/55 bg-[#FFF8E2] text-[var(--adm-warm-600)]"
+        : "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-md rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-[0_18px_40px_rgba(2,48,71,0.18)]">
+        <div className="border-b border-[var(--adm-border)] px-4 py-3">
+          <p className="adm-kicker text-[var(--adm-blue-700)]">Kézi besorolás</p>
+          <h2 className="adm-heading mt-0.5 text-[18px]">Új ügy indítása</h2>
+          <p className="mt-1 truncate text-[11px] text-[var(--adm-text-muted)]">{subject}</p>
+          <p className="mt-1 text-[10.5px] font-semibold text-[var(--adm-text-soft)]">
+            Az ügy létrehozása és a kommunikáció hozzárendelése egy szerveroldali tranzakcióban történik.
+          </p>
+        </div>
+
+        <div className="space-y-3 px-4 py-3">
+          <div>
+            <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="cc-title">
+              Ügy címe
+            </label>
+            <input
+              id="cc-title"
+              value={title}
+              onChange={(event) => onChangeTitle(event.target.value)}
+              disabled={isCreating || succeeded}
+              className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
+            />
+          </div>
+
+          {needsClientPick ? (
+            <div>
+              <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="cc-client">
+                Ügyfél
+              </label>
+              <select
+                id="cc-client"
+                value={clientId}
+                onChange={(event) => onChangeClientId(event.target.value)}
+                disabled={clientsLoading || isCreating || succeeded}
+                className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
+              >
+                <option value="">{clientsLoading ? "Ügyfelek betöltése…" : "Válassz ügyfelet…"}</option>
+                {clients.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[10.5px] text-[var(--adm-text-soft)]">
+                A kommunikációhoz nincs ügyfél rendelve, ezért az ügyfelet ki kell választani.
+              </p>
+            </div>
+          ) : (
+            <p className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[10.5px] font-semibold text-[var(--adm-text-muted)]">
+              Ügyfél a kommunikációból átvéve.
+            </p>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="cc-matter">
+                Ügytípus
+              </label>
+              <select
+                id="cc-matter"
+                value={matterType}
+                onChange={(event) => onChangeMatterType(event.target.value)}
+                disabled={isCreating || succeeded}
+                className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
+              >
+                {CASE_MATTER_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="cc-priority">
+                Prioritás
+              </label>
+              <select
+                id="cc-priority"
+                value={priority}
+                onChange={(event) => onChangePriority(event.target.value)}
+                disabled={isCreating || succeeded}
+                className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
+              >
+                <option value="LOW">Alacsony</option>
+                <option value="MEDIUM">Közepes</option>
+                <option value="HIGH">Magas</option>
+                <option value="URGENT">Sürgős</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="cc-deadline">
+              Határidő (opcionális)
+            </label>
+            <input
+              id="cc-deadline"
+              type="date"
+              value={deadline}
+              onChange={(event) => onChangeDeadline(event.target.value)}
+              disabled={isCreating || succeeded}
+              className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="cc-description">
+              Leírás (opcionális)
+            </label>
+            <textarea
+              id="cc-description"
+              value={description}
+              onChange={(event) => onChangeDescription(event.target.value)}
+              disabled={isCreating || succeeded}
+              rows={3}
+              className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
+            />
+          </div>
+
+          {feedback ? (
+            <p className={`rounded-[var(--adm-radius-sm)] border px-3 py-2 text-[11px] font-semibold ${feedbackStyle}`}>
+              {feedback.message}
+            </p>
+          ) : null}
+          {succeeded && createdCaseId ? (
+            <div className="flex flex-wrap gap-1.5">
+              <Link
+                href={`/cases/${encodeURIComponent(createdCaseId)}`}
+                className="inline-flex rounded-full border border-[var(--adm-blue-500)]/45 bg-white px-2.5 py-1 text-[10.5px] font-bold text-[var(--adm-blue-700)] transition-colors hover:border-[var(--adm-blue-500)] hover:bg-[var(--adm-blue-100)]/35"
+              >
+                Ügy megnyitása
+              </Link>
+              <Link
+                href={`/cases/${encodeURIComponent(createdCaseId)}/communications`}
+                className="inline-flex rounded-full border border-[var(--adm-blue-500)]/45 bg-white px-2.5 py-1 text-[10.5px] font-bold text-[var(--adm-blue-700)] transition-colors hover:border-[var(--adm-blue-500)] hover:bg-[var(--adm-blue-100)]/35"
+              >
+                Ügy kommunikációi
+              </Link>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-[var(--adm-border)] px-4 py-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isCreating}
+            className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-bold text-[var(--adm-text-muted)] disabled:opacity-50"
+          >
+            {succeeded ? "Bezárás" : "Mégsem"}
+          </button>
+          {succeeded ? null : (
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={!title.trim() || !clientReady || isCreating || clientsLoading}
+              className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-700)] bg-[var(--adm-blue-700)] px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-50"
+            >
+              {isCreating ? "Indítás…" : "Új ügy indítása"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -691,6 +1083,7 @@ function CommunicationPanel({
   emptyText,
   onAssign,
   onCreateTask,
+  onCreateCase,
 }: {
   title: string;
   accent: string;
@@ -702,6 +1095,7 @@ function CommunicationPanel({
   emptyText: string;
   onAssign: (item: CommunicationItem) => void;
   onCreateTask: (item: CommunicationItem) => void;
+  onCreateCase: (item: CommunicationItem) => void;
 }) {
   return (
     <article className="adm-panel flex min-h-[340px] flex-col overflow-hidden">
@@ -733,7 +1127,13 @@ function CommunicationPanel({
         ) : (
           <ul className="mt-3 grid gap-2">
             {items.map((item) => (
-              <CommunicationRow key={item.id} item={item} onAssign={onAssign} onCreateTask={onCreateTask} />
+              <CommunicationRow
+                key={item.id}
+                item={item}
+                onAssign={onAssign}
+                onCreateTask={onCreateTask}
+                onCreateCase={onCreateCase}
+              />
             ))}
           </ul>
         )}
@@ -747,10 +1147,12 @@ function CommunicationRow({
   item,
   onAssign,
   onCreateTask,
+  onCreateCase,
 }: {
   item: CommunicationItem;
   onAssign: (item: CommunicationItem) => void;
   onCreateTask: (item: CommunicationItem) => void;
+  onCreateCase: (item: CommunicationItem) => void;
 }) {
   const source = item.senderName || item.senderEmail || item.recipientName || item.recipientEmail || "Nincs megadott forrás";
   const contactLine = formatContactLine(item);
@@ -790,7 +1192,12 @@ function CommunicationRow({
       <time className="whitespace-nowrap text-[10.5px] font-semibold text-[var(--adm-text-soft)]" dateTime={item.createdAt}>
         {timestamp}
       </time>
-      <CommunicationContextLinks item={item} onAssign={onAssign} onCreateTask={onCreateTask} />
+      <CommunicationContextLinks
+        item={item}
+        onAssign={onAssign}
+        onCreateTask={onCreateTask}
+        onCreateCase={onCreateCase}
+      />
     </li>
   );
 }
@@ -799,10 +1206,12 @@ function CommunicationContextLinks({
   item,
   onAssign,
   onCreateTask,
+  onCreateCase,
 }: {
   item: CommunicationItem;
   onAssign: (item: CommunicationItem) => void;
   onCreateTask: (item: CommunicationItem) => void;
+  onCreateCase: (item: CommunicationItem) => void;
 }) {
   const links: Array<{ href: string; label: string }> = [];
 
@@ -855,6 +1264,15 @@ function CommunicationContextLinks({
           className="rounded-full border border-[var(--adm-blue-500)]/45 bg-white px-2.5 py-1 text-[9.5px] font-bold text-[var(--adm-blue-700)] transition-colors hover:border-[var(--adm-blue-500)] hover:bg-[var(--adm-blue-100)]/35"
         >
           Meglévő ügyhöz rendelés
+        </button>
+      ) : null}
+      {needsCase ? (
+        <button
+          type="button"
+          onClick={() => onCreateCase(item)}
+          className="rounded-full border border-[var(--adm-blue-700)]/45 bg-white px-2.5 py-1 text-[9.5px] font-bold text-[var(--adm-blue-700)] transition-colors hover:border-[var(--adm-blue-700)] hover:bg-[var(--adm-blue-100)]/35"
+        >
+          Új ügy indítása
         </button>
       ) : null}
       {links.map((link) => (
