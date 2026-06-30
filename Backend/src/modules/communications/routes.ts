@@ -436,6 +436,234 @@ router.post('/:id/link-case', authenticate, requireCommunicationsFoundation, asy
 });
 
 // ============================================================================
+// POST /api/v1/communications/:id/create-case
+// ----------------------------------------------------------------------------
+// Atomic Communication -> Matter intake: create a NEW case from an unlinked
+// communication and link the communication to it in a single transaction.
+// Every DB write (case create + communication link + optional initial task +
+// timeline events) runs inside prisma.$transaction, so any failure rolls back
+// the whole operation — there is never an orphan case or a half-linked
+// communication. SharePoint folder provisioning (external, non-critical) is
+// intentionally NOT performed here; the case DB row is the source of truth.
+// ============================================================================
+
+const VALID_CASE_MATTER_TYPES = ['REAL_ESTATE_SALE', 'LEASE', 'EMPLOYMENT', 'CORPORATE', 'LITIGATION', 'OTHER'];
+const DEFAULT_CASE_MATTER_TYPE = 'OTHER';
+const DEFAULT_CASE_STATUS = 'CLIENT_INPUT';
+const VALID_CASE_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+
+class CreateCaseFromCommunicationError extends Error {
+  constructor(public httpStatus: number, public code: string, message: string) {
+    super(message);
+    this.name = 'CreateCaseFromCommunicationError';
+  }
+}
+
+router.post('/:id/create-case', authenticate, requireCommunicationsFoundation, async (req: Request, res: Response) => {
+  const userId = (req as any).user?.userId;
+  const { id } = req.params;
+  const body = (req.body || {}) as Record<string, any>;
+
+  const title = typeof body.title === 'string' ? body.title.trim() : '';
+  const matterTypeRaw = typeof body.matterType === 'string' ? body.matterType.trim() : '';
+  const priorityRaw = typeof body.priority === 'string' ? body.priority.trim().toUpperCase() : '';
+  const clientIdInput = typeof body.clientId === 'string' ? body.clientId.trim() : '';
+  const clientNameInput = typeof body.clientName === 'string' ? body.clientName.trim() : '';
+  const description = typeof body.description === 'string' && body.description.trim() ? body.description : undefined;
+  const taskInput = body.task && typeof body.task === 'object' ? (body.task as Record<string, any>) : null;
+
+  // Cheap, write-free validation first.
+  if (!title) {
+    res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Missing required field: title' });
+    return;
+  }
+  if (!matterTypeRaw) {
+    res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Missing required field: matterType' });
+    return;
+  }
+  let deadline: Date | undefined;
+  if (body.deadline) {
+    const parsed = new Date(body.deadline);
+    if (Number.isNaN(parsed.getTime())) {
+      res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Invalid deadline' });
+      return;
+    }
+    deadline = parsed;
+  }
+
+  try {
+    const result = await prisma.$transaction(async (tx: any) => {
+      const communication = await tx.communication.findUnique({ where: { id: String(id) } });
+      if (!communication) {
+        throw new CreateCaseFromCommunicationError(404, 'COMMUNICATION_NOT_FOUND', 'Communication not found');
+      }
+      if (communication.caseId) {
+        throw new CreateCaseFromCommunicationError(409, 'COMMUNICATION_ALREADY_LINKED', 'Communication is already linked to a case');
+      }
+
+      const resolvedClientId = clientIdInput || (communication.clientId || '');
+      if (!resolvedClientId) {
+        throw new CreateCaseFromCommunicationError(
+          400,
+          'VALIDATION_ERROR',
+          'A client is required: provide clientId or use a communication that already has a clientId',
+        );
+      }
+
+      const client = await tx.client.findUnique({ where: { id: resolvedClientId }, select: { id: true, name: true } });
+      if (!client) {
+        throw new CreateCaseFromCommunicationError(400, 'CLIENT_NOT_FOUND', 'Client not found');
+      }
+
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { id: true, status: true, isActive: true },
+      });
+      if (!user) {
+        throw new CreateCaseFromCommunicationError(401, 'NOT_AUTHENTICATED', 'Authenticated user not found');
+      }
+      if (user.status !== 'ACTIVE' || user.isActive === false) {
+        throw new CreateCaseFromCommunicationError(403, 'USER_INACTIVE', 'Authenticated user is inactive');
+      }
+
+      const matterType = VALID_CASE_MATTER_TYPES.includes(matterTypeRaw) ? matterTypeRaw : DEFAULT_CASE_MATTER_TYPE;
+      const priority = VALID_CASE_PRIORITIES.includes(priorityRaw) ? priorityRaw : 'MEDIUM';
+      const resolvedClientName = clientNameInput || client.name;
+
+      const year = new Date().getFullYear();
+      const count = await tx.case.count();
+      const caseNumber = `CASE-${year}-${String(count + 1).padStart(3, '0')}`;
+
+      const newCase = await tx.case.create({
+        data: {
+          caseNumber,
+          title,
+          clientName: resolvedClientName,
+          matterType: matterType as any,
+          caseType: 'OTHER' as any,
+          description,
+          status: DEFAULT_CASE_STATUS as any,
+          priority: priority as any,
+          deadline: deadline || undefined,
+          sharepointSite: 'Adminiculum - Legal Workflow',
+          sharepointRoot: `/sites/AdminiculumLegalWorkflow/Cases/${caseNumber}`,
+          createdById: user.id,
+          clientId: client.id,
+        } as any,
+      });
+
+      await tx.communication.update({
+        where: { id: String(id) },
+        data: { caseId: newCase.id },
+      });
+
+      await tx.timelineEvent.create({
+        data: {
+          caseId: newCase.id,
+          userId: user.id,
+          eventType: 'CASE_CREATED',
+          type: 'CASE_CREATED',
+          payload: {
+            caseNumber,
+            clientName: resolvedClientName,
+            matterType,
+            source: 'communication',
+            communicationId: communication.id,
+          },
+        } as any,
+      });
+
+      await tx.timelineEvent.create({
+        data: {
+          caseId: newCase.id,
+          userId: user.id,
+          eventType: 'CLIENT_CONTACT',
+          type: 'CLIENT_CONTACT',
+          payload: {
+            communicationId: communication.id,
+            subject: communication.subject,
+            action: 'linked_to_new_case',
+          },
+        } as any,
+      });
+
+      let createdTask: any = null;
+      if (taskInput && typeof taskInput.title === 'string' && taskInput.title.trim()) {
+        const taskPriorityRaw = typeof taskInput.priority === 'string' ? taskInput.priority.trim().toUpperCase() : '';
+        const taskPriority = VALID_CASE_PRIORITIES.includes(taskPriorityRaw) ? taskPriorityRaw : 'MEDIUM';
+        const taskDue = taskInput.dueDate ? new Date(taskInput.dueDate) : undefined;
+        const taskDescription =
+          typeof taskInput.description === 'string' && taskInput.description.trim()
+            ? taskInput.description.trim()
+            : communication.summary || undefined;
+
+        createdTask = await tx.task.create({
+          data: {
+            title: taskInput.title.trim(),
+            description: taskDescription,
+            taskType: 'OTHER' as any,
+            type: 'OTHER',
+            status: 'TODO' as any,
+            priority: taskPriority as any,
+            caseId: newCase.id,
+            assignedById: user.id,
+            dueDate: taskDue && !Number.isNaN(taskDue.getTime()) ? taskDue : undefined,
+            sourceCommunicationId: communication.id,
+          } as any,
+        });
+
+        await tx.timelineEvent.create({
+          data: {
+            caseId: newCase.id,
+            userId: user.id,
+            eventType: 'TASK_CREATED',
+            type: 'TASK_CREATED',
+            payload: {
+              taskId: createdTask.id,
+              title: createdTask.title,
+              source: 'communication',
+              communicationId: communication.id,
+            },
+          } as any,
+        });
+      }
+
+      return { newCase, createdTask };
+    });
+
+    const responseBody: Record<string, any> = {
+      success: true,
+      case: {
+        id: result.newCase.id,
+        caseNumber: result.newCase.caseNumber,
+        title: result.newCase.title,
+      },
+      communication: {
+        id: String(id),
+        caseId: result.newCase.id,
+      },
+    };
+    if (result.createdTask) {
+      responseBody.task = { id: result.createdTask.id, title: result.createdTask.title };
+    }
+
+    res.status(201).json(responseBody);
+  } catch (error) {
+    if (error instanceof CreateCaseFromCommunicationError) {
+      res.status(error.httpStatus).json({ status: error.httpStatus, code: error.code, message: error.message });
+      return;
+    }
+    logPrismaRouteError('POST /communications/:id/create-case', error);
+    const prismaErr = buildPrismaErrorResponse(error);
+    if (prismaErr) {
+      res.status(prismaErr.status).json(prismaErr.body);
+      return;
+    }
+    res.status(500).json({ error: 'Error creating case from communication' });
+  }
+});
+
+// ============================================================================
 // POST /api/v1/communications/:id/extract-task - Create task from communication
 // ============================================================================
 

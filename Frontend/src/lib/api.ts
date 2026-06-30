@@ -2226,6 +2226,40 @@ export async function linkCommunicationToCase(
   );
 }
 
+export async function createCaseFromCommunication(
+  communicationId: string,
+  data: {
+    title: string;
+    matterType: string;
+    clientId?: string;
+    clientName?: string;
+    priority?: string;
+    deadline?: string;
+    description?: string;
+    task?: {
+      title: string;
+      description?: string;
+      dueDate?: string;
+      priority?: string;
+    };
+  }
+): Promise<{
+  success: boolean;
+  case: { id: string; caseNumber: string; title: string };
+  communication: { id: string; caseId: string };
+  task?: { id: string; title: string };
+}> {
+  return fetchApi<{
+    success: boolean;
+    case: { id: string; caseNumber: string; title: string };
+    communication: { id: string; caseId: string };
+    task?: { id: string; title: string };
+  }>(`/communications/${communicationId}/create-case`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
 export async function extractTaskFromCommunication(
   communicationId: string,
   data: {
