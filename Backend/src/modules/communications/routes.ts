@@ -27,6 +27,18 @@ const requireCommunicationsFoundation = requireDatabaseFoundation({
   nextStep: 'Complete the communications database reconciliation before enabling this operation.',
 });
 
+// Separate gate for the Outlook / Microsoft Graph import boundary. Default off.
+// This guards the dry-run contract below; no Graph connection or mailbox access
+// exists yet — the endpoint only normalizes a provider-shaped payload and reports
+// what would be imported, without writing.
+const requireOutlookImportFoundation = requireDatabaseFoundation({
+  feature: 'OUTLOOK_IMPORT',
+  enabled: () => isDatabaseFoundationEnabled('ENABLE_OUTLOOK_IMPORT'),
+  message: 'Outlook import is not available in this environment.',
+  reason: 'OUTLOOK_IMPORT_NOT_ENABLED',
+  nextStep: 'Enable ENABLE_OUTLOOK_IMPORT once the Graph import contract is reviewed and approved.',
+});
+
 function logPrismaRouteError(route: string, error: unknown): void {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     const details =
@@ -925,6 +937,195 @@ router.get('/:id/attachments', authenticate, requireCommunicationsFoundation, as
   } catch (error) {
     console.error('Error fetching attachments:', error);
     res.status(500).json({ error: 'Error fetching attachments' });
+  }
+});
+
+// ============================================================================
+// POST /api/v1/communications/outlook/import-dry-run
+// ----------------------------------------------------------------------------
+// Phase-2 Outlook import boundary — DRY RUN ONLY. Gated by ENABLE_OUTLOOK_IMPORT
+// (default off). Accepts a provider-shaped (mocked) email payload, normalizes it
+// into the future Communication shape, performs READ-ONLY duplicate detection by
+// externalMessageId, and reports what WOULD be imported. It never connects to
+// Microsoft Graph, never reads a real mailbox, and NEVER writes communications or
+// attachments. No AI classification, no persisted thread — direction is a simple
+// transparent derivation from sender vs mailbox.
+// ============================================================================
+
+const OUTLOOK_PREVIEW_LIMIT = 240;
+
+function normalizeEmailAddress(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).map((v) => v.trim());
+}
+
+function outlookPreview(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const compact = value.replace(/\s+/g, ' ').trim();
+  if (!compact) return null;
+  return compact.length > OUTLOOK_PREVIEW_LIMIT ? `${compact.slice(0, OUTLOOK_PREVIEW_LIMIT - 1)}…` : compact;
+}
+
+type OutlookDryRunItem = {
+  externalMessageId: string | null;
+  providerConversationId: string | null;
+  direction: 'INBOUND' | 'OUTBOUND' | null;
+  wouldImport: boolean;
+  duplicate: boolean;
+  valid: boolean;
+  invalidReason?: string;
+  communicationPreview: Record<string, unknown> | null;
+  attachmentPreviews: Array<Record<string, unknown>>;
+};
+
+router.post('/outlook/import-dry-run', authenticate, requireOutlookImportFoundation, async (req: Request, res: Response) => {
+  try {
+    const body = (req.body || {}) as Record<string, any>;
+    const mailboxAddress = typeof body.mailboxAddress === 'string' ? body.mailboxAddress.trim() : '';
+    const messages = body.messages;
+
+    if (!Array.isArray(messages)) {
+      res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Missing or invalid field: messages (array required)' });
+      return;
+    }
+
+    const mailboxNorm = normalizeEmailAddress(mailboxAddress);
+
+    // First pass: normalize + validate (no DB access).
+    const normalized = messages.map((raw: any): OutlookDryRunItem => {
+      const msg = (raw || {}) as Record<string, any>;
+      const externalMessageId = typeof msg.externalMessageId === 'string' ? msg.externalMessageId.trim() : '';
+      const subject = typeof msg.subject === 'string' ? msg.subject.trim() : '';
+      const sender = typeof msg.sender === 'string' ? msg.sender.trim() : '';
+
+      let invalidReason: string | undefined;
+      if (!externalMessageId) invalidReason = 'Missing externalMessageId';
+      else if (!subject) invalidReason = 'Missing subject';
+      const valid = !invalidReason;
+
+      const senderNorm = normalizeEmailAddress(sender);
+      const direction: 'INBOUND' | 'OUTBOUND' | null = !sender
+        ? null
+        : mailboxNorm && senderNorm === mailboxNorm
+          ? 'OUTBOUND'
+          : 'INBOUND';
+
+      const recipientsIn = (msg.recipients || {}) as Record<string, any>;
+      const recipients = {
+        to: toStringArray(recipientsIn.to),
+        cc: toStringArray(recipientsIn.cc),
+        bcc: toStringArray(recipientsIn.bcc),
+      };
+
+      const rawAttachments = Array.isArray(msg.attachments) ? msg.attachments : [];
+      const attachmentPreviews = rawAttachments
+        .filter((a: any) => a && typeof a === 'object')
+        .map((a: any) => ({
+          providerAttachmentId: typeof a.providerAttachmentId === 'string' ? a.providerAttachmentId : null,
+          fileName: typeof a.name === 'string' ? a.name : null,
+          fileType: typeof a.contentType === 'string' ? a.contentType : null,
+          sizeBytes: Number.isFinite(a.sizeBytes) ? a.sizeBytes : null,
+        }));
+
+      const communicationPreview = valid
+        ? {
+            type: 'EMAIL',
+            source: 'OUTLOOK',
+            syncStatus: 'PENDING',
+            externalMessageId,
+            providerConversationId: typeof msg.providerConversationId === 'string' ? msg.providerConversationId : null,
+            mailboxAddress: mailboxAddress || null,
+            direction,
+            subject,
+            sender: sender || null,
+            recipients,
+            receivedAt: typeof msg.receivedAt === 'string' ? msg.receivedAt : null,
+            sentAt: typeof msg.sentAt === 'string' ? msg.sentAt : null,
+            contentPreview: outlookPreview(msg.bodyPreview),
+            metadata: {
+              provider: 'outlook',
+              hasAttachments: Boolean(msg.hasAttachments) || attachmentPreviews.length > 0,
+              attachmentCount: attachmentPreviews.length,
+            },
+          }
+        : null;
+
+      return {
+        externalMessageId: externalMessageId || null,
+        providerConversationId: typeof msg.providerConversationId === 'string' ? msg.providerConversationId : null,
+        direction,
+        wouldImport: false, // resolved after read-only dedupe
+        duplicate: false,
+        valid,
+        invalidReason,
+        communicationPreview,
+        attachmentPreviews,
+      };
+    });
+
+    // Read-only duplicate detection by externalMessageId. NO writes.
+    const candidateIds = Array.from(
+      new Set(normalized.filter((n) => n.valid && n.externalMessageId).map((n) => n.externalMessageId as string)),
+    );
+
+    let existingIds = new Set<string>();
+    if (candidateIds.length > 0) {
+      try {
+        const existing = await prisma.communication.findMany({
+          where: { externalMessageId: { in: candidateIds } } as any,
+          select: { externalMessageId: true } as any,
+        });
+        existingIds = new Set(
+          (existing as unknown as Array<{ externalMessageId: string | null }>)
+            .map((r) => r.externalMessageId)
+            .filter((v): v is string => typeof v === 'string'),
+        );
+      } catch (error) {
+        logPrismaRouteError('POST /communications/outlook/import-dry-run dedupe', error);
+        // Read-only failure: surface honestly rather than pretend uniqueness.
+        res.status(500).json({ error: 'Error checking existing communications for dry-run' });
+        return;
+      }
+    }
+
+    for (const item of normalized) {
+      if (!item.valid) continue;
+      const dup = item.externalMessageId ? existingIds.has(item.externalMessageId) : false;
+      item.duplicate = dup;
+      item.wouldImport = !dup;
+    }
+
+    const summary = {
+      received: normalized.length,
+      new: normalized.filter((n) => n.valid && n.wouldImport).length,
+      duplicates: normalized.filter((n) => n.valid && n.duplicate).length,
+      invalid: normalized.filter((n) => !n.valid).length,
+    };
+
+    res.json({
+      success: true,
+      dryRun: true,
+      mailboxAddress: mailboxAddress || null,
+      summary,
+      items: normalized.map((n) => ({
+        externalMessageId: n.externalMessageId,
+        providerConversationId: n.providerConversationId,
+        direction: n.direction,
+        wouldImport: n.wouldImport,
+        duplicate: n.duplicate,
+        valid: n.valid,
+        ...(n.invalidReason ? { invalidReason: n.invalidReason } : {}),
+        communicationPreview: n.communicationPreview,
+        attachmentPreviews: n.attachmentPreviews,
+      })),
+    });
+  } catch (error) {
+    logPrismaRouteError('POST /communications/outlook/import-dry-run', error);
+    res.status(500).json({ error: 'Error running Outlook import dry-run' });
   }
 });
 
