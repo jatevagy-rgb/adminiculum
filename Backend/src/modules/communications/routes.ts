@@ -958,6 +958,12 @@ function normalizeEmailAddress(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
+function parseOutlookDate(value: string | null): Date | undefined {
+  if (!value) return undefined;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).map((v) => v.trim());
@@ -968,6 +974,90 @@ function outlookPreview(value: unknown): string | null {
   const compact = value.replace(/\s+/g, ' ').trim();
   if (!compact) return null;
   return compact.length > OUTLOOK_PREVIEW_LIMIT ? `${compact.slice(0, OUTLOOK_PREVIEW_LIMIT - 1)}…` : compact;
+}
+
+type NormalizedOutlookAttachment = {
+  providerAttachmentId: string | null;
+  fileName: string | null;
+  fileType: string | null;
+  sizeBytes: number | null;
+};
+
+type NormalizedOutlookMessage = {
+  valid: boolean;
+  invalidReason?: string;
+  externalMessageId: string | null;
+  providerConversationId: string | null;
+  mailboxAddress: string | null;
+  direction: 'INBOUND' | 'OUTBOUND' | null;
+  subject: string;
+  sender: string | null;
+  recipients: { to: string[]; cc: string[]; bcc: string[] };
+  receivedAt: string | null;
+  sentAt: string | null;
+  contentPreview: string | null;
+  metadata: { provider: string; hasAttachments: boolean; attachmentCount: number };
+  attachments: NormalizedOutlookAttachment[];
+};
+
+// Shared normalization used by BOTH the dry-run and the (gated) write import so
+// they apply identical rules. Pure: no DB access, no Graph calls, no AI.
+// Direction is a transparent derivation (sender==mailbox -> OUTBOUND, else INBOUND).
+function normalizeOutlookMessage(raw: any, mailboxNorm: string, mailboxAddress: string): NormalizedOutlookMessage {
+  const msg = (raw || {}) as Record<string, any>;
+  const externalMessageId = typeof msg.externalMessageId === 'string' ? msg.externalMessageId.trim() : '';
+  const subject = typeof msg.subject === 'string' ? msg.subject.trim() : '';
+  const sender = typeof msg.sender === 'string' ? msg.sender.trim() : '';
+
+  let invalidReason: string | undefined;
+  if (!externalMessageId) invalidReason = 'Missing externalMessageId';
+  else if (!subject) invalidReason = 'Missing subject';
+  const valid = !invalidReason;
+
+  const senderNorm = normalizeEmailAddress(sender);
+  const direction: 'INBOUND' | 'OUTBOUND' | null = !sender
+    ? null
+    : mailboxNorm && senderNorm === mailboxNorm
+      ? 'OUTBOUND'
+      : 'INBOUND';
+
+  const recipientsIn = (msg.recipients || {}) as Record<string, any>;
+  const recipients = {
+    to: toStringArray(recipientsIn.to),
+    cc: toStringArray(recipientsIn.cc),
+    bcc: toStringArray(recipientsIn.bcc),
+  };
+
+  const rawAttachments = Array.isArray(msg.attachments) ? msg.attachments : [];
+  const attachments: NormalizedOutlookAttachment[] = rawAttachments
+    .filter((a: any) => a && typeof a === 'object')
+    .map((a: any) => ({
+      providerAttachmentId: typeof a.providerAttachmentId === 'string' ? a.providerAttachmentId : null,
+      fileName: typeof a.name === 'string' ? a.name : null,
+      fileType: typeof a.contentType === 'string' ? a.contentType : null,
+      sizeBytes: Number.isFinite(a.sizeBytes) ? a.sizeBytes : null,
+    }));
+
+  return {
+    valid,
+    invalidReason,
+    externalMessageId: externalMessageId || null,
+    providerConversationId: typeof msg.providerConversationId === 'string' ? msg.providerConversationId : null,
+    mailboxAddress: mailboxAddress || null,
+    direction,
+    subject,
+    sender: sender || null,
+    recipients,
+    receivedAt: typeof msg.receivedAt === 'string' ? msg.receivedAt : null,
+    sentAt: typeof msg.sentAt === 'string' ? msg.sentAt : null,
+    contentPreview: outlookPreview(msg.bodyPreview),
+    metadata: {
+      provider: 'outlook',
+      hasAttachments: Boolean(msg.hasAttachments) || attachments.length > 0,
+      attachmentCount: attachments.length,
+    },
+    attachments,
+  };
 }
 
 type OutlookDryRunItem = {
@@ -995,75 +1085,38 @@ router.post('/outlook/import-dry-run', authenticate, requireOutlookImportFoundat
 
     const mailboxNorm = normalizeEmailAddress(mailboxAddress);
 
-    // First pass: normalize + validate (no DB access).
+    // First pass: normalize + validate (no DB access). Uses the shared normalizer.
     const normalized = messages.map((raw: any): OutlookDryRunItem => {
-      const msg = (raw || {}) as Record<string, any>;
-      const externalMessageId = typeof msg.externalMessageId === 'string' ? msg.externalMessageId.trim() : '';
-      const subject = typeof msg.subject === 'string' ? msg.subject.trim() : '';
-      const sender = typeof msg.sender === 'string' ? msg.sender.trim() : '';
-
-      let invalidReason: string | undefined;
-      if (!externalMessageId) invalidReason = 'Missing externalMessageId';
-      else if (!subject) invalidReason = 'Missing subject';
-      const valid = !invalidReason;
-
-      const senderNorm = normalizeEmailAddress(sender);
-      const direction: 'INBOUND' | 'OUTBOUND' | null = !sender
-        ? null
-        : mailboxNorm && senderNorm === mailboxNorm
-          ? 'OUTBOUND'
-          : 'INBOUND';
-
-      const recipientsIn = (msg.recipients || {}) as Record<string, any>;
-      const recipients = {
-        to: toStringArray(recipientsIn.to),
-        cc: toStringArray(recipientsIn.cc),
-        bcc: toStringArray(recipientsIn.bcc),
-      };
-
-      const rawAttachments = Array.isArray(msg.attachments) ? msg.attachments : [];
-      const attachmentPreviews = rawAttachments
-        .filter((a: any) => a && typeof a === 'object')
-        .map((a: any) => ({
-          providerAttachmentId: typeof a.providerAttachmentId === 'string' ? a.providerAttachmentId : null,
-          fileName: typeof a.name === 'string' ? a.name : null,
-          fileType: typeof a.contentType === 'string' ? a.contentType : null,
-          sizeBytes: Number.isFinite(a.sizeBytes) ? a.sizeBytes : null,
-        }));
-
-      const communicationPreview = valid
+      const n = normalizeOutlookMessage(raw, mailboxNorm, mailboxAddress);
+      const communicationPreview = n.valid
         ? {
             type: 'EMAIL',
             source: 'OUTLOOK',
             syncStatus: 'PENDING',
-            externalMessageId,
-            providerConversationId: typeof msg.providerConversationId === 'string' ? msg.providerConversationId : null,
-            mailboxAddress: mailboxAddress || null,
-            direction,
-            subject,
-            sender: sender || null,
-            recipients,
-            receivedAt: typeof msg.receivedAt === 'string' ? msg.receivedAt : null,
-            sentAt: typeof msg.sentAt === 'string' ? msg.sentAt : null,
-            contentPreview: outlookPreview(msg.bodyPreview),
-            metadata: {
-              provider: 'outlook',
-              hasAttachments: Boolean(msg.hasAttachments) || attachmentPreviews.length > 0,
-              attachmentCount: attachmentPreviews.length,
-            },
+            externalMessageId: n.externalMessageId,
+            providerConversationId: n.providerConversationId,
+            mailboxAddress: n.mailboxAddress,
+            direction: n.direction,
+            subject: n.subject,
+            sender: n.sender,
+            recipients: n.recipients,
+            receivedAt: n.receivedAt,
+            sentAt: n.sentAt,
+            contentPreview: n.contentPreview,
+            metadata: n.metadata,
           }
         : null;
 
       return {
-        externalMessageId: externalMessageId || null,
-        providerConversationId: typeof msg.providerConversationId === 'string' ? msg.providerConversationId : null,
-        direction,
+        externalMessageId: n.externalMessageId,
+        providerConversationId: n.providerConversationId,
+        direction: n.direction,
         wouldImport: false, // resolved after read-only dedupe
         duplicate: false,
-        valid,
-        invalidReason,
+        valid: n.valid,
+        invalidReason: n.invalidReason,
         communicationPreview,
-        attachmentPreviews,
+        attachmentPreviews: n.attachments,
       };
     });
 
@@ -1126,6 +1179,175 @@ router.post('/outlook/import-dry-run', authenticate, requireOutlookImportFoundat
   } catch (error) {
     logPrismaRouteError('POST /communications/outlook/import-dry-run', error);
     res.status(500).json({ error: 'Error running Outlook import dry-run' });
+  }
+});
+
+// ============================================================================
+// POST /api/v1/communications/outlook/import
+// ----------------------------------------------------------------------------
+// Phase-3 Outlook import CORE — gated by ENABLE_OUTLOOK_IMPORT (default off).
+// Writes Communication rows from a provider-shaped (mock) payload using the SAME
+// normalization as the dry-run. This is NOT the Graph connector and NOT automatic
+// sync: no Graph call, no mailbox read, no secrets. Dedupe by externalMessageId
+// (existing rows are never re-created). Attachments store metadata only (no
+// binaries), deduped within a message by providerAttachmentId. No case/client/
+// document/task relationships are inferred (caseId/clientId/documentId stay null).
+// No AI classification.
+//
+// Transaction: all NEW communications + their attachments are written in a single
+// batch transaction (all-or-nothing on a genuine DB error -> 500, no partial
+// commit, no fake success). Validation-invalid messages are filtered out BEFORE
+// the transaction, so they neither write nor block valid messages; duplicates are
+// skipped without writing.
+// ============================================================================
+
+router.post('/outlook/import', authenticate, requireOutlookImportFoundation, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const body = (req.body || {}) as Record<string, any>;
+    const mailboxAddress = typeof body.mailboxAddress === 'string' ? body.mailboxAddress.trim() : '';
+    const messages = body.messages;
+
+    if (!Array.isArray(messages)) {
+      res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Missing or invalid field: messages (array required)' });
+      return;
+    }
+
+    const mailboxNorm = normalizeEmailAddress(mailboxAddress);
+    const normalized = messages.map((raw: any) => normalizeOutlookMessage(raw, mailboxNorm, mailboxAddress));
+
+    // Read-only dedupe: existing externalMessageId -> existing communication id.
+    const candidateIds = Array.from(
+      new Set(normalized.filter((n) => n.valid && n.externalMessageId).map((n) => n.externalMessageId as string)),
+    );
+    const existingById = new Map<string, string>();
+    if (candidateIds.length > 0) {
+      try {
+        const existing = await prisma.communication.findMany({
+          where: { externalMessageId: { in: candidateIds } } as any,
+          select: { id: true, externalMessageId: true } as any,
+        });
+        for (const row of existing as unknown as Array<{ id: string; externalMessageId: string | null }>) {
+          if (row.externalMessageId) existingById.set(row.externalMessageId, row.id);
+        }
+      } catch (error) {
+        logPrismaRouteError('POST /communications/outlook/import dedupe', error);
+        res.status(500).json({ error: 'Error checking existing communications for import' });
+        return;
+      }
+    }
+
+    // New (non-duplicate, valid) messages to import.
+    const toImport = normalized.filter(
+      (n) => n.valid && n.externalMessageId && !existingById.has(n.externalMessageId),
+    );
+
+    const importedIds = new Map<string, string>();
+    if (toImport.length > 0) {
+      try {
+        await prisma.$transaction(async (tx: any) => {
+          for (const n of toImport) {
+            const created = await tx.communication.create({
+              data: {
+                type: 'EMAIL',
+                source: 'OUTLOOK',
+                syncStatus: 'IMPORTED',
+                externalMessageId: n.externalMessageId,
+                providerConversationId: n.providerConversationId,
+                mailboxAddress: n.mailboxAddress,
+                direction: n.direction || undefined,
+                subject: n.subject,
+                senderEmail: n.sender,
+                content: null, // full body is not fetched in the mock import
+                summary: n.contentPreview, // provider bodyPreview only
+                receivedAt: parseOutlookDate(n.receivedAt),
+                sentAt: parseOutlookDate(n.sentAt),
+                importedAt: new Date(),
+                recipients: n.recipients,
+                metadata: n.metadata,
+                createdById: userId,
+                // caseId / clientId / documentId intentionally left null (no relationship inference)
+              } as any,
+            });
+            importedIds.set(n.externalMessageId as string, created.id);
+
+            // Attachment metadata only — no binaries. Dedupe non-null provider ids within the message.
+            const seen = new Set<string>();
+            for (const att of n.attachments) {
+              if (att.providerAttachmentId) {
+                if (seen.has(att.providerAttachmentId)) continue;
+                seen.add(att.providerAttachmentId);
+              }
+              await tx.communicationAttachment.create({
+                data: {
+                  communicationId: created.id,
+                  fileName: att.fileName || att.providerAttachmentId || 'attachment',
+                  fileType: att.fileType || undefined,
+                  providerAttachmentId: att.providerAttachmentId || undefined,
+                  sizeBytes: att.sizeBytes ?? undefined,
+                  uploadedById: userId,
+                } as any,
+              });
+            }
+          }
+        }, { timeout: 120000, maxWait: 120000 });
+      } catch (error) {
+        logPrismaRouteError('POST /communications/outlook/import write', error);
+        res.status(500).json({ error: 'Error importing communications' });
+        return;
+      }
+    }
+
+    const items = normalized.map((n) => {
+      if (!n.valid) {
+        return {
+          externalMessageId: n.externalMessageId,
+          communicationId: null,
+          imported: false,
+          duplicate: false,
+          valid: false,
+          ...(n.invalidReason ? { invalidReason: n.invalidReason } : {}),
+          direction: n.direction,
+        };
+      }
+      const ext = n.externalMessageId as string;
+      if (existingById.has(ext)) {
+        return {
+          externalMessageId: ext,
+          communicationId: existingById.get(ext) as string,
+          imported: false,
+          duplicate: true,
+          valid: true,
+          direction: n.direction,
+        };
+      }
+      return {
+        externalMessageId: ext,
+        communicationId: importedIds.get(ext) || null,
+        imported: true,
+        duplicate: false,
+        valid: true,
+        direction: n.direction,
+      };
+    });
+
+    const summary = {
+      received: normalized.length,
+      imported: items.filter((i) => i.imported).length,
+      duplicates: items.filter((i) => i.duplicate).length,
+      invalid: normalized.filter((n) => !n.valid).length,
+    };
+
+    res.status(201).json({
+      success: true,
+      dryRun: false,
+      mailboxAddress: mailboxAddress || null,
+      summary,
+      items,
+    });
+  } catch (error) {
+    logPrismaRouteError('POST /communications/outlook/import', error);
+    res.status(500).json({ error: 'Error importing Outlook communications' });
   }
 });
 
