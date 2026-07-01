@@ -1391,18 +1391,34 @@ model Communication {
   caseId          String?
   clientId        String?
   documentId      String?
-  
+
+  // Provider-sourced email import foundation (Microsoft Graph / Outlook).
+  // All additive + nullable so existing manually-logged rows remain valid and
+  // the read-only list contract is unaffected. No ingestion is implemented yet.
+  externalMessageId      String?                   @unique(map: "communications_externalMessageId_key") // Graph message id / internetMessageId — dedupe key
+  providerConversationId String?                   // Graph conversationId — thread grouping (provider-derived, not a persisted thread model)
+  mailboxAddress         String?                   // which mailbox the message was imported from
+  direction              CommunicationDirection?   // INBOUND / OUTBOUND (nullable: manual rows stay heuristic-only)
+  receivedAt             DateTime?                 // Graph receivedDateTime
+  sentAt                 DateTime?                 // Graph sentDateTime
+  source                 CommunicationSource?      @default(MANUAL) // provenance; existing rows are MANUAL
+  syncStatus             CommunicationSyncStatus?  // import lifecycle
+  importedAt             DateTime?                 // when ingested
+  metadata               Json?                     // selected provider metadata only (not full raw headers)
+  recipients             Json?                     // to/cc/bcc array [{ name?, email, kind }]
+
   // Meta
   createdById     String
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
-  
+
   // Relations - optional back relations
   attachments     CommunicationAttachment[]
   relatedTasks    Task[]          @relation("CommunicationTasks")
-  
+
   @@index([caseId, createdAt])
   @@index([clientId, createdAt])
+  @@index([providerConversationId])
   @@map("communications")
 }
 
@@ -1412,6 +1428,22 @@ enum CommunicationType {
   MEETING
   LETTER
   NOTE
+}
+
+enum CommunicationDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum CommunicationSource {
+  MANUAL
+  OUTLOOK
+}
+
+enum CommunicationSyncStatus {
+  IMPORTED
+  PENDING
+  FAILED
 }
 
 // ============================================================================
@@ -1426,13 +1458,18 @@ model CommunicationAttachment {
   url             String?   // URL or path to file
   spItemId        String?   // SharePoint item ID
   
+  // Provider-sourced attachment foundation (additive, nullable).
+  providerAttachmentId String?  // Graph attachment id — idempotent re-import key
+  sizeBytes            Int?     // attachment size in bytes (metadata only; bytes not stored in v1)
+
   // Relations
   communicationId String
   communication   Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
   documentId      String?
   uploadedById    String
   createdAt       DateTime  @default(now())
-  
+
+  @@unique([communicationId, providerAttachmentId], map: "communication_attachments_provider_unique_idx")
   @@map("communication_attachments")
 }
 
