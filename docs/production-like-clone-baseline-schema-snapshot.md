@@ -299,3 +299,227 @@ operator confirmation + a read-only connection string, not clone existence.
 If clone credentials cannot be provided, the safe fallback remains:
 
 `Adminiculum — archived baseline sidecar SQL comparison docs-only`
+
+---
+
+## Manual production-like clone snapshot findings — 2026-07-02
+
+### Execution mode
+
+The production-like clone metadata snapshot was executed manually by the operator through Azure Cloud Shell / psql using the read-only `adm_snapshot_ro` user.
+
+This section records sanitized metadata findings only.
+
+No business/client row data was exported.  
+No secrets, connection strings, passwords, tokens, or environment variable values are recorded.  
+No DDL/DML, Prisma migrate, Prisma db push, deployment, app runtime, or production DB access was performed by the documentation agent.
+
+### Clone identity
+
+- Clone candidate used: `adminiculum-bp3-rc1b-clone`
+- Database: `adminiculum`
+- Source classification: PITR / production-like clone
+- Production DB targeted: no
+- Manual DB connection used by operator: yes, read-only metadata inspection
+- DB mutation performed: no
+
+### `_prisma_migrations` metadata
+
+The clone `_prisma_migrations` table contained 6 rows:
+
+| Migration | Status observed |
+|---|---|
+| `20260211153100_baseline` | finished |
+| `20260212180000_add_workload_tracking` | one rolled-back row, followed by a later finished row |
+| `20260302142000_add_kb_learning_escalation` | rolled back |
+| `20260622150000_add_lawyer_handoff_packages_foundation` | finished |
+| `20260628190000_add_communication_baseline` | finished |
+
+Detailed operator-observed facts:
+
+- `20260211153100_baseline`
+  - started: `2026-02-24 15:14:12.293962+00`
+  - finished: `2026-02-24 15:14:12.339309+00`
+  - rolled back: no
+  - applied steps: `1`
+
+- `20260212180000_add_workload_tracking`
+  - first row started: `2026-02-24 15:14:12.360124+00`
+  - first row rolled back: `2026-02-24 15:15:00.350313+00`
+  - later row started/finished: `2026-02-24 15:15:00.374758+00`
+  - later row rolled back: no
+
+- `20260302142000_add_kb_learning_escalation`
+  - started: `2026-03-14 14:56:58.460657+00`
+  - rolled back: `2026-03-14 15:57:26.076529+00`
+  - finished: no
+
+- `20260622150000_add_lawyer_handoff_packages_foundation`
+  - started/finished: `2026-06-23 10:02:30.63146+00`
+  - rolled back: no
+
+- `20260628190000_add_communication_baseline`
+  - started/finished: `2026-06-29 07:13:35.077457+00`
+  - rolled back: no
+  - applied steps: `1`
+
+### Repo-vs-clone migration note
+
+The clone did not show `20260515190000_add_lawyer_handoff_package` in `_prisma_migrations`.
+
+The repo is known to contain `20260622150000_add_lawyer_handoff_packages_foundation`.
+
+The observed handoff table is:
+
+- `lawyer_handoff_packages`
+
+No duplicate handoff package table was observed in the manual metadata checks.
+
+### Baseline-critical objects observed
+
+The clone contains the baseline-critical objects that were missing from empty-DB replay:
+
+- `_prisma_migrations`
+- `clients`
+- `users`
+- `cases`
+- `tasks`
+- `documents`
+- `communications`
+
+This is important because clean empty-DB migration replay is invalid: the no-op baseline does not create baseline objects, while later migrations expect objects such as `clients`.
+
+The clone therefore demonstrates a production-like schema state that cannot be reproduced by replaying the current repo migrations from an empty database.
+
+### Other notable tables observed
+
+Manual metadata inspection also observed, among others:
+
+- `communication_attachments`
+- `lawyer_handoff_packages`
+- `time_entries`
+- `timeline_events`
+- `workload_records`
+- `client_workgroups`
+- `matters`
+- `document_versions`
+- `notifications`
+- `departments`
+- `comments`
+- `anonymous_documents`
+- `automation_suggestions`
+- `automation_execution_logs`
+- `automation_execution_step_logs`
+- `automation_trigger_events`
+- `client_redaction_profiles`
+- `contract_generations`
+- `contract_templates`
+- `system_settings`
+- `task_assignment_history`
+- `user_automation_preferences`
+- `user_automation_suppressions`
+
+### Review/session objects
+
+Manual pattern-based table checks did not observe a dedicated review/session/document-review table.
+
+This does not prove such functionality is absent at application level; it only records that no matching table was observed in the manual metadata query.
+
+### Workload/time objects
+
+The following workload/time-related objects were observed:
+
+- `time_entries`
+- `timeline_events`
+- `workload_records`
+
+### Foreign keys
+
+The initial `information_schema` foreign-key query returned 0 rows, but a later `pg_constraint`-based foreign-key query returned 47 foreign keys.
+
+Therefore, the clone does have DB-level foreign-key constraints. The `pg_constraint` result is the controlling evidence for FK presence.
+
+Important FK examples observed:
+
+- `cases.clientId` → `clients.id`
+- `cases.assignedLawyerId` → `users.id`
+- `cases.createdById` → `users.id`
+- `documents.caseId` → `cases.id`
+- `documents.clientId` → `clients.id`
+- `document_versions.documentId` → `documents.id`
+- `lawyer_handoff_packages.caseId` → `cases.id`
+- `matters.clientId` → `clients.id`
+- `tasks.caseId` → `cases.id`
+- `tasks.matterId` → `matters.id`
+- `tasks.sourceCommunicationId` → `communications.id`
+- `time_entries.matterId` → `matters.id`
+- `time_entries.userId` → `users.id`
+- `timeline_events.caseId` → `cases.id`
+- `workload_records.workgroupId` → `client_workgroups.id`
+
+### Indexes
+
+Manual metadata inspection found 71 public indexes.
+
+Important examples observed:
+
+- `clients_pkey`
+- `users_pkey`
+- `users_email_key`
+- `cases_pkey`
+- `cases_caseNumber_key`
+- `tasks_pkey`
+- `documents_pkey`
+- `documents_spItemId_key`
+- `communications_pkey`
+- `communications_caseId_createdAt_idx`
+- `communications_clientId_createdAt_idx`
+- `lawyer_handoff_packages_pkey`
+- `lawyer_handoff_packages_caseId_status_idx`
+- `time_entries_pkey`
+- `time_entries_matterId_workDate_idx`
+- `workload_records_pkey`
+- `workload_records_workgroupId_period_key`
+
+### Enums
+
+The manual enum query returned 195 rows.
+
+Only a summary is recorded here. The enum set includes internal application enums, including `UserRole` values such as `CLIENT`.
+
+Important interpretation: the presence of internal `UserRole.CLIENT` does not satisfy the Client Portal v1 security architecture. The Client Portal design still requires separate `ClientPortalUser`, `ClientPortalMembership`, tenant isolation, publication artifacts, grants, and `/me`-scoped APIs.
+
+### Interpretation
+
+The clone contains the baseline objects that are missing from empty-DB replay.
+
+This explains why the no-op baseline can coexist with later migrations in the production-like state.
+
+The empty-DB replay remains invalid as proof.  
+The drifted local DB remains invalid as proof.  
+The production-like clone is likely suitable for future additive migration proof.
+
+### CP-SCHEMA-1 / CONNECTOR-SCHEMA-1 impact
+
+CP-SCHEMA-1 should move from hard NO-GO to conditional implementation-preflight readiness.
+
+This does not mean production-ready. It means the clone evidence is sufficient to prepare the next implementation preflight for an additive, inert, default-off CP-SCHEMA-1 candidate.
+
+CONNECTOR-SCHEMA-1 remains conditional on the same baseline proof chain.
+
+Before any actual schema implementation:
+
+- repo-vs-clone migration comparison must be documented clearly;
+- rolled-back migration rows must be acknowledged;
+- CP-SCHEMA-1 scope must remain additive/inert/default-off;
+- no existing data may become client-visible;
+- no production migration may be run from this manual snapshot alone.
+
+### Current conclusion
+
+Clone suitability: likely suitable for future additive migration proof.
+
+CP-SCHEMA-1 status: conditional / implementation-preflight ready, not production-ready.
+
+CONNECTOR-SCHEMA-1 status: conditional / implementation-preflight ready, not production-ready.
+
