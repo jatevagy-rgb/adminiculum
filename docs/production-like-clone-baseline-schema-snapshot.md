@@ -1,4 +1,4 @@
-# Production-Like Clone Baseline Schema Snapshot
+﻿# Production-Like Clone Baseline Schema Snapshot
 
 Classification target: `production_like_clone_baseline_schema_snapshot_blocked_no_runtime_change_no_schema_change_no_db_change`
 
@@ -30,14 +30,14 @@ Latest execution attempt:
      (`<non-secret clone name>`, unresolved `Read-only user: yes/no`) rather than a
      concrete filled non-secret clone name/classification;
   2. a sanitized local shell check found **`CLONE_DATABASE_URL` not set**;
-- per the hard stop condition, the task stopped before any DB query — **no connection
+- per the hard stop condition, the task stopped before any DB query â€” **no connection
   was opened**;
 - earlier attempts recorded the same blocked state (this is a repeated blocked
   execution, not a regression);
 - `CP-SCHEMA-1` and `CONNECTOR-SCHEMA-1` remain **NO-GO** per
   `docs/client-portal-v1-cp-schema1-baseline-proof-unblocking-preflight.md`.
 
-## 1a. Operator note — existing clone candidate discovered (read-only Azure listing)
+## 1a. Operator note â€” existing clone candidate discovered (read-only Azure listing)
 
 **Date context:** recorded at commit `8df1594` (branch `hotfix/runtime-shape-20260308`).
 
@@ -51,7 +51,7 @@ mutation) observed **two** PostgreSQL flexible servers in resource group
 | `adminiculum-bp3-rc1b-clone` | Ready | 15 | **appears to be an existing clone by name** |
 
 This means a **clone candidate may already exist**, so a brand-new PITR/clone
-creation is likely **not** required — but this does **not** unblock the snapshot.
+creation is likely **not** required â€” but this does **not** unblock the snapshot.
 
 Strictly what this discovery is and is not:
 - **Is:** a read-only observation of resource names + state.
@@ -75,7 +75,7 @@ Outstanding requirements before any snapshot (unchanged):
 3. The operator confirmation block must be filled **without placeholders** (using
    the real clone name `adminiculum-bp3-rc1b-clone`).
 
-Until 1–3 are satisfied, **snapshot execution remains blocked**; **CP-SCHEMA-1**
+Until 1â€“3 are satisfied, **snapshot execution remains blocked**; **CP-SCHEMA-1**
 and **CONNECTOR-SCHEMA-1** remain **NO-GO**.
 
 ## 2. Clone identity and safety verification
@@ -278,7 +278,7 @@ Limitation:
 
 Recommended next prompt:
 
-`Adminiculum — production-like clone baseline schema snapshot read-only execution with clone connection`
+`Adminiculum â€” production-like clone baseline schema snapshot read-only execution with clone connection`
 
 That prompt should provide or confirm:
 
@@ -293,16 +293,16 @@ That prompt should provide or confirm:
 - no business data export.
 
 Note: because an existing clone candidate (`adminiculum-bp3-rc1b-clone`) was
-observed, new PITR/clone creation is likely unnecessary — the missing pieces are
+observed, new PITR/clone creation is likely unnecessary â€” the missing pieces are
 operator confirmation + a read-only connection string, not clone existence.
 
 If clone credentials cannot be provided, the safe fallback remains:
 
-`Adminiculum — archived baseline sidecar SQL comparison docs-only`
+`Adminiculum â€” archived baseline sidecar SQL comparison docs-only`
 
 ---
 
-## Manual production-like clone snapshot findings — 2026-07-02
+## Manual production-like clone snapshot findings â€” 2026-07-02
 
 ### Execution mode
 
@@ -310,8 +310,8 @@ The production-like clone metadata snapshot was executed manually by the operato
 
 This section records sanitized metadata findings only.
 
-No business/client row data was exported.  
-No secrets, connection strings, passwords, tokens, or environment variable values are recorded.  
+No business/client row data was exported.
+No secrets, connection strings, passwords, tokens, or environment variable values are recorded.
 No DDL/DML, Prisma migrate, Prisma db push, deployment, app runtime, or production DB access was performed by the documentation agent.
 
 ### Clone identity
@@ -441,21 +441,21 @@ Therefore, the clone does have DB-level foreign-key constraints. The `pg_constra
 
 Important FK examples observed:
 
-- `cases.clientId` → `clients.id`
-- `cases.assignedLawyerId` → `users.id`
-- `cases.createdById` → `users.id`
-- `documents.caseId` → `cases.id`
-- `documents.clientId` → `clients.id`
-- `document_versions.documentId` → `documents.id`
-- `lawyer_handoff_packages.caseId` → `cases.id`
-- `matters.clientId` → `clients.id`
-- `tasks.caseId` → `cases.id`
-- `tasks.matterId` → `matters.id`
-- `tasks.sourceCommunicationId` → `communications.id`
-- `time_entries.matterId` → `matters.id`
-- `time_entries.userId` → `users.id`
-- `timeline_events.caseId` → `cases.id`
-- `workload_records.workgroupId` → `client_workgroups.id`
+- `cases.clientId` â†’ `clients.id`
+- `cases.assignedLawyerId` â†’ `users.id`
+- `cases.createdById` â†’ `users.id`
+- `documents.caseId` â†’ `cases.id`
+- `documents.clientId` â†’ `clients.id`
+- `document_versions.documentId` â†’ `documents.id`
+- `lawyer_handoff_packages.caseId` â†’ `cases.id`
+- `matters.clientId` â†’ `clients.id`
+- `tasks.caseId` â†’ `cases.id`
+- `tasks.matterId` â†’ `matters.id`
+- `tasks.sourceCommunicationId` â†’ `communications.id`
+- `time_entries.matterId` â†’ `matters.id`
+- `time_entries.userId` â†’ `users.id`
+- `timeline_events.caseId` â†’ `cases.id`
+- `workload_records.workgroupId` â†’ `client_workgroups.id`
 
 ### Indexes
 
@@ -495,8 +495,8 @@ The clone contains the baseline objects that are missing from empty-DB replay.
 
 This explains why the no-op baseline can coexist with later migrations in the production-like state.
 
-The empty-DB replay remains invalid as proof.  
-The drifted local DB remains invalid as proof.  
+The empty-DB replay remains invalid as proof.
+The drifted local DB remains invalid as proof.
 The production-like clone is likely suitable for future additive migration proof.
 
 ### CP-SCHEMA-1 / CONNECTOR-SCHEMA-1 impact
@@ -522,4 +522,3 @@ Clone suitability: likely suitable for future additive migration proof.
 CP-SCHEMA-1 status: conditional / implementation-preflight ready, not production-ready.
 
 CONNECTOR-SCHEMA-1 status: conditional / implementation-preflight ready, not production-ready.
-
