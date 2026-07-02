@@ -109,6 +109,12 @@ model Client {
   workgroups      ClientWorkgroup[]   // Client workgroups for workload tracking
   redactorProfile ClientRedactionProfile? // One-to-one relation for anonymization
   houseStyleProfile ClientHouseStyleProfile? // One-to-one relation for document house style
+  clientPortalMemberships ClientPortalMembership[]
+  clientVisibleArtifacts ClientVisibleArtifact[]
+  clientPortalGrants ClientPortalGrant[]
+  clientSubmissions ClientSubmission[]
+  clientSubmissionAttachments ClientSubmissionAttachment[]
+  clientPortalAuditEvents ClientPortalAuditEvent[]
 
   @@map("clients")
 }
@@ -1852,4 +1858,379 @@ model LawyerHandoffPackage {
   @@index([sourceDocumentId])
   @@index([legalAnalysisId])
   @@map("lawyer_handoff_packages")
+}
+
+// ============================================================================
+// CLIENT PORTAL V1 FOUNDATION (CP-SCHEMA-1 CANDIDATE)
+// ============================================================================
+// Additive, inert, default-off schema foundation for future Client Portal.
+// These models do not enable runtime access and do not make existing internal
+// records client-visible. Portal identity is intentionally separate from User.
+// ============================================================================
+
+enum ClientPortalUserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+enum ClientPortalMembershipRole {
+  REQUESTER
+  TEAM_LEAD
+  CLIENT_MANAGER
+  CLIENT_ADMIN
+}
+
+enum ClientPortalMembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+enum ClientVisibleArtifactType {
+  REQUEST
+  STATUS
+  TIMELINE_ITEM
+  TODO
+  DOCUMENT_REQUEST
+  DOCUMENT_VERSION
+  MESSAGE
+  DEADLINE
+  REPORT_SNAPSHOT
+  CONNECTOR_LINK
+  INTEGRATION_AUDIT_ITEM
+}
+
+enum ClientVisibleArtifactStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  PUBLISHED
+  REVOKED
+  EXPIRED
+  SUPERSEDED
+}
+
+enum ClientVisibleSourceType {
+  CASE
+  TASK
+  DOCUMENT
+  DOCUMENT_VERSION
+  COMMUNICATION
+  TIME_REPORT
+  CONNECTOR
+  MANUAL
+}
+
+enum ClientPortalGrantAction {
+  READ
+  DOWNLOAD
+  UPLOAD
+  COMMENT
+  MANAGE
+  VIEW_REPORT
+  VIEW_INTEGRATION
+}
+
+enum ClientPortalGrantScope {
+  CLIENT
+  TEAM
+  ROLE
+  MEMBERSHIP
+  REQUESTER_OWN
+}
+
+enum ClientPortalGrantStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum ClientSubmissionType {
+  NEW_REQUEST
+  MESSAGE
+  DOCUMENT_UPLOAD
+  CLARIFICATION
+  PROFILE_ADMIN
+  INTEGRATION_ADMIN
+}
+
+enum ClientSubmissionStatus {
+  SUBMITTED
+  IN_TRIAGE
+  ACCEPTED_INTERNAL
+  NEEDS_CLARIFICATION
+  REJECTED
+  CLOSED
+}
+
+enum ClientSubmissionAttachmentScanStatus {
+  PENDING
+  CLEAN
+  BLOCKED
+  FAILED
+}
+
+enum ClientSubmissionAttachmentStatus {
+  PENDING_REVIEW
+  ACCEPTED
+  REJECTED
+}
+
+enum ClientPortalActorType {
+  CLIENT_PORTAL_USER
+  INTERNAL_USER
+  SYSTEM
+  CONNECTOR
+}
+
+enum ClientPortalAuditAction {
+  LOGIN_SUCCEEDED
+  LOGIN_FAILED
+  WORKSPACE_SELECTED
+  ARTIFACT_READ
+  ARTIFACT_DOWNLOADED
+  SUBMISSION_CREATED
+  ATTACHMENT_UPLOADED
+  ARTIFACT_PROPOSED
+  ARTIFACT_APPROVED
+  ARTIFACT_PUBLISHED
+  ARTIFACT_REVOKED
+  GRANT_CREATED
+  GRANT_REVOKED
+  MEMBERSHIP_INVITED
+  MEMBERSHIP_UPDATED
+  MEMBERSHIP_REVOKED
+}
+
+enum ClientPortalAuditOutcome {
+  SUCCESS
+  DENIED
+  FAILED
+}
+
+model ClientPortalUser {
+  id                String                 @id @default(uuid())
+  email             String
+  emailNormalized   String
+  displayName       String?
+  passwordHash      String?
+  authProvider      String                 @default("password")
+  externalSubjectId String?
+  status            ClientPortalUserStatus @default(INVITED)
+  lastLoginAt       DateTime?
+  acceptedTermsAt   DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  memberships ClientPortalMembership[]
+  submissions  ClientSubmission[]
+  auditEvents  ClientPortalAuditEvent[]
+
+  @@unique([emailNormalized, authProvider], map: "client_portal_users_email_provider_key")
+  @@index([status], map: "client_portal_users_status_idx")
+  @@map("client_portal_users")
+}
+
+model ClientPortalMembership {
+  id                      String                       @id @default(uuid())
+  clientPortalUserId      String
+  clientId                String
+  role                    ClientPortalMembershipRole
+  status                  ClientPortalMembershipStatus @default(INVITED)
+  teamScopeType           String?
+  teamScopeId             String?
+  teamDisplayName         String?
+  invitedByInternalUserId String?
+  activatedAt             DateTime?
+  suspendedAt             DateTime?
+  revokedAt               DateTime?
+  createdAt               DateTime                     @default(now())
+  updatedAt               DateTime                     @updatedAt
+
+  user        ClientPortalUser @relation(fields: [clientPortalUserId], references: [id], onDelete: Cascade)
+  client      Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  grants      ClientPortalGrant[]
+  submissions ClientSubmission[]
+  auditEvents ClientPortalAuditEvent[]
+
+  @@index([clientPortalUserId, status], map: "client_portal_memberships_user_status_idx")
+  @@index([clientId, status], map: "client_portal_memberships_client_status_idx")
+  @@index([clientId, role], map: "client_portal_memberships_client_role_idx")
+  @@index([clientId, teamScopeType, teamScopeId], map: "client_portal_memberships_team_scope_idx")
+  @@map("client_portal_memberships")
+}
+
+model ClientVisibleArtifact {
+  id                         String                      @id @default(uuid())
+  clientId                   String
+  artifactType               ClientVisibleArtifactType
+  status                     ClientVisibleArtifactStatus @default(DRAFT)
+  title                      String?
+  summary                    String?
+  payload                    Json
+  payloadVersion             Int                         @default(1)
+  sourceType                 ClientVisibleSourceType?
+  sourceId                   String?
+  sourceCaseId               String?
+  sourceDocumentId           String?
+  sourceTaskId               String?
+  sourceCommunicationId      String?
+  proposedByInternalUserId   String?
+  approvedByInternalUserId   String?
+  publishedByInternalUserId  String?
+  proposedAt                 DateTime?
+  approvedAt                 DateTime?
+  publishedAt                DateTime?
+  revokedAt                  DateTime?
+  expiresAt                  DateTime?
+  supersededById             String?
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+
+  client            Client                   @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  grants            ClientPortalGrant[]
+  targetSubmissions ClientSubmission[]       @relation("ClientSubmissionTargetArtifact")
+  requestSubmissions ClientSubmission[]      @relation("ClientSubmissionTargetRequestArtifact")
+  auditEvents       ClientPortalAuditEvent[]
+
+  @@index([clientId, artifactType, status], map: "client_visible_artifacts_client_type_status_idx")
+  @@index([clientId, status, publishedAt], map: "client_visible_artifacts_client_status_published_idx")
+  @@index([sourceType, sourceId], map: "client_visible_artifacts_source_idx")
+  @@index([sourceCaseId], map: "client_visible_artifacts_source_case_idx")
+  @@index([sourceDocumentId], map: "client_visible_artifacts_source_document_idx")
+  @@index([sourceTaskId], map: "client_visible_artifacts_source_task_idx")
+  @@index([sourceCommunicationId], map: "client_visible_artifacts_source_communication_idx")
+  @@map("client_visible_artifacts")
+}
+
+model ClientPortalGrant {
+  id                      String                  @id @default(uuid())
+  clientId                String
+  artifactId              String
+  action                  ClientPortalGrantAction @default(READ)
+  scopeType               ClientPortalGrantScope
+  status                  ClientPortalGrantStatus @default(ACTIVE)
+  role                    ClientPortalMembershipRole?
+  membershipId            String?
+  teamScopeType           String?
+  teamScopeId             String?
+  startsAt                DateTime?
+  expiresAt               DateTime?
+  revokedAt               DateTime?
+  grantedByInternalUserId String?
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+
+  client     Client                  @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  artifact   ClientVisibleArtifact   @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  membership ClientPortalMembership? @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, artifactId, action], map: "client_portal_grants_client_artifact_action_idx")
+  @@index([clientId, scopeType, action], map: "client_portal_grants_client_scope_action_idx")
+  @@index([membershipId, action], map: "client_portal_grants_membership_action_idx")
+  @@index([clientId, teamScopeType, teamScopeId], map: "client_portal_grants_team_scope_idx")
+  @@map("client_portal_grants")
+}
+
+model ClientSubmission {
+  id                      String                 @id @default(uuid())
+  clientId                String
+  clientPortalUserId      String
+  membershipId            String
+  submissionType          ClientSubmissionType
+  status                  ClientSubmissionStatus @default(SUBMITTED)
+  title                   String?
+  body                    String?
+  payload                 Json?
+  targetArtifactId        String?
+  targetRequestArtifactId String?
+  idempotencyKey          String?
+  source                  String                 @default("PORTAL")
+  triagedByInternalUserId String?
+  triagedAt               DateTime?
+  linkedCaseId            String?
+  linkedTaskId            String?
+  linkedDocumentId        String?
+  linkedCommunicationId   String?
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+
+  client                Client                  @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  user                  ClientPortalUser        @relation(fields: [clientPortalUserId], references: [id], onDelete: Restrict)
+  membership            ClientPortalMembership  @relation(fields: [membershipId], references: [id], onDelete: Restrict)
+  targetArtifact        ClientVisibleArtifact?  @relation("ClientSubmissionTargetArtifact", fields: [targetArtifactId], references: [id], onDelete: SetNull)
+  targetRequestArtifact ClientVisibleArtifact?  @relation("ClientSubmissionTargetRequestArtifact", fields: [targetRequestArtifactId], references: [id], onDelete: SetNull)
+  attachments           ClientSubmissionAttachment[]
+  auditEvents           ClientPortalAuditEvent[]
+
+  @@unique([clientId, idempotencyKey], map: "client_submissions_client_idempotency_key")
+  @@index([clientId, status, createdAt], map: "client_submissions_client_status_created_idx")
+  @@index([clientPortalUserId, createdAt], map: "client_submissions_user_created_idx")
+  @@index([membershipId, createdAt], map: "client_submissions_membership_created_idx")
+  @@index([targetArtifactId], map: "client_submissions_target_artifact_idx")
+  @@index([targetRequestArtifactId], map: "client_submissions_target_request_artifact_idx")
+  @@map("client_submissions")
+}
+
+model ClientSubmissionAttachment {
+  id                  String                               @id @default(uuid())
+  clientId            String
+  submissionId        String
+  safeFileName        String
+  mimeType            String?
+  sizeBytes           Int?
+  checksumSha256      String?
+  storageRef          String?
+  scanStatus          ClientSubmissionAttachmentScanStatus @default(PENDING)
+  status              ClientSubmissionAttachmentStatus     @default(PENDING_REVIEW)
+  uploadedAt          DateTime                             @default(now())
+  acceptedDocumentId  String?
+  rejectedAt          DateTime?
+  rejectionReasonCode String?
+  createdAt           DateTime                             @default(now())
+  updatedAt           DateTime                             @updatedAt
+
+  client     Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  submission ClientSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, uploadedAt], map: "client_submission_attachments_client_uploaded_idx")
+  @@index([submissionId], map: "client_submission_attachments_submission_idx")
+  @@index([acceptedDocumentId], map: "client_submission_attachments_document_idx")
+  @@map("client_submission_attachments")
+}
+
+model ClientPortalAuditEvent {
+  id                        String                   @id @default(uuid())
+  clientId                  String?
+  actorType                 ClientPortalActorType
+  actorClientPortalUserId   String?
+  actorMembershipId         String?
+  actorInternalUserId       String?
+  action                    ClientPortalAuditAction
+  resourceType              String?
+  resourceId                String?
+  artifactId                String?
+  submissionId              String?
+  outcome                   ClientPortalAuditOutcome @default(SUCCESS)
+  ipHash                    String?
+  userAgentHash             String?
+  metadata                  Json?
+  createdAt                 DateTime                 @default(now())
+
+  client          Client?                 @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  actorPortalUser ClientPortalUser?       @relation(fields: [actorClientPortalUserId], references: [id], onDelete: SetNull)
+  actorMembership ClientPortalMembership? @relation(fields: [actorMembershipId], references: [id], onDelete: SetNull)
+  artifact        ClientVisibleArtifact?  @relation(fields: [artifactId], references: [id], onDelete: SetNull)
+  submission      ClientSubmission?       @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, createdAt], map: "client_portal_audit_events_client_created_idx")
+  @@index([actorType, actorClientPortalUserId, createdAt], map: "client_portal_audit_events_portal_actor_idx")
+  @@index([actorInternalUserId, createdAt], map: "client_portal_audit_events_internal_actor_idx")
+  @@index([resourceType, resourceId], map: "client_portal_audit_events_resource_idx")
+  @@index([artifactId, createdAt], map: "client_portal_audit_events_artifact_idx")
+  @@index([submissionId, createdAt], map: "client_portal_audit_events_submission_idx")
+  @@map("client_portal_audit_events")
 }
