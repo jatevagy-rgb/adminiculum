@@ -24,10 +24,18 @@ Impact:
 Latest execution attempt:
 
 - branch: `hotfix/runtime-shape-20260308`;
-- latest commit at start: `f2e4049 docs: add clone connection handoff runbook`;
-- operator confirmation in the task brief still contained placeholders rather than a concrete non-secret clone name/classification;
-- sanitized local shell check found `CLONE_DATABASE_URL` not set;
-- the stop condition applied before any DB query.
+- latest commit at start: `a51f9fe docs: CP-SCHEMA-1 baseline/proof unblocking preflight`;
+- **two independent stop-condition triggers**, both before any DB connection:
+  1. the operator confirmation in the task brief still contained **placeholders**
+     (`<non-secret clone name>`, unresolved `Read-only user: yes/no`) rather than a
+     concrete filled non-secret clone name/classification;
+  2. a sanitized local shell check found **`CLONE_DATABASE_URL` not set**;
+- per the hard stop condition, the task stopped before any DB query — **no connection
+  was opened**;
+- earlier attempts recorded the same blocked state (this is a repeated blocked
+  execution, not a regression);
+- `CP-SCHEMA-1` and `CONNECTOR-SCHEMA-1` remain **NO-GO** per
+  `docs/client-portal-v1-cp-schema1-baseline-proof-unblocking-preflight.md`.
 
 ## 2. Clone identity and safety verification
 
