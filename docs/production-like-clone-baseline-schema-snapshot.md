@@ -37,6 +37,47 @@ Latest execution attempt:
 - `CP-SCHEMA-1` and `CONNECTOR-SCHEMA-1` remain **NO-GO** per
   `docs/client-portal-v1-cp-schema1-baseline-proof-unblocking-preflight.md`.
 
+## 1a. Operator note — existing clone candidate discovered (read-only Azure listing)
+
+**Date context:** recorded at commit `8df1594` (branch `hotfix/runtime-shape-20260308`).
+
+A **read-only** Azure resource listing (`az postgres flexible-server list`, no
+mutation) observed **two** PostgreSQL flexible servers in resource group
+`Adminiculum-RG`:
+
+| Server (non-secret name) | State | Version | Apparent role |
+| --- | --- | --- | --- |
+| `adminiculum` | Ready | 15 | production DB |
+| `adminiculum-bp3-rc1b-clone` | Ready | 15 | **appears to be an existing clone by name** |
+
+This means a **clone candidate may already exist**, so a brand-new PITR/clone
+creation is likely **not** required — but this does **not** unblock the snapshot.
+
+Strictly what this discovery is and is not:
+- **Is:** a read-only observation of resource names + state.
+- **Is not:** a confirmation that `adminiculum-bp3-rc1b-clone` is isolated,
+  non-production, or safe to query. The name is suggestive, not authoritative.
+
+Confirmed facts for this discovery:
+- clone created by this task: **no** (an existing candidate was merely observed);
+- DB connection made: **no**;
+- secrets retrieved or printed: **no** (only non-secret server names);
+- production/Azure resource modified: **no** (read-only `list` only);
+- `CLONE_DATABASE_URL` set: **no**;
+- read-only connection string available: **no**.
+
+Outstanding requirements before any snapshot (unchanged):
+1. **Operator/DBA must confirm** `adminiculum-bp3-rc1b-clone` is an isolated,
+   **non-production** clone with no live app runtime pointed at it.
+2. A **read-only connection string** for that clone must be supplied via a secure
+   channel and set into `CLONE_DATABASE_URL` **in the local shell only** (never
+   committed, never a `.env` file, never pasted into chat).
+3. The operator confirmation block must be filled **without placeholders** (using
+   the real clone name `adminiculum-bp3-rc1b-clone`).
+
+Until 1–3 are satisfied, **snapshot execution remains blocked**; **CP-SCHEMA-1**
+and **CONNECTOR-SCHEMA-1** remain **NO-GO**.
+
 ## 2. Clone identity and safety verification
 
 Sanitized local environment check:
@@ -241,12 +282,19 @@ Recommended next prompt:
 
 That prompt should provide or confirm:
 
-- a `CLONE_DATABASE_URL` supplied only in the local shell/session, not committed;
+- operator/DBA confirmation that the observed candidate `adminiculum-bp3-rc1b-clone`
+  is an isolated **non-production** clone (or selection of another confirmed clone);
+- a **read-only** `CLONE_DATABASE_URL` for that clone supplied only in the local
+  shell/session, not committed;
 - clone host/database classification as non-production;
 - authorization to run read-only schema metadata queries;
 - no Azure/production mutation;
 - no Prisma migrate deploy/dev/db push;
 - no business data export.
+
+Note: because an existing clone candidate (`adminiculum-bp3-rc1b-clone`) was
+observed, new PITR/clone creation is likely unnecessary — the missing pieces are
+operator confirmation + a read-only connection string, not clone existence.
 
 If clone credentials cannot be provided, the safe fallback remains:
 
