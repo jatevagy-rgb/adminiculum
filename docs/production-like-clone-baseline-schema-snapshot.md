@@ -2,16 +2,15 @@
 
 Classification target: `production_like_clone_baseline_schema_snapshot_blocked_no_runtime_change_no_schema_change_no_db_change`
 
-This document records a blocked read-only execution attempt for the production-like clone baseline schema snapshot. No clone connection was available in the local shell/session, so no database connection was opened and no schema metadata was queried.
+This document records blocked read-only execution attempts for the production-like clone baseline schema snapshot. No clone connection was available in the local shell/session, so no database connection was opened and no schema metadata was queried.
 
 ## 1. Executive summary
 
-The production-like clone baseline schema snapshot was **blocked before connection**.
+The production-like clone baseline schema snapshot is **blocked before connection**.
 
 Reason:
 
 - `CLONE_DATABASE_URL` was not set in the local shell/session.
-- `DATABASE_URL` was not set in the local shell/session.
 - No connection string was available that could be confidently classified as an isolated non-production clone.
 
 Per the execution safety rules, the task stopped before any DB query. Production and Azure were not touched.
@@ -22,6 +21,14 @@ Impact:
 - No Prisma migration metadata was captured from a clone.
 - `CP-SCHEMA-1` and `CONNECTOR-SCHEMA-1` remain blocked.
 
+Latest execution attempt:
+
+- branch: `hotfix/runtime-shape-20260308`;
+- latest commit at start: `f2e4049 docs: add clone connection handoff runbook`;
+- operator confirmation in the task brief still contained placeholders rather than a concrete non-secret clone name/classification;
+- sanitized local shell check found `CLONE_DATABASE_URL` not set;
+- the stop condition applied before any DB query.
+
 ## 2. Clone identity and safety verification
 
 Sanitized local environment check:
@@ -29,7 +36,6 @@ Sanitized local environment check:
 | Variable | Result | Action |
 | --- | --- | --- |
 | `CLONE_DATABASE_URL` | not set | No DB connection attempted |
-| `DATABASE_URL` | not set | No DB connection attempted |
 
 Clone identity could not be verified because no clone connection was supplied.
 
@@ -53,10 +59,10 @@ git log -1 --oneline
 git branch --show-current
 ```
 
-Sanitized environment availability check:
+Sanitized environment availability checks:
 
 ```powershell
-$names = @('CLONE_DATABASE_URL','DATABASE_URL')
+$names = @('CLONE_DATABASE_URL')
 foreach ($name in $names) {
   $value = [Environment]::GetEnvironmentVariable($name)
   if ([string]::IsNullOrWhiteSpace($value)) {
@@ -71,7 +77,6 @@ Observed result:
 
 ```text
 CLONE_DATABASE_URL: not set
-DATABASE_URL: not set
 ```
 
 No `psql`, Prisma DB, Azure CLI, or migration command was run against a database.
