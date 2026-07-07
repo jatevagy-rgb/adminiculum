@@ -28,7 +28,7 @@ Default safe decisions if no human override is supplied:
 
 - `KEEP`: core baseline, lawyer handoff foundation, communication baseline / Outlook provider fields.
 - `UNKNOWN`: workload tracking, anonymous documents, rehydration fields, client identity fields, case client role, case collaborators, comparison snapshot, client color, workspace text.
-- `QUARANTINE`: generation drafts, contracts / generated document templates, timesheet reports/artifacts/presets, legal analyses, client house style, document review, clause library, contract assembly.
+- `QUARANTINE`: generation drafts, contracts / generated document templates, temporary operational / database administration routes, timesheet reports/artifacts/presets, legal analyses, client house style, document review, clause library, contract assembly.
 - `QUARANTINE` / future-blocked: CP-SCHEMA-1 / Client Portal foundation.
 - `UNKNOWN`: DB-only rolled-back kb/learning/escalation migration.
 
@@ -42,6 +42,7 @@ Default safe decisions if no human override is supplied:
 | Workload tracking | Manual reconciliation. | Decide whether finished workload migration row and physical objects are authoritative. | `UNKNOWN` |  | Migration history has rolled-back and later finished rows; do not replay blindly. |
 | Generation drafts | Quarantine unless product requires now. | Decide whether persistent generation drafts are production scope. | `QUARANTINE` |  | `generation_drafts` absent from production; route/UI references need guard review if quarantined. |
 | Contracts / generated document templates | Quarantine from production-compatible baseline. | Decide only after storage, retention, permission, audit, and privacy model are explicitly approved. | `QUARANTINE` | `QUARANTINE` | Not read-only: includes template upload, generated document creation/preview, local filesystem storage, `ContractTemplate`/`ContractGeneration` DB writes/reads, persisted `templateData`/file metadata, SharePoint upload, cleanup/delete behavior, and retention/privacy implications. Production apply readiness: blocked. CP-SCHEMA-1 readiness: blocked. Required before future `KEEP`: explicit storage model, SharePoint-only or approved storage policy, retention/delete policy, permission model, audit/privacy review, and targeted route tests. |
+| Temporary operational / database administration routes | Quarantine from production-compatible baseline. | Decide only after explicit admin-only hardening or removal plan. | `QUARANTINE` | `QUARANTINE` | `Backend/src/routes/migrate.ts` and `Backend/src/routes/dbcheck.ts` contain database check/sync and runtime `prisma db push` behavior; current `Backend/src/index.ts` does not register `/api/v1/migrate` or `/api/v1/dbcheck`, and `Backend/swagger.yaml` is absent. Production-compatible baseline must not depend on runtime migration/dbcheck/sync endpoints or broadly exposed temporary operational surfaces. Production apply readiness: blocked. CP-SCHEMA-1 readiness: blocked. Required before future `KEEP` or removal decision: explicit route inventory, admin-only auth/authorization decision, feature-flag or internal-only exposure decision, OpenAPI exposure decision, Azure/prod access model review, targeted route tests proving unauthenticated access is rejected, and separate runtime hardening PR if kept at all. |
 | Anonymous documents | Manual reconciliation. | Decide active anonymization persistence scope and required columns. | `UNKNOWN` |  | Table exists but Prisma-declared fields are partially absent. |
 | Rehydration fields | Manual reconciliation. | Decide whether persistent rehydration fields are production-required. | `UNKNOWN` |  | Missing fields on `anonymous_documents`; sensitive workflow, additive-only if brought forward. |
 | Client identity fields | Manual reconciliation. | Decide exact legal identity fields required in production. | `UNKNOWN` |  | Avoid historical migration DML/backfill assumptions. |
@@ -66,6 +67,7 @@ These require explicit human/product decision before any implementation planning
 - Whether production schema remains the active baseline source of truth.
 - Whether generation drafts are production-required.
 - Whether contracts/generated document templates may be kept only after explicit storage, retention/delete, permission, audit/privacy, SharePoint/local-storage, and route-test decisions.
+- Whether temporary operational/database administration routes should be removed or kept only after admin-only hardening, internal-only exposure, OpenAPI, Azure/prod access, and unauthenticated-rejection test decisions.
 - Whether anonymization and rehydration persistence should be remediated now.
 - Whether client identity, case client role, client color, workspace text, and collaborators are production-required and physically present.
 - Whether comparison snapshot persistence is required for current contract/document workflows.
