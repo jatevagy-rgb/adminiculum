@@ -1,72 +1,120 @@
 # Production-Compatible Baseline Human Decisions
 
-Final classification target: `production_compatible_baseline_human_decisions_documented_no_db_change_no_runtime_change`
+Final classification target: `production_baseline_human_decision_sheet_rollup_no_db_change_no_runtime_change`
 
-This is a short human/product decision sheet for the production-compatible schema baseline. It is not an implementation plan, migration plan, DB task, Azure task, runtime change, or Client Portal enablement step.
+This is the human/product decision sheet for the production-compatible baseline. It is a decision index only: it is not an implementation plan, migration plan, DB task, Azure task, runtime change, OpenAPI/CORS change, route change, test change, or Client Portal enablement step.
 
-## 1. Executive summary
+## 1. Purpose
 
-Production-compatible baseline work is blocked until feature-family decisions are recorded. The safest default is to keep production-present foundations, quarantine production-absent experimental/future families, and mark partial/drift families as unknown until targeted review proves whether they should be brought forward or quarantined.
+The current repository schema and historical migration chain do not safely represent the active production database as an apply-ready baseline. This sheet records which feature families are currently safe to treat as production-present, which must be quarantined from the production-compatible baseline, and which remain unknown until targeted evidence and human decisions exist.
 
-Production remains the practical source of truth for the active baseline unless humans explicitly decide that a feature family must be brought forward into production.
+This document intentionally keeps production apply blocked. It gives humans a concise place to make explicit `KEEP`, `QUARANTINE`, `REMOVE`, `BRING-FORWARD`, or `UNKNOWN` decisions before any future baseline implementation planning.
 
-## 2. How to use this decision sheet
+## 2. Current global status
 
-For each row, choose exactly one human decision:
+| Area | Status |
+| --- | --- |
+| Production apply readiness | `BLOCKED` |
+| CP-SCHEMA-1 readiness | `BLOCKED` |
+| DB apply performed by this decision series | No |
+| Runtime change performed by this decision series | No |
+| Schema or migration change authorized by this sheet | No |
+| Azure, OpenAPI, CORS, auth, route, frontend, or test behavior change authorized by this sheet | No |
+
+`KEEP` does not mean deploy or apply. It means the family is currently considered part of the intended production-compatible baseline, subject to later implementation planning and clone proof.
+
+`QUARANTINE` means the family is not part of the production-compatible baseline until it receives separate targeted review, human approval, clone proof where relevant, and a separate implementation PR for any runtime, schema, route, OpenAPI, test, Azure, or DB change.
+
+## 3. Decision vocabulary
 
 - `KEEP` — keep as part of the active production-compatible baseline because it is production-present and required.
-- `QUARANTINE` — exclude from the active baseline for now; reintroduce later through a clean, clone-proven migration if approved.
-- `REMOVE` — treat as obsolete and plan a separate repo/runtime cleanup. Do not use this unless product/engineering agrees.
-- `BRING-FORWARD` — production should be additively remediated to support this family, after fresh clone proof.
+- `QUARANTINE` — exclude from the active baseline for now; reintroduce only through separate reviewed and clone-proven work if approved.
+- `REMOVE` — treat as obsolete and plan separate repo/runtime cleanup; do not use without explicit product/engineering agreement.
+- `BRING-FORWARD` — production should be additively remediated to support this family after human approval and fresh clone proof.
 - `UNKNOWN` — not enough evidence; requires targeted review before implementation.
 
-Do not use this sheet to authorize DB mutation. It only records decisions needed before implementation planning.
+## 4. Default safe decisions
 
-## 3. Default conservative decision set
+### KEEP
 
-Default safe decisions if no human override is supplied:
+- Core baseline.
+- Lawyer handoff foundation.
+- Communication baseline / Outlook provider fields.
 
-- `KEEP`: core baseline, lawyer handoff foundation, communication baseline / Outlook provider fields.
-- `UNKNOWN`: workload tracking, anonymous documents, rehydration fields, client identity fields, case client role, case collaborators, comparison snapshot, client color, workspace text.
-- `QUARANTINE`: generation drafts, contracts / generated document templates, temporary operational / database administration routes, Client Portal / external client visibility boundary, document processing / anonymization / rehydration / AI privacy boundary, public OpenAPI / Power Apps connector / CORS exposure boundary, partial schema drift / code-compatibility leftovers, timesheet reports/artifacts/presets, legal analyses, client house style, document review, clause library, contract assembly.
-- `QUARANTINE` / future-blocked: CP-SCHEMA-1 / Client Portal foundation.
-- `UNKNOWN`: DB-only rolled-back kb/learning/escalation migration.
+### QUARANTINE
 
-## 4. Feature-family decision table
+- Generation drafts.
+- Contracts / generated document templates.
+- Temporary operational / database administration routes.
+- Client Portal / external client visibility boundary.
+- Document processing / anonymization / rehydration / AI privacy boundary.
+- Public OpenAPI / Power Apps connector / CORS exposure boundary.
+- Partial schema drift / code-compatibility leftovers.
+- Timesheet reports / artifacts / presets.
+- Legal analyses.
+- Client house style.
+- Document review persistence.
+- Clause library.
+- Contract assembly.
+- CP-SCHEMA-1 / Client Portal foundation.
 
-| Feature family | Current recommendation | Decision needed | Default safe decision | Human decision: KEEP / QUARANTINE / REMOVE / BRING-FORWARD / UNKNOWN | Notes |
-| --- | --- | --- | --- | --- | --- |
-| Core baseline | Keep in active baseline. | Confirm production DB remains source of truth for core product objects. | `KEEP` |  | Clients, users, cases, tasks, documents, and current core workflow objects are production-present and required. |
-| Lawyer handoff foundation | Keep in active baseline. | Confirm handoff foundation remains production-supported. | `KEEP` |  | Production migration is finished and feature has deployed foundation. |
-| Communication baseline / Outlook provider fields | Keep in active baseline. | Confirm communications and provider metadata remain production-supported. | `KEEP` |  | Communication baseline and Outlook provider schema are production-applied; Outlook import remains separately gate-off. |
-| Workload tracking | Manual reconciliation. | Decide whether finished workload migration row and physical objects are authoritative. | `UNKNOWN` |  | Migration history has rolled-back and later finished rows; do not replay blindly. |
-| Generation drafts | Quarantine unless product requires now. | Decide whether persistent generation drafts are production scope. | `QUARANTINE` |  | `generation_drafts` absent from production; route/UI references need guard review if quarantined. |
-| Contracts / generated document templates | Quarantine from production-compatible baseline. | Decide only after storage, retention, permission, audit, and privacy model are explicitly approved. | `QUARANTINE` | `QUARANTINE` | Not read-only: includes template upload, generated document creation/preview, local filesystem storage, `ContractTemplate`/`ContractGeneration` DB writes/reads, persisted `templateData`/file metadata, SharePoint upload, cleanup/delete behavior, and retention/privacy implications. Production apply readiness: blocked. CP-SCHEMA-1 readiness: blocked. Required before future `KEEP`: explicit storage model, SharePoint-only or approved storage policy, retention/delete policy, permission model, audit/privacy review, and targeted route tests. |
-| Temporary operational / database administration routes | Quarantine from production-compatible baseline. | Decide only after explicit admin-only hardening or removal plan. | `QUARANTINE` | `QUARANTINE` | `Backend/src/routes/migrate.ts` and `Backend/src/routes/dbcheck.ts` contain database check/sync and runtime `prisma db push` behavior; current `Backend/src/index.ts` does not register `/api/v1/migrate` or `/api/v1/dbcheck`, and `Backend/swagger.yaml` is absent. Production-compatible baseline must not depend on runtime migration/dbcheck/sync endpoints or broadly exposed temporary operational surfaces. Production apply readiness: blocked. CP-SCHEMA-1 readiness: blocked. Required before future `KEEP` or removal decision: explicit route inventory, admin-only auth/authorization decision, feature-flag or internal-only exposure decision, OpenAPI exposure decision, Azure/prod access model review, targeted route tests proving unauthenticated access is rejected, and separate runtime hardening PR if kept at all. |
-| Client Portal / external client visibility boundary | Quarantine from production-compatible baseline. | Decide only after external identity, ownership, and need-to-know model are explicit. | `QUARANTINE` | `QUARANTINE` | `/api/v1/client-portal` is registered but currently gate-off by `ENABLE_CLIENT_PORTAL` with `CLIENT_PORTAL_NOT_ENABLED`. Adjacent matter/time-entry surfaces include clientId/path/query based access and matter/time-entry data that could become externally sensitive if reused for clients; `Backend/src/routes/matters.ts` exposes matter and time-summary data without the standard `authenticate` middleware, while `Backend/src/routes/timeEntries.ts` is authenticated internal API. External client visibility requires separated internal/external mappers before any `KEEP`. Production apply readiness: blocked. CP-SCHEMA-1 readiness: blocked. Required before future `KEEP`: explicit client-user identity and ownership model, need-to-know authorization per client/matter/document/time-entry, strict internal/external field mapper, no raw internal comments/timeline/audit leakage, feature-flag behavior documented and tested, spoofed clientId/path access rejected, OpenAPI exposure decision, targeted unauthenticated/wrong-client/disabled-portal tests, and privacy/GDPR review. |
-| Document processing / anonymization / rehydration / AI privacy boundary | Quarantine from production-compatible baseline. | Decide only after document privacy, storage, retention, AI/provider, and authorization model are explicitly approved. | `QUARANTINE` | `QUARANTINE` | Document and AI flows may process privileged legal content and personal data. Current surfaces include SharePoint-backed document upload/download/text extraction, document compare/review routes, anonymization and rehydration endpoints, external AI-response import, review-suggestion persistence, legal-analysis text storage, prompt/customPrompt handling, persisted `contentText`/`contentBase64`/`redactedItems`/`aiResponseText`/`rehydratedContent`/`selectedTextPreview` fields, timeline logging, and OpenAPI document/anonymization references. Production apply readiness: blocked. CP-SCHEMA-1 readiness: blocked. Required before future `KEEP`: explicit document storage model, approved AI/provider data-processing policy, anonymization and rehydration threat model, no raw privileged/legal/personal content in audit logs unless explicitly approved, retention/delete policy for originals/redacted copies/generated outputs/prompts/responses, strict case/document permission model, internal/external field separation where relevant, OpenAPI exposure decision, targeted unauthenticated/wrong-case/wrong-document/disabled-flag/privacy-safe response tests, and GDPR/legal professional secrecy review. |
-| Public OpenAPI / Power Apps connector / CORS exposure boundary | Quarantine from production-compatible baseline. | Decide only after API metadata, connector, and browser-origin exposure model are explicit. | `QUARANTINE` | `QUARANTINE` | `Backend/src/index.ts` serves unauthenticated OpenAPI JSON at `/api/v1/openapi.json` and `/openapi.json` and rewrites `servers` from `WEBSITE_HOSTNAME`. Runtime spec resolution falls back to `powerapps-swagger2-runtime-aligned.yaml`, `swagger2.yaml`, and `swagger.yaml`; tracked root Power Apps/OpenAPI artifacts also exist. CORS allows no-origin requests, allows all origins in non-production, and production depends on `CORS_ALLOWED_ORIGINS`/`FRONTEND_ORIGIN`/`FRONTEND_URL`. Current OpenAPI material includes document generation/upload/redact and may be stale/wider-than-runtime relative to quarantined families. Production-compatible baseline must not treat public unauthenticated API metadata, Power Apps connector exposure, permissive CORS behavior, or wider-than-runtime/stale OpenAPI routes as safe without explicit exposure model. Production apply readiness: blocked. CP-SCHEMA-1 readiness: blocked. Required before future `KEEP`: decide whether OpenAPI JSON is public/authenticated/admin-only/disabled in production, runtime route inventory proving spec parity, removal or labeling of stale/future/ghost paths, production-domain CORS allowlist model, Azure hostname/domain review, Power Apps connector threat model, confirmation quarantined families are not presented as production-ready connector operations, targeted OpenAPI/CORS tests, and security/privacy review. |
-| Partial schema drift / code-compatibility leftovers | Quarantine from production-compatible baseline. | Decide each drift item separately as active production, future feature, dead code, or remediation candidate. | `QUARANTINE` | `QUARANTINE` | Partial/drift schema families and code-compatibility leftovers must not be silently included in the production-compatible baseline. Known evidence includes partial `case_collaborators` uncertainty, `anonymous_documents` missing `redactedItems`/AI/rehydration fields, `contract_generations` missing `comparisonSnapshot`/SharePoint/revision fields, `GenerationStatus` enum drift where production lacks `APPROVED`/`REJECTED`, and production-absent/runtime-referenced or future-oriented families such as `generation_drafts`, `legal_analyses`, comparison snapshot, client house style, clause library/contract assembly, and timesheet reports/artifacts/presets. Production apply readiness: blocked. CP-SCHEMA-1 readiness: blocked. Required before future `KEEP`/`REMOVE`/`BRING-FORWARD`: explicit inventory of each partial/drift family, production physical schema comparison, runtime usage review, OpenAPI exposure review where applicable, decision whether each item is active production/future/dead-code/schema-drift, migration strategy only after baseline is stable, targeted tests for kept items, and separate implementation PR for any schema/runtime change. |
-| Anonymous documents | Manual reconciliation. | Decide active anonymization persistence scope and required columns. | `UNKNOWN` |  | Table exists but Prisma-declared fields are partially absent. |
-| Rehydration fields | Manual reconciliation. | Decide whether persistent rehydration fields are production-required. | `UNKNOWN` |  | Missing fields on `anonymous_documents`; sensitive workflow, additive-only if brought forward. |
-| Client identity fields | Manual reconciliation. | Decide exact legal identity fields required in production. | `UNKNOWN` |  | Avoid historical migration DML/backfill assumptions. |
-| Case client role | Manual reconciliation, likely bring forward if active. | Decide whether `clientRole` is active production matter context. | `UNKNOWN` |  | Potentially low-risk additive field, but still requires proof. |
-| Client color | Keep if physical proof is confirmed. | Confirm column presence and runtime need. | `UNKNOWN` |  | Prior evidence suggested production representation; needs final parser-independent proof. |
-| Case collaborators | Manual reconciliation, likely keep if active. | Decide whether collaborator workflow is production-required. | `UNKNOWN` |  | Partial evidence; table/index/FK completeness must be proven. |
-| Comparison snapshot | Bring forward only if current workflow requires it. | Decide whether comparison snapshots are production-required. | `UNKNOWN` |  | Missing on `contract_generations`; clone-proven additive column if kept. |
-| Timesheet reports / artifacts / presets | Quarantine unless explicitly approved now. | Decide whether persistent timesheet reports are production scope. | `QUARANTINE` |  | Tables/enums absent; likely separate future feature-family migration. |
-| Legal analyses | Quarantine unless explicitly active. | Decide whether legal analyses are production work product now. | `QUARANTINE` |  | Sensitive work-product tables absent; governance needed before bring-forward. |
-| Client house style | Quarantine unless explicitly production scope. | Decide whether house style profiles are production-supported now. | `QUARANTINE` |  | Tables/fields absent; UI references need guard review if quarantined. |
-| Workspace text | Keep if physical proof is confirmed. | Confirm column/object presence and current workflow need. | `UNKNOWN` |  | Prior evidence suggested representation; do not replay old migration blindly. |
-| Document review | Quarantine unless DB-backed review suggestions are approved. | Decide whether persisted review suggestions are production scope. | `QUARANTINE` |  | Avoid fake automated review or unsupported review persistence claims. |
-| Clause library | Quarantine unless product-approved now. | Decide whether `/clause-library` requires DB-backed production support. | `QUARANTINE` |  | If approved, reintroduce through clean feature migration. |
-| Contract assembly | Quarantine unless clause library is approved. | Decide whether assembly drafts/clauses are production scope. | `QUARANTINE` |  | Depends on clause library baseline; do not bring forward independently. |
-| CP-SCHEMA-1 / Client Portal foundation | Future-blocked, exclude from baseline. | Decide only after baseline is stable. | `QUARANTINE` |  | No existing data becomes client-visible; Client Portal runtime remains off. |
-| DB-only rolled-back kb/learning/escalation migration | Treat as historical artifact unless product says otherwise. | Decide whether it is abandoned, archived, or needs future design. | `UNKNOWN` |  | DB row is rolled back, local migration is missing, and object checks found no active objects. |
+### UNKNOWN
 
-## 5. Items that must not be decided automatically
+- Workload tracking.
+- Anonymous documents.
+- Rehydration fields.
+- Client identity fields.
+- Case client role.
+- Client color.
+- Case collaborators.
+- Comparison snapshot.
+- Workspace text.
+- DB-only rolled-back kb/learning/escalation migration.
 
-These require explicit human/product decision before any implementation planning:
+## 5. Decision matrix
+
+| Feature family | Current decision | Production/apply posture | Required before any future change |
+| --- | --- | --- | --- |
+| Core baseline | `KEEP` | Production-present foundations such as clients, users, cases, tasks, documents, and core workflow objects remain the practical baseline. | Confirm production DB remains the source of truth during baseline implementation planning. |
+| Lawyer handoff foundation | `KEEP` | Production migration is finished and the deployed foundation is part of the active baseline. | Preserve as production-supported unless a later targeted audit contradicts this. |
+| Communication baseline / Outlook provider fields | `KEEP` | Communication baseline and Outlook provider schema are production-applied; Outlook import remains separately gate-off. | Preserve existing gates and do not infer live Outlook/Graph sync. |
+| Workload tracking | `UNKNOWN` | Migration history has rolled-back and later finished rows; do not replay blindly. | Decide whether finished migration row and physical objects are authoritative. |
+| Generation drafts | `QUARANTINE` | `generation_drafts` is production-absent and must not be silently included. | Product decision, runtime guard review, and separate clone-proven migration if brought forward. |
+| Contracts / generated document templates | `QUARANTINE` | Not read-only; includes template upload, generated document creation/preview, local filesystem storage, `ContractTemplate`/`ContractGeneration` DB reads/writes, persisted `templateData`/file metadata, SharePoint upload, cleanup/delete behavior, and retention/privacy implications. | Explicit storage model, SharePoint-only or approved storage policy, retention/delete policy, permission model, audit/privacy review, and targeted route tests. |
+| Temporary operational / database administration routes | `QUARANTINE` | Runtime migration/dbcheck/sync endpoints and broadly exposed operational surfaces are not product baseline features. `Backend/src/routes/migrate.ts` and `Backend/src/routes/dbcheck.ts` contain database check/sync and runtime `prisma db push` behavior; current `Backend/src/index.ts` does not register `/api/v1/migrate` or `/api/v1/dbcheck`. | Explicit route inventory, admin-only auth/authorization decision, feature-flag or internal-only exposure decision, OpenAPI exposure decision, Azure/prod access review, unauthenticated-rejection tests, and separate hardening/removal PR. |
+| Client Portal / external client visibility boundary | `QUARANTINE` | `/api/v1/client-portal` is gate-off by `ENABLE_CLIENT_PORTAL` with `CLIENT_PORTAL_NOT_ENABLED`. Adjacent matter/time-entry surfaces include clientId/path/query based access and matter/time-entry data that could become externally sensitive if reused for clients. | Explicit client-user identity and ownership model, need-to-know authorization per client/matter/document/time-entry, strict internal/external mapper, no raw internal comments/timeline/audit leakage, feature-flag tests, spoofed clientId/path rejection, OpenAPI exposure decision, and privacy/GDPR review. |
+| Document processing / anonymization / rehydration / AI privacy boundary | `QUARANTINE` | Document and AI flows may process privileged legal content and personal data, including upload/download/text extraction, compare/review, anonymization/rehydration, external AI-response import, review-suggestion persistence, legal-analysis text storage, prompts, persisted outputs, timeline logging, and OpenAPI document/anonymization references. | Explicit document storage model, approved AI/provider data-processing policy, anonymization and rehydration threat model, no raw privileged/legal/personal content in logs unless approved, retention/delete policy, strict case/document permissions, internal/external field separation, OpenAPI exposure decision, targeted route tests, and GDPR/legal professional secrecy review. |
+| Public OpenAPI / Power Apps connector / CORS exposure boundary | `QUARANTINE` | Public unauthenticated API metadata, Power Apps connector exposure, permissive CORS behavior, or wider-than-runtime/stale OpenAPI paths must not be treated as safe baseline. `Backend/src/index.ts` serves unauthenticated OpenAPI JSON at `/api/v1/openapi.json` and `/openapi.json` and rewrites servers from `WEBSITE_HOSTNAME`; current OpenAPI material may include quarantined document generation/upload/redact surfaces. | Decide whether OpenAPI JSON is public/authenticated/admin-only/disabled, prove runtime/spec parity, remove or label stale/future/ghost paths, define production-domain CORS allowlist, review Azure hostname/domain and Power Apps connector threat model, and test OpenAPI/CORS exposure. |
+| Partial schema drift / code-compatibility leftovers | `QUARANTINE` | Partial/drift schema families and code-compatibility leftovers must not be silently included. Known evidence includes partial `case_collaborators` uncertainty, `anonymous_documents` missing `redactedItems`/AI/rehydration fields, `contract_generations` missing `comparisonSnapshot`/SharePoint/revision fields, `GenerationStatus` enum drift where production lacks `APPROVED`/`REJECTED`, and production-absent/runtime-referenced or future-oriented families. | Explicit inventory of each partial/drift family, production physical schema comparison, runtime usage review, OpenAPI exposure review where applicable, human decision whether each item is active production/future/dead-code/schema-drift, migration strategy only after baseline stability, targeted tests for kept items, and separate implementation PR for any schema/runtime change. |
+| Anonymous documents | `UNKNOWN` | Table exists but Prisma-declared fields are partially absent. | Decide active anonymization persistence scope and required columns. |
+| Rehydration fields | `UNKNOWN` | Missing fields on `anonymous_documents`; sensitive workflow. | Decide whether persistent rehydration fields are production-required and prove additive path if brought forward. |
+| Client identity fields | `UNKNOWN` | Historical migration DML/backfill assumptions must not be reused blindly. | Decide exact legal identity fields required in production. |
+| Case client role | `UNKNOWN` | Potentially low-risk additive field, but still requires proof. | Decide whether `clientRole` is active production matter context. |
+| Client color | `UNKNOWN` | Prior evidence suggested production representation, but final parser-independent proof is still required. | Confirm column presence and runtime need. |
+| Case collaborators | `UNKNOWN` | Partial evidence; table/index/FK completeness must be proven. | Decide whether collaborator workflow is production-required. |
+| Comparison snapshot | `UNKNOWN` | Missing on `contract_generations`; may be clone-proven additive if kept. | Decide whether comparison snapshots are production-required for current workflows. |
+| Timesheet reports / artifacts / presets | `QUARANTINE` | Tables/enums are absent and likely belong to a separate future feature-family migration. | Product approval, privacy/reporting scope, and clone-proven separate migration if brought forward. |
+| Legal analyses | `QUARANTINE` | Sensitive work-product tables are absent. | Governance and privacy decision before any bring-forward. |
+| Client house style | `QUARANTINE` | Tables/fields are absent; UI references need guard review if quarantined. | Product decision and separate feature migration if approved. |
+| Workspace text | `UNKNOWN` | Prior evidence suggested representation; do not replay old migration blindly. | Confirm physical presence and current workflow need. |
+| Document review | `QUARANTINE` | Persisted review suggestions are not baseline until explicitly approved; avoid fake automated review or unsupported review persistence claims. | Product/privacy decision and targeted tests before any DB-backed review persistence. |
+| Clause library | `QUARANTINE` | `/clause-library` DB-backed production support is not baseline. | Product approval and clean feature migration if approved. |
+| Contract assembly | `QUARANTINE` | Depends on clause library baseline and must not be brought forward independently. | Approve clause library first, then separately decide assembly drafts/clauses. |
+| CP-SCHEMA-1 / Client Portal foundation | `QUARANTINE` | Future-blocked and excluded from baseline; Client Portal runtime remains off and no existing data becomes client-visible. | Resume only after production-compatible baseline/remediation is stable and a fresh clone proof shows CP as the intentionally next migration. |
+| DB-only rolled-back kb/learning/escalation migration | `UNKNOWN` | DB row is rolled back, local migration is missing, and object checks found no active objects. | Decide whether it is abandoned historical state, archived context, or future design work. |
+
+## 6. Current blockers
+
+- Production apply remains blocked.
+- CP-SCHEMA-1 remains blocked.
+- Normal `prisma migrate deploy` remains unsafe while production migration history diverges from local migration history.
+- Blanket `prisma migrate resolve --applied` remains unsafe because several local migration effects are absent, partial, or not proven physically present.
+- Quarantined families must not be treated as production-ready by schema, runtime, OpenAPI, docs, or deployment workflows.
+- Unknown families require targeted evidence and human decisions before implementation planning.
+
+## 7. Future decision requirements
+
+These items must not be decided automatically:
 
 - Whether production schema remains the active baseline source of truth.
 - Whether generation drafts are production-required.
@@ -83,7 +131,7 @@ These require explicit human/product decision before any implementation planning
 - Whether the rolled-back DB-only kb/learning/escalation migration is abandoned historical state.
 - When CP-SCHEMA-1 may resume as a separate future migration chain.
 
-## 6. Explicit non-actions
+## 8. Explicit non-actions
 
 This decision sheet does not authorize:
 
@@ -93,19 +141,26 @@ This decision sheet does not authorize:
 - schema edits;
 - migration file edits, moves, deletes, renames, or archives;
 - runtime code changes;
+- route behavior changes;
+- OpenAPI or CORS behavior changes;
+- auth changes;
+- frontend changes;
+- test behavior changes;
 - deployment;
 - Client Portal enablement;
 - public route creation;
 - exposing existing data to clients;
 - committing raw snapshot artifacts or secrets.
 
-## 7. Next step after human decisions
+Any future `KEEP`, `REMOVE`, or `BRING-FORWARD` decision that changes runtime, schema, routes, OpenAPI, tests, Azure, or DB state requires a separate implementation PR.
 
-After the human decision column is filled, the next recommended task is:
+## 9. Next step after human decisions
+
+After human decisions are filled for the remaining `UNKNOWN` and quarantined high-risk families, the next recommended task is:
 
 `Adminiculum — production-compatible schema baseline implementation planning`
 
-That task should still be docs/planning-first and should remain blocked from DB mutation until:
+That task should still be docs/planning-first and remain blocked from DB mutation until:
 
 - feature-family decisions are recorded;
 - quarantined runtime surfaces have a guard/reduction plan;
@@ -113,6 +168,6 @@ That task should still be docs/planning-first and should remain blocked from DB 
 - the proposed baseline implementation shape is reviewed;
 - clone proof succeeds without data exposure or Client Portal enablement.
 
-## 8. Final classification
+## 10. Final classification
 
-`production_compatible_baseline_human_decisions_documented_no_db_change_no_runtime_change`
+`production_baseline_human_decision_sheet_rollup_no_db_change_no_runtime_change`
