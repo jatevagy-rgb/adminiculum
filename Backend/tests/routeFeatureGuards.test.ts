@@ -268,7 +268,7 @@ describe('database foundation route guards', () => {
       status: 501,
       code: 'FEATURE_NOT_AVAILABLE',
       feature: 'DOCUMENT_REVIEW_SUGGESTIONS',
-      reason: 'DATABASE_FOUNDATION_NOT_DEPLOYED',
+      reason: 'DOCUMENT_AI_NOT_ENABLED',
     });
     expect(JSON.stringify(response.body).toLowerCase()).not.toContain('prisma');
   });
@@ -663,11 +663,11 @@ describe('database foundation route guards', () => {
   });
 
   it.each([
-    ['GET', '/clause-library/clauses', 'CLAUSE_LIBRARY'],
-    ['GET', '/communications/communication-1', 'COMMUNICATIONS'],
-    ['GET', '/documents/document-1/legal-analyses', 'LEGAL_ANALYSES'],
-    ['GET', '/contracts/generation-1/review-notes', 'CONTRACT_REVIEW_NOTES'],
-  ])('guards %s %s without leaking Prisma errors', async (method, path, feature) => {
+    ['GET', '/clause-library/clauses', 'CLAUSE_LIBRARY', 'DATABASE_FOUNDATION_NOT_DEPLOYED'],
+    ['GET', '/communications/communication-1', 'COMMUNICATIONS', 'DATABASE_FOUNDATION_NOT_DEPLOYED'],
+    ['GET', '/documents/document-1/legal-analyses', 'LEGAL_ANALYSES', 'DOCUMENT_AI_NOT_ENABLED'],
+    ['GET', '/contracts/generation-1/review-notes', 'CONTRACT_REVIEW_NOTES', 'DATABASE_FOUNDATION_NOT_DEPLOYED'],
+  ])('guards %s %s without leaking Prisma errors', async (method, path, feature, reason) => {
     const response = await requestJson(createApp(), method, path);
 
     expect(response.status).toBe(501);
@@ -675,7 +675,7 @@ describe('database foundation route guards', () => {
       status: 501,
       code: 'FEATURE_NOT_AVAILABLE',
       feature,
-      reason: 'DATABASE_FOUNDATION_NOT_DEPLOYED',
+      reason,
     });
     expect(JSON.stringify(response.body).toLowerCase()).not.toContain('prisma');
   });

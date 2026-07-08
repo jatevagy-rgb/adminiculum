@@ -14,9 +14,13 @@ import {
 const router = Router({ mergeParams: true });
 const requireReviewSuggestionFoundation = requireDatabaseFoundation({
   feature: 'DOCUMENT_REVIEW_SUGGESTIONS',
-  enabled: () => isDatabaseFoundationEnabled('ENABLE_DOCUMENT_REVIEW_SUGGESTIONS'),
+  enabled: () =>
+    isDatabaseFoundationEnabled('ENABLE_DOCUMENT_REVIEW_SUGGESTIONS') &&
+    isDatabaseFoundationEnabled('ENABLE_DOCUMENT_AI_PRIVACY_MODEL'),
   message: 'Document review suggestion persistence is not available in this environment.',
-  nextStep: 'Complete BP3A database reconciliation before enabling this feature.',
+  reason: 'DOCUMENT_AI_NOT_ENABLED',
+  nextStep:
+    'Document review suggestions require an approved privacy, storage, permission, and audit model before they can be enabled.',
 });
 
 const getAuthorId = (req: Request): string | null =>

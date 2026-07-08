@@ -2,31 +2,43 @@
 // ANONYMIZE ROUTES - Dokumentum anonimizálás endpointok
 // ============================================================================
 
-import { Router, Request, Response } from 'express';
-import anonymizeService from './services.js';
-import { authenticate } from '../../middleware/auth.js';
+import { Router, Request, Response, NextFunction } from 'express';
+import anonymizeService from './services';
+import { authenticate } from '../../middleware/auth';
+import { isDatabaseFoundationEnabled, sendFeatureUnavailable } from '../../middleware/featureAvailability';
 
 const router = Router();
 
 // ============================================================================
 // FEATURE FLAG GUARD — AI Anonymization
 // ============================================================================
-const isAnonymizeEnabled = process.env.ENABLE_AI_ANONYMIZATION === 'true';
+const isAnonymizeEnabled = (): boolean =>
+  isDatabaseFoundationEnabled('ENABLE_AI_ANONYMIZATION') &&
+  isDatabaseFoundationEnabled('ENABLE_DOCUMENT_AI_PRIVACY_MODEL');
 
-function requireAnonymizeEnabled(req: Request, res: Response, next: () => void) {
-  if (!isAnonymizeEnabled) {
-    return res.status(501).json({
-      error: 'Not Implemented',
-      message: 'AI Anonymization feature is disabled. Set ENABLE_AI_ANONYMIZATION=true to enable.',
+function requireAnonymizeEnabled(_req: Request, res: Response, next: NextFunction): void {
+  if (!isAnonymizeEnabled()) {
+    sendFeatureUnavailable(res, {
+      feature: 'DOCUMENT_AI',
+      message: 'Document AI, anonymization, and rehydration are not available in this environment.',
+      reason: 'DOCUMENT_AI_NOT_ENABLED',
+      nextStep:
+        'Document AI requires an approved privacy, storage, retention, permission, external-processing, and audit model before it can be enabled.',
     });
+    return;
   }
   next();
 }
 
+router.use('/documents/:documentId/anonymize', authenticate, requireAnonymizeEnabled);
+router.use('/documents/:documentId/anonymization-source', authenticate, requireAnonymizeEnabled);
+router.use('/clients/:clientId/redaction-profile', authenticate, requireAnonymizeEnabled);
+router.use('/anonymous-documents', authenticate, requireAnonymizeEnabled);
+
 // ============================================================================
 // POST /api/v1/documents/:documentId/anonymize
 // ============================================================================
-router.post('/documents/:documentId/anonymize', authenticate, requireAnonymizeEnabled, async (req: Request, res: Response) => {
+router.post('/documents/:documentId/anonymize', async (req: Request, res: Response) => {
   try {
     const documentIdParam = req.params.documentId;
     const documentId = Array.isArray(documentIdParam) ? documentIdParam[0] : documentIdParam;
@@ -65,7 +77,7 @@ router.post('/documents/:documentId/anonymize', authenticate, requireAnonymizeEn
 // ============================================================================
 // GET /api/v1/documents/:documentId/anonymization-source
 // ============================================================================
-router.get('/documents/:documentId/anonymization-source', authenticate, requireAnonymizeEnabled, async (req: Request, res: Response) => {
+router.get('/documents/:documentId/anonymization-source', async (req: Request, res: Response) => {
   try {
     const documentIdParam = req.params.documentId;
     const documentId = Array.isArray(documentIdParam) ? documentIdParam[0] : documentIdParam;
@@ -85,7 +97,7 @@ router.get('/documents/:documentId/anonymization-source', authenticate, requireA
 // ============================================================================
 // GET /api/v1/clients/:clientId/redaction-profile
 // ============================================================================
-router.get('/clients/:clientId/redaction-profile', authenticate, requireAnonymizeEnabled, async (req: Request, res: Response) => {
+router.get('/clients/:clientId/redaction-profile', async (req: Request, res: Response) => {
   try {
     const clientIdParam = req.params.clientId;
     const clientId = Array.isArray(clientIdParam) ? clientIdParam[0] : clientIdParam;
@@ -102,7 +114,7 @@ router.get('/clients/:clientId/redaction-profile', authenticate, requireAnonymiz
 // ============================================================================
 // POST /api/v1/clients/:clientId/redaction-profile
 // ============================================================================
-router.post('/clients/:clientId/redaction-profile', authenticate, requireAnonymizeEnabled, async (req: Request, res: Response) => {
+router.post('/clients/:clientId/redaction-profile', async (req: Request, res: Response) => {
   try {
     const clientIdParam = req.params.clientId;
     const clientId = Array.isArray(clientIdParam) ? clientIdParam[0] : clientIdParam;
@@ -130,7 +142,7 @@ router.post('/clients/:clientId/redaction-profile', authenticate, requireAnonymi
 // ============================================================================
 // GET /api/v1/anonymous-documents/:id
 // ============================================================================
-router.get('/anonymous-documents/:id', authenticate, requireAnonymizeEnabled, async (req: Request, res: Response) => {
+router.get('/anonymous-documents/:id', async (req: Request, res: Response) => {
   try {
     const idParam = req.params.id;
     const id = Array.isArray(idParam) ? idParam[0] : idParam;
@@ -152,7 +164,7 @@ router.get('/anonymous-documents/:id', authenticate, requireAnonymizeEnabled, as
 // POST /api/v1/anonymous-documents/:id/import-ai-response
 // ============================================================================
 // Import external AI response and rehydrate the anonymized content
-router.post('/anonymous-documents/:id/import-ai-response', authenticate, requireAnonymizeEnabled, async (req: Request, res: Response) => {
+router.post('/anonymous-documents/:id/import-ai-response', async (req: Request, res: Response) => {
   try {
     const idParam = req.params.id;
     const id = Array.isArray(idParam) ? idParam[0] : idParam;
@@ -198,7 +210,7 @@ router.post('/anonymous-documents/:id/import-ai-response', authenticate, require
 // POST /api/v1/anonymous-documents/:id/save-as-document
 // ============================================================================
 // Save rehydrated result as a reviewable Document
-router.post('/anonymous-documents/:id/save-as-document', authenticate, requireAnonymizeEnabled, async (req: Request, res: Response) => {
+router.post('/anonymous-documents/:id/save-as-document', async (req: Request, res: Response) => {
   try {
     const idParam = req.params.id;
     const id = Array.isArray(idParam) ? idParam[0] : idParam;
@@ -233,7 +245,7 @@ router.post('/anonymous-documents/:id/save-as-document', authenticate, requireAn
 // ============================================================================
 // List anonymized documents for a source document, newest first.
 // Returns redactedText and redactedItems so the workspace can load AI-ready text.
-router.get('/anonymous-documents/by-source/:sourceDocumentId', authenticate, requireAnonymizeEnabled, async (req: Request, res: Response) => {
+router.get('/anonymous-documents/by-source/:sourceDocumentId', async (req: Request, res: Response) => {
   try {
     const sourceDocIdParam = req.params.sourceDocumentId;
     const sourceDocumentId = Array.isArray(sourceDocIdParam) ? sourceDocIdParam[0] : sourceDocIdParam;
@@ -270,7 +282,7 @@ router.get('/anonymous-documents/by-source/:sourceDocumentId', authenticate, req
 // GET /api/v1/anonymous-documents?caseId=xxx
 // ============================================================================
 // List anonymous documents for a case
-router.get('/anonymous-documents', authenticate, requireAnonymizeEnabled, async (req: Request, res: Response) => {
+router.get('/anonymous-documents', async (req: Request, res: Response) => {
   try {
     const { caseId, sourceDocId } = req.query;
     

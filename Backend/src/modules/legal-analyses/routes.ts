@@ -12,9 +12,13 @@ import {
 const router = Router();
 const requireLegalAnalysisFoundation = requireDatabaseFoundation({
   feature: 'LEGAL_ANALYSES',
-  enabled: () => isDatabaseFoundationEnabled('ENABLE_LEGAL_ANALYSES'),
+  enabled: () =>
+    isDatabaseFoundationEnabled('ENABLE_LEGAL_ANALYSES') &&
+    isDatabaseFoundationEnabled('ENABLE_DOCUMENT_AI_PRIVACY_MODEL'),
   message: 'Legal analysis persistence is not available in this environment.',
-  nextStep: 'Complete the legal analysis database reconciliation before enabling this feature.',
+  reason: 'DOCUMENT_AI_NOT_ENABLED',
+  nextStep:
+    'Legal analyses require an approved privacy, external-processing, storage, permission, and audit model before they can be enabled.',
 });
 
 function getUserId(req: Request): string | undefined {

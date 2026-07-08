@@ -3,15 +3,33 @@
  * Document management with SharePoint integration
  */
 
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { Prisma } from '@prisma/client';
 import documentsService from './services';
 import { extractText } from './textExtractor';
 import reviewSuggestionsRoutes from './reviewSuggestions.routes';
 import { authenticate } from '../../middleware/auth';
 import { prisma } from '../../prisma/prisma.service';
+import { isDatabaseFoundationEnabled, sendFeatureUnavailable } from '../../middleware/featureAvailability';
 
 const router = Router();
+const isDocumentProcessingEnabled = (): boolean =>
+  isDatabaseFoundationEnabled('ENABLE_DOCUMENT_PROCESSING') &&
+  isDatabaseFoundationEnabled('ENABLE_DOCUMENT_AI_PRIVACY_MODEL');
+
+const requireDocumentProcessingEnabled = (_req: Request, res: Response, next: NextFunction): void => {
+  if (!isDocumentProcessingEnabled()) {
+    sendFeatureUnavailable(res, {
+      feature: 'DOCUMENT_AI',
+      message: 'Document processing and AI/privacy-sensitive document operations are not available in this environment.',
+      reason: 'DOCUMENT_AI_NOT_ENABLED',
+      nextStep:
+        'Document processing requires an approved storage, retention, permission, external-processing, and audit model before it can be enabled.',
+    });
+    return;
+  }
+  next();
+};
 
 router.use('/:documentId/review-suggestions', reviewSuggestionsRoutes);
 
@@ -46,7 +64,7 @@ router.get('/search', authenticate, async (req: Request, res: Response): Promise
  * POST /api/v1/documents
  * Upload new document
  */
-router.post('/', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/', authenticate, requireDocumentProcessingEnabled, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const { caseId, fileName, documentType, folder } = req.body;
@@ -200,7 +218,7 @@ router.get('/:id', authenticate, async (req: Request, res: Response): Promise<vo
  * GET /api/v1/documents/:id/text
  * Extract readable text from the real SharePoint-backed document when available.
  */
-router.get('/:id/text', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/text', authenticate, requireDocumentProcessingEnabled, async (req: Request, res: Response): Promise<void> => {
   try {
 const { id } = req.params as { id: string };
     const document = await prisma.document.findUnique({ where: { id } });
@@ -272,7 +290,7 @@ const { id } = req.params as { id: string };
  * POST /api/v1/documents/:id/version
  * Upload new version
  */
-router.post('/:id/version', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/version', authenticate, requireDocumentProcessingEnabled, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const { fileContent, comment } = req.body;
@@ -332,7 +350,7 @@ router.post('/:id/version', authenticate, async (req: Request, res: Response): P
  * POST /api/v1/documents/:id/submit-review
  * Submit document for review
  */
-router.post('/:id/submit-review', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/submit-review', authenticate, requireDocumentProcessingEnabled, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const { id } = req.params as { id: string };
@@ -362,7 +380,7 @@ router.post('/:id/submit-review', authenticate, async (req: Request, res: Respon
  * POST /api/v1/documents/:id/approve
  * Approve document
  */
-router.post('/:id/approve', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/approve', authenticate, requireDocumentProcessingEnabled, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const { comment } = req.body;
@@ -393,7 +411,7 @@ router.post('/:id/approve', authenticate, async (req: Request, res: Response): P
  * POST /api/v1/documents/:id/reject
  * Reject document
  */
-router.post('/:id/reject', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/reject', authenticate, requireDocumentProcessingEnabled, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const { reason } = req.body;
@@ -435,7 +453,7 @@ router.post('/:id/reject', authenticate, async (req: Request, res: Response): Pr
  * Save the workspace editor's draft text as a new "modified working copy" document.
  * Does NOT overwrite the original document.
  */
-router.post('/:id/save-workspace-version', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/save-workspace-version', authenticate, requireDocumentProcessingEnabled, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const { text, title, note } = req.body as { text?: string; title?: string; note?: string };
@@ -514,7 +532,7 @@ router.post('/:id/save-workspace-version', authenticate, async (req: Request, re
  * GET /api/v1/documents/:id/download
  * Download document from SharePoint
  */
-router.get('/:id/download', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/download', authenticate, requireDocumentProcessingEnabled, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     
