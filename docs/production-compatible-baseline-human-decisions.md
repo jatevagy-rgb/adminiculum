@@ -1,6 +1,6 @@
 # Production-Compatible Baseline Human Decisions
 
-Final classification target: `production_baseline_human_decision_sheet_rollup_no_db_change_no_runtime_change`
+Final classification target: `privacy_side_effect_hardening_rollup_quarantine_preserved_no_db_change_no_runtime_change`
 
 This is the human/product decision sheet for the production-compatible baseline. It is a decision index only: it is not an implementation plan, migration plan, DB task, Azure task, runtime change, OpenAPI/CORS change, route change, test change, or Client Portal enablement step.
 
@@ -112,22 +112,29 @@ This document intentionally keeps production apply blocked. It gives humans a co
 - Quarantined families must not be treated as production-ready by schema, runtime, OpenAPI, docs, or deployment workflows.
 - Unknown families require targeted evidence and human decisions before implementation planning.
 
-## 7. Completed hardening while quarantine preserved
+## 7. Completed exposure hardening while quarantine preserved
 
 These hardenings reduce exposure risk but do not authorize production apply, do not unblock CP-SCHEMA-1, and do not move any quarantined family to `KEEP`.
 
 | Hardening | Result | Remaining posture |
 | --- | --- | --- |
 | TEMP-OPS-HARDEN-1 (`a9c1a98`) | `migrate`/`dbcheck` route modules are auth-first, default-disabled, production-blocked even if `ENABLE_RUNTIME_ADMIN_ROUTES=true`, and tests prove `execSync` / default `prisma db push` is not reached. | Temporary operational / database administration routes remain `QUARANTINE` until a final decision exists to delete them, keep them internal-only, or replace them with a proper admin-only mechanism. |
-| CONTRACTS-HARDEN-1 | Contract routes are auth-first, default-disabled, and return `FEATURE_NOT_AVAILABLE` / `CONTRACTS_NOT_ENABLED` before upload middleware, generation services, Prisma writes, local file operations, SharePoint upload, cleanup/delete, or timeline writes can run. `ENABLE_CONTRACT_GENERATION=true` alone is not enough to enable the family. | Contracts / generated document templates remain `QUARANTINE` pending an explicit storage model, retention/delete policy, SharePoint or approved storage decision, permission model, audit/privacy review, and route tests for any future enabled behavior. |
 | OPENAPI-EXPOSURE-HARDEN-1 (`9c13114`) | `/openapi.json` and `/api/v1/openapi.json` still return JSON, but served public metadata is sanitized so quarantined, stale, admin, contracts, Client Portal, document/AI, and migrate/dbcheck paths are removed if present. Stale Power Apps / connector wording is not preserved in served public metadata and is not current scope. | OpenAPI exposure remains `QUARANTINE` until final public/internal/admin-only API metadata decision, stale/ghost route review, and runtime/spec parity review are complete. |
 | CORS-EXPOSURE-HARDEN-1 (`0e5c681`) | Production CORS allows only explicit configured origins from `CORS_ALLOWED_ORIGINS`, `CORS_ORIGIN`, `FRONTEND_ORIGIN`, or `FRONTEND_URL`; missing production allowlist fails closed for browser origins; arbitrary HTTPS/Azure origins are rejected; no-Origin server-to-server requests and localhost development origins remain supported. | CORS exposure remains `QUARANTINE` until final domain inventory, Azure hostname review, production environment setting review, and public/internal OpenAPI decision are complete. |
-| CLIENT-PORTAL-HARDEN-1 | Client Portal route modules are auth-first, remain unavailable by default, and still return `FEATURE_NOT_AVAILABLE` / `CLIENT_PORTAL_NOT_ENABLED` unless both the portal flag and a separate ownership-model flag are explicitly enabled. Tests prove spoofed client context cannot return portal data and disabled routes do not call sensitive Prisma lookups. | Client Portal / external client visibility remains `QUARANTINE` until the dedicated client-user identity, ownership, need-to-know authorization, external mapper, privacy/GDPR, and route test model exists. |
-| DOCUMENT-AI-HARDEN-1 | Document processing, anonymization, rehydration, review-suggestion, and legal-analysis routes are auth-first/default-disabled and return `FEATURE_NOT_AVAILABLE` / `DOCUMENT_AI_NOT_ENABLED` before file decoding, SharePoint download, text extraction, AI prompt construction, provider calls, Prisma writes, redacted/rehydrated content persistence, or timeline writes can run. Legacy flags such as `ENABLE_AI_ANONYMIZATION`, `ENABLE_DOCUMENT_PROCESSING`, `ENABLE_DOCUMENT_REVIEW_SUGGESTIONS`, or `ENABLE_LEGAL_ANALYSES` are not enough without the separate privacy-model gate. | Document processing / anonymization / rehydration / AI privacy boundary remains `QUARANTINE` pending approved storage, provider data-processing, anonymization/rehydration threat, retention/delete, case/document permission, privacy-safe audit/logging, targeted route tests, and GDPR/legal professional secrecy review. |
 
-Client Portal, contracts/generated documents, document/AI privacy boundary, and partial schema drift/code-compatibility leftovers remain `QUARANTINE`.
+Temporary Ops, OpenAPI/CORS, and partial schema drift/code-compatibility leftovers remain governed by their existing `QUARANTINE` decisions.
 
-## 8. Future decision requirements
+## 8. Completed privacy and side-effect hardening while quarantine preserved
+
+These hardenings reduce side-effect and privacy risk only. They do not authorize production apply, do not authorize CP-SCHEMA-1, and do not move Client Portal, contracts, or document/AI from `QUARANTINE` to `KEEP`.
+
+| Hardening | Result | Remaining posture |
+| --- | --- | --- |
+| CLIENT-PORTAL-HARDEN-1 (`7925c0b`) | Client Portal routes are auth-first and remain disabled. `ENABLE_CLIENT_PORTAL=true` alone is insufficient and still returns `501` / `CLIENT_PORTAL_NOT_ENABLED`; no external client data exposure is enabled. | Client Portal remains `QUARANTINE` pending explicit client-user identity model, ownership/need-to-know authorization, internal/external mapper, spoofing tests for any future enabled behavior, OpenAPI exposure review, and GDPR/privacy review. |
+| CONTRACTS-HARDEN-1 (`2310b03`) | Contract routes are auth-first/default-disabled. Authenticated requests return `FEATURE_NOT_AVAILABLE` / `CONTRACTS_NOT_ENABLED`; `ENABLE_CONTRACT_GENERATION=true` alone is insufficient and a separate storage-model gate is required. Disabled routes do not reach multer upload handling, generation services, Prisma writes, local file operations, SharePoint upload, cleanup/delete, or timeline writes. | Contracts / generated document templates remain `QUARANTINE` pending explicit storage model, retention/delete policy, SharePoint or approved storage decision, permission model, audit/privacy review, and targeted route tests for any future enabled behavior. |
+| DOCUMENT-AI-HARDEN-1 (`c5a9bfc`) | Document processing, anonymization, rehydration, review-suggestion, and legal-analysis routes are auth-first/default-disabled. Authenticated disabled routes return `FEATURE_NOT_AVAILABLE` / `DOCUMENT_AI_NOT_ENABLED`; legacy flags alone are insufficient and `ENABLE_DOCUMENT_AI_PRIVACY_MODEL` is also required. Disabled routes do not reach service execution, Prisma writes, text extraction, file decoding/download, prompt construction, redacted/rehydrated content persistence, AI/provider calls, or timeline writes. | Document processing / anonymization / rehydration / AI privacy boundary remains `QUARANTINE` pending approved document storage model, AI/provider data-processing policy, anonymization/rehydration threat model, retention/delete policy, strict case/document permission model, privacy-safe audit/logging policy, targeted route tests for any future enabled behavior, and GDPR/legal professional secrecy review. |
+
+## 9. Future decision requirements
 
 These items must not be decided automatically:
 
@@ -146,7 +153,7 @@ These items must not be decided automatically:
 - Whether the rolled-back DB-only kb/learning/escalation migration is abandoned historical state.
 - When CP-SCHEMA-1 may resume as a separate future migration chain.
 
-## 9. Explicit non-actions
+## 10. Explicit non-actions
 
 This decision sheet does not authorize:
 
@@ -169,7 +176,7 @@ This decision sheet does not authorize:
 
 Any future `KEEP`, `REMOVE`, or `BRING-FORWARD` decision that changes runtime, schema, routes, OpenAPI, tests, Azure, or DB state requires a separate implementation PR.
 
-## 10. Next step after human decisions
+## 11. Next step after human decisions
 
 After human decisions are filled for the remaining `UNKNOWN` and quarantined high-risk families, the next recommended task is:
 
@@ -183,6 +190,6 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - the proposed baseline implementation shape is reviewed;
 - clone proof succeeds without data exposure or Client Portal enablement.
 
-## 11. Final classification
+## 12. Final classification
 
-`exposure_hardening_rollup_quarantine_preserved_no_db_change_no_runtime_change`
+`privacy_side_effect_hardening_rollup_quarantine_preserved_no_db_change_no_runtime_change`
