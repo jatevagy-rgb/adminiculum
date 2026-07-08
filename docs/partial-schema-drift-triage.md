@@ -31,6 +31,20 @@ This triage is not a final implementation decision. It uses candidate language b
 
 An item may belong to more than one category. Where multiple categories apply, the strictest blocker is listed first.
 
+## Production metadata result overlay
+
+PROD-SCHEMA-COMPARE-READONLY-1 added the controlling metadata evidence in `docs/production-schema-readonly-compare.md`. That compare used production schema metadata only, read no business data, performed no DB apply/migration, and does not move any family to `KEEP`.
+
+| Metadata result | Items / families |
+| --- | --- |
+| present-compatible | `case_collaborators`; `workload_records`; client identity fields; `cases.clientRole`; `clients.color`; `documents.workspaceText` |
+| present-partial | `anonymous_documents`; `contract_generations` |
+| enum-drift | `GenerationStatus`, where production lacks Prisma `APPROVED` / `REJECTED` |
+| absent | generation drafts; legal analyses; client house style; clause library / assembly; timesheet persistence; document review suggestions; CP-SCHEMA-1 tables |
+| not applicable / historical | DB-only rolled-back kb/learning/escalation migration |
+
+Present-compatible metadata is not a production apply authorization. Present-compatible items still need runtime authorization review, privacy/security review where relevant, and targeted tests before any production-compatible baseline claim.
+
 ## Triage table
 
 | Item / family | Inventory evidence | Proposed lane | Reasoning | Strict blocker | Required next step | Suggested first implementation package, if any |
@@ -55,21 +69,53 @@ An item may belong to more than one category. Where multiple categories apply, t
 | DB-only rollback | `docs/production-migration-history-classification-matrix.md`; `docs/production-compatible-baseline-human-decisions.md`; `docs/production-schema-snapshot-comparison-results.md` | `REMOVE candidate` | Prior docs describe a DB-recorded rolled-back migration missing locally with no active objects found. It looks like historical state, but should not be erased from narrative without human confirmation. | Human remediation decision | Decide whether to archive as historical-only and exclude from future migration planning. | `DB-ONLY-ROLLBACK-1 human decision note` |
 | CP-SCHEMA-1 | `Backend/prisma/schema.prisma`; `Backend/prisma/migrations/20260702140000_add_client_portal_foundation/migration.sql`; `docs/cp-schema-1-fresh-clone-verification-no-go.md`; `docs/production-compatible-baseline-human-decisions.md` | `SECURITY/PRIVACY BLOCKED`; `QUARANTINE` | Client Portal foundation remains blocked until production-compatible baseline and migration-history remediation are resolved. It must not be mixed into partial-drift remediation. | Baseline remediation first | Keep CP-SCHEMA-1 out of implementation until baseline blockers and client identity/security model are resolved. | No CP package yet; resume only after baseline remediation |
 
+## Updated decision lanes after production metadata compare
+
+| Item / family | Previous lane | Production metadata result | Updated lane | Strict blocker | Next safe package |
+| --- | --- | --- | --- | --- | --- |
+| Case collaborators | `KEEP-BUT-HARDEN candidate`; `QUARANTINE pending production schema comparison` | present-compatible | `KEEP-BUT-HARDEN candidate` | Confirm runtime usage, case-level authorization, no cross-case collaborator leakage, and targeted tests | `CASE-COLLABORATORS-1 authorization and route safety audit` |
+| Workload tracking | `QUARANTINE pending production schema comparison`; `NEEDS PRODUCT DECISION` | present-compatible | `KEEP-BUT-HARDEN candidate` if runtime uses it; otherwise `KEEP candidate` pending runtime review | Confirm current runtime exposure and ensure no internal workload data is externally exposed | `WORKLOAD-TRACKING-1 runtime exposure audit` |
+| Client identity fields | `QUARANTINE pending production schema comparison`; `NEEDS PRODUCT DECISION` | present-compatible | `KEEP candidate` for internal baseline only, pending runtime/product review | No Client Portal reliance or external visibility assumption | `CLIENT-IDENTITY-1 internal baseline semantics audit` |
+| `cases.clientRole` | `KEEP-BUT-HARDEN candidate`; `QUARANTINE pending production schema comparison` | present-compatible | `KEEP candidate` for internal baseline only, pending privacy semantics | No CP-SCHEMA-1 authorization; define allowed values and anonymization meaning | `CASE-CLIENT-ROLE-1 semantics and anonymization safety audit` |
+| `clients.color` | `QUARANTINE pending production schema comparison` | present-compatible | `KEEP candidate` for internal baseline if runtime usage is safe | Confirm UI/runtime usage; no Client Portal assumption | `CLIENT-COLOR-1 runtime usage audit` |
+| `documents.workspaceText` | `SECURITY/PRIVACY BLOCKED`; `KEEP-BUT-HARDEN candidate`; `QUARANTINE pending production schema comparison` | present-compatible | `KEEP-BUT-HARDEN candidate`; `SECURITY/PRIVACY BLOCKED` | Document content/privacy review; document/AI hardening remains in force; no raw legal text exposed externally; audit/logging review | `WORKSPACE-TEXT-1 privacy and exposure audit` |
+| Anonymous document compatibility fields | `SECURITY/PRIVACY BLOCKED`; `BRING-FORWARD candidate`; `QUARANTINE pending production schema comparison` | present-partial | `QUARANTINE pending production schema reconciliation`; `SECURITY/PRIVACY BLOCKED` | Anonymization/rehydration threat model, field-level mismatch review, retention/delete policy, no rehydration enablement, no CP-SCHEMA-1 | `ANON-PARTIAL-1 field mismatch and privacy design` |
+| Rehydration / reidentification fields | `SECURITY/PRIVACY BLOCKED`; `BRING-FORWARD candidate` | absent from `anonymous_documents` | `BRING-FORWARD candidate`; `SECURITY/PRIVACY BLOCKED` | Reidentification threat model and explicit product approval | `REHYDRATION-1 threat model docs-only` |
+| Contract generation drift | `SECURITY/PRIVACY BLOCKED`; `BRING-FORWARD candidate`; `QUARANTINE pending production schema comparison` | present-partial | `QUARANTINE pending production schema reconciliation`; `SECURITY/PRIVACY BLOCKED` | Contract storage model, retention/delete policy, SharePoint/approved storage decision, `GenerationStatus` enum drift, no contract generation enablement | `CONTRACT-GENERATION-PARTIAL-1 storage and schema reconciliation design` |
+| `GenerationStatus` enum drift | `QUARANTINE pending production schema comparison`; `BRING-FORWARD candidate` | enum-drift; production lacks Prisma `APPROVED` / `REJECTED` | `CP-SCHEMA-1 BLOCKER`; `QUARANTINE` | Decide whether repo enum should be reduced to production values or production later migrated; code writing `APPROVED`/`REJECTED` would fail or be unsafe today | `GENERATION-STATUS-ENUM-DRIFT-AUDIT-1` |
+| Generation drafts | `NEEDS PRODUCT DECISION`; `BRING-FORWARD candidate` | absent | `BRING-FORWARD candidate`; `QUARANTINE pending product/security decision` | Product decision before migration design; no runtime enablement relying on absent table | `GENERATION-DRAFTS-1 product decision docs-only` |
+| Legal analyses | `SECURITY/PRIVACY BLOCKED`; `BRING-FORWARD candidate` | absent | `BRING-FORWARD candidate`; `SECURITY/PRIVACY BLOCKED`; `QUARANTINE pending product/security decision` | Legal work-product/privacy model before schema design | `LEGAL-ANALYSES-1 privacy/product decision` |
+| Client house style | `NEEDS PRODUCT DECISION`; `BRING-FORWARD candidate` | absent | `BRING-FORWARD candidate`; `QUARANTINE pending product/security decision` | Product decision first; no write enablement relying on absent table | `CLIENT-HOUSE-STYLE-1 product decision docs-only` |
+| Clause library / contract assembly | `NEEDS PRODUCT DECISION`; `BRING-FORWARD candidate`; `SECURITY/PRIVACY BLOCKED` | absent | `BRING-FORWARD candidate`; `QUARANTINE pending product/security decision` | Clause governance, ownership/versioning, storage/audit model | `CLAUSE-LIBRARY-1 governance decision docs-only` |
+| Timesheet reports / artifacts / presets | `NEEDS PRODUCT DECISION`; `BRING-FORWARD candidate` | absent | `BRING-FORWARD candidate`; `QUARANTINE pending product/security decision` | Reporting/privacy scope; no persistence enablement relying on absent tables | `TIMESHEET-REPORTS-1 product/privacy decision` |
+| Review persistence | `SECURITY/PRIVACY BLOCKED`; `BRING-FORWARD candidate` | absent | `BRING-FORWARD candidate`; `SECURITY/PRIVACY BLOCKED` | Review-suggestion privacy model and route contract before schema design | `REVIEW-PERSISTENCE-1 privacy decision docs-only` |
+| DB-only rollback | `REMOVE candidate` | not applicable / historical | `REMOVE candidate` | Human decision to archive/exclude historical rolled-back migration | `DB-ONLY-ROLLBACK-1 human decision note` |
+| CP-SCHEMA-1 | `SECURITY/PRIVACY BLOCKED`; `QUARANTINE` | absent | `CP-SCHEMA-1 BLOCKER` | Not before enum drift, present-partial tables, absent future tables, privacy boundaries, and product decisions are resolved | No CP implementation package yet |
+
+## Immediate blockers confirmed by production metadata
+
+- `GenerationStatus` enum drift is confirmed: production lacks Prisma `APPROVED` / `REJECTED`.
+- `anonymous_documents` is present-partial and missing sensitive Prisma-declared anonymization/rehydration fields.
+- `contract_generations` is present-partial and missing comparison/sharepoint/revision-lineage fields.
+- CP-SCHEMA-1 tables and enums are absent.
+- Future feature tables are absent for generation drafts, legal analyses, client house style, clause library / assembly, timesheet persistence, and review suggestions.
+- Document/privacy-sensitive fields remain blocked even where metadata is present-compatible, especially `documents.workspaceText`.
+
 ## Suggested sequencing
 
-1. **Production schema comparison package, read-only, no apply** — collect fresh clone metadata for the currently ambiguous partial/drift objects and enum values.
-2. **Clearly stale ghost decision package** — decide whether the DB-only rolled-back kb/learning/escalation migration is historical-only and should be excluded from future baseline work.
-3. **Active low-risk `KEEP-BUT-HARDEN` candidates** — prioritize case collaborators, case client role, comparison snapshot, and workspace text only after schema proof and privacy/product semantics are clear.
-4. **Product decision package for future features** — decide generation drafts, client house style, clause library/assembly, timesheet reports, and legal analyses before migration design.
-5. **Security/privacy model packages** — resolve document/AI, anonymization, rehydration, review persistence, contracts, and client-visible boundaries before enablement or bring-forward.
-6. **BRING-FORWARD schema migration design** — only after product/security decisions, split by feature family, docs-only first, then clone-proofed migration candidates.
-7. **CP-SCHEMA-1** — resume only after production-compatible baseline blockers are resolved and the Client Portal identity/security boundary is confirmed.
+1. **GENERATION-STATUS-ENUM-DRIFT-AUDIT-1** — docs/code audit only; find runtime references to `APPROVED` / `REJECTED`; no schema change.
+2. **PRESENT-COMPATIBLE-KEEP-CANDIDATES-AUDIT-1** — review case collaborators, workload tracking, client fields, `cases.clientRole`, `clients.color`, and `documents.workspaceText` for runtime/authorization/privacy safety; no schema change.
+3. **PRESENT-PARTIAL-RECONCILIATION-DESIGN-1** — design only for `anonymous_documents` and `contract_generations`; no migration.
+4. **Product decision package for absent future tables** — decide generation drafts, legal analyses, client house style, clause library/assembly, timesheet reports, and review persistence before migration design.
+5. **Security/privacy model packages** — resolve document/AI, anonymization, rehydration, contracts, workspace text, and client-visible boundaries before enablement or bring-forward.
+6. **Migration design only after product/security decisions** — split by feature family, docs-only first, then clone-proofed migration candidates.
+7. **CP-SCHEMA-1 last** — resume only after enum drift, present-partial tables, absent future tables, privacy boundaries, and product decisions are resolved.
 
 ## Non-actions
 
 - No schema changed.
 - No migration was created, edited, applied, resolved, moved, or deleted.
-- No DB connection was used.
+- No DB connection was used in this rollup task.
 - No DB apply was performed.
 - No Azure deployment or Azure configuration change occurred.
 - No runtime behavior changed.
@@ -81,10 +127,10 @@ An item may belong to more than one category. Where multiple categories apply, t
 
 ## Recommended next prompt
 
-`Adminiculum — partial schema drift production comparison plan docs-only`
+`Adminiculum — GENERATION-STATUS-ENUM-DRIFT-AUDIT-1`
 
-That next task should define a fresh-clone, SELECT-only metadata comparison plan. It should still not connect to production directly, mutate DB state, deploy, or authorize CP-SCHEMA-1.
+That next task should be docs/code-audit-only: find runtime references to `GenerationStatus.APPROVED` / `GenerationStatus.REJECTED`, determine whether repo enum or future production enum should change, and avoid schema changes, DB connections, migrations, deploys, and CP-SCHEMA-1.
 
 ## Final classification
 
-`partial_schema_drift_triage_documented_no_db_change_no_runtime_change`
+`production_schema_compare_rolled_into_drift_triage_no_db_change_no_runtime_change`
