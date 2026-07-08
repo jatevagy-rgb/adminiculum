@@ -11,6 +11,7 @@ import morgan from 'morgan';
 import path from 'path';
 import fs from 'fs';
 import yaml from 'js-yaml';
+import { sanitizePublicOpenApiSpec } from './openapi/publicSpec';
 
 type StartupConfigHealthStatus = {
   checkedAt: string;
@@ -125,7 +126,7 @@ function setOpenApiServers(spec: any): any {
 
 function handleOpenApiJson(_req: Request, res: Response): void {
   try {
-    const swaggerJson = setOpenApiServers(loadOpenApiSpec());
+    const swaggerJson = sanitizePublicOpenApiSpec(setOpenApiServers(loadOpenApiSpec()));
     res.json(swaggerJson);
   } catch (error) {
     console.error('Error loading OpenAPI spec:', error);
