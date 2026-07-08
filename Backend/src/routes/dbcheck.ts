@@ -1,15 +1,46 @@
 /**
- * Database Check and Sync Endpoint
- * Checks if tables exist and runs db push if needed
+ * Database Check and Sync Endpoint - guarded runtime administration route.
+ * Checks if tables exist and runs db push if explicitly enabled outside production.
  */
 
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response, Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { execSync } from 'child_process';
+import { authenticate } from '../middleware/auth';
 
 const prisma = new PrismaClient();
 
+export const RUNTIME_ADMIN_ROUTES_DISABLED = {
+  status: 501,
+  code: 'FEATURE_NOT_AVAILABLE',
+  feature: 'RUNTIME_ADMIN_ROUTES',
+  reason: 'RUNTIME_ADMIN_ROUTES_DISABLED',
+  message: 'Runtime administration routes are disabled.',
+};
+
+export function runtimeAdminRoutesEnabled(): boolean {
+  return process.env.ENABLE_RUNTIME_ADMIN_ROUTES === 'true'
+    && (process.env.NODE_ENV || '').toLowerCase() !== 'production';
+}
+
+export function requireRuntimeAdminRoutesEnabled(
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  if (!runtimeAdminRoutesEnabled()) {
+    res.status(501).json(RUNTIME_ADMIN_ROUTES_DISABLED);
+    return;
+  }
+  next();
+}
+
 export const checkAndSyncDatabase = async (req: Request, res: Response): Promise<void> => {
+  if (!runtimeAdminRoutesEnabled()) {
+    res.status(501).json(RUNTIME_ADMIN_ROUTES_DISABLED);
+    return;
+  }
+
   try {
     console.log('Checking database tables...');
     
@@ -75,4 +106,9 @@ export const checkAndSyncDatabase = async (req: Request, res: Response): Promise
   }
 };
 
-export default checkAndSyncDatabase;
+const router = Router();
+
+router.get('/', authenticate, requireRuntimeAdminRoutesEnabled, checkAndSyncDatabase);
+router.post('/', authenticate, requireRuntimeAdminRoutesEnabled, checkAndSyncDatabase);
+
+export default router;

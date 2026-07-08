@@ -1,6 +1,11 @@
 import express, { Express, NextFunction, Request, Response } from 'express';
 import http from 'http';
 
+jest.mock('child_process', () => ({
+  ...jest.requireActual('child_process'),
+  execSync: jest.fn(),
+}));
+
 jest.mock('../src/middleware/auth', () => ({
   authenticate: (req: Request, res: Response, next: NextFunction) => {
     if (req.headers.authorization !== 'Bearer test-token') {
@@ -55,6 +60,7 @@ jest.mock('../src/prisma/prisma.service', () => ({
   },
 }));
 
+import { execSync } from 'child_process';
 import { prisma } from '../src/prisma/prisma.service';
 import clientsRoutes from '../src/modules/clients/routes';
 import clauseLibraryRoutes from '../src/modules/clause-library/routes';
@@ -65,6 +71,8 @@ import legalAnalysesRoutes from '../src/modules/legal-analyses/routes';
 import reviewNotesRoutes from '../src/modules/review-notes/routes';
 import timesheetReportRoutes from '../src/modules/timesheet-reports/routes';
 import clientPortalRoutes from '../src/routes/clientPortal';
+import dbcheckRoutes from '../src/routes/dbcheck';
+import migrateRoutes from '../src/routes/migrate';
 
 type TestResponse = {
   status: number;
@@ -137,9 +145,20 @@ function createApp(): Express {
   return app;
 }
 
+function createRuntimeAdminApp(): Express {
+  const app = express();
+  app.use(express.json());
+  app.use('/migrate', migrateRoutes);
+  app.use('/dbcheck', dbcheckRoutes);
+  return app;
+}
+
+const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
+
 describe('database foundation route guards', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.NODE_ENV = ORIGINAL_NODE_ENV;
     delete process.env.ENABLE_DOCUMENT_REVIEW_SUGGESTIONS;
     delete process.env.ENABLE_CLIENT_HOUSE_STYLE;
     delete process.env.ENABLE_CLAUSE_LIBRARY;
@@ -149,6 +168,7 @@ describe('database foundation route guards', () => {
     delete process.env.ENABLE_TIMESHEET_REPORT_PERSISTENCE;
     delete process.env.ENABLE_HANDOFF_PACKAGES;
     delete process.env.ENABLE_CLIENT_PORTAL;
+    delete process.env.ENABLE_RUNTIME_ADMIN_ROUTES;
 
     (prisma.communication.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.communication.count as jest.Mock).mockResolvedValue(0);
@@ -165,6 +185,74 @@ describe('database foundation route guards', () => {
     );
 
     expect(response.status).toBe(401);
+  });
+
+  it('keeps authentication ahead of runtime migrate behavior', async () => {
+    process.env.ENABLE_RUNTIME_ADMIN_ROUTES = 'true';
+
+    const response = await requestJson(createRuntimeAdminApp(), 'POST', '/migrate', false);
+
+    expect(response.status).toBe(401);
+    expect(execSync).not.toHaveBeenCalled();
+  });
+
+  it('keeps authentication ahead of runtime dbcheck behavior', async () => {
+    process.env.ENABLE_RUNTIME_ADMIN_ROUTES = 'true';
+
+    const response = await requestJson(createRuntimeAdminApp(), 'GET', '/dbcheck', false);
+
+    expect(response.status).toBe(401);
+    expect(execSync).not.toHaveBeenCalled();
+  });
+
+  it('blocks runtime migrate behavior by default without leaking command details', async () => {
+    const response = await requestJson(createRuntimeAdminApp(), 'POST', '/migrate');
+    const bodyText = JSON.stringify(response.body).toLowerCase();
+
+    expect(response.status).toBe(501);
+    expect(response.body).toMatchObject({
+      code: 'FEATURE_NOT_AVAILABLE',
+      feature: 'RUNTIME_ADMIN_ROUTES',
+      reason: 'RUNTIME_ADMIN_ROUTES_DISABLED',
+    });
+    expect(bodyText).not.toContain('database_url');
+    expect(bodyText).not.toContain('prisma db push');
+    expect(bodyText).not.toContain('stack');
+    expect(execSync).not.toHaveBeenCalled();
+  });
+
+  it('blocks runtime dbcheck behavior by default without leaking command details', async () => {
+    const response = await requestJson(createRuntimeAdminApp(), 'GET', '/dbcheck');
+    const bodyText = JSON.stringify(response.body).toLowerCase();
+
+    expect(response.status).toBe(501);
+    expect(response.body).toMatchObject({
+      code: 'FEATURE_NOT_AVAILABLE',
+      feature: 'RUNTIME_ADMIN_ROUTES',
+      reason: 'RUNTIME_ADMIN_ROUTES_DISABLED',
+    });
+    expect(bodyText).not.toContain('database_url');
+    expect(bodyText).not.toContain('prisma db push');
+    expect(bodyText).not.toContain('stack');
+    expect(execSync).not.toHaveBeenCalled();
+  });
+
+  it('blocks runtime admin routes in production even when the flag is set', async () => {
+    process.env.NODE_ENV = 'production';
+    process.env.ENABLE_RUNTIME_ADMIN_ROUTES = 'true';
+
+    const migrateResponse = await requestJson(createRuntimeAdminApp(), 'POST', '/migrate');
+    const dbcheckResponse = await requestJson(createRuntimeAdminApp(), 'POST', '/dbcheck');
+
+    expect(migrateResponse.status).toBe(501);
+    expect(dbcheckResponse.status).toBe(501);
+    expect(migrateResponse.body).toMatchObject({
+      reason: 'RUNTIME_ADMIN_ROUTES_DISABLED',
+    });
+    expect(dbcheckResponse.body).toMatchObject({
+      reason: 'RUNTIME_ADMIN_ROUTES_DISABLED',
+    });
+    expect(execSync).not.toHaveBeenCalled();
   });
 
   it('returns the controlled unavailable response for guarded review routes', async () => {

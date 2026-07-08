@@ -1,14 +1,45 @@
 /**
- * Migration Runner Endpoint - Runs prisma db push
+ * Migration Runner Endpoint - guarded runtime administration route.
  */
 
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response, Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { execSync } from 'child_process';
+import { authenticate } from '../middleware/auth';
 
 const prisma = new PrismaClient();
 
+export const RUNTIME_ADMIN_ROUTES_DISABLED = {
+  status: 501,
+  code: 'FEATURE_NOT_AVAILABLE',
+  feature: 'RUNTIME_ADMIN_ROUTES',
+  reason: 'RUNTIME_ADMIN_ROUTES_DISABLED',
+  message: 'Runtime administration routes are disabled.',
+};
+
+export function runtimeAdminRoutesEnabled(): boolean {
+  return process.env.ENABLE_RUNTIME_ADMIN_ROUTES === 'true'
+    && (process.env.NODE_ENV || '').toLowerCase() !== 'production';
+}
+
+export function requireRuntimeAdminRoutesEnabled(
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  if (!runtimeAdminRoutesEnabled()) {
+    res.status(501).json(RUNTIME_ADMIN_ROUTES_DISABLED);
+    return;
+  }
+  next();
+}
+
 export const runMigration = async (req: Request, res: Response): Promise<void> => {
+  if (!runtimeAdminRoutesEnabled()) {
+    res.status(501).json(RUNTIME_ADMIN_ROUTES_DISABLED);
+    return;
+  }
+
   try {
     console.log('Starting database migration...');
     
@@ -74,4 +105,8 @@ export const runMigration = async (req: Request, res: Response): Promise<void> =
   }
 };
 
-export default runMigration;
+const router = Router();
+
+router.post('/', authenticate, requireRuntimeAdminRoutesEnabled, runMigration);
+
+export default router;
