@@ -168,6 +168,7 @@ describe('database foundation route guards', () => {
     delete process.env.ENABLE_TIMESHEET_REPORT_PERSISTENCE;
     delete process.env.ENABLE_HANDOFF_PACKAGES;
     delete process.env.ENABLE_CLIENT_PORTAL;
+    delete process.env.ENABLE_CLIENT_PORTAL_OWNERSHIP_MODEL;
     delete process.env.ENABLE_RUNTIME_ADMIN_ROUTES;
 
     (prisma.communication.findMany as jest.Mock).mockResolvedValue([]);
@@ -688,17 +689,11 @@ describe('database foundation route guards', () => {
     ['GET', '/client-portal/matters/matter-1'],
     ['GET', '/client-portal/matters/matter-1/time-log'],
     ['GET', '/client-portal/export/client-1'],
-  ])('client portal %s %s returns 501 when feature is disabled (unauthenticated)', async (_method, path) => {
+  ])('client portal %s %s requires authentication before feature checks', async (_method, path) => {
     const response = await requestJson(createApp(), 'GET', path, false);
 
-    expect(response.status).toBe(501);
-    expect(response.body).toMatchObject({
-      status: 501,
-      code: 'FEATURE_NOT_AVAILABLE',
-      feature: 'CLIENT_PORTAL',
-      reason: 'CLIENT_PORTAL_NOT_ENABLED',
-    });
-    expect(JSON.stringify(response.body).toLowerCase()).not.toContain('prisma');
+    expect(response.status).toBe(401);
+    expect(prisma.case.findUnique).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -719,15 +714,20 @@ describe('database foundation route guards', () => {
       reason: 'CLIENT_PORTAL_NOT_ENABLED',
     });
     expect(JSON.stringify(response.body).toLowerCase()).not.toContain('prisma');
+    expect(JSON.stringify(response.body).toLowerCase()).not.toContain('matter');
+    expect(JSON.stringify(response.body).toLowerCase()).not.toContain('timeline');
+    expect(JSON.stringify(response.body).toLowerCase()).not.toContain('timeentry');
   });
 
-  it('spoofed x-user-id header cannot access client portal data', async () => {
+  it('client portal remains unavailable when only the portal flag is true', async () => {
+    process.env.ENABLE_CLIENT_PORTAL = 'true';
+
     const response = await requestJson(
       createApp(),
       'GET',
-      '/client-portal/summary/client-1',
-      false,
-      { 'x-user-id': 'spoofed-client-id' }
+      '/client-portal/summary/client-1?clientId=spoofed-client-id',
+      true,
+      { 'x-test-user-id': 'spoofed-client-id' }
     );
 
     expect(response.status).toBe(501);
@@ -736,6 +736,38 @@ describe('database foundation route guards', () => {
       feature: 'CLIENT_PORTAL',
       reason: 'CLIENT_PORTAL_NOT_ENABLED',
     });
+    expect(prisma.case.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('spoofed x-user-id header cannot bypass client portal authentication', async () => {
+    const response = await requestJson(
+      createApp(),
+      'GET',
+      '/client-portal/summary/client-1',
+      false,
+      { 'x-user-id': 'spoofed-client-id' }
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it('authenticated spoofed client context cannot access client portal data while disabled', async () => {
+    const response = await requestJson(
+      createApp(),
+      'GET',
+      '/client-portal/summary/client-1?clientId=spoofed-client-id',
+      true,
+      { 'x-test-user-id': 'spoofed-client-id' }
+    );
+
+    expect(response.status).toBe(501);
+    expect(response.body).toMatchObject({
+      code: 'FEATURE_NOT_AVAILABLE',
+      feature: 'CLIENT_PORTAL',
+      reason: 'CLIENT_PORTAL_NOT_ENABLED',
+    });
+    expect(JSON.stringify(response.body).toLowerCase()).not.toContain('client-1');
+    expect(JSON.stringify(response.body).toLowerCase()).not.toContain('spoofed-client-id');
   });
 
   it('no Prisma data queries run when client portal is disabled', async () => {
