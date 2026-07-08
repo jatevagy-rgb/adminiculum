@@ -112,7 +112,19 @@ This document intentionally keeps production apply blocked. It gives humans a co
 - Quarantined families must not be treated as production-ready by schema, runtime, OpenAPI, docs, or deployment workflows.
 - Unknown families require targeted evidence and human decisions before implementation planning.
 
-## 7. Future decision requirements
+## 7. Completed hardening while quarantine preserved
+
+These hardenings reduce exposure risk but do not authorize production apply, do not unblock CP-SCHEMA-1, and do not move any quarantined family to `KEEP`.
+
+| Hardening | Result | Remaining posture |
+| --- | --- | --- |
+| TEMP-OPS-HARDEN-1 (`a9c1a98`) | `migrate`/`dbcheck` route modules are auth-first, default-disabled, production-blocked even if `ENABLE_RUNTIME_ADMIN_ROUTES=true`, and tests prove `execSync` / default `prisma db push` is not reached. | Temporary operational / database administration routes remain `QUARANTINE` until a final decision exists to delete them, keep them internal-only, or replace them with a proper admin-only mechanism. |
+| OPENAPI-EXPOSURE-HARDEN-1 (`9c13114`) | `/openapi.json` and `/api/v1/openapi.json` still return JSON, but served public metadata is sanitized so quarantined, stale, admin, contracts, Client Portal, document/AI, and migrate/dbcheck paths are removed if present. Stale Power Apps / connector wording is not preserved in served public metadata and is not current scope. | OpenAPI exposure remains `QUARANTINE` until final public/internal/admin-only API metadata decision, stale/ghost route review, and runtime/spec parity review are complete. |
+| CORS-EXPOSURE-HARDEN-1 (`0e5c681`) | Production CORS allows only explicit configured origins from `CORS_ALLOWED_ORIGINS`, `CORS_ORIGIN`, `FRONTEND_ORIGIN`, or `FRONTEND_URL`; missing production allowlist fails closed for browser origins; arbitrary HTTPS/Azure origins are rejected; no-Origin server-to-server requests and localhost development origins remain supported. | CORS exposure remains `QUARANTINE` until final domain inventory, Azure hostname review, production environment setting review, and public/internal OpenAPI decision are complete. |
+
+Client Portal, contracts/generated documents, document/AI privacy boundary, and partial schema drift/code-compatibility leftovers remain `QUARANTINE`.
+
+## 8. Future decision requirements
 
 These items must not be decided automatically:
 
@@ -131,7 +143,7 @@ These items must not be decided automatically:
 - Whether the rolled-back DB-only kb/learning/escalation migration is abandoned historical state.
 - When CP-SCHEMA-1 may resume as a separate future migration chain.
 
-## 8. Explicit non-actions
+## 9. Explicit non-actions
 
 This decision sheet does not authorize:
 
@@ -154,7 +166,7 @@ This decision sheet does not authorize:
 
 Any future `KEEP`, `REMOVE`, or `BRING-FORWARD` decision that changes runtime, schema, routes, OpenAPI, tests, Azure, or DB state requires a separate implementation PR.
 
-## 9. Next step after human decisions
+## 10. Next step after human decisions
 
 After human decisions are filled for the remaining `UNKNOWN` and quarantined high-risk families, the next recommended task is:
 
@@ -168,6 +180,6 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - the proposed baseline implementation shape is reviewed;
 - clone proof succeeds without data exposure or Client Portal enablement.
 
-## 10. Final classification
+## 11. Final classification
 
-`production_baseline_human_decision_sheet_rollup_no_db_change_no_runtime_change`
+`exposure_hardening_rollup_quarantine_preserved_no_db_change_no_runtime_change`
