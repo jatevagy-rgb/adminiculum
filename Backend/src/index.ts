@@ -11,6 +11,7 @@ import morgan from 'morgan';
 import path from 'path';
 import fs from 'fs';
 import yaml from 'js-yaml';
+import { createCorsOptions, getConfiguredCorsAllowedOrigins } from './http/corsPolicy';
 import { sanitizePublicOpenApiSpec } from './openapi/publicSpec';
 
 type StartupConfigHealthStatus = {
@@ -25,13 +26,6 @@ type StartupConfigHealthStatus = {
 };
 
 let startupConfigHealth: StartupConfigHealthStatus | null = null;
-
-function parseCsvEnv(value: string | undefined): string[] {
-  return String(value || '')
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
 
 function isPresent(value: string | undefined): boolean {
   return typeof value === 'string' && value.trim().length > 0;
@@ -140,12 +134,7 @@ const app = express();
 // Local default aligns with dev launcher expectations (scripts/dev-launch.ps1).
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production';
-const configuredAllowedOrigins = parseCsvEnv(process.env.CORS_ALLOWED_ORIGINS);
-const frontendOrigin = process.env.FRONTEND_ORIGIN?.trim();
-const frontendUrl = process.env.FRONTEND_URL?.trim();
-const productionAllowedOrigins = configuredAllowedOrigins.length
-  ? configuredAllowedOrigins
-  : [frontendOrigin, frontendUrl].filter((entry): entry is string => Boolean(entry));
+const productionAllowedOrigins = getConfiguredCorsAllowedOrigins();
 
 if (isProduction && productionAllowedOrigins.length === 0) {
   console.warn(
@@ -155,32 +144,7 @@ if (isProduction && productionAllowedOrigins.length === 0) {
 
 // Middleware
 app.use(helmet());
-app.use(cors({
-  origin: function(origin: string | undefined, callback: (err: Error | null, allow: boolean) => void) {
-    if (!origin) {
-      return callback(null, true);
-    }
-
-    if (!isProduction) {
-      if (origin.match(/^http:\/\/localhost:\d+$/) || origin.match(/^https:\/\/localhost:\d+$/)) {
-        return callback(null, true);
-      }
-      if (frontendUrl && origin === frontendUrl) {
-        return callback(null, true);
-      }
-      return callback(null, true);
-    }
-
-    if (productionAllowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    return callback(null, false);
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Authorization', 'Content-Type', 'X-Requested-With', 'Accept', 'Origin'],
-}));
+app.use(cors(createCorsOptions()));
 app.use(morgan('combined'));
 // Increase payload limits for normal DOC/DOCX base64 uploads from frontend
 // (base64 payloads are larger than binary source files)
