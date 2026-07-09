@@ -1,6 +1,6 @@
 # Production-Compatible Baseline Human Decisions
 
-Final classification target: `case_collaborators_hardening_closeout_documented_no_db_change_no_runtime_change`
+Final classification target: `case_collaborators_internal_keep_decision_documented_no_db_change_no_runtime_change`
 
 This is the human/product decision sheet for the production-compatible baseline. It is a decision index only: it is not an implementation plan, migration plan, DB task, Azure task, runtime change, OpenAPI/CORS change, route change, test change, or Client Portal enablement step.
 
@@ -41,6 +41,7 @@ This document intentionally keeps production apply blocked. It gives humans a co
 - Lawyer handoff foundation.
 - Communication baseline / Outlook provider fields.
 - Client color (`clients.color`) as narrow internal display metadata only.
+- Case collaborators (`case_collaborators`) as narrow internal read/create/delete baseline only.
 
 ### QUARANTINE
 
@@ -90,7 +91,7 @@ This document intentionally keeps production apply blocked. It gives humans a co
 | Client identity fields | `UNKNOWN` | Historical migration DML/backfill assumptions must not be reused blindly. | Decide exact legal identity fields required in production. |
 | Case client role | `UNKNOWN` | Potentially low-risk additive field, but still requires proof. | Decide whether `clientRole` is active production matter context. |
 | Client color (`clients.color`) | `KEEP` | CLIENTS-COLOR-INTERNAL-KEEP-DECISION-1 moves only `clients.color` to a narrow internal baseline `KEEP`. Production metadata compare found `clients.color` present-compatible; Prisma contains nullable `Client.color`; internal client detail UI edits/displays it as hex visual metadata; case list UI can consume client color metadata for a dot. No Client Portal exposure, external visibility model, sensitive legal/document content, schema migration, DB apply, or production apply is implied. | Keep internal-only. Do not use as Client Portal tenancy, authorization, branding boundary, or external client visibility signal. Future external exposure still requires separate privacy/client-visibility review and DTO tests. |
-| Case collaborators | `hardened internal KEEP candidate` | CASE-COLLABORATORS-AUTHZ-AUDIT-1 created `docs/case-collaborators-authz-audit.md`. CASE-COLLABORATORS-HARDEN-1 (`7177693`) added case-level authorization for generic collaborator reads, manager-only authorization for create/delete, delete path consistency, and targeted tests. CASE-COLLABORATORS-HARDENING-ROLLOUT-1 documents the closeout only. Production metadata compare found `case_collaborators` present-compatible and the repo has active internal usage. This still does not authorize broad `KEEP`, Client Portal exposure, CP-SCHEMA-1, production apply, or DB migration replay. | Required before full narrow internal `KEEP`: explicit human decision, confirm no unreviewed collaborator routes remain, confirm no external/client-portal exposure, preserve targeted tests, and keep production apply / CP-SCHEMA-1 blocked. |
+| Case collaborators | `KEEP — narrow internal baseline` | CASE-COLLABORATORS-INTERNAL-KEEP-DECISION-1 moves only `case_collaborators` to a narrow internal baseline `KEEP`. Production metadata compare found `case_collaborators` present-compatible and the repo has active internal usage. CASE-COLLABORATORS-HARDEN-1 (`7177693`) added case-level authorization for generic collaborator reads, manager-only authorization for create/delete, delete path consistency using path `caseId` plus `collaboratorId`, and targeted tests. CASE-COLLABORATORS-HARDENING-ROLLOUT-1 (`49f2bdc`) documented the hardening closeout. No schema, migration, DB, Azure, frontend, Client Portal, OpenAPI, CORS, or package change is implied. | Keep limited to internal collaborator read/create/delete routes covered by `7177693`. Do not treat as Client Portal, external visibility, CP-SCHEMA-1, production apply, future update/bulk/export routes, authz weakening, or DB migration replay. Future external exposure requires a strict internal/external mapper, GDPR/privacy review, and separate tests. |
 | Comparison snapshot | `UNKNOWN` | Missing on `contract_generations`; may be clone-proven additive if kept. | Decide whether comparison snapshots are production-required for current workflows. |
 | Timesheet reports / artifacts / presets | `QUARANTINE` | Tables/enums are absent and likely belong to a separate future feature-family migration. | Product approval, privacy/reporting scope, and clone-proven separate migration if brought forward. |
 | Legal analyses | `QUARANTINE` | Sensitive work-product tables are absent. | Governance and privacy decision before any bring-forward. |
@@ -102,7 +103,7 @@ This document intentionally keeps production apply blocked. It gives humans a co
 | CP-SCHEMA-1 / Client Portal foundation | `QUARANTINE` | Future-blocked and excluded from baseline; Client Portal runtime remains off and no existing data becomes client-visible. | Resume only after production-compatible baseline/remediation is stable and a fresh clone proof shows CP as the intentionally next migration. |
 | DB-only rolled-back kb/learning/escalation migration | `UNKNOWN` | DB row is rolled back, local migration is missing, and object checks found no active objects. | Decide whether it is abandoned historical state, archived context, or future design work. |
 
-PRESENT-COMPATIBLE-KEEP-CANDIDATES-AUDIT-1 created `docs/present-compatible-keep-candidates-audit.md`. Present-compatible metadata does not automatically promote items to `KEEP`: the audit classified `clients.color` as an internal `KEEP candidate`, `case_collaborators`, `workload_records`, client identity fields, and `cases.clientRole` as `KEEP-BUT-HARDEN candidate`, and `documents.workspaceText` as `SECURITY/PRIVACY BLOCKED`. CLIENTS-COLOR-INTERNAL-KEEP-DECISION-1 moves only `clients.color` from candidate to narrow internal `KEEP`. CASE-COLLABORATORS-AUTHZ-AUDIT-1 recorded required collaborator authorization hardening, CASE-COLLABORATORS-HARDEN-1 moves `case_collaborators` only to `hardened internal KEEP candidate`, and CASE-COLLABORATORS-HARDENING-ROLLOUT-1 documents that closeout without runtime change. Production apply and CP-SCHEMA-1 remain blocked, and partial schema drift remains `QUARANTINE` unless separately decided.
+PRESENT-COMPATIBLE-KEEP-CANDIDATES-AUDIT-1 created `docs/present-compatible-keep-candidates-audit.md`. Present-compatible metadata does not automatically promote items to `KEEP`: the audit classified `clients.color` as an internal `KEEP candidate`, `case_collaborators`, `workload_records`, client identity fields, and `cases.clientRole` as `KEEP-BUT-HARDEN candidate`, and `documents.workspaceText` as `SECURITY/PRIVACY BLOCKED`. CLIENTS-COLOR-INTERNAL-KEEP-DECISION-1 moves only `clients.color` from candidate to narrow internal `KEEP`. CASE-COLLABORATORS-AUTHZ-AUDIT-1 recorded required collaborator authorization hardening, CASE-COLLABORATORS-HARDEN-1 hardened the internal collaborator routes, CASE-COLLABORATORS-HARDENING-ROLLOUT-1 documented that closeout without runtime change, and CASE-COLLABORATORS-INTERNAL-KEEP-DECISION-1 moves only the hardened internal read/create/delete collaborator surface to narrow internal `KEEP`. Production apply and CP-SCHEMA-1 remain blocked, and partial schema drift remains `QUARANTINE` unless separately decided.
 
 ## 6. Current blockers
 
@@ -193,4 +194,4 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 
 ## 12. Final classification
 
-`case_collaborators_hardening_closeout_documented_no_db_change_no_runtime_change`
+`case_collaborators_internal_keep_decision_documented_no_db_change_no_runtime_change`

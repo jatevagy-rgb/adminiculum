@@ -93,21 +93,21 @@ Relationship and index shape:
 
 ## Decision lane
 
-`case_collaborators` remains:
+`case_collaborators` is now:
 
-`hardened internal KEEP candidate`
+`KEEP — narrow internal baseline`
 
 Reason:
 
 - The production physical schema is present-compatible.
 - The repo has active internal runtime usage.
 - The data is useful internal matter/team metadata.
-- However, generic collaborator read/write/delete routes appear to rely on general authentication only.
-- Case-level authorization, current-user access checks, manage-collaborator permission, delete path consistency, OpenAPI metadata posture, and targeted tests remain required before a narrow internal `KEEP` decision.
+- CASE-COLLABORATORS-HARDEN-1 (`7177693`) added case-level authorization, manager-only create/delete authorization, delete path consistency, and targeted tests.
+- CASE-COLLABORATORS-INTERNAL-KEEP-DECISION-1 moves only the hardened internal read/create/delete surface to narrow internal `KEEP`.
 
 CASE-COLLABORATORS-HARDEN-1 subsequently added case-level authorization for generic collaborator reads and stronger manager-only authorization for generic collaborator create/delete. It also added targeted tests for unauthenticated access, wrong-case access, authorized collaborator reads, manager writes, and delete path consistency.
 
-This audit and hardening do not move `case_collaborators` to broad `KEEP`. A separate human decision is still required before changing the production-compatible baseline lane to full narrow internal `KEEP`.
+This audit and hardening do not move `case_collaborators` to broad `KEEP`, external/client-facing `KEEP`, Client Portal, CP-SCHEMA-1, production apply, or future collaborator route expansions.
 
 ## Hardening closeout — CASE-COLLABORATORS-HARDEN-1
 
@@ -146,7 +146,7 @@ Full backend validation from the hardening package:
 
 Decision posture:
 
-- Current lane: `hardened internal KEEP candidate`.
+- Current lane: `KEEP — narrow internal baseline`.
 - Not broad `KEEP`.
 - Not external/client-facing `KEEP`.
 - Not Client Portal.
@@ -175,13 +175,33 @@ Implemented scope:
 - Ensured collaborator deletion verifies `collaboratorId` belongs to the path `caseId`.
 - Added targeted tests for unauthenticated, wrong-case, authorized read, authorized write, unauthorized write/delete, and delete-wrong-case behavior.
 
-Remaining before full internal `KEEP`:
+Final internal KEEP scope:
 
-- Confirm public OpenAPI metadata does not present collaborator management as externally safe.
-- Keep Client Portal external exposure out of scope unless a separate publication/mapper model exists.
-- No schema change unless separately justified.
+- Internal generic collaborator read/create/delete routes hardened in `7177693`.
+- Public OpenAPI exposure, external/client-facing visibility, Client Portal, CP-SCHEMA-1, production apply, collaborator update routes, bulk routes, export routes, and authz weakening remain excluded.
+- Future external exposure requires a separate publication/mapper model, GDPR/privacy review, and targeted route/DTO tests.
 
-If a future hardening pass proves the above protections, a later `CASE-COLLABORATORS-INTERNAL-KEEP-DECISION-1` can decide whether to move `case_collaborators` to narrow internal `KEEP`.
+## Final decision — CASE-COLLABORATORS-INTERNAL-KEEP-DECISION-1
+
+`case_collaborators` is moved from `hardened internal KEEP candidate` to `KEEP — narrow internal baseline`.
+
+This decision is limited to the hardened internal collaborator read/create/delete routes from `7177693`:
+
+- reads require case access;
+- create/delete require manager access;
+- delete validates both path `caseId` and `collaboratorId`;
+- targeted authorization tests passed;
+- no schema, migration, DB, Azure, frontend, Client Portal, OpenAPI, CORS, or package change is authorized.
+
+Excluded from this decision:
+
+- broad `KEEP`;
+- external/client-facing visibility;
+- Client Portal;
+- CP-SCHEMA-1;
+- production apply;
+- future update, bulk, export, or reporting routes;
+- any weakening of case-level authorization.
 
 ## Non-actions
 
@@ -218,4 +238,4 @@ This closeout update did not:
 
 ## Final classification
 
-`case_collaborators_hardening_closeout_documented_no_db_change_no_runtime_change`
+`case_collaborators_internal_keep_decision_documented_no_db_change_no_runtime_change`
