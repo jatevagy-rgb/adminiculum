@@ -33,6 +33,7 @@ No production DB, clone DB, Kudu, Azure, migration, smoke test, business-data qu
 - The same compare records `cases.clientRole` as present-compatible and nullable.
 - `PRESENT-COMPATIBLE-KEEP-CANDIDATES-AUDIT-1` classified client identity fields and `cases.clientRole` as `KEEP-BUT-HARDEN candidate`, not `KEEP`.
 - `CLIENT-IDENTITY-FIELDS-HARDEN-1` moves only client identity fields to `hardened internal KEEP candidate`; it does not move them to broad `KEEP`, Client Portal, or external visibility.
+- `CLIENT-IDENTITY-FIELDS-INTERNAL-KEEP-DECISION-1` later moves only the hardened internal client-route behavior to `KEEP — narrow internal baseline`.
 - `CLIENTS-COLOR-INTERNAL-KEEP-DECISION-1` moved only `clients.color` to narrow internal `KEEP`; it did not include legal identity fields.
 - Client Portal remains disabled/quarantined. `Backend/src/routes/clientPortal.ts` authenticates first and remains unavailable unless both the portal flag and separate ownership-model flag are enabled.
 - Production apply and CP-SCHEMA-1 remain blocked.
@@ -89,10 +90,10 @@ No production DB, clone DB, Kudu, Azure, migration, smoke test, business-data qu
 
 | Item | Decision lane | Rationale |
 | --- | --- | --- |
-| Client identity fields (`clients.taxNumber`, `clients.companyRegistrationNumber`, `clients.authorizedRepresentative`, plus adjacent contact fields when returned with client DTOs) | `hardened internal KEEP candidate` | Production metadata is present-compatible and active internal client-management routes use the fields. CLIENT-IDENTITY-FIELDS-HARDEN-1 scopes non-privileged list/detail reads to related-case access, limits create/update to `ADMIN` / `PARTNER`, and adds targeted authorization tests. Treat as internal-only and privacy-sensitive until a separate human keep decision approves the narrow boundary. |
+| Client identity fields (`clients.taxNumber`, `clients.companyRegistrationNumber`, `clients.authorizedRepresentative`, plus adjacent contact fields when returned with client DTOs) | `KEEP — narrow internal baseline` | Production metadata is present-compatible and active internal client-management routes use the fields. CLIENT-IDENTITY-FIELDS-HARDEN-1 scopes non-privileged list/detail reads to related-case access, limits create/update to `ADMIN` / `PARTNER`, and adds targeted authorization tests. CLIENT-IDENTITY-FIELDS-INTERNAL-KEEP-DECISION-1 approves only that hardened internal client-route boundary. |
 | `cases.clientRole` | `KEEP-BUT-HARDEN candidate` + `NEEDS PRODUCT DECISION` | Production metadata is present-compatible and the field is active in case DTOs, create/update flows, timeline payloads, and anonymization targeting. Semantics and allowed values are underdefined, and generic case update does not show a dedicated case manager/role policy for changing it. |
 
-Neither item moves to `KEEP` in this audit.
+This original audit did not move either item to `KEEP`. Later decision packages moved `cases.clientRole` and client identity fields separately, each only within its documented narrow internal boundary.
 
 
 ## Follow-up — CASES-CLIENT-ROLE-SEMANTICS-DECISION-1
@@ -151,15 +152,28 @@ Remaining limitations:
 - Any future broader client ownership model requires a separate product/security decision.
 - Client Portal remains disabled/quarantined.
 
-This closeout prepares a possible future narrow internal `KEEP` decision; it does not finalize that decision.
+This closeout prepared the evidence for a possible future narrow internal `KEEP` decision; CLIENT-IDENTITY-FIELDS-INTERNAL-KEEP-DECISION-1 later finalizes that narrow internal decision.
+
+## Final decision — CLIENT-IDENTITY-FIELDS-INTERNAL-KEEP-DECISION-1
+
+CLIENT-IDENTITY-FIELDS-INTERNAL-KEEP-DECISION-1 moves client identity fields to `KEEP — narrow internal baseline`.
+
+This decision is limited to the hardened internal client-route behavior from `8cea64c`:
+
+- non-privileged `GET /api/v1/clients` access is scoped to clients linked to cases where the user is assigned lawyer, creator, or collaborator;
+- `GET /api/v1/clients/:clientId` requires related-case access or `ADMIN` / `PARTNER`;
+- `POST /api/v1/clients` and `PATCH /api/v1/clients/:clientId` require `ADMIN` / `PARTNER`;
+- `Backend/tests/clientIdentityFieldsAuthz.test.ts` must be preserved for this boundary.
+
+This decision does not authorize Client Portal, external/client-facing identity visibility, CP-SCHEMA-1, production apply, schema/migration work, DB migration replay, frontend behavior changes, future client search/export/report routes, a broader client ownership model, or weakening the related-case read scope / `ADMIN` / `PARTNER` management guard. Any future external exposure requires a separate internal/external mapper, field allowlist, GDPR/privacy review, and targeted tests.
 
 ## Required next packages
 
-1. `CLIENT-IDENTITY-FIELDS-HARDEN-1` — completed for the internal route boundary; future work is a separate keep-decision closeout only if desired.
+1. `CLIENT-IDENTITY-FIELDS-HARDEN-1` — completed for the internal route boundary; CLIENT-IDENTITY-FIELDS-INTERNAL-KEEP-DECISION-1 moves only the hardened internal client-route behavior to `KEEP — narrow internal baseline`.
 
 2. `CASES-CLIENT-ROLE-INTERNAL-HARDEN-1` — completed for the internal route boundary; future work is a separate keep-decision closeout only if desired.
 
-Only after this hardening evidence should a future `CLIENT-IDENTITY-INTERNAL-KEEP-DECISION-1` be considered. That future decision must not imply Client Portal or external exposure.
+Any future client identity work after this decision must be a separate package and must not imply Client Portal or external exposure.
 
 ## Non-actions
 
