@@ -107,9 +107,15 @@ The dedicated hardening package addresses the case-role authorization finding fo
 
 `cases.clientRole` moved separately to `KEEP — narrow internal baseline` for the hardened internal matter-party metadata behavior only. Client identity fields remain separate and are not moved by this decision. This does not authorize Client Portal, external visibility, CP-SCHEMA-1, production apply, schema/migration work, or client-facing use of client identity fields.
 
-## Follow-up — CLIENT-IDENTITY-FIELDS-HARDEN-1
+## Hardening closeout — CLIENT-IDENTITY-FIELDS-HARDEN-1
 
-CLIENT-IDENTITY-FIELDS-HARDEN-1 adds internal authorization/exposure hardening for client identity fields. Route inventory and result:
+Commit: `8cea64c`.
+
+CLIENT-IDENTITY-FIELDS-HARDEN-1 completed the authorization/exposure hardening package for client identity fields. It made a narrow backend runtime hardening change only. It did not change Prisma schema, migrations, database state, Azure configuration, Azure app settings, OpenAPI, CORS, frontend code, Client Portal runtime, package files, or feature flags. It did not connect to the database, run a migration, deploy, read business data, or enable Client Portal.
+
+Original risk: production metadata showed `clients.taxNumber`, `clients.companyRegistrationNumber`, and `clients.authorizedRepresentative` as present-compatible, and the internal client routes used these fields, but prior evidence showed broad authenticated reachability rather than a dedicated need-to-know or role-scoped authorization boundary. That was enough for `KEEP-BUT-HARDEN candidate`, not enough for `KEEP`.
+
+Hardening evidence:
 
 | Route/surface | Prior exposure | Hardened result |
 | --- | --- | --- |
@@ -121,9 +127,31 @@ CLIENT-IDENTITY-FIELDS-HARDEN-1 adds internal authorization/exposure hardening f
 | House-style/profile routes | Separate quarantined family with identity-like profile fields. | Not moved by this package; remains separate/quarantined and needs separate review if enabled. |
 | Delete route | Authenticated client delete route. | Not part of this identity-field write hardening; requires separate client lifecycle/admin decision if changed. |
 
-Tests: `Backend/tests/clientIdentityFieldsAuthz.test.ts` covers unauthenticated, unauthorized, related-case, admin/partner, list-scoping, and Client Portal gate behavior.
+Tests:
 
-Current lane: `hardened internal KEEP candidate`. This does not authorize broad `KEEP`, CP-SCHEMA-1, production apply, Client Portal, external visibility, schema/migration work, OpenAPI/CORS change, frontend change, or DB migration replay. Any move to full narrow internal `KEEP` requires a separate human decision.
+- Targeted test file: `Backend/tests/clientIdentityFieldsAuthz.test.ts`.
+- Targeted result in `8cea64c`: 11/11 tests passed.
+- Full backend result in `8cea64c`: 16 suites / 172 tests passed.
+- Coverage includes unauthenticated, unauthorized, related-case, admin/partner, list-scoping, and Client Portal gate behavior.
+
+Decision posture:
+
+- Current lane: `hardened internal KEEP candidate`.
+- Not broad `KEEP`.
+- Not external/client-facing `KEEP`.
+- Not Client Portal.
+- Not CP-SCHEMA-1.
+- Not production apply.
+
+Remaining limitations:
+
+- This hardening covers current internal client routes only.
+- Any future client search/export/report route exposing identity fields requires separate authorization and privacy review.
+- Any future external or Client Portal exposure requires a separate internal/external mapper, field allowlist, ownership checks, and GDPR/privacy review.
+- Any future broader client ownership model requires a separate product/security decision.
+- Client Portal remains disabled/quarantined.
+
+This closeout prepares a possible future narrow internal `KEEP` decision; it does not finalize that decision.
 
 ## Required next packages
 
