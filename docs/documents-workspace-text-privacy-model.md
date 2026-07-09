@@ -415,6 +415,30 @@ Client Portal.
   implementation. Any future AI use requires an explicit human privacy decision,
   anonymization/redaction rule, a provider DPA/region/retention model, and tests.
 
+## Export/SharePoint/generated-document review — DOCUMENTS-WORKSPACE-TEXT-EXPORT-SHAREPOINT-REVIEW-1
+
+- `DOCUMENTS-WORKSPACE-TEXT-EXPORT-SHAREPOINT-REVIEW-1` reviewed export/download,
+  SharePoint/upload, generated-document, contract, anonymize/rehydrate artifact, legal
+  analysis, public metadata, and Client Portal boundaries for accidental
+  `documents.workspaceText` use. **No SharePoint/Graph call, upload, download, export,
+  file processing, document generation, AI/provider call, DB query, migration, deploy,
+  or Azure action was made.**
+- **Inventory result:** raw `workspaceText` is still read/persisted only by the two
+  gated document workspace routes. Document download/version/upload paths use explicit
+  file buffers or SharePoint item IDs, contracts use template data/generated files,
+  anonymize/rehydrate save paths use redacted/rehydrated artifact content, and
+  public/external surfaces remain blocked or sanitized. No inspected export/download/
+  SharePoint/generated-document path silently consumes raw `workspaceText`.
+- **Policy result:** raw `workspaceText` must remain excluded from generated document
+  bodies, contract generation input, SharePoint/Graph upload content, file attachment
+  bodies, download responses, exported review artifacts, PDF/DOCX content, public
+  metadata, and Client Portal payloads unless a future explicit privacy decision creates
+  a sanitized artifact boundary with authorization, gates, retention, logging, and tests.
+- Lane remains **`SECURITY/PRIVACY BLOCKED`**. This does **not** authorize KEEP,
+  production apply, CP-SCHEMA-1, Document/AI enablement, Client Portal enablement,
+  SharePoint/Graph/file-processing/export enablement, or generated-document use of raw
+  workspace text.
+
 ---
 
 *Documentation-only privacy/security design. `documents.workspaceText` remains

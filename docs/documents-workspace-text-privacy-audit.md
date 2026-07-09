@@ -176,6 +176,29 @@ Follow-up implementation packages only after the privacy model exists:
   remains **`SECURITY/PRIVACY BLOCKED`**; no AI/provider use authorized; no KEEP,
   CP-SCHEMA-1, production apply, Document/AI, Client Portal, export/SharePoint, or
   retention implementation authorized.
+- `DOCUMENTS-WORKSPACE-TEXT-EXPORT-SHAREPOINT-REVIEW-1` reviewed the export/download,
+  SharePoint/upload, generated-document, contract, anonymize/rehydrate artifact, legal
+  analysis, public metadata, and Client Portal boundaries. **No SharePoint/Graph call,
+  upload, download, export, file processing, document generation, AI/provider call, DB
+  query, migration, deploy, or Azure action was made.**
+- **Inventory result:** raw `workspaceText` remains read/persisted only by the two
+  gated document workspace routes (`GET /documents/:id/text`,
+  `POST /documents/:id/save-workspace-version`). Document download/version/upload paths
+  use explicit file buffers or SharePoint item IDs; contract generation/download/upload
+  paths use contract template data and generated local files; anonymize/rehydrate save
+  paths use redacted/rehydrated artifact content; legal-analysis/review-suggestion paths
+  store their own text-derived work product; public OpenAPI and Client Portal paths do
+  not authorize raw `workspaceText`.
+- **Boundary result:** no runtime hardening was required for this pass because no
+  inspected export/download/SharePoint/generated-document path silently consumes
+  `documents.workspaceText`. The boundary remains unresolved as a product/privacy
+  decision: any future export, generated-document, SharePoint, Graph, Client Portal, or
+  external use requires a separate sanitized artifact boundary, explicit authorization,
+  feature/privacy gate, logging guard, retention/delete rule, and targeted tests.
+- Lane remains **`SECURITY/PRIVACY BLOCKED`**. This review does **not** authorize KEEP,
+  CP-SCHEMA-1, production apply, Document/AI enablement, Client Portal enablement,
+  SharePoint/Graph/file-processing/export enablement, or generated-document use of raw
+  workspace text.
 
 ## Final Classification
 

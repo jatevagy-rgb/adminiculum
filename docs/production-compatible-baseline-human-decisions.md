@@ -267,3 +267,12 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - **Not KEEP.** This does not authorize CP-SCHEMA-1, production apply, Document/AI enablement, Client Portal, AI/provider use, export, SharePoint, or retention implementation.
 - Remaining blockers: export/SharePoint review; external/Client Portal mapper exclusion; explicit human privacy decision; retention implementation (only if durable storage is ever allowed); and — before any AI use — an explicit privacy decision, anonymization/redaction rule, and provider DPA/region/retention model.
 - **Production apply and CP-SCHEMA-1 remain blocked.**
+
+## 20. DOCUMENTS-WORKSPACE-TEXT-EXPORT-SHAREPOINT-REVIEW-1
+
+- `documents.workspaceText`: **`SECURITY/PRIVACY BLOCKED`**, **authz-hardened, retention-designed, logging-guard-implemented, AI/provider-gate-reviewed, and export/SharePoint/generated-document-boundary-reviewed**.
+- `DOCUMENTS-WORKSPACE-TEXT-EXPORT-SHAREPOINT-REVIEW-1` reviewed export/download, SharePoint/upload, generated-document, contract, anonymize/rehydrate artifact, legal-analysis, public metadata, and Client Portal boundaries. **No SharePoint/Graph call, upload, download, export, file processing, document generation, AI/provider call, DB query, migration, deploy, or Azure action was made.**
+- **Finding:** raw `workspaceText` remains read/persisted only by the two gated document workspace routes (`GET /documents/:id/text`, `POST /documents/:id/save-workspace-version`). Document download/version/upload paths use explicit file buffers or SharePoint item IDs; contracts use template data and generated local files; anonymize/rehydrate save paths use redacted/rehydrated artifact content; public metadata and Client Portal remain sanitized/blocked. No inspected export/download/SharePoint/generated-document path silently consumes raw `workspaceText`, so no runtime hardening was required.
+- **Not KEEP.** This does not authorize CP-SCHEMA-1, production apply, Document/AI enablement, Client Portal, SharePoint/Graph/file-processing/export enablement, or generated-document use of raw workspace text.
+- Remaining blockers: external/Client Portal mapper exclusion; explicit human privacy decision; retention implementation (only if durable storage is ever allowed); and any future export/SharePoint/generated-document use requires a sanitized artifact boundary, explicit authorization, feature/privacy gate, logging guard, retention/delete rules, and targeted tests.
+- **Production apply and CP-SCHEMA-1 remain blocked.**
