@@ -144,6 +144,20 @@ This audit did not:
   enablement.
 - `documents.workspaceText` remains outside the narrow internal KEEP baseline.
 
+## Update — Production-compatible baseline final rollup
+
+- `docs/production-compatible-baseline-final-rollup.md` records the final rollup after the
+  present-compatible KEEP candidate decisions and the `documents.workspaceText` blocked
+  closeout.
+- KEEP candidates resolved into a narrow internal baseline only: `clients.color`,
+  `case_collaborators`, `workload_records`, `cases.clientRole`, and client identity fields.
+- `documents.workspaceText` remains present-compatible but excluded from `KEEP` because it
+  can contain raw privileged legal text and still lacks retention implementation and a
+  human legal/privacy decision for durable storage.
+- The final baseline is narrow and internal only; it does not authorize production apply,
+  CP-SCHEMA-1, Client Portal, external visibility, AI/provider use, export/SharePoint use,
+  Document/AI enablement, or migration/schema work.
+
 ## Final classification
 
 `present_compatible_keep_candidates_audited_no_db_change_no_runtime_change`

@@ -328,3 +328,20 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
   client identity fields).
 - **Production apply and CP-SCHEMA-1 remain blocked.** Any future move requires a separate
   human decision and likely a separate implementation package.
+
+## 23. Production-compatible baseline final rollup
+
+- `PRODUCTION-COMPATIBLE-BASELINE-FINAL-ROLLUP-1` created
+  `docs/production-compatible-baseline-final-rollup.md`.
+- The final narrow internal KEEP baseline remains limited to `clients.color`,
+  `case_collaborators`, `workload_records`, `cases.clientRole`, and client identity
+  fields, each only within its documented internal boundary.
+- `documents.workspaceText` remains **`SECURITY/PRIVACY BLOCKED`** and outside the narrow
+  internal KEEP baseline.
+- Quarantined families remain quarantined, including Client Portal / external visibility,
+  Document/AI privacy boundary, contracts / generated documents, temporary ops / DB admin
+  routes, OpenAPI / CORS exposure boundary, partial schema drift leftovers, CP-SCHEMA-1,
+  and production apply.
+- **Production apply and CP-SCHEMA-1 remain blocked.** This rollup does not authorize DB
+  apply, migration creation/application, Client Portal, Document/AI, AI/provider use,
+  SharePoint/export, external visibility, or Azure/deployment work.
