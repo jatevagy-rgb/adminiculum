@@ -118,6 +118,13 @@ This audit did not:
 - run file-processing jobs;
 - authorize CP-SCHEMA-1.
 
+## Update — DOCUMENTS-WORKSPACE-TEXT-AUTHZ-CLOSEOUT-1
+
+- `documents.workspaceText` is **authz-hardened** (`d3f6bea`) but remains
+  **`SECURITY/PRIVACY BLOCKED`**.
+- It is **not** part of the narrow internal KEEP baseline (`clients.color`,
+  `case_collaborators`, `workload_records`, `cases.clientRole`, client identity fields).
+
 ## Final classification
 
 `present_compatible_keep_candidates_audited_no_db_change_no_runtime_change`

@@ -214,3 +214,17 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - This **preserves the `SECURITY/PRIVACY BLOCKED` lane**.
 - It does **not** authorize KEEP, CP-SCHEMA-1, production apply, external visibility, AI/provider use, or file processing; it does **not** enable Client Portal; it does **not** resolve retention/logging/AI/export privacy blockers.
 - Any move out of blocked status requires separate privacy closeout and human decision.
+
+## 15. DOCUMENTS-WORKSPACE-TEXT-AUTHZ-CLOSEOUT-1
+
+- `documents.workspaceText`: **`SECURITY/PRIVACY BLOCKED`**, **authz-hardened after `d3f6bea`**.
+- Production metadata: **present-compatible**.
+- Raw-text routes remain **default-disabled behind the Document/AI gate**.
+- Read (`GET /documents/:id/text`) and write (`POST /documents/:id/save-workspace-version`)
+  now require **document/case read access** and **case manage access** respectively.
+- Broad responses **omit** raw text (`getCaseDocuments`, `searchDocuments`, `getDocumentById`, case-detail).
+- **Not KEEP.**
+- Required before any candidate review: retention design/implementation; logging guard;
+  AI/provider gate review; export/SharePoint review; external/Client Portal exclusion;
+  explicit human privacy decision.
+- **Production apply and CP-SCHEMA-1 remain blocked.**

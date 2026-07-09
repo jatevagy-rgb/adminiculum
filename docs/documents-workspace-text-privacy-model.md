@@ -305,6 +305,56 @@ Client Portal.
   AI/provider, export/SharePoint, and Client Portal/external blockers remain
   **unresolved** and are still `SECURITY/PRIVACY BLOCKED`.
 
+## Authorization hardening closeout — DOCUMENTS-WORKSPACE-TEXT-AUTHZ-HARDEN-1
+
+- **Commit:** `d3f6bea`.
+- **Runtime change:** narrow backend authorization/exposure hardening only.
+- **Schema / migration / DB / Azure / Client Portal / Document-AI flag / AI-provider /
+  SharePoint / file-processing changes:** none.
+- **Raw-text code paths confirmed** (the only two in the codebase):
+  - `GET /documents/:id/text`
+  - `POST /documents/:id/save-workspace-version`
+- **Broad DTOs confirmed to omit `workspaceText`:**
+  - `getCaseDocuments`
+  - `searchDocuments`
+  - `getDocumentById`
+  - case-detail
+- **Read route (`GET /:id/text`):** remains auth-first; remains behind the
+  default-disabled Document/AI gate; **now requires document/case read access**
+  (assigned lawyer / creator / privileged role / collaborator on the owning case).
+- **Write route (`POST /:id/save-workspace-version`):** remains auth-first; remains
+  behind the default-disabled Document/AI gate; **now requires case manage access**.
+- **Non-enumeration:** missing / out-of-scope documents return **404**; ordinary
+  authenticated users cannot read/write arbitrary document text by id; no raw text
+  appears in responses, errors, or logs.
+- **Route order:** `401 unauth` → `501 gate off` → `404 missing` → `403 no access` →
+  handler.
+- **Tests:** `documentsWorkspaceTextAuthz` — **11/11 passed**.
+- **Full backend:** **17 suites / 183 tests passed**.
+
+### Decision posture (unchanged blocked lane)
+
+- Current lane remains **`SECURITY/PRIVACY BLOCKED`** — **authz-hardened but still
+  privacy-blocked**.
+- **Not** KEEP. **Not** Client Portal. **Not** external visibility. **Not**
+  AI/provider approved. **Not** export/SharePoint approved. **Not** retention-approved.
+  **Not** CP-SCHEMA-1. **Not** production apply.
+
+### Remaining blockers (before any internal-candidate review)
+
+- retention policy **not implemented**;
+- logging guard **not separately proven**;
+- AI/provider gate review **not complete**;
+- export/download/SharePoint model **not implemented**;
+- Client Portal / external mapper **not designed**;
+- **no human decision** for internal candidate review.
+
+### Next package
+
+- `DOCUMENTS-WORKSPACE-TEXT-RETENTION-DESIGN-1` (clearing / retention / legal-hold
+  design), then logging guard, AI-gate review, export/SharePoint review, and only
+  after all of those a **not-KEEP** internal-candidate review.
+
 ---
 
 *Documentation-only privacy/security design. `documents.workspaceText` remains

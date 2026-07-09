@@ -149,6 +149,11 @@ Follow-up implementation packages only after the privacy model exists:
   (both still auth-first and behind the default-disabled Document/AI gate). Broad
   list/detail/search responses already omit raw text via explicit DTOs.
 - Lane remains **`SECURITY/PRIVACY BLOCKED`** (authz-hardened but privacy-blocked; not KEEP).
+- `DOCUMENTS-WORKSPACE-TEXT-AUTHZ-CLOSEOUT-1` (`d3f6bea`) documented the completed
+  hardening: the raw-text read/write route authorization is now document/case-scoped.
+  `workspaceText` **remains `SECURITY/PRIVACY BLOCKED`**; the hardening does **not**
+  resolve the retention / logging / AI-provider / export-SharePoint / external
+  (Client Portal) blockers.
 
 ## Final Classification
 
