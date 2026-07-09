@@ -125,6 +125,18 @@ AI/provider use is authorized. No SharePoint/export enablement is authorized.
   application, CP-SCHEMA-1, Client Portal, external visibility, Document/AI enablement,
   AI/provider use, SharePoint/export, or Azure deployment.
 
+## Follow-up — CLIENT-PORTAL-PRODUCT-BOUNDARY-DESIGN-1
+
+- `CLIENT-PORTAL-PRODUCT-BOUNDARY-DESIGN-1` created
+  `docs/client-portal-product-boundary-design.md`.
+- The design defines a future Client Portal as a safe external matter-status and
+  client-action surface, not a mirror of the internal lawyer workflow app.
+- This design does not alter the final rollup posture: Client Portal remains
+  disabled/quarantined, CP-SCHEMA-1 remains blocked, production apply remains NO-GO, and
+  external visibility remains unauthorized.
+- The narrow internal KEEP baseline remains internal only and does not authorize
+  client-facing exposure.
+
 ## Non-actions
 
 - No runtime changed.

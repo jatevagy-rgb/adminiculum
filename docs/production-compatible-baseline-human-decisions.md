@@ -355,3 +355,14 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
   deployment, or Azure app setting change is authorized.
 - CP-SCHEMA-1 remains **blocked** and is not authorized by the narrow internal KEEP
   baseline, the final rollup, or this NO-GO reconfirmation.
+
+## 25. Client Portal product boundary design
+
+- `CLIENT-PORTAL-PRODUCT-BOUNDARY-DESIGN-1` created
+  `docs/client-portal-product-boundary-design.md`.
+- The document defines product and privacy boundaries for a future Client Portal only.
+- Client Portal remains **disabled/quarantined**.
+- CP-SCHEMA-1 and production apply remain **blocked**.
+- No external visibility, Client Portal runtime, schema migration, DB apply, Azure
+  deployment, Document/AI enablement, AI/provider use, SharePoint/export use, or
+  `documents.workspaceText` exposure is authorized.
