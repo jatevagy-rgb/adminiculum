@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../../middleware/auth';
+import { requireWorkloadManagerAccess } from './authorization';
 import { workgroupService, workloadService, isValidPeriodFormat } from './services';
 
 const router = Router();
@@ -14,7 +15,7 @@ const router = Router();
 // ============================================================================
 
 // POST /clients/:clientId/workgroups - Create new workgroup
-router.post('/clients/:clientId/workgroups', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/clients/:clientId/workgroups', authenticate, requireWorkloadManagerAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { clientId } = req.params as { clientId: string };
     const { name, description } = req.body;
@@ -38,7 +39,7 @@ router.post('/clients/:clientId/workgroups', authenticate, async (req: Request, 
 });
 
 // GET /clients/:clientId/workgroups - List client workgroups
-router.get('/clients/:clientId/workgroups', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/clients/:clientId/workgroups', authenticate, requireWorkloadManagerAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { clientId } = req.params as { clientId: string };
     const workgroups = await workgroupService.getWorkgroupsByClient(clientId);
@@ -50,7 +51,7 @@ router.get('/clients/:clientId/workgroups', authenticate, async (req: Request, r
 });
 
 // GET /workgroups/:id - Get single workgroup
-router.get('/workgroups/:id', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/workgroups/:id', authenticate, requireWorkloadManagerAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const workgroup = await workgroupService.getWorkgroupById(id);
@@ -68,7 +69,7 @@ router.get('/workgroups/:id', authenticate, async (req: Request, res: Response):
 });
 
 // PATCH /workgroups/:id - Update workgroup
-router.patch('/workgroups/:id', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.patch('/workgroups/:id', authenticate, requireWorkloadManagerAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const { name, description, isActive } = req.body;
@@ -87,7 +88,7 @@ router.patch('/workgroups/:id', authenticate, async (req: Request, res: Response
 });
 
 // DELETE /workgroups/:id - Soft delete workgroup
-router.delete('/workgroups/:id', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.delete('/workgroups/:id', authenticate, requireWorkloadManagerAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     await workgroupService.deleteWorkgroup(id);
@@ -108,7 +109,7 @@ router.delete('/workgroups/:id', authenticate, async (req: Request, res: Respons
 // ============================================================================
 
 // POST /workgroups/:id/workload - Record workload
-router.post('/workgroups/:id/workload', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/workgroups/:id/workload', authenticate, requireWorkloadManagerAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const { period, reportedHours, note } = req.body;
@@ -148,7 +149,7 @@ router.post('/workgroups/:id/workload', authenticate, async (req: Request, res: 
 });
 
 // GET /workgroups/:id/workload - Get workload records for workgroup
-router.get('/workgroups/:id/workload', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/workgroups/:id/workload', authenticate, requireWorkloadManagerAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const records = await workloadService.getWorkloadByWorkgroup(id);
@@ -164,7 +165,7 @@ router.get('/workgroups/:id/workload', authenticate, async (req: Request, res: R
 // ============================================================================
 
 // GET /clients/:clientId/workload-summary - Get workload summary for client
-router.get('/clients/:clientId/workload-summary', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/clients/:clientId/workload-summary', authenticate, requireWorkloadManagerAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { clientId } = req.params as { clientId: string };
     const { period } = req.query as { period?: string };

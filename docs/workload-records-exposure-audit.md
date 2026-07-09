@@ -95,7 +95,7 @@ Relationship and index shape:
 
 `workload_records` remains:
 
-`KEEP-BUT-HARDEN candidate`
+`hardened internal KEEP candidate`
 
 Reason:
 
@@ -103,29 +103,72 @@ Reason:
 - The repo has active internal runtime and frontend usage.
 - The data can be useful internal client/workgroup capacity metadata.
 - Public OpenAPI metadata currently quarantines workload/workgroup paths.
-- However, inspected runtime routes rely on general authentication, with no visible client/workgroup/role/current-user scoped authorization or targeted tests.
+- WORKLOAD-RECORDS-HARDEN-1 added scoped internal authorization that limits workload/workgroup read and write routes to `ADMIN` / `PARTNER`.
+- Ordinary authenticated users are rejected before workload/workgroup DB access.
 - Workload data can expose internal capacity, productivity, client relationship intensity, and optional internal notes.
 
-This audit does not move `workload_records` to `KEEP`. It also does not move workload data to Client Portal, external visibility, CP-SCHEMA-1, production apply, or DB migration replay.
+This audit and hardening do not move `workload_records` to full `KEEP`. They also do not move workload data to Client Portal, external visibility, CP-SCHEMA-1, production apply, or DB migration replay.
+
+## Hardening closeout — WORKLOAD-RECORDS-HARDEN-1
+
+Runtime change: narrow backend authorization hardening only.
+
+Schema, migration, DB, Azure, frontend, Client Portal, CORS, and OpenAPI changes: no.
+
+Scoped access policy now applied to all inspected workgroup/workload routes:
+
+- `POST /api/v1/clients/:clientId/workgroups`;
+- `GET /api/v1/clients/:clientId/workgroups`;
+- `GET /api/v1/workgroups/:id`;
+- `PATCH /api/v1/workgroups/:id`;
+- `DELETE /api/v1/workgroups/:id`;
+- `POST /api/v1/workgroups/:id/workload`;
+- `GET /api/v1/workgroups/:id/workload`;
+- `GET /api/v1/clients/:clientId/workload-summary`.
+
+Allowed roles:
+
+- `ADMIN`;
+- `PARTNER`.
+
+Blocked roles include ordinary authenticated `LAWYER`, `COLLAB_LAWYER`, `TRAINEE`, `LEGAL_ASSISTANT`, `CLIENT`, and `EXTERNAL_REVIEWER` until a finer-grained workgroup/client membership model is explicitly designed and tested.
+
+Targeted tests added:
+
+- unauthenticated workload read is rejected before DB access;
+- ordinary authenticated workload summary read is rejected before DB access;
+- `ADMIN` can read workload records;
+- ordinary authenticated workload mutation is rejected before DB access;
+- `PARTNER` can mutate workload records;
+- ordinary authenticated workgroup list read is rejected before DB access;
+- `ADMIN` can read workgroup lists.
+
+Decision posture:
+
+- Current lane: `hardened internal KEEP candidate`.
+- Not broad `KEEP`.
+- Not external/client-facing `KEEP`.
+- Not Client Portal.
+- Not CP-SCHEMA-1.
+- Not production apply.
+
+Remaining limitations:
+
+- This hardening uses conservative `ADMIN` / `PARTNER` scoping because no reliable workgroup membership or client team authorization model exists.
+- Any future self-scoped, lawyer-scoped, workgroup-manager, or client-team access requires a separate model and tests.
+- Any future external exposure requires a separate internal/external mapper, aggregate-only policy, GDPR/privacy review, and DTO tests.
 
 ## Required next package
 
 Recommended next package:
 
-`WORKLOAD-RECORDS-HARDEN-1`
+`WORKLOAD-RECORDS-INTERNAL-KEEP-DECISION-1`
 
 Suggested purpose:
 
-- Add or prove internal role/user/client/workgroup scoping for workload and adjacent workgroup routes.
-- Define who may read workload records and summaries: admin/partner, responsible lawyer, client team member, workgroup manager, or other approved internal role.
-- Define who may create/update/delete workgroups and upsert workload records.
-- Ensure wrong-client, wrong-workgroup, and ordinary authenticated-user access is rejected.
-- Preserve public OpenAPI quarantine unless a separate exposure decision changes it.
-- Keep Client Portal and external visibility out of scope.
-- Add targeted route tests for unauthenticated, unauthorized, authorized read, authorized write, wrong-client/workgroup, and public metadata behavior.
-- No schema change unless separately justified.
-
-If a future hardening package proves those protections, a later `WORKLOAD-RECORDS-INTERNAL-KEEP-DECISION-1` can decide whether to move `workload_records` to narrow internal `KEEP`.
+- Decide whether the hardened `ADMIN` / `PARTNER` internal route set is sufficient to move `workload_records` to narrow internal `KEEP`.
+- Keep Client Portal, external visibility, CP-SCHEMA-1, production apply, and DB migration replay out of scope.
+- Do not broaden workload visibility without a separate scoped authorization model.
 
 ## Non-actions
 
@@ -151,4 +194,4 @@ This audit did not:
 
 ## Final classification
 
-`workload_records_exposure_audited_no_db_change_no_runtime_change`
+`workload_records_authorization_hardened_no_db_change_no_migration_no_azure`
