@@ -242,3 +242,11 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
   - explicit human privacy decision.
 - **Not KEEP.**
 - **Production apply and CP-SCHEMA-1 remain blocked.**
+
+## 17. DOCUMENTS-WORKSPACE-TEXT-LOGGING-GUARD-DESIGN-1
+
+- `documents.workspaceText`: **`SECURITY/PRIVACY BLOCKED`**, **authz-hardened, retention-designed, logging-guard-designed**.
+- Logging guard is **design only** (`docs/documents-workspace-text-logging-guard-design.md`), **not implemented**.
+- **Not KEEP.**
+- Remaining blockers: logging implementation/proof; AI/provider gate review; export/SharePoint review; external/Client Portal mapper exclusion; explicit human privacy decision; retention implementation (only if durable storage is ever allowed).
+- **Production apply and CP-SCHEMA-1 remain blocked.**

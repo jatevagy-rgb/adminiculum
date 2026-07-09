@@ -157,6 +157,9 @@ Follow-up implementation packages only after the privacy model exists:
 - `DOCUMENTS-WORKSPACE-TEXT-RETENTION-DESIGN-1` created a follow-up retention design
   (`docs/documents-workspace-text-retention-design.md`); retention is designed only,
   not implemented. Lane remains **`SECURITY/PRIVACY BLOCKED`**.
+- `DOCUMENTS-WORKSPACE-TEXT-LOGGING-GUARD-DESIGN-1` created a follow-up logging-guard
+  design (`docs/documents-workspace-text-logging-guard-design.md`); logging guard is
+  designed only, not implemented. Lane remains **`SECURITY/PRIVACY BLOCKED`**.
 
 ## Final Classification
 

@@ -248,6 +248,16 @@ review → external/Client-Portal exclusion → a **not-KEEP** internal-candidat
 
 ---
 
+## Logging guard follow-up
+
+- `DOCUMENTS-WORKSPACE-TEXT-LOGGING-GUARD-DESIGN-1` created
+  `docs/documents-workspace-text-logging-guard-design.md`, which defines the
+  content-free logging/error/audit/telemetry/test model referenced by this retention
+  design's "Logging/telemetry relation" and "Audit model" sections. Logging guard is
+  designed only, not implemented. Lane remains **`SECURITY/PRIVACY BLOCKED`**.
+
+---
+
 *Documentation-only retention/deletion design. `documents.workspaceText` remains
 `SECURITY/PRIVACY BLOCKED`. Retention is designed only, not implemented. This does not
 authorize enablement, KEEP, production apply, CP-SCHEMA-1, or Client Portal.*

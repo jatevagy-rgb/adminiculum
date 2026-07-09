@@ -366,6 +366,16 @@ Client Portal.
 - Lane remains **`SECURITY/PRIVACY BLOCKED`**. **No KEEP / enablement authorized.**
 - Recommended immediate next package: `DOCUMENTS-WORKSPACE-TEXT-LOGGING-GUARD-DESIGN-1`.
 
+## Logging guard follow-up — DOCUMENTS-WORKSPACE-TEXT-LOGGING-GUARD-DESIGN-1
+
+- `DOCUMENTS-WORKSPACE-TEXT-LOGGING-GUARD-DESIGN-1` created
+  `docs/documents-workspace-text-logging-guard-design.md`: metadata-only logging,
+  content-free error responses, content-free audit events, telemetry/no-payload
+  rules, synthetic-only test model, and AI/export/external logging boundaries.
+- **Logging guard is designed only; not implemented.** Lane remains
+  **`SECURITY/PRIVACY BLOCKED`**; **no KEEP / enablement authorized**.
+- Recommended immediate next package: `DOCUMENTS-WORKSPACE-TEXT-LOGGING-GUARD-IMPLEMENTATION-1`.
+
 ---
 
 *Documentation-only privacy/security design. `documents.workspaceText` remains
