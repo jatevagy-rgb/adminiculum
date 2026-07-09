@@ -1,5 +1,6 @@
 import express, { Express, NextFunction, Request, Response } from 'express';
 import http from 'http';
+import { Prisma } from '@prisma/client';
 
 // Synthetic placeholder — never real legal content, never logged.
 const SYNTHETIC = 'SYNTHETIC_WORKSPACE_TEXT_DO_NOT_LOG';
@@ -228,5 +229,46 @@ describe('documents.workspaceText authorization hardening', () => {
     const writeRes = await requestJson(createApp(), 'POST', '/documents/doc-1/save-workspace-version', { body: { text: SYNTHETIC } });
     expect(writeRes.status).toBe(403);
     expect((prisma as any).document.create).not.toHaveBeenCalled();
+  });
+
+  // ── logging guard: no raw text in error responses or logs ────────────────
+  it('12. write failure returns content-free 500 and does not leak raw text (response or logs)', async () => {
+    enableGate();
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-1', assignedLawyerId: 'user-1', createdById: 'creator' });
+    (prisma as any).document.create.mockRejectedValue(new Error('insert failed for value ' + SYNTHETIC));
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await requestJson(createApp(), 'POST', '/documents/doc-1/save-workspace-version', { body: { text: SYNTHETIC } });
+      expect(res.status).toBe(500);
+      expect(res.body).toMatchObject({ code: 'INTERNAL_ERROR' });
+      bodyHasNoRawText(res);
+      const logged = errSpy.mock.calls.map((args) => JSON.stringify(args)).join('\n');
+      expect(logged).not.toContain(SYNTHETIC);
+      // content-free metadata is still logged
+      expect(logged).toContain('workspace_text_update');
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('13. write failure with a Prisma error logs code only (no message/params, no raw text)', async () => {
+    enableGate();
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-1', assignedLawyerId: 'user-1', createdById: 'creator' });
+    const prismaErr = new Prisma.PrismaClientKnownRequestError(
+      'constraint failed on ' + SYNTHETIC,
+      { code: 'P2002', clientVersion: 'test' } as any
+    );
+    (prisma as any).document.create.mockRejectedValue(prismaErr);
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await requestJson(createApp(), 'POST', '/documents/doc-1/save-workspace-version', { body: { text: SYNTHETIC } });
+      expect(res.status).toBe(500);
+      bodyHasNoRawText(res);
+      const logged = errSpy.mock.calls.map((args) => JSON.stringify(args)).join('\n');
+      expect(logged).not.toContain(SYNTHETIC);
+      expect(logged).toContain('P2002');
+    } finally {
+      errSpy.mockRestore();
+    }
   });
 });

@@ -376,6 +376,14 @@ Client Portal.
   **`SECURITY/PRIVACY BLOCKED`**; **no KEEP / enablement authorized**.
 - Recommended immediate next package: `DOCUMENTS-WORKSPACE-TEXT-LOGGING-GUARD-IMPLEMENTATION-1`.
 
+- **Update:** `DOCUMENTS-WORKSPACE-TEXT-LOGGING-GUARD-IMPLEMENTATION-1` implemented the
+  guard: `safeWorkspaceTextLogContext` (`Backend/src/modules/documents/logging.ts`)
+  now logs content-free metadata only, and the two raw-text routes' catch blocks no
+  longer log the raw error object; tests prove no synthetic raw text appears in error
+  responses or `console.error` output (`documentsWorkspaceTextAuthz` 13/13). Lane
+  remains **`SECURITY/PRIVACY BLOCKED`**; **not KEEP**; retention/AI/export/external
+  blockers unchanged.
+
 ---
 
 *Documentation-only privacy/security design. `documents.workspaceText` remains

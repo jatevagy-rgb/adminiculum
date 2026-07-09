@@ -12,6 +12,7 @@ import { authenticate } from '../../middleware/auth';
 import { prisma } from '../../prisma/prisma.service';
 import { isDatabaseFoundationEnabled, sendFeatureUnavailable } from '../../middleware/featureAvailability';
 import { requireDocumentReadAccess, requireDocumentManageAccess } from './authorization';
+import { safeWorkspaceTextLogContext } from './logging';
 
 const router = Router();
 const isDocumentProcessingEnabled = (): boolean =>
@@ -282,7 +283,12 @@ const { id } = req.params as { id: string };
       extractedAt: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('Extract document text error:', error);
+    // Content-free logging only: this route handles raw workspaceText, so never log
+    // the raw error object (it may serialize legal text or query params).
+    console.error(
+      'Extract document text error',
+      safeWorkspaceTextLogContext({ action: 'workspace_text_read', result: 'error', documentId: String(req.params.id || ''), error })
+    );
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'A dokumentumszöveg kinyerése sikertelen.' });
   }
 });
@@ -524,7 +530,12 @@ router.post('/:id/save-workspace-version', authenticate, requireDocumentProcessi
       updatedAt: newDocument.updatedAt,
     });
   } catch (error) {
-    console.error('Save workspace version error:', error);
+    // Content-free logging only: the raw workspace text is in scope here, so never log
+    // the raw error object (Prisma errors can echo the input value / query params).
+    console.error(
+      'Save workspace version error',
+      safeWorkspaceTextLogContext({ action: 'workspace_text_update', result: 'error', documentId: String(req.params.id || ''), actorId: (req as any).user?.userId, error })
+    );
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Módosított munkapéldány mentése sikertelen.' });
   }
 });

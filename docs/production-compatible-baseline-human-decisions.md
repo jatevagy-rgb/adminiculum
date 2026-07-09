@@ -250,3 +250,11 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - **Not KEEP.**
 - Remaining blockers: logging implementation/proof; AI/provider gate review; export/SharePoint review; external/Client Portal mapper exclusion; explicit human privacy decision; retention implementation (only if durable storage is ever allowed).
 - **Production apply and CP-SCHEMA-1 remain blocked.**
+
+## 18. DOCUMENTS-WORKSPACE-TEXT-LOGGING-GUARD-IMPLEMENTATION-1
+
+- `documents.workspaceText`: **`SECURITY/PRIVACY BLOCKED`**, **authz-hardened, retention-designed, logging-guard-designed, and logging-guard-implemented**.
+- `DOCUMENTS-WORKSPACE-TEXT-LOGGING-GUARD-IMPLEMENTATION-1` added runtime/test proof for content-free logging/error behavior on the two raw-text routes (`safeWorkspaceTextLogContext`; catch blocks no longer log the raw error object). `documentsWorkspaceTextAuthz` now 13/13.
+- **Not KEEP.** This does not authorize CP-SCHEMA-1, production apply, Document/AI enablement, Client Portal, AI/provider use, export, SharePoint, or retention implementation.
+- Remaining blockers: AI/provider gate review; export/SharePoint review; external/Client Portal mapper exclusion; explicit human privacy decision; retention implementation (only if durable storage is ever allowed).
+- **Production apply and CP-SCHEMA-1 remain blocked.**

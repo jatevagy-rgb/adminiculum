@@ -200,6 +200,33 @@ next, because it closes a real accidental-leak surface with a small, testable ch
 
 ---
 
+## Implementation — DOCUMENTS-WORKSPACE-TEXT-LOGGING-GUARD-IMPLEMENTATION-1
+
+- `DOCUMENTS-WORKSPACE-TEXT-LOGGING-GUARD-IMPLEMENTATION-1` implemented the runtime/test
+  proof for content-free logging/error behavior on the two raw-text routes.
+- Added `Backend/src/modules/documents/logging.ts` (`safeWorkspaceTextLogContext`) which
+  logs only content-free metadata (`action`, `result`, `documentId`, `caseId?`,
+  `actorId?`, error **name** and, for known Prisma errors, error **code**) — never the
+  raw error object, `error.message`, `error.meta`, stack, request body, or Prisma
+  payload.
+- Rewired the catch blocks of `GET /documents/:id/text` and
+  `POST /documents/:id/save-workspace-version` to log via that helper instead of the
+  raw `error` object. Error responses remain content-free (generic messages, no
+  echoed content, no stack traces).
+- Tests (`documentsWorkspaceTextAuthz`, now **13/13**): a forced write failure — with a
+  plain `Error` and with a `PrismaClientKnownRequestError` whose message/params contain
+  the synthetic marker — asserts the synthetic raw text appears in **neither the 500
+  response body nor any `console.error` argument**, while content-free metadata
+  (`workspace_text_update`, `P2002`) is still logged. Prior authz/no-leak tests
+  preserved.
+- Lane remains **`SECURITY/PRIVACY BLOCKED`**. This does **not** authorize KEEP,
+  CP-SCHEMA-1, production apply, Document/AI enablement, Client Portal, AI/provider use,
+  export, SharePoint, or retention implementation.
+
+---
+
 *Documentation-only logging/audit guard design. `documents.workspaceText` remains
-`SECURITY/PRIVACY BLOCKED`. The logging guard is designed only, not implemented. This
-does not authorize enablement, KEEP, production apply, CP-SCHEMA-1, or Client Portal.*
+`SECURITY/PRIVACY BLOCKED`. The logging guard runtime/test proof is now implemented
+(metadata-only logging on the raw-text routes); retention/AI/export/external blockers
+remain. This does not authorize enablement, KEEP, production apply, CP-SCHEMA-1, or
+Client Portal.*
