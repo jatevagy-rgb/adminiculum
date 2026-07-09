@@ -22,7 +22,6 @@ interface CaseListItem {
   status: string;
   priority: string;
   deadline?: Date | null;
-  clientRole?: string | null;
   clientColor?: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -141,7 +140,6 @@ class CasesService {
       status: c.status,
       priority: c.priority,
       deadline: c.deadline || null,
-      clientRole: c.clientRole || null,
       clientColor: null,
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,

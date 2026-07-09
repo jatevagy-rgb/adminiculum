@@ -80,7 +80,7 @@ async function userCanReadCase(req: Request, caseId: string): Promise<boolean | 
   return Boolean(collaborator);
 }
 
-async function userCanManageCaseCollaborators(req: Request, caseId: string): Promise<boolean | null> {
+async function userCanManageCase(req: Request, caseId: string): Promise<boolean | null> {
   if (!req.user?.userId) {
     return false;
   }
@@ -145,7 +145,43 @@ export async function requireCaseCollaboratorManageAccess(
   }
 
   try {
-    const access = await userCanManageCaseCollaborators(req, caseId);
+    const access = await userCanManageCase(req, caseId);
+    if (access === null) {
+      res.status(404).json({
+        status: 404,
+        code: 'CASE_NOT_FOUND',
+        message: 'Case not found',
+      });
+      return;
+    }
+    if (!access) {
+      sendForbidden(res);
+      return;
+    }
+
+    next();
+  } catch {
+    sendAuthorizationError(res);
+  }
+}
+
+export async function requireCaseManageAccess(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const caseId = getCaseId(req);
+  if (!caseId) {
+    res.status(400).json({
+      status: 400,
+      code: 'CASE_ID_REQUIRED',
+      message: 'caseId is required',
+    });
+    return;
+  }
+
+  try {
+    const access = await userCanManageCase(req, caseId);
     if (access === null) {
       res.status(404).json({
         status: 404,

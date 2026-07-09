@@ -98,6 +98,10 @@ Neither item moves to `KEEP` in this audit.
 
 `docs/cases-client-role-semantics-decision.md` reviewed the product/data-model meaning of `cases.clientRole` and selected Option A: internal matter-party metadata. The field remains internal-only and remains a `KEEP-BUT-HARDEN candidate`; the semantics decision does not change this audit's authorization/privacy findings, does not move the field to `KEEP`, and does not authorize Client Portal, external visibility, CP-SCHEMA-1, production apply, schema migration, route changes, or frontend changes.
 
+## Follow-up — CASES-CLIENT-ROLE-INTERNAL-HARDEN-1
+
+The dedicated hardening package addresses the case-role authorization finding for `cases.clientRole`: broad case list responses omit the field, detail/summary/workflow reads require case-level read access, and generic case patch/update requires case-manager access before `clientRole` can be changed. This moves only `cases.clientRole` to `hardened internal KEEP candidate`; it does not move client identity fields to `KEEP`, does not authorize Client Portal/external visibility, and does not authorize production apply, schema migration, CP-SCHEMA-1, or DB migration replay.
+
 ## Required next packages
 
 1. `CLIENT-IDENTITY-FIELDS-HARDEN-1`
@@ -107,13 +111,9 @@ Neither item moves to `KEEP` in this audit.
    - Add tests for unauthenticated, ordinary authenticated, unauthorized, and authorized internal users.
    - No schema change unless separately justified.
 
-2. `CASES-CLIENT-ROLE-INTERNAL-HARDEN-1`
-   - Use the internal matter-party metadata semantics decided in `docs/cases-client-role-semantics-decision.md`.
-   - Add or prove case-level authorization for reading/updating `clientRole` on generic case routes.
-   - Verify create/update rules and targeted tests.
-   - Keep Client Portal and external exposure out of scope.
+2. `CASES-CLIENT-ROLE-INTERNAL-HARDEN-1` — completed for the internal route boundary; future work is a separate keep-decision closeout only if desired.
 
-Only after those packages should a future `CLIENT-IDENTITY-INTERNAL-KEEP-DECISION-1` or `CASES-CLIENT-ROLE-INTERNAL-KEEP-DECISION-1` be considered.
+Only after the remaining client identity hardening package should a future `CLIENT-IDENTITY-INTERNAL-KEEP-DECISION-1` be considered. `CASES-CLIENT-ROLE-INTERNAL-KEEP-DECISION-1` remains optional future closeout and must not imply Client Portal or external exposure.
 
 ## Non-actions
 

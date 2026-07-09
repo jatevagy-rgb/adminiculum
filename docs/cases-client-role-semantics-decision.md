@@ -105,6 +105,20 @@ Scope for that future package:
 - add targeted tests for unauthenticated, unauthorized authenticated, assigned/manager, collaborator, admin, and partner paths as appropriate;
 - keep Client Portal, external visibility, CP-SCHEMA-1, schema migration, OpenAPI/CORS changes, and production apply out of scope unless separately authorized.
 
+## Follow-up — CASES-CLIENT-ROLE-INTERNAL-HARDEN-1
+
+The internal hardening package adds the missing route boundary for this semantics decision:
+
+- broad `GET /api/v1/cases` no longer returns `clientRole`;
+- `GET /api/v1/cases/:caseId`, `GET /api/v1/cases/:caseId/summary`, and `GET /api/v1/cases/:caseId/workflow` require case-level read access before returning case data that can include `clientRole`;
+- `PATCH /api/v1/cases/:caseId` requires case-manager access before updating `clientRole`;
+- `POST /api/v1/cases` remains governed by the existing authenticated create-case rules;
+- targeted backend tests cover unauthenticated, unauthorized, collaborator-read, assigned-lawyer-write, list-omission, workflow-guard, and create-auth cases.
+
+This moves `cases.clientRole` at most to `hardened internal KEEP candidate`. It still does not authorize Client Portal exposure, external mapping, production apply, CP-SCHEMA-1, schema migration, enum conversion, or use as an authorization primitive.
+
+Follow-up classification: `cases_client_role_authorization_hardened_no_db_change_no_migration_no_azure`.
+
 ## Non-actions
 
 This decision did not:

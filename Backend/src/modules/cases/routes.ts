@@ -7,7 +7,7 @@ import { Router, Request, Response } from 'express';
 import casesService from './services';
 import { workflowService } from '../workflow';
 import { authenticate } from '../../middleware/auth';
-import { requireCaseCollaboratorManageAccess, requireCaseReadAccess } from './authorization';
+import { requireCaseCollaboratorManageAccess, requireCaseManageAccess, requireCaseReadAccess } from './authorization';
 
 const router = Router();
 
@@ -63,7 +63,7 @@ router.get('/:caseId/documents', authenticate, async (req: Request, res: Respons
   }
 });
 
-router.get('/:caseId/workflow', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId/workflow', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const workflow = await casesService.getWorkflow(caseId);
@@ -117,7 +117,7 @@ router.get('/:caseId/workflow-history', authenticate, async (req: Request, res: 
 // ============================================================================
 // GET /cases/:caseId/summary
 // ============================================================================
-router.get('/:caseId/summary', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId/summary', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const summary = await casesService.getCaseSummary(caseId);
@@ -156,7 +156,7 @@ router.get('/:caseId/client-house-style', authenticate, async (req: Request, res
 // ============================================================================
 // GET /cases/:caseId
 // ============================================================================
-router.get('/:caseId', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const caseData = await casesService.getCaseById(caseId);
@@ -234,7 +234,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
 // ============================================================================
 // PATCH /cases/:caseId - Partial update (deadline, priority, description)
 // ============================================================================
-router.patch('/:caseId', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.patch('/:caseId', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const { caseId } = req.params as { caseId: string };
