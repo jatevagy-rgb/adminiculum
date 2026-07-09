@@ -111,9 +111,18 @@ This audit and hardening do not move `workload_records` to full `KEEP`. They als
 
 ## Hardening closeout — WORKLOAD-RECORDS-HARDEN-1
 
+Commit: `f6836d7`
+
 Runtime change: narrow backend authorization hardening only.
 
 Schema, migration, DB, Azure, frontend, Client Portal, CORS, and OpenAPI changes: no.
+
+Workgroup/workload routes now require:
+
+- authentication;
+- `ADMIN` or `PARTNER` role.
+
+Ordinary authenticated users receive `403 WORKLOAD_ACCESS_FORBIDDEN`. Unauthorized users are blocked before workload/workgroup DB access.
 
 Scoped access policy now applied to all inspected workgroup/workload routes:
 
@@ -135,6 +144,8 @@ Blocked roles include ordinary authenticated `LAWYER`, `COLLAB_LAWYER`, `TRAINEE
 
 Targeted tests added:
 
+- `workloadRecordsAuthz`;
+- 7 tests passed;
 - unauthenticated workload read is rejected before DB access;
 - ordinary authenticated workload summary read is rejected before DB access;
 - `ADMIN` can read workload records;
@@ -142,6 +153,10 @@ Targeted tests added:
 - `PARTNER` can mutate workload records;
 - ordinary authenticated workgroup list read is rejected before DB access;
 - `ADMIN` can read workgroup lists.
+
+Full backend validation from the hardening package:
+
+- 14 suites / 152 tests passed.
 
 Decision posture:
 
@@ -154,9 +169,13 @@ Decision posture:
 
 Remaining limitations:
 
+- This hardening covers current workgroup/workload routes only.
 - This hardening uses conservative `ADMIN` / `PARTNER` scoping because no reliable workgroup membership or client team authorization model exists.
-- Any future self-scoped, lawyer-scoped, workgroup-manager, or client-team access requires a separate model and tests.
-- Any future external exposure requires a separate internal/external mapper, aggregate-only policy, GDPR/privacy review, and DTO tests.
+- Any future self-scoped workload view requires separate review.
+- Any future workgroup membership model requires separate review.
+- Any future export or reporting route requires separate authorization and privacy review.
+- Any future external/client portal exposure requires a separate internal/external mapper, aggregate-only policy, GDPR/privacy review, and DTO tests.
+- Client Portal remains disabled/quarantined.
 
 ## Required next package
 
@@ -172,7 +191,15 @@ Suggested purpose:
 
 ## Non-actions
 
-This audit did not:
+This closeout update did not:
+
+- change runtime behavior;
+- change route behavior;
+- change tests;
+- change frontend behavior;
+- change OpenAPI or CORS behavior;
+
+This audit and closeout did not:
 
 - change schema;
 - create, edit, apply, resolve, move, or delete migrations;
@@ -180,12 +207,7 @@ This audit did not:
 - apply any DB change;
 - read business data;
 - touch Azure, Kudu, app settings, or deployment;
-- change runtime behavior;
-- change route behavior;
-- change OpenAPI or CORS behavior;
-- change auth behavior;
-- change frontend behavior;
-- change tests;
+- change auth behavior beyond the completed `f6836d7` hardening;
 - run production smoke tests;
 - run AI/provider calls;
 - run SharePoint calls;
@@ -194,4 +216,4 @@ This audit did not:
 
 ## Final classification
 
-`workload_records_authorization_hardened_no_db_change_no_migration_no_azure`
+`workload_records_hardening_closeout_documented_no_db_change_no_runtime_change`
