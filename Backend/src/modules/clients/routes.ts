@@ -4,7 +4,7 @@
  * Matching Frontend Data Contract
  */
 
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../prisma/prisma.service';
 import { authenticate } from '../../middleware/auth';
@@ -14,6 +14,7 @@ import {
 } from '../../middleware/featureAvailability';
 
 const router = Router();
+const CLIENT_IDENTITY_MANAGER_ROLES = new Set(['ADMIN', 'PARTNER']);
 const isHouseStyleFoundationEnabled = () =>
   isDatabaseFoundationEnabled('ENABLE_CLIENT_HOUSE_STYLE');
 const requireHouseStyleFoundation = requireDatabaseFoundation({
@@ -75,6 +76,100 @@ function pickHouseStylePayload(body: any): Record<string, string | null> {
     }
   }
   return data;
+}
+
+function isClientIdentityManager(req: Request): boolean {
+  const role = String(req.user?.role || '').toUpperCase();
+  return CLIENT_IDENTITY_MANAGER_ROLES.has(role);
+}
+
+function sendClientIdentityForbidden(res: Response): void {
+  res.status(403).json({
+    status: 403,
+    code: 'CLIENT_IDENTITY_ACCESS_FORBIDDEN',
+    message: 'You do not have access to client identity data.',
+  });
+}
+
+async function getCaseAccessibleClientIds(req: Request): Promise<string[]> {
+  const userId = req.user?.userId;
+  if (!userId) {
+    return [];
+  }
+
+  const cases = await prisma.case.findMany({
+    where: {
+      OR: [
+        { assignedLawyerId: userId },
+        { createdById: userId },
+        { collaborators: { some: { userId } } },
+      ],
+    },
+    select: { clientId: true },
+  });
+
+  return Array.from(new Set(cases.map((caseRecord: { clientId: string }) => caseRecord.clientId).filter(Boolean)));
+}
+
+async function canReadClientIdentity(req: Request, clientId: string): Promise<boolean> {
+  if (isClientIdentityManager(req)) {
+    return true;
+  }
+
+  const userId = req.user?.userId;
+  if (!userId) {
+    return false;
+  }
+
+  const relatedCase = await prisma.case.findFirst({
+    where: {
+      clientId,
+      OR: [
+        { assignedLawyerId: userId },
+        { createdById: userId },
+        { collaborators: { some: { userId } } },
+      ],
+    },
+    select: { id: true },
+  });
+
+  return Boolean(relatedCase);
+}
+
+async function requireClientIdentityReadAccess(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const clientId = Array.isArray(req.params.clientId) ? req.params.clientId[0] : req.params.clientId;
+  if (!clientId) {
+    res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Client ID is required' });
+    return;
+  }
+
+  try {
+    const access = await canReadClientIdentity(req, clientId);
+    if (!access) {
+      sendClientIdentityForbidden(res);
+      return;
+    }
+    next();
+  } catch (error) {
+    logPrismaRouteError('client identity read authorization', error);
+    res.status(500).json({ status: 500, code: 'CLIENT_IDENTITY_AUTHORIZATION_ERROR', message: 'Client identity access could not be verified.' });
+  }
+}
+
+async function requireClientIdentityManageAccess(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  if (!isClientIdentityManager(req)) {
+    sendClientIdentityForbidden(res);
+    return;
+  }
+  next();
 }
 
 // Ping endpoint for debugging
@@ -163,9 +258,16 @@ router.put('/:clientId/house-style', authenticate, requireHouseStyleFoundation, 
 // ============================================================================
 router.get('/', authenticate, async (req: Request, res: Response): Promise<void> => {
   try {
+    const accessibleClientIds = isClientIdentityManager(req) ? null : await getCaseAccessibleClientIds(req);
+    if (accessibleClientIds !== null && accessibleClientIds.length === 0) {
+      res.json({ data: [] });
+      return;
+    }
+
     let baseClients: any[] = [];
     try {
       baseClients = await prisma.client.findMany({
+        ...(accessibleClientIds ? { where: { id: { in: accessibleClientIds } } } : {}),
         orderBy: { name: 'asc' },
         select: {
           id: true,
@@ -234,7 +336,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
 // ============================================================================
 // GET /clients/:clientId
 // ============================================================================
-router.get('/:clientId', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:clientId', authenticate, requireClientIdentityReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const clientId = Array.isArray(req.params.clientId) ? req.params.clientId[0] : req.params.clientId;
     
@@ -261,7 +363,7 @@ router.get('/:clientId', authenticate, async (req: Request, res: Response): Prom
 // ============================================================================
 // POST /clients
 // ============================================================================
-router.post('/', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/', authenticate, requireClientIdentityManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     // Support both JSON and form-urlencoded body
     const name = req.body.name || req.body['name'];
@@ -317,7 +419,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
 // ============================================================================
 // PATCH /clients/:clientId
 // ============================================================================
-router.patch('/:clientId', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.patch('/:clientId', authenticate, requireClientIdentityManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const clientId = Array.isArray(req.params.clientId) ? req.params.clientId[0] : req.params.clientId;
     

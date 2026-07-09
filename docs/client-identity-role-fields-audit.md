@@ -32,6 +32,7 @@ No production DB, clone DB, Kudu, Azure, migration, smoke test, business-data qu
 - `PROD-SCHEMA-COMPARE-READONLY-1` records client identity fields as present-compatible: `clients.taxNumber`, `clients.companyRegistrationNumber`, `clients.authorizedRepresentative`, and `clients.color`.
 - The same compare records `cases.clientRole` as present-compatible and nullable.
 - `PRESENT-COMPATIBLE-KEEP-CANDIDATES-AUDIT-1` classified client identity fields and `cases.clientRole` as `KEEP-BUT-HARDEN candidate`, not `KEEP`.
+- `CLIENT-IDENTITY-FIELDS-HARDEN-1` moves only client identity fields to `hardened internal KEEP candidate`; it does not move them to broad `KEEP`, Client Portal, or external visibility.
 - `CLIENTS-COLOR-INTERNAL-KEEP-DECISION-1` moved only `clients.color` to narrow internal `KEEP`; it did not include legal identity fields.
 - Client Portal remains disabled/quarantined. `Backend/src/routes/clientPortal.ts` authenticates first and remains unavailable unless both the portal flag and separate ownership-model flag are enabled.
 - Production apply and CP-SCHEMA-1 remain blocked.
@@ -88,7 +89,7 @@ No production DB, clone DB, Kudu, Azure, migration, smoke test, business-data qu
 
 | Item | Decision lane | Rationale |
 | --- | --- | --- |
-| Client identity fields (`clients.taxNumber`, `clients.companyRegistrationNumber`, `clients.authorizedRepresentative`, plus adjacent contact fields when returned with client DTOs) | `KEEP-BUT-HARDEN candidate` | Production metadata is present-compatible and active internal client-management routes use the fields, but current routes appear broadly authenticated without a dedicated client/case need-to-know or role-scoped authorization policy. Treat as internal-only and privacy-sensitive until hardening/tests prove the intended access boundary. |
+| Client identity fields (`clients.taxNumber`, `clients.companyRegistrationNumber`, `clients.authorizedRepresentative`, plus adjacent contact fields when returned with client DTOs) | `hardened internal KEEP candidate` | Production metadata is present-compatible and active internal client-management routes use the fields. CLIENT-IDENTITY-FIELDS-HARDEN-1 scopes non-privileged list/detail reads to related-case access, limits create/update to `ADMIN` / `PARTNER`, and adds targeted authorization tests. Treat as internal-only and privacy-sensitive until a separate human keep decision approves the narrow boundary. |
 | `cases.clientRole` | `KEEP-BUT-HARDEN candidate` + `NEEDS PRODUCT DECISION` | Production metadata is present-compatible and the field is active in case DTOs, create/update flows, timeline payloads, and anonymization targeting. Semantics and allowed values are underdefined, and generic case update does not show a dedicated case manager/role policy for changing it. |
 
 Neither item moves to `KEEP` in this audit.
@@ -106,18 +107,31 @@ The dedicated hardening package addresses the case-role authorization finding fo
 
 `cases.clientRole` moved separately to `KEEP — narrow internal baseline` for the hardened internal matter-party metadata behavior only. Client identity fields remain separate and are not moved by this decision. This does not authorize Client Portal, external visibility, CP-SCHEMA-1, production apply, schema/migration work, or client-facing use of client identity fields.
 
+## Follow-up — CLIENT-IDENTITY-FIELDS-HARDEN-1
+
+CLIENT-IDENTITY-FIELDS-HARDEN-1 adds internal authorization/exposure hardening for client identity fields. Route inventory and result:
+
+| Route/surface | Prior exposure | Hardened result |
+| --- | --- | --- |
+| `GET /api/v1/clients` | Authenticated internal broad list, with identity enrichment returned when columns existed. | Non-privileged users are scoped to clients linked to cases where they are assigned lawyer, creator, or collaborator; users without related cases receive an empty list; `ADMIN` / `PARTNER` can list all. |
+| `GET /api/v1/clients/:clientId` | Authenticated internal whole-client detail. | Requires `ADMIN` / `PARTNER` or related-case access before returning identity/contact fields. |
+| `POST /api/v1/clients` | Authenticated create with identity/contact fields. | Requires `ADMIN` / `PARTNER`. |
+| `PATCH /api/v1/clients/:clientId` | Authenticated update with identity/contact fields. | Requires `ADMIN` / `PARTNER`. |
+| Client Portal | Disabled/quarantined. | Remains disabled/quarantined; targeted test proves `501 FEATURE_NOT_AVAILABLE` and no identity payload while disabled. |
+| House-style/profile routes | Separate quarantined family with identity-like profile fields. | Not moved by this package; remains separate/quarantined and needs separate review if enabled. |
+| Delete route | Authenticated client delete route. | Not part of this identity-field write hardening; requires separate client lifecycle/admin decision if changed. |
+
+Tests: `Backend/tests/clientIdentityFieldsAuthz.test.ts` covers unauthenticated, unauthorized, related-case, admin/partner, list-scoping, and Client Portal gate behavior.
+
+Current lane: `hardened internal KEEP candidate`. This does not authorize broad `KEEP`, CP-SCHEMA-1, production apply, Client Portal, external visibility, schema/migration work, OpenAPI/CORS change, frontend change, or DB migration replay. Any move to full narrow internal `KEEP` requires a separate human decision.
+
 ## Required next packages
 
-1. `CLIENT-IDENTITY-FIELDS-HARDEN-1`
-   - Add or prove internal client/case-level authorization for client identity field reads/writes.
-   - Decide whether client identity create/update requires `ADMIN`, `PARTNER`, assigned lawyer, case collaborator, or another internal role.
-   - Verify DTO boundaries for client list/detail/search.
-   - Add tests for unauthenticated, ordinary authenticated, unauthorized, and authorized internal users.
-   - No schema change unless separately justified.
+1. `CLIENT-IDENTITY-FIELDS-HARDEN-1` — completed for the internal route boundary; future work is a separate keep-decision closeout only if desired.
 
 2. `CASES-CLIENT-ROLE-INTERNAL-HARDEN-1` — completed for the internal route boundary; future work is a separate keep-decision closeout only if desired.
 
-Only after the remaining client identity hardening package should a future `CLIENT-IDENTITY-INTERNAL-KEEP-DECISION-1` be considered. `CASES-CLIENT-ROLE-INTERNAL-KEEP-DECISION-1` remains optional future closeout and must not imply Client Portal or external exposure.
+Only after this hardening evidence should a future `CLIENT-IDENTITY-INTERNAL-KEEP-DECISION-1` be considered. That future decision must not imply Client Portal or external exposure.
 
 ## Non-actions
 
