@@ -93,9 +93,9 @@ Relationship and index shape:
 
 ## Decision lane
 
-`workload_records` remains:
+`workload_records` is now:
 
-`hardened internal KEEP candidate`
+`KEEP — narrow internal baseline`
 
 Reason:
 
@@ -105,9 +105,10 @@ Reason:
 - Public OpenAPI metadata currently quarantines workload/workgroup paths.
 - WORKLOAD-RECORDS-HARDEN-1 added scoped internal authorization that limits workload/workgroup read and write routes to `ADMIN` / `PARTNER`.
 - Ordinary authenticated users are rejected before workload/workgroup DB access.
+- WORKLOAD-RECORDS-INTERNAL-KEEP-DECISION-1 moves only the hardened internal workgroup/workload route surface to narrow internal `KEEP`.
 - Workload data can expose internal capacity, productivity, client relationship intensity, and optional internal notes.
 
-This audit and hardening do not move `workload_records` to full `KEEP`. They also do not move workload data to Client Portal, external visibility, CP-SCHEMA-1, production apply, or DB migration replay.
+This audit, hardening, and internal KEEP decision do not move workload data to broad `KEEP`, Client Portal, external visibility, self-scoped workload views, workgroup membership expansion, export/reporting routes, CP-SCHEMA-1, production apply, or DB migration replay.
 
 ## Hardening closeout — WORKLOAD-RECORDS-HARDEN-1
 
@@ -160,7 +161,7 @@ Full backend validation from the hardening package:
 
 Decision posture:
 
-- Current lane: `hardened internal KEEP candidate`.
+- Current lane: `KEEP — narrow internal baseline`.
 - Not broad `KEEP`.
 - Not external/client-facing `KEEP`.
 - Not Client Portal.
@@ -177,17 +178,33 @@ Remaining limitations:
 - Any future external/client portal exposure requires a separate internal/external mapper, aggregate-only policy, GDPR/privacy review, and DTO tests.
 - Client Portal remains disabled/quarantined.
 
-## Required next package
+## Final decision — WORKLOAD-RECORDS-INTERNAL-KEEP-DECISION-1
 
-Recommended next package:
+`workload_records` is moved from `hardened internal KEEP candidate` to `KEEP — narrow internal baseline`.
 
-`WORKLOAD-RECORDS-INTERNAL-KEEP-DECISION-1`
+This decision is limited to the current internal workgroup/workload routes hardened in `f6836d7`:
 
-Suggested purpose:
+- all current workgroup/workload routes require authentication;
+- all current workgroup/workload routes require `ADMIN` or `PARTNER`;
+- ordinary authenticated users receive `403 WORKLOAD_ACCESS_FORBIDDEN`;
+- unauthorized users are blocked before workload DB access;
+- targeted `workloadRecordsAuthz` tests passed;
+- full backend tests passed after hardening;
+- no schema, migration, DB, Azure, frontend, Client Portal, OpenAPI, CORS, or package change is authorized.
 
-- Decide whether the hardened `ADMIN` / `PARTNER` internal route set is sufficient to move `workload_records` to narrow internal `KEEP`.
-- Keep Client Portal, external visibility, CP-SCHEMA-1, production apply, and DB migration replay out of scope.
-- Do not broaden workload visibility without a separate scoped authorization model.
+Excluded from this decision:
+
+- broad `KEEP`;
+- Client Portal;
+- external/client-facing workload visibility;
+- self-scoped workload views;
+- workgroup membership model expansion;
+- export/reporting routes;
+- CP-SCHEMA-1;
+- production apply;
+- weakening of the `ADMIN` / `PARTNER` guard.
+
+Future external exposure requires a separate internal/external mapper, aggregate-only policy, GDPR/privacy review, and targeted route/DTO tests.
 
 ## Non-actions
 
@@ -216,4 +233,4 @@ This audit and closeout did not:
 
 ## Final classification
 
-`workload_records_hardening_closeout_documented_no_db_change_no_runtime_change`
+`workload_records_internal_keep_decision_documented_no_db_change_no_runtime_change`

@@ -54,10 +54,11 @@ No production DB, clone DB, Kudu, Azure, migration, smoke test, business-data qu
 - CLIENTS-COLOR-INTERNAL-KEEP-DECISION-1 moved only `clients.color` from internal `KEEP candidate` to narrow internal `KEEP`.
 - CASE-COLLABORATORS-INTERNAL-KEEP-DECISION-1 moved only `case_collaborators` from `KEEP-BUT-HARDEN` / `hardened internal KEEP candidate` to `KEEP — narrow internal baseline` after CASE-COLLABORATORS-HARDEN-1 (`7177693`) and CASE-COLLABORATORS-HARDENING-ROLLOUT-1 (`49f2bdc`).
 - WORKLOAD-RECORDS-HARDEN-1 moved only `workload_records` from `KEEP-BUT-HARDEN candidate` to `hardened internal KEEP candidate` after conservative `ADMIN` / `PARTNER` route authorization and targeted tests.
+- WORKLOAD-RECORDS-INTERNAL-KEEP-DECISION-1 moved only `workload_records` from `hardened internal KEEP candidate` to `KEEP — narrow internal baseline` after WORKLOAD-RECORDS-HARDEN-1 (`f6836d7`) and WORKLOAD-RECORDS-HARDENING-CLOSEOUT-1 (`30f15d2`).
 - This does not move client identity fields, `cases.clientRole`, Client Portal, external client visibility, or `documents.workspaceText` out of their prior lanes.
 - The `clients.color` decision does not authorize schema changes, migration creation/application, production apply, CP-SCHEMA-1, route behavior changes, frontend changes, OpenAPI/CORS changes, or external/client-portal exposure.
 - The `case_collaborators` decision does not authorize schema changes, migration creation/application, production apply, CP-SCHEMA-1, future collaborator update/bulk/export routes, authz weakening, OpenAPI/CORS changes, or external/client-portal exposure.
-- The `workload_records` hardening does not authorize full `KEEP`, schema changes, migration creation/application, production apply, CP-SCHEMA-1, self-scoped lawyer/team access, future export/reporting routes, OpenAPI/CORS changes, or external/client-portal exposure.
+- The `workload_records` decision does not authorize schema changes, migration creation/application, production apply, CP-SCHEMA-1, self-scoped lawyer/team access, future membership expansion, future export/reporting routes, OpenAPI/CORS changes, weakening the `ADMIN` / `PARTNER` guard, or external/client-portal exposure.
 
 ## Cross-cutting findings
 
