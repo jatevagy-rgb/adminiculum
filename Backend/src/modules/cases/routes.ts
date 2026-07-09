@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import casesService from './services';
 import { workflowService } from '../workflow';
 import { authenticate } from '../../middleware/auth';
+import { requireCaseCollaboratorManageAccess, requireCaseReadAccess } from './authorization';
 
 const router = Router();
 
@@ -369,7 +370,7 @@ router.get('/dashboard/stats', authenticate, async (req: Request, res: Response)
 // ============================================================================
 // GET /cases/:caseId/collaborators
 // ============================================================================
-router.get('/:caseId/collaborators', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId/collaborators', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const caseId = req.params.caseId as string;
     const collaborators = await casesService.getCaseCollaborators(caseId);
@@ -383,7 +384,7 @@ router.get('/:caseId/collaborators', authenticate, async (req: Request, res: Res
 // ============================================================================
 // POST /cases/:caseId/collaborators
 // ============================================================================
-router.post('/:caseId/collaborators', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:caseId/collaborators', authenticate, requireCaseCollaboratorManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const caseId = req.params.caseId as string;
     const { userId, role } = req.body as { userId: string; role?: string };
@@ -406,10 +407,15 @@ router.post('/:caseId/collaborators', authenticate, async (req: Request, res: Re
 // ============================================================================
 // DELETE /cases/:caseId/collaborators/:collaboratorId
 // ============================================================================
-router.delete('/:caseId/collaborators/:collaboratorId', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.delete('/:caseId/collaborators/:collaboratorId', authenticate, requireCaseCollaboratorManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
+    const caseId = req.params.caseId as string;
     const collaboratorId = req.params.collaboratorId as string;
-    await casesService.removeCaseCollaborator(collaboratorId);
+    const removed = await casesService.removeCaseCollaborator(caseId, collaboratorId);
+    if (!removed) {
+      res.status(404).json({ status: 404, code: 'COLLABORATOR_NOT_FOUND', message: 'Collaborator not found for this case' });
+      return;
+    }
     res.status(204).send();
   } catch (error) {
     console.error('Remove collaborator error:', error);

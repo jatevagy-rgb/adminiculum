@@ -95,7 +95,7 @@ Relationship and index shape:
 
 `case_collaborators` remains:
 
-`KEEP-BUT-HARDEN candidate`
+`hardened internal KEEP candidate`
 
 Reason:
 
@@ -105,21 +105,27 @@ Reason:
 - However, generic collaborator read/write/delete routes appear to rely on general authentication only.
 - Case-level authorization, current-user access checks, manage-collaborator permission, delete path consistency, OpenAPI metadata posture, and targeted tests remain required before a narrow internal `KEEP` decision.
 
-This audit does not move `case_collaborators` to full `KEEP`.
+CASE-COLLABORATORS-HARDEN-1 subsequently added case-level authorization for generic collaborator reads and stronger manager-only authorization for generic collaborator create/delete. It also added targeted tests for unauthenticated access, wrong-case access, authorized collaborator reads, manager writes, and delete path consistency.
+
+This audit and hardening do not move `case_collaborators` to broad `KEEP`. A separate human decision is still required before changing the production-compatible baseline lane to full narrow internal `KEEP`.
 
 ## Required next package
 
-Recommended next package:
+Completed hardening package:
 
 `CASE-COLLABORATORS-HARDEN-1`
 
-Suggested scope:
+Implemented scope:
 
-- Add or prove case-level authorization for collaborator reads.
-- Add or prove manage-collaborator authorization for collaborator create/delete.
-- Ensure collaborator deletion verifies `collaboratorId` belongs to the path `caseId`.
-- Define allowed manager roles, such as privileged roles, assigned lawyer, or explicitly authorized case members.
-- Add tests for unauthenticated, wrong-case, non-collaborator, assigned-lawyer, same-case collaborator, privileged-role, and delete-wrong-case cases.
+- Added case-level authorization for collaborator reads.
+- Added manage-collaborator authorization for collaborator create/delete.
+- Limited collaborator managers to privileged roles, assigned lawyer, or case creator.
+- Allowed same-case collaborators to read collaborator lists but not manage them.
+- Ensured collaborator deletion verifies `collaboratorId` belongs to the path `caseId`.
+- Added targeted tests for unauthenticated, wrong-case, authorized read, authorized write, unauthorized write/delete, and delete-wrong-case behavior.
+
+Remaining before full internal `KEEP`:
+
 - Confirm public OpenAPI metadata does not present collaborator management as externally safe.
 - Keep Client Portal external exposure out of scope unless a separate publication/mapper model exists.
 - No schema change unless separately justified.
@@ -136,8 +142,8 @@ This audit did not:
 - apply any DB change;
 - read business data;
 - touch Azure, Kudu, app settings, or deployment;
-- change runtime behavior;
-- change route behavior;
+- change runtime behavior beyond collaborator authorization hardening;
+- change route behavior beyond collaborator authorization hardening;
 - change OpenAPI or CORS behavior;
 - change auth behavior;
 - change frontend behavior;
@@ -150,4 +156,4 @@ This audit did not:
 
 ## Final classification
 
-`case_collaborators_authz_audited_no_db_change_no_runtime_change`
+`case_collaborators_authorization_hardened_no_db_change_no_migration_no_azure`

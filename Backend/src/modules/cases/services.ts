@@ -885,10 +885,11 @@ return {
   /**
    * Remove a collaborator from a case
    */
-  async removeCaseCollaborator(collaboratorId: string): Promise<void> {
-    await prisma.caseCollaborator.delete({
-      where: { id: collaboratorId }
+  async removeCaseCollaborator(caseId: string, collaboratorId: string): Promise<boolean> {
+    const result = await prisma.caseCollaborator.deleteMany({
+      where: { id: collaboratorId, caseId }
     });
+    return result.count > 0;
   }
 }
 
