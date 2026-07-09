@@ -137,6 +137,13 @@ Follow-up implementation packages only after the privacy model exists:
 - No file processing performed.
 - No SharePoint call made.
 
+## Follow-up
+
+- `DOCUMENTS-WORKSPACE-TEXT-PRIVACY-MODEL-DESIGN-1` created a follow-up privacy model:
+  `docs/documents-workspace-text-privacy-model.md` (defines the minimum
+  privacy/security prerequisites before any controlled internal use).
+- Lane remains **`SECURITY/PRIVACY BLOCKED`**.
+
 ## Final Classification
 
 `documents_workspace_text_privacy_audited_no_db_change_no_runtime_change`

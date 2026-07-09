@@ -194,3 +194,15 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 ## 12. Final classification
 
 `cases_client_role_semantics_decision_documented_no_db_change_no_runtime_change`
+
+## 13. DOCUMENTS-WORKSPACE-TEXT-PRIVACY-MODEL-DESIGN-1
+
+- `DOCUMENTS-WORKSPACE-TEXT-PRIVACY-MODEL-DESIGN-1` created `docs/documents-workspace-text-privacy-model.md`.
+- `documents.workspaceText` remains **`SECURITY/PRIVACY BLOCKED`**.
+- The privacy model defines **prerequisites only**; it does **not** authorize enablement or KEEP.
+- Production apply and CP-SCHEMA-1 remain **blocked**.
+- Client Portal remains **disabled/quarantined**.
+- Document/AI privacy boundary remains **guarded/default-disabled**.
+- Recommended immediate next package: `DOCUMENTS-WORKSPACE-TEXT-AUTHZ-HARDEN-1`
+  (the audit found reachable-if-enabled read/write routes + broad-response inclusion risk
+  needing document/case-level hardening first).
