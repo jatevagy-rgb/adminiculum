@@ -105,17 +105,60 @@ Scope for that future package:
 - add targeted tests for unauthenticated, unauthorized authenticated, assigned/manager, collaborator, admin, and partner paths as appropriate;
 - keep Client Portal, external visibility, CP-SCHEMA-1, schema migration, OpenAPI/CORS changes, and production apply out of scope unless separately authorized.
 
-## Follow-up — CASES-CLIENT-ROLE-INTERNAL-HARDEN-1
+## Hardening closeout — CASES-CLIENT-ROLE-INTERNAL-HARDEN-1
 
-The internal hardening package adds the missing route boundary for this semantics decision:
+Commit: `e2a943a`.
 
-- broad `GET /api/v1/cases` no longer returns `clientRole`;
-- `GET /api/v1/cases/:caseId`, `GET /api/v1/cases/:caseId/summary`, and `GET /api/v1/cases/:caseId/workflow` require case-level read access before returning case data that can include `clientRole`;
-- `PATCH /api/v1/cases/:caseId` requires case-manager access before updating `clientRole`;
+This closeout documents the already-completed internal hardening package. It does not make a new runtime change, schema change, migration, DB connection, DB apply, Azure deployment or app-setting change, Client Portal change, OpenAPI/CORS change, frontend change, test change, or feature enablement.
+
+Original risk:
+
+- production metadata showed `cases.clientRole` as present-compatible and nullable;
+- the field appeared in case DTOs and could be updated through generic case routes;
+- prior evidence showed general authentication, but not enough case-level authorization evidence for broad reads or writes;
+- the field can reveal matter-party/legal-side context and affects anonymization/redaction targeting.
+
+Product semantics preserved:
+
+- `cases.clientRole` remains internal matter-party metadata for lawyer workflow, document-generation context, and anonymization/redaction targeting;
+- it is not Client Portal display;
+- it is not external visibility;
+- it is not an authorization primitive;
+- it is not an enum contract or public API contract.
+
+Hardening evidence from `e2a943a`:
+
+- reusable `requireCaseManageAccess` was added for case-manager write checks;
+- `GET /api/v1/cases/:caseId`, `GET /api/v1/cases/:caseId/summary`, and `GET /api/v1/cases/:caseId/workflow` now require case-level read access before returning case data that can include `clientRole`;
+- `PATCH /api/v1/cases/:caseId` now requires case-manager access before updating `clientRole`;
+- broad `GET /api/v1/cases` no longer returns `clientRole` in the case list DTO;
 - `POST /api/v1/cases` remains governed by the existing authenticated create-case rules;
-- targeted backend tests cover unauthenticated, unauthorized, collaborator-read, assigned-lawyer-write, list-omission, workflow-guard, and create-auth cases.
+- focused `casesClientRoleAuthz` tests cover unauthenticated detail rejection, unauthorized detail rejection, collaborator detail read, list omission, unauthenticated patch rejection, unauthorized patch rejection, assigned-lawyer patch, workflow read guard, and authenticated create-case boundary.
 
-This moves `cases.clientRole` at most to `hardened internal KEEP candidate`. It still does not authorize Client Portal exposure, external mapping, production apply, CP-SCHEMA-1, schema migration, enum conversion, or use as an authorization primitive.
+Validation evidence:
+
+- `git diff --check` passed;
+- `cd Backend && npx.cmd prisma validate` passed;
+- `cd Backend && npx.cmd tsc --noEmit` passed;
+- `cd Backend && npm.cmd test -- --runInBand` passed: 15 suites / 161 tests.
+
+Decision posture after closeout:
+
+- current lane: `hardened internal KEEP candidate`;
+- not broad `KEEP` yet;
+- not external/client-facing `KEEP`;
+- not Client Portal;
+- not CP-SCHEMA-1;
+- not production apply;
+- not DB migration replay.
+
+Remaining limitations:
+
+- this hardening covers current internal `cases.clientRole` detail, summary, workflow, list, and patch exposure paths only;
+- any future broad list, search, export, reporting, analytics, or bulk route that includes `clientRole` requires separate review and tests;
+- any future external or Client Portal exposure requires a separate internal/external mapper, explicit publication model, need-to-know authorization, and GDPR/privacy review;
+- any future use of `clientRole` as an authorization, tenant, ownership, or security primitive is not authorized;
+- Client Portal remains disabled/quarantined.
 
 Follow-up classification: `cases_client_role_authorization_hardened_no_db_change_no_migration_no_azure`.
 
