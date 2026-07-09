@@ -384,6 +384,37 @@ Client Portal.
   remains **`SECURITY/PRIVACY BLOCKED`**; **not KEEP**; retention/AI/export/external
   blockers unchanged.
 
+## AI/provider gate review — DOCUMENTS-WORKSPACE-TEXT-AI-GATE-REVIEW-1
+
+- `DOCUMENTS-WORKSPACE-TEXT-AI-GATE-REVIEW-1` reviewed and regression-proofed the
+  AI/provider/prompt gate boundary. **No AI/provider call was made; no provider
+  credential added; no feature flag enabled in production code.**
+- **Inventory result:** the backend contains **no in-code AI provider client**
+  (no OpenAI/Anthropic SDK call). The single prompt-construction path is
+  `anonymizeDocument`'s `aiReadyPrompt` (`Backend/src/modules/anonymize/services.ts`),
+  which is built **only from anonymized/redacted content** and is gated by
+  `ENABLE_AI_ANONYMIZATION && ENABLE_DOCUMENT_AI_PRIVACY_MODEL`. Raw
+  `documents.workspaceText` is read in **exactly two** routes
+  (`GET /documents/:id/text`, `POST /documents/:id/save-workspace-version`), both
+  gated by `ENABLE_DOCUMENT_PROCESSING && ENABLE_DOCUMENT_AI_PRIVACY_MODEL`,
+  auth-first then authz.
+- **No path wires raw `workspaceText` into prompt construction or a provider
+  call.** The documents router imports no anonymize/prompt/provider module; the
+  workspace routes forward text to neither the prompt builder nor any AI service.
+  No hardening was required beyond regression proof (narrowest safe change).
+- **Regression proof:** `Backend/tests/documentsWorkspaceTextAiGate.test.ts`
+  (synthetic marker only) asserts: gate-off → the workspace read/write routes and
+  the anonymize/prompt route return content-free 501 and the prompt/provider path
+  is never invoked; legacy flags alone do not open the workspace→prompt path; even
+  fully enabled (test-only) the workspace save path never invokes the AI/prompt
+  path with raw text and never echoes/logs the marker; and the documents router
+  statically imports no provider/anonymize/prompt module.
+- Lane remains **`SECURITY/PRIVACY BLOCKED`**. **No AI/provider use is
+  authorized.** This does **not** authorize KEEP, CP-SCHEMA-1, production apply,
+  Document/AI enablement, Client Portal, export/SharePoint, or retention
+  implementation. Any future AI use requires an explicit human privacy decision,
+  anonymization/redaction rule, a provider DPA/region/retention model, and tests.
+
 ---
 
 *Documentation-only privacy/security design. `documents.workspaceText` remains

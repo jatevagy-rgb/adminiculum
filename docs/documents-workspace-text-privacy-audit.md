@@ -160,6 +160,22 @@ Follow-up implementation packages only after the privacy model exists:
 - `DOCUMENTS-WORKSPACE-TEXT-LOGGING-GUARD-DESIGN-1` created a follow-up logging-guard
   design (`docs/documents-workspace-text-logging-guard-design.md`); logging guard is
   designed only, not implemented. Lane remains **`SECURITY/PRIVACY BLOCKED`**.
+- `DOCUMENTS-WORKSPACE-TEXT-LOGGING-GUARD-IMPLEMENTATION-1` (`52fe3d6`) implemented the
+  logging guard: `safeWorkspaceTextLogContext` (`Backend/src/modules/documents/logging.ts`)
+  logs content-free metadata only and the two raw-text route catch blocks no longer
+  serialize the raw error object; `documentsWorkspaceTextAuthz` proves no synthetic raw
+  text appears in error responses/logs (13/13). Lane remains **`SECURITY/PRIVACY BLOCKED`**.
+- `DOCUMENTS-WORKSPACE-TEXT-AI-GATE-REVIEW-1` reviewed/regression-proofed the AI/provider
+  gate boundary. **No AI/provider call was made.** Inventory found **no in-code AI
+  provider client**; the only prompt-construction path (`anonymizeDocument`'s
+  `aiReadyPrompt`) is fed only anonymized/redacted content and is privacy-gated; raw
+  `workspaceText` is read in only the two gated document routes and is wired to **no**
+  prompt/provider path. Added `Backend/tests/documentsWorkspaceTextAiGate.test.ts`
+  proving raw workspace text cannot reach the prompt/provider path (gate-off,
+  legacy-flags-only, fully-enabled non-forwarding, and static no-provider-import). Lane
+  remains **`SECURITY/PRIVACY BLOCKED`**; no AI/provider use authorized; no KEEP,
+  CP-SCHEMA-1, production apply, Document/AI, Client Portal, export/SharePoint, or
+  retention implementation authorized.
 
 ## Final Classification
 

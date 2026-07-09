@@ -258,3 +258,12 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - **Not KEEP.** This does not authorize CP-SCHEMA-1, production apply, Document/AI enablement, Client Portal, AI/provider use, export, SharePoint, or retention implementation.
 - Remaining blockers: AI/provider gate review; export/SharePoint review; external/Client Portal mapper exclusion; explicit human privacy decision; retention implementation (only if durable storage is ever allowed).
 - **Production apply and CP-SCHEMA-1 remain blocked.**
+
+## 19. DOCUMENTS-WORKSPACE-TEXT-AI-GATE-REVIEW-1
+
+- `documents.workspaceText`: **`SECURITY/PRIVACY BLOCKED`**, **authz-hardened, retention-designed, logging-guard-implemented, and AI/provider-gate-reviewed**.
+- `DOCUMENTS-WORKSPACE-TEXT-AI-GATE-REVIEW-1` reviewed and regression-proofed the AI/provider/prompt gate boundary. **No AI/provider call was made; no provider credential added; no feature flag enabled.**
+- **Finding:** the backend has **no in-code AI provider client**; the only prompt-construction path (`anonymizeDocument`'s `aiReadyPrompt`) is fed only anonymized/redacted content and is gated by `ENABLE_AI_ANONYMIZATION && ENABLE_DOCUMENT_AI_PRIVACY_MODEL`. Raw `workspaceText` is read only in the two gated document routes (`ENABLE_DOCUMENT_PROCESSING && ENABLE_DOCUMENT_AI_PRIVACY_MODEL`, auth-first then authz) and is wired to **no** prompt/provider path — no runtime hardening was required. Added `Backend/tests/documentsWorkspaceTextAiGate.test.ts` as regression proof (gate-off, legacy-flags-only, fully-enabled non-forwarding, static no-provider-import).
+- **Not KEEP.** This does not authorize CP-SCHEMA-1, production apply, Document/AI enablement, Client Portal, AI/provider use, export, SharePoint, or retention implementation.
+- Remaining blockers: export/SharePoint review; external/Client Portal mapper exclusion; explicit human privacy decision; retention implementation (only if durable storage is ever allowed); and — before any AI use — an explicit privacy decision, anonymization/redaction rule, and provider DPA/region/retention model.
+- **Production apply and CP-SCHEMA-1 remain blocked.**
