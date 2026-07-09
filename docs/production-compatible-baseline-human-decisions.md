@@ -228,3 +228,17 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
   AI/provider gate review; export/SharePoint review; external/Client Portal exclusion;
   explicit human privacy decision.
 - **Production apply and CP-SCHEMA-1 remain blocked.**
+
+## 16. DOCUMENTS-WORKSPACE-TEXT-RETENTION-DESIGN-1
+
+- `documents.workspaceText`: **`SECURITY/PRIVACY BLOCKED`**, **authz-hardened and retention-designed**.
+- Retention design created (`docs/documents-workspace-text-retention-design.md`), but **not implemented**. Conservative default: raw text stays blocked; future default should be **ephemeral/short-lived, not durable**, unless a separate explicit human decision selects durable storage.
+- Remaining blockers:
+  - logging guard;
+  - retention implementation (only if durable storage is ever allowed);
+  - AI/provider gate review;
+  - export/SharePoint review;
+  - external/Client Portal exclusion;
+  - explicit human privacy decision.
+- **Not KEEP.**
+- **Production apply and CP-SCHEMA-1 remain blocked.**

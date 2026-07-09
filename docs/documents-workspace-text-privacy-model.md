@@ -355,6 +355,17 @@ Client Portal.
   design), then logging guard, AI-gate review, export/SharePoint review, and only
   after all of those a **not-KEEP** internal-candidate review.
 
+## Retention design follow-up — DOCUMENTS-WORKSPACE-TEXT-RETENTION-DESIGN-1
+
+- `DOCUMENTS-WORKSPACE-TEXT-RETENTION-DESIGN-1` created
+  `docs/documents-workspace-text-retention-design.md`.
+- **Retention is designed only; not implemented.** Conservative default: raw
+  `workspaceText` stays blocked; future default should be **ephemeral/short-lived
+  (Option D/A), not durable**, unless a separate explicit human decision selects
+  durable storage.
+- Lane remains **`SECURITY/PRIVACY BLOCKED`**. **No KEEP / enablement authorized.**
+- Recommended immediate next package: `DOCUMENTS-WORKSPACE-TEXT-LOGGING-GUARD-DESIGN-1`.
+
 ---
 
 *Documentation-only privacy/security design. `documents.workspaceText` remains

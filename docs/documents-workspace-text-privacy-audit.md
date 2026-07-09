@@ -154,6 +154,9 @@ Follow-up implementation packages only after the privacy model exists:
   `workspaceText` **remains `SECURITY/PRIVACY BLOCKED`**; the hardening does **not**
   resolve the retention / logging / AI-provider / export-SharePoint / external
   (Client Portal) blockers.
+- `DOCUMENTS-WORKSPACE-TEXT-RETENTION-DESIGN-1` created a follow-up retention design
+  (`docs/documents-workspace-text-retention-design.md`); retention is designed only,
+  not implemented. Lane remains **`SECURITY/PRIVACY BLOCKED`**.
 
 ## Final Classification
 
