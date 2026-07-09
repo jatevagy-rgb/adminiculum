@@ -1,6 +1,6 @@
 # Production-Compatible Baseline Human Decisions
 
-Final classification target: `privacy_side_effect_hardening_rollup_quarantine_preserved_no_db_change_no_runtime_change`
+Final classification target: `clients_color_internal_keep_decision_documented_no_db_change_no_runtime_change`
 
 This is the human/product decision sheet for the production-compatible baseline. It is a decision index only: it is not an implementation plan, migration plan, DB task, Azure task, runtime change, OpenAPI/CORS change, route change, test change, or Client Portal enablement step.
 
@@ -40,6 +40,7 @@ This document intentionally keeps production apply blocked. It gives humans a co
 - Core baseline.
 - Lawyer handoff foundation.
 - Communication baseline / Outlook provider fields.
+- Client color (`clients.color`) as narrow internal display metadata only.
 
 ### QUARANTINE
 
@@ -65,7 +66,6 @@ This document intentionally keeps production apply blocked. It gives humans a co
 - Rehydration fields.
 - Client identity fields.
 - Case client role.
-- Client color.
 - Case collaborators.
 - Comparison snapshot.
 - Workspace text.
@@ -90,7 +90,7 @@ This document intentionally keeps production apply blocked. It gives humans a co
 | Rehydration fields | `UNKNOWN` | Missing fields on `anonymous_documents`; sensitive workflow. | Decide whether persistent rehydration fields are production-required and prove additive path if brought forward. |
 | Client identity fields | `UNKNOWN` | Historical migration DML/backfill assumptions must not be reused blindly. | Decide exact legal identity fields required in production. |
 | Case client role | `UNKNOWN` | Potentially low-risk additive field, but still requires proof. | Decide whether `clientRole` is active production matter context. |
-| Client color | `UNKNOWN` | Prior evidence suggested production representation, but final parser-independent proof is still required. | Confirm column presence and runtime need. |
+| Client color (`clients.color`) | `KEEP` | CLIENTS-COLOR-INTERNAL-KEEP-DECISION-1 moves only `clients.color` to a narrow internal baseline `KEEP`. Production metadata compare found `clients.color` present-compatible; Prisma contains nullable `Client.color`; internal client detail UI edits/displays it as hex visual metadata; case list UI can consume client color metadata for a dot. No Client Portal exposure, external visibility model, sensitive legal/document content, schema migration, DB apply, or production apply is implied. | Keep internal-only. Do not use as Client Portal tenancy, authorization, branding boundary, or external client visibility signal. Future external exposure still requires separate privacy/client-visibility review and DTO tests. |
 | Case collaborators | `UNKNOWN` | Partial evidence; table/index/FK completeness must be proven. | Decide whether collaborator workflow is production-required. |
 | Comparison snapshot | `UNKNOWN` | Missing on `contract_generations`; may be clone-proven additive if kept. | Decide whether comparison snapshots are production-required for current workflows. |
 | Timesheet reports / artifacts / presets | `QUARANTINE` | Tables/enums are absent and likely belong to a separate future feature-family migration. | Product approval, privacy/reporting scope, and clone-proven separate migration if brought forward. |
@@ -103,7 +103,7 @@ This document intentionally keeps production apply blocked. It gives humans a co
 | CP-SCHEMA-1 / Client Portal foundation | `QUARANTINE` | Future-blocked and excluded from baseline; Client Portal runtime remains off and no existing data becomes client-visible. | Resume only after production-compatible baseline/remediation is stable and a fresh clone proof shows CP as the intentionally next migration. |
 | DB-only rolled-back kb/learning/escalation migration | `UNKNOWN` | DB row is rolled back, local migration is missing, and object checks found no active objects. | Decide whether it is abandoned historical state, archived context, or future design work. |
 
-PRESENT-COMPATIBLE-KEEP-CANDIDATES-AUDIT-1 created `docs/present-compatible-keep-candidates-audit.md`. Present-compatible metadata does not automatically promote items to `KEEP`: the audit classifies `clients.color` as an internal `KEEP candidate`, `case_collaborators`, `workload_records`, client identity fields, and `cases.clientRole` as `KEEP-BUT-HARDEN candidate`, and `documents.workspaceText` as `SECURITY/PRIVACY BLOCKED`. Production apply and CP-SCHEMA-1 remain blocked, and partial schema drift remains `QUARANTINE` unless separately decided.
+PRESENT-COMPATIBLE-KEEP-CANDIDATES-AUDIT-1 created `docs/present-compatible-keep-candidates-audit.md`. Present-compatible metadata does not automatically promote items to `KEEP`: the audit classified `clients.color` as an internal `KEEP candidate`, `case_collaborators`, `workload_records`, client identity fields, and `cases.clientRole` as `KEEP-BUT-HARDEN candidate`, and `documents.workspaceText` as `SECURITY/PRIVACY BLOCKED`. CLIENTS-COLOR-INTERNAL-KEEP-DECISION-1 moves only `clients.color` from candidate to narrow internal `KEEP`. Production apply and CP-SCHEMA-1 remain blocked, and partial schema drift remains `QUARANTINE` unless separately decided.
 
 ## 6. Current blockers
 
@@ -149,7 +149,7 @@ These items must not be decided automatically:
 - Whether public OpenAPI JSON, Swagger metadata, and CORS behavior should be public, authenticated, admin-only, disabled, or narrowed before any production-compatible baseline `KEEP` decision.
 - Whether each partial/drift/code-compatibility leftover is active production, future feature, dead code, or schema drift before any `KEEP`, `REMOVE`, or `BRING-FORWARD` decision.
 - Whether anonymization and rehydration persistence should be remediated now.
-- Whether client identity, case client role, client color, workspace text, and collaborators are production-required and physically present.
+- Whether client identity, case client role, workspace text, and collaborators are production-required and physically present. `clients.color` is separately decided as narrow internal `KEEP` only.
 - Whether comparison snapshot persistence is required for current contract/document workflows.
 - Whether timesheet reports, legal analyses, client house style, clause library, contract assembly, or document review suggestions are active product commitments.
 - Whether the rolled-back DB-only kb/learning/escalation migration is abandoned historical state.
@@ -194,4 +194,4 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 
 ## 12. Final classification
 
-`privacy_side_effect_hardening_rollup_quarantine_preserved_no_db_change_no_runtime_change`
+`clients_color_internal_keep_decision_documented_no_db_change_no_runtime_change`
