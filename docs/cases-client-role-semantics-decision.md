@@ -162,6 +162,19 @@ Remaining limitations:
 
 Follow-up classification: `cases_client_role_authorization_hardened_no_db_change_no_migration_no_azure`.
 
+## Final internal KEEP decision — CASES-CLIENT-ROLE-INTERNAL-KEEP-DECISION-1
+
+CASES-CLIENT-ROLE-INTERNAL-KEEP-DECISION-1 moves `cases.clientRole` from `hardened internal KEEP candidate` to `KEEP — narrow internal baseline`.
+
+This decision is limited to the current hardened internal matter-party metadata behavior:
+
+- production metadata compare found `cases.clientRole` present-compatible;
+- CASES-CLIENT-ROLE-SEMANTICS-DECISION-1 selected internal matter-party metadata semantics;
+- CASES-CLIENT-ROLE-INTERNAL-HARDEN-1 (`e2a943a`) guarded workflow, summary, and detail reads; guarded generic patch; removed `clientRole` from the broad case list DTO; and added focused authorization/exposure tests;
+- CASES-CLIENT-ROLE-HARDENING-CLOSEOUT-1 (`05791ef`) documented the evidence chain.
+
+The KEEP decision does not authorize external exposure, Client Portal, CP-SCHEMA-1, production apply, schema/migration work, broad list/search/export/report exposure, frontend display changes, use as an authorization primitive, or weakening of `requireCaseManageAccess` / case-level read guards.
+
 ## Non-actions
 
 This decision did not:

@@ -102,6 +102,10 @@ Neither item moves to `KEEP` in this audit.
 
 The dedicated hardening package addresses the case-role authorization finding for `cases.clientRole` according to the internal matter-party metadata semantics: broad case list responses omit the field, detail/summary/workflow reads require case-level read access, and generic case patch/update requires case-manager access before `clientRole` can be changed. CASES-CLIENT-ROLE-HARDENING-CLOSEOUT-1 records the evidence chain for a future human keep decision. This moves only `cases.clientRole` to `hardened internal KEEP candidate`; it does not move client identity fields to `KEEP`, does not authorize Client Portal/external visibility, and does not authorize production apply, schema migration, CP-SCHEMA-1, or DB migration replay.
 
+## Follow-up — CASES-CLIENT-ROLE-INTERNAL-KEEP-DECISION-1
+
+`cases.clientRole` moved separately to `KEEP — narrow internal baseline` for the hardened internal matter-party metadata behavior only. Client identity fields remain separate and are not moved by this decision. This does not authorize Client Portal, external visibility, CP-SCHEMA-1, production apply, schema/migration work, or client-facing use of client identity fields.
+
 ## Required next packages
 
 1. `CLIENT-IDENTITY-FIELDS-HARDEN-1`
