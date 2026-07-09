@@ -109,6 +109,57 @@ CASE-COLLABORATORS-HARDEN-1 subsequently added case-level authorization for gene
 
 This audit and hardening do not move `case_collaborators` to broad `KEEP`. A separate human decision is still required before changing the production-compatible baseline lane to full narrow internal `KEEP`.
 
+## Hardening closeout — CASE-COLLABORATORS-HARDEN-1
+
+Commit: `7177693`
+
+Runtime change: narrow backend authorization hardening only.
+
+Schema, migration, DB, Azure, frontend, Client Portal, CORS, and OpenAPI changes: no.
+
+Read access now requires one of:
+
+- admin / partner;
+- assigned lawyer;
+- creator;
+- same-case collaborator.
+
+Create/delete now require manager access through one of:
+
+- admin / partner;
+- assigned lawyer;
+- creator.
+
+Delete now validates collaborator membership using both:
+
+- path `caseId`;
+- `collaboratorId`.
+
+Targeted tests:
+
+- `caseCollaboratorsAuthz`;
+- 9 tests passed.
+
+Full backend validation from the hardening package:
+
+- 13 suites / 145 tests passed.
+
+Decision posture:
+
+- Current lane: `hardened internal KEEP candidate`.
+- Not broad `KEEP`.
+- Not external/client-facing `KEEP`.
+- Not Client Portal.
+- Not CP-SCHEMA-1.
+- Not production apply.
+
+Remaining limitations:
+
+- This hardening covers generic collaborator read/create/delete routes only.
+- Any future external exposure requires a separate internal/external mapper and privacy review.
+- Any future collaborator update route, bulk route, export route, or OpenAPI exposure must be separately reviewed.
+- Client Portal remains disabled/quarantined.
+
 ## Required next package
 
 Completed hardening package:
@@ -154,6 +205,17 @@ This audit did not:
 - run file-processing jobs;
 - authorize CP-SCHEMA-1.
 
+This closeout update did not:
+
+- change runtime behavior;
+- change route behavior;
+- change tests;
+- change schema;
+- create migrations;
+- connect to any database;
+- apply any DB change;
+- touch Azure, CORS, OpenAPI, frontend, auth, or Client Portal.
+
 ## Final classification
 
-`case_collaborators_authorization_hardened_no_db_change_no_migration_no_azure`
+`case_collaborators_hardening_closeout_documented_no_db_change_no_runtime_change`
