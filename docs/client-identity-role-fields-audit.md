@@ -93,6 +93,11 @@ No production DB, clone DB, Kudu, Azure, migration, smoke test, business-data qu
 
 Neither item moves to `KEEP` in this audit.
 
+
+## Follow-up — CASES-CLIENT-ROLE-SEMANTICS-DECISION-1
+
+`docs/cases-client-role-semantics-decision.md` reviewed the product/data-model meaning of `cases.clientRole` and selected Option A: internal matter-party metadata. The field remains internal-only and remains a `KEEP-BUT-HARDEN candidate`; the semantics decision does not change this audit's authorization/privacy findings, does not move the field to `KEEP`, and does not authorize Client Portal, external visibility, CP-SCHEMA-1, production apply, schema migration, route changes, or frontend changes.
+
 ## Required next packages
 
 1. `CLIENT-IDENTITY-FIELDS-HARDEN-1`
@@ -102,13 +107,8 @@ Neither item moves to `KEEP` in this audit.
    - Add tests for unauthenticated, ordinary authenticated, unauthorized, and authorized internal users.
    - No schema change unless separately justified.
 
-2. `CASES-CLIENT-ROLE-SEMANTICS-DECISION-1`
-   - Define product meaning and allowed values for `cases.clientRole`.
-   - Decide whether it is internal matter metadata, legal-party role, anonymization hint, Client Portal display candidate, or something else.
-   - Explicitly decide timeline/audit wording and privacy implications.
-   - No runtime change.
-
-3. `CASES-CLIENT-ROLE-HARDEN-1`
+2. `CASES-CLIENT-ROLE-INTERNAL-HARDEN-1`
+   - Use the internal matter-party metadata semantics decided in `docs/cases-client-role-semantics-decision.md`.
    - Add or prove case-level authorization for reading/updating `clientRole` on generic case routes.
    - Verify create/update rules and targeted tests.
    - Keep Client Portal and external exposure out of scope.
