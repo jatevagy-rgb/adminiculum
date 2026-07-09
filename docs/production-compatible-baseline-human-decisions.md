@@ -366,3 +366,16 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - No external visibility, Client Portal runtime, schema migration, DB apply, Azure
   deployment, Document/AI enablement, AI/provider use, SharePoint/export use, or
   `documents.workspaceText` exposure is authorized.
+
+## 26. Client Portal current code inventory
+
+- `CLIENT-PORTAL-CURRENT-CODE-INVENTORY-1` created
+  `docs/client-portal-current-code-inventory.md`.
+- Current backend code is a mounted, auth-first, disabled/quarantined skeleton under
+  `/api/v1/client-portal`; no `Backend/src/modules/client-portal` service module or
+  dedicated frontend portal route was found in the focused inventory.
+- Existing tests prove unauthenticated requests return `401`, authenticated disabled
+  requests return `501 CLIENT_PORTAL_NOT_ENABLED`, `ENABLE_CLIENT_PORTAL=true` alone is
+  insufficient, spoofed user/client context remains blocked, and Prisma is not reached
+  while disabled.
+- No enablement is authorized. CP-SCHEMA-1 and production apply remain **blocked**.

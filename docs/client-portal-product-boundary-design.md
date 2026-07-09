@@ -264,6 +264,15 @@ The existing portal route is intentionally quarantined/default-disabled. Feature
 
 This design does not enable Client Portal. Client Portal remains quarantined. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO. External visibility remains unauthorized. This is only the product boundary for future work.
 
+## Follow-up — CLIENT-PORTAL-CURRENT-CODE-INVENTORY-1
+
+- `CLIENT-PORTAL-CURRENT-CODE-INVENTORY-1` created
+  `docs/client-portal-current-code-inventory.md`.
+- The inventory does not alter this product boundary and does not authorize runtime,
+  schema, frontend, OpenAPI, CORS, Azure, DB, or feature behavior changes.
+- Client Portal remains disabled/quarantined.
+- Next recommended package: `CLIENT-PORTAL-V1-DATA-CONTRACT-DESIGN-1`.
+
 ## Non-actions
 
 - No runtime changed.
