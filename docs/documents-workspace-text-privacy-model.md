@@ -462,6 +462,33 @@ Client Portal.
   content-free logging, and targeted tests.
 - Lane remains **`SECURITY/PRIVACY BLOCKED`**. **No KEEP / enablement authorized.**
 
+## Final blocked closeout — DOCUMENTS-WORKSPACE-TEXT-PRIVACY-BLOCKED-CLOSEOUT-1
+
+- **Evidence chain:** `cf61011` → `4110b1f` → `d3f6bea` → `f4e60aa` → `c136a34` →
+  `5c9b3ca` → `52fe3d6` → `cee359f` → `7133d2c` → `f19c9fe`.
+- **Final posture:** `documents.workspaceText` remains
+  **`SECURITY/PRIVACY BLOCKED — authz/logging/AI/export/external-reviewed, not KEEP`**.
+  The completed reviews and narrow logging/authz hardening reduce accidental exposure
+  risk but do not convert raw legal text storage into a production-compatible baseline.
+- **Controlled internal routes only:** raw text is limited to `GET /documents/:id/text`
+  and `POST /documents/:id/save-workspace-version`, both auth-first, behind the
+  default-disabled Document/AI gate, with read scoped to document/case read access and
+  write scoped to case manage access.
+- **External boundary:** broad internal DTOs omit `workspaceText`; no inspected
+  external/client/public mapper silently exposes it; Client Portal remains
+  disabled/quarantined and requires a future sanitized publication/artifact model before
+  any external display.
+- **Provider and artifact boundary:** no in-code AI provider client exists in
+  `Backend/src`; raw `workspaceText` is not wired into prompts/provider calls; export,
+  SharePoint/Graph upload, generated documents, and external artifacts are not authorized
+  to use raw workspace text.
+- **Retention and logging boundary:** raw text is forbidden log content and raw-route catch
+  blocks are guarded. Retention remains design-only; no durable retention, legal hold,
+  clearing workflow, or human legal/privacy decision has been implemented.
+- **Non-authorization:** this closeout does not authorize KEEP, KEEP-BUT-HARDEN,
+  production apply, CP-SCHEMA-1, Client Portal, external visibility, Document/AI flag
+  enablement, AI/provider use, export/SharePoint, or durable retention.
+
 ---
 
 *Documentation-only privacy/security design. `documents.workspaceText` remains

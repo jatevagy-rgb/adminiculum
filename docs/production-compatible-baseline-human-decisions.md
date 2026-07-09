@@ -303,3 +303,28 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
   ownership/need-to-know authorization, feature/privacy gate, logging guard,
   retention/delete rules, and targeted tests.
 - **Production apply and CP-SCHEMA-1 remain blocked.**
+
+## 22. Final blocked closeout — DOCUMENTS-WORKSPACE-TEXT-PRIVACY-BLOCKED-CLOSEOUT-1
+
+- **Commit chain:** `cf61011`, `4110b1f`, `d3f6bea`, `f4e60aa`, `c136a34`,
+  `5c9b3ca`, `52fe3d6`, `cee359f`, `7133d2c`, and `f19c9fe`.
+- `documents.workspaceText` remains **`SECURITY/PRIVACY BLOCKED`**. It is now reviewed
+  and/or hardened across authorization, logging, AI/provider, export/SharePoint/generated
+  document, and external/client/public mapper boundaries, but this does **not** make it
+  `KEEP`, `KEEP-BUT-HARDEN`, production-ready, or safe for enablement.
+- The only raw-text routes remain `GET /documents/:id/text` and
+  `POST /documents/:id/save-workspace-version`; both are auth-first, behind the
+  default-disabled Document/AI gate, and require document/case read access or case manage
+  access respectively.
+- Broad internal DTOs omit `workspaceText`; external/client/public mappers were reviewed
+  with no silent exposure; Client Portal remains disabled/quarantined and must not reuse
+  raw internal text without a future sanitized publication/artifact model.
+- AI/provider use, SharePoint/Graph/export/generated-document use, durable retention, and
+  Document/AI flag enablement are **not authorized**. Retention is designed only; there is
+  no retention implementation, legal-hold workflow, or human legal/privacy decision for
+  durable storage.
+- `documents.workspaceText` remains outside the narrow internal KEEP baseline
+  (`clients.color`, `case_collaborators`, `workload_records`, `cases.clientRole`, and
+  client identity fields).
+- **Production apply and CP-SCHEMA-1 remain blocked.** Any future move requires a separate
+  human decision and likely a separate implementation package.

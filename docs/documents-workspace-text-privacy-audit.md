@@ -221,6 +221,39 @@ Follow-up implementation packages only after the privacy model exists:
   CP-SCHEMA-1, production apply, Document/AI enablement, Client Portal enablement,
   external/public API exposure, or generated-document/export use of raw workspace text.
 
+## Final blocked closeout — DOCUMENTS-WORKSPACE-TEXT-PRIVACY-BLOCKED-CLOSEOUT-1
+
+- **Commit chain:** `cf61011` privacy audit; `4110b1f` privacy model; `d3f6bea`
+  authz hardening; `f4e60aa` authz closeout; `c136a34` retention design; `5c9b3ca`
+  logging-guard design; `52fe3d6` logging-guard implementation; `cee359f`
+  AI/provider gate review; `7133d2c` export/SharePoint/generated-document review;
+  `f19c9fe` external/API/Client Portal/public mapper review.
+- **Current lane:** `SECURITY/PRIVACY BLOCKED` — authz/logging/AI/export/external
+  reviewed, **not KEEP**, **not KEEP-BUT-HARDEN**, and **not safe for enablement**.
+- **Raw text routes:** `GET /documents/:id/text` and
+  `POST /documents/:id/save-workspace-version` are auth-first, behind the default-disabled
+  Document/AI gate, and now require document/case read access and case manage access
+  respectively.
+- **Broad response posture:** broad internal DTOs omit `workspaceText`; external,
+  client-facing, and public mappers were reviewed with no silent exposure; Client Portal
+  remains disabled/quarantined.
+- **AI/export posture:** there is no in-code provider client in `Backend/src`, raw
+  `workspaceText` does not reach prompts/provider, and no export/SharePoint/generated-doc
+  enablement or raw-text artifact source is authorized.
+- **Logging/retention posture:** raw text is forbidden log content; runtime route catch
+  blocks no longer log raw error/message/meta/stack/request body/Prisma payload. Retention
+  is design-only with a conservative blocked/ephemeral preference; no retention
+  implementation, legal-hold workflow, or human legal/privacy decision for durable storage
+  exists.
+- **Remaining blockers:** retention implementation or explicit no-durable-storage
+  decision; legal-hold/clearing workflow if durable storage is ever selected; human
+  privacy/legal decision; possible DPA/provider review if AI is ever considered; possible
+  export/SharePoint privacy decision if external artifacts are ever considered; Client
+  Portal sanitized artifact model if external display is ever considered.
+- **Explicit non-authorizations:** this closeout does not authorize KEEP, CP-SCHEMA-1,
+  production apply, Client Portal, external visibility, AI/provider use, export/SharePoint,
+  durable retention, or Document/AI flag enablement.
+
 ## Final Classification
 
 `documents_workspace_text_privacy_audited_no_db_change_no_runtime_change`

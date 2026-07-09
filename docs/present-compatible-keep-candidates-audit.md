@@ -125,6 +125,25 @@ This audit did not:
 - It is **not** part of the narrow internal KEEP baseline (`clients.color`,
   `case_collaborators`, `workload_records`, `cases.clientRole`, client identity fields).
 
+## Update — Final blocked closeout for documents.workspaceText
+
+- `documents.workspaceText` is present-compatible but remains excluded from `KEEP`.
+- Final lane:
+  **`SECURITY/PRIVACY BLOCKED — authz/logging/AI/export/external-reviewed, not KEEP`**.
+- Completed chain: `cf61011` privacy audit; `4110b1f` privacy model; `d3f6bea` authz
+  hardening; `f4e60aa` authz closeout; `c136a34` retention design; `5c9b3ca`
+  logging-guard design; `52fe3d6` logging-guard implementation; `cee359f` AI/provider
+  review; `7133d2c` export/SharePoint/generated-document review; `f19c9fe`
+  external/API/Client Portal/public mapper review.
+- Reason: the field can contain raw privileged legal drafting text and personal data,
+  creating privacy, retention, deletion, legal-hold, logging, provider, export, and
+  external-visibility risk that is not resolved by physical schema compatibility.
+- The hardening/reviews reduce accidental exposure risk but do **not** authorize KEEP,
+  KEEP-BUT-HARDEN, production apply, CP-SCHEMA-1, Client Portal, external visibility,
+  AI/provider use, export/SharePoint use, durable retention, or Document/AI flag
+  enablement.
+- `documents.workspaceText` remains outside the narrow internal KEEP baseline.
+
 ## Final classification
 
 `present_compatible_keep_candidates_audited_no_db_change_no_runtime_change`
