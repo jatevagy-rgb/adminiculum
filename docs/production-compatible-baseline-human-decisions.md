@@ -276,3 +276,30 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - **Not KEEP.** This does not authorize CP-SCHEMA-1, production apply, Document/AI enablement, Client Portal, SharePoint/Graph/file-processing/export enablement, or generated-document use of raw workspace text.
 - Remaining blockers: external/Client Portal mapper exclusion; explicit human privacy decision; retention implementation (only if durable storage is ever allowed); and any future export/SharePoint/generated-document use requires a sanitized artifact boundary, explicit authorization, feature/privacy gate, logging guard, retention/delete rules, and targeted tests.
 - **Production apply and CP-SCHEMA-1 remain blocked.**
+
+## 21. DOCUMENTS-WORKSPACE-TEXT-EXTERNAL-MAPPER-REVIEW-1
+
+- `documents.workspaceText`: **`SECURITY/PRIVACY BLOCKED`**, **authz-hardened,
+  retention-designed, logging-guard-implemented, AI/provider-gate-reviewed,
+  export/SharePoint/generated-document-boundary-reviewed, and external/client/public
+  mapper-reviewed**.
+- `DOCUMENTS-WORKSPACE-TEXT-EXTERNAL-MAPPER-REVIEW-1` reviewed external/API, Client
+  Portal, public OpenAPI, communications, contracts, case summary/workflow, and document
+  metadata mapper boundaries. **No Client Portal/public API enablement, DB query, file
+  processing, AI/provider call, SharePoint/Graph call, migration, deploy, or Azure action
+  was made.**
+- **Finding:** no inspected external/client/public mapper silently includes raw
+  `workspaceText`. The raw field remains isolated to the two gated workspace routes;
+  broad document list/detail/search DTOs, case document/summary/workflow DTOs,
+  communication rows, contract-generation metadata, and public OpenAPI metadata use
+  explicit allow-lists, IDs, or artifact metadata instead of raw workspace text. Client
+  Portal remains disabled before mapper/Prisma work.
+- **Not KEEP.** This does not authorize CP-SCHEMA-1, production apply, Document/AI
+  enablement, Client Portal enablement, external/public API exposure, export,
+  SharePoint/Graph use, or generated-document use of raw workspace text.
+- Remaining blockers: explicit human privacy decision; retention implementation only if
+  durable storage is ever allowed; and any future Client Portal/external/public/export use
+  requires a sanitized publication/artifact boundary, explicit field allow-list mapper,
+  ownership/need-to-know authorization, feature/privacy gate, logging guard,
+  retention/delete rules, and targeted tests.
+- **Production apply and CP-SCHEMA-1 remain blocked.**

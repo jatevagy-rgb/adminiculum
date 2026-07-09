@@ -439,6 +439,29 @@ Client Portal.
   SharePoint/Graph/file-processing/export enablement, or generated-document use of raw
   workspace text.
 
+## External/API/Client Portal mapper review — DOCUMENTS-WORKSPACE-TEXT-EXTERNAL-MAPPER-REVIEW-1
+
+- `DOCUMENTS-WORKSPACE-TEXT-EXTERNAL-MAPPER-REVIEW-1` reviewed the currently reachable
+  external/API, Client Portal, public OpenAPI, communications, contracts, case
+  summary/workflow, and document metadata mapper boundaries. **No external system was
+  contacted, no Client Portal or public API surface was enabled, no DB query was run, no
+  file/AI/SharePoint/Graph operation was executed, and no runtime/schema/config change was
+  made.**
+- **Current mapper posture:** raw `documents.workspaceText` remains isolated to the two
+  gated internal workspace routes (`GET /documents/:id/text` and
+  `POST /documents/:id/save-workspace-version`). Broad document DTOs, case document and
+  summary/workflow DTOs, communication rows, contract-generation metadata, and public
+  OpenAPI metadata do not expose raw workspace text through the inspected mappers.
+- **Client/public posture:** Client Portal stays disabled before any mapper/Prisma work,
+  and the public OpenAPI sanitizer excludes document/AI, anonymous-document, Client
+  Portal, contract generation, runtime/admin, and related quarantined paths.
+- **Required future boundary:** any Client Portal, external API, connector, export,
+  generated-document, or public metadata use must go through a separate sanitized
+  publication/artifact model with explicit field allow-lists, ownership/need-to-know
+  authorization, approval where external, privacy gates, retention/delete rules,
+  content-free logging, and targeted tests.
+- Lane remains **`SECURITY/PRIVACY BLOCKED`**. **No KEEP / enablement authorized.**
+
 ---
 
 *Documentation-only privacy/security design. `documents.workspaceText` remains

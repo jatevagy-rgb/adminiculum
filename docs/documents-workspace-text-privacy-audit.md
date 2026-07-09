@@ -199,6 +199,27 @@ Follow-up implementation packages only after the privacy model exists:
   CP-SCHEMA-1, production apply, Document/AI enablement, Client Portal enablement,
   SharePoint/Graph/file-processing/export enablement, or generated-document use of raw
   workspace text.
+- `DOCUMENTS-WORKSPACE-TEXT-EXTERNAL-MAPPER-REVIEW-1` reviewed external/API, Client
+  Portal, public OpenAPI, communications, contracts, case summary/workflow, and document
+  metadata mapper boundaries for accidental raw `documents.workspaceText` exposure. **No
+  Client Portal/public API enablement, DB query, file processing, AI/provider call,
+  SharePoint/Graph call, migration, deploy, or Azure action was made.**
+- **Inventory result:** raw `workspaceText` remains read/persisted only by the two gated
+  document workspace routes (`GET /documents/:id/text`,
+  `POST /documents/:id/save-workspace-version`). Document list/detail/search DTOs, case
+  document/summary/workflow DTOs, and communications/contracts payloads use explicit
+  metadata or ID/file-artifact mappers and do not include raw workspace text. Client
+  Portal remains disabled before mapper/Prisma work, and public OpenAPI sanitization
+  excludes document/AI, anonymous-document, Client Portal, contract generation, and
+  related quarantined paths from public metadata.
+- **Boundary result:** no runtime hardening was required for this pass because no inspected
+  external/client/public mapper silently includes raw `documents.workspaceText`. Any future
+  external or Client Portal use requires a separate sanitized publication/artifact boundary,
+  explicit allow-list mapper, ownership/need-to-know authorization, feature/privacy gate,
+  logging guard, retention/delete rule, and targeted tests.
+- Lane remains **`SECURITY/PRIVACY BLOCKED`**. This review does **not** authorize KEEP,
+  CP-SCHEMA-1, production apply, Document/AI enablement, Client Portal enablement,
+  external/public API exposure, or generated-document/export use of raw workspace text.
 
 ## Final Classification
 
