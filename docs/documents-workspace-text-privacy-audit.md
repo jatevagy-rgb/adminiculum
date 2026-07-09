@@ -142,7 +142,13 @@ Follow-up implementation packages only after the privacy model exists:
 - `DOCUMENTS-WORKSPACE-TEXT-PRIVACY-MODEL-DESIGN-1` created a follow-up privacy model:
   `docs/documents-workspace-text-privacy-model.md` (defines the minimum
   privacy/security prerequisites before any controlled internal use).
-- Lane remains **`SECURITY/PRIVACY BLOCKED`**.
+- `DOCUMENTS-WORKSPACE-TEXT-AUTHZ-HARDEN-1` added internal authorization/exposure
+  hardening: the gated raw-text read (`GET /documents/:id/text`) now requires
+  document/case read access and the gated write
+  (`POST /documents/:id/save-workspace-version`) now requires case manage access
+  (both still auth-first and behind the default-disabled Document/AI gate). Broad
+  list/detail/search responses already omit raw text via explicit DTOs.
+- Lane remains **`SECURITY/PRIVACY BLOCKED`** (authz-hardened but privacy-blocked; not KEEP).
 
 ## Final Classification
 

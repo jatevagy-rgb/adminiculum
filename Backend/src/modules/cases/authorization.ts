@@ -54,7 +54,7 @@ function isCaseManager(
   );
 }
 
-async function userCanReadCase(req: Request, caseId: string): Promise<boolean | null> {
+export async function userCanReadCase(req: Request, caseId: string): Promise<boolean | null> {
   const user = req.user;
   if (!user?.userId) {
     return false;
@@ -80,7 +80,7 @@ async function userCanReadCase(req: Request, caseId: string): Promise<boolean | 
   return Boolean(collaborator);
 }
 
-async function userCanManageCase(req: Request, caseId: string): Promise<boolean | null> {
+export async function userCanManageCase(req: Request, caseId: string): Promise<boolean | null> {
   if (!req.user?.userId) {
     return false;
   }

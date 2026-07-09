@@ -11,6 +11,7 @@ import reviewSuggestionsRoutes from './reviewSuggestions.routes';
 import { authenticate } from '../../middleware/auth';
 import { prisma } from '../../prisma/prisma.service';
 import { isDatabaseFoundationEnabled, sendFeatureUnavailable } from '../../middleware/featureAvailability';
+import { requireDocumentReadAccess, requireDocumentManageAccess } from './authorization';
 
 const router = Router();
 const isDocumentProcessingEnabled = (): boolean =>
@@ -218,7 +219,7 @@ router.get('/:id', authenticate, async (req: Request, res: Response): Promise<vo
  * GET /api/v1/documents/:id/text
  * Extract readable text from the real SharePoint-backed document when available.
  */
-router.get('/:id/text', authenticate, requireDocumentProcessingEnabled, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/text', authenticate, requireDocumentProcessingEnabled, requireDocumentReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
 const { id } = req.params as { id: string };
     const document = await prisma.document.findUnique({ where: { id } });
@@ -453,7 +454,7 @@ router.post('/:id/reject', authenticate, requireDocumentProcessingEnabled, async
  * Save the workspace editor's draft text as a new "modified working copy" document.
  * Does NOT overwrite the original document.
  */
-router.post('/:id/save-workspace-version', authenticate, requireDocumentProcessingEnabled, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/save-workspace-version', authenticate, requireDocumentProcessingEnabled, requireDocumentManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const { text, title, note } = req.body as { text?: string; title?: string; note?: string };

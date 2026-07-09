@@ -206,3 +206,11 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - Recommended immediate next package: `DOCUMENTS-WORKSPACE-TEXT-AUTHZ-HARDEN-1`
   (the audit found reachable-if-enabled read/write routes + broad-response inclusion risk
   needing document/case-level hardening first).
+
+## 14. DOCUMENTS-WORKSPACE-TEXT-AUTHZ-HARDEN-1
+
+- `DOCUMENTS-WORKSPACE-TEXT-AUTHZ-HARDEN-1` added internal authorization/exposure hardening for `documents.workspaceText`.
+- The gated raw-text read (`GET /documents/:id/text`) now requires **document/case read access**; the gated write (`POST /documents/:id/save-workspace-version`) now requires **case manage access**. Both remain auth-first and behind the default-disabled Document/AI gate. Reuses the existing case authorization rules (assigned lawyer / creator / privileged role / collaborator). Broad list/detail/search responses already omit raw text (explicit DTOs); tests confirm.
+- This **preserves the `SECURITY/PRIVACY BLOCKED` lane**.
+- It does **not** authorize KEEP, CP-SCHEMA-1, production apply, external visibility, AI/provider use, or file processing; it does **not** enable Client Portal; it does **not** resolve retention/logging/AI/export privacy blockers.
+- Any move out of blocked status requires separate privacy closeout and human decision.

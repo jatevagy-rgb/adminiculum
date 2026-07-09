@@ -293,6 +293,20 @@ Client Portal.
 
 ---
 
+## Implementation progress
+
+- `DOCUMENTS-WORKSPACE-TEXT-AUTHZ-HARDEN-1` implemented the authorization/exposure
+  hardening portion of this model: the gated raw-text read
+  (`GET /documents/:id/text`) now requires **document/case read access**; the gated
+  write (`POST /documents/:id/save-workspace-version`) now requires **case manage
+  access** (reusing the existing case authorization rules); both remain auth-first and
+  behind the default-disabled Document/AI gate; broad list/detail/search responses
+  already omit raw text via explicit DTOs (verified by tests). Retention, logging,
+  AI/provider, export/SharePoint, and Client Portal/external blockers remain
+  **unresolved** and are still `SECURITY/PRIVACY BLOCKED`.
+
+---
+
 *Documentation-only privacy/security design. `documents.workspaceText` remains
 `SECURITY/PRIVACY BLOCKED`. This model defines prerequisites only; it does not
 authorize enablement, KEEP, production apply, CP-SCHEMA-1, or Client Portal.*
