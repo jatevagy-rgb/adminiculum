@@ -116,6 +116,15 @@ Quarantined families remain quarantined. Production apply remains blocked. CP-SC
 remains blocked. No external visibility is authorized. No Client Portal is authorized. No
 AI/provider use is authorized. No SharePoint/export enablement is authorized.
 
+## Follow-up — PRODUCTION-APPLY-NO-GO-RECONFIRM-1
+
+- `PRODUCTION-APPLY-NO-GO-RECONFIRM-1` created
+  `docs/production-apply-no-go-reconfirmation.md` as a standalone NO-GO reaffirmation.
+- Production apply and CP-SCHEMA-1 remain blocked.
+- The narrow internal KEEP baseline does **not** authorize DB apply, migration creation or
+  application, CP-SCHEMA-1, Client Portal, external visibility, Document/AI enablement,
+  AI/provider use, SharePoint/export, or Azure deployment.
+
 ## Non-actions
 
 - No runtime changed.

@@ -345,3 +345,13 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - **Production apply and CP-SCHEMA-1 remain blocked.** This rollup does not authorize DB
   apply, migration creation/application, Client Portal, Document/AI, AI/provider use,
   SharePoint/export, external visibility, or Azure/deployment work.
+
+## 24. Production apply NO-GO reconfirmation
+
+- `PRODUCTION-APPLY-NO-GO-RECONFIRM-1` created
+  `docs/production-apply-no-go-reconfirmation.md`.
+- Production apply remains **NO-GO**.
+- No production database mutation, schema migration, DB push, DB metadata refresh, Azure
+  deployment, or Azure app setting change is authorized.
+- CP-SCHEMA-1 remains **blocked** and is not authorized by the narrow internal KEEP
+  baseline, the final rollup, or this NO-GO reconfirmation.
