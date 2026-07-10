@@ -273,6 +273,17 @@ This design does not enable Client Portal. Client Portal remains quarantined. CP
 - Client Portal remains disabled/quarantined.
 - Next recommended package: `CLIENT-PORTAL-V1-DATA-CONTRACT-DESIGN-1`.
 
+## Follow-up — CLIENT-PORTAL-V1-DATA-CONTRACT-DESIGN-1
+
+- `CLIENT-PORTAL-V1-DATA-CONTRACT-DESIGN-1` created
+  `docs/client-portal-v1-data-contract-design.md`.
+- The data contract supplements this product boundary with conceptual allow-list DTOs,
+  forbidden fields, grant requirements, mapper rules, and future test expectations.
+- The product boundary remains unchanged: Client Portal stays disabled/quarantined,
+  external visibility remains unauthorized, CP-SCHEMA-1 remains blocked, and production
+  apply remains NO-GO.
+- Next recommended package: `CLIENT-PORTAL-AUTHZ-MODEL-DESIGN-1`.
+
 ## Non-actions
 
 - No runtime changed.

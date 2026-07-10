@@ -164,6 +164,17 @@ This inventory does not enable Client Portal. Client Portal remains quarantined.
 code must remain disabled. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO.
 External visibility remains unauthorized.
 
+## Follow-up — CLIENT-PORTAL-V1-DATA-CONTRACT-DESIGN-1
+
+- `CLIENT-PORTAL-V1-DATA-CONTRACT-DESIGN-1` created
+  `docs/client-portal-v1-data-contract-design.md`.
+- The data contract supplements this inventory with conceptual external DTOs, forbidden
+  fields, grant scoping, mapper rules, and tests needed before any implementation.
+- Existing backend code remains a disabled/quarantined skeleton and must not be enabled
+  by feature flags alone.
+- No runtime, schema, frontend, OpenAPI, CORS, Azure, DB, or feature behavior change is
+  authorized by the data contract.
+
 ## Non-actions
 
 - No runtime changed.

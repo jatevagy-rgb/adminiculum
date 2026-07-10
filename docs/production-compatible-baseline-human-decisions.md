@@ -379,3 +379,16 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
   insufficient, spoofed user/client context remains blocked, and Prisma is not reached
   while disabled.
 - No enablement is authorized. CP-SCHEMA-1 and production apply remain **blocked**.
+
+## 27. Client Portal V1 data contract design
+
+- `CLIENT-PORTAL-V1-DATA-CONTRACT-DESIGN-1` created
+  `docs/client-portal-v1-data-contract-design.md`.
+- The design defines conceptual allow-list DTOs, forbidden fields, grant boundaries,
+  mapper requirements, and future tests for a possible V1 Client Portal contract.
+- It is documentation-only and does **not** authorize runtime implementation, schema
+  change, migration creation/application, CP-SCHEMA-1, production apply, OpenAPI/CORS
+  exposure, Azure changes, frontend work, file processing, SharePoint/Graph calls,
+  AI/provider use, or Client Portal enablement.
+- External visibility remains unauthorized; the current Client Portal remains
+  disabled/quarantined; CP-SCHEMA-1 and production apply remain **blocked**.
