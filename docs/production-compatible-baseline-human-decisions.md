@@ -436,3 +436,17 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
   calls, AI/provider use, auth changes, or Client Portal enablement.
 - External visibility remains unauthorized; the current Client Portal remains
   disabled/quarantined; CP-SCHEMA-1 and production apply remain **blocked**.
+
+## 31. Client Portal runtime skeleton harden design
+
+- `CLIENT-PORTAL-RUNTIME-SKELETON-HARDEN-DESIGN-1` created
+  `docs/client-portal-runtime-skeleton-harden-design.md`.
+- The design defines future Client Portal runtime skeleton boundaries for disabled gate
+  order, route/module split, service access, portal authorization, external mappers,
+  content-free audit/logging, OpenAPI posture, and tests.
+- It is documentation-only and does **not** authorize runtime implementation, frontend
+  implementation, schema change, migration creation/application, CP-SCHEMA-1, production
+  apply, OpenAPI/CORS exposure, Azure changes, file processing, SharePoint/Graph calls,
+  AI/provider use, auth changes, or Client Portal enablement.
+- External visibility remains unauthorized; the current Client Portal remains
+  disabled/quarantined; CP-SCHEMA-1 and production apply remain **blocked**.

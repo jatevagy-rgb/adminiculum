@@ -490,6 +490,16 @@ Alternative if product/UI planning should continue first:
 
 Use the runtime skeleton hardening design first if the team wants to reduce backend exposure risk before any frontend shell planning.
 
+## Follow-up — CLIENT-PORTAL-RUNTIME-SKELETON-HARDEN-DESIGN-1
+
+- `CLIENT-PORTAL-RUNTIME-SKELETON-HARDEN-DESIGN-1` created
+  `docs/client-portal-runtime-skeleton-harden-design.md`.
+- The runtime skeleton boundary design defines future route/module boundaries, gate order,
+  disabled behavior, service/mapper/authz/audit boundaries, and test expectations.
+- This schema readiness document remains docs-only. No schema or runtime changes are
+  authorized. CP-SCHEMA-1 remains blocked, production apply remains NO-GO, and external
+  visibility remains unauthorized.
+
 ## Final decision statement
 
 This design does not implement schema. This design does not authorize CP-SCHEMA-1. This design does not authorize production apply. This design does not enable Client Portal. External visibility remains unauthorized. The runtime skeleton remains disabled. No schema migration is authorized.

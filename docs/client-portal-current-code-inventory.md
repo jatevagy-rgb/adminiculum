@@ -185,6 +185,16 @@ External visibility remains unauthorized.
 - The skeleton must remain disabled/quarantined until a future implementation package
   creates and tests those grant checks separately.
 
+## Follow-up — CLIENT-PORTAL-RUNTIME-SKELETON-HARDEN-DESIGN-1
+
+- `CLIENT-PORTAL-RUNTIME-SKELETON-HARDEN-DESIGN-1` created
+  `docs/client-portal-runtime-skeleton-harden-design.md`.
+- The runtime skeleton boundary design defines a future `Backend/src/modules/client-portal`
+  split, disabled gate order, no-Prisma-while-disabled expectation, external mapper
+  boundary, and content-free audit/log boundary.
+- Existing code remains a disabled/quarantined skeleton. No runtime, schema, frontend,
+  OpenAPI, CORS, Azure, DB, auth, or feature behavior change is authorized.
+
 ## Non-actions
 
 - No runtime changed.

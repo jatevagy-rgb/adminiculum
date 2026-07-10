@@ -317,6 +317,16 @@ This design does not enable Client Portal. Client Portal remains quarantined. CP
   external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply
   remains NO-GO.
 
+## Follow-up — CLIENT-PORTAL-RUNTIME-SKELETON-HARDEN-DESIGN-1
+
+- `CLIENT-PORTAL-RUNTIME-SKELETON-HARDEN-DESIGN-1` created
+  `docs/client-portal-runtime-skeleton-harden-design.md`.
+- The runtime skeleton design translates this product boundary into future disabled-gate,
+  service, authorization, mapper, audit, OpenAPI, and test boundaries.
+- The product boundary is unchanged. Client Portal stays disabled/quarantined; external
+  visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains
+  NO-GO.
+
 ## Non-actions
 
 - No runtime changed.
