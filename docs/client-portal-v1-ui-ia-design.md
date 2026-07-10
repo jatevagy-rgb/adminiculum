@@ -329,6 +329,16 @@ The product boundary, current code inventory, data contract, authorization model
 - This UI/IA design remains documentation-only. No frontend, runtime, schema, migration,
   DB, Azure, OpenAPI/CORS, or Client Portal enablement is authorized.
 
+## Follow-up — CLIENT-PORTAL-FRONTEND-SHELL-DESIGN-1
+
+- `CLIENT-PORTAL-FRONTEND-SHELL-DESIGN-1` created
+  `docs/client-portal-frontend-shell-design.md`.
+- The frontend shell design turns this UI/IA into a future route, layout, component,
+  visual reuse, disabled-state, API-client, privacy, and test plan.
+- This UI/IA design remains documentation-only. No frontend implementation, runtime,
+  schema, migration, DB, Azure, OpenAPI/CORS, auth, or Client Portal enablement is
+  authorized.
+
 ## Final decision statement
 
 This design does not implement the portal UI. Client Portal remains quarantined. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO. External visibility remains unauthorized. The runtime skeleton remains disabled. No schema migration is authorized.

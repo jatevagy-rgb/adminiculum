@@ -327,6 +327,17 @@ This design does not enable Client Portal. Client Portal remains quarantined. CP
   visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains
   NO-GO.
 
+## Follow-up — CLIENT-PORTAL-FRONTEND-SHELL-DESIGN-1
+
+- `CLIENT-PORTAL-FRONTEND-SHELL-DESIGN-1` created
+  `docs/client-portal-frontend-shell-design.md`.
+- The frontend shell design translates this boundary into future `/portal` routes,
+  client-facing shell layout, safe components, visual reuse limits, disabled states, and
+  frontend privacy tests.
+- The product boundary is unchanged. Client Portal stays disabled/quarantined; external
+  visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains
+  NO-GO.
+
 ## Non-actions
 
 - No runtime changed.

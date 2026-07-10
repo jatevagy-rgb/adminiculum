@@ -219,6 +219,17 @@ Alternative:
 
 Use this only if a human explicitly authorizes code changes while the portal remains disabled.
 
+## Follow-up — CLIENT-PORTAL-FRONTEND-SHELL-DESIGN-1
+
+- `CLIENT-PORTAL-FRONTEND-SHELL-DESIGN-1` created
+  `docs/client-portal-frontend-shell-design.md`.
+- The frontend shell design defines future `/portal` routes, portal-specific layout,
+  safe components, visual reuse limits, disabled states, mock/static data strategy,
+  conceptual API client rules, and frontend tests.
+- This runtime skeleton boundary remains documentation-only. The backend skeleton remains
+  disabled/quarantined. No runtime, frontend, schema, migration, DB, Azure, OpenAPI/CORS,
+  auth, or Client Portal enablement is authorized.
+
 ## Final Decision Statement
 
 No runtime skeleton changes are made or authorized by this document. Client Portal is not enabled. Client Portal remains quarantined. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO. External visibility remains unauthorized. The runtime skeleton remains disabled. No schema migration is authorized.
