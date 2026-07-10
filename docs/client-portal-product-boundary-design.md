@@ -295,6 +295,17 @@ This design does not enable Client Portal. Client Portal remains quarantined. CP
   apply remains NO-GO.
 - Next recommended package: `CLIENT-PORTAL-V1-UI-IA-DESIGN-1`.
 
+## Follow-up — CLIENT-PORTAL-V1-UI-IA-DESIGN-1
+
+- `CLIENT-PORTAL-V1-UI-IA-DESIGN-1` created
+  `docs/client-portal-v1-ui-ia-design.md`.
+- The UI/IA design defines a separate client-facing portal surface for Home, Matters,
+  Documents, Uploads/Requests, deferred Messages, and optional Profile/Contact screens.
+- The product boundary remains unchanged: the portal is not an internal dashboard mirror,
+  document dump, AI/legal-analysis surface, or raw internal-data exposure layer.
+- Client Portal stays disabled/quarantined; external visibility remains unauthorized;
+  CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
 ## Non-actions
 
 - No runtime changed.

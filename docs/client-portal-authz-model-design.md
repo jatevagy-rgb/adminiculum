@@ -294,6 +294,16 @@ These are schema implications only. No migration is authorized by this document.
 
 The product boundary, current code inventory, data contract, and authorization model now describe what is safe in concept. The next design package should translate that into screens, navigation, and user flows without implementation.
 
+## Follow-up — CLIENT-PORTAL-V1-UI-IA-DESIGN-1
+
+- `CLIENT-PORTAL-V1-UI-IA-DESIGN-1` created
+  `docs/client-portal-v1-ui-ia-design.md`.
+- The UI/IA design maps grant-scoped portal concepts into Home, Matters, Documents,
+  Uploads/Requests, deferred Messages, and optional Profile/Contact screens.
+- This authorization model remains documentation-only. Client Portal remains
+  disabled/quarantined, external visibility remains unauthorized, CP-SCHEMA-1 remains
+  blocked, and production apply remains NO-GO.
+
 ## Final decision statement
 
 This design does not implement authorization. Client Portal remains quarantined. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO. External visibility remains unauthorized. The runtime skeleton remains disabled. No schema migration is authorized.

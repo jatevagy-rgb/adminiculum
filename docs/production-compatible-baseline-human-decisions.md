@@ -406,3 +406,18 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
   AI/provider use, auth changes, or Client Portal enablement.
 - External visibility remains unauthorized; the current Client Portal remains
   disabled/quarantined; CP-SCHEMA-1 and production apply remain **blocked**.
+
+## 29. Client Portal V1 UI/IA design
+
+- `CLIENT-PORTAL-V1-UI-IA-DESIGN-1` created
+  `docs/client-portal-v1-ui-ia-design.md`.
+- The design defines a future client-facing information architecture for Home, Matters,
+  Documents, Uploads/Requests, deferred Messages, and optional Profile/Contact screens,
+  with DTO dependencies, forbidden content, empty states, disabled states, and privacy
+  checklists.
+- It is documentation-only and does **not** authorize frontend implementation, runtime
+  implementation, schema change, migration creation/application, CP-SCHEMA-1, production
+  apply, OpenAPI/CORS exposure, Azure changes, file processing, SharePoint/Graph calls,
+  AI/provider use, auth changes, or Client Portal enablement.
+- External visibility remains unauthorized; the current Client Portal remains
+  disabled/quarantined; CP-SCHEMA-1 and production apply remain **blocked**.

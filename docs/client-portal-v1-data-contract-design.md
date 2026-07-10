@@ -306,6 +306,15 @@ That package should define portal identity, memberships, grant resolution, wrong
 - The authorization model defines conceptual portal principals, matter/document/upload/task/message grants, revocation, non-enumeration, endpoint-level grant checks, and future tests.
 - This data contract remains documentation-only. Client Portal remains disabled/quarantined, external visibility remains unauthorized, CP-SCHEMA-1 remains blocked, and production apply remains NO-GO.
 
+## Follow-up — CLIENT-PORTAL-V1-UI-IA-DESIGN-1
+
+- `CLIENT-PORTAL-V1-UI-IA-DESIGN-1` created
+  `docs/client-portal-v1-ui-ia-design.md`.
+- The UI/IA design maps the conceptual DTOs to client-facing screens, components, empty
+  states, disabled states, and privacy checklists.
+- This data contract remains documentation-only. No frontend, runtime, schema, migration,
+  DB, Azure, OpenAPI/CORS, or Client Portal enablement is authorized.
+
 ## Final decision statement
 
 This document does not implement the Client Portal V1 data contract. It does not authorize schema changes, migrations, DB apply, production apply, frontend work, OpenAPI exposure, CORS changes, auth changes, Azure changes, file processing, SharePoint/Graph calls, AI/provider calls, or Client Portal enablement. Client Portal remains disabled/quarantined. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO. External visibility remains unauthorized.
