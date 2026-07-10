@@ -315,6 +315,15 @@ That package should define portal identity, memberships, grant resolution, wrong
 - This data contract remains documentation-only. No frontend, runtime, schema, migration,
   DB, Azure, OpenAPI/CORS, or Client Portal enablement is authorized.
 
+## Follow-up — CLIENT-PORTAL-SCHEMA-READINESS-DESIGN-1
+
+- `CLIENT-PORTAL-SCHEMA-READINESS-DESIGN-1` created
+  `docs/client-portal-schema-readiness-design.md`.
+- The schema readiness design maps DTOs to future portal source tables, sanitized
+  publication models, grant records, upload/submission metadata, and content-free audit.
+- This data contract remains documentation-only. No `schema.prisma` edit, migration,
+  DB apply, runtime implementation, or Client Portal enablement is authorized.
+
 ## Final decision statement
 
 This document does not implement the Client Portal V1 data contract. It does not authorize schema changes, migrations, DB apply, production apply, frontend work, OpenAPI exposure, CORS changes, auth changes, Azure changes, file processing, SharePoint/Graph calls, AI/provider calls, or Client Portal enablement. Client Portal remains disabled/quarantined. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO. External visibility remains unauthorized.

@@ -320,6 +320,15 @@ A later implementation package should:
 
 The product boundary, current code inventory, data contract, authorization model, and UI/IA are now designed. The next design should map required schema support without creating migrations or authorizing CP-SCHEMA-1.
 
+## Follow-up — CLIENT-PORTAL-SCHEMA-READINESS-DESIGN-1
+
+- `CLIENT-PORTAL-SCHEMA-READINESS-DESIGN-1` created
+  `docs/client-portal-schema-readiness-design.md`.
+- The schema readiness design maps portal screens and DTOs to future portal identity,
+  grant, publication, upload, submission, and audit schema families.
+- This UI/IA design remains documentation-only. No frontend, runtime, schema, migration,
+  DB, Azure, OpenAPI/CORS, or Client Portal enablement is authorized.
+
 ## Final decision statement
 
 This design does not implement the portal UI. Client Portal remains quarantined. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO. External visibility remains unauthorized. The runtime skeleton remains disabled. No schema migration is authorized.

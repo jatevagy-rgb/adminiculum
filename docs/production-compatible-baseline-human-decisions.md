@@ -421,3 +421,18 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
   AI/provider use, auth changes, or Client Portal enablement.
 - External visibility remains unauthorized; the current Client Portal remains
   disabled/quarantined; CP-SCHEMA-1 and production apply remain **blocked**.
+
+## 30. Client Portal schema readiness design
+
+- `CLIENT-PORTAL-SCHEMA-READINESS-DESIGN-1` created
+  `docs/client-portal-schema-readiness-design.md`.
+- The design maps future portal identity, memberships, grants, sanitized publications,
+  document shares, upload requests, uploaded-file metadata, client-facing tasks, deferred
+  messages, external-safe identifiers, retention, and content-free audit into schema
+  readiness requirements.
+- It is documentation-only and does **not** authorize `schema.prisma` edits, migration
+  creation/application, CP-SCHEMA-1, production apply, runtime implementation, frontend
+  implementation, OpenAPI/CORS exposure, Azure changes, file processing, SharePoint/Graph
+  calls, AI/provider use, auth changes, or Client Portal enablement.
+- External visibility remains unauthorized; the current Client Portal remains
+  disabled/quarantined; CP-SCHEMA-1 and production apply remain **blocked**.

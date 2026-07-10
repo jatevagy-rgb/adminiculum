@@ -306,6 +306,17 @@ This design does not enable Client Portal. Client Portal remains quarantined. CP
 - Client Portal stays disabled/quarantined; external visibility remains unauthorized;
   CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
 
+## Follow-up — CLIENT-PORTAL-SCHEMA-READINESS-DESIGN-1
+
+- `CLIENT-PORTAL-SCHEMA-READINESS-DESIGN-1` created
+  `docs/client-portal-schema-readiness-design.md`.
+- The schema readiness design describes future portal identity, grant, publication,
+  document share, upload/submission, client task, deferred message, and audit schema
+  needs without changing schema or authorizing migrations.
+- The product boundary remains unchanged. Client Portal stays disabled/quarantined;
+  external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply
+  remains NO-GO.
+
 ## Non-actions
 
 - No runtime changed.

@@ -304,6 +304,16 @@ The product boundary, current code inventory, data contract, and authorization m
   disabled/quarantined, external visibility remains unauthorized, CP-SCHEMA-1 remains
   blocked, and production apply remains NO-GO.
 
+## Follow-up — CLIENT-PORTAL-SCHEMA-READINESS-DESIGN-1
+
+- `CLIENT-PORTAL-SCHEMA-READINESS-DESIGN-1` created
+  `docs/client-portal-schema-readiness-design.md`.
+- The schema readiness design maps portal principals, memberships, grants, document
+  shares, upload requests, client-facing tasks, deferred messages, and content-free audit
+  into future schema families.
+- This authorization model remains documentation-only. CP-SCHEMA-1 remains blocked,
+  production apply remains NO-GO, and Client Portal remains disabled/quarantined.
+
 ## Final decision statement
 
 This design does not implement authorization. Client Portal remains quarantined. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO. External visibility remains unauthorized. The runtime skeleton remains disabled. No schema migration is authorized.
