@@ -284,6 +284,17 @@ This design does not enable Client Portal. Client Portal remains quarantined. CP
   apply remains NO-GO.
 - Next recommended package: `CLIENT-PORTAL-AUTHZ-MODEL-DESIGN-1`.
 
+## Follow-up — CLIENT-PORTAL-AUTHZ-MODEL-DESIGN-1
+
+- `CLIENT-PORTAL-AUTHZ-MODEL-DESIGN-1` created
+  `docs/client-portal-authz-model-design.md`.
+- The authorization model designs grant-based portal access for matter, document, upload,
+  client-facing task, and deferred message visibility.
+- The product boundary remains unchanged: Client Portal stays disabled/quarantined,
+  external visibility remains unauthorized, CP-SCHEMA-1 remains blocked, and production
+  apply remains NO-GO.
+- Next recommended package: `CLIENT-PORTAL-V1-UI-IA-DESIGN-1`.
+
 ## Non-actions
 
 - No runtime changed.

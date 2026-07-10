@@ -175,6 +175,16 @@ External visibility remains unauthorized.
 - No runtime, schema, frontend, OpenAPI, CORS, Azure, DB, or feature behavior change is
   authorized by the data contract.
 
+## Follow-up — CLIENT-PORTAL-AUTHZ-MODEL-DESIGN-1
+
+- `CLIENT-PORTAL-AUTHZ-MODEL-DESIGN-1` created
+  `docs/client-portal-authz-model-design.md`.
+- The current skeleton has no implemented portal principal, grant-resolution service,
+  document-share model, upload-request model, client-facing task model, or message
+  visibility model.
+- The skeleton must remain disabled/quarantined until a future implementation package
+  creates and tests those grant checks separately.
+
 ## Non-actions
 
 - No runtime changed.

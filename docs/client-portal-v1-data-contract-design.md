@@ -299,6 +299,13 @@ No migration is authorized here. CP-SCHEMA-1 remains blocked until production-co
 
 That package should define portal identity, memberships, grant resolution, wrong-client/wrong-matter rejection, and disabled behavior before any runtime implementation.
 
+## Follow-up — CLIENT-PORTAL-AUTHZ-MODEL-DESIGN-1
+
+- `CLIENT-PORTAL-AUTHZ-MODEL-DESIGN-1` created
+  `docs/client-portal-authz-model-design.md`.
+- The authorization model defines conceptual portal principals, matter/document/upload/task/message grants, revocation, non-enumeration, endpoint-level grant checks, and future tests.
+- This data contract remains documentation-only. Client Portal remains disabled/quarantined, external visibility remains unauthorized, CP-SCHEMA-1 remains blocked, and production apply remains NO-GO.
+
 ## Final decision statement
 
 This document does not implement the Client Portal V1 data contract. It does not authorize schema changes, migrations, DB apply, production apply, frontend work, OpenAPI exposure, CORS changes, auth changes, Azure changes, file processing, SharePoint/Graph calls, AI/provider calls, or Client Portal enablement. Client Portal remains disabled/quarantined. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO. External visibility remains unauthorized.
