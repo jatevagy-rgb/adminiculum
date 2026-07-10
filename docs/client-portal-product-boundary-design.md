@@ -338,6 +338,16 @@ This design does not enable Client Portal. Client Portal remains quarantined. CP
   visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains
   NO-GO.
 
+## Follow-up — CLIENT-PORTAL-DESIGN-ROLLUP-1
+
+- `CLIENT-PORTAL-DESIGN-ROLLUP-1` created `docs/client-portal-design-rollup.md`.
+- The design rollup consolidates the product boundary, current code inventory, V1 data
+  contract, authorization/grant model, UI/IA, schema readiness, runtime skeleton boundary,
+  and frontend shell.
+- The product boundary is unchanged. Client Portal stays disabled/quarantined; external
+  visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains
+  NO-GO.
+
 ## Non-actions
 
 - No runtime changed.

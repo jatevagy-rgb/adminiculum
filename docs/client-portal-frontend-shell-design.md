@@ -241,6 +241,16 @@ Implementation option only if a human explicitly approves frontend code changes:
 
 That package must remain frontend-only, disabled/default-off, synthetic-data-only, and must not call live portal backend routes except for disabled-state handling.
 
+## Follow-up — CLIENT-PORTAL-DESIGN-ROLLUP-1
+
+- `CLIENT-PORTAL-DESIGN-ROLLUP-1` created `docs/client-portal-design-rollup.md`.
+- The rollup consolidates the product boundary, code inventory, data contract,
+  authorization model, UI/IA, schema readiness, runtime skeleton boundary, and frontend
+  shell design.
+- This frontend shell remains documentation-only. No frontend implementation, runtime,
+  schema, migration, DB, Azure, OpenAPI/CORS, auth, or Client Portal enablement is
+  authorized.
+
 ## Final Decision Statement
 
 This design does not implement a frontend shell. Client Portal remains quarantined. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO. External visibility remains unauthorized. The runtime skeleton remains disabled. No schema migration is authorized. No frontend route or component is authorized by this document.

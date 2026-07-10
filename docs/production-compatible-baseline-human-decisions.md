@@ -465,3 +465,19 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
   AI/provider use, auth changes, or Client Portal enablement.
 - External visibility remains unauthorized; the current Client Portal remains
   disabled/quarantined; CP-SCHEMA-1 and production apply remain **blocked**.
+
+## 33. Client Portal design rollup
+
+- `CLIENT-PORTAL-DESIGN-ROLLUP-1` created `docs/client-portal-design-rollup.md`.
+- The rollup consolidates the Client Portal product boundary, current code inventory,
+  V1 data contract, authorization/grant model, UI/IA, schema readiness, runtime skeleton
+  boundary, and frontend shell.
+- It is documentation-only and does **not** authorize frontend implementation, backend
+  implementation, runtime changes, schema changes, migration creation/application,
+  CP-SCHEMA-1, production apply, OpenAPI/CORS exposure, Azure changes, file processing,
+  SharePoint/Graph calls, AI/provider use, auth changes, or Client Portal enablement.
+- External visibility remains unauthorized; the current Client Portal remains
+  disabled/quarantined; CP-SCHEMA-1 and production apply remain **blocked**.
+- Safe next implementation candidate, if a human explicitly approves code changes, is
+  `CLIENT-PORTAL-FRONTEND-SHELL-MOCK-IMPLEMENTATION-1` with synthetic/mock data only and
+  no backend/schema enablement.
