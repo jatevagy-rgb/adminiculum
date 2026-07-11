@@ -275,6 +275,13 @@ If no code should be started yet:
 
 Client Portal V1 is designed, not implemented. Client Portal remains disabled/quarantined. No frontend route/component is implemented. No backend service module is implemented. No schema migration is authorized. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO. External visibility remains unauthorized. `documents.workspaceText` remains forbidden. The existing skeleton must not be enabled by flag alone.
 
+## Follow-up — CLIENT-PORTAL-FRONTEND-SHELL-MOCK-IMPLEMENTATION-1
+
+- `CLIENT-PORTAL-FRONTEND-SHELL-MOCK-IMPLEMENTATION-1` added a static/mock frontend shell at `/portal`.
+- The shell uses synthetic data only and does not call backend APIs, internal case/document/task APIs, AI providers, SharePoint/Graph, uploads, downloads, or export jobs.
+- The shell does not enable the Client Portal backend, does not authorize external visibility, does not authorize CP-SCHEMA-1, and does not change production apply readiness.
+- `documents.workspaceText` remains forbidden and is not exposed by the mock shell.
+
 ## Non-actions
 
 - No runtime changed.

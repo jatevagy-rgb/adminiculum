@@ -251,6 +251,17 @@ That package must remain frontend-only, disabled/default-off, synthetic-data-onl
   schema, migration, DB, Azure, OpenAPI/CORS, auth, or Client Portal enablement is
   authorized.
 
+## Follow-up — CLIENT-PORTAL-FRONTEND-SHELL-MOCK-IMPLEMENTATION-1
+
+- `CLIENT-PORTAL-FRONTEND-SHELL-MOCK-IMPLEMENTATION-1` added a static/mock `/portal`
+  frontend shell using synthetic data only.
+- The implementation demonstrates the shell, matter cards, safe next actions, document
+  metadata, upload request cards, responsible lawyer card, deferred states, and disabled
+  mock actions without backend integration.
+- No backend API calls, internal API imports, real client/case/document data, upload,
+  download, SharePoint/Graph, AI/provider, schema, migration, CP-SCHEMA-1, production
+  apply, or Client Portal backend enablement is authorized by the mock shell.
+
 ## Final Decision Statement
 
 This design does not implement a frontend shell. Client Portal remains quarantined. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO. External visibility remains unauthorized. The runtime skeleton remains disabled. No schema migration is authorized. No frontend route or component is authorized by this document.
