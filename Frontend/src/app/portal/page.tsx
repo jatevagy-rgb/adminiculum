@@ -106,9 +106,9 @@ const mockUpdates: PortalUpdate[] = [
 
 const navItems = [
   { href: "#figyelem", label: "Figyelmet igényel" },
-  { href: "#ugyek", label: "Ügyek" },
-  { href: "#dokumentumok", label: "Dokumentumok" },
-  { href: "#feltoltesek", label: "Feltöltések" },
+  { href: "/portal/matters", label: "Ügyek" },
+  { href: "/portal/documents", label: "Dokumentumok" },
+  { href: "/portal/uploads", label: "Feltöltések" },
   { href: "#uzenetek", label: "Üzenetek" },
 ];
 

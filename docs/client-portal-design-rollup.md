@@ -288,6 +288,12 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - The polish keeps the shell frontend-only, synthetic-data-only, and API-free while making the development-preview notice, attention-first hierarchy, inactive upload/download actions, and deferred message/profile states clearer.
 - No backend API calls, internal API imports, backend/schema/migration/DB/Azure/auth/OpenAPI/CORS changes, Client Portal backend enablement, external visibility, CP-SCHEMA-1 readiness, or production apply readiness are authorized.
 
+## Follow-up — Client Portal mock subroutes
+
+- Static/mock pages were added for `/portal/matters`, `/portal/matters/[matterId]`, `/portal/documents`, and `/portal/uploads`.
+- The subroutes use synthetic mock data only and share the same no-API, no-backend-enable, no-real-data posture as `/portal`.
+- They do not authorize backend implementation, schema changes, migrations, CP-SCHEMA-1, production apply, external visibility, real upload/download, or document-content display.
+
 ## Non-actions
 
 - No runtime changed.

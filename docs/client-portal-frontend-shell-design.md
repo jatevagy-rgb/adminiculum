@@ -274,6 +274,15 @@ That package must remain frontend-only, disabled/default-off, synthetic-data-onl
   OpenAPI/CORS changes, Client Portal backend enablement, external visibility,
   CP-SCHEMA-1 readiness, or production apply readiness are authorized.
 
+## Follow-up — Client Portal mock subroutes
+
+- Static/mock subroutes now exist for `/portal/matters`, `/portal/matters/[matterId]`,
+  `/portal/documents`, and `/portal/uploads`.
+- They remain frontend-only, synthetic-data-only, and API-free.
+- The subroutes demonstrate mock matter list/detail, metadata-only document list, and
+  inactive upload request list without real data, backend calls, internal API imports,
+  upload/download implementation, messages, or document-content preview.
+
 ## Final Decision Statement
 
 This design does not implement a frontend shell. Client Portal remains quarantined. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO. External visibility remains unauthorized. The runtime skeleton remains disabled. No schema migration is authorized. No frontend route or component is authorized by this document.

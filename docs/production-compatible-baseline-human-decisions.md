@@ -515,3 +515,16 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
   changes, real upload/download, or Client Portal enablement.
 - External visibility remains unauthorized; the current Client Portal backend remains
   disabled/quarantined; CP-SCHEMA-1 and production apply remain **blocked**.
+
+## 36. Client Portal frontend mock subroutes
+
+- Static/mock frontend subroutes were added for `/portal/matters`,
+  `/portal/matters/[matterId]`, `/portal/documents`, and `/portal/uploads`.
+- They use synthetic mock data only and remain API-free, with no internal API imports and
+  no backend Client Portal calls.
+- They do **not** authorize backend implementation, backend enablement, external
+  visibility, schema changes, migration creation/application, CP-SCHEMA-1, production
+  apply, OpenAPI/CORS exposure, Azure changes, SharePoint/Graph calls, AI/provider use,
+  auth changes, real upload/download, message implementation, or Client Portal enablement.
+- External visibility remains unauthorized; the current Client Portal backend remains
+  disabled/quarantined; CP-SCHEMA-1 and production apply remain **blocked**.
