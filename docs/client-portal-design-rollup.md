@@ -282,6 +282,12 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - The shell does not enable the Client Portal backend, does not authorize external visibility, does not authorize CP-SCHEMA-1, and does not change production apply readiness.
 - `documents.workspaceText` remains forbidden and is not exposed by the mock shell.
 
+## Follow-up — CLIENT-PORTAL-FRONTEND-MOCK-SHELL-SAFETY-POLISH-1
+
+- `CLIENT-PORTAL-FRONTEND-MOCK-SHELL-SAFETY-POLISH-1` reviewed and polished the static/mock `/portal` shell.
+- The polish keeps the shell frontend-only, synthetic-data-only, and API-free while making the development-preview notice, attention-first hierarchy, inactive upload/download actions, and deferred message/profile states clearer.
+- No backend API calls, internal API imports, backend/schema/migration/DB/Azure/auth/OpenAPI/CORS changes, Client Portal backend enablement, external visibility, CP-SCHEMA-1 readiness, or production apply readiness are authorized.
+
 ## Non-actions
 
 - No runtime changed.

@@ -32,7 +32,7 @@ type PortalUpdate = {
   date: string;
 };
 
-const previewMatters: PortalMatter[] = [
+const mockMatters: PortalMatter[] = [
   {
     externalId: "PORTAL-MINTA-001",
     title: "Minta ügy — szerződés előkészítés",
@@ -59,7 +59,7 @@ const previewMatters: PortalMatter[] = [
   },
 ];
 
-const previewDocuments: PortalDocument[] = [
+const mockDocuments: PortalDocument[] = [
   {
     title: "Tájékoztató.pdf",
     type: "Megosztott dokumentum",
@@ -76,7 +76,7 @@ const previewDocuments: PortalDocument[] = [
   },
 ];
 
-const previewUploadRequests: PortalUploadRequest[] = [
+const mockUploadRequests: PortalUploadRequest[] = [
   {
     title: "Hiánypótlás: személyi igazolvány másolat",
     matterTitle: "Minta ügy — szerződés előkészítés",
@@ -91,7 +91,7 @@ const previewUploadRequests: PortalUploadRequest[] = [
   },
 ];
 
-const previewUpdates: PortalUpdate[] = [
+const mockUpdates: PortalUpdate[] = [
   {
     title: "Biztonságos státuszfrissítés",
     body: "Az iroda rögzítette a következő egyeztetési lépést. Jelenleg nincs új ügyfélteendő.",
@@ -105,7 +105,7 @@ const previewUpdates: PortalUpdate[] = [
 ];
 
 const navItems = [
-  { href: "#attekintes", label: "Áttekintés" },
+  { href: "#figyelem", label: "Figyelmet igényel" },
   { href: "#ugyek", label: "Ügyek" },
   { href: "#dokumentumok", label: "Dokumentumok" },
   { href: "#feltoltesek", label: "Feltöltések" },
@@ -124,33 +124,34 @@ export default function ClientPortalMockPage() {
     <main className="min-h-screen bg-[var(--adm-ivory-50)] text-[var(--adm-text)]">
       <PortalShell>
         <PortalNotice />
-        <PortalHero />
 
-        <section id="attekintes" className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+        <section id="figyelem" className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
           <PortalHomeAttentionPanel />
           <PortalResponsibleLawyerCard />
         </section>
 
+        <PortalHero />
+
         <section id="ugyek" className="space-y-4">
           <SectionHeader
-            eyebrow="Ügyek"
-            title="Csak ügyfélnek szánt, szintetikus ügykártyák"
-            description="A valódi portál később kizárólag explicit jogosultsággal megosztott ügyeket mutathat."
+            eyebrow="Aktív ügyeim"
+            title="Szintetikus ügykártyák — második szintű áttekintés"
+            description="A valódi portál később kizárólag explicit jogosultsággal megosztott ügyeket mutathat; ez a minta nem használ valós ügyadatot."
           />
           <div className="grid gap-4 lg:grid-cols-3">
-            {previewMatters.map((matter) => (
+            {mockMatters.map((matter) => (
               <PortalMatterCard key={matter.externalId} matter={matter} />
             ))}
           </div>
         </section>
 
         <section id="dokumentumok" className="grid gap-4 xl:grid-cols-[1fr_0.75fr]">
-          <PortalSharedDocumentList documents={previewDocuments} />
-          <PortalSafeUpdateTimeline updates={previewUpdates} />
+          <PortalSharedDocumentList documents={mockDocuments} />
+          <PortalSafeUpdateTimeline updates={mockUpdates} />
         </section>
 
         <section id="feltoltesek" className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
-          <PortalUploadRequestList uploadRequests={previewUploadRequests} />
+          <PortalUploadRequestList uploadRequests={mockUploadRequests} />
           <PortalDeferredPanel />
         </section>
       </PortalShell>
@@ -165,7 +166,7 @@ function PortalShell({ children }: { children: ReactNode }) {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--adm-text-muted)]">
-              Adminiculum ügyfélportál
+              Ügyfélportál előnézet
             </p>
             <h1 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[var(--adm-green-950)]">
               Biztonságos ügyféloldali előnézet
@@ -191,9 +192,9 @@ function PortalShell({ children }: { children: ReactNode }) {
 
 function PortalNotice() {
   return (
-    <aside className="rounded-2xl border border-[rgba(253,158,2,0.35)] bg-[rgba(253,158,2,0.10)] px-4 py-3 text-sm text-[var(--adm-blue-950)]">
-      <strong>Fejlesztési előnézet</strong> — szintetikus adatokkal. Az ügyfélportál backendje nincs engedélyezve,
-      és ez az oldal nem végez API-hívást.
+    <aside className="rounded-2xl border border-[rgba(253,158,2,0.42)] bg-[rgba(253,158,2,0.12)] px-4 py-3 text-sm leading-6 text-[var(--adm-blue-950)]">
+      <strong>Fejlesztési előnézet — szintetikus adatokkal.</strong> Az ügyfélportál backendje nincs engedélyezve,
+      ez az oldal nem végez API-hívást, és nem jelenít meg valós ügyfél-, ügy- vagy dokumentumadatot.
     </aside>
   );
 }
@@ -204,7 +205,7 @@ function PortalHero() {
       <div className="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="p-6 sm:p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--adm-blue-700)]">
-            Ügyféloldali munkatér
+            Ügyfélportál előnézet
           </p>
           <h2 className="mt-4 max-w-3xl text-4xl font-semibold tracking-[-0.045em] text-[var(--adm-green-950)] sm:text-5xl">
             Egy helyen a biztonságosan megosztott ügyállapot, teendő és dokumentum-metaadat.
@@ -242,9 +243,9 @@ function PortalHomeAttentionPanel() {
   return (
     <section className="rounded-3xl border border-[var(--adm-border)] bg-white p-5 shadow-[var(--adm-shadow-md)]">
       <SectionHeader
-        eyebrow="Itt érdemes kezdeni"
-        title="Ügyfélteendők és határidők"
-        description="Csak ügyfélnek szánt, szintetikus státuszok és határidők jelennek meg."
+        eyebrow="Mi igényel figyelmet?"
+        title="Figyelmet igényel"
+        description="A legfontosabb minta teendők és határidők vannak elöl. Minden adat szintetikus és inaktív."
       />
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         <InfoTile label="Aktív mintaügy" value="3" />
@@ -253,7 +254,7 @@ function PortalHomeAttentionPanel() {
         <InfoTile label="Üzenetek" value="Később" />
       </div>
       <div className="mt-5 rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
-        <p className="text-sm font-semibold text-[var(--adm-green-950)]">Következő ügyféloldali lépés</p>
+        <p className="text-sm font-semibold text-[var(--adm-green-950)]">Első minta teendő</p>
         <p className="mt-2 text-sm leading-6 text-[var(--adm-text-muted)]">
           Hiánypótlás: személyi igazolvány másolat. A gomb inaktív, mert ez a shell nem végez valódi feltöltést.
         </p>
@@ -307,7 +308,7 @@ function PortalSharedDocumentList({ documents }: { documents: PortalDocument[] }
       <SectionHeader
         eyebrow="Dokumentumok"
         title="Megosztott dokumentum-metaadatok"
-        description="Nincs letöltés, nincs nyers tartalom, nincs tárhelyútvonal."
+        description="Csak cím, típus, ügycímke és megosztási dátum látható. Nincs letöltés, nincs nyers tartalom, nincs tárhelyútvonal."
       />
       <div className="mt-5 space-y-3">
         {documents.map((document) => (
@@ -349,7 +350,7 @@ function PortalUploadRequestList({ uploadRequests }: { uploadRequests: PortalUpl
       <SectionHeader
         eyebrow="Feltöltési kérések"
         title="Inaktív mock kártyák"
-        description="A shell nem jelenít meg fájlválasztót, és nem küld adatot sehová."
+        description="A shell nem jelenít meg fájlválasztót, nem indít feltöltést, és nem küld adatot sehová."
       />
       <div className="mt-5 space-y-3">
         {uploadRequests.map((request) => (

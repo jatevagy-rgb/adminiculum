@@ -498,3 +498,20 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
   auth changes, real upload/download, or Client Portal enablement.
 - External visibility remains unauthorized; the current Client Portal backend remains
   disabled/quarantined; CP-SCHEMA-1 and production apply remain **blocked**.
+
+## 35. Client Portal frontend mock shell safety polish
+
+- `CLIENT-PORTAL-FRONTEND-MOCK-SHELL-SAFETY-POLISH-1` reviewed and polished the static/mock
+  `/portal` shell.
+- The polish keeps the shell frontend-only, synthetic-data-only, and API-free while making
+  the development-preview notice, "Figyelmet igényel" hierarchy, metadata-only document
+  display, inactive upload/download actions, and deferred messages/profile states clearer.
+- It does **not** call backend APIs, does **not** import internal case/document/task API
+  functions, does **not** use real client/case/document data, and does **not** expose
+  `documents.workspaceText`.
+- It does **not** authorize backend implementation, backend enablement, external visibility,
+  schema changes, migration creation/application, CP-SCHEMA-1, production apply,
+  OpenAPI/CORS exposure, Azure changes, SharePoint/Graph calls, AI/provider use, auth
+  changes, real upload/download, or Client Portal enablement.
+- External visibility remains unauthorized; the current Client Portal backend remains
+  disabled/quarantined; CP-SCHEMA-1 and production apply remain **blocked**.

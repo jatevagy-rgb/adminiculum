@@ -262,6 +262,18 @@ That package must remain frontend-only, disabled/default-off, synthetic-data-onl
   download, SharePoint/Graph, AI/provider, schema, migration, CP-SCHEMA-1, production
   apply, or Client Portal backend enablement is authorized by the mock shell.
 
+## Follow-up — CLIENT-PORTAL-FRONTEND-MOCK-SHELL-SAFETY-POLISH-1
+
+- `CLIENT-PORTAL-FRONTEND-MOCK-SHELL-SAFETY-POLISH-1` polished the static/mock `/portal`
+  shell without adding backend integration.
+- The shell now makes the synthetic-data notice, "Figyelmet igényel" first screen,
+  secondary active-matter section, metadata-only documents, inactive upload/download
+  actions, and deferred messages/profile states clearer.
+- It remains frontend-only and synthetic-data-only. No backend API calls, internal API
+  imports, schema/migration changes, DB access, Azure changes, auth changes,
+  OpenAPI/CORS changes, Client Portal backend enablement, external visibility,
+  CP-SCHEMA-1 readiness, or production apply readiness are authorized.
+
 ## Final Decision Statement
 
 This design does not implement a frontend shell. Client Portal remains quarantined. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO. External visibility remains unauthorized. The runtime skeleton remains disabled. No schema migration is authorized. No frontend route or component is authorized by this document.
