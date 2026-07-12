@@ -343,3 +343,12 @@ enums and external-safe refs should be frozen before any migration draft.
 - Client Portal remains **inert**.
 - CP-SCHEMA-1 remains **blocked**.
 - Production apply remains **NO-GO**.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-ENUM-AND-REF-DECISION-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-ENUM-AND-REF-DECISION-1` completed the enum/ref decision
+  (`docs/client-portal-cp-schema-1-enum-and-ref-decision.md`): recommended enum values
+  per status enum, the external-safe `*Ref` strategy (opaque, non-sequential,
+  prefixed, unique/indexed; not internal DB IDs), which refs are client-visible vs
+  internal-only, and a client-facing mapping rule. **No schema/migration is authorized.**
+  CP-SCHEMA-1 remains blocked; production apply remains NO-GO.

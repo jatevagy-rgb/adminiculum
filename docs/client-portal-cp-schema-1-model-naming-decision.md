@@ -165,3 +165,12 @@ before any migration.
   candidate enums, an index/constraint draft, and a field-level forbidden list.
 - **No schema/migration is authorized.** CP-SCHEMA-1 remains blocked; production apply
   remains NO-GO.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-ENUM-AND-REF-DECISION-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-ENUM-AND-REF-DECISION-1` **refined these final candidate
+  names with their external-safe `*Ref` fields and status enum values**
+  (`docs/client-portal-cp-schema-1-enum-and-ref-decision.md`): per-model refs
+  (`portalUserRef`, `grantRef`, `documentShareRef`, …), a prefixed opaque ref strategy,
+  and recommended status values per enum. No schema/migration authorized; CP-SCHEMA-1
+  remains blocked; production apply remains NO-GO.

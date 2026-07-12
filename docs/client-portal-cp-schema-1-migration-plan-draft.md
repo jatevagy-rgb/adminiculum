@@ -283,3 +283,11 @@ Reason: before any schema implementation, model naming/semantics must be frozen.
   list) for the frozen `ClientPortal*` models. **The field spec draft exists; no
   schema/migration is authorized.** CP-SCHEMA-1 remains blocked; production apply remains
   NO-GO.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-ENUM-AND-REF-DECISION-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-ENUM-AND-REF-DECISION-1` created
+  `docs/client-portal-cp-schema-1-enum-and-ref-decision.md`, deciding the CP-SCHEMA-1
+  enum values and external-safe ref strategy. **The enum/ref decision exists; no
+  schema/migration is authorized.** CP-SCHEMA-1 remains blocked; production apply remains
+  NO-GO.
