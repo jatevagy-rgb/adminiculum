@@ -291,3 +291,11 @@ Reason: before any schema implementation, model naming/semantics must be frozen.
   enum values and external-safe ref strategy. **The enum/ref decision exists; no
   schema/migration is authorized.** CP-SCHEMA-1 remains blocked; production apply remains
   NO-GO.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-RELATION-AND-INDEX-SPEC-DRAFT-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-RELATION-AND-INDEX-SPEC-DRAFT-1` created
+  `docs/client-portal-cp-schema-1-relation-and-index-spec-draft.md`, drafting per-model
+  relations, index/uniqueness candidates, cascade cautions, and cross-model security
+  invariants. **The relation/index spec draft exists; no schema/migration is
+  authorized.** CP-SCHEMA-1 remains blocked; production apply remains NO-GO.

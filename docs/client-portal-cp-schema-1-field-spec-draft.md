@@ -352,3 +352,12 @@ enums and external-safe refs should be frozen before any migration draft.
   prefixed, unique/indexed; not internal DB IDs), which refs are client-visible vs
   internal-only, and a client-facing mapping rule. **No schema/migration is authorized.**
   CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-RELATION-AND-INDEX-SPEC-DRAFT-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-RELATION-AND-INDEX-SPEC-DRAFT-1` **refined these fields with
+  relation/index/cascade planning**
+  (`docs/client-portal-cp-schema-1-relation-and-index-spec-draft.md`): per-model
+  required/optional relations, index/uniqueness candidates, cascade cautions, and
+  cross-model security invariants. No schema/migration authorized; CP-SCHEMA-1 remains
+  blocked; production apply remains NO-GO.

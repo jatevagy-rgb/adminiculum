@@ -470,3 +470,9 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - `CLIENT-PORTAL-CP-SCHEMA-1-ENUM-AND-REF-DECISION-1` created `docs/client-portal-cp-schema-1-enum-and-ref-decision.md`, deciding CP-SCHEMA-1 enum values and the external-safe ref strategy.
 - **The enum/ref decision exists and does not change the no-go posture.** No `schema.prisma` edit, migration, DB, migration command, or ref-generator implementation.
 - Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Plan — CLIENT-PORTAL-CP-SCHEMA-1-RELATION-AND-INDEX-SPEC-DRAFT-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-RELATION-AND-INDEX-SPEC-DRAFT-1` created `docs/client-portal-cp-schema-1-relation-and-index-spec-draft.md`, a docs-only relation/index/cascade spec draft (per-model relations, index/uniqueness candidates, cascade cautions, cross-model security invariants).
+- **The relation/index spec draft exists and does not change the no-go posture.** No `schema.prisma` edit, migration, DB, or migration command.
+- Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.

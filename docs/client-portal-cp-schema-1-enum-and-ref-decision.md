@@ -218,3 +218,13 @@ relation / index / cascade specification.
 - Client Portal remains **inert**.
 - CP-SCHEMA-1 remains **blocked**.
 - Production apply remains **NO-GO**.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-RELATION-AND-INDEX-SPEC-DRAFT-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-RELATION-AND-INDEX-SPEC-DRAFT-1` completed the
+  relation/index/cascade spec draft
+  (`docs/client-portal-cp-schema-1-relation-and-index-spec-draft.md`): a candidate
+  relation map, per-model required/optional relations, index/uniqueness candidates,
+  cascade cautions, per-model security rules, and cross-model security invariants,
+  built on these enums/refs. **No schema/migration is authorized.** CP-SCHEMA-1 remains
+  blocked; production apply remains NO-GO.

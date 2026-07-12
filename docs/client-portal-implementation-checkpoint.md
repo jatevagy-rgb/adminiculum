@@ -279,3 +279,9 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 - `CLIENT-PORTAL-CP-SCHEMA-1-ENUM-AND-REF-DECISION-1` created `docs/client-portal-cp-schema-1-enum-and-ref-decision.md`, deciding CP-SCHEMA-1 enum values and the external-safe ref strategy (opaque, prefixed, unique/indexed refs distinct from internal IDs; per-status enum values; client-facing mapping rule).
 - **A CP-SCHEMA-1 enum/ref decision exists; there is still no DB-backed portal** — no `schema.prisma` edit, no migration, no DB, no ref generator implemented. The inert shell is unchanged.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## Plan — CLIENT-PORTAL-CP-SCHEMA-1-RELATION-AND-INDEX-SPEC-DRAFT-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-RELATION-AND-INDEX-SPEC-DRAFT-1` created `docs/client-portal-cp-schema-1-relation-and-index-spec-draft.md`, a docs-only relation/index/cascade spec draft (candidate relation map, per-model relations/indexes/cascades, cross-model security invariants).
+- **A CP-SCHEMA-1 relation/index spec draft exists; there is still no DB-backed portal** — no `schema.prisma` edit, no migration, no DB. The inert shell is unchanged.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
