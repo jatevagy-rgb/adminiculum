@@ -90,3 +90,9 @@ blocked; production apply remains NO-GO; Client Portal remains inert.
   (`user → memberships`, `artifact → grants`) and **two `Json` payload columns**
   (`ClientVisibleArtifact.payload`, `ClientPortalAuditEvent.metadata`) that the
   final plan forbids. No implementation authorized.
+
+## Update — CLIENT-PORTAL-INERT-SHELL-STATIC-GUARDS-1
+
+- `CLIENT-PORTAL-INERT-SHELL-STATIC-GUARDS-1` added `Backend/tests/clientPortalInertShellStaticGuards.test.ts`, converting the inert-shell safety posture into automated static checks.
+- New checks cover accidental route wiring, service wiring, authz wiring, mapper/internal-module coupling, Prisma access, executable `workspaceText` references, frontend API calls, `@/lib/api`, file input/form behavior, internal app component reuse, and DTO mapper source spreading.
+- Risk status: accidental enablement/exposure risk is further reduced by tests, but CP-SCHEMA-1 remains blocked because schema collision decisions, migration proof, authz implementation, service implementation, runtime enablement, and production apply gates remain unresolved.

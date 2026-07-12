@@ -196,3 +196,10 @@ authz/principal boundary design that can later sit between routes and services.
   planning. **The readiness checkpoint exists; the inert shell remains non-DB-backed** —
   routes still `401`/`501 CLIENT_PORTAL_NOT_ENABLED`, no schema/migration/DB. CP-SCHEMA-1
   remains blocked; production apply remains NO-GO.
+
+## Follow-up — CLIENT-PORTAL-INERT-SHELL-STATIC-GUARDS-1
+
+- `CLIENT-PORTAL-INERT-SHELL-STATIC-GUARDS-1` added a consolidated static guard suite at `Backend/tests/clientPortalInertShellStaticGuards.test.ts` for the inert Client Portal shell.
+- The guards prove the backend route matrix remains auth-first/gate-first and does not import authz/services/mappers/Prisma; authz, service, and mapper modules remain isolated from Prisma/internal modules; frontend `/portal*` remains static, synthetic, API-free, upload/form-free, and free of internal app component reuse.
+- The suite also guards against executable `workspaceText` references in Client Portal backend/frontend code and mapper source spreading (`...source`). No schema, migration, DB query, route wiring, service wiring, frontend API integration, runtime enablement, OpenAPI/CORS, Azure, or package change was made.
+- CP-SCHEMA-1 remains blocked and production apply remains NO-GO.

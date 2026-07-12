@@ -494,3 +494,10 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - `CLIENT-PORTAL-CP-SCHEMA-1-COLLISION-RESOLUTION-AND-PATCH-STRATEGY-1` created the docs-only **collision-resolution and patch-strategy package** (strategy + legacy inventory + patch review checklist), resolving on paper how the legacy candidate block should be handled (recommended Option C — replacement/normalization, pending human approval and clone verification).
 - **The collision strategy exists and does not change the no-go posture.** No `schema.prisma` edit, migration, DB, or migration command.
 - Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Guard — CLIENT-PORTAL-INERT-SHELL-STATIC-GUARDS-1
+
+- `CLIENT-PORTAL-INERT-SHELL-STATIC-GUARDS-1` added a consolidated static guard suite (`Backend/tests/clientPortalInertShellStaticGuards.test.ts`) around the current Client Portal mock frontend + inert backend shell.
+- The guard covers backend route unwiring, authz/service/mapper isolation, absence of Prisma access, frontend API-free/static behavior, no upload/form behavior, no internal component reuse, no executable `workspaceText` references, and no mapper `...source` DTO spreading.
+- **The guard strengthens the no-go posture without changing product behavior.** No schema/migration/DB, route/service/authz wiring, frontend API integration, OpenAPI/CORS, Azure, package, or runtime enablement was introduced.
+- Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.

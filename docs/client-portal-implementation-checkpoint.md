@@ -303,3 +303,10 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 - `CLIENT-PORTAL-CP-SCHEMA-1-COLLISION-RESOLUTION-AND-PATCH-STRATEGY-1` created the docs-only collision package: **collision-resolution and patch strategy** (recommended Option C — replacement/normalization, human approval + clone verification required), the **exact legacy candidate block inventory** (7 models, 16 enums, `@@map` tables, cascade/Json findings), and the **schema patch review checklist**.
 - **A collision strategy exists; there is still no DB-backed portal** — no `schema.prisma` edit, no migration, no DB. The inert shell is unchanged.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## Guard — CLIENT-PORTAL-INERT-SHELL-STATIC-GUARDS-1
+
+- `CLIENT-PORTAL-INERT-SHELL-STATIC-GUARDS-1` added `Backend/tests/clientPortalInertShellStaticGuards.test.ts`, a consolidated static guard suite for the disabled Client Portal shell.
+- The test suite checks that routes stay auth-first/gate-first and unwired from authz/services/mappers/Prisma; service/authz/mapper stubs stay isolated from internal modules and Prisma; frontend `/portal*` stays synthetic/static with no API calls, `@/lib/api`, file input, form behavior, `workspaceText`, or internal app component reuse.
+- This is a safety guard only. It does not enable runtime behavior, connect frontend to backend, add schema/migration/DB access, or authorize CP-SCHEMA-1.
+- Client Portal remains mock frontend + disabled backend skeleton only; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
