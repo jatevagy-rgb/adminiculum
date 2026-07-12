@@ -181,3 +181,11 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 - The pass added clearer skip/content structure, page-level headings, labelled sections, list semantics for card collections, active navigation semantics, and clearer disabled-action affordances.
 - The route tree remains frontend-only, synthetic-only, typed against frontend-local Portal V1 DTO types, and API-free.
 - No backend API calls, internal API imports, `documents.workspaceText`, file input, real upload/download/message implementation, real data, backend/schema/migration/DB/Azure/OpenAPI/CORS/package change, external visibility, CP-SCHEMA-1 readiness, production apply readiness, or Client Portal backend enablement is authorized.
+
+## Closeout — CLIENT-PORTAL-MOCK-FRONTEND-ACCESSIBILITY-CLOSEOUT-1
+
+- `CLIENT-PORTAL-MOCK-FRONTEND-ACCESSIBILITY-CLOSEOUT-1` records the closeout (docs-only) of the frontend accessibility pass completed in `f8c63de`.
+- The portal remains **mock frontend + disabled backend skeleton only** — not live, not API-integrated, not DB-backed, not externally visible, not production-enabled, not CP-SCHEMA-1 ready.
+- **No API/DB/schema/enablement.** This closeout made no runtime, frontend behavior, backend behavior, schema, migration, database, Azure, OpenAPI, CORS, auth, package, or API-integration change.
+- Safety re-verified: no `fetch(`, no `@/lib/api`, no `documents.workspaceText`, no `type="file"`, no form action, no internal Dashboard/CaseDetail/Litigation/Workload/Review/Compare/Anonymize imports across the portal route tree; no backend runtime, schema, or migration file required changes.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.

@@ -348,3 +348,10 @@ This design does not implement a frontend shell. Client Portal remains quarantin
 - `CLIENT-PORTAL-MOCK-FRONTEND-ACCESSIBILITY-PASS-1` improved the static/mock Client Portal shell's accessibility and responsive review quality.
 - The polish remains frontend-only, synthetic-only, DTO-typed, and API-free, with no backend integration, no real data, no file input, and no upload/download/message behavior.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; CP-SCHEMA-1 and production apply remain blocked.
+
+## Closeout — CLIENT-PORTAL-MOCK-FRONTEND-ACCESSIBILITY-CLOSEOUT-1
+
+- **Accessibility pass and closeout completed** (docs-only) for the static/mock Client Portal shell and route tree, following `f8c63de`.
+- The static/mock route tree now has improved semantic structure (page-level headings, `<main>` content region, labelled sections), active navigation semantics (`aria-current`), a skip link to content, list/card semantics for card collections, and safer disabled-action semantics (`disabled` + `aria-disabled`).
+- **No behavior or API integration is authorized.** The shell remains frontend-only, synthetic-only, typed against frontend-local Portal V1 DTO types, and API-free — no `fetch`, no `@/lib/api`, no `workspaceText`, no file input, no form action, and no upload/download/message implementation.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; CP-SCHEMA-1 and production apply remain blocked.

@@ -377,3 +377,10 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - The static/mock Client Portal route tree received an accessibility/responsive pass: skip/content structure, page-level headings, labelled sections, card-list semantics, active navigation semantics, and clearer disabled-action affordances.
 - It remains frontend-only, synthetic-only, typed against frontend-local Portal V1 DTO types, and API-free.
 - No backend API implementation, frontend API integration, internal API import, `workspaceText`, file input, real data, upload/download/message implementation, schema/migration/DB change, Azure/OpenAPI/CORS/package change, external visibility, CP-SCHEMA-1 readiness, production apply readiness, or Client Portal enablement is authorized.
+
+## Closeout — CLIENT-PORTAL-MOCK-FRONTEND-ACCESSIBILITY-CLOSEOUT-1
+
+- The accessibility pass closeout was completed (docs-only) after `f8c63de`.
+- **It does not change product posture.** Client Portal remains **non-live, mock-only on the frontend, and disabled on the backend**.
+- The static/mock route tree stays frontend-only, synthetic-only, DTO-typed, and API-free; no `fetch`, `@/lib/api`, `workspaceText`, file input, real data, or upload/download/message behavior was introduced, and no backend/schema/migration/DB/Azure/OpenAPI/CORS/package/auth change was made.
+- External visibility remains unauthorized; CP-SCHEMA-1 and production apply remain blocked.

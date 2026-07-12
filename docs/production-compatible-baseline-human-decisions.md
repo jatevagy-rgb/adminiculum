@@ -604,3 +604,10 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - It remains frontend-only, synthetic-only, typed against frontend-local Portal V1 DTO types, and API-free.
 - No backend API calls, internal API imports, `documents.workspaceText`, file input, real form action, active upload/download/message implementation, real client/case/document data, backend/schema/migration/DB/Prisma business access, Azure change, OpenAPI/CORS change, package change, auth change, or production behavior change was made.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; CP-SCHEMA-1 and production apply remain **blocked**.
+
+## 45. Client Portal mock frontend accessibility closeout
+
+- `CLIENT-PORTAL-MOCK-FRONTEND-ACCESSIBILITY-CLOSEOUT-1` completed the docs-only closeout of the frontend accessibility pass (`f8c63de`) for the static/mock Client Portal route tree.
+- **No runtime, backend, schema, migration, DB, Azure, OpenAPI, CORS, auth, package, API-integration, or external-visibility change was authorized or made.** The closeout is documentation-only.
+- Safety re-verified across the portal route tree: no `fetch(`, `@/lib/api`, `documents.workspaceText`, `type="file"`, form action, or internal app-module imports; no backend/schema/migration file required changes.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
