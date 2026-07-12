@@ -249,3 +249,9 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 - `CLIENT-PORTAL-AUTHZ-STUB-DESIGN-2` created `docs/client-portal-authz-stub-design-2.md`, an **authz/principal boundary design** for the future `authorization.ts` module (principal concept, module shape, authorization order, grant-check functions, content-free errors, non-enumeration rule, tests).
 - **No runtime authz implementation exists** — no `authorization.ts`, no route/service wiring, no schema/migration, no DB. The inert shell is unchanged: routes stay `401`/`501 CLIENT_PORTAL_NOT_ENABLED`.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## Implementation — CLIENT-PORTAL-AUTHZ-FAIL-CLOSED-STUBS-1
+
+- `CLIENT-PORTAL-AUTHZ-FAIL-CLOSED-STUBS-1` added **fail-closed backend authorization stubs only** (`Backend/src/modules/client-portal/authorization.ts` + `Backend/tests/clientPortalAuthorizationStubs.test.ts`). This is **not live authorization**.
+- Every stub **fails closed** with a content-free error (`CLIENT_PORTAL_PRINCIPAL_NOT_READY` 501 / `CLIENT_PORTAL_ACCESS_DENIED` 403); input refs never leak. The module imports no Prisma/DB/internal/service/mapper and is **not wired into routes or services**; the runtime stays `401`/`501 CLIENT_PORTAL_NOT_ENABLED`.
+- No schema/migration, no DB, no frontend API integration, no upload/download/message implementation. Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.

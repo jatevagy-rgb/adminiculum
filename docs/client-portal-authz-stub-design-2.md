@@ -254,3 +254,34 @@ implementation.
 - Client Portal remains **inert**.
 - CP-SCHEMA-1 remains **blocked**.
 - Production apply remains **NO-GO**.
+
+## Implementation — CLIENT-PORTAL-AUTHZ-FAIL-CLOSED-STUBS-1
+
+- `CLIENT-PORTAL-AUTHZ-FAIL-CLOSED-STUBS-1` added **fail-closed backend authorization
+  stubs only**: `Backend/src/modules/client-portal/authorization.ts` exports the
+  designed types (`PortalPrincipal`, `PortalPrincipalContext`, and the
+  `Portal*AccessRequest` inputs), error classes (`ClientPortalAuthorizationError`,
+  `ClientPortalPrincipalNotReadyError`, `ClientPortalAccessDeniedError`), and functions
+  (`resolvePortalPrincipal`, `requireActivePortalUser`,
+  `assertPortalFeatureReadyForDataAccess`, `requirePortalMatterAccess`,
+  `requirePortalDocumentShare`, `requirePortalTaskAccess`,
+  `requirePortalUploadRequestAccess`, deferred `requirePortalMessageAccess`).
+- **Every function fails closed immediately** with a content-free error: principal
+  resolution/readiness throws `ClientPortalPrincipalNotReadyError`
+  (code `CLIENT_PORTAL_PRINCIPAL_NOT_READY`, 501, "Client Portal principal is not
+  available."); grant checks throw `ClientPortalAccessDeniedError`
+  (code `CLIENT_PORTAL_ACCESS_DENIED`, 403, "Client Portal access is not authorized.").
+  Input refs never reach the error surface.
+- **Not wired anywhere.** `authorization.ts` imports no Prisma / no `@prisma/client`,
+  runs no DB query, imports no internal case/document/task/communication module, and
+  imports no portal service or mapper. `routes.ts` and `services.ts` do **not** import
+  it; the runtime still stops at `401`/`501 CLIENT_PORTAL_NOT_ENABLED`.
+- Tests (`Backend/tests/clientPortalAuthorizationStubs.test.ts`, 12) prove every stub
+  fails closed with the right content-free error, input refs never leak,
+  `authorization.ts` has no Prisma/DB/internal/service/mapper import, and neither
+  `routes.ts` nor `services.ts` imports it. Existing route/matrix/service-stub tests
+  still pass.
+- **This is not live authorization.** No schema/migration, no DB, no frontend API
+  integration, no upload/download/message implementation. Client Portal backend remains
+  disabled/quarantined; external visibility remains unauthorized; CP-SCHEMA-1 remains
+  blocked; production apply remains NO-GO.

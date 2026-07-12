@@ -162,3 +162,13 @@ authz/principal boundary design that can later sit between routes and services.
   but there is still no authz module** (`authorization.ts` was not created) and no
   route/service wiring. The inert shell is unchanged: routes stay `401`/`501
   CLIENT_PORTAL_NOT_ENABLED`. CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Follow-up — CLIENT-PORTAL-AUTHZ-FAIL-CLOSED-STUBS-1
+
+- `CLIENT-PORTAL-AUTHZ-FAIL-CLOSED-STUBS-1` added the **fail-closed authorization stub
+  module** (`Backend/src/modules/client-portal/authorization.ts`) + tests. Every stub
+  fails closed with a content-free error (principal-not-ready 501 / access-denied 403).
+  The module imports no Prisma/DB/internal/service/mapper and is **not imported by
+  `routes.ts` or `services.ts`** — the inert shell is unchanged (routes stay `401`/`501
+  CLIENT_PORTAL_NOT_ENABLED`). This is not live authorization; CP-SCHEMA-1 remains
+  blocked; production apply remains NO-GO.
