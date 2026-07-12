@@ -618,3 +618,9 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - DTOs are explicit allow-list only (no `workspaceText`, raw/extracted text, storage/SharePoint paths, internal notes, workload, collaborators, AI/analysis internals, or audit data). Mappers take local explicit source shapes (not Prisma models, not internal DTOs), return explicit fields only (no spread), import no Prisma, run no DB query, and access no `workspaceText`. Tests prove forbidden fields are dropped and no Prisma/DB access exists.
 - **No API implementation, no Prisma/DB business access, no schema/migration, no frontend API integration.** Mappers are not wired into any live route; existing disabled `401`/`501 CLIENT_PORTAL_NOT_ENABLED` behavior and the `ENABLE_CLIENT_PORTAL` + `ENABLE_CLIENT_PORTAL_OWNERSHIP_MODEL` + `ENABLE_CLIENT_PORTAL_RUNTIME_READY` triple gate are unchanged (no flag weakened).
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## 47. Client Portal backend DTO stubs closeout
+
+- `CLIENT-PORTAL-BACKEND-DTO-STUBS-CLOSEOUT-1` completed the docs-only closeout of the backend DTO/mapper foundation (`3bdab60`).
+- Confirmed: backend-local allow-list DTO types and pure mapper stubs exist; mappers use local explicit source shapes, import no Prisma, run no DB query, access no `workspaceText`, and are not wired into any live route. The active runtime remains the `401`/`501 CLIENT_PORTAL_NOT_ENABLED` disabled boundary, and the triple runtime-ready gate is unchanged.
+- **No runtime enablement, schema, migration, DB, frontend API integration, external visibility, CP-SCHEMA-1, or production apply is authorized.** Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.

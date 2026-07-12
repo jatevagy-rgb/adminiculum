@@ -198,3 +198,10 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
   - `tests/clientPortalDtoMappers.test.ts` — proves each mapper returns only its allow-list keys, drops forbidden input fields (`workspaceText`/`internalNote`/`storagePath`/`sharePointPath`/`workload`/`collaborator`/`rawText`/`extractedText`/…), the synthetic `workspaceText` marker never survives, and the module source imports no Prisma/DB/services.
 - **No API implementation. No Prisma/DB business access. No schema/migration. No frontend API integration.** The mappers are **not wired into any live route**; existing disabled `401`/`501 CLIENT_PORTAL_NOT_ENABLED` behavior and the triple-flag runtime-ready gate are unchanged.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## Closeout — CLIENT-PORTAL-BACKEND-DTO-STUBS-CLOSEOUT-1
+
+- `CLIENT-PORTAL-BACKEND-DTO-STUBS-CLOSEOUT-1` records (docs-only) the closeout of the backend DTO/mapper foundation (`3bdab60`).
+- The backend now has DTO/mapper **stubs** (allow-list `types.ts`, pure `mappers.ts` from local explicit source shapes, no Prisma import/query, not wired into routes), but the portal remains **mock frontend + disabled backend skeleton only** — not live, not API-integrated, not DB-backed, not externally visible, not production-enabled, not CP-SCHEMA-1 ready.
+- **No API/DB/schema/enablement.** The active runtime boundary stays `401` (unauthenticated) / `501 CLIENT_PORTAL_NOT_ENABLED` (authenticated, disabled), and the triple runtime-ready gate is unchanged.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.

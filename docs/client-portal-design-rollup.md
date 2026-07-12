@@ -391,3 +391,10 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - DTOs are explicit allow-list only; mappers are pure functions from local explicit source shapes (not Prisma models, not internal DTOs) with explicit-field returns (no spread), no Prisma import, no DB query, and no `workspaceText` access. Tests prove forbidden fields are dropped and no Prisma/DB access exists.
 - This is **type/mapper foundation only** — no API implementation, no Prisma/DB business access, no schema/migration, no frontend API integration. Mappers are not wired into any live route; disabled `401`/`501` behavior and the triple-flag runtime-ready gate are unchanged.
 - Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 and production apply remain blocked.
+
+## Closeout — CLIENT-PORTAL-BACKEND-DTO-STUBS-CLOSEOUT-1
+
+- `CLIENT-PORTAL-BACKEND-DTO-STUBS-CLOSEOUT-1` completed the docs-only closeout of the backend DTO/mapper foundation (`3bdab60`).
+- The backend DTO/mapper foundation exists (allow-list `types.ts`, pure `mappers.ts` stubs), but **it does not change product posture**: Client Portal remains non-live, mock-only on the frontend and disabled on the backend.
+- The existing runtime remains the `401` (unauthenticated) / `501 CLIENT_PORTAL_NOT_ENABLED` (authenticated, disabled) boundary; mappers are not wired into any route; the triple runtime-ready gate is unchanged (no flag weakened).
+- No API implementation, frontend API integration, schema/migration/DB change, external visibility, or enablement is authorized; external visibility remains unauthorized; CP-SCHEMA-1 and production apply remain blocked.
