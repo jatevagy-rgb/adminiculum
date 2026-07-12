@@ -462,3 +462,11 @@ the static/mock route tree.
   names here remain product shorthand only, mapped to the final DB names.
 - No schema/migration authorized. CP-SCHEMA-1 remains blocked; production apply remains
   NO-GO.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-FIELD-SPEC-DRAFT-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-FIELD-SPEC-DRAFT-1` **refined this model-level candidate into
+  field-level planning** (`docs/client-portal-cp-schema-1-field-spec-draft.md`):
+  per-model field tables, candidate enums, index/constraint draft, and forbidden-field
+  list. No schema/migration authorized; CP-SCHEMA-1 remains blocked; production apply
+  remains NO-GO.

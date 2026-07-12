@@ -274,3 +274,12 @@ Reason: before any schema implementation, model naming/semantics must be frozen.
   `ClientPortalMembership`/`ClientVisibleArtifact`.
 - **No schema/migration is authorized.** CP-SCHEMA-1 remains blocked; production apply
   remains NO-GO.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-FIELD-SPEC-DRAFT-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-FIELD-SPEC-DRAFT-1` created
+  `docs/client-portal-cp-schema-1-field-spec-draft.md`, a docs-only field-level draft
+  (per-model field tables, candidate enums, index/constraint draft, forbidden-field
+  list) for the frozen `ClientPortal*` models. **The field spec draft exists; no
+  schema/migration is authorized.** CP-SCHEMA-1 remains blocked; production apply remains
+  NO-GO.

@@ -458,3 +458,9 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - `CLIENT-PORTAL-CP-SCHEMA-1-MODEL-NAMING-DECISION-1` created `docs/client-portal-cp-schema-1-model-naming-decision.md`, freezing the future model naming (explicit `ClientPortal*`, refined semantics) for planning purposes.
 - **The model naming decision exists and does not change the no-go posture.** No `schema.prisma` edit, migration, DB, or migration command.
 - Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Plan — CLIENT-PORTAL-CP-SCHEMA-1-FIELD-SPEC-DRAFT-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-FIELD-SPEC-DRAFT-1` created `docs/client-portal-cp-schema-1-field-spec-draft.md`, a docs-only field-level spec draft (per-model field tables, candidate enums, index/constraint draft, forbidden-field list).
+- **The field spec draft exists and does not change the no-go posture.** No `schema.prisma` edit, migration, DB, or migration command.
+- Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.

@@ -155,3 +155,13 @@ before any migration.
 - Client Portal remains **inert**.
 - CP-SCHEMA-1 remains **blocked**.
 - Production apply remains **NO-GO**.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-FIELD-SPEC-DRAFT-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-FIELD-SPEC-DRAFT-1` completed a docs-only **field-level
+  spec draft** (`docs/client-portal-cp-schema-1-field-spec-draft.md`) using the final
+  candidate `ClientPortal*` names frozen here: per-model field tables (required/optional,
+  external-safe ref vs internal FK, client-facing, status/revocation/expiry/retention),
+  candidate enums, an index/constraint draft, and a field-level forbidden list.
+- **No schema/migration is authorized.** CP-SCHEMA-1 remains blocked; production apply
+  remains NO-GO.
