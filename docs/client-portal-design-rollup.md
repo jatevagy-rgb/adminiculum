@@ -446,3 +446,9 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - `CLIENT-PORTAL-AUTHZ-FAIL-CLOSED-STUBS-1` added the **fail-closed authorization stub module** (`Backend/src/modules/client-portal/authorization.ts`) that fails closed with content-free errors (principal-not-ready 501 / access-denied 403) and is **not wired into routes or services**. This is not live authorization.
 - The module imports no Prisma/DB/internal/service/mapper; existing route behavior stays `401`/`501 CLIENT_PORTAL_NOT_ENABLED`; the triple runtime-ready gate is unchanged. A focused test proves the fail-closed boundary; existing route/matrix/service-stub tests still pass.
 - Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Plan — CLIENT-PORTAL-CP-SCHEMA-1-MIGRATION-PLAN-DRAFT-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-MIGRATION-PLAN-DRAFT-1` created `docs/client-portal-cp-schema-1-migration-plan-draft.md`, a docs-only migration plan draft (sequencing, model-by-model risks, index/constraint plan, privacy gates, clone rehearsal, rollback, blockers).
+- **The migration plan draft exists and does not change the no-go posture.** No `schema.prisma` edit, migration, DB, or migration command.
+- Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.

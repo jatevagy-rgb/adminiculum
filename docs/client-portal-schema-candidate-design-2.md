@@ -441,3 +441,14 @@ the static/mock route tree.
 - CP-SCHEMA-1 remains **blocked**.
 - Production apply remains **NO-GO**.
 - Client Portal remains **mock frontend + disabled backend skeleton only**.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-MIGRATION-PLAN-DRAFT-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-MIGRATION-PLAN-DRAFT-1` created
+  `docs/client-portal-cp-schema-1-migration-plan-draft.md`, drafting a safe future
+  migration approach (candidate scope, sequencing, model-by-model considerations,
+  index/constraint plan, privacy/security gates, clone rehearsal, rollback strategy,
+  production-apply blockers) built on this candidate model.
+- **No schema or migration is authorized.** No `schema.prisma` edit, no migration, no
+  DB. CP-SCHEMA-1 remains blocked; production apply remains NO-GO; Client Portal
+  remains inert.

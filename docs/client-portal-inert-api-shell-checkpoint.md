@@ -172,3 +172,11 @@ authz/principal boundary design that can later sit between routes and services.
   `routes.ts` or `services.ts`** — the inert shell is unchanged (routes stay `401`/`501
   CLIENT_PORTAL_NOT_ENABLED`). This is not live authorization; CP-SCHEMA-1 remains
   blocked; production apply remains NO-GO.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-MIGRATION-PLAN-DRAFT-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-MIGRATION-PLAN-DRAFT-1` created
+  `docs/client-portal-cp-schema-1-migration-plan-draft.md`, a docs-only migration plan
+  draft. **The migration plan draft exists; the inert shell remains non-DB-backed** —
+  no schema/migration/DB, routes still `401`/`501 CLIENT_PORTAL_NOT_ENABLED`.
+  CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
