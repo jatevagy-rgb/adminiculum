@@ -180,3 +180,11 @@ authz/principal boundary design that can later sit between routes and services.
   draft. **The migration plan draft exists; the inert shell remains non-DB-backed** —
   no schema/migration/DB, routes still `401`/`501 CLIENT_PORTAL_NOT_ENABLED`.
   CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-MODEL-NAMING-DECISION-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-MODEL-NAMING-DECISION-1` froze the future CP-SCHEMA-1
+  model naming (explicit `ClientPortal*`) in
+  `docs/client-portal-cp-schema-1-model-naming-decision.md`. **The model naming decision
+  exists; the inert shell remains non-DB-backed** — no schema/migration/DB. CP-SCHEMA-1
+  remains blocked; production apply remains NO-GO.

@@ -261,3 +261,9 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 - `CLIENT-PORTAL-CP-SCHEMA-1-MIGRATION-PLAN-DRAFT-1` created `docs/client-portal-cp-schema-1-migration-plan-draft.md`, a docs-only CP-SCHEMA-1 migration plan draft (candidate scope, sequencing, model-by-model risks, index/constraint plan, privacy gates, clone rehearsal, rollback strategy, blockers).
 - **A CP-SCHEMA-1 migration plan draft exists; there is still no DB-backed portal** — no `schema.prisma` edit, no migration, no DB, no migration command. The inert shell is unchanged (routes stay `401`/`501 CLIENT_PORTAL_NOT_ENABLED`).
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## Decision — CLIENT-PORTAL-CP-SCHEMA-1-MODEL-NAMING-DECISION-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-MODEL-NAMING-DECISION-1` created `docs/client-portal-cp-schema-1-model-naming-decision.md`, freezing the future CP-SCHEMA-1 model naming to explicit `ClientPortal*` names (with refined per-surface semantics; ambiguous `ClientPortalMembership`/`ClientVisibleArtifact` avoided).
+- **A CP-SCHEMA-1 naming decision exists; there is still no DB-backed portal** — no `schema.prisma` edit, no migration, no DB. The inert shell is unchanged.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.

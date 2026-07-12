@@ -452,3 +452,9 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - `CLIENT-PORTAL-CP-SCHEMA-1-MIGRATION-PLAN-DRAFT-1` created `docs/client-portal-cp-schema-1-migration-plan-draft.md`, a docs-only migration plan draft (sequencing, model-by-model risks, index/constraint plan, privacy gates, clone rehearsal, rollback, blockers).
 - **The migration plan draft exists and does not change the no-go posture.** No `schema.prisma` edit, migration, DB, or migration command.
 - Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Decision — CLIENT-PORTAL-CP-SCHEMA-1-MODEL-NAMING-DECISION-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-MODEL-NAMING-DECISION-1` created `docs/client-portal-cp-schema-1-model-naming-decision.md`, freezing the future model naming (explicit `ClientPortal*`, refined semantics) for planning purposes.
+- **The model naming decision exists and does not change the no-go posture.** No `schema.prisma` edit, migration, DB, or migration command.
+- Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.

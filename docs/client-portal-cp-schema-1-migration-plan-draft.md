@@ -261,3 +261,16 @@ Reason: before any schema implementation, model naming/semantics must be frozen.
 - Client Portal remains **inert**.
 - CP-SCHEMA-1 remains **blocked**.
 - Production apply remains **NO-GO**.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-MODEL-NAMING-DECISION-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-MODEL-NAMING-DECISION-1` completed the model naming/
+  semantics decision (`docs/client-portal-cp-schema-1-model-naming-decision.md`). The
+  **final candidate DB names use explicit `ClientPortal*` naming**
+  (`ClientPortalUser`, `ClientPortalMatterGrant`, `ClientPortalMatterPublication`,
+  `ClientPortalDocumentShare`, `ClientPortalUploadRequest`, `ClientPortalUploadedFile`,
+  `ClientPortalTask`, `ClientPortalAuditEvent`; deferred `ClientPortalMessageThread`,
+  `ClientPortalMessage`, `ClientPortalNotificationPreference`), avoiding ambiguous
+  `ClientPortalMembership`/`ClientVisibleArtifact`.
+- **No schema/migration is authorized.** CP-SCHEMA-1 remains blocked; production apply
+  remains NO-GO.

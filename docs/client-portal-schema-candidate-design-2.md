@@ -452,3 +452,13 @@ the static/mock route tree.
 - **No schema or migration is authorized.** No `schema.prisma` edit, no migration, no
   DB. CP-SCHEMA-1 remains blocked; production apply remains NO-GO; Client Portal
   remains inert.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-MODEL-NAMING-DECISION-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-MODEL-NAMING-DECISION-1` froze the future model naming
+  direction (`docs/client-portal-cp-schema-1-model-naming-decision.md`): explicit
+  `ClientPortal*` DB names with refined per-surface semantics. **Future schema docs
+  should use the final candidate names from that decision**; the conceptual `Portal*`
+  names here remain product shorthand only, mapped to the final DB names.
+- No schema/migration authorized. CP-SCHEMA-1 remains blocked; production apply remains
+  NO-GO.
