@@ -190,3 +190,9 @@ High-level only (nothing here is performed by this task):
 - **No migration.**
 - **CP-SCHEMA-1 remains blocked.**
 - **Production apply remains NO-GO.**
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-BLOCK-ENFORCEMENT-AND-APPROVAL-READINESS-1
+
+- Added static schema-block guards at `Backend/tests/clientPortalCpSchemaBlockGuards.test.ts` to keep the legacy ClientPortal collision block visible and prevent accidental final CP-SCHEMA-1 model paste-in or migration movement while blocked.
+- Added the approval readiness summary and operator verification checklist: `docs/client-portal-cp-schema-1-approval-readiness-summary.md` and `docs/client-portal-cp-schema-1-operator-verification-checklist.md`.
+- The operator checklist makes legacy table/enums/migration verification a prerequisite before any schema patch. No schema, migration, DB command, runtime API, or Client Portal enablement is authorized.

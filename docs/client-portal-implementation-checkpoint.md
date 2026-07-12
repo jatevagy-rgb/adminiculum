@@ -310,3 +310,9 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 - The test suite checks that routes stay auth-first/gate-first and unwired from authz/services/mappers/Prisma; service/authz/mapper stubs stay isolated from internal modules and Prisma; frontend `/portal*` stays synthetic/static with no API calls, `@/lib/api`, file input, form behavior, `workspaceText`, or internal app component reuse.
 - This is a safety guard only. It does not enable runtime behavior, connect frontend to backend, add schema/migration/DB access, or authorize CP-SCHEMA-1.
 - Client Portal remains mock frontend + disabled backend skeleton only; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## Guard — CLIENT-PORTAL-CP-SCHEMA-1-BLOCK-ENFORCEMENT-AND-APPROVAL-READINESS-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-BLOCK-ENFORCEMENT-AND-APPROVAL-READINESS-1` added static schema-block guards proving CP-SCHEMA-1 remains blocked: the legacy collision block is still visible, final-only models are absent from `schema.prisma`, no new CP-SCHEMA-1 migration folder exists, and the non-applied Prisma draft stays markdown-only.
+- It also added approval readiness and operator verification docs for a future human/clone evidence step. This does not create a DB-backed portal.
+- Client Portal remains mock frontend + disabled backend skeleton only; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.

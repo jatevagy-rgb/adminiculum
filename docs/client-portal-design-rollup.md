@@ -501,3 +501,9 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - The guard covers backend route unwiring, authz/service/mapper isolation, absence of Prisma access, frontend API-free/static behavior, no upload/form behavior, no internal component reuse, no executable `workspaceText` references, and no mapper `...source` DTO spreading.
 - **The guard strengthens the no-go posture without changing product behavior.** No schema/migration/DB, route/service/authz wiring, frontend API integration, OpenAPI/CORS, Azure, package, or runtime enablement was introduced.
 - Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Guard — CLIENT-PORTAL-CP-SCHEMA-1-BLOCK-ENFORCEMENT-AND-APPROVAL-READINESS-1
+
+- CP-SCHEMA-1 block enforcement now exists as static tests plus approval-readiness/operator-verification docs.
+- The package prevents silent schema movement while preserving the current no-go posture: no schema patch, no migration, no DB, no runtime wiring, no frontend API integration, and no Client Portal enablement.
+- Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.

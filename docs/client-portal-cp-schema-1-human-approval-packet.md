@@ -150,3 +150,9 @@ Portal remains inert.
   hard precondition: verify the legacy tables' existence/emptiness in production).
   Approval question 1 explicitly includes this decision. No schema/migration
   authorized.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-BLOCK-ENFORCEMENT-AND-APPROVAL-READINESS-1
+
+- CP-SCHEMA-1 approval now depends on the approval readiness summary (`docs/client-portal-cp-schema-1-approval-readiness-summary.md`) and the operator verification checklist (`docs/client-portal-cp-schema-1-operator-verification-checklist.md`).
+- Before approving a schema patch, a human must accept the collision replacement/normalization strategy and an operator must verify legacy ClientPortal table/enums/migration state in an approved environment.
+- Static block guards now enforce that the non-applied Prisma draft remains markdown-only and that final-only models are not silently added to `schema.prisma`.

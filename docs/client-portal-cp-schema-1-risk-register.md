@@ -96,3 +96,8 @@ blocked; production apply remains NO-GO; Client Portal remains inert.
 - `CLIENT-PORTAL-INERT-SHELL-STATIC-GUARDS-1` added `Backend/tests/clientPortalInertShellStaticGuards.test.ts`, converting the inert-shell safety posture into automated static checks.
 - New checks cover accidental route wiring, service wiring, authz wiring, mapper/internal-module coupling, Prisma access, executable `workspaceText` references, frontend API calls, `@/lib/api`, file input/form behavior, internal app component reuse, and DTO mapper source spreading.
 - Risk status: accidental enablement/exposure risk is further reduced by tests, but CP-SCHEMA-1 remains blocked because schema collision decisions, migration proof, authz implementation, service implementation, runtime enablement, and production apply gates remain unresolved.
+
+## Update — CLIENT-PORTAL-CP-SCHEMA-1-BLOCK-ENFORCEMENT-AND-APPROVAL-READINESS-1
+
+- Static schema-block guards now mitigate accidental CP-SCHEMA-1 movement by checking the legacy collision block remains visible, final-only models stay out of `schema.prisma`, no new CP-SCHEMA-1 migration folder appears, and the non-applied Prisma draft remains markdown-only.
+- Residual risk remains: the actual legacy table/enums/migration state in production-like environments is unresolved until an operator completes the verification checklist. CP-SCHEMA-1 remains blocked and production apply remains NO-GO.

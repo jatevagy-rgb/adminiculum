@@ -104,3 +104,10 @@ NO-GO; Client Portal remains inert.
   (replace / rename-deprecate) for the legacy candidate block.
 - No gate is passed by this update. CP-SCHEMA-1 remains blocked; production apply
   remains NO-GO.
+
+## Gate 1B — Legacy table operator verification
+
+- Added by `CLIENT-PORTAL-CP-SCHEMA-1-BLOCK-ENFORCEMENT-AND-APPROVAL-READINESS-1`.
+- Before any schema patch, operator verification must record whether legacy ClientPortal tables, enum types, and the `20260702140000_add_client_portal_foundation` migration exist in the target environment and whether any legacy tables contain rows.
+- Use `docs/client-portal-cp-schema-1-operator-verification-checklist.md` as the checklist. If verification is blocked or legacy tables contain data, CP-SCHEMA-1 remains blocked pending human data-classification and migration/backfill decisions.
+- This gate authorizes no DB access by itself and does not authorize production apply.

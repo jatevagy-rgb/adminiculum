@@ -199,3 +199,9 @@ exact decisions and no-go gates for a human decision.
 - **Readiness is still blocked** pending human approval (Gate 1 + new Gate 1A) and
   clone/production verification of the legacy tables' existence and emptiness.
   No schema/migration authorized; production apply remains NO-GO.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-BLOCK-ENFORCEMENT-AND-APPROVAL-READINESS-1
+
+- Added CP-SCHEMA-1 block-enforcement guards (`Backend/tests/clientPortalCpSchemaBlockGuards.test.ts`) plus approval-readiness/operator-verification docs.
+- The readiness position is unchanged: the planning package is stronger, but schema work remains blocked until human approval, collision strategy acceptance, and operator verification of legacy ClientPortal table/enums/migration state.
+- No `schema.prisma` edit, migration, DB query, migration command, runtime API, frontend API integration, or Client Portal enablement is authorized.
