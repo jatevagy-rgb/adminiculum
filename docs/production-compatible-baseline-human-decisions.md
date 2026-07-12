@@ -630,3 +630,9 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - `CLIENT-PORTAL-SCHEMA-CANDIDATE-DESIGN-2` completed a docs-only refined schema candidate model (`docs/client-portal-schema-candidate-design-2.md`): candidate portal tables, existing-model relationships, fields/indexes/constraints, revocation/visibility/retention fields, migration risks, and a CP-SCHEMA-1 readiness checklist.
 - **No `schema.prisma` edit, migration, DB, CP-SCHEMA-1, production apply, runtime API, or external visibility is authorized.** `schema.prisma` was inspected for alignment only (the inert CP-SCHEMA-1 candidate block); it was not edited.
 - Client Portal remains mock frontend + disabled backend skeleton only; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked (NO-GO)**.
+
+## 49. Client Portal backend service stubs design
+
+- `CLIENT-PORTAL-BACKEND-DISABLED-SERVICE-STUBS-DESIGN-1` completed a docs-only design of the future backend service boundary (`docs/client-portal-backend-service-stubs-design.md`): conceptual service files/functions, the authorization-before-service order (auth → feature gate → runtime-ready gate → principal resolution → active-user check → explicit grant check → query → explicit select → mapper → content-free audit), candidate data dependencies, forbidden service behavior, and required future tests.
+- **No backend service implementation, schema, migration, DB, runtime API, frontend API integration, external visibility, CP-SCHEMA-1, or production apply is authorized.** No backend runtime code was created or changed; DTO mappers remain unwired; the route boundary stays `401`/`501 CLIENT_PORTAL_NOT_ENABLED` and the triple runtime-ready gate is unchanged (no flag weakened).
+- Client Portal remains mock frontend + disabled backend skeleton only; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked (NO-GO)**.

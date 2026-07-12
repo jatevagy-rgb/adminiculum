@@ -277,6 +277,17 @@ No runtime skeleton changes are made or authorized by this document. Client Port
 - No Graph/SharePoint call was made.
 - No file processing, export, or generation job was run.
 
+## Follow-up — CLIENT-PORTAL-BACKEND-DISABLED-SERVICE-STUBS-DESIGN-1
+
+- `CLIENT-PORTAL-BACKEND-DISABLED-SERVICE-STUBS-DESIGN-1` created
+  `docs/client-portal-backend-service-stubs-design.md`, a docs-only design of the
+  future backend service boundary (service files/functions, authorization-before-service
+  order, candidate data dependencies, forbidden behavior, and future tests).
+- **The service boundary design exists; the runtime skeleton remains disabled and
+  service-free.** No service layer, no schema, no migration, no DB, no runtime/API
+  change. Routes still stop at `401`/`501 CLIENT_PORTAL_NOT_ENABLED`, and the triple
+  runtime-ready gate is unchanged. CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
 ## Final Classification
 
 `client_portal_runtime_skeleton_boundary_designed_no_db_change_no_runtime_change`

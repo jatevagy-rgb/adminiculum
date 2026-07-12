@@ -211,3 +211,9 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 - `CLIENT-PORTAL-SCHEMA-CANDIDATE-DESIGN-2` created `docs/client-portal-schema-candidate-design-2.md`, a docs-only refined schema candidate model.
 - A **schema candidate design exists, but no DB-backed portal exists** — no schema change, no migration, no DB connection, no runtime service. The portal remains mock frontend + disabled backend skeleton only.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## Design — CLIENT-PORTAL-BACKEND-DISABLED-SERVICE-STUBS-DESIGN-1
+
+- `CLIENT-PORTAL-BACKEND-DISABLED-SERVICE-STUBS-DESIGN-1` created `docs/client-portal-backend-service-stubs-design.md`, a docs-only design of the future backend service boundary (conceptual service files/functions, authorization-before-service order, candidate data dependencies, forbidden behavior, and required future tests).
+- A **backend service-stubs design exists, but no service implementation or DB-backed portal exists** — no service layer, no schema, no migration, no DB, no runtime/API change. The active route boundary stays `401`/`501 CLIENT_PORTAL_NOT_ENABLED`.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
