@@ -230,3 +230,10 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 - Every stub **fails closed** with `CLIENT_PORTAL_SERVICE_NOT_IMPLEMENTED` (status `501`, content-free message). Stubs import no Prisma, run no DB query, call no mapper, and import no internal case/document/task service or DTO. **Services are not wired into routes.**
 - The active runtime remains `401`/`501 CLIENT_PORTAL_NOT_ENABLED`; the triple runtime-ready gate is unchanged (no flag weakened). No schema/migration/DB, no frontend API integration, no upload/download/message implementation.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## Implementation — CLIENT-PORTAL-BACKEND-DISABLED-ROUTE-MATRIX-1
+
+- `CLIENT-PORTAL-BACKEND-DISABLED-ROUTE-MATRIX-1` added **disabled Client Portal V1 route placeholders only** to `routes.ts` (`/me`, `/matters`, `/matters/:matterRef`, `/matters/:matterRef/documents`, `/documents/:documentRef`, `/tasks`, `/tasks/:taskRef/complete`, `/uploads`; deferred `/uploads/:uploadRequestRef/files`, `/messages`, `/messages/:threadRef/replies`).
+- The **route matrix is inert and auth-first**: unauthenticated calls return `401`, and authenticated calls still return `501 CLIENT_PORTAL_NOT_ENABLED` via the runtime-ready gate. Handlers **call no service, no mapper, no Prisma, no DB** and return no synthetic data. Flag insufficiency is unchanged (no flag weakened).
+- Tests (`Backend/tests/clientPortalDisabledRouteMatrix.test.ts`) prove the matrix is inert; existing `routeFeatureGuards` tests still pass. No schema/migration, no frontend API integration, no upload/download/message implementation.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.

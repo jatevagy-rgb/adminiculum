@@ -272,3 +272,31 @@ Reason: frontend demo quality can improve without any schema/API/DB risk.
   frontend API integration, no upload/download/message implementation. Client
   Portal backend remains disabled/quarantined; external visibility remains
   unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Route matrix — CLIENT-PORTAL-BACKEND-DISABLED-ROUTE-MATRIX-1
+
+- `CLIENT-PORTAL-BACKEND-DISABLED-ROUTE-MATRIX-1` added the **inert V1 route
+  matrix** to `Backend/src/modules/client-portal/routes.ts`: `GET /me`,
+  `GET /matters`, `GET /matters/:matterRef`, `GET /matters/:matterRef/documents`,
+  `GET /documents/:documentRef`, `GET /tasks`, `POST /tasks/:taskRef/complete`,
+  `GET /uploads`, and deferred `POST /uploads/:uploadRequestRef/files`,
+  `GET /messages`, `POST /messages/:threadRef/replies` (external-safe `*Ref`
+  params).
+- **The matrix is inert and auth-first.** The router still runs `authenticate`
+  then `requireClientPortalRuntimeReady` before any handler, so unauthenticated
+  calls get `401` and authenticated calls get `501 CLIENT_PORTAL_NOT_ENABLED`.
+  Each handler is a shared inert `disabledPortalRoute` fallback returning the same
+  content-free 501 — it **calls no service stub, no mapper, no Prisma, no DB, and
+  returns no synthetic DTO**.
+- Flag insufficiency is unchanged (`ENABLE_CLIENT_PORTAL` alone insufficient;
+  ownership flag also insufficient without `ENABLE_CLIENT_PORTAL_RUNTIME_READY`);
+  no flag weakened.
+- Tests (`Backend/tests/clientPortalDisabledRouteMatrix.test.ts`, 15) prove the
+  matrix is inert: `401` unauthenticated, `501 CLIENT_PORTAL_NOT_ENABLED` for every
+  authenticated route, content-free bodies, flag insufficiency preserved, and
+  `routes.ts` importing no service/mapper/Prisma. Existing `routeFeatureGuards`
+  tests still pass.
+- No schema/migration, no DB, no frontend API integration, no upload/download/message
+  implementation. Client Portal backend remains disabled/quarantined; external
+  visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply
+  remains NO-GO.

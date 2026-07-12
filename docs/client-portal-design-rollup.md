@@ -422,3 +422,9 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - `CLIENT-PORTAL-BACKEND-DISABLED-SERVICE-STUBS-1` added **disabled backend service stubs** (`Backend/src/modules/client-portal/services.ts`) that fail closed with `CLIENT_PORTAL_SERVICE_NOT_IMPLEMENTED` (501, content-free) and are **not wired into routes**. This is not live service implementation.
 - The stubs import no Prisma, run no DB query, call no mapper, and import no internal case/document/task service or DTO. Existing route behavior stays `401`/`501 CLIENT_PORTAL_NOT_ENABLED`; the triple runtime-ready gate is unchanged.
 - Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Implementation — CLIENT-PORTAL-BACKEND-DISABLED-ROUTE-MATRIX-1
+
+- `CLIENT-PORTAL-BACKEND-DISABLED-ROUTE-MATRIX-1` added the **inert V1 route matrix** to `routes.ts` (me/matters/matter-detail/matter-documents/document-detail/tasks/task-complete/uploads; deferred uploads-files/messages/replies). Every route is auth-first and still returns `401` unauthenticated / `501 CLIENT_PORTAL_NOT_ENABLED` authenticated; handlers call no service, mapper, Prisma, or DB.
+- **The route matrix does not change the no-go posture.** Flag insufficiency is unchanged (no flag weakened); a focused test proves the matrix is inert and existing `routeFeatureGuards` tests still pass.
+- Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
