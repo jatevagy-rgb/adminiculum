@@ -355,3 +355,10 @@ This design does not implement a frontend shell. Client Portal remains quarantin
 - The static/mock route tree now has improved semantic structure (page-level headings, `<main>` content region, labelled sections), active navigation semantics (`aria-current`), a skip link to content, list/card semantics for card collections, and safer disabled-action semantics (`disabled` + `aria-disabled`).
 - **No behavior or API integration is authorized.** The shell remains frontend-only, synthetic-only, typed against frontend-local Portal V1 DTO types, and API-free — no `fetch`, no `@/lib/api`, no `workspaceText`, no file input, no form action, and no upload/download/message implementation.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; CP-SCHEMA-1 and production apply remain blocked.
+
+## Demo review — CLIENT-PORTAL-MOCK-DEMO-REVIEW-PASS-1
+
+- `CLIENT-PORTAL-MOCK-DEMO-REVIEW-PASS-1` reviewed the static/mock portal as a **stakeholder demo surface**. The route tree already meets the demo checklist: the dev-preview/synthetic notice is present on every screen, "Figyelmet igényel" is the first useful home section, disabled actions are visibly inactive and labelled as mock/deferred, document pages are metadata-only, upload pages are non-functional (no file picker), the unknown-matter state is non-enumerating and client-friendly, and the navigation is clear and separate from the internal app.
+- Only one small semantic consistency fix was made: the two inline disabled buttons on the home page now carry `aria-disabled="true"` (and disabled cursor/opacity styling) to match the shared `DisabledMockButton`/`DisabledAction` components used elsewhere.
+- It remains **frontend-only, synthetic-only, API-free** — no `fetch`, no `@/lib/api`, no `workspaceText`, no file input, no form/form action, no upload/download/message implementation, and no internal-app component reuse.
+- Client Portal backend remains disabled/quarantined. No service implementation, schema, migration, DB, API integration, external visibility, CP-SCHEMA-1, or production apply was authorized.

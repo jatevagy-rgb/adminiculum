@@ -410,3 +410,9 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - `CLIENT-PORTAL-BACKEND-DISABLED-SERVICE-STUBS-DESIGN-1` created `docs/client-portal-backend-service-stubs-design.md`, a docs-only design of the future backend **service boundary** (conceptual service files/functions, grant-checks-before-service order, candidate schema/mapper dependencies, forbidden behavior, and future tests).
 - **The service boundary design exists and does not change the no-go posture.** No service implementation, backend code, schema, migration, DB, or API change was made; mappers remain unwired.
 - Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Demo review — CLIENT-PORTAL-MOCK-DEMO-REVIEW-PASS-1
+
+- `CLIENT-PORTAL-MOCK-DEMO-REVIEW-PASS-1` reviewed the static/mock Client Portal route tree as a stakeholder demo surface and confirmed it is demo-ready; only a small semantic consistency fix was applied (added `aria-disabled="true"` to the two inline disabled buttons on the home page).
+- **It remains frontend-only, synthetic-only, and API-free.** No backend integration, service implementation, schema, migration, DB, API call, real data, or internal-app component reuse was introduced.
+- Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.

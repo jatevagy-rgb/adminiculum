@@ -217,3 +217,9 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 - `CLIENT-PORTAL-BACKEND-DISABLED-SERVICE-STUBS-DESIGN-1` created `docs/client-portal-backend-service-stubs-design.md`, a docs-only design of the future backend service boundary (conceptual service files/functions, authorization-before-service order, candidate data dependencies, forbidden behavior, and required future tests).
 - A **backend service-stubs design exists, but no service implementation or DB-backed portal exists** — no service layer, no schema, no migration, no DB, no runtime/API change. The active route boundary stays `401`/`501 CLIENT_PORTAL_NOT_ENABLED`.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## Demo review — CLIENT-PORTAL-MOCK-DEMO-REVIEW-PASS-1
+
+- `CLIENT-PORTAL-MOCK-DEMO-REVIEW-PASS-1` reviewed the static/mock Client Portal route tree as a stakeholder demo surface and confirmed it is demo-ready (dev-preview/synthetic notice everywhere, disabled/deferred actions labelled, metadata-only documents, non-functional uploads, non-enumerating unknown-matter state, client-facing Hungarian copy). One small semantic consistency fix (added `aria-disabled="true"` to the two inline disabled buttons on the home page).
+- The portal remains **frontend-only, synthetic-only, API-free**; there is **no service implementation and no DB-backed portal**. No backend integration, schema, migration, DB, API integration, external visibility, CP-SCHEMA-1, or production apply was authorized.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.

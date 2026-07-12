@@ -199,7 +199,8 @@ function PortalDocumentCard({ document }: { document: PortalDocumentListItemDto 
       <button
         type="button"
         disabled
-        className="mt-4 rounded-full border border-[var(--adm-border)] px-3 py-2 text-sm font-medium text-[var(--adm-text-soft)]"
+        aria-disabled="true"
+        className="mt-4 rounded-full border border-[var(--adm-border)] px-3 py-2 text-sm font-medium text-[var(--adm-text-soft)] disabled:cursor-not-allowed disabled:opacity-80"
       >
         Letöltés nem aktív
       </button>
@@ -244,7 +245,8 @@ function PortalUploadRequestCard({ request }: { request: PortalUploadRequestDto 
       <button
         type="button"
         disabled
-        className="mt-4 rounded-full border border-[var(--adm-border)] px-3 py-2 text-sm font-medium text-[var(--adm-text-soft)]"
+        aria-disabled="true"
+        className="mt-4 rounded-full border border-[var(--adm-border)] px-3 py-2 text-sm font-medium text-[var(--adm-text-soft)] disabled:cursor-not-allowed disabled:opacity-80"
       >
         Feltöltés nem aktív
       </button>
