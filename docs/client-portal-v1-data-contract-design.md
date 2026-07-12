@@ -357,3 +357,12 @@ This document does not implement the Client Portal V1 data contract. It does not
 - Existing synthetic frontend mock data is typed with these DTOs using TypeScript compile-time checks only.
 - No backend API implementation, frontend API integration, schema/migration/DB change, Prisma business access, upload/download/message implementation, OpenAPI/CORS exposure, Azure change, or Client Portal enablement is authorized.
 - Client Portal backend remains disabled/quarantined, external visibility remains unauthorized, CP-SCHEMA-1 remains blocked, and production apply remains NO-GO.
+
+## Follow-up — CLIENT-PORTAL-BACKEND-DISABLED-DTO-STUBS-1
+
+- `CLIENT-PORTAL-BACKEND-DISABLED-DTO-STUBS-1` added a **backend-local** (not frontend, not shared-package) implementation of this contract's DTOs and the mapper boundary, in `Backend/src/modules/client-portal/`:
+  - `types.ts` — explicit allow-list interfaces `PortalMeDto`, `PortalMatterListItemDto`, `PortalMatterDetailDto`, `PortalDocumentListItemDto`, `PortalDocumentDetailDto`, `PortalTaskDto`, `PortalUploadRequestDto`, and deferred `PortalMessageThreadDto`, using external-safe `*Ref` identifiers.
+  - `mappers.ts` — one pure mapper per DTO (`toPortal*Dto`) from **local explicit source shapes** (not Prisma models, not internal DTOs), returning explicit fields only (no `...source` spread), per the "Mapper requirements" section above. No Prisma import, no DB query, no `workspaceText` access.
+  - `tests/clientPortalDtoMappers.test.ts` — asserts allow-list-only output, forbidden-field drop (`workspaceText`, `internalNote`, `storagePath`, `sharePointPath`, `workload`, `collaborator`, `rawText`, `extractedText`, …), and that the module source imports no Prisma/DB/services.
+- This is **type/mapper foundation only.** The mappers are not wired into any live route; the disabled-route tests (`401` before feature checks, `501 CLIENT_PORTAL_NOT_ENABLED` without Prisma) and the triple-flag runtime-ready gate remain unchanged.
+- No backend API implementation, frontend API integration, schema/migration/DB change, Prisma business access, upload/download/message implementation, OpenAPI/CORS exposure, Azure change, or Client Portal enablement is authorized. Client Portal backend remains disabled/quarantined, external visibility remains unauthorized, CP-SCHEMA-1 remains blocked, and production apply remains NO-GO.

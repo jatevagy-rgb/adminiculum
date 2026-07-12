@@ -384,3 +384,10 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - **It does not change product posture.** Client Portal remains **non-live, mock-only on the frontend, and disabled on the backend**.
 - The static/mock route tree stays frontend-only, synthetic-only, DTO-typed, and API-free; no `fetch`, `@/lib/api`, `workspaceText`, file input, real data, or upload/download/message behavior was introduced, and no backend/schema/migration/DB/Azure/OpenAPI/CORS/package/auth change was made.
 - External visibility remains unauthorized; CP-SCHEMA-1 and production apply remain blocked.
+
+## Foundation — CLIENT-PORTAL-BACKEND-DISABLED-DTO-STUBS-1
+
+- `CLIENT-PORTAL-BACKEND-DISABLED-DTO-STUBS-1` added a backend-local Client Portal V1 DTO type + mapper-boundary foundation (`Backend/src/modules/client-portal/types.ts`, `mappers.ts`, `tests/clientPortalDtoMappers.test.ts`).
+- DTOs are explicit allow-list only; mappers are pure functions from local explicit source shapes (not Prisma models, not internal DTOs) with explicit-field returns (no spread), no Prisma import, no DB query, and no `workspaceText` access. Tests prove forbidden fields are dropped and no Prisma/DB access exists.
+- This is **type/mapper foundation only** — no API implementation, no Prisma/DB business access, no schema/migration, no frontend API integration. Mappers are not wired into any live route; disabled `401`/`501` behavior and the triple-flag runtime-ready gate are unchanged.
+- Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 and production apply remain blocked.

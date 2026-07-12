@@ -189,3 +189,12 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 - **No API/DB/schema/enablement.** This closeout made no runtime, frontend behavior, backend behavior, schema, migration, database, Azure, OpenAPI, CORS, auth, package, or API-integration change.
 - Safety re-verified: no `fetch(`, no `@/lib/api`, no `documents.workspaceText`, no `type="file"`, no form action, no internal Dashboard/CaseDetail/Litigation/Workload/Review/Compare/Anonymize imports across the portal route tree; no backend runtime, schema, or migration file required changes.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## Foundation — CLIENT-PORTAL-BACKEND-DISABLED-DTO-STUBS-1
+
+- `CLIENT-PORTAL-BACKEND-DISABLED-DTO-STUBS-1` added a **backend-local DTO type + mapper-boundary foundation only** inside `Backend/src/modules/client-portal/`:
+  - `types.ts` — explicit allow-list V1 DTO interfaces (`PortalMeDto`, `PortalMatterListItemDto`, `PortalMatterDetailDto`, `PortalDocumentListItemDto`, `PortalDocumentDetailDto`, `PortalTaskDto`, `PortalUploadRequestDto`, deferred `PortalMessageThreadDto`), aligned with `docs/client-portal-v1-data-contract-design.md`.
+  - `mappers.ts` — pure, disabled-safe mapper functions from **local explicit source shapes** (not Prisma models, not internal DTOs) to those DTOs; explicit-field returns only (no object spread), no Prisma import, no DB query, no `workspaceText` access.
+  - `tests/clientPortalDtoMappers.test.ts` — proves each mapper returns only its allow-list keys, drops forbidden input fields (`workspaceText`/`internalNote`/`storagePath`/`sharePointPath`/`workload`/`collaborator`/`rawText`/`extractedText`/…), the synthetic `workspaceText` marker never survives, and the module source imports no Prisma/DB/services.
+- **No API implementation. No Prisma/DB business access. No schema/migration. No frontend API integration.** The mappers are **not wired into any live route**; existing disabled `401`/`501 CLIENT_PORTAL_NOT_ENABLED` behavior and the triple-flag runtime-ready gate are unchanged.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.

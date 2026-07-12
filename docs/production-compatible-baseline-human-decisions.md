@@ -611,3 +611,10 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - **No runtime, backend, schema, migration, DB, Azure, OpenAPI, CORS, auth, package, API-integration, or external-visibility change was authorized or made.** The closeout is documentation-only.
 - Safety re-verified across the portal route tree: no `fetch(`, `@/lib/api`, `documents.workspaceText`, `type="file"`, form action, or internal app-module imports; no backend/schema/migration file required changes.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## 46. Client Portal backend disabled DTO/mapper stubs
+
+- `CLIENT-PORTAL-BACKEND-DISABLED-DTO-STUBS-1` added a **backend-local DTO/mapper-boundary foundation only** in `Backend/src/modules/client-portal/` (`types.ts` allow-list V1 DTO interfaces; `mappers.ts` pure disabled-safe mappers; `tests/clientPortalDtoMappers.test.ts`).
+- DTOs are explicit allow-list only (no `workspaceText`, raw/extracted text, storage/SharePoint paths, internal notes, workload, collaborators, AI/analysis internals, or audit data). Mappers take local explicit source shapes (not Prisma models, not internal DTOs), return explicit fields only (no spread), import no Prisma, run no DB query, and access no `workspaceText`. Tests prove forbidden fields are dropped and no Prisma/DB access exists.
+- **No API implementation, no Prisma/DB business access, no schema/migration, no frontend API integration.** Mappers are not wired into any live route; existing disabled `401`/`501 CLIENT_PORTAL_NOT_ENABLED` behavior and the `ENABLE_CLIENT_PORTAL` + `ENABLE_CLIENT_PORTAL_OWNERSHIP_MODEL` + `ENABLE_CLIENT_PORTAL_RUNTIME_READY` triple gate are unchanged (no flag weakened).
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
