@@ -313,6 +313,16 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - No frontend API integration, real portal data access, schema/migration/DB changes,
   external visibility, CP-SCHEMA-1 readiness, or production apply readiness is authorized.
 
+## Closeout — CLIENT-PORTAL-RUNTIME-SKELETON-CLOSEOUT-1
+
+- Runtime skeleton hardening implementation completed at commit `28e7c73`.
+- This does not change the design posture: Client Portal remains disabled/quarantined.
+- `ENABLE_CLIENT_PORTAL_RUNTIME_READY` is documented as the additional runtime-readiness
+  gate beyond `ENABLE_CLIENT_PORTAL` and `ENABLE_CLIENT_PORTAL_OWNERSHIP_MODEL`.
+- No schema, DB, Prisma business access, frontend API integration, CP-SCHEMA-1,
+  production apply, upload/download/message implementation, or external visibility is
+  authorized.
+
 ## Non-actions
 
 - No runtime changed.

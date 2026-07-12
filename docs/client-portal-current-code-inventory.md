@@ -207,6 +207,18 @@ External visibility remains unauthorized.
 - No schema, migration, DB access, frontend API integration, external visibility,
   CP-SCHEMA-1 readiness, or production apply readiness is authorized.
 
+## Closeout — CLIENT-PORTAL-RUNTIME-SKELETON-CLOSEOUT-1
+
+- Current code inventory is updated after `CLIENT-PORTAL-RUNTIME-SKELETON-HARDEN-1`.
+- The backend skeleton now lives under `Backend/src/modules/client-portal`.
+- `Backend/src/routes/clientPortal.ts` remains as a compatibility re-export for the
+  existing mount path.
+- Runtime remains disabled/quarantined and auth-first.
+- Runtime readiness now requires more than `ENABLE_CLIENT_PORTAL` and
+  `ENABLE_CLIENT_PORTAL_OWNERSHIP_MODEL`; `ENABLE_CLIENT_PORTAL_RUNTIME_READY` is the
+  additional explicit disabled-runtime readiness gate.
+- No Prisma business access is added or reachable while disabled.
+
 ## Non-actions
 
 - No runtime changed.

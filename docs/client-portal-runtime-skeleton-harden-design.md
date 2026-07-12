@@ -242,6 +242,17 @@ Use this only if a human explicitly authorizes code changes while the portal rem
   exposure, upload/download/message implementation, external visibility, CP-SCHEMA-1
   readiness, or production apply readiness is authorized.
 
+## Closeout — CLIENT-PORTAL-RUNTIME-SKELETON-CLOSEOUT-1
+
+- The hardened backend skeleton state was reviewed and documented.
+- Unauthenticated requests remain `401` before feature checks.
+- Authenticated disabled requests remain `501 CLIENT_PORTAL_NOT_ENABLED`.
+- `ENABLE_CLIENT_PORTAL` and `ENABLE_CLIENT_PORTAL_OWNERSHIP_MODEL` are insufficient
+  without `ENABLE_CLIENT_PORTAL_RUNTIME_READY`.
+- The module contains no Prisma business query path, schema dependency, upload/download
+  implementation, message implementation, frontend API integration, OpenAPI/CORS exposure,
+  CP-SCHEMA-1 readiness, production apply readiness, or external visibility authorization.
+
 ## Final Decision Statement
 
 No runtime skeleton changes are made or authorized by this document. Client Portal is not enabled. Client Portal remains quarantined. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO. External visibility remains unauthorized. The runtime skeleton remains disabled. No schema migration is authorized.

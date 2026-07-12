@@ -553,3 +553,19 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - No schema, migration, DB, Prisma business access, frontend API integration, external
   visibility, OpenAPI/CORS exposure, Azure change, CP-SCHEMA-1 readiness, production
   apply readiness, upload/download, or message implementation is authorized.
+
+## 39. Client Portal runtime skeleton closeout
+
+- `CLIENT-PORTAL-RUNTIME-SKELETON-CLOSEOUT-1` documented the post-hardening backend
+  skeleton state.
+- Backend module boundary exists under `Backend/src/modules/client-portal`, while
+  `Backend/src/routes/clientPortal.ts` remains a compatibility re-export.
+- `ENABLE_CLIENT_PORTAL_RUNTIME_READY` is the additional runtime-readiness gate; neither
+  `ENABLE_CLIENT_PORTAL` alone nor `ENABLE_CLIENT_PORTAL_OWNERSHIP_MODEL` is sufficient
+  to make the backend live.
+- No enablement, schema change, migration, DB access, Prisma business access, frontend API
+  integration, external visibility, OpenAPI/CORS exposure, Azure change, upload/download,
+  message implementation, CP-SCHEMA-1 readiness, or production apply readiness is
+  authorized.
+- Client Portal backend remains disabled/quarantined; external visibility remains
+  unauthorized; CP-SCHEMA-1 and production apply remain **blocked**.
