@@ -337,3 +337,8 @@ This design does not implement a frontend shell. Client Portal remains quarantin
 - No backend API calls, internal API imports, `documents.workspaceText`, file input, real form action, active upload/download/message implementation, or real client/case/document data were introduced.
 - No backend/schema/migration/DB/Prisma business access, Azure, OpenAPI/CORS, package, auth, or production behavior change was made.
 - Client Portal backend remains disabled/quarantined, external visibility remains unauthorized, and CP-SCHEMA-1 plus production apply remain blocked.
+
+## Checkpoint — CLIENT-PORTAL-IMPLEMENTATION-CHECKPOINT-1
+
+- `CLIENT-PORTAL-IMPLEMENTATION-CHECKPOINT-1` confirms the frontend route tree remains static/mock, synthetic-only, DTO-typed, and API-free.
+- No frontend API integration, internal API import, real data, file input, upload/download/message behavior, backend/schema/migration/DB change, CP-SCHEMA-1 readiness, production apply readiness, external visibility, or Client Portal enablement is authorized.

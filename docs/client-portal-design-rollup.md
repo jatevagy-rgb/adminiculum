@@ -365,3 +365,9 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - The polished static/mock Client Portal route tree was safety-reviewed after `CLIENT-PORTAL-FRONTEND-MOCK-UX-POLISH-1`.
 - `/portal`, `/portal/matters`, `/portal/matters/[matterId]`, `/portal/documents`, and `/portal/uploads` remain frontend-only, synthetic-only, DTO-typed, and disconnected from backend/internal APIs.
 - No `fetch`, `@/lib/api`, internal app API import, `workspaceText`, file input, real upload/download/message behavior, real data, backend/schema/migration/DB/Azure/OpenAPI/CORS/package change, CP-SCHEMA-1 readiness, production apply readiness, external visibility, or Client Portal enablement is authorized.
+
+## Checkpoint — CLIENT-PORTAL-IMPLEMENTATION-CHECKPOINT-1
+
+- `CLIENT-PORTAL-IMPLEMENTATION-CHECKPOINT-1` created `docs/client-portal-implementation-checkpoint.md`.
+- The checkpoint confirms Client Portal is currently mock frontend plus disabled backend skeleton only.
+- No backend API implementation, frontend API integration, schema/migration/DB work, CP-SCHEMA-1 readiness, production apply readiness, external visibility, or Client Portal enablement is authorized.
