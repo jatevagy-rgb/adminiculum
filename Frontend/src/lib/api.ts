@@ -276,6 +276,108 @@ export async function getCaseById(caseId: string): Promise<CaseListItem> {
   return fetchApi<CaseListItem>(`/cases/${caseId}`);
 }
 
+export type CaseWorkflowNextActionKind =
+  | 'OVERDUE_TASK'
+  | 'HANDOFF_REVIEW'
+  | 'DOCUMENT_REVIEW'
+  | 'DUE_SOON_TASK'
+  | 'UPCOMING_DEADLINE'
+  | 'BLOCKED_ITEM'
+  | 'OPEN_TASK';
+
+export interface CaseWorkflowSummary {
+  caseId: string;
+  generatedAt: string;
+  case: {
+    displayName: string;
+    reference?: string | null;
+    status?: string | null;
+    clientRole?: string | null;
+    updatedAt?: string | null;
+  };
+  nextAction: {
+    kind: CaseWorkflowNextActionKind;
+    title: string;
+    explanation: string;
+    dueAt?: string | null;
+    sourceType: 'TASK' | 'DEADLINE' | 'DOCUMENT_REVIEW' | 'HANDOFF';
+    sourceId?: string | null;
+    href?: string | null;
+    scope: 'MY_WORK' | 'CASE';
+  } | null;
+  waitingOn: {
+    category: 'CLIENT' | 'COUNTERPARTY' | 'AUTHORITY' | 'INTERNAL' | 'UNKNOWN';
+    label: string;
+    since?: string | null;
+    sourceType?: string | null;
+    sourceId?: string | null;
+  } | null;
+  nextDeadline: {
+    id: string;
+    title: string;
+    dueAt: string;
+    urgency: 'OVERDUE' | 'TODAY' | 'SOON' | 'LATER';
+    href?: string | null;
+  } | null;
+  taskStats: {
+    open: number;
+    overdue: number;
+    dueSoon: number;
+    blocked: number;
+    review: number;
+  };
+  latestCommunication: {
+    id: string;
+    subject?: string | null;
+    contentPreview?: string | null;
+    occurredAt?: string | null;
+    direction?: string | null;
+    attachmentCount?: number;
+    sourceTaskCount?: number;
+    href?: string | null;
+  } | null;
+  activeReview: {
+    id: string;
+    documentId?: string | null;
+    displayName: string;
+    status?: string | null;
+    responsibleName?: string | null;
+    updatedAt?: string | null;
+    href?: string | null;
+  } | null;
+  responsibility: {
+    responsibleLawyer?: {
+      id: string;
+      displayName: string;
+    } | null;
+    collaborators: Array<{
+      id: string;
+      displayName: string;
+      role?: string | null;
+    }>;
+  };
+  handoff: {
+    id: string;
+    status: string;
+    fromName?: string | null;
+    toName?: string | null;
+    updatedAt?: string | null;
+    href?: string | null;
+  } | null;
+  availability: {
+    tasks: boolean;
+    deadlines: boolean;
+    communications: boolean;
+    reviews: boolean;
+    collaborators: boolean;
+    handoff: boolean;
+  };
+}
+
+export async function getCaseWorkflowSummary(caseId: string): Promise<CaseWorkflowSummary> {
+  return fetchApi<CaseWorkflowSummary>(`/cases/${caseId}/workflow-summary`);
+}
+
 // Case Assignment
 export interface AssignCaseData {
   userId: string;

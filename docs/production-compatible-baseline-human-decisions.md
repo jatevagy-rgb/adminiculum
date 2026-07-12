@@ -732,3 +732,9 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - `CLIENT-PORTAL-CP-SCHEMA-1-BLOCK-ENFORCEMENT-AND-APPROVAL-READINESS-1` added `Backend/tests/clientPortalCpSchemaBlockGuards.test.ts`, static tests that keep the legacy ClientPortal collision block visible, prevent final-only CP-SCHEMA-1 models from appearing in `schema.prisma`, prevent new CP-SCHEMA-1 migration-folder movement, and prove the non-applied Prisma draft remains markdown-only.
 - Added approval-readiness and operator-verification docs: `docs/client-portal-cp-schema-1-approval-readiness-summary.md` and `docs/client-portal-cp-schema-1-operator-verification-checklist.md`. Operator verification of legacy ClientPortal tables/enums/migration state is now an explicit prerequisite before schema patch approval.
 - **No `schema.prisma` edit, migration, DB query, migration command, production apply, runtime API, frontend API integration, external visibility, OpenAPI/CORS, Azure, package, or Client Portal enablement is authorized.** Client Portal remains inert; **CP-SCHEMA-1 and production apply remain blocked (NO-GO)**.
+
+## 66. Workflow Core Case Center 1
+
+- `WORKFLOW-CORE-CASE-CENTER-1` implemented an internal case-centered workflow summary using existing production-compatible data only: case metadata, task status/deadline stats, case deadline, communication preview metadata, document/review metadata, responsible lawyer, and collaborators.
+- Added `GET /api/v1/cases/:caseId/workflow-summary`, deterministic next-action prioritization, a Case Detail `Itt folytasd` operational panel, source audit docs, implementation checkpoint docs, and acceptance checklist docs.
+- **No `schema.prisma` edit, migration, DB command/query, production apply, Client Portal enablement, external visibility, raw document text, `documents.workspaceText`, raw communication body/content, Azure/OpenAPI/CORS/package change, or production deployment is authorized.**

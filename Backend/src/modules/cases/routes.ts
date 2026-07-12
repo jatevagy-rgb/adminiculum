@@ -8,6 +8,7 @@ import casesService from './services';
 import { workflowService } from '../workflow';
 import { authenticate } from '../../middleware/auth';
 import { requireCaseCollaboratorManageAccess, requireCaseManageAccess, requireCaseReadAccess } from './authorization';
+import { getCaseWorkflowSummary } from './workflowSummary';
 
 const router = Router();
 
@@ -130,6 +131,32 @@ router.get('/:caseId/summary', authenticate, requireCaseReadAccess, async (req: 
     res.json(summary);
   } catch (error) {
     console.error('Get case summary error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// GET /cases/:caseId/workflow-summary
+// ============================================================================
+router.get('/:caseId/workflow-summary', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+
+    const summary = await getCaseWorkflowSummary(caseId, userId);
+
+    if (!summary) {
+      res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+      return;
+    }
+
+    res.json(summary);
+  } catch (error) {
+    console.error('Get workflow summary error:', error);
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 });

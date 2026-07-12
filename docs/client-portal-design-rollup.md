@@ -507,3 +507,8 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - CP-SCHEMA-1 block enforcement now exists as static tests plus approval-readiness/operator-verification docs.
 - The package prevents silent schema movement while preserving the current no-go posture: no schema patch, no migration, no DB, no runtime wiring, no frontend API integration, and no Client Portal enablement.
 - Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Implementation — WORKFLOW-CORE-CASE-CENTER-1
+
+- Internal Case Detail now has a workflow-centered `Itt folytasd` Case Center V1 panel backed by a safe read-only aggregate endpoint. It uses existing production-compatible internal data only and does not alter the Client Portal design or no-go posture.
+- No schema/migration/DB, Client Portal enablement, external visibility, Azure/OpenAPI/CORS/package, or production deploy is authorized by this workflow package.

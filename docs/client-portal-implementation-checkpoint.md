@@ -316,3 +316,8 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 - `CLIENT-PORTAL-CP-SCHEMA-1-BLOCK-ENFORCEMENT-AND-APPROVAL-READINESS-1` added static schema-block guards proving CP-SCHEMA-1 remains blocked: the legacy collision block is still visible, final-only models are absent from `schema.prisma`, no new CP-SCHEMA-1 migration folder exists, and the non-applied Prisma draft stays markdown-only.
 - It also added approval readiness and operator verification docs for a future human/clone evidence step. This does not create a DB-backed portal.
 - Client Portal remains mock frontend + disabled backend skeleton only; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## Implementation — WORKFLOW-CORE-CASE-CENTER-1
+
+- `WORKFLOW-CORE-CASE-CENTER-1` added an internal read-only case workflow summary endpoint and Case Detail Case Center V1 UI. This is internal workflow work only; it does not change the Client Portal mock frontend, disabled backend skeleton, route matrix, static guards, CP-SCHEMA-1 posture, or external visibility.
+- No Client Portal runtime files, `/portal` frontend files, schema, migration, DB command, Azure/OpenAPI/CORS/package files, or production deployment were changed.

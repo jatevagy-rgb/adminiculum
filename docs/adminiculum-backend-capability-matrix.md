@@ -249,3 +249,8 @@ Scope: audit-only (no app code changes)
 8. Settings source-of-truth szétválik (local vs backend).
 9. Review/task ownership policy részben implicit.
 10. Export/compliance auditing hiányos (timesheet/handoff).
+
+## Update — WORKFLOW-CORE-CASE-CENTER-1
+
+- Added a read-only workflow summary endpoint and Case Detail Case Center V1 UI so the internal matter workspace has one stronger operational next-action panel.
+- The aggregate is select-only, bounded, metadata-first, and excludes `documents.workspaceText`, raw document text, raw communication body/content, broad relation includes, and Client Portal modules.

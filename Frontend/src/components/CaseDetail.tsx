@@ -2,7 +2,7 @@
 
 import { useState, use, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator } from "@/lib/api";
+import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, type CaseWorkflowSummary, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator } from "@/lib/api";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
@@ -132,6 +132,31 @@ const getTaskDueDateTone = (dueDate?: string | null): string => {
   if (dueTs < tomorrowStart) return "bg-[var(--adm-surface)] text-[var(--adm-ochre-500)] border-[#f9c74f]";
   return "bg-[#E2EDE5] text-[var(--adm-green-800)] border-[#A6C0AF]";
 };
+
+const WORKFLOW_ACTION_LABELS: Record<string, string> = {
+  OVERDUE_TASK: "Lejárt feladat",
+  HANDOFF_REVIEW: "Átadás ellenőrzése",
+  DOCUMENT_REVIEW: "Dokumentum-review",
+  DUE_SOON_TASK: "Közeli feladat",
+  UPCOMING_DEADLINE: "Közelgő határidő",
+  BLOCKED_ITEM: "Blokkolt tétel",
+  OPEN_TASK: "Nyitott feladat",
+};
+
+const DEADLINE_URGENCY_LABELS: Record<string, string> = {
+  OVERDUE: "Lejárt",
+  TODAY: "Ma esedékes",
+  SOON: "Hamarosan",
+  LATER: "Későbbi",
+};
+
+const formatWorkflowDate = (value?: string | null): string => {
+  if (!value) return "Nincs határidő";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Nincs határidő";
+  return date.toLocaleString("hu-HU", { dateStyle: "medium", timeStyle: "short" });
+};
+
 export function CaseDetail({ params }: CaseDetailProps) {
   const resolvedParams = use(params);
   const router = useRouter();
@@ -148,6 +173,9 @@ export function CaseDetail({ params }: CaseDetailProps) {
   }[]>([]);
   const [timelineEvents, setTimelineEvents] = useState<TimelineEventItem[]>([]);
   const [communications, setCommunications] = useState<CommunicationItem[]>([]);
+  const [workflowSummary, setWorkflowSummary] = useState<CaseWorkflowSummary | null>(null);
+  const [isLoadingWorkflowSummary, setIsLoadingWorkflowSummary] = useState(false);
+  const [workflowSummaryError, setWorkflowSummaryError] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState<string | null>(null);
   const [caseRecord, setCaseRecord] = useState<{
     id: string;
@@ -439,18 +467,26 @@ export function CaseDetail({ params }: CaseDetailProps) {
         return;
       }
 
-      const [contracts, timeline, caseList, backendDocuments, anonDocs, communicationsResponse] = await Promise.all([
+      setIsLoadingWorkflowSummary(true);
+      setWorkflowSummaryError(null);
+      const [contracts, timeline, caseList, backendDocuments, anonDocs, communicationsResponse, workflowSummaryResponse] = await Promise.all([
         getCaseContracts(effectiveCaseId).catch(() => []),
         getCaseTimeline(effectiveCaseId).catch(() => []),
         getCases(1, 200).catch(() => ({ data: [] })),
         getCaseDocuments(effectiveCaseId).catch(() => []),
         getCaseAnonymousDocuments(effectiveCaseId).catch(() => []),
         getCommunications({ caseId: effectiveCaseId, limit: 50 }).catch(() => ({ communications: [], pagination: { total: 0, limit: 50, offset: 0 } })),
+        getCaseWorkflowSummary(effectiveCaseId).catch((error) => {
+          console.error('Failed to load workflow summary:', error);
+          setWorkflowSummaryError('A workflow összefoglaló most nem érhető el.');
+          return null;
+        }),
       ]);
       setGeneratedContracts(contracts);
       setTimelineEvents(timeline);
       setAnonymousDocuments(anonDocs);
       setCommunications(communicationsResponse.communications || []);
+      setWorkflowSummary(workflowSummaryResponse);
       const record = caseList.data.find((item) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId) || null;
       if (!caseRecord && record) {
         setCaseRecord({
@@ -476,6 +512,9 @@ export function CaseDetail({ params }: CaseDetailProps) {
       })));
     } catch (err) {
       console.error('Failed to load backend data:', err);
+      setWorkflowSummaryError('Az ügyadatok betöltése közben hiba történt.');
+    } finally {
+      setIsLoadingWorkflowSummary(false);
     }
   }, [resolvedParams.caseId, caseRecord]);
 
@@ -1167,6 +1206,14 @@ export function CaseDetail({ params }: CaseDetailProps) {
             label: 'Irat feltöltése',
             action: () => fileInputRef.current?.click(),
           };
+  const workflowNextAction = workflowSummary?.nextAction || null;
+  const workflowScopeLabel = workflowNextAction?.scope === 'MY_WORK' ? 'Saját feladatom' : 'Ügyszintű következő lépés';
+  const workflowActionLabel = workflowNextAction ? (WORKFLOW_ACTION_LABELS[workflowNextAction.kind] || 'Következő lépés') : null;
+  const workflowDeadlineTone = workflowSummary?.nextDeadline?.urgency === 'OVERDUE'
+    ? 'border-[#d4b8b8] bg-[#FEF2F2] text-[#8b3a3a]'
+    : workflowSummary?.nextDeadline?.urgency === 'TODAY'
+      ? 'border-[#f9c74f] bg-[var(--adm-sand-100)] text-[var(--adm-ochre-500)]'
+      : 'border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]';
 
   if (!caseRecord && timelineEvents.length === 0 && generatedContracts.length === 0 && documents.length === 0) {
     return (
@@ -1321,6 +1368,153 @@ export function CaseDetail({ params }: CaseDetailProps) {
             </section>
 
             <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleFileUpload} className="hidden" disabled={isArchived} />
+
+            <section aria-labelledby="case-center-heading" className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+              <div className="border border-[var(--adm-green-900)] bg-[var(--adm-green-800)] p-5 text-[var(--adm-ivory-50)] shadow-[0_10px_24px_rgba(31,74,51,0.18)]">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(255,255,255,0.72)]">Itt folytasd</p>
+                    <h2 id="case-center-heading" className="mt-1 font-serif text-[24px] leading-tight">
+                      {isLoadingWorkflowSummary
+                        ? 'Workflow összefoglaló betöltése'
+                        : workflowNextAction?.title || 'Nincs sürgős következő lépés'}
+                    </h2>
+                  </div>
+                  {workflowActionLabel && (
+                    <span className="border border-[rgba(255,255,255,0.35)] bg-[rgba(255,255,255,0.12)] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em]">
+                      {workflowActionLabel}
+                    </span>
+                  )}
+                </div>
+
+                {workflowSummaryError ? (
+                  <p className="mt-4 border border-[rgba(255,255,255,0.28)] bg-[rgba(255,255,255,0.10)] p-3 text-[12px] leading-relaxed">
+                    {workflowSummaryError} A meglévő ügytörténet és feladatlista továbbra is használható.
+                  </p>
+                ) : workflowNextAction ? (
+                  <>
+                    <p className="mt-4 max-w-2xl text-[13px] leading-relaxed text-[rgba(255,255,255,0.84)]">{workflowNextAction.explanation}</p>
+                    <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px]">
+                      <span className="border border-[rgba(255,255,255,0.25)] px-2 py-1">{workflowScopeLabel}</span>
+                      <span className="border border-[rgba(255,255,255,0.25)] px-2 py-1">{formatWorkflowDate(workflowNextAction.dueAt)}</span>
+                    </div>
+                    {workflowNextAction.href && (
+                      <button
+                        type="button"
+                        onClick={() => router.push(workflowNextAction.href as string)}
+                        className="mt-5 bg-[var(--adm-ochre-500)] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-[var(--adm-green-800)]"
+                      >
+                        Munkalépés megnyitása
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-4 max-w-2xl text-[13px] leading-relaxed text-[rgba(255,255,255,0.84)]">
+                      Nincs lejárt vagy közeli határidejű feladat a biztonságos workflow összefoglalóban. Érdemes átnézni az ügytörténetet vagy a feladatlistát.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/tasks?caseId=${canonicalCaseId}`)}
+                      className="mt-5 bg-white px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)] focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-[var(--adm-green-800)]"
+                    >
+                      Feladatlista megnyitása
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+                <div className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Aktuális állapot</h3>
+                  <div className="mt-3 grid gap-2 text-[11px] text-[var(--adm-text)]">
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Ügystátusz</span>
+                      <b>{getCaseStatusLabel(workflowSummary?.case.status || caseRecord?.status)}</b>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Várakozás</span>
+                      <b>{workflowSummary?.waitingOn?.label || 'Nincs strukturált várakozási adat'}</b>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Következő határidő</span>
+                      <span className={`border px-2 py-0.5 text-[10px] ${workflowDeadlineTone}`}>
+                        {workflowSummary?.nextDeadline
+                          ? `${DEADLINE_URGENCY_LABELS[workflowSummary.nextDeadline.urgency]} · ${formatWorkflowDate(workflowSummary.nextDeadline.dueAt)}`
+                          : 'Nincs rögzített határidő'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Felelős</span>
+                      <b>{workflowSummary?.responsibility.responsibleLawyer?.displayName || assignedLawyer?.name || 'Nincs kijelölve'}</b>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Résztvevők</span>
+                      <b>{workflowSummary?.responsibility.collaborators.length ?? collaborators.length} fő</b>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Munka mozgásban</h3>
+                  <div className="mt-3 grid grid-cols-5 gap-1.5 text-center">
+                    {[
+                      ['Nyitott', workflowSummary?.taskStats.open ?? openTasks.length],
+                      ['Lejárt', workflowSummary?.taskStats.overdue ?? 0],
+                      ['48 óra', workflowSummary?.taskStats.dueSoon ?? 0],
+                      ['Blokk', workflowSummary?.taskStats.blocked ?? 0],
+                      ['Review', workflowSummary?.taskStats.review ?? 0],
+                    ].map(([label, value]) => (
+                      <div key={label} className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2">
+                        <p className="text-[14px] font-bold text-[var(--adm-text)]">{value}</p>
+                        <p className="text-[9px] text-[var(--adm-text-muted)]">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {workflowSummary?.activeReview ? (
+                    <button
+                      type="button"
+                      onClick={() => workflowSummary.activeReview?.href && router.push(workflowSummary.activeReview.href)}
+                      className="mt-3 w-full border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2 text-left focus:outline-none focus:ring-2 focus:ring-[var(--adm-ochre-500)]"
+                    >
+                      <p className="truncate text-[12px] font-semibold text-[var(--adm-text)]">{workflowSummary.activeReview.displayName}</p>
+                      <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">Aktív dokumentum-review · {workflowSummary.activeReview.status || 'Nincs státuszadat'}</p>
+                    </button>
+                  ) : (
+                    <p className="mt-3 border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-2 text-[10px] text-[var(--adm-text-muted)]">Nincs biztonságosan azonosított aktív review.</p>
+                  )}
+                  {workflowSummary?.handoff ? (
+                    <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Átadás: {workflowSummary.handoff.status}</p>
+                  ) : (
+                    <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Átadás: nincs aktív, production-kompatibilis összefoglaló forrás.</p>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            {workflowSummary?.latestCommunication && (
+              <section className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Legutóbbi kommunikáció</p>
+                    <h2 className="mt-1 text-[15px] font-semibold text-[var(--adm-text)]">{workflowSummary.latestCommunication.subject || 'Nincs tárgy'}</h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.push(workflowSummary.latestCommunication?.href || `/cases/${canonicalCaseId}/communications`)}
+                    className="border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text)] focus:outline-none focus:ring-2 focus:ring-[var(--adm-ochre-500)]"
+                  >
+                    Kommunikációs napló
+                  </button>
+                </div>
+                <p className="mt-2 text-[12px] leading-relaxed text-[var(--adm-text-muted)]">
+                  {workflowSummary.latestCommunication.contentPreview || 'Ehhez a kommunikációhoz csak metaadat érhető el az összefoglalóban.'}
+                </p>
+                <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">
+                  {formatWorkflowDate(workflowSummary.latestCommunication.occurredAt)} · Mellékletek: {workflowSummary.latestCommunication.attachmentCount || 0} · Forrásfeladatok: {workflowSummary.latestCommunication.sourceTaskCount || 0}
+                </p>
+              </section>
+            )}
 
             <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {quickActions.map((action) => (

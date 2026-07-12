@@ -124,3 +124,9 @@ Azure-on futó, SharePoint-alapú, kollégák által napi használatban pilotké
 
 ## Roadmap fő üzenet
 Az Adminiculum alapcapability-jei már nagyrészt rendelkezésre állnak; a pilothoz vezető út fókusza a meglévő modulok **felszínre hozása, konzisztens összekötése, és production-grade hardeningje** Azure + SharePoint környezetben.
+
+## Update — WORKFLOW-CORE-CASE-CENTER-1
+
+- Case Detail now includes an internal Case Center V1 workflow panel backed by `GET /api/v1/cases/:caseId/workflow-summary`.
+- The endpoint intentionally uses safe metadata only: case fields, tasks, case deadline, communication summary/preview metadata, document-review metadata, responsible lawyer, and collaborators. It does not select document workspace text or raw communication/document content.
+- See `docs/workflow-core-case-center-data-source-audit.md`, `docs/workflow-core-case-center-1.md`, and `docs/workflow-core-case-center-acceptance.md`.
