@@ -476,3 +476,9 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - `CLIENT-PORTAL-CP-SCHEMA-1-RELATION-AND-INDEX-SPEC-DRAFT-1` created `docs/client-portal-cp-schema-1-relation-and-index-spec-draft.md`, a docs-only relation/index/cascade spec draft (per-model relations, index/uniqueness candidates, cascade cautions, cross-model security invariants).
 - **The relation/index spec draft exists and does not change the no-go posture.** No `schema.prisma` edit, migration, DB, or migration command.
 - Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Checkpoint — CLIENT-PORTAL-CP-SCHEMA-1-READINESS-CHECKPOINT-2
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-READINESS-CHECKPOINT-2` created `docs/client-portal-cp-schema-1-readiness-checkpoint-2.md`, consolidating all pre-schema planning and stating the project is better prepared but CP-SCHEMA-1 is still blocked.
+- **The readiness checkpoint exists and does not change the no-go posture.** No `schema.prisma` edit, migration, DB, or migration command.
+- Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.

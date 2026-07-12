@@ -244,3 +244,11 @@ into a readiness checkpoint.
 - Client Portal remains **inert**.
 - CP-SCHEMA-1 remains **blocked**.
 - Production apply remains **NO-GO**.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-READINESS-CHECKPOINT-2
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-READINESS-CHECKPOINT-2` consolidated all pre-schema
+  planning (including this relation/index spec) into
+  `docs/client-portal-cp-schema-1-readiness-checkpoint-2.md`. Its conclusion: the project
+  is better prepared but **CP-SCHEMA-1 is still blocked** and production apply remains
+  NO-GO. No schema/migration authorized.

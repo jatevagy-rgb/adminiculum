@@ -299,3 +299,12 @@ Reason: before any schema implementation, model naming/semantics must be frozen.
   relations, index/uniqueness candidates, cascade cautions, and cross-model security
   invariants. **The relation/index spec draft exists; no schema/migration is
   authorized.** CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-READINESS-CHECKPOINT-2
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-READINESS-CHECKPOINT-2` **consolidates this and all other
+  schema planning** into `docs/client-portal-cp-schema-1-readiness-checkpoint-2.md`
+  (completed planning, frozen decisions, inert baseline, unresolved items, migration
+  readiness gates, production-apply blockers). Conclusion: better prepared but
+  **CP-SCHEMA-1 still blocked**; **no schema/migration authorized**; production apply
+  remains NO-GO.
