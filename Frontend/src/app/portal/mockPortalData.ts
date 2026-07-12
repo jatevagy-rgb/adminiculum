@@ -1,16 +1,25 @@
 export type PortalMatterStatus = "Előkészítés" | "Egyeztetés" | "Ügyfélre vár" | "Lezárás előtt";
 
-export type PortalMatter = {
+export type PortalMeDto = {
+  displayName: string;
+  clientName: string;
+  portalStatus: "mock-disabled";
+};
+
+export type PortalMatterListItemDto = {
   externalId: string;
   title: string;
   status: PortalMatterStatus;
   summary: string;
   nextAction: string;
   deadline: string;
+};
+
+export type PortalMatterDetailDto = PortalMatterListItemDto & {
   safeUpdate: string;
 };
 
-export type PortalDocument = {
+export type PortalDocumentListItemDto = {
   title: string;
   type: string;
   sharedAt: string;
@@ -18,14 +27,41 @@ export type PortalDocument = {
   status: string;
 };
 
-export type PortalUploadRequest = {
+export type PortalDocumentDetailDto = PortalDocumentListItemDto & {
+  accessMode: "metadata-only";
+};
+
+export type PortalTaskDto = {
   title: string;
   matterTitle: string;
   dueDate: string;
   status: string;
 };
 
-export const mockMatters: PortalMatter[] = [
+export type PortalUploadRequestDto = {
+  title: string;
+  matterTitle: string;
+  dueDate: string;
+  status: string;
+};
+
+export type PortalSafeUpdateDto = {
+  title: string;
+  body: string;
+  date: string;
+};
+
+export type PortalMessageThreadDto = {
+  status: "deferred";
+};
+
+export const mockPortalMe = {
+  displayName: "Minta ügyfél",
+  clientName: "Szintetikus ügyfél",
+  portalStatus: "mock-disabled",
+} satisfies PortalMeDto;
+
+export const mockMatters = [
   {
     externalId: "portal-minta-001",
     title: "Minta ügy — szerződés előkészítés",
@@ -53,9 +89,9 @@ export const mockMatters: PortalMatter[] = [
     deadline: "2026. július 29.",
     safeUpdate: "A kapcsolattartói adatok ellenőrzése későbbi, jóváhagyott űrlapon történhet.",
   },
-];
+] satisfies PortalMatterDetailDto[];
 
-export const mockDocuments: PortalDocument[] = [
+export const mockDocuments = [
   {
     title: "Tájékoztató.pdf",
     type: "Megosztott dokumentum",
@@ -77,9 +113,9 @@ export const mockDocuments: PortalDocument[] = [
     matterTitle: "Minta cégjogi változás",
     status: "Későbbi funkció",
   },
-];
+] satisfies PortalDocumentListItemDto[];
 
-export const mockUploadRequests: PortalUploadRequest[] = [
+export const mockUploadRequests = [
   {
     title: "Hiánypótlás: személyi igazolvány másolat",
     matterTitle: "Minta ügy — szerződés előkészítés",
@@ -92,7 +128,35 @@ export const mockUploadRequests: PortalUploadRequest[] = [
     dueDate: "2026. július 29.",
     status: "Nem aktív",
   },
-];
+] satisfies PortalUploadRequestDto[];
+
+export const mockPortalTasks = [
+  {
+    title: "Hiánypótlás: személyi igazolvány másolat",
+    matterTitle: "Minta ügy — szerződés előkészítés",
+    dueDate: "2026. július 18.",
+    status: "Mock előnézet",
+  },
+  {
+    title: "Kapcsolattartói adatok megerősítése",
+    matterTitle: "Minta cégjogi változás",
+    dueDate: "2026. július 29.",
+    status: "Nem aktív",
+  },
+] satisfies PortalTaskDto[];
+
+export const mockSafeUpdates = [
+  {
+    title: "Biztonságos státuszfrissítés",
+    body: "Az iroda rögzítette a következő egyeztetési lépést. Jelenleg nincs új ügyfélteendő.",
+    date: "2026. július 10.",
+  },
+  {
+    title: "Dokumentum megosztva",
+    body: "Egy ügyfélnek szánt tájékoztató metaadatai megjelentek a mock előnézetben.",
+    date: "2026. július 9.",
+  },
+] satisfies PortalSafeUpdateDto[];
 
 export const statusTone: Record<PortalMatterStatus, string> = {
   Előkészítés: "border-[var(--adm-blue-100)] bg-[rgba(142,202,230,0.22)] text-[var(--adm-blue-700)]",

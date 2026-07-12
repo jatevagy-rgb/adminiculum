@@ -349,3 +349,11 @@ This document does not implement the Client Portal V1 data contract. It does not
 ## Final classification
 
 `client_portal_v1_data_contract_designed_no_db_change_no_runtime_change`
+
+## Follow-up — CLIENT-PORTAL-DTO-TYPES-FOUNDATION-1
+
+- `CLIENT-PORTAL-DTO-TYPES-FOUNDATION-1` added a type-only V1 DTO foundation for the static/mock Client Portal shell.
+- The DTOs are allow-list frontend-local TypeScript types aligned with this data contract: `PortalMeDto`, `PortalMatterListItemDto`, `PortalMatterDetailDto`, `PortalDocumentListItemDto`, `PortalDocumentDetailDto`, `PortalTaskDto`, `PortalUploadRequestDto`, and deferred `PortalMessageThreadDto`.
+- Existing synthetic frontend mock data is typed with these DTOs using TypeScript compile-time checks only.
+- No backend API implementation, frontend API integration, schema/migration/DB change, Prisma business access, upload/download/message implementation, OpenAPI/CORS exposure, Azure change, or Client Portal enablement is authorized.
+- Client Portal backend remains disabled/quarantined, external visibility remains unauthorized, CP-SCHEMA-1 remains blocked, and production apply remains NO-GO.

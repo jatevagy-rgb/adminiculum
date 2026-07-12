@@ -1,108 +1,17 @@
 import type { ReactNode } from "react";
 
-type PortalMatterStatus = "Előkészítés" | "Egyeztetés" | "Ügyfélre vár" | "Lezárás előtt";
-
-type PortalMatter = {
-  externalId: string;
-  title: string;
-  status: PortalMatterStatus;
-  summary: string;
-  nextAction: string;
-  deadline: string;
-};
-
-type PortalDocument = {
-  title: string;
-  type: string;
-  sharedAt: string;
-  matterTitle: string;
-  status: string;
-};
-
-type PortalUploadRequest = {
-  title: string;
-  matterTitle: string;
-  dueDate: string;
-  status: string;
-};
-
-type PortalUpdate = {
-  title: string;
-  body: string;
-  date: string;
-};
-
-const mockMatters: PortalMatter[] = [
-  {
-    externalId: "PORTAL-MINTA-001",
-    title: "Minta ügy — szerződés előkészítés",
-    status: "Ügyfélre vár",
-    summary: "Az iroda a véglegesítéshez egy hiányzó mellékletet vár.",
-    nextAction: "Személyi igazolvány másolat feltöltése",
-    deadline: "2026. július 18.",
-  },
-  {
-    externalId: "PORTAL-MINTA-002",
-    title: "Minta ingatlanügy",
-    status: "Egyeztetés",
-    summary: "A felek egyeztetése folyamatban van, új ügyfélteendő nincs.",
-    nextAction: "Nincs aktív teendő",
-    deadline: "2026. július 24.",
-  },
-  {
-    externalId: "PORTAL-MINTA-003",
-    title: "Minta cégjogi változás",
-    status: "Előkészítés",
-    summary: "Az előkészítő adatok ellenőrzése zajlik.",
-    nextAction: "Kapcsolattartó adatok ellenőrzése",
-    deadline: "2026. július 29.",
-  },
-];
-
-const mockDocuments: PortalDocument[] = [
-  {
-    title: "Tájékoztató.pdf",
-    type: "Megosztott dokumentum",
-    sharedAt: "2026. július 10.",
-    matterTitle: "Minta ügy — szerződés előkészítés",
-    status: "Megtekintés későbbi funkció",
-  },
-  {
-    title: "Ütemezési összefoglaló.pdf",
-    type: "Ügyfélnek szánt összefoglaló",
-    sharedAt: "2026. július 9.",
-    matterTitle: "Minta ingatlanügy",
-    status: "Metaadat előnézet",
-  },
-];
-
-const mockUploadRequests: PortalUploadRequest[] = [
-  {
-    title: "Hiánypótlás: személyi igazolvány másolat",
-    matterTitle: "Minta ügy — szerződés előkészítés",
-    dueDate: "2026. július 18.",
-    status: "Mock előnézet",
-  },
-  {
-    title: "Kapcsolattartói adatok megerősítése",
-    matterTitle: "Minta cégjogi változás",
-    dueDate: "2026. július 29.",
-    status: "Nem aktív",
-  },
-];
-
-const mockUpdates: PortalUpdate[] = [
-  {
-    title: "Biztonságos státuszfrissítés",
-    body: "Az iroda rögzítette a következő egyeztetési lépést. Jelenleg nincs új ügyfélteendő.",
-    date: "2026. július 10.",
-  },
-  {
-    title: "Dokumentum megosztva",
-    body: "Egy ügyfélnek szánt tájékoztató metaadatai megjelentek a mock előnézetben.",
-    date: "2026. július 9.",
-  },
-];
+import {
+  mockDocuments,
+  mockMatters,
+  mockSafeUpdates,
+  mockUploadRequests,
+  statusTone,
+  type PortalDocumentListItemDto,
+  type PortalMatterListItemDto,
+  type PortalMatterStatus,
+  type PortalSafeUpdateDto,
+  type PortalUploadRequestDto,
+} from "./mockPortalData";
 
 const navItems = [
   { href: "#figyelem", label: "Figyelmet igényel" },
@@ -111,13 +20,6 @@ const navItems = [
   { href: "/portal/uploads", label: "Feltöltések" },
   { href: "#uzenetek", label: "Üzenetek" },
 ];
-
-const statusTone: Record<PortalMatterStatus, string> = {
-  Előkészítés: "border-[var(--adm-blue-100)] bg-[rgba(142,202,230,0.22)] text-[var(--adm-blue-700)]",
-  Egyeztetés: "border-[var(--adm-sand-300)] bg-[rgba(244,230,199,0.45)] text-[var(--adm-green-900)]",
-  "Ügyfélre vár": "border-[var(--adm-warm-500)] bg-[rgba(253,158,2,0.14)] text-[var(--adm-blue-950)]",
-  "Lezárás előtt": "border-[var(--adm-sage-300)] bg-[rgba(223,232,216,0.55)] text-[var(--adm-green-800)]",
-};
 
 export default function ClientPortalMockPage() {
   return (
@@ -147,7 +49,7 @@ export default function ClientPortalMockPage() {
 
         <section id="dokumentumok" className="grid gap-4 xl:grid-cols-[1fr_0.75fr]">
           <PortalSharedDocumentList documents={mockDocuments} />
-          <PortalSafeUpdateTimeline updates={mockUpdates} />
+          <PortalSafeUpdateTimeline updates={mockSafeUpdates} />
         </section>
 
         <section id="feltoltesek" className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
@@ -266,7 +168,7 @@ function PortalHomeAttentionPanel() {
   );
 }
 
-function PortalMatterCard({ matter }: { matter: PortalMatter }) {
+function PortalMatterCard({ matter }: { matter: PortalMatterListItemDto }) {
   return (
     <article className="flex min-h-[270px] flex-col rounded-3xl border border-[var(--adm-border)] bg-white p-5 shadow-[var(--adm-shadow-md)]">
       <div className="flex items-start justify-between gap-3">
@@ -302,7 +204,7 @@ function PortalNextActionCard({ title, detail, dueDate }: { title: string; detai
   );
 }
 
-function PortalSharedDocumentList({ documents }: { documents: PortalDocument[] }) {
+function PortalSharedDocumentList({ documents }: { documents: PortalDocumentListItemDto[] }) {
   return (
     <section className="rounded-3xl border border-[var(--adm-border)] bg-white p-5 shadow-[var(--adm-shadow-md)]">
       <SectionHeader
@@ -319,7 +221,7 @@ function PortalSharedDocumentList({ documents }: { documents: PortalDocument[] }
   );
 }
 
-function PortalDocumentCard({ document }: { document: PortalDocument }) {
+function PortalDocumentCard({ document }: { document: PortalDocumentListItemDto }) {
   return (
     <article className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -344,7 +246,7 @@ function PortalDocumentCard({ document }: { document: PortalDocument }) {
   );
 }
 
-function PortalUploadRequestList({ uploadRequests }: { uploadRequests: PortalUploadRequest[] }) {
+function PortalUploadRequestList({ uploadRequests }: { uploadRequests: PortalUploadRequestDto[] }) {
   return (
     <section className="rounded-3xl border border-[var(--adm-border)] bg-white p-5 shadow-[var(--adm-shadow-md)]">
       <SectionHeader
@@ -361,7 +263,7 @@ function PortalUploadRequestList({ uploadRequests }: { uploadRequests: PortalUpl
   );
 }
 
-function PortalUploadRequestCard({ request }: { request: PortalUploadRequest }) {
+function PortalUploadRequestCard({ request }: { request: PortalUploadRequestDto }) {
   return (
     <article className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -387,7 +289,7 @@ function PortalUploadRequestCard({ request }: { request: PortalUploadRequest }) 
   );
 }
 
-function PortalSafeUpdateTimeline({ updates }: { updates: PortalUpdate[] }) {
+function PortalSafeUpdateTimeline({ updates }: { updates: PortalSafeUpdateDto[] }) {
   return (
     <section className="rounded-3xl border border-[var(--adm-border)] bg-white p-5 shadow-[var(--adm-shadow-md)]">
       <SectionHeader

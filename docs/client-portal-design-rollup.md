@@ -346,3 +346,10 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 ## Final Classification
 
 `client_portal_design_rollup_documented_no_db_change_no_runtime_change`
+
+## Follow-up — CLIENT-PORTAL-DTO-TYPES-FOUNDATION-1
+
+- Type-only V1 Client Portal DTOs now exist in the frontend mock shell boundary and are used by the synthetic mock data.
+- This is contract alignment only: no backend route implementation, no frontend API client, no `fetch`, no real data access, no schema/migration/DB work, and no portal enablement.
+- The DTO foundation keeps the same allow-list posture and does not authorize `documents.workspaceText`, internal notes, internal tasks, workload records, collaborators, legal analyses, AI internals, audit logs, storage paths, SharePoint paths, uploads/downloads, or messages.
+- Client Portal remains disabled/quarantined; external visibility, CP-SCHEMA-1, and production apply remain blocked.
