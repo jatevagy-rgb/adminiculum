@@ -223,3 +223,10 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 - `CLIENT-PORTAL-MOCK-DEMO-REVIEW-PASS-1` reviewed the static/mock Client Portal route tree as a stakeholder demo surface and confirmed it is demo-ready (dev-preview/synthetic notice everywhere, disabled/deferred actions labelled, metadata-only documents, non-functional uploads, non-enumerating unknown-matter state, client-facing Hungarian copy). One small semantic consistency fix (added `aria-disabled="true"` to the two inline disabled buttons on the home page).
 - The portal remains **frontend-only, synthetic-only, API-free**; there is **no service implementation and no DB-backed portal**. No backend integration, schema, migration, DB, API integration, external visibility, CP-SCHEMA-1, or production apply was authorized.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## Implementation — CLIENT-PORTAL-BACKEND-DISABLED-SERVICE-STUBS-1
+
+- `CLIENT-PORTAL-BACKEND-DISABLED-SERVICE-STUBS-1` added **disabled backend service stubs only** (`Backend/src/modules/client-portal/services.ts` + `Backend/tests/clientPortalServiceStubs.test.ts`). This is **not live service implementation**.
+- Every stub **fails closed** with `CLIENT_PORTAL_SERVICE_NOT_IMPLEMENTED` (status `501`, content-free message). Stubs import no Prisma, run no DB query, call no mapper, and import no internal case/document/task service or DTO. **Services are not wired into routes.**
+- The active runtime remains `401`/`501 CLIENT_PORTAL_NOT_ENABLED`; the triple runtime-ready gate is unchanged (no flag weakened). No schema/migration/DB, no frontend API integration, no upload/download/message implementation.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.

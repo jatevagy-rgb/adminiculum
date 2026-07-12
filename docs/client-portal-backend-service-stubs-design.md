@@ -242,3 +242,33 @@ Reason: frontend demo quality can improve without any schema/API/DB risk.
 - Client Portal remains **mock frontend + disabled backend skeleton only**.
 - CP-SCHEMA-1 remains **blocked**.
 - Production apply remains **NO-GO**.
+
+## Implementation — CLIENT-PORTAL-BACKEND-DISABLED-SERVICE-STUBS-1
+
+- `CLIENT-PORTAL-BACKEND-DISABLED-SERVICE-STUBS-1` added **disabled backend service
+  stubs only**: `Backend/src/modules/client-portal/services.ts` exports the
+  designed named functions (`getPortalMe`, `listPortalMatters`,
+  `getPortalMatterDetail`, `listPortalMatterDocuments`, `getPortalDocumentDetail`,
+  `listPortalTasks`, `completePortalTask`, `listPortalUploadRequests`; deferred
+  `createPortalUploadedFile`, `listPortalMessageThreads`,
+  `replyToPortalMessageThread`), each typed with portal-local input types and
+  existing `types.ts` DTO return types.
+- **Every stub fails closed immediately** via `throwClientPortalServiceDisabled` /
+  `ClientPortalServiceDisabledError` with a content-free error:
+  code `CLIENT_PORTAL_SERVICE_NOT_IMPLEMENTED`, status `501`, message
+  "Client Portal service is not implemented." (optional operation name only; no
+  user data/content).
+- **Services are not wired into routes.** `routes.ts` does not import or invoke
+  `services.ts`; the runtime still stops at `401`/`501 CLIENT_PORTAL_NOT_ENABLED`,
+  and the triple runtime-ready gate is unchanged (no flag weakened).
+- The stubs import **no Prisma / no `@prisma/client`**, run no DB query, call no
+  mapper, import no internal case/document/task service or DTO, and touch no
+  document content or real data.
+- Tests (`Backend/tests/clientPortalServiceStubs.test.ts`, 14): every stub
+  fails closed with the content-free 501 error; input refs never leak into the
+  error surface; `services.ts` contains no Prisma/DB access and no
+  internal-service/DTO imports; `routes.ts` neither imports nor invokes the stubs.
+- **This is not live service implementation.** No schema/migration, no DB, no
+  frontend API integration, no upload/download/message implementation. Client
+  Portal backend remains disabled/quarantined; external visibility remains
+  unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.

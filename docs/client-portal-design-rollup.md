@@ -416,3 +416,9 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - `CLIENT-PORTAL-MOCK-DEMO-REVIEW-PASS-1` reviewed the static/mock Client Portal route tree as a stakeholder demo surface and confirmed it is demo-ready; only a small semantic consistency fix was applied (added `aria-disabled="true"` to the two inline disabled buttons on the home page).
 - **It remains frontend-only, synthetic-only, and API-free.** No backend integration, service implementation, schema, migration, DB, API call, real data, or internal-app component reuse was introduced.
 - Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Implementation — CLIENT-PORTAL-BACKEND-DISABLED-SERVICE-STUBS-1
+
+- `CLIENT-PORTAL-BACKEND-DISABLED-SERVICE-STUBS-1` added **disabled backend service stubs** (`Backend/src/modules/client-portal/services.ts`) that fail closed with `CLIENT_PORTAL_SERVICE_NOT_IMPLEMENTED` (501, content-free) and are **not wired into routes**. This is not live service implementation.
+- The stubs import no Prisma, run no DB query, call no mapper, and import no internal case/document/task service or DTO. Existing route behavior stays `401`/`501 CLIENT_PORTAL_NOT_ENABLED`; the triple runtime-ready gate is unchanged.
+- Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
