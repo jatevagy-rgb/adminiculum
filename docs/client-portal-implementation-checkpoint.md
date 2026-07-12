@@ -237,3 +237,9 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 - The **route matrix is inert and auth-first**: unauthenticated calls return `401`, and authenticated calls still return `501 CLIENT_PORTAL_NOT_ENABLED` via the runtime-ready gate. Handlers **call no service, no mapper, no Prisma, no DB** and return no synthetic data. Flag insufficiency is unchanged (no flag weakened).
 - Tests (`Backend/tests/clientPortalDisabledRouteMatrix.test.ts`) prove the matrix is inert; existing `routeFeatureGuards` tests still pass. No schema/migration, no frontend API integration, no upload/download/message implementation.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## Checkpoint — CLIENT-PORTAL-INERT-API-SHELL-CHECKPOINT-1
+
+- `CLIENT-PORTAL-INERT-API-SHELL-CHECKPOINT-1` created `docs/client-portal-inert-api-shell-checkpoint.md`, recording the current **inert API shell**.
+- The three layers — frontend mock shell, inert backend route matrix, and fail-closed backend service stubs — are all present, with DTO/mappers unwired. **There is no live portal**: routes stay `401`/`501 CLIENT_PORTAL_NOT_ENABLED`, stubs fail closed, and no route calls a service, mapper, or Prisma.
+- No runtime/frontend/schema/migration/DB change was made. Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.

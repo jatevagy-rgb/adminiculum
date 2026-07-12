@@ -428,3 +428,9 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - `CLIENT-PORTAL-BACKEND-DISABLED-ROUTE-MATRIX-1` added the **inert V1 route matrix** to `routes.ts` (me/matters/matter-detail/matter-documents/document-detail/tasks/task-complete/uploads; deferred uploads-files/messages/replies). Every route is auth-first and still returns `401` unauthenticated / `501 CLIENT_PORTAL_NOT_ENABLED` authenticated; handlers call no service, mapper, Prisma, or DB.
 - **The route matrix does not change the no-go posture.** Flag insufficiency is unchanged (no flag weakened); a focused test proves the matrix is inert and existing `routeFeatureGuards` tests still pass.
 - Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Checkpoint — CLIENT-PORTAL-INERT-API-SHELL-CHECKPOINT-1
+
+- `CLIENT-PORTAL-INERT-API-SHELL-CHECKPOINT-1` created `docs/client-portal-inert-api-shell-checkpoint.md`, checkpointing the three inert layers (frontend mock shell, inert backend route matrix, fail-closed service stubs; DTO/mappers unwired).
+- **The inert API shell exists and does not change the no-go posture.** No runtime/frontend/schema/migration/DB change; routes stay `401`/`501 CLIENT_PORTAL_NOT_ENABLED`.
+- Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.

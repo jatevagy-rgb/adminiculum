@@ -300,3 +300,15 @@ Reason: frontend demo quality can improve without any schema/API/DB risk.
   implementation. Client Portal backend remains disabled/quarantined; external
   visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply
   remains NO-GO.
+
+## Checkpoint — CLIENT-PORTAL-INERT-API-SHELL-CHECKPOINT-1
+
+- `CLIENT-PORTAL-INERT-API-SHELL-CHECKPOINT-1` created
+  `docs/client-portal-inert-api-shell-checkpoint.md`, checkpointing the current inert
+  shell. **The disabled route matrix is present but does not call the service stubs**
+  (or mappers, or Prisma) — `routes.ts` neither imports nor invokes `services.ts`;
+  every service stub still fails closed, and the routes still return
+  `401`/`501 CLIENT_PORTAL_NOT_ENABLED`.
+- Docs-only checkpoint. No runtime/schema/migration/DB change. Client Portal backend
+  remains disabled/quarantined; external visibility remains unauthorized; CP-SCHEMA-1
+  remains blocked; production apply remains NO-GO.
