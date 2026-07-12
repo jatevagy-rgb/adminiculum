@@ -488,3 +488,9 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - `CLIENT-PORTAL-CP-SCHEMA-1-APPROVAL-AND-NONAPPLIED-PRISMA-DRAFT-1` created the **CP-SCHEMA-1 approval package** (human approval packet, non-applied markdown-only Prisma draft, risk register, next-gates plan).
 - **The approval package exists; the no-go posture is unchanged.** No `schema.prisma` edit, migration, DB, migration command, or generated Prisma artifact.
 - Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Strategy — CLIENT-PORTAL-CP-SCHEMA-1-COLLISION-RESOLUTION-AND-PATCH-STRATEGY-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-COLLISION-RESOLUTION-AND-PATCH-STRATEGY-1` created the docs-only **collision-resolution and patch-strategy package** (strategy + legacy inventory + patch review checklist), resolving on paper how the legacy candidate block should be handled (recommended Option C — replacement/normalization, pending human approval and clone verification).
+- **The collision strategy exists and does not change the no-go posture.** No `schema.prisma` edit, migration, DB, or migration command.
+- Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.

@@ -136,3 +136,17 @@ called out in the non-applied draft and the risk register.
 **This packet requests future human approval only. It does not grant approval by
 itself.** CP-SCHEMA-1 remains blocked; production apply remains NO-GO; Client
 Portal remains inert.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-COLLISION-RESOLUTION-AND-PATCH-STRATEGY-1
+
+- The **collision-resolution strategy**
+  (`docs/client-portal-cp-schema-1-collision-resolution-and-patch-strategy.md`) and the
+  **legacy candidate block inventory**
+  (`docs/client-portal-cp-schema-1-legacy-candidate-block-inventory.md`) now exist,
+  together with a **schema patch review checklist**
+  (`docs/client-portal-cp-schema-1-schema-patch-review-checklist.md`).
+- **The approver must decide how to handle the legacy candidate block before any
+  schema patch** (recommended: Option C — human-approved replacement/normalization;
+  hard precondition: verify the legacy tables' existence/emptiness in production).
+  Approval question 1 explicitly includes this decision. No schema/migration
+  authorized.

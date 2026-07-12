@@ -187,3 +187,15 @@ exact decisions and no-go gates for a human decision.
   name collisions (`ClientPortalUser`/`ClientPortalAuditEvent` and three enums) as a
   required pre-patch human decision. CP-SCHEMA-1 remains blocked; production apply
   remains NO-GO.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-COLLISION-RESOLUTION-AND-PATCH-STRATEGY-1
+
+- The **collision strategy package now exists**: strategy
+  (`docs/client-portal-cp-schema-1-collision-resolution-and-patch-strategy.md`,
+  recommended Option C — replacement/normalization), exact legacy inventory
+  (`docs/client-portal-cp-schema-1-legacy-candidate-block-inventory.md`), and the
+  schema patch review checklist
+  (`docs/client-portal-cp-schema-1-schema-patch-review-checklist.md`).
+- **Readiness is still blocked** pending human approval (Gate 1 + new Gate 1A) and
+  clone/production verification of the legacy tables' existence and emptiness.
+  No schema/migration authorized; production apply remains NO-GO.

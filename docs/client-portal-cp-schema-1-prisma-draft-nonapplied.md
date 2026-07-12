@@ -424,3 +424,15 @@ model ClientPortalAuditEvent {
 - **No DB-backed portal exists.**
 - **CP-SCHEMA-1 remains blocked**; production apply remains NO-GO; Client Portal
   remains inert.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-COLLISION-RESOLUTION-AND-PATCH-STRATEGY-1
+
+- **This draft must be reconciled against the collision strategy before any use**:
+  see `docs/client-portal-cp-schema-1-collision-resolution-and-patch-strategy.md`
+  (recommended Option C — replacement/normalization) and
+  `docs/client-portal-cp-schema-1-legacy-candidate-block-inventory.md` (exact legacy
+  model/enum/table facts). The draft's `@@map("client_portal_users")` and
+  `@@map("client_portal_audit_events")` collide with legacy tables created by the
+  committed `20260702140000_add_client_portal_foundation` migration.
+- **Do not copy into `schema.prisma`.** No schema/migration authorized; CP-SCHEMA-1
+  remains blocked; production apply remains NO-GO.

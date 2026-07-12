@@ -74,3 +74,19 @@ authorize implementation.**
 
 **This risk register does not authorize implementation.** CP-SCHEMA-1 remains
 blocked; production apply remains NO-GO; Client Portal remains inert.
+
+## Update — CLIENT-PORTAL-CP-SCHEMA-1-COLLISION-RESOLUTION-AND-PATCH-STRATEGY-1
+
+- The **legacy candidate block collision risk** now has a documented resolution
+  strategy and exact inventory: see
+  `docs/client-portal-cp-schema-1-collision-resolution-and-patch-strategy.md`
+  (recommended Option C — replacement/normalization, human approval + clone
+  verification required) and
+  `docs/client-portal-cp-schema-1-legacy-candidate-block-inventory.md`.
+- Status change for that risk row: mitigation documented, **still open** pending
+  the human decision and the production-emptiness verification of the legacy tables
+  (created by `20260702140000_add_client_portal_foundation`). Two additional facts
+  sharpen existing rows: the legacy block contains **two cascade deletes**
+  (`user → memberships`, `artifact → grants`) and **two `Json` payload columns**
+  (`ClientVisibleArtifact.payload`, `ClientPortalAuditEvent.metadata`) that the
+  final plan forbids. No implementation authorized.

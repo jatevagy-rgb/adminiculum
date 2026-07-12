@@ -90,3 +90,17 @@ what is renamed, how legacy candidates are handled).
 **The current task completes none of these gates** — it only prepares the documents
 that feed Gate 1 and Gate 2. CP-SCHEMA-1 remains blocked; production apply remains
 NO-GO; Client Portal remains inert.
+
+## Update — Gate 1A inserted (collision strategy approval)
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-COLLISION-RESOLUTION-AND-PATCH-STRATEGY-1` added a
+  **Gate 1A prerequisite between Gate 1 and Gate 2**: the **collision strategy must be
+  approved** (and the legacy tables' production existence/emptiness verified) **before
+  the non-applied draft review (Gate 2) or any schema patch (Gate 3)**.
+- Gate 1A inputs: `docs/client-portal-cp-schema-1-collision-resolution-and-patch-strategy.md`,
+  `docs/client-portal-cp-schema-1-legacy-candidate-block-inventory.md`. Gate 2/3 also
+  gain the `docs/client-portal-cp-schema-1-schema-patch-review-checklist.md` as a
+  review input. Exit criteria: explicit human approval of the disposition
+  (replace / rename-deprecate) for the legacy candidate block.
+- No gate is passed by this update. CP-SCHEMA-1 remains blocked; production apply
+  remains NO-GO.

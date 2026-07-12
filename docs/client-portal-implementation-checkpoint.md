@@ -297,3 +297,9 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 - `CLIENT-PORTAL-CP-SCHEMA-1-APPROVAL-AND-NONAPPLIED-PRISMA-DRAFT-1` created the CP-SCHEMA-1 approval package: **human approval packet, non-applied Prisma draft (markdown-only), risk register, and next-gates plan**.
 - **The approval packet / non-applied draft / risk register / gates exist; there is still no DB-backed portal** — no `schema.prisma` edit, no migration, no DB, no generated Prisma artifact. The inert shell is unchanged.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## Strategy — CLIENT-PORTAL-CP-SCHEMA-1-COLLISION-RESOLUTION-AND-PATCH-STRATEGY-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-COLLISION-RESOLUTION-AND-PATCH-STRATEGY-1` created the docs-only collision package: **collision-resolution and patch strategy** (recommended Option C — replacement/normalization, human approval + clone verification required), the **exact legacy candidate block inventory** (7 models, 16 enums, `@@map` tables, cascade/Json findings), and the **schema patch review checklist**.
+- **A collision strategy exists; there is still no DB-backed portal** — no `schema.prisma` edit, no migration, no DB. The inert shell is unchanged.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
