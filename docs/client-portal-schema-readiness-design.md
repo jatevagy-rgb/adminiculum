@@ -524,6 +524,17 @@ This design does not implement schema. This design does not authorize CP-SCHEMA-
 - No SharePoint/Graph call was made.
 - No export or generation job was run.
 
+## Follow-up — CLIENT-PORTAL-SCHEMA-CANDIDATE-DESIGN-2
+
+- `CLIENT-PORTAL-SCHEMA-CANDIDATE-DESIGN-2` refined this readiness design into a
+  more concrete candidate schema model in
+  `docs/client-portal-schema-candidate-design-2.md` (candidate models, existing-model
+  relationships, fields, indexes/constraints, revocation/visibility/retention,
+  migration risks, and a CP-SCHEMA-1 readiness checklist).
+- **No schema or migration is authorized.** No `schema.prisma` edit, no migration,
+  no DB connection. CP-SCHEMA-1 remains blocked, production apply remains NO-GO, and
+  Client Portal remains mock frontend + disabled backend skeleton only.
+
 ## Final classification
 
 `client_portal_schema_readiness_designed_no_db_change_no_runtime_change`

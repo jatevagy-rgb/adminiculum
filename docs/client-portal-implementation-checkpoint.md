@@ -205,3 +205,9 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 - The backend now has DTO/mapper **stubs** (allow-list `types.ts`, pure `mappers.ts` from local explicit source shapes, no Prisma import/query, not wired into routes), but the portal remains **mock frontend + disabled backend skeleton only** — not live, not API-integrated, not DB-backed, not externally visible, not production-enabled, not CP-SCHEMA-1 ready.
 - **No API/DB/schema/enablement.** The active runtime boundary stays `401` (unauthenticated) / `501 CLIENT_PORTAL_NOT_ENABLED` (authenticated, disabled), and the triple runtime-ready gate is unchanged.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## Design — CLIENT-PORTAL-SCHEMA-CANDIDATE-DESIGN-2
+
+- `CLIENT-PORTAL-SCHEMA-CANDIDATE-DESIGN-2` created `docs/client-portal-schema-candidate-design-2.md`, a docs-only refined schema candidate model.
+- A **schema candidate design exists, but no DB-backed portal exists** — no schema change, no migration, no DB connection, no runtime service. The portal remains mock frontend + disabled backend skeleton only.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.

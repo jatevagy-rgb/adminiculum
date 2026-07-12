@@ -398,3 +398,9 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - The backend DTO/mapper foundation exists (allow-list `types.ts`, pure `mappers.ts` stubs), but **it does not change product posture**: Client Portal remains non-live, mock-only on the frontend and disabled on the backend.
 - The existing runtime remains the `401` (unauthenticated) / `501 CLIENT_PORTAL_NOT_ENABLED` (authenticated, disabled) boundary; mappers are not wired into any route; the triple runtime-ready gate is unchanged (no flag weakened).
 - No API implementation, frontend API integration, schema/migration/DB change, external visibility, or enablement is authorized; external visibility remains unauthorized; CP-SCHEMA-1 and production apply remain blocked.
+
+## Design — CLIENT-PORTAL-SCHEMA-CANDIDATE-DESIGN-2
+
+- `CLIENT-PORTAL-SCHEMA-CANDIDATE-DESIGN-2` created `docs/client-portal-schema-candidate-design-2.md`, a docs-only refined schema candidate model (candidate tables, relationships, fields, indexes, revocation/visibility/retention, migration risks, CP-SCHEMA-1 readiness checklist).
+- **Schema candidate design 2 exists and does not change the no-go posture.** No `schema.prisma` edit, migration, DB, runtime, or API change was made.
+- Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.

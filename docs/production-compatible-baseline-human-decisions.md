@@ -624,3 +624,9 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - `CLIENT-PORTAL-BACKEND-DTO-STUBS-CLOSEOUT-1` completed the docs-only closeout of the backend DTO/mapper foundation (`3bdab60`).
 - Confirmed: backend-local allow-list DTO types and pure mapper stubs exist; mappers use local explicit source shapes, import no Prisma, run no DB query, access no `workspaceText`, and are not wired into any live route. The active runtime remains the `401`/`501 CLIENT_PORTAL_NOT_ENABLED` disabled boundary, and the triple runtime-ready gate is unchanged.
 - **No runtime enablement, schema, migration, DB, frontend API integration, external visibility, CP-SCHEMA-1, or production apply is authorized.** Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## 48. Client Portal schema candidate design 2
+
+- `CLIENT-PORTAL-SCHEMA-CANDIDATE-DESIGN-2` completed a docs-only refined schema candidate model (`docs/client-portal-schema-candidate-design-2.md`): candidate portal tables, existing-model relationships, fields/indexes/constraints, revocation/visibility/retention fields, migration risks, and a CP-SCHEMA-1 readiness checklist.
+- **No `schema.prisma` edit, migration, DB, CP-SCHEMA-1, production apply, runtime API, or external visibility is authorized.** `schema.prisma` was inspected for alignment only (the inert CP-SCHEMA-1 candidate block); it was not edited.
+- Client Portal remains mock frontend + disabled backend skeleton only; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked (NO-GO)**.
