@@ -3,7 +3,7 @@ import { mockDocuments } from "../mockPortalData";
 
 export default function PortalDocumentsMockPage() {
   return (
-    <PortalMockShell>
+    <PortalMockShell activeHref="/portal/documents">
       <PortalPageHero
         eyebrow="Megosztott dokumentumok"
         title="Dokumentumlista metaadatokkal, tartalom nélkül."
@@ -19,12 +19,20 @@ export default function PortalDocumentsMockPage() {
         <div className="grid gap-4 lg:grid-cols-3">
           {mockDocuments.map((document) => (
             <article key={`${document.title}-${document.sharedAt}`} className="rounded-3xl border border-[var(--adm-border)] bg-white p-5 shadow-[var(--adm-shadow-md)]">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-soft)]">{document.type}</p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-soft)]">{document.type}</p>
+                <span className="w-fit rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1 text-xs font-semibold text-[var(--adm-text-muted)]">
+                  Tartalom nem látható
+                </span>
+              </div>
               <h2 className="mt-3 text-xl font-semibold tracking-[-0.025em] text-[var(--adm-green-950)]">{document.title}</h2>
               <p className="mt-2 text-sm text-[var(--adm-text-muted)]">{document.matterTitle}</p>
               <div className="mt-5 rounded-2xl bg-[var(--adm-surface)] p-4">
                 <p className="text-xs text-[var(--adm-text-muted)]">Megosztva: {document.sharedAt}</p>
                 <p className="mt-2 text-sm font-semibold text-[var(--adm-text)]">{document.status}</p>
+                <p className="mt-2 text-xs leading-5 text-[var(--adm-text-muted)]">
+                  Csak ügyfélnek szánt metaadat. Nincs előnézet, letöltés, nyers tartalom vagy tárhelyútvonal.
+                </p>
               </div>
               <div className="mt-5">
                 <DisabledMockButton label="Letöltés nem aktív" />

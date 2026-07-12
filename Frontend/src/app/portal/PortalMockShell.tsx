@@ -5,35 +5,44 @@ import { statusTone, type PortalMatterStatus } from "./mockPortalData";
 
 const portalNavItems = [
   { href: "/portal", label: "Áttekintés" },
-  { href: "/portal/matters", label: "Ügyek" },
+  { href: "/portal/matters", label: "Ügyeim" },
   { href: "/portal/documents", label: "Dokumentumok" },
-  { href: "/portal/uploads", label: "Feltöltések" },
+  { href: "/portal/uploads", label: "Feltöltési kérések" },
 ];
 
-export function PortalMockShell({ children }: { children: ReactNode }) {
+export function PortalMockShell({ children, activeHref = "/portal" }: { children: ReactNode; activeHref?: string }) {
   return (
     <main className="min-h-screen bg-[var(--adm-ivory-50)] text-[var(--adm-text)]">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
-        <header className="rounded-[28px] border border-[var(--adm-border)] bg-white/90 px-5 py-4 shadow-[var(--adm-shadow-md)]">
+        <header className="rounded-[28px] border border-[var(--adm-border)] bg-white/95 px-4 py-4 shadow-[var(--adm-shadow-md)] sm:px-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--adm-text-muted)]">
                 Ügyfélportál előnézet
               </p>
               <h1 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[var(--adm-green-950)]">
-                Szintetikus, nem éles ügyféloldali shell
+                Biztonságos, szintetikus ügyféloldali előnézet
               </h1>
             </div>
-            <nav aria-label="Ügyfélportál mock navigáció" className="flex flex-wrap gap-2">
-              {portalNavItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm font-medium text-[var(--adm-text-muted)] transition hover:border-[var(--adm-border-strong)] hover:text-[var(--adm-green-900)]"
-                >
-                  {item.label}
-                </Link>
-              ))}
+            <nav aria-label="Ügyfélportál mock navigáció" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
+              {portalNavItems.map((item) => {
+                const isActive = activeHref === item.href;
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`whitespace-nowrap rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                      isActive
+                        ? "border-[var(--adm-green-950)] bg-[var(--adm-green-950)] text-white shadow-sm"
+                        : "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)] hover:border-[var(--adm-border-strong)] hover:text-[var(--adm-green-900)]"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
             </nav>
           </div>
         </header>
@@ -46,9 +55,9 @@ export function PortalMockShell({ children }: { children: ReactNode }) {
 
 export function PortalMockNotice() {
   return (
-    <aside className="rounded-2xl border border-[rgba(253,158,2,0.42)] bg-[rgba(253,158,2,0.12)] px-4 py-3 text-sm leading-6 text-[var(--adm-blue-950)]">
-      <strong>Fejlesztési előnézet — szintetikus adatokkal.</strong> Az ügyfélportál backendje nincs engedélyezve,
-      ez az oldal nem végez API-hívást, és nem jelenít meg valós ügyfél-, ügy- vagy dokumentumadatot.
+    <aside className="rounded-2xl border border-[rgba(253,158,2,0.42)] bg-[rgba(253,158,2,0.12)] px-4 py-3 text-sm leading-6 text-[var(--adm-blue-950)] shadow-sm">
+      <strong>Fejlesztési előnézet — szintetikus adatokkal.</strong> Az ügyfélportál backendje nincs engedélyezve.
+      Ez az előnézet nem végez API-hívást, nem fogad beküldést, és nem jelenít meg valós ügyfél-, ügy- vagy dokumentumadatot.
     </aside>
   );
 }
@@ -100,7 +109,7 @@ export function DisabledMockButton({ label }: { label: string }) {
     <button
       type="button"
       disabled
-      className="rounded-full border border-[var(--adm-border)] bg-white/75 px-4 py-2 text-sm font-semibold text-[var(--adm-text-muted)] shadow-sm disabled:cursor-not-allowed disabled:opacity-80"
+      className="rounded-full border border-dashed border-[var(--adm-border-strong)] bg-white/80 px-4 py-2 text-sm font-semibold text-[var(--adm-text-muted)] shadow-sm disabled:cursor-not-allowed disabled:opacity-80"
     >
       {label}
     </button>

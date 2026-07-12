@@ -353,3 +353,9 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - This is contract alignment only: no backend route implementation, no frontend API client, no `fetch`, no real data access, no schema/migration/DB work, and no portal enablement.
 - The DTO foundation keeps the same allow-list posture and does not authorize `documents.workspaceText`, internal notes, internal tasks, workload records, collaborators, legal analyses, AI internals, audit logs, storage paths, SharePoint paths, uploads/downloads, or messages.
 - Client Portal remains disabled/quarantined; external visibility, CP-SCHEMA-1, and production apply remain blocked.
+
+## Follow-up — CLIENT-PORTAL-FRONTEND-MOCK-UX-POLISH-1
+
+- The static/mock Client Portal route tree was polished for client-facing clarity: shared shell/navigation, active-route affordance, improved responsive card hierarchy, safer unavailable states, and clearer disabled upload/download/message copy.
+- It remains frontend-only and synthetic-data-only, and continues to use frontend-local Portal V1 DTO types.
+- No backend API implementation, frontend API integration, `fetch`, internal API import, schema/migration/DB change, Prisma business access, upload/download/message implementation, OpenAPI/CORS exposure, Azure change, external visibility, CP-SCHEMA-1 readiness, production apply readiness, or Client Portal enablement is authorized.

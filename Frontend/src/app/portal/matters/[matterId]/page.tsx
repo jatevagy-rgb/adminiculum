@@ -20,10 +20,10 @@ export default async function PortalMatterDetailMockPage({ params }: { params: P
 
   if (!matter) {
     return (
-      <PortalMockShell>
+      <PortalMockShell activeHref="/portal/matters">
         <MockEmptyState
-          title="Ez a mintaügy nem elérhető"
-          detail="A mock shell nem árulja el, hogy létezne-e ilyen ügy éles környezetben. Nincs backend lekérdezés."
+          title="Ez az ügy ebben az előnézetben nem érhető el."
+          detail="Az előnézet nem árulja el, hogy létezne-e ilyen ügy éles környezetben. Nincs backend lekérdezés."
         />
       </PortalMockShell>
     );
@@ -33,11 +33,11 @@ export default async function PortalMatterDetailMockPage({ params }: { params: P
   const relatedUploads = mockUploadRequests.filter((request) => request.matterTitle === matter.title);
 
   return (
-    <PortalMockShell>
+    <PortalMockShell activeHref="/portal/matters">
       <PortalPageHero
         eyebrow="Minta ügy részlete"
         title={matter.title}
-        description="Ez a részletező nézet csak ügyfélnek szánt státuszt, teendőt és metaadatot mutat. Nem jelenít meg belső idővonalat, jegyzetet vagy dokumentumtartalmat."
+        description="Ez a részletező nézet csak ügyfélnek szánt státuszt, következő lépést és metaadatot mutat. Nem jelenít meg belső idővonalat, jegyzetet vagy dokumentumtartalmat."
       />
 
       <section className="grid gap-4 lg:grid-cols-[1fr_0.7fr]">
@@ -48,10 +48,14 @@ export default async function PortalMatterDetailMockPage({ params }: { params: P
           </div>
           <h2 className="mt-5 text-2xl font-semibold tracking-[-0.035em] text-[var(--adm-green-950)]">Ügyfélnek szánt állapot</h2>
           <p className="mt-3 text-sm leading-6 text-[var(--adm-text-muted)]">{matter.safeUpdate}</p>
-          <div className="mt-5 rounded-2xl bg-[var(--adm-surface)] p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-soft)]">Figyelmet igényel</p>
+          <div className="mt-5 rounded-2xl border border-[rgba(253,158,2,0.28)] bg-[rgba(253,158,2,0.08)] p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-soft)]">Következő lépés</p>
             <p className="mt-2 text-sm font-semibold text-[var(--adm-text)]">{matter.nextAction}</p>
-            <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Határidő: {matter.deadline}</p>
+            <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Ügyféloldali határidő: {matter.deadline}</p>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <SummaryPill label="Dokumentum-metaadat" value={`${relatedDocuments.length}`} />
+            <SummaryPill label="Feltöltési kérés" value={`${relatedUploads.length}`} />
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
             <DisabledMockButton label="Beküldés nem aktív" />
@@ -67,7 +71,7 @@ export default async function PortalMatterDetailMockPage({ params }: { params: P
         <article className="rounded-3xl border border-[var(--adm-border)] bg-white p-5 shadow-[var(--adm-shadow-md)]">
           <SectionHeader
             eyebrow="Kapcsolat"
-            title="dr. Példa Ügyvéd"
+            title="Kapcsolattartó előnézet"
             description="Szintetikus kapcsolattartó. Valódi üzenetküldés vagy profiladat nincs bekötve."
           />
           <div className="mt-5 rounded-2xl bg-[var(--adm-surface)] p-4 text-sm leading-6 text-[var(--adm-text-muted)]">
@@ -90,7 +94,7 @@ export default async function PortalMatterDetailMockPage({ params }: { params: P
               relatedDocuments.map((document) => (
                 <div key={document.title} className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
                   <p className="text-sm font-semibold text-[var(--adm-green-950)]">{document.title}</p>
-                  <p className="mt-1 text-xs text-[var(--adm-text-muted)]">{document.type} · {document.sharedAt}</p>
+                  <p className="mt-1 text-xs text-[var(--adm-text-muted)]">{document.type} · megosztva: {document.sharedAt}</p>
                   <p className="mt-2 text-xs font-semibold text-[var(--adm-text-soft)]">{document.status}</p>
                 </div>
               ))
@@ -112,6 +116,7 @@ export default async function PortalMatterDetailMockPage({ params }: { params: P
                 <div key={request.title} className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
                   <p className="text-sm font-semibold text-[var(--adm-green-950)]">{request.title}</p>
                   <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Határidő: {request.dueDate}</p>
+                  <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Elfogadott típusok később: {request.allowedFileTypes}</p>
                   <DisabledMockButton label="Feltöltés nem aktív" />
                 </div>
               ))
@@ -120,5 +125,14 @@ export default async function PortalMatterDetailMockPage({ params }: { params: P
         </article>
       </section>
     </PortalMockShell>
+  );
+}
+
+function SummaryPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-soft)]">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-[var(--adm-green-950)]">{value}</p>
+    </div>
   );
 }

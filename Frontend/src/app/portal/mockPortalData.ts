@@ -43,6 +43,7 @@ export type PortalUploadRequestDto = {
   matterTitle: string;
   dueDate: string;
   status: string;
+  allowedFileTypes: string;
 };
 
 export type PortalSafeUpdateDto = {
@@ -69,7 +70,7 @@ export const mockMatters = [
     summary: "Az iroda a véglegesítéshez egy hiányzó mellékletet vár.",
     nextAction: "Személyi igazolvány másolat feltöltése",
     deadline: "2026. július 18.",
-    safeUpdate: "A következő ügyféloldali lépés egy hiánypótlás. Ez a minta nem küld adatot.",
+    safeUpdate: "A következő ügyféloldali lépés egy hiánypótlás. Ez az előnézet nem küld adatot.",
   },
   {
     externalId: "portal-minta-002",
@@ -78,7 +79,7 @@ export const mockMatters = [
     summary: "A felek egyeztetése folyamatban van, új ügyfélteendő nincs.",
     nextAction: "Nincs aktív teendő",
     deadline: "2026. július 24.",
-    safeUpdate: "A státusz csak ügyfélnek szánt, rövid összefoglaló. Belső munkafolyamat nem látható.",
+    safeUpdate: "A státusz ügyfélnek szánt, rövid összefoglaló. Belső munkafolyamat nem látható.",
   },
   {
     externalId: "portal-minta-003",
@@ -120,13 +121,15 @@ export const mockUploadRequests = [
     title: "Hiánypótlás: személyi igazolvány másolat",
     matterTitle: "Minta ügy — szerződés előkészítés",
     dueDate: "2026. július 18.",
-    status: "Mock előnézet",
+    status: "Előkészített kérés",
+    allowedFileTypes: "PDF, JPG vagy PNG",
   },
   {
     title: "Kapcsolattartói adatok megerősítése",
     matterTitle: "Minta cégjogi változás",
     dueDate: "2026. július 29.",
     status: "Nem aktív",
+    allowedFileTypes: "PDF vagy DOCX",
   },
 ] satisfies PortalUploadRequestDto[];
 

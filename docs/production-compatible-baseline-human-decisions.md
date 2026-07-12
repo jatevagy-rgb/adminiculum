@@ -576,3 +576,10 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - This does **not** add backend API implementation, frontend API integration, live fetches, real client/case/document data, schema/migration/DB changes, Prisma business access, OpenAPI/CORS exposure, Azure changes, upload/download/message implementation, or Client Portal enablement.
 - The DTOs remain allow-list only and do not authorize `documents.workspaceText`, internal notes, internal task board data, workload records, collaborators, legal analyses, AI prompt/output internals, audit logs, admin/ops data, internal communications, storage paths, SharePoint paths, internal review comments, or raw document content.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; CP-SCHEMA-1 and production apply remain **blocked**.
+
+## 41. Client Portal frontend mock UX polish
+
+- `CLIENT-PORTAL-FRONTEND-MOCK-UX-POLISH-1` polished the static/mock Client Portal route tree while preserving the disabled, synthetic-only posture.
+- The route tree remains frontend-only, synthetic-data-only, typed against frontend-local Portal V1 DTO types, and API-free, with no backend API calls, internal API imports, file input, form submission, upload/download/message implementation, or real client/case/document data.
+- No backend/schema/migration/DB/Prisma business access, OpenAPI/CORS exposure, Azure change, external visibility, CP-SCHEMA-1 readiness, production apply readiness, or Client Portal backend enablement is authorized.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; CP-SCHEMA-1 and production apply remain **blocked**.
