@@ -12,13 +12,14 @@ export default function PortalMattersMockPage() {
         description="Ez az oldal nem kér le ügyeket a backendből. A kártyák csak azt mutatják, hogyan nézhet ki később egy jogosultsággal megosztott ügyféloldali lista."
       />
 
-      <section className="space-y-4">
+      <section aria-labelledby="portal-matters-list-title" className="space-y-4">
         <SectionHeader
           eyebrow="Minta ügyek"
           title="Ügyfélnek szánt, biztonságos összefoglalók"
+          titleId="portal-matters-list-title"
           description="Nincs belső munkafolyamat, nincs belső feladatlista, nincs ügyvédi jegyzet vagy jogi elemzés."
         />
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div role="list" className="grid gap-4 lg:grid-cols-3">
           {mockMatters.map((matter) => (
             <PortalMatterListCard key={matter.externalId} matter={matter} />
           ))}
@@ -33,12 +34,12 @@ function PortalMatterListCard({ matter }: { matter: (typeof mockMatters)[number]
   const uploadCount = mockUploadRequests.filter((request) => request.matterTitle === matter.title).length;
 
   return (
-    <article className="flex min-h-[320px] flex-col rounded-3xl border border-[var(--adm-border)] bg-white p-5 shadow-[var(--adm-shadow-md)]">
+    <article role="listitem" className="flex min-h-[320px] flex-col rounded-3xl border border-[var(--adm-border)] bg-white p-5 shadow-[var(--adm-shadow-md)]">
       <div className="flex items-start justify-between gap-3">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-soft)]">{matter.externalId}</p>
         <PortalStatusBadge status={matter.status} />
       </div>
-      <h2 className="mt-4 text-xl font-semibold tracking-[-0.025em] text-[var(--adm-green-950)]">{matter.title}</h2>
+      <h3 className="mt-4 text-xl font-semibold tracking-[-0.025em] text-[var(--adm-green-950)]">{matter.title}</h3>
       <p className="mt-3 flex-1 text-sm leading-6 text-[var(--adm-text-muted)]">{matter.summary}</p>
       <div className="mt-5 rounded-2xl bg-[var(--adm-surface)] p-4">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-soft)]">Következő ügyféloldali lépés</p>

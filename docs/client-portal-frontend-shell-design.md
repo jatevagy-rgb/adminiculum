@@ -342,3 +342,9 @@ This design does not implement a frontend shell. Client Portal remains quarantin
 
 - `CLIENT-PORTAL-IMPLEMENTATION-CHECKPOINT-1` confirms the frontend route tree remains static/mock, synthetic-only, DTO-typed, and API-free.
 - No frontend API integration, internal API import, real data, file input, upload/download/message behavior, backend/schema/migration/DB change, CP-SCHEMA-1 readiness, production apply readiness, external visibility, or Client Portal enablement is authorized.
+
+## Follow-up — CLIENT-PORTAL-MOCK-FRONTEND-ACCESSIBILITY-PASS-1
+
+- `CLIENT-PORTAL-MOCK-FRONTEND-ACCESSIBILITY-PASS-1` improved the static/mock Client Portal shell's accessibility and responsive review quality.
+- The polish remains frontend-only, synthetic-only, DTO-typed, and API-free, with no backend integration, no real data, no file input, and no upload/download/message behavior.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; CP-SCHEMA-1 and production apply remain blocked.

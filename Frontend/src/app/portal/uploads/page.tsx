@@ -10,19 +10,20 @@ export default function PortalUploadsMockPage() {
         description="Ez a mock oldal nem jelenít meg fájlválasztót, nem tölt fel fájlt és nem küld adatot. Csak későbbi portálfolyamatot szemléltet."
       />
 
-      <section className="space-y-4">
+      <section aria-labelledby="portal-upload-list-title" className="space-y-4">
         <SectionHeader
           eyebrow="Mock kérések"
           title="Feltöltési kérések éles működés nélkül"
+          titleId="portal-upload-list-title"
           description="A valódi feltöltéshez külön tárolási, jogosultsági, vírusellenőrzési és adatvédelmi döntés szükséges."
         />
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div role="list" className="grid gap-4 lg:grid-cols-2">
           {mockUploadRequests.map((request) => (
-            <article key={`${request.title}-${request.dueDate}`} className="rounded-3xl border border-[var(--adm-border)] bg-white p-5 shadow-[var(--adm-shadow-md)]">
+            <article key={`${request.title}-${request.dueDate}`} role="listitem" className="rounded-3xl border border-[var(--adm-border)] bg-white p-5 shadow-[var(--adm-shadow-md)]">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-soft)]">{request.matterTitle}</p>
-                  <h2 className="mt-3 text-xl font-semibold tracking-[-0.025em] text-[var(--adm-green-950)]">{request.title}</h2>
+                  <h3 className="mt-3 text-xl font-semibold tracking-[-0.025em] text-[var(--adm-green-950)]">{request.title}</h3>
                   <p className="mt-2 text-sm font-semibold text-[var(--adm-blue-950)]">Határidő: {request.dueDate}</p>
                   <p className="mt-1 text-sm text-[var(--adm-text-muted)]">Elfogadott típusok később: {request.allowedFileTypes}</p>
                 </div>

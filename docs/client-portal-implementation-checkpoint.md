@@ -174,3 +174,10 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 ## Final classification
 
 `client_portal_implementation_checkpoint_documented_no_runtime_no_db_no_enablement`
+
+## Follow-up — CLIENT-PORTAL-MOCK-FRONTEND-ACCESSIBILITY-PASS-1
+
+- `CLIENT-PORTAL-MOCK-FRONTEND-ACCESSIBILITY-PASS-1` improved accessibility and responsive review quality of the static/mock Client Portal route tree.
+- The pass added clearer skip/content structure, page-level headings, labelled sections, list semantics for card collections, active navigation semantics, and clearer disabled-action affordances.
+- The route tree remains frontend-only, synthetic-only, typed against frontend-local Portal V1 DTO types, and API-free.
+- No backend API calls, internal API imports, `documents.workspaceText`, file input, real upload/download/message implementation, real data, backend/schema/migration/DB/Azure/OpenAPI/CORS/package change, external visibility, CP-SCHEMA-1 readiness, production apply readiness, or Client Portal backend enablement is authorized.

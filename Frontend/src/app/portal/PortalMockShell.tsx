@@ -12,7 +12,13 @@ const portalNavItems = [
 
 export function PortalMockShell({ children, activeHref = "/portal" }: { children: ReactNode; activeHref?: string }) {
   return (
-    <main className="min-h-screen bg-[var(--adm-ivory-50)] text-[var(--adm-text)]">
+    <div className="min-h-screen bg-[var(--adm-ivory-50)] text-[var(--adm-text)]">
+      <a
+        href="#portal-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-full focus:bg-[var(--adm-green-950)] focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white focus:shadow-lg"
+      >
+        Ugrás a portál tartalmára
+      </a>
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
         <header className="rounded-[28px] border border-[var(--adm-border)] bg-white/95 px-4 py-4 shadow-[var(--adm-shadow-md)] sm:px-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -20,9 +26,9 @@ export function PortalMockShell({ children, activeHref = "/portal" }: { children
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--adm-text-muted)]">
                 Ügyfélportál előnézet
               </p>
-              <h1 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[var(--adm-green-950)]">
+              <p className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[var(--adm-green-950)]">
                 Biztonságos, szintetikus ügyféloldali előnézet
-              </h1>
+              </p>
             </div>
             <nav aria-label="Ügyfélportál mock navigáció" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
               {portalNavItems.map((item) => {
@@ -47,15 +53,20 @@ export function PortalMockShell({ children, activeHref = "/portal" }: { children
           </div>
         </header>
         <PortalMockNotice />
-        {children}
+        <main id="portal-content" className="flex flex-col gap-6" tabIndex={-1}>
+          {children}
+        </main>
       </div>
-    </main>
+    </div>
   );
 }
 
 export function PortalMockNotice() {
   return (
-    <aside className="rounded-2xl border border-[rgba(253,158,2,0.42)] bg-[rgba(253,158,2,0.12)] px-4 py-3 text-sm leading-6 text-[var(--adm-blue-950)] shadow-sm">
+    <aside
+      aria-label="Fejlesztési előnézet biztonsági jelzés"
+      className="rounded-2xl border border-[rgba(253,158,2,0.42)] bg-[rgba(253,158,2,0.12)] px-4 py-3 text-sm leading-6 text-[var(--adm-blue-950)] shadow-sm"
+    >
       <strong>Fejlesztési előnézet — szintetikus adatokkal.</strong> Az ügyfélportál backendje nincs engedélyezve.
       Ez az előnézet nem végez API-hívást, nem fogad beküldést, és nem jelenít meg valós ügyfél-, ügy- vagy dokumentumadatot.
     </aside>
@@ -74,9 +85,9 @@ export function PortalPageHero({
   return (
     <section className="rounded-[32px] border border-[var(--adm-border)] bg-white p-6 shadow-[var(--adm-shadow-shell)] sm:p-8">
       <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--adm-blue-700)]">{eyebrow}</p>
-      <h2 className="mt-4 max-w-4xl text-4xl font-semibold tracking-[-0.045em] text-[var(--adm-green-950)] sm:text-5xl">
+      <h1 className="mt-4 max-w-4xl text-4xl font-semibold tracking-[-0.045em] text-[var(--adm-green-950)] sm:text-5xl">
         {title}
-      </h2>
+      </h1>
       <p className="mt-5 max-w-3xl text-base leading-7 text-[var(--adm-text-muted)]">{description}</p>
     </section>
   );
@@ -86,15 +97,17 @@ export function SectionHeader({
   eyebrow,
   title,
   description,
+  titleId,
 }: {
   eyebrow: string;
   title: string;
   description: string;
+  titleId?: string;
 }) {
   return (
     <div>
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--adm-text-soft)]">{eyebrow}</p>
-      <h2 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-[var(--adm-green-950)]">{title}</h2>
+      <h2 id={titleId} className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-[var(--adm-green-950)]">{title}</h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--adm-text-muted)]">{description}</p>
     </div>
   );
@@ -109,6 +122,7 @@ export function DisabledMockButton({ label }: { label: string }) {
     <button
       type="button"
       disabled
+      aria-disabled="true"
       className="rounded-full border border-dashed border-[var(--adm-border-strong)] bg-white/80 px-4 py-2 text-sm font-semibold text-[var(--adm-text-muted)] shadow-sm disabled:cursor-not-allowed disabled:opacity-80"
     >
       {label}

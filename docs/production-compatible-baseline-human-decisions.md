@@ -597,3 +597,10 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - The checkpoint confirms Client Portal remains mock frontend plus disabled backend skeleton only; it is not live, not DB-backed, not externally visible, not API-integrated, not production-enabled, and not CP-SCHEMA-1 ready.
 - No enablement, schema change, migration, DB access, Prisma business access, frontend API integration, backend API implementation, external visibility, OpenAPI/CORS exposure, Azure change, upload/download/message implementation, CP-SCHEMA-1 readiness, or production apply readiness is authorized.
 - Safest next candidate, if work continues, is `CLIENT-PORTAL-MOCK-FRONTEND-ACCESSIBILITY-PASS-1` because it remains frontend-only and avoids API/schema risk.
+
+## 44. Client Portal mock frontend accessibility pass
+
+- `CLIENT-PORTAL-MOCK-FRONTEND-ACCESSIBILITY-PASS-1` improved accessibility and responsive review quality of the static/mock Client Portal route tree.
+- It remains frontend-only, synthetic-only, typed against frontend-local Portal V1 DTO types, and API-free.
+- No backend API calls, internal API imports, `documents.workspaceText`, file input, real form action, active upload/download/message implementation, real client/case/document data, backend/schema/migration/DB/Prisma business access, Azure change, OpenAPI/CORS change, package change, auth change, or production behavior change was made.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; CP-SCHEMA-1 and production apply remain **blocked**.

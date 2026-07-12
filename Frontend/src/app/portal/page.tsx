@@ -15,32 +15,33 @@ import { PortalMockShell } from "./PortalMockShell";
 export default function ClientPortalMockPage() {
   return (
     <PortalMockShell activeHref="/portal">
-        <section id="figyelem" className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+        <section id="figyelem" aria-labelledby="portal-attention-title" className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
           <PortalHomeAttentionPanel />
           <PortalResponsibleLawyerCard />
         </section>
 
         <PortalHero />
 
-        <section id="ugyek" className="space-y-4">
+        <section id="ugyek" aria-labelledby="portal-matters-title" className="space-y-4">
           <SectionHeader
             eyebrow="Ügyeim"
             title="Ügyfélnek szánt áttekintés"
+            titleId="portal-matters-title"
             description="A valódi portál később kizárólag külön jogosultsággal megosztott ügyeket mutathat; ez az előnézet szintetikus adatokat használ."
           />
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div role="list" className="grid gap-4 lg:grid-cols-3">
             {mockMatters.map((matter) => (
               <PortalMatterCard key={matter.externalId} matter={matter} />
             ))}
           </div>
         </section>
 
-        <section id="dokumentumok" className="grid gap-4 xl:grid-cols-[1fr_0.75fr]">
+        <section id="dokumentumok" aria-labelledby="portal-documents-title" className="grid gap-4 xl:grid-cols-[1fr_0.75fr]">
           <PortalSharedDocumentList documents={mockDocuments} />
           <PortalSafeUpdateTimeline updates={mockSafeUpdates} />
         </section>
 
-        <section id="feltoltesek" className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
+        <section id="feltoltesek" aria-labelledby="portal-uploads-title" className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
           <PortalUploadRequestList uploadRequests={mockUploadRequests} />
           <PortalDeferredPanel />
         </section>
@@ -56,9 +57,9 @@ function PortalHero() {
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--adm-blue-700)]">
             Ügyfélportál előnézet
           </p>
-          <h2 className="mt-4 max-w-3xl text-4xl font-semibold tracking-[-0.045em] text-[var(--adm-green-950)] sm:text-5xl">
+          <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-[-0.045em] text-[var(--adm-green-950)] sm:text-5xl">
             Egy helyen a biztonságosan megosztott ügyállapot, teendő és dokumentum-metaadat.
-          </h2>
+          </h1>
           <p className="mt-5 max-w-2xl text-base leading-7 text-[var(--adm-text-muted)]">
             Ez a mock shell azt mutatja meg, hogyan nézhet ki egy későbbi ügyfélportál úgy, hogy közben nem nyit meg
             belső ügyvédi munkafelületet, nyers dokumentumtartalmat vagy nem jóváhagyott adatot.
@@ -94,6 +95,7 @@ function PortalHomeAttentionPanel() {
       <SectionHeader
         eyebrow="Mi igényel figyelmet?"
         title="Figyelmet igényel"
+        titleId="portal-attention-title"
         description="A legfontosabb minta teendők és határidők vannak elöl. Minden adat szintetikus és inaktív."
       />
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -120,7 +122,7 @@ function PortalMatterCard({ matter }: { matter: PortalMatterListItemDto }) {
   const uploadCount = mockUploadRequests.filter((request) => request.matterTitle === matter.title).length;
 
   return (
-    <article className="flex min-h-[270px] flex-col rounded-3xl border border-[var(--adm-border)] bg-white p-5 shadow-[var(--adm-shadow-md)]">
+    <article role="listitem" className="flex min-h-[270px] flex-col rounded-3xl border border-[var(--adm-border)] bg-white p-5 shadow-[var(--adm-shadow-md)]">
       <div className="flex items-start justify-between gap-3">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-soft)]">{matter.externalId}</p>
         <PortalMatterStatusBadge status={matter.status} />
@@ -168,9 +170,10 @@ function PortalSharedDocumentList({ documents }: { documents: PortalDocumentList
       <SectionHeader
         eyebrow="Dokumentumok"
         title="Megosztott dokumentum-metaadatok"
+        titleId="portal-documents-title"
         description="Csak cím, típus, ügycímke és megosztási dátum látható. Nincs letöltés, nincs nyers tartalom, nincs tárhelyútvonal."
       />
-      <div className="mt-5 space-y-3">
+      <div role="list" className="mt-5 space-y-3">
         {documents.map((document) => (
           <PortalDocumentCard key={`${document.title}-${document.sharedAt}`} document={document} />
         ))}
@@ -181,7 +184,7 @@ function PortalSharedDocumentList({ documents }: { documents: PortalDocumentList
 
 function PortalDocumentCard({ document }: { document: PortalDocumentListItemDto }) {
   return (
-    <article className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
+    <article role="listitem" className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-soft)]">{document.type}</p>
@@ -210,9 +213,10 @@ function PortalUploadRequestList({ uploadRequests }: { uploadRequests: PortalUpl
       <SectionHeader
         eyebrow="Feltöltési kérések"
         title="Előkészített, de inaktív kérések"
+        titleId="portal-uploads-title"
         description="Az előnézet nem jelenít meg fájlválasztót, nem indít feltöltést, és nem küld adatot sehová."
       />
-      <div className="mt-5 space-y-3">
+      <div role="list" className="mt-5 space-y-3">
         {uploadRequests.map((request) => (
           <PortalUploadRequestCard key={`${request.title}-${request.dueDate}`} request={request} />
         ))}
@@ -223,7 +227,7 @@ function PortalUploadRequestList({ uploadRequests }: { uploadRequests: PortalUpl
 
 function PortalUploadRequestCard({ request }: { request: PortalUploadRequestDto }) {
   return (
-    <article className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
+    <article role="listitem" className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="text-base font-semibold text-[var(--adm-green-950)]">{request.title}</h3>
@@ -325,11 +329,21 @@ function PortalDisabledState({ title, detail }: { title: string; detail: string 
   );
 }
 
-function SectionHeader({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
+function SectionHeader({
+  eyebrow,
+  title,
+  description,
+  titleId,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  titleId?: string;
+}) {
   return (
     <div>
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--adm-text-soft)]">{eyebrow}</p>
-      <h2 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-[var(--adm-green-950)]">{title}</h2>
+      <h2 id={titleId} className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-[var(--adm-green-950)]">{title}</h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--adm-text-muted)]">{description}</p>
     </div>
   );
@@ -349,6 +363,7 @@ function DisabledAction({ label }: { label: string }) {
     <button
       type="button"
       disabled
+      aria-disabled="true"
       className="rounded-full border border-[var(--adm-border)] bg-white/75 px-4 py-2 text-sm font-semibold text-[var(--adm-text-muted)] shadow-sm disabled:cursor-not-allowed disabled:opacity-80"
     >
       {label}

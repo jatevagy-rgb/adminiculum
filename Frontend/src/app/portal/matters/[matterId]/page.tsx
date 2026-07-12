@@ -40,7 +40,7 @@ export default async function PortalMatterDetailMockPage({ params }: { params: P
         description="Ez a részletező nézet csak ügyfélnek szánt státuszt, következő lépést és metaadatot mutat. Nem jelenít meg belső idővonalat, jegyzetet vagy dokumentumtartalmat."
       />
 
-      <section className="grid gap-4 lg:grid-cols-[1fr_0.7fr]">
+      <section aria-label="Ügyféloldali ügyállapot és kapcsolat" className="grid gap-4 lg:grid-cols-[1fr_0.7fr]">
         <article className="rounded-3xl border border-[var(--adm-border)] bg-white p-5 shadow-[var(--adm-shadow-md)]">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-soft)]">{matter.externalId}</p>
@@ -80,19 +80,20 @@ export default async function PortalMatterDetailMockPage({ params }: { params: P
         </article>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section aria-label="Kapcsolódó dokumentumok és feltöltési kérések" className="grid gap-4 lg:grid-cols-2">
         <article className="rounded-3xl border border-[var(--adm-border)] bg-white p-5 shadow-[var(--adm-shadow-md)]">
           <SectionHeader
             eyebrow="Megosztott dokumentumok"
             title="Metaadatok, tartalom nélkül"
+            titleId="portal-matter-documents-title"
             description="Nincs letöltés, nincs előnézet, nincs tárhelyútvonal."
           />
-          <div className="mt-5 space-y-3">
+          <div role="list" aria-labelledby="portal-matter-documents-title" className="mt-5 space-y-3">
             {relatedDocuments.length === 0 ? (
               <MockEmptyState title="Nincs megosztott dokumentum" detail="Ez is szintetikus üres állapot, backend lekérdezés nélkül." />
             ) : (
               relatedDocuments.map((document) => (
-                <div key={document.title} className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
+                <div key={document.title} role="listitem" className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
                   <p className="text-sm font-semibold text-[var(--adm-green-950)]">{document.title}</p>
                   <p className="mt-1 text-xs text-[var(--adm-text-muted)]">{document.type} · megosztva: {document.sharedAt}</p>
                   <p className="mt-2 text-xs font-semibold text-[var(--adm-text-soft)]">{document.status}</p>
@@ -106,14 +107,15 @@ export default async function PortalMatterDetailMockPage({ params }: { params: P
           <SectionHeader
             eyebrow="Feltöltési kérések"
             title="Inaktív minta teendők"
+            titleId="portal-matter-uploads-title"
             description="Nincs fájlválasztó, nincs adatküldés."
           />
-          <div className="mt-5 space-y-3">
+          <div role="list" aria-labelledby="portal-matter-uploads-title" className="mt-5 space-y-3">
             {relatedUploads.length === 0 ? (
               <MockEmptyState title="Nincs aktív minta feltöltés" detail="A shell nem kapcsolódik a backendhez." />
             ) : (
               relatedUploads.map((request) => (
-                <div key={request.title} className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
+                <div key={request.title} role="listitem" className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
                   <p className="text-sm font-semibold text-[var(--adm-green-950)]">{request.title}</p>
                   <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Határidő: {request.dueDate}</p>
                   <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Elfogadott típusok később: {request.allowedFileTypes}</p>
