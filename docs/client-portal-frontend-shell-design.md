@@ -283,6 +283,18 @@ That package must remain frontend-only, disabled/default-off, synthetic-data-onl
   inactive upload request list without real data, backend calls, internal API imports,
   upload/download implementation, messages, or document-content preview.
 
+## Follow-up — CLIENT-PORTAL-FRONTEND-MOCK-ROUTES-SAFETY-CLOSEOUT-1
+
+- `CLIENT-PORTAL-FRONTEND-MOCK-ROUTES-SAFETY-CLOSEOUT-1` completed a safety closeout for
+  `/portal`, `/portal/matters`, `/portal/matters/[matterId]`, `/portal/documents`, and
+  `/portal/uploads`.
+- The closeout confirmed no `fetch(`, no `@/lib/api`, no internal workflow component
+  imports, no `workspaceText`, no file input, no form submission, no active
+  upload/download/message behavior, and no internal app navigation links in the mock
+  route tree.
+- Client Portal backend remains disabled/quarantined; external visibility remains
+  unauthorized; CP-SCHEMA-1 and production apply remain blocked.
+
 ## Final Decision Statement
 
 This design does not implement a frontend shell. Client Portal remains quarantined. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO. External visibility remains unauthorized. The runtime skeleton remains disabled. No schema migration is authorized. No frontend route or component is authorized by this document.

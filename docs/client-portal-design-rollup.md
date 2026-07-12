@@ -294,6 +294,13 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - The subroutes use synthetic mock data only and share the same no-API, no-backend-enable, no-real-data posture as `/portal`.
 - They do not authorize backend implementation, schema changes, migrations, CP-SCHEMA-1, production apply, external visibility, real upload/download, or document-content display.
 
+## Follow-up — CLIENT-PORTAL-FRONTEND-MOCK-ROUTES-SAFETY-CLOSEOUT-1
+
+- `CLIENT-PORTAL-FRONTEND-MOCK-ROUTES-SAFETY-CLOSEOUT-1` reviewed the static/mock route tree:
+  `/portal`, `/portal/matters`, `/portal/matters/[matterId]`, `/portal/documents`, and `/portal/uploads`.
+- The route tree remains frontend-only, synthetic-data-only, API-free, and disconnected from internal case/document/task APIs.
+- The closeout confirmed no backend/schema/migration/DB/Azure/auth/OpenAPI/CORS changes, no backend enablement, no external visibility authorization, no CP-SCHEMA-1 readiness, and no production apply readiness.
+
 ## Non-actions
 
 - No runtime changed.

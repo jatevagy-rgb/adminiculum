@@ -528,3 +528,16 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
   auth changes, real upload/download, message implementation, or Client Portal enablement.
 - External visibility remains unauthorized; the current Client Portal backend remains
   disabled/quarantined; CP-SCHEMA-1 and production apply remain **blocked**.
+
+## 37. Client Portal frontend mock routes safety closeout
+
+- `CLIENT-PORTAL-FRONTEND-MOCK-ROUTES-SAFETY-CLOSEOUT-1` reviewed the static/mock Client
+  Portal route tree: `/portal`, `/portal/matters`, `/portal/matters/[matterId]`,
+  `/portal/documents`, and `/portal/uploads`.
+- The route tree remains frontend-only and synthetic-only, with no backend API calls,
+  no internal API imports, no `workspaceText`, no real client/case/document data, no file
+  input, no real form submission, no active upload/download/message behavior, and no
+  internal app navigation links.
+- No backend/schema/migration/DB/Azure/auth/OpenAPI/CORS changes were made or authorized.
+- Client Portal backend remains disabled/quarantined; external visibility remains
+  unauthorized; CP-SCHEMA-1 and production apply remain **blocked**.
