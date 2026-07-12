@@ -541,3 +541,15 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - No backend/schema/migration/DB/Azure/auth/OpenAPI/CORS changes were made or authorized.
 - Client Portal backend remains disabled/quarantined; external visibility remains
   unauthorized; CP-SCHEMA-1 and production apply remain **blocked**.
+
+## 38. Client Portal runtime skeleton hardening
+
+- `CLIENT-PORTAL-RUNTIME-SKELETON-HARDEN-1` created a disabled-only backend module
+  boundary under `Backend/src/modules/client-portal`.
+- The backend remains disabled/quarantined and auth-first. Authenticated requests still
+  return `501 CLIENT_PORTAL_NOT_ENABLED` before Prisma/service access.
+- `ENABLE_CLIENT_PORTAL` alone remains insufficient, and the ownership-model flag alone
+  is not enough without the explicit runtime-readiness gate.
+- No schema, migration, DB, Prisma business access, frontend API integration, external
+  visibility, OpenAPI/CORS exposure, Azure change, CP-SCHEMA-1 readiness, production
+  apply readiness, upload/download, or message implementation is authorized.

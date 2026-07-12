@@ -301,6 +301,18 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - The route tree remains frontend-only, synthetic-data-only, API-free, and disconnected from internal case/document/task APIs.
 - The closeout confirmed no backend/schema/migration/DB/Azure/auth/OpenAPI/CORS changes, no backend enablement, no external visibility authorization, no CP-SCHEMA-1 readiness, and no production apply readiness.
 
+## Follow-up — CLIENT-PORTAL-RUNTIME-SKELETON-HARDEN-1
+
+- `CLIENT-PORTAL-RUNTIME-SKELETON-HARDEN-1` created the disabled backend module boundary
+  for the Client Portal skeleton.
+- The backend remains auth-first, disabled/quarantined, and unavailable with
+  `501 CLIENT_PORTAL_NOT_ENABLED` for authenticated requests before any Prisma or service
+  access.
+- `ENABLE_CLIENT_PORTAL` alone remains insufficient; ownership-model readiness is also
+  not enough without the explicit runtime-readiness gate.
+- No frontend API integration, real portal data access, schema/migration/DB changes,
+  external visibility, CP-SCHEMA-1 readiness, or production apply readiness is authorized.
+
 ## Non-actions
 
 - No runtime changed.

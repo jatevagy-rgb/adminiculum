@@ -230,6 +230,18 @@ Use this only if a human explicitly authorizes code changes while the portal rem
   disabled/quarantined. No runtime, frontend, schema, migration, DB, Azure, OpenAPI/CORS,
   auth, or Client Portal enablement is authorized.
 
+## Follow-up — CLIENT-PORTAL-RUNTIME-SKELETON-HARDEN-1
+
+- `CLIENT-PORTAL-RUNTIME-SKELETON-HARDEN-1` implemented a disabled-only backend module
+  boundary under `Backend/src/modules/client-portal`.
+- The legacy `Backend/src/routes/clientPortal.ts` remains as a compatibility re-export.
+- The backend remains disabled/quarantined. `ENABLE_CLIENT_PORTAL=true` alone remains
+  insufficient, and `ENABLE_CLIENT_PORTAL_OWNERSHIP_MODEL=true` also remains insufficient
+  without an explicit runtime-readiness gate.
+- No schema, migration, DB, Prisma business access, frontend API integration, OpenAPI/CORS
+  exposure, upload/download/message implementation, external visibility, CP-SCHEMA-1
+  readiness, or production apply readiness is authorized.
+
 ## Final Decision Statement
 
 No runtime skeleton changes are made or authorized by this document. Client Portal is not enabled. Client Portal remains quarantined. CP-SCHEMA-1 remains blocked. Production apply remains NO-GO. External visibility remains unauthorized. The runtime skeleton remains disabled. No schema migration is authorized.

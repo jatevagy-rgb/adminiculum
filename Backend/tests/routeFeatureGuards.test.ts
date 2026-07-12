@@ -169,6 +169,7 @@ describe('database foundation route guards', () => {
     delete process.env.ENABLE_HANDOFF_PACKAGES;
     delete process.env.ENABLE_CLIENT_PORTAL;
     delete process.env.ENABLE_CLIENT_PORTAL_OWNERSHIP_MODEL;
+    delete process.env.ENABLE_CLIENT_PORTAL_RUNTIME_READY;
     delete process.env.ENABLE_RUNTIME_ADMIN_ROUTES;
 
     (prisma.communication.findMany as jest.Mock).mockResolvedValue([]);
@@ -737,6 +738,22 @@ describe('database foundation route guards', () => {
       reason: 'CLIENT_PORTAL_NOT_ENABLED',
     });
     expect(prisma.case.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('client portal remains unavailable when portal and ownership flags are true without runtime readiness', async () => {
+    process.env.ENABLE_CLIENT_PORTAL = 'true';
+    process.env.ENABLE_CLIENT_PORTAL_OWNERSHIP_MODEL = 'true';
+
+    const response = await requestJson(createApp(), 'GET', '/client-portal/export/client-1', true);
+
+    expect(response.status).toBe(501);
+    expect(response.body).toMatchObject({
+      code: 'FEATURE_NOT_AVAILABLE',
+      feature: 'CLIENT_PORTAL',
+      reason: 'CLIENT_PORTAL_NOT_ENABLED',
+    });
+    expect(prisma.case.findUnique).not.toHaveBeenCalled();
+    expect(prisma.lawyerHandoffPackage.findMany).not.toHaveBeenCalled();
   });
 
   it('spoofed x-user-id header cannot bypass client portal authentication', async () => {

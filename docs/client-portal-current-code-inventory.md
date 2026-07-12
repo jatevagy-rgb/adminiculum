@@ -195,6 +195,18 @@ External visibility remains unauthorized.
 - Existing code remains a disabled/quarantined skeleton. No runtime, schema, frontend,
   OpenAPI, CORS, Azure, DB, auth, or feature behavior change is authorized.
 
+## Follow-up — CLIENT-PORTAL-RUNTIME-SKELETON-HARDEN-1
+
+- `CLIENT-PORTAL-RUNTIME-SKELETON-HARDEN-1` moved the disabled backend skeleton into
+  `Backend/src/modules/client-portal` while preserving the existing mount path.
+- The current route remains auth-first and disabled/quarantined. `ENABLE_CLIENT_PORTAL`
+  alone remains insufficient, and ownership-model readiness alone still does not make
+  the route live.
+- Tests continue proving unauthenticated `401`, authenticated disabled `501`, spoof
+  protection, flag-alone insufficiency, and no Prisma business access while disabled.
+- No schema, migration, DB access, frontend API integration, external visibility,
+  CP-SCHEMA-1 readiness, or production apply readiness is authorized.
+
 ## Non-actions
 
 - No runtime changed.

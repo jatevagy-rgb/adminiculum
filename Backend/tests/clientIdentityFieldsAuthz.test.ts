@@ -134,6 +134,7 @@ describe('client identity field authorization and exposure', () => {
     jest.clearAllMocks();
     delete process.env.ENABLE_CLIENT_PORTAL;
     delete process.env.ENABLE_CLIENT_PORTAL_OWNERSHIP_MODEL;
+    delete process.env.ENABLE_CLIENT_PORTAL_RUNTIME_READY;
   });
 
   it('rejects unauthenticated client detail before identity fields can be read', async () => {
