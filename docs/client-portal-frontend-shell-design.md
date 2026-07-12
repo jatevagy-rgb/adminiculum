@@ -329,3 +329,11 @@ This design does not implement a frontend shell. Client Portal remains quarantin
 - The mock shell now has more consistent navigation, active-route affordance, clearer synthetic-data notice, improved matter/document/upload card hierarchy, metadata counts, and clearer disabled/deferred action copy.
 - The route tree remains frontend-only, synthetic-data-only, typed against frontend-local Portal V1 DTO types, and API-free.
 - No backend API calls, internal API imports, backend/schema/migration/DB/Prisma business access, OpenAPI/CORS exposure, Azure change, upload/download/message implementation, external visibility, CP-SCHEMA-1 readiness, production apply readiness, or Client Portal backend enablement is authorized.
+
+## Closeout — CLIENT-PORTAL-FRONTEND-MOCK-UX-CLOSEOUT-1
+
+- `CLIENT-PORTAL-FRONTEND-MOCK-UX-CLOSEOUT-1` reviewed the polished static/mock Client Portal route tree after `99b4da8`.
+- The route tree remains frontend-only, synthetic-only, typed against frontend-local Portal V1 DTO types, and API-free.
+- No backend API calls, internal API imports, `documents.workspaceText`, file input, real form action, active upload/download/message implementation, or real client/case/document data were introduced.
+- No backend/schema/migration/DB/Prisma business access, Azure, OpenAPI/CORS, package, auth, or production behavior change was made.
+- Client Portal backend remains disabled/quarantined, external visibility remains unauthorized, and CP-SCHEMA-1 plus production apply remain blocked.

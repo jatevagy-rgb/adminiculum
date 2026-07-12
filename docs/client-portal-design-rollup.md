@@ -359,3 +359,9 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - The static/mock Client Portal route tree was polished for client-facing clarity: shared shell/navigation, active-route affordance, improved responsive card hierarchy, safer unavailable states, and clearer disabled upload/download/message copy.
 - It remains frontend-only and synthetic-data-only, and continues to use frontend-local Portal V1 DTO types.
 - No backend API implementation, frontend API integration, `fetch`, internal API import, schema/migration/DB change, Prisma business access, upload/download/message implementation, OpenAPI/CORS exposure, Azure change, external visibility, CP-SCHEMA-1 readiness, production apply readiness, or Client Portal enablement is authorized.
+
+## Closeout — CLIENT-PORTAL-FRONTEND-MOCK-UX-CLOSEOUT-1
+
+- The polished static/mock Client Portal route tree was safety-reviewed after `CLIENT-PORTAL-FRONTEND-MOCK-UX-POLISH-1`.
+- `/portal`, `/portal/matters`, `/portal/matters/[matterId]`, `/portal/documents`, and `/portal/uploads` remain frontend-only, synthetic-only, DTO-typed, and disconnected from backend/internal APIs.
+- No `fetch`, `@/lib/api`, internal app API import, `workspaceText`, file input, real upload/download/message behavior, real data, backend/schema/migration/DB/Azure/OpenAPI/CORS/package change, CP-SCHEMA-1 readiness, production apply readiness, external visibility, or Client Portal enablement is authorized.
