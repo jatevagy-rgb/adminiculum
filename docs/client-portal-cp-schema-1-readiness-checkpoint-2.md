@@ -173,3 +173,17 @@ exact decisions and no-go gates for a human decision.
 - **No DB-backed portal exists.**
 - Client Portal remains **inert**.
 - Production apply remains **NO-GO**.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-APPROVAL-AND-NONAPPLIED-PRISMA-DRAFT-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-APPROVAL-AND-NONAPPLIED-PRISMA-DRAFT-1` created the Gate 1/2
+  materials: the **human approval packet**
+  (`docs/client-portal-cp-schema-1-human-approval-packet.md`), the **non-applied Prisma
+  draft** (`docs/client-portal-cp-schema-1-prisma-draft-nonapplied.md`, markdown-only,
+  not `schema.prisma`, not a migration), the **risk register**
+  (`docs/client-portal-cp-schema-1-risk-register.md`), and the **gate plan**
+  (`docs/client-portal-cp-schema-1-next-gates.md`).
+- **No schema/migration is authorized.** The draft flags the legacy candidate block
+  name collisions (`ClientPortalUser`/`ClientPortalAuditEvent` and three enums) as a
+  required pre-patch human decision. CP-SCHEMA-1 remains blocked; production apply
+  remains NO-GO.

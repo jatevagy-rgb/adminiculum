@@ -308,3 +308,12 @@ Reason: before any schema implementation, model naming/semantics must be frozen.
   readiness gates, production-apply blockers). Conclusion: better prepared but
   **CP-SCHEMA-1 still blocked**; **no schema/migration authorized**; production apply
   remains NO-GO.
+
+## Follow-up — CLIENT-PORTAL-CP-SCHEMA-1-APPROVAL-AND-NONAPPLIED-PRISMA-DRAFT-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-APPROVAL-AND-NONAPPLIED-PRISMA-DRAFT-1` created a
+  **non-applied Prisma draft as documentation only**
+  (`docs/client-portal-cp-schema-1-prisma-draft-nonapplied.md`) plus the human approval
+  packet, risk register, and gate plan. **The draft exists only inside markdown — the
+  migration is still not authorized**, no `schema.prisma` edit was made, and CP-SCHEMA-1
+  remains blocked; production apply remains NO-GO.

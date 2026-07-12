@@ -291,3 +291,9 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 - `CLIENT-PORTAL-CP-SCHEMA-1-READINESS-CHECKPOINT-2` created `docs/client-portal-cp-schema-1-readiness-checkpoint-2.md`, consolidating all pre-schema planning (completed decisions, frozen naming/fields/enums/refs/relations, inert baseline, unresolved items, migration readiness gates, production-apply blockers). Conclusion: better prepared, **but CP-SCHEMA-1 still not authorized**.
 - **A CP-SCHEMA-1 readiness checkpoint exists; there is still no DB-backed portal** — no `schema.prisma` edit, no migration, no DB. The inert shell is unchanged.
 - Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## Package — CLIENT-PORTAL-CP-SCHEMA-1-APPROVAL-AND-NONAPPLIED-PRISMA-DRAFT-1
+
+- `CLIENT-PORTAL-CP-SCHEMA-1-APPROVAL-AND-NONAPPLIED-PRISMA-DRAFT-1` created the CP-SCHEMA-1 approval package: **human approval packet, non-applied Prisma draft (markdown-only), risk register, and next-gates plan**.
+- **The approval packet / non-applied draft / risk register / gates exist; there is still no DB-backed portal** — no `schema.prisma` edit, no migration, no DB, no generated Prisma artifact. The inert shell is unchanged.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
