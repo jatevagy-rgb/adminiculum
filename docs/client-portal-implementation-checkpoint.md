@@ -243,3 +243,9 @@ Client Portal has a mock frontend and disabled backend skeleton. It remains non-
 - `CLIENT-PORTAL-INERT-API-SHELL-CHECKPOINT-1` created `docs/client-portal-inert-api-shell-checkpoint.md`, recording the current **inert API shell**.
 - The three layers — frontend mock shell, inert backend route matrix, and fail-closed backend service stubs — are all present, with DTO/mappers unwired. **There is no live portal**: routes stay `401`/`501 CLIENT_PORTAL_NOT_ENABLED`, stubs fail closed, and no route calls a service, mapper, or Prisma.
 - No runtime/frontend/schema/migration/DB change was made. Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.
+
+## Design — CLIENT-PORTAL-AUTHZ-STUB-DESIGN-2
+
+- `CLIENT-PORTAL-AUTHZ-STUB-DESIGN-2` created `docs/client-portal-authz-stub-design-2.md`, an **authz/principal boundary design** for the future `authorization.ts` module (principal concept, module shape, authorization order, grant-check functions, content-free errors, non-enumeration rule, tests).
+- **No runtime authz implementation exists** — no `authorization.ts`, no route/service wiring, no schema/migration, no DB. The inert shell is unchanged: routes stay `401`/`501 CLIENT_PORTAL_NOT_ENABLED`.
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked**.

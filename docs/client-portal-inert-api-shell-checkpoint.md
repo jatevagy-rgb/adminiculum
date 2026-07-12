@@ -154,3 +154,11 @@ authz/principal boundary design that can later sit between routes and services.
 - It is **not externally visible**.
 - CP-SCHEMA-1 remains **blocked**.
 - Production apply remains **NO-GO**.
+
+## Follow-up — CLIENT-PORTAL-AUTHZ-STUB-DESIGN-2
+
+- `CLIENT-PORTAL-AUTHZ-STUB-DESIGN-2` created `docs/client-portal-authz-stub-design-2.md`,
+  designing the future portal principal/grant boundary. **The authz stub design exists,
+  but there is still no authz module** (`authorization.ts` was not created) and no
+  route/service wiring. The inert shell is unchanged: routes stay `401`/`501
+  CLIENT_PORTAL_NOT_ENABLED`. CP-SCHEMA-1 remains blocked; production apply remains NO-GO.

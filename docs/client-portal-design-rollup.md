@@ -434,3 +434,9 @@ Client Portal V1 is designed, not implemented. Client Portal remains disabled/qu
 - `CLIENT-PORTAL-INERT-API-SHELL-CHECKPOINT-1` created `docs/client-portal-inert-api-shell-checkpoint.md`, checkpointing the three inert layers (frontend mock shell, inert backend route matrix, fail-closed service stubs; DTO/mappers unwired).
 - **The inert API shell exists and does not change the no-go posture.** No runtime/frontend/schema/migration/DB change; routes stay `401`/`501 CLIENT_PORTAL_NOT_ENABLED`.
 - Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
+## Design — CLIENT-PORTAL-AUTHZ-STUB-DESIGN-2
+
+- `CLIENT-PORTAL-AUTHZ-STUB-DESIGN-2` created `docs/client-portal-authz-stub-design-2.md`, designing the future portal principal/grant-check boundary (conceptual `authorization.ts`, authorization order, grant-check functions, content-free errors, non-enumeration).
+- **The authz stub design exists and does not change the no-go posture.** No `authorization.ts`, no route/service wiring, no schema/migration/DB change.
+- Client Portal remains non-live, mock-only on the frontend and disabled on the backend; external visibility remains unauthorized; CP-SCHEMA-1 remains blocked; production apply remains NO-GO.

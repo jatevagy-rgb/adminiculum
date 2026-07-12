@@ -660,3 +660,9 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - `CLIENT-PORTAL-INERT-API-SHELL-CHECKPOINT-1` completed a docs-only checkpoint (`docs/client-portal-inert-api-shell-checkpoint.md`) of the current inert Client Portal API shell: frontend mock shell + inert backend route matrix + fail-closed service stubs (DTO/mappers unwired). Backend tests are 21 suites / 229 tests.
 - **The shell is not a live portal.** Routes remain `401`/`501 CLIENT_PORTAL_NOT_ENABLED`; service stubs fail closed; no route calls a service, mapper, or Prisma; DTOs/mappers are not route-wired.
 - **No runtime enablement, schema, migration, DB, frontend API integration, external visibility, CP-SCHEMA-1, or production apply is authorized.** Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked (NO-GO)**.
+
+## 54. Client Portal authz stub design 2
+
+- `CLIENT-PORTAL-AUTHZ-STUB-DESIGN-2` completed a docs-only design of the future Client Portal authorization/principal boundary (`docs/client-portal-authz-stub-design-2.md`): the `PortalPrincipal` concept, the conceptual `authorization.ts` module shape (`resolvePortalPrincipal`, `requireActivePortalUser`, `requirePortal*Access`, fail-closed error types), the authorization order, grant-check functions, content-free errors, the non-enumeration rule, candidate schema dependencies, and required future tests.
+- **No authorization implementation, route wiring, service wiring, schema, migration, DB, frontend API integration, external visibility, CP-SCHEMA-1, or production apply is authorized.** No `authorization.ts` was created; the inert shell is unchanged (routes stay `401`/`501 CLIENT_PORTAL_NOT_ENABLED`; the triple runtime-ready gate is unchanged).
+- Client Portal backend remains disabled/quarantined; external visibility remains unauthorized; **CP-SCHEMA-1 and production apply remain blocked (NO-GO)**.

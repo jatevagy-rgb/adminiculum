@@ -338,6 +338,18 @@ This design does not implement authorization. Client Portal remains quarantined.
 - No SharePoint/Graph call was made.
 - No export or generation job was run.
 
+## Follow-up — CLIENT-PORTAL-AUTHZ-STUB-DESIGN-2
+
+- `CLIENT-PORTAL-AUTHZ-STUB-DESIGN-2` created `docs/client-portal-authz-stub-design-2.md`,
+  refining the future portal **principal/grant boundary**: the `PortalPrincipal`
+  concept, the conceptual `authorization.ts` module shape (`resolvePortalPrincipal`,
+  `requireActivePortalUser`, `requirePortal*Access`, fail-closed error types), the
+  authorization order, grant-check functions, content-free errors, the
+  non-enumeration rule, candidate schema dependencies, and required future tests.
+- **No implementation is authorized.** No `authorization.ts` was created, no route/
+  service wiring, no schema/migration, no DB. Client Portal remains inert;
+  CP-SCHEMA-1 remains blocked; production apply remains NO-GO.
+
 ## Final classification
 
 `client_portal_authz_model_designed_no_db_change_no_runtime_change`
