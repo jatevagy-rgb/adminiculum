@@ -270,6 +270,7 @@ export async function createTask(data: {
   requiredSkills?: string[];
   dueDate?: Date;
   documentId?: string;
+  sourceCommunicationId?: string;
 }) {
   const prismaTaskType = mapAnyTaskTypeToPrisma((data.taskType as string | undefined) || (data.type as string | undefined));
 
@@ -286,7 +287,8 @@ export async function createTask(data: {
       assignedById: data.assignedBy,
       requiredSkills: data.requiredSkills || TASK_TYPE_SKILLS[prismaTaskType] || [],
       dueDate: data.dueDate,
-      documentId: data.documentId
+      documentId: data.documentId,
+      sourceCommunicationId: data.sourceCommunicationId
     } as any,
     include: {
       case: true,
@@ -354,6 +356,158 @@ export async function getTask(taskId: string) {
  */
 export async function startTask(taskId: string, userId: string) {
   return transitionTask(taskId, userId, 'START');
+}
+
+export class SourceLinkedTaskError extends Error {
+  constructor(public statusCode: number, public code: string, message: string) {
+    super(message);
+    this.name = 'SourceLinkedTaskError';
+  }
+}
+
+const DOCUMENT_TASK_KINDS = new Set(['REVIEW', 'FOLLOW_UP']);
+const COMMUNICATION_TASK_KINDS = new Set(['FOLLOW_UP', 'REVIEW_ATTACHMENT']);
+
+function parseSourceTaskBody(
+  body: unknown,
+  allowedKinds: Set<string>,
+  fallbackTitle: string,
+): { title: string; assigneeId?: string; dueAt?: Date; kind: string } {
+  const payload = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+  for (const forbidden of ['status', 'caseId', 'createdById', 'assignedById', 'description', 'priority', 'content', 'workspaceText']) {
+    if (forbidden in payload) {
+      throw new SourceLinkedTaskError(400, 'UNSUPPORTED_TASK_PAYLOAD_FIELD', `Field ${forbidden} is not accepted for source-linked task creation.`);
+    }
+  }
+
+  const kind = String(payload.kind || '').trim().toUpperCase();
+  if (!kind || !allowedKinds.has(kind)) {
+    throw new SourceLinkedTaskError(400, 'INVALID_SOURCE_TASK_KIND', 'Unsupported source-linked task kind.');
+  }
+
+  let dueAt: Date | undefined;
+  if (payload.dueAt) {
+    const parsed = new Date(String(payload.dueAt));
+    if (Number.isNaN(parsed.getTime())) {
+      throw new SourceLinkedTaskError(400, 'INVALID_DUE_DATE', 'Invalid dueAt value.');
+    }
+    dueAt = parsed;
+  }
+
+  const titleInput = typeof payload.title === 'string' ? payload.title.trim() : '';
+  const assigneeId = typeof payload.assigneeId === 'string' && payload.assigneeId.trim() ? payload.assigneeId.trim() : undefined;
+  return {
+    title: titleInput || fallbackTitle,
+    assigneeId,
+    dueAt,
+    kind,
+  };
+}
+
+function sourceKindToTaskType(kind: string): TaskType {
+  if (kind === 'REVIEW' || kind === 'REVIEW_ATTACHMENT') return TaskType.REVIEW_CONTRACT;
+  return TaskType.OTHER;
+}
+
+export async function createTaskFromDocumentSource(documentId: string, userId: string, body: unknown) {
+  if (!userId) {
+    throw new SourceLinkedTaskError(401, 'NOT_AUTHENTICATED', 'Authenticated user is required.');
+  }
+
+  const document = await prisma.document.findUnique({
+    where: { id: documentId },
+    select: {
+      id: true,
+      caseId: true,
+      name: true,
+      fileName: true,
+      documentType: true,
+    },
+  });
+  if (!document) {
+    throw new SourceLinkedTaskError(404, 'DOCUMENT_NOT_FOUND', 'Document not found.');
+  }
+
+  const parsed = parseSourceTaskBody(body, DOCUMENT_TASK_KINDS, `Dokumentum feldolgozása: ${document.fileName || document.name}`);
+  const task = await createTask({
+    caseId: document.caseId,
+    title: parsed.title,
+    taskType: sourceKindToTaskType(parsed.kind),
+    type: parsed.kind === 'REVIEW' ? 'DOCUMENT_REVIEW' : 'DOCUMENT_FOLLOW_UP',
+    priority: TaskPriority.MEDIUM,
+    assignedTo: parsed.assigneeId,
+    assignedBy: userId,
+    dueDate: parsed.dueAt,
+    documentId: document.id,
+  });
+
+  return {
+    success: true,
+    task: {
+      id: task.id,
+      title: task.title,
+      caseId: task.caseId,
+      documentId: task.documentId,
+      status: task.status,
+      dueDate: task.dueDate ? task.dueDate.toISOString() : null,
+    },
+    source: {
+      type: 'DOCUMENT',
+      id: document.id,
+      caseId: document.caseId,
+    },
+  };
+}
+
+export async function createTaskFromCommunicationSource(communicationId: string, userId: string, body: unknown) {
+  if (!userId) {
+    throw new SourceLinkedTaskError(401, 'NOT_AUTHENTICATED', 'Authenticated user is required.');
+  }
+
+  const communication = await prisma.communication.findUnique({
+    where: { id: communicationId },
+    select: {
+      id: true,
+      caseId: true,
+      subject: true,
+    },
+  });
+  if (!communication) {
+    throw new SourceLinkedTaskError(404, 'COMMUNICATION_NOT_FOUND', 'Communication not found.');
+  }
+  if (!communication.caseId) {
+    throw new SourceLinkedTaskError(409, 'COMMUNICATION_NOT_LINKED_TO_CASE', 'Communication must be linked to a case before creating a task.');
+  }
+
+  const parsed = parseSourceTaskBody(body, COMMUNICATION_TASK_KINDS, `Kommunikáció feldolgozása: ${communication.subject || communication.id}`);
+  const task = await createTask({
+    caseId: communication.caseId,
+    title: parsed.title,
+    taskType: sourceKindToTaskType(parsed.kind),
+    type: parsed.kind === 'REVIEW_ATTACHMENT' ? 'COMMUNICATION_ATTACHMENT_REVIEW' : 'COMMUNICATION_FOLLOW_UP',
+    priority: TaskPriority.MEDIUM,
+    assignedTo: parsed.assigneeId,
+    assignedBy: userId,
+    dueDate: parsed.dueAt,
+    sourceCommunicationId: communication.id,
+  });
+
+  return {
+    success: true,
+    task: {
+      id: task.id,
+      title: task.title,
+      caseId: task.caseId,
+      sourceCommunicationId: task.sourceCommunicationId,
+      status: task.status,
+      dueDate: task.dueDate ? task.dueDate.toISOString() : null,
+    },
+    source: {
+      type: 'COMMUNICATION',
+      id: communication.id,
+      caseId: communication.caseId,
+    },
+  };
 }
 
 /**

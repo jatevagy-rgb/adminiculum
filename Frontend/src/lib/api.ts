@@ -394,7 +394,7 @@ export interface CaseWorkItemCapabilities {
 
 export interface CaseWorkItem {
   id: string;
-  type: 'TASK' | 'REVIEW' | 'HANDOFF';
+  type: 'TASK' | 'REVIEW' | 'HANDOFF' | 'DOCUMENT' | 'COMMUNICATION';
   title: string;
   safeDescription?: string | null;
   status: string;
@@ -462,6 +462,84 @@ export interface CaseWorkItemsResponse {
 
 export async function getCaseWorkItems(caseId: string): Promise<CaseWorkItemsResponse> {
   return fetchApi<CaseWorkItemsResponse>(`/cases/${caseId}/work-items`);
+}
+
+export interface CaseActivityItem {
+  id: string;
+  kind: 'TASK' | 'DOCUMENT' | 'COMMUNICATION' | 'TIMELINE';
+  source: 'tasks' | 'documents' | 'communications' | 'timeline_events';
+  title: string;
+  safeDescription: string | null;
+  occurredAt: string;
+  caseId: string;
+  documentId?: string | null;
+  communicationId?: string | null;
+  taskId?: string | null;
+  href?: string | null;
+  meta: {
+    status?: string | null;
+    type?: string | null;
+    attachmentCount?: number;
+    sourceTaskCount?: number;
+  };
+}
+
+export interface CaseActivityResponse {
+  caseId: string;
+  generatedAt: string;
+  pagination: {
+    limit: number;
+    offset: number;
+    returned: number;
+  };
+  items: CaseActivityItem[];
+  privacy: {
+    rawDocumentTextIncluded: false;
+    rawCommunicationBodyIncluded: false;
+    attachmentBytesIncluded: false;
+  };
+}
+
+export async function getCaseActivity(caseId: string): Promise<CaseActivityResponse> {
+  return fetchApi<CaseActivityResponse>(`/cases/${caseId}/activity?limit=30`);
+}
+
+export interface SourceLinkedTaskResponse {
+  success: boolean;
+  task: {
+    id: string;
+    title: string;
+    caseId: string;
+    documentId?: string | null;
+    sourceCommunicationId?: string | null;
+    status: string;
+    dueDate: string | null;
+  };
+  source: {
+    type: 'DOCUMENT' | 'COMMUNICATION';
+    id: string;
+    caseId: string;
+  };
+}
+
+export async function createDocumentSourceTask(
+  documentId: string,
+  data: { kind: 'REVIEW' | 'FOLLOW_UP'; title?: string; assigneeId?: string; dueAt?: string }
+): Promise<SourceLinkedTaskResponse> {
+  return fetchApi<SourceLinkedTaskResponse>(`/documents/${documentId}/tasks`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function createCommunicationSourceTask(
+  communicationId: string,
+  data: { kind: 'FOLLOW_UP' | 'REVIEW_ATTACHMENT'; title?: string; assigneeId?: string; dueAt?: string }
+): Promise<SourceLinkedTaskResponse> {
+  return fetchApi<SourceLinkedTaskResponse>(`/communications/${communicationId}/tasks`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }
 
 // Case Assignment

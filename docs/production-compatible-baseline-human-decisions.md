@@ -742,3 +742,7 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 ## WORKFLOW-CORE-TASKS-HANDOFF-1 decision
 
 Decision: internal KEEP candidate for the production-compatible baseline, limited to existing task, blocker, case-access, and handoff-package metadata fields. Implemented without `schema.prisma` edits, migrations, manual DB queries, production deployment, Client Portal changes, workspace text/raw document/raw communication exposure, or arbitrary frontend status assignment. Unsupported waiting and recipient-specific handoff states were not simulated.
+
+## WORKFLOW-CORE-DOCUMENTS-COMMUNICATIONS-1 Decision Note
+
+The internal lawyer workflow gained safe document/communication metadata handoff surfaces and source-linked task creation. This does not change the production-compatible baseline decision posture: Client Portal and external visibility remain blocked, and document/communication metadata reuse outside internal authenticated case workflows requires a separate privacy/security decision.

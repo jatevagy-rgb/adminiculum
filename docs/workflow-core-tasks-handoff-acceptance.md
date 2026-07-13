@@ -37,3 +37,7 @@
 - [ ] `/litigation-workspace` returns locally.
 - [ ] `/notifications` returns locally.
 - [ ] `/portal` returns locally as inert mock/regression surface only.
+
+## Source-Linked Task Acceptance Link
+
+Additional acceptance for document/communication source-linked tasks is recorded in `docs/workflow-core-documents-communications-acceptance.md`. The task handoff contract remains internal-only and does not create client portal visibility.

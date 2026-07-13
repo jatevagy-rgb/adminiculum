@@ -40,7 +40,8 @@ jest.mock('../src/prisma/prisma.service', () => ({
     task: { findMany: jest.fn(), count: jest.fn() },
     document: { findMany: jest.fn() },
     communication: { findMany: jest.fn() },
-    communicationAttachment: { count: jest.fn() },
+    communicationAttachment: { count: jest.fn(), findMany: jest.fn() },
+    timelineEvent: { findMany: jest.fn() },
     lawyerHandoffPackage: { findMany: jest.fn() },
   },
 }));
@@ -137,6 +138,8 @@ describe('GET /cases/:caseId/work-items', () => {
     (prisma.document.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.communication.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.communicationAttachment.count as jest.Mock).mockResolvedValue(0);
+    (prisma.communicationAttachment.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.timelineEvent.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.lawyerHandoffPackage.findMany as jest.Mock).mockResolvedValue([]);
   });
 
@@ -192,6 +195,42 @@ describe('GET /cases/:caseId/work-items', () => {
     expect(JSON.stringify(response.body)).not.toContain('contentPreview');
   });
 
+  it('includes safe document and communication workbench entries without raw bodies', async () => {
+    (prisma.task.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.document.findMany as jest.Mock).mockResolvedValue([
+      {
+        id: 'doc-1',
+        name: 'Agreement',
+        fileName: 'agreement.docx',
+        documentType: 'CONTRACT',
+        category: 'CONTRACT',
+        createdAt: new Date('2026-07-10T10:00:00.000Z'),
+        updatedAt: new Date('2026-07-12T10:00:00.000Z'),
+      },
+    ]);
+    (prisma.communication.findMany as jest.Mock).mockResolvedValue([
+      {
+        id: 'comm-1',
+        subject: 'Client email',
+        summary: 'Safe summarized communication metadata',
+        type: 'EMAIL',
+        documentId: null,
+        createdAt: new Date('2026-07-11T10:00:00.000Z'),
+        updatedAt: new Date('2026-07-11T10:00:00.000Z'),
+      },
+    ]);
+
+    const response = await requestJson(createApp(), '/cases/case-1/work-items');
+
+    expect(response.status).toBe(200);
+    expect(response.body.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'document-doc-1', type: 'DOCUMENT', title: 'agreement.docx' }),
+      expect.objectContaining({ id: 'communication-comm-1', type: 'COMMUNICATION', title: 'Client email' }),
+    ]));
+    expect(JSON.stringify(response.body)).not.toContain('workspaceText');
+    expect(JSON.stringify(response.body)).not.toContain('Raw message body');
+  });
+
   it('uses bounded explicit selects and no broad includes', async () => {
     (prisma.task.findMany as jest.Mock).mockResolvedValue([]);
 
@@ -219,5 +258,101 @@ describe('GET /cases/:caseId/work-items', () => {
     expect(source).not.toMatch(/include\s*:/);
     expect(source).not.toMatch(/client-portal/i);
     expect(source).not.toMatch(/\.\.\.task[,}]/);
+  });
+});
+
+describe('GET /cases/:caseId/activity', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (prisma.case.findUnique as jest.Mock).mockResolvedValue({ id: 'case-1', assignedLawyerId: 'user-1', createdById: 'creator-1' });
+    (prisma.caseCollaborator.findFirst as jest.Mock).mockResolvedValue(null);
+    (prisma.task.findMany as jest.Mock).mockResolvedValue([
+      {
+        id: 'task-1',
+        title: 'Structured task',
+        description: 'Safe task description',
+        status: 'TODO',
+        taskType: 'OTHER',
+        dueDate: null,
+        createdAt: new Date('2026-07-10T10:00:00.000Z'),
+        updatedAt: new Date('2026-07-10T11:00:00.000Z'),
+        documentId: null,
+        sourceCommunicationId: null,
+      },
+    ]);
+    (prisma.document.findMany as jest.Mock).mockResolvedValue([
+      {
+        id: 'doc-1',
+        name: 'Agreement',
+        fileName: 'agreement.docx',
+        documentType: 'CONTRACT',
+        category: 'CONTRACT',
+        createdAt: new Date('2026-07-11T10:00:00.000Z'),
+        updatedAt: new Date('2026-07-11T11:00:00.000Z'),
+      },
+    ]);
+    (prisma.communication.findMany as jest.Mock).mockResolvedValue([
+      {
+        id: 'comm-1',
+        subject: 'Client email',
+        summary: 'Safe summary only',
+        type: 'EMAIL',
+        documentId: null,
+        createdAt: new Date('2026-07-12T10:00:00.000Z'),
+        updatedAt: new Date('2026-07-12T10:00:00.000Z'),
+      },
+    ]);
+    (prisma.timelineEvent.findMany as jest.Mock).mockResolvedValue([
+      {
+        id: 'timeline-1',
+        eventType: 'DOCUMENT_UPLOADED',
+        type: 'DOCUMENT_UPLOADED',
+        description: 'Document metadata event',
+        createdAt: new Date('2026-07-09T10:00:00.000Z'),
+        documentId: 'doc-1',
+        communicationId: null,
+        taskId: null,
+      },
+    ]);
+    (prisma.communicationAttachment.findMany as jest.Mock).mockResolvedValue([{ communicationId: 'comm-1' }]);
+  });
+
+  it('requires authentication', async () => {
+    const response = await requestJson(createApp(), '/cases/case-1/activity', false);
+    expect(response.status).toBe(401);
+  });
+
+  it('returns unified safe activity with explicit privacy flags', async () => {
+    const response = await requestJson(createApp(), '/cases/case-1/activity?limit=500');
+
+    expect(response.status).toBe(200);
+    expect(response.body.pagination.limit).toBe(50);
+    expect(response.body.privacy).toEqual({
+      rawDocumentTextIncluded: false,
+      rawCommunicationBodyIncluded: false,
+      attachmentBytesIncluded: false,
+    });
+    expect(response.body.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'DOCUMENT', documentId: 'doc-1' }),
+      expect.objectContaining({ kind: 'COMMUNICATION', communicationId: 'comm-1', meta: expect.objectContaining({ attachmentCount: 1 }) }),
+      expect.objectContaining({ kind: 'TASK', taskId: 'task-1' }),
+    ]));
+    expect(JSON.stringify(response.body)).not.toContain('workspaceText');
+    expect(JSON.stringify(response.body)).not.toContain('contentPreview');
+    expect(JSON.stringify(response.body)).not.toContain('spWebUrl');
+  });
+
+  it('supports a safe type filter and avoids broad relation includes', async () => {
+    const response = await requestJson(createApp(), '/cases/case-1/activity?type=document');
+
+    expect(response.status).toBe(200);
+    expect(prisma.document.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({ id: true, fileName: true, documentType: true }),
+      take: 50,
+    }));
+    expect((prisma.document.findMany as jest.Mock).mock.calls[0][0]).not.toHaveProperty('include');
+    expect(prisma.task.findMany).not.toHaveBeenCalled();
+    expect(prisma.communication.findMany).not.toHaveBeenCalled();
+    expect(prisma.timelineEvent.findMany).not.toHaveBeenCalled();
   });
 });

@@ -257,3 +257,7 @@ Follow-up implementation packages only after the privacy model exists:
 ## Final Classification
 
 `documents_workspace_text_privacy_audited_no_db_change_no_runtime_change`
+
+## WORKFLOW-CORE-DOCUMENTS-COMMUNICATIONS-1 Privacy Note
+
+The case activity/workbench extension intentionally avoids `documents.workspaceText`, extracted document text, SharePoint storage paths, and attachment bytes. Document source-linked task creation derives task context from document metadata and case ownership only.

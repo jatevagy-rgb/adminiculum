@@ -23,6 +23,7 @@ import {
   OutlookImportServiceError,
   runOutlookImportDryRun,
 } from './outlookImport.service';
+import { createTaskFromCommunicationSource, SourceLinkedTaskError } from '../tasks/services';
 
 const router = Router();
 const requireCommunicationsFoundation = requireDatabaseFoundation({
@@ -898,6 +899,22 @@ router.post('/:id/add-attachment', authenticate, requireCommunicationsFoundation
 // ============================================================================
 // GET /api/v1/communications/:id/tasks - Get tasks created from communication
 // ============================================================================
+
+router.post('/:id/tasks', authenticate, requireCommunicationsFoundation, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const { id } = req.params;
+    const result = await createTaskFromCommunicationSource(String(id), userId, req.body);
+    res.status(201).json(result);
+  } catch (error) {
+    if (error instanceof SourceLinkedTaskError) {
+      res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
+      return;
+    }
+    logPrismaRouteError('POST /communications/:id/tasks', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Task creation from communication failed.' });
+  }
+});
 
 router.get('/:id/tasks', authenticate, requireCommunicationsFoundation, async (req: Request, res: Response) => {
   try {

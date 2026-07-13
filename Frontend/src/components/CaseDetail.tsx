@@ -2,7 +2,7 @@
 
 import { useState, use, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, blockTask, unblockTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, getCaseWorkItems, type CaseWorkflowSummary, type CaseWorkItemsResponse, type CaseWorkItem, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator } from "@/lib/api";
+import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, blockTask, unblockTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, getCaseWorkItems, getCaseActivity, createDocumentSourceTask, createCommunicationSourceTask, type CaseWorkflowSummary, type CaseWorkItemsResponse, type CaseWorkItem, type CaseActivityResponse, type CaseActivityItem, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator } from "@/lib/api";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
@@ -164,6 +164,15 @@ const WORK_ITEM_TYPE_LABELS: Record<string, string> = {
   TASK: "Feladat",
   REVIEW: "Review",
   HANDOFF: "Átadás",
+  DOCUMENT: "Dokumentum",
+  COMMUNICATION: "Kommunikáció",
+};
+
+const CASE_ACTIVITY_KIND_LABELS: Record<string, string> = {
+  TASK: "Feladat",
+  DOCUMENT: "Dokumentum",
+  COMMUNICATION: "Kommunikáció",
+  TIMELINE: "Ügyesemény",
 };
 
 const WORK_ITEM_URGENCY_LABELS: Record<string, string> = {
@@ -199,6 +208,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
   const [communications, setCommunications] = useState<CommunicationItem[]>([]);
   const [workflowSummary, setWorkflowSummary] = useState<CaseWorkflowSummary | null>(null);
   const [workItems, setWorkItems] = useState<CaseWorkItemsResponse | null>(null);
+  const [caseActivity, setCaseActivity] = useState<CaseActivityResponse | null>(null);
   const [isLoadingWorkflowSummary, setIsLoadingWorkflowSummary] = useState(false);
   const [workflowSummaryError, setWorkflowSummaryError] = useState<string | null>(null);
   const [workItemsError, setWorkItemsError] = useState<string | null>(null);
@@ -497,7 +507,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
       setIsLoadingWorkflowSummary(true);
       setWorkflowSummaryError(null);
       setWorkItemsError(null);
-      const [contracts, timeline, caseList, backendDocuments, anonDocs, communicationsResponse, workflowSummaryResponse, workItemsResponse] = await Promise.all([
+      const [contracts, timeline, caseList, backendDocuments, anonDocs, communicationsResponse, workflowSummaryResponse, workItemsResponse, caseActivityResponse] = await Promise.all([
         getCaseContracts(effectiveCaseId).catch(() => []),
         getCaseTimeline(effectiveCaseId).catch(() => []),
         getCases(1, 200).catch(() => ({ data: [] })),
@@ -514,6 +524,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
           setWorkItemsError('A Case Workbench most nem érhető el.');
           return null;
         }),
+        getCaseActivity(effectiveCaseId).catch(() => null),
       ]);
       setGeneratedContracts(contracts);
       setTimelineEvents(timeline);
@@ -521,6 +532,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
       setCommunications(communicationsResponse.communications || []);
       setWorkflowSummary(workflowSummaryResponse);
       setWorkItems(workItemsResponse);
+      setCaseActivity(caseActivityResponse);
       const record = caseList.data.find((item) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId) || null;
       if (!caseRecord && record) {
         setCaseRecord({
@@ -1075,6 +1087,29 @@ export function CaseDetail({ params }: CaseDetailProps) {
     }
   };
 
+  const createSourceTask = async (item: CaseWorkItem | CaseActivityItem, kind: 'REVIEW' | 'FOLLOW_UP' | 'REVIEW_ATTACHMENT') => {
+    const isActivityItem = 'kind' in item;
+    const sourceType = isActivityItem ? item.kind : item.source?.type || null;
+    const sourceId = isActivityItem
+      ? (item.documentId || item.communicationId || null)
+      : (item.source?.id || null);
+    if (!sourceId) return;
+    setActionTaskId(`source:${sourceId}:${kind}`);
+    try {
+      if (sourceType === 'DOCUMENT' && kind !== 'REVIEW_ATTACHMENT') {
+        await createDocumentSourceTask(sourceId, { kind: kind === 'REVIEW' ? 'REVIEW' : 'FOLLOW_UP' });
+      } else if (sourceType === 'COMMUNICATION' && kind !== 'REVIEW') {
+        await createCommunicationSourceTask(sourceId, { kind });
+      }
+      await refreshWorkSurfaces();
+    } catch (err) {
+      console.error('Source-linked task creation failed:', err);
+      await refreshWorkSurfaces();
+    } finally {
+      setActionTaskId(null);
+    }
+  };
+
   const handleStartTask = async (taskId: string) => {
     await runWorkbenchTaskAction(taskId, 'start');
   };
@@ -1165,6 +1200,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
   const openTasks = tasks.filter(
     (task) => !['COMPLETED', 'APPROVED', 'REJECTED', 'DECLINED', 'CANCELLED', 'ARCHIVED'].includes(String(task.status || '').toUpperCase())
   );
+  const activityItems = caseActivity?.items || [];
   const workbenchItems = workItems?.items || [];
   const filteredWorkbenchItems = workbenchItems.filter((item) => {
     if (workItemFilter === 'mine') return item.isMine;
@@ -1674,6 +1710,16 @@ export function CaseDetail({ params }: CaseDetailProps) {
                               Forrás
                             </button>
                           )}
+                          {item.type === 'DOCUMENT' && item.source?.id && (
+                            <button type="button" onClick={() => createSourceTask(item, 'REVIEW')} disabled={Boolean(actionTaskId)} className="border border-[var(--adm-ochre-500)] bg-white px-2 py-1 text-[9px] font-semibold text-[var(--adm-ochre-500)] disabled:opacity-50">
+                              Review feladat
+                            </button>
+                          )}
+                          {item.type === 'COMMUNICATION' && item.source?.id && (
+                            <button type="button" onClick={() => createSourceTask(item, 'FOLLOW_UP')} disabled={Boolean(actionTaskId)} className="border border-[var(--adm-ochre-500)] bg-white px-2 py-1 text-[9px] font-semibold text-[var(--adm-ochre-500)] disabled:opacity-50">
+                              Utánkövetés
+                            </button>
+                          )}
                           {item.type === 'TASK' && item.capabilities.canStart && (
                             <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'start')} disabled={Boolean(actionTaskId)} className="bg-[var(--adm-green-800)] px-2 py-1 text-[9px] font-semibold text-white disabled:opacity-50">Elkezdem</button>
                           )}
@@ -1705,6 +1751,74 @@ export function CaseDetail({ params }: CaseDetailProps) {
 
               <p className="mt-3 text-[10px] text-[var(--adm-text-soft)]">
                 Elérhetőség: feladatműveletek {workItems?.availability.taskTransitions ? 'aktív' : 'nem elérhető'} · blokkolás {workItems?.availability.blockerState ? 'strukturált' : 'nem támogatott'} · várakozás {workItems?.availability.waitingState ? 'strukturált' : 'nem támogatott'} · leadás {workItems?.availability.handoffWorkflow ? 'aktív' : 'nem elérhető'}.
+              </p>
+            </section>
+
+            <section aria-labelledby="case-activity-heading" className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Ügyaktivitás</p>
+                  <h2 id="case-activity-heading" className="mt-1 font-serif text-[22px] text-[var(--adm-text)]">Dokumentumok és kommunikációk mozgása</h2>
+                  <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-[var(--adm-text-muted)]">
+                    Egységes, olvasási lista feladatokból, dokumentum-metaadatokból, kommunikációs metaadatokból és timeline eseményekből. Nyers iratszöveg, teljes üzenettörzs és mellékletfájl nem jelenik meg.
+                  </p>
+                </div>
+                <span className="border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text-muted)]">
+                  {caseActivity?.pagination.returned ?? 0} tétel
+                </span>
+              </div>
+
+              {activityItems.length > 0 ? (
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                  {activityItems.slice(0, 8).map((item) => (
+                    <article key={item.id} className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="border border-[var(--adm-border)] bg-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">
+                          {CASE_ACTIVITY_KIND_LABELS[item.kind] || item.kind}
+                        </span>
+                        {item.meta.status && (
+                          <span className="border border-[var(--adm-border)] bg-white px-2 py-0.5 text-[9px] font-semibold text-[var(--adm-text)]">
+                            {getTaskStatusLabel(item.meta.status)}
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="mt-2 truncate text-[14px] font-semibold text-[var(--adm-text)]">{item.title}</h3>
+                      <p className="mt-1 text-[11px] leading-relaxed text-[var(--adm-text-muted)]">
+                        {item.safeDescription || 'Csak biztonságos metaadat érhető el ehhez az eseményhez.'}
+                      </p>
+                      <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">
+                        {formatWorkflowDate(item.occurredAt)}
+                        {typeof item.meta.attachmentCount === 'number' ? ` · Melléklet-metaadat: ${item.meta.attachmentCount}` : ''}
+                        {typeof item.meta.sourceTaskCount === 'number' ? ` · Forrásfeladat: ${item.meta.sourceTaskCount}` : ''}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {item.href && (
+                          <button type="button" onClick={() => router.push(item.href as string)} className="border border-[var(--adm-border)] bg-white px-2 py-1 text-[9px] font-semibold text-[var(--adm-text)]">
+                            Megnyitás
+                          </button>
+                        )}
+                        {item.kind === 'DOCUMENT' && item.documentId && (
+                          <button type="button" onClick={() => createSourceTask(item, 'REVIEW')} disabled={Boolean(actionTaskId)} className="border border-[var(--adm-ochre-500)] bg-white px-2 py-1 text-[9px] font-semibold text-[var(--adm-ochre-500)] disabled:opacity-50">
+                            Review feladat
+                          </button>
+                        )}
+                        {item.kind === 'COMMUNICATION' && item.communicationId && (
+                          <button type="button" onClick={() => createSourceTask(item, 'FOLLOW_UP')} disabled={Boolean(actionTaskId)} className="border border-[var(--adm-ochre-500)] bg-white px-2 py-1 text-[9px] font-semibold text-[var(--adm-ochre-500)] disabled:opacity-50">
+                            Utánkövetés
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[11px] text-[var(--adm-text-muted)]">
+                  Nincs biztonságosan megjeleníthető ügyaktivitás. A rendszer nem szimulál dokumentum- vagy kommunikációs eseményeket.
+                </p>
+              )}
+
+              <p className="mt-3 text-[10px] text-[var(--adm-text-soft)]">
+                Privacy guard: iratszöveg {caseActivity?.privacy.rawDocumentTextIncluded ? 'megjelenik' : 'nem jelenik meg'} · üzenettörzs {caseActivity?.privacy.rawCommunicationBodyIncluded ? 'megjelenik' : 'nem jelenik meg'} · mellékletfájl {caseActivity?.privacy.attachmentBytesIncluded ? 'megjelenik' : 'nem jelenik meg'}.
               </p>
             </section>
 

@@ -68,3 +68,7 @@ Future work may add a recipient-aware handoff model, explicit reviewer assignmen
 ## Explicit non-actions
 
 No schema change, migration, manual DB query, Client Portal change, external visibility, Azure change, OpenAPI/CORS change, package change, Outlook import, or production deployment was performed.
+
+## Source-Linked Document / Communication Tasks
+
+WORKFLOW-CORE-DOCUMENTS-COMMUNICATIONS-1 adds constrained source-linked task creation for document and communication sources. The server derives case/source linkage and rejects arbitrary status, case, creator, priority, description, and raw-content fields.

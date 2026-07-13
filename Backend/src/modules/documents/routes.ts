@@ -13,6 +13,7 @@ import { prisma } from '../../prisma/prisma.service';
 import { isDatabaseFoundationEnabled, sendFeatureUnavailable } from '../../middleware/featureAvailability';
 import { requireDocumentReadAccess, requireDocumentManageAccess } from './authorization';
 import { safeWorkspaceTextLogContext } from './logging';
+import { createTaskFromDocumentSource, SourceLinkedTaskError } from '../tasks/services';
 
 const router = Router();
 const isDocumentProcessingEnabled = (): boolean =>
@@ -184,6 +185,26 @@ router.get('/case/:caseId', authenticate, async (req: Request, res: Response): P
       code: 'INTERNAL_ERROR', 
       message: 'Internal server error' 
     });
+  }
+});
+
+/**
+ * POST /api/v1/documents/:id/tasks
+ * Create a safe source-linked task from document metadata only.
+ */
+router.post('/:id/tasks', authenticate, requireDocumentReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).user?.userId;
+    const { id } = req.params as { id: string };
+    const result = await createTaskFromDocumentSource(id, userId, req.body);
+    res.status(201).json(result);
+  } catch (error) {
+    if (error instanceof SourceLinkedTaskError) {
+      res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
+      return;
+    }
+    console.error('Create document source task error:', error instanceof Error ? error.message : error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Task creation from document failed.' });
   }
 });
 

@@ -87,3 +87,7 @@ Status: phase closeout. This note documents the deployed Communication → Matte
 ```text
 communication_outlook_intake_closeout_documented_no_runtime_change
 ```
+
+## WORKFLOW-CORE-DOCUMENTS-COMMUNICATIONS-1 Note
+
+The communication workspace foundation is now referenced by Case Detail through safe case activity and source-linked task actions. The new workflow uses communication metadata and summaries only; it does not enable Outlook import, Graph sync, raw mailbox reads, or client portal communication exposure.

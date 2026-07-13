@@ -102,3 +102,7 @@ Implemented validation includes:
 ## WORKFLOW-CORE-TASKS-HANDOFF-1 note
 
 The task/handoff workflow layer now has a backend-normalized case work-item contract, capability-derived task action buttons, and structured task transitions using existing production-compatible fields only. No schema, migration, DB command, Client Portal change, or external visibility was introduced. Unsupported recipient-specific handoff acceptance and generic waiting state remain deferred rather than simulated.
+
+## WORKFLOW-CORE-DOCUMENTS-COMMUNICATIONS-1 Extension
+
+The case center workflow now has a safe document/communication companion contract documented in `docs/workflow-core-documents-communications-1.md` and `docs/workflow-core-case-activity-contract.md`. This extension preserves the case-centered posture: internal lawyer activity uses metadata-only document and communication sources, with no client portal exposure and no raw document/communication content.

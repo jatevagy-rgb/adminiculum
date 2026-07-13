@@ -1,7 +1,7 @@
 import { prisma } from '../../prisma/prisma.service';
 import { isDatabaseFoundationEnabled } from '../../middleware/featureAvailability';
 
-export type WorkItemType = 'TASK' | 'HANDOFF';
+export type WorkItemType = 'TASK' | 'HANDOFF' | 'DOCUMENT' | 'COMMUNICATION';
 export type WorkflowCategory = 'OPEN' | 'IN_PROGRESS' | 'BLOCKED' | 'WAITING' | 'REVIEW' | 'HANDOFF' | 'COMPLETED';
 export type WorkItemUrgency = 'OVERDUE' | 'TODAY' | 'SOON' | 'LATER' | 'NONE';
 export type SupportedTaskAction = 'START' | 'SUBMIT_FOR_REVIEW' | 'APPROVE' | 'RETURN_FOR_CORRECTION' | 'BLOCK' | 'UNBLOCK';
@@ -282,7 +282,7 @@ export async function getCaseWorkItems(
   });
   if (!caseRecord) return null;
 
-  const [tasks, handoffs] = await Promise.all([
+  const [tasks, documents, communications, handoffs] = await Promise.all([
     prisma.task.findMany({
       where: { caseId },
       select: {
@@ -307,6 +307,34 @@ export async function getCaseWorkItems(
       },
       orderBy: [{ dueDate: 'asc' }, { updatedAt: 'desc' }],
       take: 80,
+    }),
+    prisma.document.findMany({
+      where: { caseId },
+      select: {
+        id: true,
+        name: true,
+        fileName: true,
+        documentType: true,
+        category: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 20,
+    }),
+    prisma.communication.findMany({
+      where: { caseId },
+      select: {
+        id: true,
+        subject: true,
+        summary: true,
+        type: true,
+        documentId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
     }),
     isDatabaseFoundationEnabled('ENABLE_HANDOFF_PACKAGES') && (prisma as any).lawyerHandoffPackage
       ? (prisma as any).lawyerHandoffPackage.findMany({
@@ -439,7 +467,73 @@ export async function getCaseWorkItems(
     };
   });
 
-  const items = [...taskItems, ...handoffItems].sort((a, b) => {
+  const documentItems = documents.map((document) => {
+    const capabilities = blankCapabilities();
+    capabilities.canOpenSource = true;
+    return {
+      id: `document-${document.id}`,
+      type: 'DOCUMENT' as const,
+      title: document.fileName || document.name || 'Kapcsolt dokumentum',
+      safeDescription: [document.documentType, document.category].filter(Boolean).join(' · ') || null,
+      status: String(document.documentType || document.category || 'DOCUMENT'),
+      workflowCategory: 'OPEN' as const,
+      priority: null,
+      dueAt: null,
+      completedAt: null,
+      updatedAt: document.updatedAt ? document.updatedAt.toISOString() : document.createdAt.toISOString(),
+      caseId,
+      isMine: false,
+      assignee: null,
+      createdBy: null,
+      review: null,
+      handoff: null,
+      blocker: null,
+      source: {
+        type: 'DOCUMENT' as const,
+        id: document.id,
+        displayName: 'Dokumentum',
+        href: `/documents/compare?caseId=${encodeURIComponent(caseId)}&documentId=${encodeURIComponent(document.id)}`,
+      },
+      urgency: 'NONE' as const,
+      capabilities,
+      href: `/documents/compare?caseId=${encodeURIComponent(caseId)}&documentId=${encodeURIComponent(document.id)}`,
+    };
+  });
+
+  const communicationItems = communications.map((communication) => {
+    const capabilities = blankCapabilities();
+    capabilities.canOpenSource = true;
+    return {
+      id: `communication-${communication.id}`,
+      type: 'COMMUNICATION' as const,
+      title: communication.subject || 'Kapcsolt kommunikáció',
+      safeDescription: safeDescription(communication.summary),
+      status: String(communication.type || 'COMMUNICATION'),
+      workflowCategory: 'OPEN' as const,
+      priority: null,
+      dueAt: null,
+      completedAt: null,
+      updatedAt: communication.updatedAt ? communication.updatedAt.toISOString() : communication.createdAt.toISOString(),
+      caseId,
+      isMine: false,
+      assignee: null,
+      createdBy: null,
+      review: null,
+      handoff: null,
+      blocker: null,
+      source: {
+        type: 'COMMUNICATION' as const,
+        id: communication.id,
+        displayName: 'Kommunikáció',
+        href: `/cases/${encodeURIComponent(caseId)}/communications`,
+      },
+      urgency: 'NONE' as const,
+      capabilities,
+      href: `/cases/${encodeURIComponent(caseId)}/communications`,
+    };
+  });
+
+  const items = [...taskItems, ...documentItems, ...communicationItems, ...handoffItems].sort((a, b) => {
     const mineA = a.assignee?.id === currentUserId ? 0 : 1;
     const mineB = b.assignee?.id === currentUserId ? 0 : 1;
     return (

@@ -60,3 +60,7 @@
 ## WORKFLOW-CORE-TASKS-HANDOFF-1 regression note
 
 Case Center next-action refresh must be verified after task start, submit, approve, return, block, and unblock actions. The frontend refreshes the workflow summary after supported mutations and does not optimistically invent resulting state.
+
+## WORKFLOW-CORE-DOCUMENTS-COMMUNICATIONS-1 Acceptance Link
+
+Document and communication workflow acceptance is tracked separately in `docs/workflow-core-documents-communications-acceptance.md`. The extension keeps the existing Case Center acceptance posture intact and adds metadata-only activity/source-task checks.

@@ -10,6 +10,7 @@ import { authenticate } from '../../middleware/auth';
 import { requireCaseCollaboratorManageAccess, requireCaseManageAccess, requireCaseReadAccess } from './authorization';
 import { getCaseWorkflowSummary } from './workflowSummary';
 import { getCaseWorkItems } from './workItems';
+import { getCaseActivity } from './activity';
 
 const router = Router();
 
@@ -184,6 +185,30 @@ router.get('/:caseId/work-items', authenticate, requireCaseReadAccess, async (re
     res.json(workItems);
   } catch (error) {
     console.error('Get case work items error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// GET /cases/:caseId/activity
+// ============================================================================
+router.get('/:caseId/activity', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const activity = await getCaseActivity(caseId, {
+      limit: req.query.limit,
+      offset: req.query.offset,
+      type: req.query.type,
+    });
+
+    if (!activity) {
+      res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+      return;
+    }
+
+    res.json(activity);
+  } catch (error) {
+    console.error('Get case activity error:', error);
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 });
