@@ -112,3 +112,7 @@ The case center workflow now has a safe document/communication companion contrac
 `WORKFLOW-CORE-DEADLINES-AGENDA-NOTIFICATIONS-1` moves deadline/agenda handling into a canonical backend contract documented in `docs/workflow-core-deadline-agenda-contract.md`. Case Center now uses the shared deadline engine for case deadline urgency and Case Detail also shows a case agenda strip backed by `GET /api/v1/agenda`.
 
 The extension still uses existing production-compatible fields only: `Task.dueDate` and `Case.deadline`. It does not add hearings, reminders, recurrence, external calendar sync, AI date extraction, or legal significance inference.
+
+## Responsibility / Workload / Time Follow-up
+
+WORKFLOW-CORE-RESPONSIBILITY-WORKLOAD-TIME-1 adds the canonical case responsibility DTO and workload entry point. Case Center remains the handoff source; workload/time data is operational and internal-only.

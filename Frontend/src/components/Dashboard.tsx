@@ -442,6 +442,7 @@ export function Dashboard() {
   const quickOpenLinks = [
     { href: "/cases", label: "Ügyek", description: "Aktív ügyek és új ügy indítása" },
     { href: "/tasks", label: "Feladatok", description: "Mai teendők és review sor" },
+    { href: "/workload", label: "Munkateher", description: "Felelősség, feladat és rögzített idő" },
     { href: "/documents/compare", label: "Dokumentum-review", description: "Összevetés és szerződésmunka" },
     { href: "/litigation-workspace", label: "Peres munkatér", description: "Stratégiai peres jegyzetek" },
   ];

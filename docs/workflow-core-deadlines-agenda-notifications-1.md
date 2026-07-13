@@ -32,3 +32,7 @@ The agenda exposes safe operational metadata only: ids, title, compact task desc
 ## Runtime Posture
 
 No schema or migration change. No Azure/deploy/config/package change. The feature is internal backend/frontend workflow behavior only.
+
+## Responsibility / Workload / Time Follow-up
+
+Deadline agenda items now align with the workload view as operational attention signals. They are not performance metrics and do not create passive tracking or external calendar sync.

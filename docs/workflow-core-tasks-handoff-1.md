@@ -78,3 +78,7 @@ WORKFLOW-CORE-DOCUMENTS-COMMUNICATIONS-1 adds constrained source-linked task cre
 `WORKFLOW-CORE-DEADLINES-AGENDA-NOTIFICATIONS-1` adds `POST /api/v1/tasks/:id/reschedule` as the explicit due-date mutation for internal tasks. The route accepts only `dueAt`, preserves the task transition/authz boundary, rejects arbitrary status/assignment payloads, and records a content-minimal `DEADLINE_SET` timeline event.
 
 The agenda page and Case Detail render mutation controls only when the backend capability flags allow them.
+
+## Responsibility / Workload / Time Follow-up
+
+Task handoff now treats reassignment as a supported mutation only when the actor can work on the task and the new assignee is already part of the case team. No automatic reassignment or AI assignment recommendation was added.

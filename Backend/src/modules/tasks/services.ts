@@ -629,6 +629,48 @@ export async function rescheduleTaskDueDate(taskId: string, userId: string, body
  * Reassign a task
  */
 export async function reassignTask(taskId: string, newAssigneeId: string, reassignedBy: string) {
+  if (!reassignedBy) {
+    throw new WorkflowTransitionError(401, 'NOT_AUTHENTICATED', 'Authenticated user is required.');
+  }
+
+  const existingTask = await getTaskForTransition(taskId);
+  if (!existingTask) {
+    throw new WorkflowTransitionError(404, 'TASK_NOT_FOUND', 'Task not found.');
+  }
+
+  const actorAccess = await userCanActOnTask(existingTask, reassignedBy);
+  if (!actorAccess.allowed) {
+    throw new WorkflowTransitionError(403, 'TASK_ACCESS_FORBIDDEN', 'You do not have access to reassign this task.');
+  }
+
+  const assignee = await prisma.user.findUnique({
+    where: { id: newAssigneeId },
+    select: { id: true, role: true, isActive: true },
+  });
+  if (!assignee || assignee.isActive === false) {
+    throw new WorkflowTransitionError(400, 'ASSIGNEE_NOT_AVAILABLE', 'Assignee is not available.');
+  }
+
+  const caseRecord = await prisma.case.findUnique({
+    where: { id: existingTask.caseId },
+    select: { assignedLawyerId: true, createdById: true },
+  });
+  const isCaseMember =
+    caseRecord?.assignedLawyerId === newAssigneeId ||
+    caseRecord?.createdById === newAssigneeId ||
+    Boolean(await prisma.caseCollaborator.findFirst({
+      where: { caseId: existingTask.caseId, userId: newAssigneeId },
+      select: { id: true },
+    }));
+
+  if (!isCaseMember && !['ADMIN', 'PARTNER'].includes(String(assignee.role))) {
+    throw new WorkflowTransitionError(403, 'ASSIGNEE_NOT_CASE_MEMBER', 'Task assignee must already be part of the case team.');
+  }
+
+  if (existingTask.assignedToId === newAssigneeId) {
+    return getTask(taskId);
+  }
+
   const task = await prisma.task.update({
     where: { id: taskId },
     data: {

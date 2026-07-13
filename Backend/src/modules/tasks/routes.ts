@@ -346,11 +346,14 @@ router.post('/:id/reassign', authenticate, async (req: Request, res: Response) =
 
     const task = await taskService.reassignTask(id, newAssigneeId, reassignedBy);
     res.json(task);
-  } catch (error) {
+    } catch (error) {
     console.error('Error reassigning task:', error);
-    const prismaErr = buildPrismaErrorResponse(error);
-    if (prismaErr) {
-      return res.status(prismaErr.status).json(prismaErr.body);
+    if (error instanceof WorkflowTransitionError) {
+      return res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
+    }
+      const prismaErr = buildPrismaErrorResponse(error);
+      if (prismaErr) {
+        return res.status(prismaErr.status).json(prismaErr.body);
     }
     res.status(500).json({ error: 'Hiba a feladat átadásakor' });
   }

@@ -2,7 +2,7 @@
 
 import { useState, use, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, blockTask, unblockTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, getCaseWorkItems, getCaseActivity, getWorkflowAgenda, createDocumentSourceTask, createCommunicationSourceTask, type CaseWorkflowSummary, type CaseWorkItemsResponse, type CaseWorkItem, type CaseActivityResponse, type CaseActivityItem, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator, type WorkflowAgendaResponse, type WorkflowDeadlineItem } from "@/lib/api";
+import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, blockTask, unblockTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, getCaseWorkItems, getCaseActivity, getWorkflowAgenda, getCaseResponsibility, createDocumentSourceTask, createCommunicationSourceTask, type CaseWorkflowSummary, type CaseWorkItemsResponse, type CaseWorkItem, type CaseActivityResponse, type CaseActivityItem, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator, type WorkflowAgendaResponse, type WorkflowDeadlineItem, type CaseResponsibilityResponse } from "@/lib/api";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
@@ -192,6 +192,13 @@ const formatWorkflowDate = (value?: string | null): string => {
   return date.toLocaleString("hu-HU", { dateStyle: "medium", timeStyle: "short" });
 };
 
+const formatMinutes = (minutes?: number | null): string => {
+  if (!minutes) return "0 óra";
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} óra ${rest} perc` : `${hours} óra`;
+};
+
 export function CaseDetail({ params }: CaseDetailProps) {
   const resolvedParams = use(params);
   const router = useRouter();
@@ -212,6 +219,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
   const [workItems, setWorkItems] = useState<CaseWorkItemsResponse | null>(null);
   const [caseActivity, setCaseActivity] = useState<CaseActivityResponse | null>(null);
   const [caseAgenda, setCaseAgenda] = useState<WorkflowAgendaResponse | null>(null);
+  const [caseResponsibility, setCaseResponsibility] = useState<CaseResponsibilityResponse | null>(null);
   const [isLoadingWorkflowSummary, setIsLoadingWorkflowSummary] = useState(false);
   const [workflowSummaryError, setWorkflowSummaryError] = useState<string | null>(null);
   const [workItemsError, setWorkItemsError] = useState<string | null>(null);
@@ -510,7 +518,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
       setIsLoadingWorkflowSummary(true);
       setWorkflowSummaryError(null);
       setWorkItemsError(null);
-      const [contracts, timeline, caseList, backendDocuments, anonDocs, communicationsResponse, workflowSummaryResponse, workItemsResponse, caseActivityResponse, caseAgendaResponse] = await Promise.all([
+      const [contracts, timeline, caseList, backendDocuments, anonDocs, communicationsResponse, workflowSummaryResponse, workItemsResponse, caseActivityResponse, caseAgendaResponse, caseResponsibilityResponse] = await Promise.all([
         getCaseContracts(effectiveCaseId).catch(() => []),
         getCaseTimeline(effectiveCaseId).catch(() => []),
         getCases(1, 200).catch(() => ({ data: [] })),
@@ -529,6 +537,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
         }),
         getCaseActivity(effectiveCaseId).catch(() => null),
         getWorkflowAgenda({ scope: 'CASE', caseId: effectiveCaseId, status: 'OPEN', limit: 20 }).catch(() => null),
+        getCaseResponsibility(effectiveCaseId).catch(() => null),
       ]);
       setGeneratedContracts(contracts);
       setTimelineEvents(timeline);
@@ -538,6 +547,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
       setWorkItems(workItemsResponse);
       setCaseActivity(caseActivityResponse);
       setCaseAgenda(caseAgendaResponse);
+      setCaseResponsibility(caseResponsibilityResponse);
       const record = caseList.data.find((item) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId) || null;
       if (!caseRecord && record) {
         setCaseRecord({
@@ -1378,10 +1388,12 @@ export function CaseDetail({ params }: CaseDetailProps) {
                       <p className="mt-1 text-[13px] font-semibold text-[var(--adm-text)]">{assignedLawyer.name}</p>
                       <p className="text-[10px] text-[var(--adm-text-muted)]">{assignedLawyer.email}</p>
                     </>
-                  ) : (
+                  ) : caseResponsibility?.capabilities.canChangeResponsibleLawyer ? (
                     <button onClick={() => { setShowAssignDropdown(!showAssignDropdown); loadAvailableUsers(); }} className="mt-1 text-[11px] font-semibold text-[var(--adm-ochre-500)]">
                       + Felelős ügyvéd hozzárendelése
                     </button>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Nincs kijelölve</p>
                   )}
                   {showAssignDropdown && (
                     <div className="absolute left-3 top-full z-50 mt-1 max-h-48 w-64 overflow-y-auto border border-[var(--adm-border)] bg-white shadow-lg">
@@ -1403,7 +1415,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                 <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
                   <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Résztvevők</p>
                   <p className="mt-1 text-[13px] font-semibold text-[var(--adm-text)]">{collaborators.length || 0} résztvevő</p>
-                  {!isArchived && (
+                  {!isArchived && caseResponsibility?.capabilities.canAddCollaborator && (
                     <div className="relative">
                       <button onClick={() => { setShowCollaboratorDropdown(!showCollaboratorDropdown); loadAvailableUsers(); }} className="mt-1 text-[10px] font-semibold text-[var(--adm-ochre-500)]">+ Résztvevő hozzáadása</button>
                       {showCollaboratorDropdown && (
@@ -1558,6 +1570,24 @@ export function CaseDetail({ params }: CaseDetailProps) {
                       <span>Résztvevők</span>
                       <b>{workflowSummary?.responsibility.collaborators.length ?? collaborators.length} fő</b>
                     </div>
+                  </div>
+                  <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Munka és idő</p>
+                    <p className="mt-1 text-[13px] font-semibold text-[var(--adm-text)]">
+                      {caseResponsibility?.work.openTaskCount ?? workflowSummary?.taskStats.open ?? openTasks.length} nyitott · {caseResponsibility?.work.overdueTaskCount ?? workflowSummary?.taskStats.overdue ?? 0} lejárt
+                    </p>
+                    <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">
+                      {caseResponsibility?.time.supported
+                        ? `Rögzített idő: ${formatMinutes(caseResponsibility.time.totalMinutes ?? caseResponsibility.time.currentUserMinutes)}`
+                        : 'Időrögzítés csak matter-kapcsolattal támogatott'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => router.push(caseResponsibility?.time.matterId ? `/time-entries?caseId=${canonicalCaseId}&matterId=${caseResponsibility.time.matterId}` : `/workload?caseId=${canonicalCaseId}`)}
+                      className="mt-2 text-[10px] font-semibold text-[var(--adm-ochre-500)]"
+                    >
+                      Munkateher / idő megnyitása
+                    </button>
                   </div>
                 </div>
 

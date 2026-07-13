@@ -12,6 +12,7 @@ import { getCaseWorkflowSummary } from './workflowSummary';
 import { getCaseWorkItems } from './workItems';
 import { getCaseActivity } from './activity';
 import { AgendaRequestError, getCaseDeadlines } from '../agenda/service';
+import { getCaseResponsibility } from '../responsibility/service';
 
 const router = Router();
 
@@ -186,6 +187,31 @@ router.get('/:caseId/work-items', authenticate, requireCaseReadAccess, async (re
     res.json(workItems);
   } catch (error) {
     console.error('Get case work items error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// GET /cases/:caseId/responsibility
+// ============================================================================
+router.get('/:caseId/responsibility', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+
+    const result = await getCaseResponsibility(caseId, { userId, role: req.user?.role });
+    if (!result) {
+      res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+      return;
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Get case responsibility error:', error);
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 });
@@ -442,7 +468,7 @@ router.patch('/:caseId/status', authenticate, async (req: Request, res: Response
 // ============================================================================
 // POST /cases/:caseId/assign
 // ============================================================================
-router.post('/:caseId/assign', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:caseId/assign', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const assignedById = (req as any).user?.userId;
     const { caseId } = req.params as { caseId: string };

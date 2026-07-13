@@ -50,3 +50,7 @@ Rejected caller-controlled fields include direct `status`, `caseId`, creator fie
 The deadline agenda extension intentionally keeps communications separate from case notes and does not infer deadlines from communication body text. Communication-linked task extraction may create structured task due dates through existing explicit flows; the agenda then reads the persisted `Task.dueDate` only.
 
 No raw communication body, document workspace text, AI output, or timeline payload is included in agenda or notification DTOs.
+
+## Responsibility / Workload / Time Follow-up
+
+Document and communication task extraction can feed the task workload view, but time entries remain matter-based until a future persisted task/document/communication time-link model exists.

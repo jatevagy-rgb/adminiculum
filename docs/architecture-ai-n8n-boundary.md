@@ -27,3 +27,7 @@ Adminiculum backend remains the source of truth for workflow state. n8n, AI prov
 ## Future Automation Pattern
 
 A future automation must call a hardened backend endpoint, not the database. The endpoint must enforce authentication, authorization, feature flags, tenant/client boundaries where relevant, validation, idempotency, and content minimization.
+
+## WORKFLOW-CORE-RESPONSIBILITY-WORKLOAD-TIME-1 Reference
+
+The responsibility/workload/time pass stays inside the existing AI/n8n boundary: no AI staffing, no n8n automation, no passive tracking, no external calendar/team/email connector, and no automatic assignment or reassignment. It uses authenticated internal case/task/time persistence only.

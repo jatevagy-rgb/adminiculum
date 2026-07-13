@@ -750,3 +750,11 @@ The internal lawyer workflow gained safe document/communication metadata handoff
 ## Workflow deadline/agenda decision note
 
 `WORKFLOW-CORE-DEADLINES-AGENDA-NOTIFICATIONS-1` adds an internal backend-owned deadline/agenda workflow using existing production-compatible fields only (`tasks.dueDate`, `cases.deadline`, and existing notification/timeline tables). This is not a schema baseline change, migration authorization, Client Portal deadline publication, external calendar integration, AI deadline extraction, n8n automation, or legal-significance inference. Production apply readiness and CP-SCHEMA-1 readiness remain blocked.
+
+## Workflow Core Responsibility / Workload / Time Note
+
+Internal responsibility, workload and manual time-entry coordination is treated as KEEP-compatible only for the currently supported internal case/task/matter/time-entry surfaces. This does not authorize schema baseline apply, CP-SCHEMA-1, employee performance scoring, passive tracking, AI staffing, or external connector automation.
+
+- Production apply readiness: still blocked by baseline posture.
+- CP-SCHEMA-1 readiness: still blocked.
+- Future schema/runtime changes require separate proof and PR.

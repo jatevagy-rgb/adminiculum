@@ -7,11 +7,19 @@
 // ============================================================================
 
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
+import { prisma } from '../prisma/prisma.service';
 
 const router = Router();
-const prisma = new PrismaClient();
+const PRIVILEGED_ROLES = new Set(['ADMIN', 'PARTNER']);
+
+function isPrivileged(req: Request): boolean {
+  return Boolean(req.user?.role && PRIVILEGED_ROLES.has(req.user.role));
+}
+
+function getAuthenticatedUserId(req: Request): string | null {
+  return req.user?.userId || null;
+}
 
 // ============================================================================
 // GET /api/v1/time-entries - List time entries
@@ -20,11 +28,19 @@ const prisma = new PrismaClient();
 router.get('/', authenticate, async (req: Request, res: Response) => {
   try {
     const { matterId, userId, workType, startDate, endDate } = req.query;
+    const requesterId = getAuthenticatedUserId(req);
+    if (!requesterId) {
+      return res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+    }
+
+    if (userId && String(userId) !== requesterId && !isPrivileged(req)) {
+      return res.status(403).json({ status: 403, code: 'TIME_ENTRY_USER_SCOPE_FORBIDDEN', message: 'Time entry user filter is restricted.' });
+    }
 
     const where: any = {};
 
     if (matterId) where.matterId = matterId;
-    if (userId) where.userId = userId;
+    where.userId = userId ? String(userId) : requesterId;
     if (workType) where.workType = workType;
     
     if (startDate || endDate) {
@@ -133,10 +149,17 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
 router.get('/summary', authenticate, async (req: Request, res: Response) => {
   try {
     const { matterId, userId, departmentId, startDate, endDate } = req.query;
+    const requesterId = getAuthenticatedUserId(req);
+    if (!requesterId) {
+      return res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+    }
+    if (userId && String(userId) !== requesterId && !isPrivileged(req)) {
+      return res.status(403).json({ status: 403, code: 'TIME_ENTRY_USER_SCOPE_FORBIDDEN', message: 'Time entry user filter is restricted.' });
+    }
 
     const where: any = {};
     if (matterId) where.matterId = matterId;
-    if (userId) where.userId = userId;
+    where.userId = userId ? String(userId) : requesterId;
     if (departmentId) where.departmentId = departmentId;
 
     if (startDate || endDate) {
@@ -222,6 +245,10 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
     if (!entry) {
       return res.status(404).json({ error: 'Time entry not found' });
     }
+    const requesterId = getAuthenticatedUserId(req);
+    if (!requesterId || (entry.userId !== requesterId && !isPrivileged(req))) {
+      return res.status(403).json({ status: 403, code: 'TIME_ENTRY_ACCESS_FORBIDDEN', message: 'Time entry is restricted.' });
+    }
 
     res.json(entry);
   } catch (error) {
@@ -243,29 +270,24 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
       minutes,
       workDate,
       departmentId,
-      caseId,  // Optional: link to specific case
-      userId   // From auth middleware
+      caseId
     } = req.body;
+    const resolvedUserId = getAuthenticatedUserId(req);
+    if (!resolvedUserId) {
+      return res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+    }
+    if (req.body?.userId && req.body.userId !== resolvedUserId) {
+      return res.status(400).json({ status: 400, code: 'TIME_ENTRY_USER_ID_NOT_ACCEPTED', message: 'Time entries use the authenticated user only.' });
+    }
+    if (req.body?.taskId || req.body?.documentId || req.body?.communicationId) {
+      return res.status(400).json({ status: 400, code: 'TIME_ENTRY_CONTEXT_NOT_SUPPORTED', message: 'Task, document and communication time links need a future persisted model.' });
+    }
 
     // Validate required fields
     if (!matterId || !workType || !description || !minutes) {
       return res.status(400).json({
         error: 'Missing required fields: matterId, workType, description, minutes'
       });
-    }
-
-    // Get userId from body or auth middleware (placeholder)
-    const actualUserId = userId || req.body.userId;
-
-    // Resolve actualUserId — auth middleware should set req.user.id but may not be wired for this route yet.
-    // Fall back to first active user to avoid FK constraint failure on userId.
-    let resolvedUserId = actualUserId;
-    if (!resolvedUserId) {
-      const fallbackUser = await prisma.user.findFirst({
-        where: { isActive: true },
-        select: { id: true }
-      });
-      resolvedUserId = fallbackUser?.id;
     }
 
     // Map Hungarian workType labels to Prisma enum values
@@ -281,9 +303,30 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
     const mappedWorkType = workTypeMap[workType] || workType;
 
     // Validate matterId exists
-    const matterExists = await prisma.matter.findUnique({ where: { id: matterId } });
+    const matterExists = await prisma.matter.findUnique({ where: { id: matterId }, select: { id: true } });
     if (!matterExists) {
       return res.status(400).json({ error: `Matter with id '${matterId}' not found` });
+    }
+    if (caseId) {
+      const caseRecord = await prisma.case.findUnique({
+        where: { id: String(caseId) },
+        select: { id: true, matterId: true, assignedLawyerId: true, createdById: true },
+      });
+      if (!caseRecord || caseRecord.matterId !== matterId) {
+        return res.status(400).json({ status: 400, code: 'TIME_ENTRY_CASE_MATTER_MISMATCH', message: 'caseId must belong to the selected matter.' });
+      }
+      const collaborator = await prisma.caseCollaborator.findFirst({
+        where: { caseId: String(caseId), userId: resolvedUserId },
+        select: { id: true },
+      });
+      const canRecord =
+        isPrivileged(req) ||
+        caseRecord.assignedLawyerId === resolvedUserId ||
+        caseRecord.createdById === resolvedUserId ||
+        Boolean(collaborator);
+      if (!canRecord) {
+        return res.status(403).json({ status: 403, code: 'TIME_ENTRY_CASE_FORBIDDEN', message: 'You cannot record time on this case.' });
+      }
     }
 
     // Create time entry
@@ -355,6 +398,13 @@ router.patch('/:id', authenticate, async (req: Request, res: Response) => {
     const idParam = req.params.id;
     const id = Array.isArray(idParam) ? idParam[0] : idParam;
     const { workType, description, minutes, workDate, departmentId, billable } = req.body;
+    if (req.body?.userId || req.body?.taskId || req.body?.documentId || req.body?.communicationId || req.body?.caseId) {
+      return res.status(400).json({ status: 400, code: 'TIME_ENTRY_CONTEXT_UPDATE_NOT_SUPPORTED', message: 'Time entry ownership and context cannot be changed here.' });
+    }
+    const requesterId = getAuthenticatedUserId(req);
+    if (!requesterId) {
+      return res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+    }
 
     // Get original entry to calculate difference
     const original = await prisma.timeEntry.findUnique({
@@ -363,6 +413,9 @@ router.patch('/:id', authenticate, async (req: Request, res: Response) => {
 
     if (!original) {
       return res.status(404).json({ error: 'Time entry not found' });
+    }
+    if (original.userId !== requesterId && !isPrivileged(req)) {
+      return res.status(403).json({ status: 403, code: 'TIME_ENTRY_ACCESS_FORBIDDEN', message: 'Time entry is restricted.' });
     }
 
     // Map Hungarian workType labels to Prisma enum values (same map as POST)
@@ -426,6 +479,10 @@ router.delete('/:id', authenticate, async (req: Request, res: Response) => {
   try {
     const idParam = req.params.id;
     const id = Array.isArray(idParam) ? idParam[0] : idParam;
+    const requesterId = getAuthenticatedUserId(req);
+    if (!requesterId) {
+      return res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+    }
 
     const entry = await prisma.timeEntry.findUnique({
       where: { id }
@@ -433,6 +490,9 @@ router.delete('/:id', authenticate, async (req: Request, res: Response) => {
 
     if (!entry) {
       return res.status(404).json({ error: 'Time entry not found' });
+    }
+    if (entry.userId !== requesterId && !isPrivileged(req)) {
+      return res.status(403).json({ status: 403, code: 'TIME_ENTRY_ACCESS_FORBIDDEN', message: 'Time entry is restricted.' });
     }
 
     // Delete entry

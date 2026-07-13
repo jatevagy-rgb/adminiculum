@@ -378,6 +378,54 @@ export async function getCaseWorkflowSummary(caseId: string): Promise<CaseWorkfl
   return fetchApi<CaseWorkflowSummary>(`/cases/${caseId}/workflow-summary`);
 }
 
+export interface CaseResponsibilityResponse {
+  case: {
+    id: string;
+    caseNumber: string;
+    title: string;
+    status: string;
+    deadline: string | null;
+    matterId: string | null;
+  };
+  responsibleLawyer: { id: string; name: string | null; email: string | null; role: string | null } | null;
+  createdBy: { id: string; name: string | null; email: string | null; role: string | null } | null;
+  collaborators: CaseCollaborator[];
+  work: {
+    openTaskCount: number;
+    overdueTaskCount: number;
+    dueSoonTaskCount: number;
+    reviewTaskCount: number;
+    blockedTaskCount: number;
+    assignedPeople: Array<{
+      user: { id: string; name: string | null; email: string | null; role: string | null };
+      openTaskCount: number;
+      overdueTaskCount: number;
+      dueSoonTaskCount: number;
+    }>;
+  };
+  time: {
+    supported: boolean;
+    matterId: string | null;
+    totalMinutes: number | null;
+    currentUserMinutes: number;
+    activeTimerSupported: boolean;
+  };
+  capabilities: {
+    canChangeResponsibleLawyer: boolean;
+    canAddCollaborator: boolean;
+    canRemoveCollaborator: boolean;
+    canChangeCollaboratorRole: boolean;
+    canAssignWork: boolean;
+    canRecordTime: boolean;
+    canViewCaseTime: boolean;
+    canViewTeamWorkload: boolean;
+  };
+}
+
+export async function getCaseResponsibility(caseId: string): Promise<CaseResponsibilityResponse> {
+  return fetchApi<CaseResponsibilityResponse>(`/cases/${caseId}/responsibility`);
+}
+
 export interface CaseWorkItemCapabilities {
   canStart: boolean;
   canComplete: boolean;
@@ -3116,6 +3164,58 @@ export async function deleteTimeEntry(id: string): Promise<{ message: string }> 
   return fetchApi<{ message: string }>(`/time-entries/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
+}
+
+export interface WorkflowWorkloadResponse {
+  scope: 'MY_WORK' | 'MY_CASES' | 'TEAM';
+  generatedAt: string;
+  summary: {
+    caseCount: number;
+    openTaskCount: number;
+    overdueTaskCount: number;
+    dueSoonTaskCount: number;
+    recordedMinutes: number;
+    activeTimerSupported: boolean;
+  };
+  people: Array<{
+    user: { id: string; name: string | null; email: string | null; role: string | null };
+    openTaskCount: number;
+    overdueTaskCount: number;
+    dueSoonTaskCount: number;
+    reviewTaskCount: number;
+    blockedTaskCount: number;
+    recordedMinutes: number;
+    caseCount: number;
+  }>;
+  cases: Array<{
+    id: string;
+    caseNumber: string;
+    title: string;
+    status: string;
+    deadline: string | null;
+    matterId: string | null;
+    responsibleLawyerId: string | null;
+    openTaskCount: number;
+    overdueTaskCount: number;
+    dueSoonTaskCount: number;
+  }>;
+  availability: {
+    teamScope: boolean;
+    caseTime: boolean;
+    activeTimer: boolean;
+    passiveTracking: boolean;
+  };
+}
+
+export async function getWorkflowWorkload(params?: {
+  scope?: 'MY_WORK' | 'MY_CASES' | 'TEAM';
+  caseId?: string;
+}): Promise<WorkflowWorkloadResponse> {
+  const queryParams = new URLSearchParams();
+  if (params?.scope) queryParams.set('scope', params.scope);
+  if (params?.caseId) queryParams.set('caseId', params.caseId);
+  const query = queryParams.toString();
+  return fetchApi<WorkflowWorkloadResponse>(`/workload${query ? `?${query}` : ''}`);
 }
 
 export async function getTimesheetReportTemplates(): Promise<TimesheetReportTemplate[]> {
