@@ -42,3 +42,15 @@ Node/Express backend remains the source of truth. Static guards in
 lifecycle source imports no AI provider and no n8n, and encodes no legal-merits/outcome
 scoring. Any future AI assistance must use the separately approved manual AI work-package
 model with human review.
+
+## Cross-reference: WORKFLOW-CORE-INTAKE-MATTER-OPENING-1
+
+The intake/matter-opening package (`docs/workflow-core-intake-matter-opening-1.md`) complies
+with this boundary: no AI API/SDK, no AI client matching, no AI conflict checking or
+clearance, no AI case classification or risk scoring, no AI-created matters/tasks/deadlines
+without human confirmation, and no n8n ownership of intake, clients, cases, conflict review,
+assignments, or opening state. Conflict review is truthfully UNAVAILABLE (no persistence
+exists) and is never decided automatically. Static guards in
+`Backend/tests/intakeMatterOpeningStaticGuards.test.ts` assert the intake surface imports no
+AI provider, no n8n, no external CRM/identity/screening service, and contains no automatic
+merge/clearance/activation logic.

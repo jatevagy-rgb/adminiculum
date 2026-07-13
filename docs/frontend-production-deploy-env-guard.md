@@ -84,3 +84,36 @@ This documentation closeout classification:
 ```text
 frontend_production_deploy_env_guard_documented_no_runtime_change
 ```
+
+## Non-destructive clean-build verification procedure (WORKFLOW-CORE-INTAKE-MATTER-OPENING-1)
+
+Local development keeps `Frontend/.env.local` with
+`NEXT_PUBLIC_BACKEND_BASE_URL=http://localhost:3001`, so a plain local `npm run build`
+correctly FAILS `verify:prod-env` — that failure is the guard working, not a defect.
+
+To verify the guard passes with production-safe values **without editing or deleting the
+developer's `.env.local`** (Next.js gives process environment variables precedence over
+`.env.local`):
+
+```powershell
+cd Frontend
+Remove-Item -Recurse -Force .next                                   # clean previous output
+$env:NEXT_PUBLIC_BACKEND_BASE_URL = 'https://prod-env-verify.invalid' # temporary, process-env only
+npm run build
+npm run verify:prod-env                                              # -> [prod-env-guard] OK
+```
+
+Verified 2026-07-13 on `hotfix/runtime-shape-20260308`: build exit 0, guard reported
+`OK: no localhost API/auth targets found in .next runtime output`.
+
+Notes:
+
+- `https://prod-env-verify.invalid` uses the RFC 2606 reserved `.invalid` TLD: it is
+  non-routable and is **not a deployment configuration** — real deployments must supply the
+  actual production `NEXT_PUBLIC_*` values in the pipeline/app settings.
+- The verification script itself was not modified or weakened.
+- No environment file is committed; `.env.local` remains untouched, so the next ordinary
+  local build keeps working against `localhost:3001`.
+- The only source-level `localhost:3001` literals are a comment in `src/lib/api.ts` and a
+  read-only placeholder in the unreferenced (not bundled) `src/components/Layout/StitchLayout.tsx`;
+  neither reaches the `.next` runtime output.

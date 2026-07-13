@@ -203,6 +203,9 @@ app.use('/api/v1/agenda', agendaRoutes);
 import workloadRoutes from './modules/responsibility/routes';
 app.use('/api/v1/workload', workloadRoutes);
 
+import intakeRoutes from './modules/intake/routes';
+app.use('/api/v1/intake', intakeRoutes);
+
 import settingsRoutes from './modules/settings/routes';
 app.use('/api/v1/settings', settingsRoutes);
 

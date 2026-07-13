@@ -15,6 +15,13 @@ import { AgendaRequestError, getCaseDeadlines } from '../agenda/service';
 import { getCaseResponsibility } from '../responsibility/service';
 import { getCaseLifecycle, closeCase, reopenCase, archiveCase, LifecycleServiceError } from './lifecycleService';
 import { getCaseLitigationDossier } from './litigationDossier';
+import {
+  activateMatter,
+  createOpeningTasks,
+  declineIntake,
+  getCaseIntakeReadiness,
+  IntakeServiceError,
+} from './intakeService';
 
 const router = Router();
 
@@ -346,6 +353,94 @@ router.get('/:caseId/litigation-dossier', authenticate, requireCaseReadAccess, a
   } catch (error) {
     console.error('Get litigation dossier error:', error);
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// GET /cases/:caseId/intake-readiness
+// ============================================================================
+router.get('/:caseId/intake-readiness', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+    const readiness = await getCaseIntakeReadiness(caseId, { userId, role: req.user?.role });
+    if (!readiness) {
+      res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+      return;
+    }
+    res.json(readiness);
+  } catch (error) {
+    console.error('Get intake readiness error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+function sendIntakeError(res: Response, error: unknown, label: string): void {
+  if (error instanceof IntakeServiceError) {
+    res.status(error.statusCode).json({
+      status: error.statusCode,
+      code: error.code,
+      message: error.message,
+      ...(error.blockers ? { blockers: error.blockers } : {}),
+    });
+    return;
+  }
+  console.error(`${label} error:`, error);
+  res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+}
+
+// ============================================================================
+// POST /cases/:caseId/opening-tasks — explicit, user-confirmed bundle only
+// ============================================================================
+router.post('/:caseId/opening-tasks', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+    const result = await createOpeningTasks(caseId, { userId, role: req.user?.role }, req.body);
+    res.status(201).json(result);
+  } catch (error) {
+    sendIntakeError(res, error, 'Create opening tasks');
+  }
+});
+
+// ============================================================================
+// POST /cases/:caseId/activate | /decline-intake — explicit intake transitions
+// ============================================================================
+router.post('/:caseId/activate', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+    const result = await activateMatter(caseId, { userId, role: req.user?.role });
+    res.json(result);
+  } catch (error) {
+    sendIntakeError(res, error, 'Activate matter');
+  }
+});
+
+router.post('/:caseId/decline-intake', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+    const result = await declineIntake(caseId, { userId, role: req.user?.role });
+    res.json(result);
+  } catch (error) {
+    sendIntakeError(res, error, 'Decline intake');
   }
 });
 

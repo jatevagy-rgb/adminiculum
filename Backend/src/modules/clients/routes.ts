@@ -334,6 +334,91 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
 });
 
 // ============================================================================
+// GET /clients/lookup — WORKFLOW-CORE-INTAKE-MATTER-OPENING-1
+// Bounded duplicate-safety lookup for intake. Match signals are supported-field
+// exact matches plus name similarity FOR HUMAN REVIEW ONLY — a search match is
+// never a confirmed duplicate and never triggers a merge.
+// ============================================================================
+const LOOKUP_MIN_QUERY_LENGTH = 2;
+const LOOKUP_MAX_RESULTS = 10;
+
+router.get('/lookup', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const query = String(req.query.q || '').trim();
+    if (query.length < LOOKUP_MIN_QUERY_LENGTH) {
+      res.status(400).json({
+        status: 400,
+        code: 'QUERY_TOO_SHORT',
+        message: `A kereséshez legalább ${LOOKUP_MIN_QUERY_LENGTH} karakter szükséges.`,
+      });
+      return;
+    }
+
+    // Same access model as the client list: identity managers search all
+    // clients; other users search only clients on their accessible cases.
+    const accessibleClientIds = isClientIdentityManager(req) ? null : await getCaseAccessibleClientIds(req);
+    if (accessibleClientIds !== null && accessibleClientIds.length === 0) {
+      res.json({ query, candidates: [] });
+      return;
+    }
+
+    const normalized = query.toLowerCase();
+    const candidates = await prisma.client.findMany({
+      where: {
+        ...(accessibleClientIds ? { id: { in: accessibleClientIds } } : {}),
+        OR: [
+          { name: { contains: query, mode: 'insensitive' } },
+          { email: { equals: query, mode: 'insensitive' } },
+          { taxNumber: { equals: query } },
+          { companyRegistrationNumber: { equals: query } },
+        ],
+      },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      take: LOOKUP_MAX_RESULTS,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        taxNumber: true,
+        companyRegistrationNumber: true,
+      },
+    });
+
+    const manager = isClientIdentityManager(req);
+    res.json({
+      query,
+      candidates: candidates.map((client) => {
+        const matchSignals: string[] = [];
+        if (client.email && client.email.toLowerCase() === normalized) matchSignals.push('EXACT_EMAIL');
+        if (client.companyRegistrationNumber && client.companyRegistrationNumber === query) matchSignals.push('EXACT_REGISTRATION_ID');
+        if (client.taxNumber && client.taxNumber === query) matchSignals.push('EXACT_TAX_ID');
+        if (client.name && client.name.toLowerCase().includes(normalized)) matchSignals.push('SIMILAR_NAME');
+        return {
+          id: client.id,
+          displayName: client.name,
+          // No person/organization type field exists in the schema — never inferred.
+          type: null,
+          email: client.email,
+          phone: client.phone,
+          matchSignals,
+          // Every candidate requires human review; a match signal is not a
+          // duplicate confirmation and never triggers an automatic merge.
+          warning: 'REVIEW_REQUIRED',
+          capabilities: {
+            canSelect: true,
+            canEdit: manager,
+          },
+        };
+      }),
+    });
+  } catch (error) {
+    logPrismaRouteError('GET /clients/lookup', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
 // GET /clients/:clientId
 // ============================================================================
 router.get('/:clientId', authenticate, requireClientIdentityReadAccess, async (req: Request, res: Response): Promise<void> => {

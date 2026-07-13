@@ -695,6 +695,186 @@ export async function getCaseLitigationDossier(caseId: string): Promise<Litigati
   return fetchApi<LitigationDossierResponse>(`/cases/${caseId}/litigation-dossier`);
 }
 
+// ===========================================================================
+// Intake & matter opening (WORKFLOW-CORE-INTAKE-MATTER-OPENING-1)
+// ===========================================================================
+
+export interface IntakeChecklistItem {
+  code:
+    | 'CLIENT_SELECTED'
+    | 'CLIENT_IDENTITY'
+    | 'CLIENT_ROLE'
+    | 'RESPONSIBLE_LAWYER'
+    | 'CONFLICT_REVIEW'
+    | 'MATTER_DESCRIPTION'
+    | 'INITIAL_TASKS'
+    | 'INITIAL_DEADLINE';
+  label: string;
+  required: boolean;
+  complete: boolean;
+  available: boolean;
+  href?: string | null;
+}
+
+export interface IntakeBlockerItem {
+  code: string;
+  label: string;
+  href?: string | null;
+}
+
+export interface IntakeReadinessSummary {
+  readyForActivation: boolean;
+  completedRequiredItems: number;
+  totalRequiredItems: number;
+}
+
+export interface MatterIntakeReadinessResponse {
+  caseId: string;
+  generatedAt: string;
+  case: {
+    displayName: string;
+    reference?: string | null;
+    status: string;
+    clientRole?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+  };
+  client: {
+    id: string;
+    displayName: string;
+    type?: string | null;
+    identityStatus?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  } | null;
+  responsibility: {
+    responsibleLawyer?: { id: string; displayName: string } | null;
+    collaborators: Array<{ id: string; displayName: string; role?: string | null }>;
+  };
+  conflictReview: {
+    status: 'UNAVAILABLE' | 'NOT_RECORDED' | 'REVIEW_REQUIRED' | 'CLEARED' | 'BLOCKED';
+    reviewedAt?: string | null;
+    reviewer?: { id: string; displayName: string } | null;
+    safeLabel?: string | null;
+  };
+  checklist: IntakeChecklistItem[];
+  blockers: IntakeBlockerItem[];
+  readiness: IntakeReadinessSummary;
+  capabilities: {
+    canEditClientLink: boolean;
+    canEditClientRole: boolean;
+    canChangeResponsibleLawyer: boolean;
+    canManageCollaborators: boolean;
+    canRecordConflictReview: boolean;
+    canCreateOpeningTasks: boolean;
+    canSetInitialDeadline: boolean;
+    canActivateMatter: boolean;
+    canDeclineMatter: boolean;
+  };
+  availability: {
+    clientIdentity: boolean;
+    clientRole: boolean;
+    parties: boolean;
+    opposingParties: boolean;
+    conflictReviewPersistence: boolean;
+    engagementState: boolean;
+    openingTaskBundle: boolean;
+    initialDeadline: boolean;
+  };
+}
+
+export async function getCaseIntakeReadiness(caseId: string): Promise<MatterIntakeReadinessResponse> {
+  return fetchApi<MatterIntakeReadinessResponse>(`/cases/${caseId}/intake-readiness`);
+}
+
+export interface CreateOpeningTasksResponse {
+  caseId: string;
+  created: Array<{ id: string; code: string; title: string; dueAt: string | null }>;
+  skippedExisting: string[];
+  availableCodes: Array<{ code: string; title: string }>;
+}
+
+export async function createOpeningTasks(
+  caseId: string,
+  tasks: Array<{ code: string; assigneeId?: string; dueAt?: string }>
+): Promise<CreateOpeningTasksResponse> {
+  return fetchApi<CreateOpeningTasksResponse>(`/cases/${caseId}/opening-tasks`, {
+    method: 'POST',
+    body: JSON.stringify({ tasks }),
+  });
+}
+
+export async function activateMatterIntake(caseId: string): Promise<MatterIntakeReadinessResponse> {
+  return fetchApi<MatterIntakeReadinessResponse>(`/cases/${caseId}/activate`, { method: 'POST' });
+}
+
+export async function declineMatterIntake(caseId: string): Promise<MatterIntakeReadinessResponse> {
+  return fetchApi<MatterIntakeReadinessResponse>(`/cases/${caseId}/decline-intake`, { method: 'POST' });
+}
+
+export interface IntakeQueueResponse {
+  generatedAt: string;
+  summary: {
+    total: number;
+    missingClient: number;
+    missingResponsibleLawyer: number;
+    conflictReviewRequired: number;
+    readyForActivation: number;
+    blocked: number;
+  };
+  items: Array<{
+    caseId: string;
+    displayName: string;
+    reference?: string | null;
+    status: string;
+    client?: { id: string; displayName: string } | null;
+    responsibleLawyer?: { id: string; displayName: string } | null;
+    readiness: IntakeReadinessSummary;
+    blockers: Array<{ code: string; label: string }>;
+    nextStep?: { code: string; label: string; href?: string | null } | null;
+    updatedAt?: string | null;
+    href: string;
+  }>;
+  pagination: { limit: number; offset: number; hasMore: boolean };
+  availability: {
+    conflictReview: boolean;
+    engagementState: boolean;
+    teamScope: boolean;
+  };
+}
+
+export async function getIntakeQueue(params: {
+  scope?: 'MY_INTAKES' | 'MY_CASES' | 'TEAM';
+  status?: 'ALL' | 'NEEDS_ATTENTION' | 'READY';
+  limit?: number;
+  offset?: number;
+} = {}): Promise<IntakeQueueResponse> {
+  const query = new URLSearchParams();
+  if (params.scope) query.set('scope', params.scope);
+  if (params.status) query.set('status', params.status);
+  if (params.limit) query.set('limit', String(params.limit));
+  if (params.offset) query.set('offset', String(params.offset));
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return fetchApi<IntakeQueueResponse>(`/intake${suffix}`);
+}
+
+export interface ClientLookupCandidate {
+  id: string;
+  displayName: string;
+  type?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  matchSignals: Array<'EXACT_EMAIL' | 'EXACT_REGISTRATION_ID' | 'EXACT_TAX_ID' | 'SIMILAR_NAME'>;
+  warning: 'REVIEW_REQUIRED';
+  capabilities: { canSelect: boolean; canEdit: boolean };
+}
+
+export async function lookupClients(query: string): Promise<{ query: string; candidates: ClientLookupCandidate[] }> {
+  return fetchApi<{ query: string; candidates: ClientLookupCandidate[] }>(
+    `/clients/lookup?q=${encodeURIComponent(query)}`
+  );
+}
+
 export type WorkflowDeadlineUrgency = 'OVERDUE' | 'TODAY' | 'TOMORROW' | 'THIS_WEEK' | 'LATER';
 export type WorkflowDeadlineStatus = 'OPEN' | 'COMPLETED' | 'CANCELLED' | 'SUPERSEDED';
 

@@ -120,3 +120,11 @@ WORKFLOW-CORE-RESPONSIBILITY-WORKLOAD-TIME-1 adds the canonical case responsibil
 ## Related: WORKFLOW-CORE-LITIGATION-CASE-LIFECYCLE-1
 
 The litigation & case-lifecycle package builds on this module. It adds the canonical case-lifecycle contract (`GET /cases/:id/lifecycle`, close/reopen/archive) and the read-only litigation dossier (`GET /cases/:id/litigation-dossier`), and reuses this module's contracts rather than duplicating them. See `docs/workflow-core-litigation-case-lifecycle-1.md`.
+
+## Cross-reference: intake and matter opening
+
+Opening tasks created by the explicit intake bundle
+(`POST /cases/:id/opening-tasks`, WORKFLOW-CORE-INTAKE-MATTER-OPENING-1) flow through the
+existing task pipeline, so a valid opening task can become the Case Center next action with no
+Case Center changes. Declined intakes (`CANCELLED`) leave active work queues. See
+`docs/workflow-core-intake-matter-opening-1.md`.

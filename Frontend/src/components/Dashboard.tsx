@@ -7,6 +7,7 @@ import {
   getCommunications,
   getCurrentUser,
   getDashboardStats,
+  getIntakeQueue,
   getWorkflowAgenda,
   getMyTasks,
   getNewsFeed,
@@ -15,6 +16,7 @@ import {
   type CommunicationItem,
   type CurrentUser,
   type DashboardStats,
+  type IntakeQueueResponse,
   type TaskItem,
   type WorkflowAgendaResponse,
   type WorkflowDeadlineItem,
@@ -72,6 +74,72 @@ function KpiCard({ label, value, tone, zeroHint, href }: KpiCardProps) {
         <span className="adm-work-tile__caption">{value === 0 ? zeroHint : "Aktív tétel"}</span>
       </span>
     </Link>
+  );
+}
+
+/**
+ * Bounded intake panel (WORKFLOW-CORE-INTAKE-MATTER-OPENING-1): my intakes
+ * requiring attention, ready/blocked counts, next few items, link to /intake.
+ * Uses the canonical intake API; renders nothing when there is no intake work.
+ */
+function DashboardIntakePanel() {
+  const [queue, setQueue] = useState<IntakeQueueResponse | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getIntakeQueue({ scope: "MY_INTAKES", limit: 5 })
+      .then((response) => {
+        if (!cancelled) setQueue(response);
+      })
+      .catch(() => {
+        if (!cancelled) setQueue(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!queue || queue.summary.total === 0) return null;
+
+  return (
+    <section>
+      <article className="adm-panel overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--adm-border)] px-4 py-3 lg:px-5">
+          <div>
+            <p className="adm-kicker text-[var(--adm-green-800)]">Ügyfelvétel</p>
+            <h3 className="adm-heading mt-0.5 text-[20px] leading-tight">Beérkezési sor</h3>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1 text-[10.5px] font-semibold text-[var(--adm-text-muted)]">
+              Aktiválható: {queue.summary.readyForActivation}
+            </span>
+            <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1 text-[10.5px] font-semibold text-[var(--adm-text-muted)]">
+              Hiányos: {queue.summary.blocked}
+            </span>
+            <Link href="/intake" className="adm-link-button px-3 py-1.5 text-[11px]">
+              Ügyfelvételi sor
+            </Link>
+          </div>
+        </div>
+        <ul className="divide-y divide-[var(--adm-border)]">
+          {queue.items.slice(0, 5).map((item) => (
+            <li key={item.caseId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 lg:px-5">
+              <div className="min-w-0">
+                <Link href={item.href} className="text-[12px] font-semibold text-[var(--adm-text)] hover:underline">
+                  {item.displayName}
+                </Link>
+                <p className="text-[10.5px] text-[var(--adm-text-muted)]">
+                  {item.nextStep ? item.nextStep.label : "Aktiválásra kész"}
+                </p>
+              </div>
+              <span className="text-[10.5px] font-semibold text-[var(--adm-text-soft)]">
+                {item.readiness.completedRequiredItems}/{item.readiness.totalRequiredItems}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </article>
+    </section>
   );
 }
 
@@ -633,6 +701,9 @@ export function Dashboard() {
           <KpiCard label="Külső kommunikáció" value={externalComms.length} tone="cyan" zeroHint="Nincs új külső jelzés" href="/notifications?view=external" />
           <KpiCard label="Belső kommunikáció" value={internalComms.length} tone="petrol" zeroHint="Nincs új belső jelzés" href="/notifications?view=internal" />
         </section>
+
+        {/* 3b — Bounded intake panel (renders only when intake work exists) */}
+        <DashboardIntakePanel />
 
         {/* 4 + 5 — Dominant "Itt folytasd" workbench + review/handoff side column */}
         <section className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.38fr)_minmax(330px,0.72fr)]">

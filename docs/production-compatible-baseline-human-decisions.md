@@ -770,3 +770,38 @@ Internal responsibility, workload and manual time-entry coordination is treated 
 - Unsupported litigation/lifecycle concepts were **not simulated**: structured legal issues/claims/allegations/defences, evidence items & evidence↔issue relations and relation classification, pleading filing status/supersede, hearing/procedural-event typing, opposing party, court/authority reference, legal significance, burden of proof, and a dedicated `CLOSING`/`closedAt`/`archivedAt` schema are marked unavailable/deferred (`availability` flags) with the exact blocker documented in `docs/workflow-core-litigation-case-lifecycle-data-source-audit.md`.
 - Validation: backend `prisma validate` + `tsc --noEmit` + `jest` (33 suites / 344 tests, up from 30 / 305); frontend `tsc --noEmit` + build + `verify:prod-env`.
 - Production apply readiness: still blocked by baseline posture. CP-SCHEMA-1 readiness: still blocked. Future structured litigation models require a separate schema change, proof, and PR.
+
+## WORKFLOW-CORE-INTAKE-MATTER-OPENING-1 Decision Note
+
+`WORKFLOW-CORE-INTAKE-MATTER-OPENING-1` adds the internal intake and matter-opening workflow
+using **existing production-compatible data only**: a canonical intake-readiness contract
+(`GET /cases/:id/intake-readiness`), a bounded duplicate-safety client lookup
+(`GET /clients/lookup`), an explicit user-confirmed opening task bundle
+(`POST /cases/:id/opening-tasks`, existing `Task` model + `type` code convention), explicit
+activation/decline on the real `CaseStatus` enum (`CLIENT_INPUT → DRAFT` / `CLIENT_INPUT →
+CANCELLED`), and a bounded intake queue (`GET /api/v1/intake`).
+
+- Implemented **without** `schema.prisma` edit, migration, `prisma migrate`/`db push`, or manual DB query.
+- **No** production deployment; **no** Client Portal change (the portal is not an onboarding channel); **no** AI API/SDK; **no** n8n; **no** external CRM/identity-verification/sanctions-PEP integration; **no** client communication; **no** OpenAPI/CORS/Azure/package/lock change.
+- **No automatic conflict clearance** — conflict review has no persistence and is exposed as
+  UNAVAILABLE, never simulated in descriptions/JSON, with no clearance checkbox anywhere.
+- **No client merging** — lookup match signals are human-review hints (`REVIEW_REQUIRED`), never
+  duplicate confirmations; unique-field collision returns 409.
+- **No automatic activation, responsible-lawyer assignment, or task creation** — every mutation is
+  an explicit, authorized human action; opening tasks require explicit selection.
+- **No** raw `workspaceText`/document/communication content exposure; explicit `select`, bounded
+  queries, and content-minimized audit events only; no sensitive identity numbers in readiness or
+  queue DTOs.
+- Unsupported intake/compliance concepts (prospective-client state, person/org type, verified
+  identity, parties/opposing parties, conflict-review persistence, engagement state, decline
+  reason codes, client merge, task templates) were **not simulated**; blockers documented in
+  `docs/workflow-core-intake-matter-opening-data-source-audit.md`.
+- Production-env verification recorded honestly: local build with `.env.local` correctly fails the
+  guard; the documented non-destructive clean procedure (process-env override with a non-routable
+  `.invalid` placeholder, fresh `.next`) passes `verify:prod-env` without editing `.env.local` or
+  weakening the script (`docs/frontend-production-deploy-env-guard.md`).
+- Validation: backend `prisma validate` + `tsc --noEmit` + Jest **38 suites / 408 tests** (up from
+  33/344); frontend `tsc --noEmit` + build + clean-env `verify:prod-env`.
+- Production apply readiness: still blocked by baseline posture. CP-SCHEMA-1 readiness: still
+  blocked. Structured conflict-review/engagement/party models require a separate schema change,
+  proof, and PR.

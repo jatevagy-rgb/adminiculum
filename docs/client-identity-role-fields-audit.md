@@ -198,3 +198,12 @@ This audit did not:
 ## Final classification
 
 `client_identity_role_fields_audited_no_db_change_no_runtime_change`
+
+## Cross-reference: intake duplicate-safety lookup (WORKFLOW-CORE-INTAKE-MATTER-OPENING-1)
+
+The intake package adds `GET /clients/lookup` — a bounded, authenticated duplicate-safety search
+over the KEEP client identity fields (`email`, `taxNumber`, `companyRegistrationNumber`, `name`).
+Identifiers are matched server-side but not echoed in candidates; match signals are human-review
+hints only (`REVIEW_REQUIRED`), never duplicate confirmations, and no merge path exists. Client
+creation/update boundaries and their ADMIN/PARTNER gating are unchanged. See
+`docs/workflow-core-client-selection-duplicate-safety.md`.

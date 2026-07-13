@@ -7,6 +7,7 @@ import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/Ano
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import { CaseMatterDossierPanel } from "@/components/litigation/CaseMatterDossierPanel";
+import { CaseIntakeReadinessPanel } from "@/components/intake/CaseIntakeReadinessPanel";
 
 type CaseDocument = {
   id: string;
@@ -1628,6 +1629,8 @@ export function CaseDetail({ params }: CaseDetailProps) {
                 </div>
               </div>
             </section>
+
+            <CaseIntakeReadinessPanel caseId={canonicalCaseId} />
 
             <CaseMatterDossierPanel caseId={canonicalCaseId} compact />
 

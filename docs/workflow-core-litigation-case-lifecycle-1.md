@@ -149,3 +149,12 @@ a future schema change and are surfaced via `availability` flags.
 A future package (with an approved schema change) can add structured
 issue/claim/evidence-relation/pleading-filing/hearing/party models and their
 mutation/validation engines, reusing the availability flags established here.
+
+## Cross-reference: intake and matter opening
+
+`WORKFLOW-CORE-INTAKE-MATTER-OPENING-1` (`docs/workflow-core-intake-matter-opening-1.md`) adds the
+beginning of the lifecycle in front of this package: cases start in the INTAKE-category
+`CLIENT_INPUT` status, are explicitly activated to `DRAFT` (existing valid transition) once the
+backend-derived intake readiness has no blockers, or explicitly declined to `CANCELLED`
+(CLOSED-category). Both transitions are human actions with content-minimized audit events; see
+`docs/workflow-core-matter-opening-transition-matrix.md`.
