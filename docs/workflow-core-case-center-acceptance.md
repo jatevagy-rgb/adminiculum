@@ -56,3 +56,7 @@
 - [ ] No production deploy.
 - [ ] No Client Portal enablement.
 - [ ] No external visibility.
+
+## WORKFLOW-CORE-TASKS-HANDOFF-1 regression note
+
+Case Center next-action refresh must be verified after task start, submit, approve, return, block, and unblock actions. The frontend refreshes the workflow summary after supported mutations and does not optimistically invent resulting state.

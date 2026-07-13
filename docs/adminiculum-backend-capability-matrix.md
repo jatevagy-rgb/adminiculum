@@ -254,3 +254,7 @@ Scope: audit-only (no app code changes)
 
 - Added a read-only workflow summary endpoint and Case Detail Case Center V1 UI so the internal matter workspace has one stronger operational next-action panel.
 - The aggregate is select-only, bounded, metadata-first, and excludes `documents.workspaceText`, raw document text, raw communication body/content, broad relation includes, and Client Portal modules.
+
+## WORKFLOW-CORE-TASKS-HANDOFF-1
+
+Added `GET /api/v1/cases/:caseId/work-items` and hardened task transition routes for start, submit, approve/return, block, and unblock. Responses are explicit DTOs and omit raw document/communication content.

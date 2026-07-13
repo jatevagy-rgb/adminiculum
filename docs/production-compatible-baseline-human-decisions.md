@@ -738,3 +738,7 @@ That task should still be docs/planning-first and remain blocked from DB mutatio
 - `WORKFLOW-CORE-CASE-CENTER-1` implemented an internal case-centered workflow summary using existing production-compatible data only: case metadata, task status/deadline stats, case deadline, communication preview metadata, document/review metadata, responsible lawyer, and collaborators.
 - Added `GET /api/v1/cases/:caseId/workflow-summary`, deterministic next-action prioritization, a Case Detail `Itt folytasd` operational panel, source audit docs, implementation checkpoint docs, and acceptance checklist docs.
 - **No `schema.prisma` edit, migration, DB command/query, production apply, Client Portal enablement, external visibility, raw document text, `documents.workspaceText`, raw communication body/content, Azure/OpenAPI/CORS/package change, or production deployment is authorized.**
+
+## WORKFLOW-CORE-TASKS-HANDOFF-1 decision
+
+Decision: internal KEEP candidate for the production-compatible baseline, limited to existing task, blocker, case-access, and handoff-package metadata fields. Implemented without `schema.prisma` edits, migrations, manual DB queries, production deployment, Client Portal changes, workspace text/raw document/raw communication exposure, or arbitrary frontend status assignment. Unsupported waiting and recipient-specific handoff states were not simulated.

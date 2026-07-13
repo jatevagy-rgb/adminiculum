@@ -130,3 +130,7 @@ Az Adminiculum alapcapability-jei már nagyrészt rendelkezésre állnak; a pilo
 - Case Detail now includes an internal Case Center V1 workflow panel backed by `GET /api/v1/cases/:caseId/workflow-summary`.
 - The endpoint intentionally uses safe metadata only: case fields, tasks, case deadline, communication summary/preview metadata, document-review metadata, responsible lawyer, and collaborators. It does not select document workspace text or raw communication/document content.
 - See `docs/workflow-core-case-center-data-source-audit.md`, `docs/workflow-core-case-center-1.md`, and `docs/workflow-core-case-center-acceptance.md`.
+
+## WORKFLOW-CORE-TASKS-HANDOFF-1
+
+Internal task and handoff work management now exposes a case-scoped work-item contract and capability-driven transitions. The implementation is schema-neutral and keeps Client Portal parked.

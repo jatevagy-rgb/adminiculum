@@ -329,3 +329,7 @@ Suggested scope:
 Final classification:
 
 `migration_history_reconciliation_decision_documented_no_runtime_change_no_db_change`
+
+## WORKFLOW-CORE-TASKS-HANDOFF-1 note
+
+The Case Workbench reads lawyer handoff packages as metadata-only work items when the handoff foundation is enabled. Recipient-specific offer/accept/return semantics remain out of scope because the current production-compatible package schema does not include a recipient field.

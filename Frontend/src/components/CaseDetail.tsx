@@ -2,7 +2,7 @@
 
 import { useState, use, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, type CaseWorkflowSummary, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator } from "@/lib/api";
+import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, blockTask, unblockTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, getCaseWorkItems, type CaseWorkflowSummary, type CaseWorkItemsResponse, type CaseWorkItem, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator } from "@/lib/api";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
@@ -150,6 +150,30 @@ const DEADLINE_URGENCY_LABELS: Record<string, string> = {
   LATER: "Későbbi",
 };
 
+const WORK_ITEM_CATEGORY_LABELS: Record<string, string> = {
+  OPEN: "Nyitott",
+  IN_PROGRESS: "Folyamatban",
+  BLOCKED: "Blokkolva",
+  WAITING: "Várakozik",
+  REVIEW: "Review",
+  HANDOFF: "Átadás",
+  COMPLETED: "Kész",
+};
+
+const WORK_ITEM_TYPE_LABELS: Record<string, string> = {
+  TASK: "Feladat",
+  REVIEW: "Review",
+  HANDOFF: "Átadás",
+};
+
+const WORK_ITEM_URGENCY_LABELS: Record<string, string> = {
+  OVERDUE: "Lejárt",
+  TODAY: "Ma",
+  SOON: "Közelgő",
+  LATER: "Későbbi",
+  NONE: "Nincs határidő",
+};
+
 const formatWorkflowDate = (value?: string | null): string => {
   if (!value) return "Nincs határidő";
   const date = new Date(value);
@@ -174,8 +198,11 @@ export function CaseDetail({ params }: CaseDetailProps) {
   const [timelineEvents, setTimelineEvents] = useState<TimelineEventItem[]>([]);
   const [communications, setCommunications] = useState<CommunicationItem[]>([]);
   const [workflowSummary, setWorkflowSummary] = useState<CaseWorkflowSummary | null>(null);
+  const [workItems, setWorkItems] = useState<CaseWorkItemsResponse | null>(null);
   const [isLoadingWorkflowSummary, setIsLoadingWorkflowSummary] = useState(false);
   const [workflowSummaryError, setWorkflowSummaryError] = useState<string | null>(null);
+  const [workItemsError, setWorkItemsError] = useState<string | null>(null);
+  const [workItemFilter, setWorkItemFilter] = useState<'all' | 'mine' | 'overdue' | 'soon' | 'review' | 'handoff' | 'blocked'>('all');
   const [isDownloading, setIsDownloading] = useState<string | null>(null);
   const [caseRecord, setCaseRecord] = useState<{
     id: string;
@@ -469,7 +496,8 @@ export function CaseDetail({ params }: CaseDetailProps) {
 
       setIsLoadingWorkflowSummary(true);
       setWorkflowSummaryError(null);
-      const [contracts, timeline, caseList, backendDocuments, anonDocs, communicationsResponse, workflowSummaryResponse] = await Promise.all([
+      setWorkItemsError(null);
+      const [contracts, timeline, caseList, backendDocuments, anonDocs, communicationsResponse, workflowSummaryResponse, workItemsResponse] = await Promise.all([
         getCaseContracts(effectiveCaseId).catch(() => []),
         getCaseTimeline(effectiveCaseId).catch(() => []),
         getCases(1, 200).catch(() => ({ data: [] })),
@@ -481,12 +509,18 @@ export function CaseDetail({ params }: CaseDetailProps) {
           setWorkflowSummaryError('A workflow összefoglaló most nem érhető el.');
           return null;
         }),
+        getCaseWorkItems(effectiveCaseId).catch((error) => {
+          console.error('Failed to load case work items:', error);
+          setWorkItemsError('A Case Workbench most nem érhető el.');
+          return null;
+        }),
       ]);
       setGeneratedContracts(contracts);
       setTimelineEvents(timeline);
       setAnonymousDocuments(anonDocs);
       setCommunications(communicationsResponse.communications || []);
       setWorkflowSummary(workflowSummaryResponse);
+      setWorkItems(workItemsResponse);
       const record = caseList.data.find((item) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId) || null;
       if (!caseRecord && record) {
         setCaseRecord({
@@ -1013,40 +1047,44 @@ export function CaseDetail({ params }: CaseDetailProps) {
   };
 
   // Task action handlers
-  const handleStartTask = async (taskId: string) => {
-    setActionTaskId(taskId);
+  const refreshWorkSurfaces = async () => {
+    await Promise.all([
+      loadTasks(),
+      loadBackendData(),
+    ]);
+  };
+
+  const runWorkbenchTaskAction = async (
+    taskId: string,
+    action: 'start' | 'submit' | 'approve' | 'return' | 'block' | 'unblock'
+  ) => {
+    setActionTaskId(`${taskId}:${action}`);
     try {
-      await startTask(taskId);
-      await loadTasks();
+      if (action === 'start') await startTask(taskId);
+      if (action === 'submit') await submitTask(taskId);
+      if (action === 'approve') await completeTask(taskId, true);
+      if (action === 'return') await completeTask(taskId, false);
+      if (action === 'block') await blockTask(taskId, 'DEPENDENCY');
+      if (action === 'unblock') await unblockTask(taskId);
+      await refreshWorkSurfaces();
     } catch (err) {
-      console.error('Failed to start task:', err);
+      console.error('Task workflow action failed:', err);
+      await refreshWorkSurfaces();
     } finally {
       setActionTaskId(null);
     }
+  };
+
+  const handleStartTask = async (taskId: string) => {
+    await runWorkbenchTaskAction(taskId, 'start');
   };
 
   const handleSubmitTask = async (taskId: string) => {
-    setActionTaskId(taskId);
-    try {
-      await submitTask(taskId);
-      await loadTasks();
-    } catch (err) {
-      console.error('Failed to submit task:', err);
-    } finally {
-      setActionTaskId(null);
-    }
+    await runWorkbenchTaskAction(taskId, 'submit');
   };
 
   const handleCompleteTask = async (taskId: string, approved: boolean) => {
-    setActionTaskId(taskId);
-    try {
-      await completeTask(taskId, approved);
-      await loadTasks();
-    } catch (err) {
-      console.error('Failed to complete task:', err);
-    } finally {
-      setActionTaskId(null);
-    }
+    await runWorkbenchTaskAction(taskId, approved ? 'approve' : 'return');
   };
 
   const fileToBase64 = (file: File): Promise<string> => {
@@ -1127,6 +1165,25 @@ export function CaseDetail({ params }: CaseDetailProps) {
   const openTasks = tasks.filter(
     (task) => !['COMPLETED', 'APPROVED', 'REJECTED', 'DECLINED', 'CANCELLED', 'ARCHIVED'].includes(String(task.status || '').toUpperCase())
   );
+  const workbenchItems = workItems?.items || [];
+  const filteredWorkbenchItems = workbenchItems.filter((item) => {
+    if (workItemFilter === 'mine') return item.isMine;
+    if (workItemFilter === 'overdue') return item.urgency === 'OVERDUE';
+    if (workItemFilter === 'soon') return item.urgency === 'TODAY' || item.urgency === 'SOON';
+    if (workItemFilter === 'review') return item.workflowCategory === 'REVIEW';
+    if (workItemFilter === 'handoff') return item.workflowCategory === 'HANDOFF';
+    if (workItemFilter === 'blocked') return item.workflowCategory === 'BLOCKED' || item.workflowCategory === 'WAITING';
+    return true;
+  });
+  const workbenchFilters = [
+    { key: 'all' as const, label: 'Összes', count: workItems?.summary.open ?? workbenchItems.length },
+    { key: 'mine' as const, label: 'Saját munkám', count: workItems?.summary.mine ?? 0 },
+    { key: 'overdue' as const, label: 'Lejárt', count: workItems?.summary.overdue ?? 0 },
+    { key: 'soon' as const, label: 'Közelgő', count: workItems?.summary.dueSoon ?? 0 },
+    { key: 'review' as const, label: 'Review', count: workItems?.summary.reviewRequired ?? 0 },
+    { key: 'handoff' as const, label: 'Átadás', count: workItems?.summary.handoffRequired ?? 0 },
+    ...(workItems?.availability.blockerState ? [{ key: 'blocked' as const, label: 'Blokkolt / várakozó', count: (workItems?.summary.blocked ?? 0) + (workItems?.summary.waiting ?? 0) }] : []),
+  ];
   const quickActions = [
     {
       title: 'Dokumentum-review',
@@ -1515,6 +1572,141 @@ export function CaseDetail({ params }: CaseDetailProps) {
                 </p>
               </section>
             )}
+
+            <section aria-labelledby="case-workbench-heading" className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Case Workbench</p>
+                  <h2 id="case-workbench-heading" className="mt-1 font-serif text-[22px] text-[var(--adm-text)]">Ügyhöz tartozó munkasor</h2>
+                  <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-[var(--adm-text-muted)]">
+                    Backendből normalizált feladat- és leadási lista. A műveletgombok csak akkor jelennek meg, ha a szerver szerint az adott lépés engedélyezett.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/tasks?caseId=${encodeURIComponent(canonicalCaseId)}`)}
+                  className="border border-[var(--adm-border)] bg-white px-3 py-2 text-[10px] font-semibold text-[var(--adm-text)] focus:outline-none focus:ring-2 focus:ring-[var(--adm-ochre-500)]"
+                >
+                  Globális munkasor
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-2 sm:grid-cols-5">
+                {[
+                  ['Nyitott', workItems?.summary.open ?? 0],
+                  ['Saját', workItems?.summary.mine ?? 0],
+                  ['Lejárt', workItems?.summary.overdue ?? 0],
+                  ['Review', workItems?.summary.reviewRequired ?? 0],
+                  ['Átadás', workItems?.summary.handoffRequired ?? 0],
+                ].map(([label, value]) => (
+                  <div key={label} className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2 text-center">
+                    <p className="text-[16px] font-bold text-[var(--adm-text)]">{value}</p>
+                    <p className="text-[9px] uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">{label}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {workbenchFilters.map((filter) => (
+                  <button
+                    key={filter.key}
+                    type="button"
+                    onClick={() => setWorkItemFilter(filter.key)}
+                    className={`border px-3 py-1.5 text-[10px] font-semibold ${
+                      workItemFilter === filter.key
+                        ? 'border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-white'
+                        : 'border-[var(--adm-border)] bg-white text-[var(--adm-text)] hover:bg-[var(--adm-surface)]'
+                    }`}
+                  >
+                    {filter.label} · {filter.count}
+                  </button>
+                ))}
+              </div>
+
+              {workItemsError ? (
+                <p className="mt-4 border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-[11px] text-[var(--adm-text-muted)]">
+                  {workItemsError} A régi feladatlista továbbra is elérhető a jobb oldali panelben.
+                </p>
+              ) : filteredWorkbenchItems.length > 0 ? (
+                <div className="mt-4 space-y-3">
+                  {filteredWorkbenchItems.slice(0, 10).map((item: CaseWorkItem) => (
+                    <article key={item.id} className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="border border-[var(--adm-border)] bg-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">
+                              {WORK_ITEM_TYPE_LABELS[item.type] || item.type}
+                            </span>
+                            <span className="border border-[var(--adm-border)] bg-white px-2 py-0.5 text-[9px] font-semibold text-[var(--adm-text)]">
+                              {WORK_ITEM_CATEGORY_LABELS[item.workflowCategory] || item.workflowCategory}
+                            </span>
+                            <span className={`border px-2 py-0.5 text-[9px] font-semibold ${
+                              item.urgency === 'OVERDUE'
+                                ? 'border-[#d4b8b8] bg-[#FEF2F2] text-[#8b3a3a]'
+                                : item.urgency === 'TODAY' || item.urgency === 'SOON'
+                                  ? 'border-[#f9c74f] bg-[var(--adm-sand-100)] text-[#6B4B14]'
+                                  : 'border-[var(--adm-border)] bg-white text-[var(--adm-text-muted)]'
+                            }`}>
+                              {WORK_ITEM_URGENCY_LABELS[item.urgency] || item.urgency}
+                            </span>
+                          </div>
+                          <h3 className="mt-2 truncate text-[14px] font-semibold text-[var(--adm-text)]">{item.title}</h3>
+                          <p className="mt-1 text-[11px] leading-relaxed text-[var(--adm-text-muted)]">
+                            {item.safeDescription || 'Nincs biztonságos rövid leírás ehhez a munkatételhez.'}
+                          </p>
+                          <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">
+                            Felelős: {item.assignee?.displayName || 'Nincs kijelölve'} · Határidő: {item.dueAt ? new Date(item.dueAt).toLocaleDateString('hu-HU') : 'Nincs'} · Státusz: {getTaskStatusLabel(item.status)}
+                          </p>
+                          {item.blocker && (
+                            <p className="mt-1 text-[10px] font-semibold text-[#8b3a3a]">
+                              Blokkolás: {item.blocker.safeLabel || 'Strukturált blokkoló'} {item.blocker.since ? `· ${new Date(item.blocker.since).toLocaleDateString('hu-HU')}` : ''}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                          {item.href && (
+                            <button type="button" onClick={() => router.push(item.href as string)} className="border border-[var(--adm-border)] bg-white px-2 py-1 text-[9px] font-semibold text-[var(--adm-text)]">
+                              Megnyitás
+                            </button>
+                          )}
+                          {item.source?.href && item.capabilities.canOpenSource && (
+                            <button type="button" onClick={() => router.push(item.source?.href as string)} className="border border-[var(--adm-border)] bg-white px-2 py-1 text-[9px] font-semibold text-[var(--adm-text)]">
+                              Forrás
+                            </button>
+                          )}
+                          {item.type === 'TASK' && item.capabilities.canStart && (
+                            <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'start')} disabled={Boolean(actionTaskId)} className="bg-[var(--adm-green-800)] px-2 py-1 text-[9px] font-semibold text-white disabled:opacity-50">Elkezdem</button>
+                          )}
+                          {item.type === 'TASK' && item.capabilities.canSubmitForReview && (
+                            <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'submit')} disabled={Boolean(actionTaskId)} className="bg-[var(--adm-ochre-500)] px-2 py-1 text-[9px] font-semibold text-white disabled:opacity-50">Review-ra küldöm</button>
+                          )}
+                          {item.type === 'TASK' && item.capabilities.canApprove && (
+                            <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'approve')} disabled={Boolean(actionTaskId)} className="bg-[var(--adm-green-800)] px-2 py-1 text-[9px] font-semibold text-white disabled:opacity-50">Jóváhagyom</button>
+                          )}
+                          {item.type === 'TASK' && item.capabilities.canReturnForCorrection && (
+                            <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'return')} disabled={Boolean(actionTaskId)} className="border border-[#8B2A2A] bg-white px-2 py-1 text-[9px] font-semibold text-[#8B2A2A] disabled:opacity-50">Visszaküldöm</button>
+                          )}
+                          {item.type === 'TASK' && item.capabilities.canBlock && (
+                            <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'block')} disabled={Boolean(actionTaskId)} className="border border-[#8B2A2A] bg-white px-2 py-1 text-[9px] font-semibold text-[#8B2A2A] disabled:opacity-50">Blokkolom</button>
+                          )}
+                          {item.type === 'TASK' && item.capabilities.canUnblock && (
+                            <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'unblock')} disabled={Boolean(actionTaskId)} className="bg-[var(--adm-green-800)] px-2 py-1 text-[9px] font-semibold text-white disabled:opacity-50">Blokkolás feloldása</button>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[11px] text-[var(--adm-text-muted)]">
+                  Nincs megjeleníthető munkatétel ebben a szűrőben. A nem támogatott várakozási/review/átadási állapotok nem kerülnek szimulálásra.
+                </p>
+              )}
+
+              <p className="mt-3 text-[10px] text-[var(--adm-text-soft)]">
+                Elérhetőség: feladatműveletek {workItems?.availability.taskTransitions ? 'aktív' : 'nem elérhető'} · blokkolás {workItems?.availability.blockerState ? 'strukturált' : 'nem támogatott'} · várakozás {workItems?.availability.waitingState ? 'strukturált' : 'nem támogatott'} · leadás {workItems?.availability.handoffWorkflow ? 'aktív' : 'nem elérhető'}.
+              </p>
+            </section>
 
             <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {quickActions.map((action) => (

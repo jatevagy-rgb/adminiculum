@@ -3,7 +3,12 @@
 // ============================================================================
 
 import { PrismaClient } from '@prisma/client';
-import prisma from '../../config/database.js';
+import prisma from '../../config/database';
+import {
+  SupportedTaskAction,
+  validateTaskTransition,
+  WorkflowTransitionError,
+} from '../cases/workItems';
 
 const TaskStatus = {
   TODO: 'TODO',
@@ -71,6 +76,90 @@ type TaskStatus = typeof TaskStatus[keyof typeof TaskStatus];
 type TaskPriority = typeof TaskPriority[keyof typeof TaskPriority];
 type TimelineType = typeof TimelineType[keyof typeof TimelineType];
 type UserRole = typeof UserRole[keyof typeof UserRole];
+
+async function getTaskForTransition(taskId: string) {
+  return prisma.task.findUnique({
+    where: { id: taskId },
+    select: {
+      id: true,
+      title: true,
+      caseId: true,
+      status: true,
+      assignedToId: true,
+      assignedById: true,
+      stuckReason: true,
+      stuckSince: true,
+    },
+  });
+}
+
+async function userCanActOnTask(task: { caseId: string; assignedToId?: string | null; assignedById?: string | null }, userId: string): Promise<{ allowed: boolean; role: string | null }> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true },
+  });
+  if (!user) return { allowed: false, role: null };
+
+  if (['ADMIN', 'PARTNER'].includes(String(user.role))) {
+    return { allowed: true, role: String(user.role) };
+  }
+
+  if (task.assignedToId === userId || task.assignedById === userId) {
+    return { allowed: true, role: String(user.role) };
+  }
+
+  const caseRecord = await prisma.case.findUnique({
+    where: { id: task.caseId },
+    select: { assignedLawyerId: true, createdById: true },
+  });
+  if (caseRecord?.assignedLawyerId === userId || caseRecord?.createdById === userId) {
+    return { allowed: true, role: String(user.role) };
+  }
+
+  const collaborator = await prisma.caseCollaborator.findFirst({
+    where: { caseId: task.caseId, userId },
+    select: { id: true },
+  });
+  return { allowed: Boolean(collaborator), role: String(user.role) };
+}
+
+async function transitionTask(taskId: string, userId: string, action: SupportedTaskAction, extraData: Record<string, unknown> = {}) {
+  if (!userId) {
+    throw new WorkflowTransitionError(401, 'NOT_AUTHENTICATED', 'Authenticated user is required.');
+  }
+
+  const existing = await getTaskForTransition(taskId);
+  if (!existing) {
+    throw new WorkflowTransitionError(404, 'TASK_NOT_FOUND', 'Task not found.');
+  }
+
+  const actor = await userCanActOnTask(existing, userId);
+  if (!actor.allowed) {
+    throw new WorkflowTransitionError(403, 'TASK_ACTION_FORBIDDEN', 'You are not allowed to perform this task action.');
+  }
+
+  const transition = validateTaskTransition(existing, action, userId, actor.role);
+  const task = await prisma.task.update({
+    where: { id: taskId },
+    data: {
+      ...transition.data,
+      ...extraData,
+    } as any,
+  });
+
+  await createTimelineEvent({
+    caseId: task.caseId,
+    userId,
+    type: transition.timelineType as TimelineType,
+    payload: {
+      taskId,
+      taskTitle: task.title,
+      action,
+    },
+  });
+
+  return task;
+}
 
 function mapAnyTaskTypeToPrisma(taskType?: string): TaskType {
   const normalized = String(taskType || '').trim().toUpperCase();
@@ -264,66 +353,42 @@ export async function getTask(taskId: string) {
  * Start a task (TODO -> IN_PROGRESS)
  */
 export async function startTask(taskId: string, userId: string) {
-  const task = await prisma.task.update({
-    where: { id: taskId },
-    data: {
-      status: 'IN_PROGRESS',
-      startedAt: new Date()
-    }
-  });
-
-  await createTimelineEvent({
-    caseId: task.caseId,
-    userId,
-    type: TimelineType.TASK_STARTED,
-    payload: { taskId, taskTitle: task.title }
-  });
-
-  return task;
+  return transitionTask(taskId, userId, 'START');
 }
 
 /**
  * Submit task for review (IN_PROGRESS -> IN_REVIEW)
  */
 export async function submitTask(taskId: string, userId: string, notes?: string) {
-  const task = await prisma.task.update({
-    where: { id: taskId },
-    data: {
-      status: 'IN_REVIEW',
-      submittedAt: new Date()
-    }
-  });
-
-  await createTimelineEvent({
-    caseId: task.caseId,
-    userId,
-    type: TimelineType.TASK_SUBMITTED,
-    payload: { taskId, taskTitle: task.title, notes }
-  });
-
-  return task;
+  return transitionTask(taskId, userId, 'SUBMIT_FOR_REVIEW', notes ? { lastProgressAt: new Date() } : {});
 }
 
 /**
  * Complete a task (IN_REVIEW -> DONE)
  */
 export async function completeTask(taskId: string, userId: string, approved: boolean, notes?: string) {
-  const task = await prisma.task.update({
-    where: { id: taskId },
-    data: {
-      status: approved ? 'DONE' : 'IN_PROGRESS',
-      completedAt: approved ? new Date() : null
-    }
-  });
+  return transitionTask(taskId, userId, approved ? 'APPROVE' : 'RETURN_FOR_CORRECTION', notes ? { lastProgressAt: new Date() } : {});
+}
 
-  await createTimelineEvent({
-    caseId: task.caseId,
-    userId,
-    type: approved ? TimelineType.TASK_COMPLETED : TimelineType.TASK_REJECTED,
-    payload: { taskId, taskTitle: task.title, notes }
-  });
+export async function blockTask(taskId: string, userId: string, reason: string) {
+  const allowedReasons = new Set([
+    'INFORMATION_MISSING',
+    'CLIENT_WAITING',
+    'LEGAL_RESEARCH',
+    'TECHNICAL_BLOCK',
+    'DEPENDENCY',
+    'INTERNAL_REVIEW',
+    'EXTERNAL_APPROVAL',
+  ]);
+  const normalizedReason = String(reason || '').trim().toUpperCase();
+  if (!allowedReasons.has(normalizedReason)) {
+    throw new WorkflowTransitionError(400, 'INVALID_STUCK_REASON', 'Invalid blocker reason.');
+  }
+  return transitionTask(taskId, userId, 'BLOCK', { stuckReason: normalizedReason });
+}
 
-  return task;
+export async function unblockTask(taskId: string, userId: string) {
+  return transitionTask(taskId, userId, 'UNBLOCK');
 }
 
 /**
@@ -565,6 +630,8 @@ export default {
   startTask,
   submitTask,
   completeTask,
+  blockTask,
+  unblockTask,
   reassignTask,
   getTaskRecommendations,
   autoGenerateTask,

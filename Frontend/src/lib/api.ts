@@ -378,6 +378,92 @@ export async function getCaseWorkflowSummary(caseId: string): Promise<CaseWorkfl
   return fetchApi<CaseWorkflowSummary>(`/cases/${caseId}/workflow-summary`);
 }
 
+export interface CaseWorkItemCapabilities {
+  canStart: boolean;
+  canComplete: boolean;
+  canBlock: boolean;
+  canUnblock: boolean;
+  canSubmitForReview: boolean;
+  canApprove: boolean;
+  canReturnForCorrection: boolean;
+  canCreateHandoff: boolean;
+  canAcceptHandoff: boolean;
+  canReturnHandoff: boolean;
+  canOpenSource: boolean;
+}
+
+export interface CaseWorkItem {
+  id: string;
+  type: 'TASK' | 'REVIEW' | 'HANDOFF';
+  title: string;
+  safeDescription?: string | null;
+  status: string;
+  workflowCategory: 'OPEN' | 'IN_PROGRESS' | 'BLOCKED' | 'WAITING' | 'REVIEW' | 'HANDOFF' | 'COMPLETED';
+  priority?: string | null;
+  dueAt?: string | null;
+  completedAt?: string | null;
+  updatedAt?: string | null;
+  caseId: string;
+  isMine: boolean;
+  assignee?: { id: string; displayName: string } | null;
+  createdBy?: { id: string; displayName: string } | null;
+  review?: {
+    reviewer?: { id: string; displayName: string } | null;
+    state?: string | null;
+    requestedAt?: string | null;
+    reviewedAt?: string | null;
+  } | null;
+  handoff?: {
+    id: string;
+    status: string;
+    from?: { id: string; displayName: string } | null;
+    to?: { id: string; displayName: string } | null;
+    updatedAt?: string | null;
+  } | null;
+  blocker?: {
+    category?: string | null;
+    safeLabel?: string | null;
+    since?: string | null;
+  } | null;
+  source?: {
+    type?: 'DOCUMENT' | 'COMMUNICATION' | 'DEADLINE' | 'CASE' | null;
+    id?: string | null;
+    displayName?: string | null;
+    href?: string | null;
+  } | null;
+  urgency: 'OVERDUE' | 'TODAY' | 'SOON' | 'LATER' | 'NONE';
+  capabilities: CaseWorkItemCapabilities;
+  href?: string | null;
+}
+
+export interface CaseWorkItemsResponse {
+  caseId: string;
+  generatedAt: string;
+  summary: {
+    open: number;
+    mine: number;
+    overdue: number;
+    dueSoon: number;
+    blocked: number;
+    waiting: number;
+    reviewRequired: number;
+    handoffRequired: number;
+    completedRecently: number;
+  };
+  items: CaseWorkItem[];
+  availability: {
+    taskTransitions: boolean;
+    blockerState: boolean;
+    waitingState: boolean;
+    reviewWorkflow: boolean;
+    handoffWorkflow: boolean;
+  };
+}
+
+export async function getCaseWorkItems(caseId: string): Promise<CaseWorkItemsResponse> {
+  return fetchApi<CaseWorkItemsResponse>(`/cases/${caseId}/work-items`);
+}
+
 // Case Assignment
 export interface AssignCaseData {
   userId: string;
@@ -510,6 +596,20 @@ export async function completeTask(taskId: string, approved: boolean, notes?: st
   return fetchApi<TaskItem>(`/tasks/${taskId}/complete`, {
     method: 'POST',
     body: JSON.stringify({ approved, notes }),
+  });
+}
+
+export async function blockTask(taskId: string, reason: string): Promise<TaskItem> {
+  return fetchApi<TaskItem>(`/tasks/${taskId}/block`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function unblockTask(taskId: string): Promise<TaskItem> {
+  return fetchApi<TaskItem>(`/tasks/${taskId}/unblock`, {
+    method: 'POST',
+    body: JSON.stringify({}),
   });
 }
 

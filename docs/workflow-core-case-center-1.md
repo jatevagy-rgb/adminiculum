@@ -98,3 +98,7 @@ Implemented validation includes:
 - No Client Portal change or enablement.
 - No production deploy.
 - No external visibility.
+
+## WORKFLOW-CORE-TASKS-HANDOFF-1 note
+
+The task/handoff workflow layer now has a backend-normalized case work-item contract, capability-derived task action buttons, and structured task transitions using existing production-compatible fields only. No schema, migration, DB command, Client Portal change, or external visibility was introduced. Unsupported recipient-specific handoff acceptance and generic waiting state remain deferred rather than simulated.

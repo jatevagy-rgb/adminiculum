@@ -6,19 +6,21 @@ import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import {
   completeTask,
+  blockTask,
   createTask,
   getCaseCollaborators,
   getCaseSummary,
+  getCaseWorkItems,
   getCases,
-  getCaseTasks,
   getUsers,
   reassignTask,
   startTask,
   submitTask,
-  getMyTasks,
+  unblockTask,
   type CaseCollaborator,
   type CaseListItem,
   type CaseSummaryResponse,
+  type CaseWorkItemCapabilities,
   type CreateTaskData,
   type User,
 } from "@/lib/api";
@@ -31,6 +33,10 @@ type LedgerTask = {
   priority: string;
   dueDate?: string | null;
   assignedTo?: { id: string; name: string; role?: string } | null;
+  workflowCategory?: string;
+  urgency?: string;
+  capabilities?: CaseWorkItemCapabilities;
+  sourceHref?: string | null;
   case: {
     id: string;
     caseNumber: string;
@@ -147,49 +153,32 @@ function TasksPageContent() {
     setIsLoading(true);
     setError(null);
     try {
-      const [casesResponse, usersResponse, myTasks] = await Promise.all([getCases(1, 200), getUsers(), getMyTasks()]);
+      const [casesResponse, usersResponse] = await Promise.all([getCases(1, 200), getUsers()]);
       const caseList = casesResponse.data;
       setCases(caseList);
       setUsers(usersResponse);
 
-      const myTasksMapped: LedgerTask[] = myTasks.map((task) => ({
-        id: task.id,
-        title: task.title,
-        description: task.description ?? null,
-        status: task.status,
-        priority: task.priority,
-        dueDate: task.dueDate ?? null,
-        assignedTo: task.assignedTo
-          ? {
-              id: task.assignedTo.id,
-              name: task.assignedTo.name,
-              role: task.assignedTo.role,
-            }
-          : null,
-        case: {
-          id: task.case.id,
-          caseNumber: task.case.caseNumber,
-          clientName: task.case.clientName,
-          matterType: task.case.matterType,
-          title: undefined,
-        },
-      }));
-
       const tasksByCase = await Promise.all(
         caseList.map(async (caseItem) => {
-          const caseTasks = await getCaseTasks(caseItem.id).catch(() => [] as any[]);
-          return caseTasks.map((task: any) => ({
+          const workItems = await getCaseWorkItems(caseItem.id).catch(() => null);
+          return (workItems?.items || [])
+            .filter((item) => item.type === "TASK")
+            .map((task) => ({
             id: task.id,
             title: task.title,
-            description: task.description ?? null,
+            description: task.safeDescription ?? null,
             status: task.status,
-            priority: task.priority,
-            dueDate: task.dueDate ?? null,
-            assignedTo: task.assignedTo
+            priority: task.priority || "MEDIUM",
+            dueDate: task.dueAt ?? null,
+            workflowCategory: task.workflowCategory,
+            urgency: task.urgency,
+            capabilities: task.capabilities,
+            sourceHref: task.source?.href || null,
+            assignedTo: task.assignee
               ? {
-                  id: task.assignedTo.id,
-                  name: task.assignedTo.name,
-                  role: task.assignedTo.role,
+                  id: task.assignee.id,
+                  name: task.assignee.displayName,
+                  role: undefined,
                 }
               : null,
             case: {
@@ -204,7 +193,7 @@ function TasksPageContent() {
       );
 
       const mergedById = new Map<string, LedgerTask>();
-      [...myTasksMapped, ...tasksByCase.flat()].forEach((task) => {
+      tasksByCase.flat().forEach((task) => {
         if (!mergedById.has(task.id)) {
           mergedById.set(task.id, task);
         }
@@ -335,13 +324,15 @@ function TasksPageContent() {
     };
   }, [tasks]);
 
-  const runTaskAction = async (taskId: string, action: "start" | "submit" | "approve" | "reject") => {
+  const runTaskAction = async (taskId: string, action: "start" | "submit" | "approve" | "reject" | "block" | "unblock") => {
     setIsActionLoading(taskId + action);
     try {
       if (action === "start") await startTask(taskId);
       if (action === "submit") await submitTask(taskId);
       if (action === "approve") await completeTask(taskId, true);
       if (action === "reject") await completeTask(taskId, false);
+      if (action === "block") await blockTask(taskId, "DEPENDENCY");
+      if (action === "unblock") await unblockTask(taskId);
       await loadTasksWorkspace();
     } catch (err) {
       console.error("Task action failed:", err);
@@ -538,7 +529,7 @@ function TasksPageContent() {
                         </span>
                       </td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        {task.status === "TODO" && (
+                        {task.capabilities?.canStart && (
                           <button
                             onClick={() => runTaskAction(task.id, "start")}
                             disabled={isActionLoading === task.id + "start"}
@@ -547,7 +538,7 @@ function TasksPageContent() {
                             Indítás
                           </button>
                         )}
-                        {task.status === "IN_PROGRESS" && (
+                        {task.capabilities?.canSubmitForReview && (
                           <button
                             onClick={() => runTaskAction(task.id, "submit")}
                             disabled={isActionLoading === task.id + "submit"}
@@ -556,23 +547,45 @@ function TasksPageContent() {
                             Beküldés
                           </button>
                         )}
-                        {task.status === "IN_REVIEW" && (
+                        {(task.capabilities?.canApprove || task.capabilities?.canReturnForCorrection) && (
                           <div className="flex gap-1">
-                            <button
-                              onClick={() => runTaskAction(task.id, "approve")}
-                              disabled={isActionLoading === task.id + "approve"}
-                              className="text-[10px] px-2 py-1 bg-[#059669] text-white"
-                            >
-                              Jóváhagy
-                            </button>
-                            <button
-                              onClick={() => runTaskAction(task.id, "reject")}
-                              disabled={isActionLoading === task.id + "reject"}
-                              className="text-[10px] px-2 py-1 bg-[#DC2626] text-white"
-                            >
-                              Visszaad
-                            </button>
+                            {task.capabilities?.canApprove && (
+                              <button
+                                onClick={() => runTaskAction(task.id, "approve")}
+                                disabled={isActionLoading === task.id + "approve"}
+                                className="text-[10px] px-2 py-1 bg-[#059669] text-white"
+                              >
+                                Jóváhagy
+                              </button>
+                            )}
+                            {task.capabilities?.canReturnForCorrection && (
+                              <button
+                                onClick={() => runTaskAction(task.id, "reject")}
+                                disabled={isActionLoading === task.id + "reject"}
+                                className="text-[10px] px-2 py-1 bg-[#DC2626] text-white"
+                              >
+                                Visszaad
+                              </button>
+                            )}
                           </div>
+                        )}
+                        {task.capabilities?.canBlock && (
+                          <button
+                            onClick={() => runTaskAction(task.id, "block")}
+                            disabled={isActionLoading === task.id + "block"}
+                            className="ml-1 text-[10px] px-2 py-1 border border-[#DC2626] text-[#991B1B]"
+                          >
+                            Blokkol
+                          </button>
+                        )}
+                        {task.capabilities?.canUnblock && (
+                          <button
+                            onClick={() => runTaskAction(task.id, "unblock")}
+                            disabled={isActionLoading === task.id + "unblock"}
+                            className="ml-1 text-[10px] px-2 py-1 bg-[#059669] text-white"
+                          >
+                            Felold
+                          </button>
                         )}
                       </td>
                     </tr>
