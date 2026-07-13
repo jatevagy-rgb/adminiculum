@@ -1,404 +1,285 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
-import { useUiPack } from "@/lib/uiPack";
 import {
-  getCaseDeadlines,
-  getCases,
-  getCurrentUser,
-  getMyTasks,
-  type CaseListItem,
-  type DeadlineItem,
-  type TaskItem,
+  completeTask,
+  getWorkflowAgenda,
+  rescheduleTaskDeadline,
+  type WorkflowAgendaResponse,
+  type WorkflowDeadlineItem,
+  type WorkflowDeadlineUrgency,
 } from "@/lib/api";
 
-type DeadlineSourceType = "task" | "review-task" | "case-deadline" | "case-level";
-type DeadlineBucket = "overdue" | "today" | "week" | "later";
-
-type DeadlineBoardItem = {
-  id: string;
-  sourceType: DeadlineSourceType;
-  title: string;
-  dueDate: string;
-  bucket: DeadlineBucket;
-  caseId: string;
-  caseNumber: string;
-  caseTitle: string;
-  clientName?: string;
-  status: string;
-  description?: string;
-  taskId?: string;
-  link: string;
-  linkLabel: string;
-  secondaryLink?: string;
-  secondaryLinkLabel?: string;
+const URGENCY_LABELS: Record<WorkflowDeadlineUrgency, string> = {
+  OVERDUE: "Lejárt",
+  TODAY: "Ma",
+  TOMORROW: "Holnap",
+  THIS_WEEK: "Ezen a héten",
+  LATER: "Később",
 };
 
-const startOfToday = () => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
+const SOURCE_LABELS: Record<string, string> = {
+  TASK: "Feladat-határidő",
+  CASE_DEADLINE: "Ügyhatáridő",
 };
 
-const endOfToday = () => {
-  const d = startOfToday();
-  d.setDate(d.getDate() + 1);
-  d.setMilliseconds(-1);
-  return d;
-};
-
-const endOfWeek = () => {
-  const d = startOfToday();
-  const day = d.getDay();
-  const toSunday = (7 - day) % 7;
-  d.setDate(d.getDate() + toSunday + 1);
-  d.setMilliseconds(-1);
-  return d;
-};
-
-const toDate = (value: string) => new Date(value);
-
-const getBucket = (dueDate: string): DeadlineBucket => {
-  const due = toDate(dueDate).getTime();
-  const todayStart = startOfToday().getTime();
-  const todayEnd = endOfToday().getTime();
-  const weekEnd = endOfWeek().getTime();
-
-  if (due < todayStart) return "overdue";
-  if (due >= todayStart && due <= todayEnd) return "today";
-  if (due > todayEnd && due <= weekEnd) return "week";
-  return "later";
-};
-
-const formatDueDate = (value: string) => {
-  try {
-    return new Date(value).toLocaleString("hu-HU", { dateStyle: "medium", timeStyle: "short" });
-  } catch {
-    return value;
-  }
-};
-
-const daysDiffFromToday = (value: string) => {
-  const start = startOfToday().getTime();
-  const due = toDate(value).getTime();
-  return Math.floor((due - start) / (1000 * 60 * 60 * 24));
-};
-
-const dueLabel = (item: DeadlineBoardItem) => {
-  const diff = daysDiffFromToday(item.dueDate);
-  if (item.bucket === "overdue") {
-    const overdueDays = Math.abs(diff);
-    return overdueDays === 0 ? "Lejárt (ma)" : `Lejárt ${overdueDays} napja`;
-  }
-  if (item.bucket === "today") return "Ma esedékes";
-  if (item.bucket === "week") return diff === 1 ? "Holnap esedékes" : `${diff} napon belül esedékes`;
-  return `${diff} nap múlva esedékes`;
-};
-
-const byDueDateAsc = (a: DeadlineBoardItem, b: DeadlineBoardItem) => toDate(a.dueDate).getTime() - toDate(b.dueDate).getTime();
-
-const bucketOrder: DeadlineBucket[] = ["overdue", "today", "week", "later"];
-
-const bucketTitle: Record<DeadlineBucket, string> = {
-  overdue: "Lejárt",
-  today: "Ma esedékes",
-  week: "Ezen a héten",
-  later: "Később",
-};
-
-const bucketEmpty: Record<DeadlineBucket, string> = {
-  overdue: "Nincs lejárt, rögzített határidő.",
-  today: "Ma nincs esedékes, rögzített határidő.",
-  week: "A héten nincs további rögzített határidő.",
-  later: "Nincs későbbi, rögzített határidő.",
-};
-
-// Visual badge config for source type
-const sourceBadge: Record<DeadlineSourceType, { label: string; bg: string; text: string; dot: string }> = {
-  "task":          { label: "Feladat",        bg: "bg-blue-50",    text: "text-blue-700",    dot: "bg-blue-500" },
-  "review-task":   { label: "Review",         bg: "bg-amber-50",   text: "text-amber-700",   dot: "bg-amber-500" },
-  "case-deadline": { label: "Ügyhatáridő",    bg: "bg-purple-50",  text: "text-purple-700",  dot: "bg-purple-500" },
-  "case-level":    { label: "Ügy határidő",   bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
-};
-
-const statusLabel: Record<string, string> = {
-  TODO: "Teendő",
-  ASSIGNED: "Teendő",
-  PENDING: "Teendő",
-  IN_PROGRESS: "Folyamatban",
-  SUBMITTED: "Beküldve",
-  IN_REVIEW: "Review alatt",
-  REVIEW_NEEDED: "Review alatt",
-  REVIEW_SUBMITTED: "Beküldve",
-  COMPLETED: "Kész",
-  DONE: "Kész",
-  APPROVED: "Jóváhagyva",
-  FINALIZED: "Kész",
-  REJECTED: "Visszaküldve",
-  DECLINED: "Visszaküldve",
-  BLOCKED: "Blokkolva",
-  CANCELLED: "Törölve",
-  ARCHIVED: "Archivált",
+const STATUS_LABELS: Record<string, string> = {
   OPEN: "Nyitott",
-  ACTIVE: "Aktív",
+  COMPLETED: "Kész",
+  CANCELLED: "Törölve",
+  SUPERSEDED: "Felülírva",
 };
 
-export default function DeadlinesPage() {
+function formatDateTime(value: string, timezone: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("hu-HU", { dateStyle: "medium", timeStyle: "short", timeZone: timezone });
+}
+
+function inputDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function AgendaItemCard({
+  item,
+  timezone,
+  busyId,
+  onComplete,
+  onReschedule,
+}: {
+  item: WorkflowDeadlineItem;
+  timezone: string;
+  busyId: string | null;
+  onComplete: (item: WorkflowDeadlineItem) => void;
+  onReschedule: (item: WorkflowDeadlineItem, dueAt: string) => void;
+}) {
+  const [draftDueAt, setDraftDueAt] = useState(inputDateTime(item.dueAt));
+  const busy = busyId === item.id;
+  const danger = item.urgency === "OVERDUE";
+
   return (
-    <AuthenticatedApp section="calendar">
-      <DeadlinesBoardContent />
-    </AuthenticatedApp>
+    <article className="border border-[var(--adm-border)] bg-white p-4 shadow-[0_1px_0_rgba(2,48,71,0.04)]">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] ${danger ? "border-[#d4b8b8] bg-[#FEF2F2] text-[#8b3a3a]" : "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]"}`}>
+              {URGENCY_LABELS[item.urgency]}
+            </span>
+            <span className="border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-0.5 text-[9px] font-semibold text-[var(--adm-text)]">
+              {SOURCE_LABELS[item.sourceType] || item.sourceType}
+            </span>
+            <span className="border border-[var(--adm-border)] bg-white px-2 py-0.5 text-[9px] font-semibold text-[var(--adm-text-muted)]">
+              {STATUS_LABELS[item.status] || item.status}
+            </span>
+          </div>
+          <h3 className="mt-2 text-[15px] font-semibold text-[var(--adm-text)]">{item.title}</h3>
+          <p className="mt-1 text-[11px] leading-relaxed text-[var(--adm-text-muted)]">
+            {item.safeDescription || "Csak strukturált, biztonságos határidő-metaadat érhető el."}
+          </p>
+          <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">
+            Felelős: {item.responsibility.assignee?.displayName || item.responsibility.responsibleLawyer?.displayName || "Nincs kijelölve"} · Fontosság: {item.importance}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Esedékesség</p>
+          <p className="mt-1 text-[12px] font-semibold text-[var(--adm-text)]">{formatDateTime(item.dueAt, timezone)}</p>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {item.href && (
+          <Link href={item.href} className="border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text)]">
+            Megnyitás
+          </Link>
+        )}
+        <Link href={`/cases/${encodeURIComponent(item.caseId)}`} className="border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text)]">
+          Ügy
+        </Link>
+        {item.capabilities.canComplete && item.sourceType === "TASK" && (
+          <button type="button" disabled={busy} onClick={() => onComplete(item)} className="bg-[var(--adm-green-800)] px-3 py-1.5 text-[10px] font-semibold text-white disabled:opacity-50">
+            Kész
+          </button>
+        )}
+        {item.capabilities.canReschedule && item.sourceType === "TASK" && (
+          <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            <input
+              type="datetime-local"
+              value={draftDueAt}
+              onChange={(event) => setDraftDueAt(event.target.value)}
+              className="border border-[var(--adm-border)] bg-white px-2 py-1 text-[10px] text-[var(--adm-text)]"
+              aria-label="Új határidő"
+            />
+            <button type="button" disabled={busy || !draftDueAt} onClick={() => onReschedule(item, draftDueAt)} className="border border-[var(--adm-ochre-500)] bg-white px-2 py-1 text-[10px] font-semibold text-[var(--adm-ochre-500)] disabled:opacity-50">
+              Átütemezés
+            </button>
+          </div>
+        )}
+      </div>
+    </article>
   );
 }
 
-function DeadlinesBoardContent() {
-  const [isLoading, setIsLoading] = useState(true);
+function DeadlinesAgendaContent() {
+  const searchParams = useSearchParams();
+  const queryScope = searchParams?.get("scope");
+  const initialScope = queryScope === "CASE"
+    ? "CASE"
+    : queryScope === "MY_CASES"
+      ? "MY_CASES"
+      : "MY_WORK";
+  const initialCaseId = searchParams?.get("caseId") || "";
+  const [agenda, setAgenda] = useState<WorkflowAgendaResponse | null>(null);
+  const [scope, setScope] = useState<"MY_WORK" | "MY_CASES" | "CASE">(initialScope);
+  const [caseId] = useState(initialCaseId);
+  const [status, setStatus] = useState<"OPEN" | "COMPLETED" | "ALL">("OPEN");
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [items, setItems] = useState<DeadlineBoardItem[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  const [uiPack] = useUiPack();
-  const isSignalTiles = uiPack === "signal_tiles_console";
-  const p = {
-    bg: isSignalTiles ? "bg-[#0C1222]" : "bg-[#F6F2E8]",
-    bgAlt: isSignalTiles ? "bg-[#111827]" : "bg-[#F0EBE0]",
-    bgHover: isSignalTiles ? "hover:bg-[#1a2744]" : "hover:bg-[#EAE3D5]",
-    bgCard: isSignalTiles ? "bg-[#0F1923]" : "bg-white",
-    bgSection: isSignalTiles ? "bg-[#0A1020]" : "bg-[#FAF8F2]",
-    text: isSignalTiles ? "text-[#CBD5E1]" : "text-[#514D45]",
-    textMuted: isSignalTiles ? "text-[#94A3B8]" : "text-[#7B776D]",
-    textDark: isSignalTiles ? "text-[#F1F5F9]" : "text-[#1F2821]",
-    border: isSignalTiles ? "border-[#1E3A5F]" : "border-[#DDD7CA]",
-    borderLight: isSignalTiles ? "border-[#1E3A5F]" : "border-[#E8E2D6]",
-    badge: isSignalTiles ? "bg-[#1E3A5F] text-[#67E8F9]" : "bg-[#E8E2D6] text-[#7B776D]",
-    accent: isSignalTiles ? "text-cyan-400" : "text-[#8B7355]",
-    accentBg: isSignalTiles ? "bg-cyan-400/10" : "bg-[#F6F2E8]",
-    success: isSignalTiles ? "text-emerald-400" : "text-emerald-700",
-    warning: isSignalTiles ? "text-amber-400" : "text-amber-700",
-    danger: isSignalTiles ? "text-red-400" : "text-red-700",
-  };
+  const loadAgenda = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await getWorkflowAgenda({ scope, status, caseId: scope === "CASE" ? caseId : undefined, limit: 100 });
+      setAgenda(result);
+    } catch (err) {
+      console.error("Agenda load failed:", err);
+      setError("Az agenda most nem érhető el.");
+    } finally {
+      setLoading(false);
+    }
+  }, [caseId, scope, status]);
 
   useEffect(() => {
-    const load = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const me = await getCurrentUser();
-        const [myTasks, myCases] = await Promise.all([getMyTasks(), getCases(1, 120, me.id)]);
+    loadAgenda();
+  }, [loadAgenda]);
 
-        const taskItems: DeadlineBoardItem[] = myTasks
-          .filter((task: TaskItem) => Boolean(task.dueDate))
-          .map((task: TaskItem) => {
-            const dueDate = task.dueDate as string;
-            return {
-              id: `task-${task.id}`,
-              sourceType: String(task.status || "").toUpperCase().includes("REVIEW") ? "review-task" : "task",
-              title: task.title,
-              dueDate,
-              bucket: getBucket(dueDate),
-              caseId: task.case.id,
-              caseNumber: task.case.caseNumber,
-              caseTitle: task.case.matterType || "Ügy",
-              clientName: task.case.clientName,
-              status: task.status || "TODO",
-              description: task.description || undefined,
-              taskId: task.id,
-              link: `/tasks?taskId=${task.id}`,
-              linkLabel: "Feladat megnyitása",
-              secondaryLink: `/cases/${task.case.id}`,
-              secondaryLinkLabel: "Ügy megnyitása",
-            };
-          });
+  const flatItems = useMemo(() => agenda?.days.flatMap((day) => day.items) || [], [agenda]);
 
-        const caseDeadlineGroups = await Promise.all(
-          myCases.data.map(async (caseItem: CaseListItem) => {
-            const deadlines = await getCaseDeadlines(caseItem.id).catch(() => [] as DeadlineItem[]);
-            return { caseItem, deadlines };
-          })
-        );
+  const completeDeadline = async (item: WorkflowDeadlineItem) => {
+    if (item.sourceType !== "TASK") return;
+    setBusyId(item.id);
+    try {
+      await completeTask(item.sourceId, true);
+      await loadAgenda();
+    } catch (err) {
+      console.error("Deadline completion failed:", err);
+      await loadAgenda();
+    } finally {
+      setBusyId(null);
+    }
+  };
 
-        const caseDeadlineItems: DeadlineBoardItem[] = caseDeadlineGroups.flatMap(({ caseItem, deadlines }) =>
-          deadlines
-            .filter((deadline) => Boolean(deadline.dueDate))
-            .map((deadline) => ({
-              id: `case-deadline-${deadline.id}`,
-              sourceType: "case-deadline" as const,
-              title: deadline.extractedPhrase || "Ügyhatáridő",
-              dueDate: deadline.dueDate,
-              bucket: getBucket(deadline.dueDate),
-              caseId: caseItem.id,
-              caseNumber: caseItem.caseNumber,
-              caseTitle: caseItem.title || "Ügy",
-              clientName: caseItem.clientName,
-              status: deadline.status || "OPEN",
-              description: deadline.ruleSet ? `Forrás: ${deadline.ruleSet}` : undefined,
-              link: `/cases/${caseItem.id}`,
-              linkLabel: "Ügy megnyitása",
-              secondaryLink: undefined,
-              secondaryLinkLabel: undefined,
-            }))
-        );
-
-        // Case-level deadline items — from the Case.deadline field surfaced by the PATCH endpoint
-        const caseLevelItems: DeadlineBoardItem[] = myCases.data
-          .filter((c: CaseListItem) => Boolean(c.deadline))
-          .map((c: CaseListItem) => {
-            const dueDate = c.deadline as string;
-            return {
-              id: `case-level-${c.id}`,
-              sourceType: "case-level" as const,
-              title: c.title || "Ügyhatáridő",
-              dueDate,
-              bucket: getBucket(dueDate),
-              caseId: c.id,
-              caseNumber: c.caseNumber,
-              caseTitle: c.title || "Ügy",
-              clientName: c.clientName,
-              status: c.status || "OPEN",
-              description: `Ügy állapota: ${statusLabel[String(c.status || "").toUpperCase()] || "Ismeretlen állapot"}`,
-              link: `/cases/${c.id}`,
-              linkLabel: "Ügy megnyitása",
-              secondaryLink: undefined,
-              secondaryLinkLabel: undefined,
-            };
-          });
-
-        setItems([...taskItems, ...caseDeadlineItems, ...caseLevelItems].sort(byDueDateAsc));
-      } catch (err) {
-        console.error("Deadlines board load failed:", err);
-        setError("A határidők board betöltése sikertelen.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    load();
-  }, []);
-
-  const grouped = useMemo(() => {
-    const map: Record<DeadlineBucket, DeadlineBoardItem[]> = {
-      overdue: [],
-      today: [],
-      week: [],
-      later: [],
-    };
-    items.forEach((item) => map[item.bucket].push(item));
-    return map;
-  }, [items]);
-
-  const summary = useMemo(() => ({
-    overdue: grouped.overdue.length,
-    today: grouped.today.length,
-    week: grouped.week.length,
-    total: items.length,
-  }), [grouped, items.length]);
+  const rescheduleDeadline = async (item: WorkflowDeadlineItem, dueAt: string) => {
+    if (item.sourceType !== "TASK") return;
+    setBusyId(item.id);
+    try {
+      await rescheduleTaskDeadline(item.sourceId, new Date(dueAt).toISOString());
+      await loadAgenda();
+    } catch (err) {
+      console.error("Deadline reschedule failed:", err);
+      await loadAgenda();
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   return (
-    <div className={`flex-1 overflow-y-auto deadlines-surface ${p.bg}`}>
-      <div className="max-w-6xl mx-auto p-8">
-        <h1 className={`text-2xl font-serif ${p.textDark}`}>Feladatok és határidők</h1>
-        <p className={`text-xs ${p.textMuted} mt-1`}>
-          Rögzített határidős tételek feladatokból és ügyhatáridő rekordokból. Operatív munkasor, nem teljes naptárszinkron.
-        </p>
-
-        <div className="mt-5 grid md:grid-cols-4 gap-2 text-[11px]">
-          <div className={`p-3 border ${p.border} ${isSignalTiles ? "bg-red-400/10" : "bg-[#FEF2F2]"}`}>
-            <p className={`text-lg font-serif ${p.textDark}`}>{summary.overdue}</p>
-            <p className={p.textMuted}>Lejárt</p>
+    <div className="deadlines-surface min-h-screen bg-[var(--adm-surface)]">
+      <div className="mx-auto max-w-6xl p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Agenda</p>
+            <h1 className="mt-1 font-serif text-[28px] text-[var(--adm-text)]">Határidők és napi munkasor</h1>
+            <p className="mt-2 max-w-3xl text-[12px] leading-relaxed text-[var(--adm-text-muted)]">
+              Backendből normalizált, belső agenda. Forrásai: feladat-határidők és ügyhatáridők. Nincs AI dátumfelismerés, naptárszinkron vagy jogi minősítés-következtetés.
+            </p>
           </div>
-          <div className={`p-3 border ${p.border} ${isSignalTiles ? "bg-amber-400/10" : "bg-[#FFFBEB]"}`}>
-            <p className={`text-lg font-serif ${p.textDark}`}>{summary.today}</p>
-            <p className={p.textMuted}>Ma esedékes</p>
-          </div>
-          <div className={`p-3 border ${p.border} ${p.bgSection}`}>
-            <p className={`text-lg font-serif ${p.textDark}`}>{summary.week}</p>
-            <p className={p.textMuted}>Ezen a héten</p>
-          </div>
-          <div className={`p-3 border ${p.border} ${p.bgCard}`}>
-            <p className={`text-lg font-serif ${p.textDark}`}>{summary.total}</p>
-            <p className={p.textMuted}>Összes rögzített tétel</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => setScope("MY_WORK")} className={`border px-3 py-2 text-[10px] font-semibold ${scope === "MY_WORK" ? "border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-white" : "border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>Saját munkám</button>
+            <button type="button" onClick={() => setScope("MY_CASES")} className={`border px-3 py-2 text-[10px] font-semibold ${scope === "MY_CASES" ? "border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-white" : "border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>Saját ügyeim</button>
+            {scope === "CASE" && (
+              <span className="border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[10px] font-semibold text-[var(--adm-text)]">
+                Ügy agenda
+              </span>
+            )}
+            <select value={status} onChange={(event) => setStatus(event.target.value as typeof status)} className="border border-[var(--adm-border)] bg-white px-3 py-2 text-[10px] font-semibold text-[var(--adm-text)]">
+              <option value="OPEN">Nyitott</option>
+              <option value="COMPLETED">Lezárt</option>
+              <option value="ALL">Összes</option>
+            </select>
           </div>
         </div>
 
-        {error && (
-          <div className="mt-4 p-3 text-xs bg-[#fef2f2] border border-[#d4b8b8] text-[#8b3a3a]">
-            {error}
-          </div>
+        <div className="mt-5 grid gap-2 sm:grid-cols-5">
+          {[
+            ["Lejárt", agenda?.summary.overdue ?? 0],
+            ["Ma", agenda?.summary.today ?? 0],
+            ["Holnap", agenda?.summary.tomorrow ?? 0],
+            ["Ezen a héten", agenda?.summary.thisWeek ?? 0],
+            ["Később", agenda?.summary.later ?? 0],
+          ].map(([label, value]) => (
+            <div key={label} className="border border-[var(--adm-border)] bg-white p-3 text-center">
+              <p className="text-[18px] font-bold text-[var(--adm-text)]">{value}</p>
+              <p className="text-[9px] uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">{label}</p>
+            </div>
+          ))}
+        </div>
+
+        {agenda && (
+          <p className="mt-3 text-[10px] text-[var(--adm-text-soft)]">
+            Időzóna: {agenda.timezone} · Tartomány: {agenda.range.from} – {agenda.range.to} · Ügyhatáridők {agenda.availability.caseDeadlines ? "elérhetők" : "nem ebben a scope-ban"} · tárgyalás/reminder/külső naptár nem támogatott ebben a passzban.
+          </p>
         )}
 
-        {isLoading ? (
-          <div className="py-12 text-center text-xs text-[#7B776D]">Határidők betöltése…</div>
-        ) : items.length === 0 ? (
-          <div className="mt-6 p-6 border border-dashed border-[#DDD7CA] bg-[#FAF8F2]">
-            <p className="text-sm text-[#514D45]">Nincs rögzített határidős tétel.</p>
-            <p className="text-xs text-[#7B776D] mt-2">
-              Ez a board a meglévő workflowkból rögzített due date mezőket mutatja (feladat-határidők, ügyhatáridő rekordok).
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Link href="/tasks" className="px-3 py-2 text-xs border border-[#DDD7CA] bg-white hover:bg-[#FBF9F3]">Feladatok</Link>
-              <Link href="/notifications" className="px-3 py-2 text-xs border border-[#DDD7CA] bg-white hover:bg-[#FBF9F3]">Értesítések</Link>
-              <Link href="/cases" className="px-3 py-2 text-xs border border-[#DDD7CA] bg-white hover:bg-[#FBF9F3]">Ügyek</Link>
+        {error && <p className="mt-4 border border-[#d4b8b8] bg-[#FEF2F2] p-3 text-xs text-[#8b3a3a]">{error}</p>}
+
+        {loading ? (
+          <p className="mt-8 text-center text-xs text-[var(--adm-text-muted)]">Agenda betöltése…</p>
+        ) : flatItems.length === 0 ? (
+          <div className="mt-6 border border-dashed border-[var(--adm-border)] bg-white p-6">
+            <p className="text-sm font-semibold text-[var(--adm-text)]">Nincs megjeleníthető határidős tétel.</p>
+            <p className="mt-2 text-xs text-[var(--adm-text-muted)]">A rendszer nem hoz létre rejtett vagy frontend-lokális dátumállapotot.</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link href="/tasks" className="border border-[var(--adm-border)] bg-white px-3 py-2 text-xs">Feladatok</Link>
+              <Link href="/cases" className="border border-[var(--adm-border)] bg-white px-3 py-2 text-xs">Ügyek</Link>
+              <Link href="/notifications" className="border border-[var(--adm-border)] bg-white px-3 py-2 text-xs">Értesítések</Link>
             </div>
           </div>
         ) : (
           <div className="mt-6 space-y-6">
-            {bucketOrder.map((bucket) => (
-              <section key={bucket}>
-                <div className={`flex items-center justify-between mb-2`}>
-                  <h2 className={`text-[12px] uppercase tracking-[0.2em] ${p.textMuted}`}>{bucketTitle[bucket]}</h2>
-                  <span className={`text-[10px] ${p.textMuted}`}>{grouped[bucket].length} tétel</span>
+            {agenda?.days.map((day) => (
+              <section key={day.date}>
+                <div className="mb-2 flex items-center justify-between">
+                  <h2 className="text-[12px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">{day.date}</h2>
+                  <span className="text-[10px] text-[var(--adm-text-muted)]">{day.items.length} tétel</span>
                 </div>
-
-                {grouped[bucket].length === 0 ? (
-                  <div className={`p-3 border border-dashed ${p.border} text-xs ${p.textMuted}`}>{bucketEmpty[bucket]}</div>
-                ) : (
-                  <div className="space-y-2">
-                    {grouped[bucket].map((item) => (
-                      <article key={item.id} className={`p-4 border ${p.border} ${p.bgCard}`}>
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${sourceBadge[item.sourceType].bg} ${sourceBadge[item.sourceType].text}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${sourceBadge[item.sourceType].dot}`} />
-                                {sourceBadge[item.sourceType].label}
-                              </span>
-                              <span className={`text-xs ${p.text} truncate`}>
-                                {item.caseNumber} · {item.caseTitle}
-                                {item.clientName ? ` · ${item.clientName}` : ""}
-                              </span>
-                            </div>
-                            <p className={`text-sm font-semibold ${p.textDark} mt-1`}>{item.title}</p>
-                            {item.description && <p className={`text-[11px] ${p.textMuted} mt-0.5`}>{item.description}</p>}
-                          </div>
-                          <div className="text-right">
-                            <p className={`text-[10px] uppercase tracking-[0.15em] ${p.textMuted}`}>{dueLabel(item)}</p>
-                            <p className={`text-[11px] ${p.textDark} mt-1`}>{formatDueDate(item.dueDate)}</p>
-                            <p className={`text-[10px] ${p.textMuted} mt-1`}>
-                              Státusz: {statusLabel[String(item.status || "").toUpperCase()] || "Ismeretlen állapot"}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <Link href={item.link} className={`px-3 py-1.5 text-[11px] border ${p.border} ${p.bgHover}`}>{item.linkLabel}</Link>
-                          {item.secondaryLink && item.secondaryLinkLabel && (
-                            <Link href={item.secondaryLink} className={`px-3 py-1.5 text-[11px] border ${p.border} ${p.bgCard} ${p.bgHover}`}>{item.secondaryLinkLabel}</Link>
-                          )}
-                          <Link href={`/cases/${item.caseId}/documents`} className={`px-3 py-1.5 text-[11px] border ${p.border} ${p.bgCard} ${p.bgHover}`}>Dokumentumtár</Link>
-                          <Link href={`/documents/compare?caseId=${encodeURIComponent(item.caseId)}`} className={`px-3 py-1.5 text-[11px] border ${p.border} ${p.bgCard} ${p.bgHover}`}>Szerződés-workspace</Link>
-                          <Link href={`/cases/${item.caseId}/communications`} className={`px-3 py-1.5 text-[11px] border ${p.border} ${p.bgCard} ${p.bgHover}`}>Kommunikáció</Link>
-                          <Link href={`/cases/${item.caseId}/handoff`} className={`px-3 py-1.5 text-[11px] border ${p.border} ${p.bgCard} ${p.bgHover}`}>Leadási csomag</Link>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                )}
+                <div className="space-y-3">
+                  {day.items.map((item) => (
+                    <AgendaItemCard key={item.id} item={item} timezone={agenda.timezone} busyId={busyId} onComplete={completeDeadline} onReschedule={rescheduleDeadline} />
+                  ))}
+                </div>
               </section>
             ))}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+export default function DeadlinesPage() {
+  return (
+    <AuthenticatedApp section="calendar">
+      <Suspense fallback={<div className="p-6 text-xs text-[var(--adm-text-muted)]">Agenda betöltése…</div>}>
+        <DeadlinesAgendaContent />
+      </Suspense>
+    </AuthenticatedApp>
   );
 }

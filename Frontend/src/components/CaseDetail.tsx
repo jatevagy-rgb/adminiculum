@@ -2,7 +2,7 @@
 
 import { useState, use, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, blockTask, unblockTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, getCaseWorkItems, getCaseActivity, createDocumentSourceTask, createCommunicationSourceTask, type CaseWorkflowSummary, type CaseWorkItemsResponse, type CaseWorkItem, type CaseActivityResponse, type CaseActivityItem, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator } from "@/lib/api";
+import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, blockTask, unblockTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, getCaseWorkItems, getCaseActivity, getWorkflowAgenda, createDocumentSourceTask, createCommunicationSourceTask, type CaseWorkflowSummary, type CaseWorkItemsResponse, type CaseWorkItem, type CaseActivityResponse, type CaseActivityItem, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator, type WorkflowAgendaResponse, type WorkflowDeadlineItem } from "@/lib/api";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
@@ -146,6 +146,8 @@ const WORKFLOW_ACTION_LABELS: Record<string, string> = {
 const DEADLINE_URGENCY_LABELS: Record<string, string> = {
   OVERDUE: "Lejárt",
   TODAY: "Ma esedékes",
+  TOMORROW: "Holnap",
+  THIS_WEEK: "Ezen a héten",
   SOON: "Hamarosan",
   LATER: "Későbbi",
 };
@@ -209,6 +211,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
   const [workflowSummary, setWorkflowSummary] = useState<CaseWorkflowSummary | null>(null);
   const [workItems, setWorkItems] = useState<CaseWorkItemsResponse | null>(null);
   const [caseActivity, setCaseActivity] = useState<CaseActivityResponse | null>(null);
+  const [caseAgenda, setCaseAgenda] = useState<WorkflowAgendaResponse | null>(null);
   const [isLoadingWorkflowSummary, setIsLoadingWorkflowSummary] = useState(false);
   const [workflowSummaryError, setWorkflowSummaryError] = useState<string | null>(null);
   const [workItemsError, setWorkItemsError] = useState<string | null>(null);
@@ -507,7 +510,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
       setIsLoadingWorkflowSummary(true);
       setWorkflowSummaryError(null);
       setWorkItemsError(null);
-      const [contracts, timeline, caseList, backendDocuments, anonDocs, communicationsResponse, workflowSummaryResponse, workItemsResponse, caseActivityResponse] = await Promise.all([
+      const [contracts, timeline, caseList, backendDocuments, anonDocs, communicationsResponse, workflowSummaryResponse, workItemsResponse, caseActivityResponse, caseAgendaResponse] = await Promise.all([
         getCaseContracts(effectiveCaseId).catch(() => []),
         getCaseTimeline(effectiveCaseId).catch(() => []),
         getCases(1, 200).catch(() => ({ data: [] })),
@@ -525,6 +528,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
           return null;
         }),
         getCaseActivity(effectiveCaseId).catch(() => null),
+        getWorkflowAgenda({ scope: 'CASE', caseId: effectiveCaseId, status: 'OPEN', limit: 20 }).catch(() => null),
       ]);
       setGeneratedContracts(contracts);
       setTimelineEvents(timeline);
@@ -533,6 +537,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
       setWorkflowSummary(workflowSummaryResponse);
       setWorkItems(workItemsResponse);
       setCaseActivity(caseActivityResponse);
+      setCaseAgenda(caseAgendaResponse);
       const record = caseList.data.find((item) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId) || null;
       if (!caseRecord && record) {
         setCaseRecord({
@@ -1220,6 +1225,14 @@ export function CaseDetail({ params }: CaseDetailProps) {
     { key: 'handoff' as const, label: 'Átadás', count: workItems?.summary.handoffRequired ?? 0 },
     ...(workItems?.availability.blockerState ? [{ key: 'blocked' as const, label: 'Blokkolt / várakozó', count: (workItems?.summary.blocked ?? 0) + (workItems?.summary.waiting ?? 0) }] : []),
   ];
+  const caseAgendaItems = (caseAgenda?.days || []).flatMap((day) => day.items);
+  const overdueCaseAgendaItems = caseAgendaItems.filter((item) => item.status === 'OPEN' && item.urgency === 'OVERDUE');
+  const nextCaseAgendaItem = caseAgendaItems.find((item) => item.status === 'OPEN') || null;
+  const agendaToneClass = (item: WorkflowDeadlineItem) => {
+    if (item.urgency === 'OVERDUE') return 'border-[#d4b8b8] bg-[#FEF2F2] text-[#8b3a3a]';
+    if (item.urgency === 'TODAY' || item.urgency === 'TOMORROW' || item.urgency === 'THIS_WEEK') return 'border-[#f9c74f] bg-[var(--adm-sand-100)] text-[#6B4B14]';
+    return 'border-[var(--adm-border)] bg-white text-[var(--adm-text-muted)]';
+  };
   const quickActions = [
     {
       title: 'Dokumentum-review',
@@ -1608,6 +1621,70 @@ export function CaseDetail({ params }: CaseDetailProps) {
                 </p>
               </section>
             )}
+
+            <section aria-labelledby="case-agenda-heading" className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Határidő agenda</p>
+                  <h2 id="case-agenda-heading" className="mt-1 font-serif text-[22px] text-[var(--adm-text)]">Ügyhatáridők és feladat leadások</h2>
+                  <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-[var(--adm-text-muted)]">
+                    Backend agenda szerződésből érkező ügyhatáridő és strukturált feladat leadási dátum. Nincs külső naptárszinkron, AI dátumfelismerés vagy jogi jelentőség-következtetés.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/deadlines?scope=CASE&caseId=${encodeURIComponent(canonicalCaseId)}`)}
+                  className="border border-[var(--adm-border)] bg-white px-3 py-2 text-[10px] font-semibold text-[var(--adm-text)] focus:outline-none focus:ring-2 focus:ring-[var(--adm-ochre-500)]"
+                >
+                  Agenda megnyitása
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Következő</p>
+                  <p className="mt-1 truncate text-[13px] font-semibold text-[var(--adm-text)]">{nextCaseAgendaItem?.title || 'Nincs nyitott határidő'}</p>
+                  <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{nextCaseAgendaItem ? formatWorkflowDate(nextCaseAgendaItem.dueAt) : 'Csak rögzített dátumok jelennek meg.'}</p>
+                </div>
+                <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Lejárt</p>
+                  <p className="mt-1 text-[18px] font-bold text-[#8b3a3a]">{overdueCaseAgendaItems.length}</p>
+                  <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">Nyitott, lejárt agendaelem.</p>
+                </div>
+                <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Források</p>
+                  <p className="mt-1 text-[13px] font-semibold text-[var(--adm-text)]">{caseAgenda?.availability.caseDeadlines ? 'Ügy + feladat' : 'Feladat leadások'}</p>
+                  <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">Tárgyalás/reminder mező nincs ebben a modellben.</p>
+                </div>
+              </div>
+
+              {caseAgendaItems.length > 0 ? (
+                <div className="mt-4 space-y-2">
+                  {caseAgendaItems.slice(0, 6).map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => router.push(item.href || item.source.href || `/cases/${canonicalCaseId}`)}
+                      className="w-full border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-left focus:outline-none focus:ring-2 focus:ring-[var(--adm-ochre-500)]"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="truncate text-[13px] font-semibold text-[var(--adm-text)]">{item.title}</p>
+                        <span className={`border px-2 py-0.5 text-[9px] font-semibold ${agendaToneClass(item)}`}>
+                          {DEADLINE_URGENCY_LABELS[item.urgency] || item.urgency}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">
+                        {item.source.displayName || item.sourceType} · {formatWorkflowDate(item.dueAt)} · {item.responsibility.assignee?.displayName || item.responsibility.responsibleLawyer?.displayName || 'Nincs kijelölt felelős'}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-[11px] text-[var(--adm-text-muted)]">
+                  Nincs strukturált ügyhatáridő vagy feladat leadási dátum a jelenlegi agendaablakban.
+                </p>
+              )}
+            </section>
 
             <section aria-labelledby="case-workbench-heading" className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">

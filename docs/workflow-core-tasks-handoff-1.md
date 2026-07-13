@@ -72,3 +72,9 @@ No schema change, migration, manual DB query, Client Portal change, external vis
 ## Source-Linked Document / Communication Tasks
 
 WORKFLOW-CORE-DOCUMENTS-COMMUNICATIONS-1 adds constrained source-linked task creation for document and communication sources. The server derives case/source linkage and rejects arbitrary status, case, creator, priority, description, and raw-content fields.
+
+## Deadline mutation extension
+
+`WORKFLOW-CORE-DEADLINES-AGENDA-NOTIFICATIONS-1` adds `POST /api/v1/tasks/:id/reschedule` as the explicit due-date mutation for internal tasks. The route accepts only `dueAt`, preserves the task transition/authz boundary, rejects arbitrary status/assignment payloads, and records a content-minimal `DEADLINE_SET` timeline event.
+
+The agenda page and Case Detail render mutation controls only when the backend capability flags allow them.

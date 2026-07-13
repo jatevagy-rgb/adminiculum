@@ -44,3 +44,9 @@ Rejected caller-controlled fields include direct `status`, `caseId`, creator fie
 - No Outlook or provider import enablement.
 - No SharePoint path/file-byte exposure.
 - No deployment in this pass.
+
+## Deadline and communication boundary extension
+
+The deadline agenda extension intentionally keeps communications separate from case notes and does not infer deadlines from communication body text. Communication-linked task extraction may create structured task due dates through existing explicit flows; the agenda then reads the persisted `Task.dueDate` only.
+
+No raw communication body, document workspace text, AI output, or timeline payload is included in agenda or notification DTOs.

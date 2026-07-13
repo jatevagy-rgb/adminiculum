@@ -7,6 +7,7 @@ import {
   getCommunications,
   getCurrentUser,
   getDashboardStats,
+  getWorkflowAgenda,
   getMyTasks,
   getNewsFeed,
   getUnreadNotificationsCount,
@@ -15,6 +16,8 @@ import {
   type CurrentUser,
   type DashboardStats,
   type TaskItem,
+  type WorkflowAgendaResponse,
+  type WorkflowDeadlineItem,
 } from "@/lib/api";
 import { toCommunicationSignal, type CommunicationSignal } from "@/lib/communicationIntake";
 
@@ -228,6 +231,7 @@ export function Dashboard() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [cases, setCases] = useState<CaseListItem[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [agenda, setAgenda] = useState<WorkflowAgendaResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -243,11 +247,12 @@ export function Dashboard() {
       const me = await getCurrentUser();
       setCurrentUser(me);
 
-      const [comm, myTasks, myCases, dashboardStats] = await Promise.all([
+      const [comm, myTasks, myCases, dashboardStats, workflowAgenda] = await Promise.all([
         getCommunications({ limit: 8 }).catch(() => null),
         getMyTasks().catch(() => null),
         getCases(1, 12, me.id).catch(() => null),
         getDashboardStats().catch(() => null),
+        getWorkflowAgenda({ scope: "MY_WORK", status: "OPEN", limit: 8 }).catch(() => null),
       ]);
 
       const nextWarnings: string[] = [];
@@ -276,9 +281,15 @@ export function Dashboard() {
         nextWarnings.push("Dashboard statisztikák most nem érhetők el.");
       }
 
+      if (workflowAgenda) setAgenda(workflowAgenda);
+      else {
+        setAgenda(null);
+        nextWarnings.push("Agenda határidőnézet átmenetileg nem érhető el.");
+      }
+
       setWarnings(nextWarnings);
 
-      if (!myTasks && !myCases && !dashboardStats) {
+      if (!myTasks && !myCases && !dashboardStats && !workflowAgenda) {
         setError("A dashboard fő adatai nem érhetők el.");
       }
     } catch (e) {
@@ -325,12 +336,9 @@ export function Dashboard() {
   const activeCase = cases[0] || null;
   const reviewQueue = tasks.filter((task) => mapTaskBucket(task) === "review").slice(0, 6);
 
-  const upcomingDeadlines = useMemo(() => {
-    return tasks
-      .filter((task) => !!task.dueDate && mapTaskBucket(task) !== "done")
-      .sort((a, b) => new Date(a.dueDate || "").getTime() - new Date(b.dueDate || "").getTime())
-      .slice(0, 5);
-  }, [tasks]);
+  const upcomingDeadlines = useMemo<WorkflowDeadlineItem[]>(() => {
+    return (agenda?.days || []).flatMap((day) => day.items).slice(0, 8);
+  }, [agenda]);
 
   const recentDocuments = useMemo(() => {
     if (!stats?.recentActivity?.length) return [] as DashboardStats["recentActivity"];
@@ -487,14 +495,14 @@ export function Dashboard() {
         href: `/tasks?taskId=${review.id}`,
       });
     }
-    const deadline = upcomingDeadlines.find((task) => mapTaskBucket(task) !== "review");
+    const deadline = upcomingDeadlines.find((item) => item.status === "OPEN");
     if (deadline) {
       items.push({
-        id: `mai-deadline-${deadline.id}`,
+        id: `mai-deadline-${deadline.sourceId}`,
         kind: "Határidő",
         title: deadline.title,
-        detail: `${displayDate(deadline.dueDate)} · ${deadline.case?.caseNumber || "Feladat"}`,
-        href: `/tasks?taskId=${deadline.id}`,
+        detail: `${displayDate(deadline.dueAt)} · ${deadline.source.displayName || deadline.sourceType}`,
+        href: deadline.href || deadline.source.href || "/deadlines",
       });
     }
     const importantCommunication = externalComms.find((signal) => signal.requiresReview) || externalComms[0];
@@ -517,12 +525,14 @@ export function Dashboard() {
   );
   const agendaItems = useMemo(
     () =>
-      upcomingDeadlines.slice(0, 5).map((task) => ({
-        id: task.id,
-        title: task.title,
-        date: task.dueDate,
-        caseNumber: task.case?.caseNumber || "Feladat",
-        urgent: mapTaskBucket(task) === "urgent",
+      upcomingDeadlines.slice(0, 5).map((item) => ({
+        id: item.id,
+        title: item.title,
+        date: item.dueAt,
+        caseNumber: item.source.displayName || item.sourceType,
+        href: item.href || item.source.href || "/deadlines",
+        urgent: item.urgency === "OVERDUE" || item.urgency === "TODAY",
+        label: item.urgency === "OVERDUE" ? "Lejárt" : item.urgency === "TODAY" ? "Ma" : "Határidő",
       })),
     [upcomingDeadlines],
   );
@@ -851,17 +861,17 @@ export function Dashboard() {
                   {agendaItems.map((item) => (
                     <Link
                       key={item.id}
-                      href={`/tasks?taskId=${item.id}`}
+                      href={item.href}
                       className={`block rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 bg-white p-2.5 ${item.urgent ? "border-l-[var(--adm-critical-600)] hover:bg-[#FBEDED]" : "border-l-[var(--adm-warm-400)] hover:bg-[#FFF9E8]"}`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="min-w-0 flex-1 truncate font-semibold text-[var(--adm-text)]">{item.title}</p>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-[0.08em] ${item.urgent ? "bg-[#F4DADA] text-[var(--adm-critical-600)]" : "bg-[#FFF3CB] text-[var(--adm-warm-600)]"}`}>{item.urgent ? "Sürgős" : "Határidő"}</span>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-[0.08em] ${item.urgent ? "bg-[#F4DADA] text-[var(--adm-critical-600)]" : "bg-[#FFF3CB] text-[var(--adm-warm-600)]"}`}>{item.label}</span>
                       </div>
                       <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{displayDate(item.date)} · {item.caseNumber}</p>
                     </Link>
                   ))}
-                  <p className="text-[10px] text-[var(--adm-text-muted)]">A lista a betöltött határidős feladatokra szűkül.</p>
+                  <p className="text-[10px] text-[var(--adm-text-muted)]">A lista a backend agenda szerződésből érkező saját nyitott határidőket mutatja.</p>
                 </>
               )}
             </div>

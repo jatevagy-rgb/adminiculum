@@ -24,3 +24,9 @@
 ## Follow-Up
 
 Future workflow work can add richer document review/task status only after separate schema/runtime proof. Client Portal use requires a separate external-safe publication mapper.
+
+## Deadline and communication acceptance extension
+
+- [ ] Communication rows may link to tasks/cases, but agenda items are sourced from persisted task/case deadline fields only.
+- [ ] Agenda and notification DTOs do not expose raw communication body, raw document text, workspace text, AI prompts, or AI outputs.
+- [ ] No fake external email/calendar/provider notification is introduced by the agenda work.

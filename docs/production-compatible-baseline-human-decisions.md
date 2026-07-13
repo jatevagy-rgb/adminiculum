@@ -746,3 +746,7 @@ Decision: internal KEEP candidate for the production-compatible baseline, limite
 ## WORKFLOW-CORE-DOCUMENTS-COMMUNICATIONS-1 Decision Note
 
 The internal lawyer workflow gained safe document/communication metadata handoff surfaces and source-linked task creation. This does not change the production-compatible baseline decision posture: Client Portal and external visibility remain blocked, and document/communication metadata reuse outside internal authenticated case workflows requires a separate privacy/security decision.
+
+## Workflow deadline/agenda decision note
+
+`WORKFLOW-CORE-DEADLINES-AGENDA-NOTIFICATIONS-1` adds an internal backend-owned deadline/agenda workflow using existing production-compatible fields only (`tasks.dueDate`, `cases.deadline`, and existing notification/timeline tables). This is not a schema baseline change, migration authorization, Client Portal deadline publication, external calendar integration, AI deadline extraction, n8n automation, or legal-significance inference. Production apply readiness and CP-SCHEMA-1 readiness remain blocked.

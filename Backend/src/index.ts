@@ -197,6 +197,9 @@ app.use('/api/v1/clients', clientsRoutes);
 import tasksRoutes from './modules/tasks/routes';
 app.use('/api/v1/tasks', tasksRoutes);
 
+import agendaRoutes from './modules/agenda/routes';
+app.use('/api/v1/agenda', agendaRoutes);
+
 import settingsRoutes from './modules/settings/routes';
 app.use('/api/v1/settings', settingsRoutes);
 

@@ -306,6 +306,23 @@ router.post('/:id/unblock', authenticate, async (req: Request, res: Response) =>
 });
 
 // ============================================================================
+// POST /api/v1/tasks/:id/reschedule - Feladathatáridő átütemezése
+// ============================================================================
+router.post('/:id/reschedule', authenticate, async (req: Request, res: Response) => {
+  try {
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
+    const userId = (req as any).user?.userId;
+
+    const task = await taskService.rescheduleTaskDueDate(id, userId, req.body);
+    res.json(task);
+  } catch (error) {
+    console.error('Error rescheduling task deadline:', error);
+    sendTaskWorkflowError(res, error, 'Hiba a feladathatáridő átütemezésekor');
+  }
+});
+
+// ============================================================================
 // POST /api/v1/tasks/:id/reassign - Feladat átadása
 // ============================================================================
 router.post('/:id/reassign', authenticate, async (req: Request, res: Response) => {

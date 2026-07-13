@@ -41,3 +41,11 @@
 ## Source-Linked Task Acceptance Link
 
 Additional acceptance for document/communication source-linked tasks is recorded in `docs/workflow-core-documents-communications-acceptance.md`. The task handoff contract remains internal-only and does not create client portal visibility.
+
+## Deadline mutation acceptance extension
+
+- [ ] `POST /api/v1/tasks/:id/reschedule` requires authentication.
+- [ ] Reschedule accepts only `dueAt` and rejects arbitrary task status/priority/assignment fields.
+- [ ] Closed/cancelled/archived task deadlines cannot be rescheduled.
+- [ ] Successful reschedule updates only `Task.dueDate` and creates a content-minimal `DEADLINE_SET` event.
+- [ ] Frontend reschedule controls are hidden unless the backend agenda item capability says `canReschedule`.

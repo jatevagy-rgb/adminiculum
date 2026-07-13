@@ -11,6 +11,7 @@ import { requireCaseCollaboratorManageAccess, requireCaseManageAccess, requireCa
 import { getCaseWorkflowSummary } from './workflowSummary';
 import { getCaseWorkItems } from './workItems';
 import { getCaseActivity } from './activity';
+import { AgendaRequestError, getCaseDeadlines } from '../agenda/service';
 
 const router = Router();
 
@@ -209,6 +210,33 @@ router.get('/:caseId/activity', authenticate, requireCaseReadAccess, async (req:
     res.json(activity);
   } catch (error) {
     console.error('Get case activity error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// GET /cases/:caseId/deadlines
+// ============================================================================
+router.get('/:caseId/deadlines', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+    const result = await getCaseDeadlines(caseId, userId, {
+      status: req.query.status,
+      limit: req.query.limit,
+      offset: req.query.offset,
+    });
+    res.json(result);
+  } catch (error) {
+    if (error instanceof AgendaRequestError) {
+      res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
+      return;
+    }
+    console.error('Get case deadlines error:', error);
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 });

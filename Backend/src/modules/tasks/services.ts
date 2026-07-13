@@ -57,6 +57,7 @@ const TimelineType = {
   TASK_SUBMITTED: 'TASK_SUBMITTED',
   TASK_COMPLETED: 'TASK_COMPLETED',
   TASK_REJECTED: 'TASK_REJECTED',
+  DEADLINE_SET: 'DEADLINE_SET',
   CHECKED_OUT: 'CHECKED_OUT',
   CHECKED_IN: 'CHECKED_IN',
   VERSION_CREATED: 'VERSION_CREATED',
@@ -77,6 +78,19 @@ type TaskPriority = typeof TaskPriority[keyof typeof TaskPriority];
 type TimelineType = typeof TimelineType[keyof typeof TimelineType];
 type UserRole = typeof UserRole[keyof typeof UserRole];
 
+const taskRescheduleSelect = {
+  id: true,
+  title: true,
+  description: true,
+  status: true,
+  priority: true,
+  dueDate: true,
+  caseId: true,
+  assignedToId: true,
+  assignedById: true,
+  updatedAt: true,
+} as const;
+
 async function getTaskForTransition(taskId: string) {
   return prisma.task.findUnique({
     where: { id: taskId },
@@ -85,6 +99,7 @@ async function getTaskForTransition(taskId: string) {
       title: true,
       caseId: true,
       status: true,
+      dueDate: true,
       assignedToId: true,
       assignedById: true,
       stuckReason: true,
@@ -545,6 +560,71 @@ export async function unblockTask(taskId: string, userId: string) {
   return transitionTask(taskId, userId, 'UNBLOCK');
 }
 
+export async function rescheduleTaskDueDate(taskId: string, userId: string, body: unknown) {
+  if (!userId) {
+    throw new WorkflowTransitionError(401, 'NOT_AUTHENTICATED', 'Authenticated user is required.');
+  }
+  const payload = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+  const allowed = new Set(['dueAt']);
+  for (const key of Object.keys(payload)) {
+    if (!allowed.has(key)) {
+      throw new WorkflowTransitionError(400, 'UNSUPPORTED_RESCHEDULE_FIELD', `Field ${key} is not accepted for task rescheduling.`);
+    }
+  }
+  if (!('dueAt' in payload)) {
+    throw new WorkflowTransitionError(400, 'DUE_AT_REQUIRED', 'dueAt is required.');
+  }
+
+  let dueDate: Date | null = null;
+  if (payload.dueAt !== null && payload.dueAt !== '') {
+    const parsed = new Date(String(payload.dueAt));
+    if (Number.isNaN(parsed.getTime())) {
+      throw new WorkflowTransitionError(400, 'INVALID_DUE_DATE', 'Invalid dueAt value.');
+    }
+    dueDate = parsed;
+  }
+
+  const existing = await getTaskForTransition(taskId);
+  if (!existing) {
+    throw new WorkflowTransitionError(404, 'TASK_NOT_FOUND', 'Task not found.');
+  }
+  const status = String(existing.status || '').toUpperCase();
+  if (['COMPLETED', 'DONE', 'CANCELLED', 'ARCHIVED'].includes(status)) {
+    throw new WorkflowTransitionError(409, 'TASK_DEADLINE_NOT_OPEN', 'Closed task deadlines cannot be rescheduled.');
+  }
+  const actor = await userCanActOnTask(existing, userId);
+  if (!actor.allowed) {
+    throw new WorkflowTransitionError(403, 'TASK_ACTION_FORBIDDEN', 'You are not allowed to reschedule this task.');
+  }
+
+  const currentDue = existing as typeof existing & { dueDate?: Date | null };
+  const same =
+    (!dueDate && !currentDue.dueDate) ||
+    (dueDate && currentDue.dueDate && dueDate.getTime() === currentDue.dueDate.getTime());
+  if (same) {
+    return prisma.task.findUnique({ where: { id: taskId }, select: taskRescheduleSelect });
+  }
+
+  const task = await prisma.task.update({
+    where: { id: taskId },
+    data: { dueDate } as any,
+    select: taskRescheduleSelect,
+  });
+
+  await createTimelineEvent({
+    caseId: task.caseId,
+    userId,
+    type: TimelineType.DEADLINE_SET,
+    payload: {
+      taskId,
+      source: 'task_due_date',
+      dueAt: dueDate ? dueDate.toISOString() : null,
+    },
+  });
+
+  return task;
+}
+
 /**
  * Reassign a task
  */
@@ -751,6 +831,7 @@ async function createTimelineEvent(data: {
     TASK_SUBMITTED: 'CUSTOM',
     TASK_COMPLETED: 'TASK_COMPLETED',
     TASK_REJECTED: 'TASK_BLOCKED',
+    DEADLINE_SET: 'DEADLINE_SET',
     CHECKED_OUT: 'CUSTOM',
     CHECKED_IN: 'CUSTOM',
     VERSION_CREATED: 'DOCUMENT_VERSION_CREATED',
@@ -786,6 +867,7 @@ export default {
   completeTask,
   blockTask,
   unblockTask,
+  rescheduleTaskDueDate,
   reassignTask,
   getTaskRecommendations,
   autoGenerateTask,

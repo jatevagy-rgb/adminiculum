@@ -504,6 +504,98 @@ export async function getCaseActivity(caseId: string): Promise<CaseActivityRespo
   return fetchApi<CaseActivityResponse>(`/cases/${caseId}/activity?limit=30`);
 }
 
+export type WorkflowDeadlineUrgency = 'OVERDUE' | 'TODAY' | 'TOMORROW' | 'THIS_WEEK' | 'LATER';
+export type WorkflowDeadlineStatus = 'OPEN' | 'COMPLETED' | 'CANCELLED' | 'SUPERSEDED';
+
+export interface WorkflowDeadlineItem {
+  id: string;
+  sourceType: 'TASK' | 'CASE_DEADLINE';
+  sourceId: string;
+  caseId: string;
+  title: string;
+  safeDescription?: string | null;
+  startsAt?: string | null;
+  dueAt: string;
+  allDay: boolean;
+  status: WorkflowDeadlineStatus;
+  urgency: WorkflowDeadlineUrgency;
+  importance: 'CRITICAL' | 'HIGH' | 'NORMAL' | 'LOW' | 'UNSPECIFIED';
+  legalSignificance: null;
+  responsibility: {
+    assignee?: { id: string; displayName: string } | null;
+    responsibleLawyer?: { id: string; displayName: string } | null;
+  };
+  source: {
+    type: 'TASK' | 'CASE';
+    id: string;
+    displayName?: string | null;
+    href?: string | null;
+  };
+  capabilities: {
+    canOpen: boolean;
+    canComplete: boolean;
+    canReopen: boolean;
+    canReschedule: boolean;
+    canCancel: boolean;
+    canCreateTask: boolean;
+  };
+  href?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface WorkflowAgendaResponse {
+  generatedAt: string;
+  timezone: string;
+  range: { from: string; to: string };
+  scope: 'MY_WORK' | 'MY_CASES' | 'CASE';
+  summary: {
+    overdue: number;
+    today: number;
+    tomorrow: number;
+    thisWeek: number;
+    later: number;
+    completedRecently: number;
+  };
+  days: Array<{ date: string; items: WorkflowDeadlineItem[] }>;
+  pagination: { limit: number; offset: number; hasMore: boolean };
+  availability: {
+    taskDueDates: boolean;
+    caseDeadlines: boolean;
+    hearings: boolean;
+    reminders: boolean;
+    teamScope: boolean;
+    externalCalendar: false;
+  };
+}
+
+export async function getWorkflowAgenda(params?: {
+  from?: string;
+  to?: string;
+  scope?: 'MY_WORK' | 'MY_CASES' | 'CASE';
+  status?: 'OPEN' | 'COMPLETED' | 'ALL';
+  caseId?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<WorkflowAgendaResponse> {
+  const query = new URLSearchParams();
+  if (params?.from) query.set('from', params.from);
+  if (params?.to) query.set('to', params.to);
+  if (params?.scope) query.set('scope', params.scope);
+  if (params?.status) query.set('status', params.status);
+  if (params?.caseId) query.set('caseId', params.caseId);
+  if (params?.limit) query.set('limit', String(params.limit));
+  if (params?.offset) query.set('offset', String(params.offset));
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return fetchApi<WorkflowAgendaResponse>(`/agenda${suffix}`);
+}
+
+export async function rescheduleTaskDeadline(taskId: string, dueAt: string | null): Promise<TaskItem> {
+  return fetchApi<TaskItem>(`/tasks/${taskId}/reschedule`, {
+    method: 'POST',
+    body: JSON.stringify({ dueAt }),
+  });
+}
+
 export interface SourceLinkedTaskResponse {
   success: boolean;
   task: {
@@ -852,8 +944,17 @@ export async function getWorkflowGraph(caseId: string): Promise<WorkflowGraph> {
   return fetchApi<WorkflowGraph>(`/cases/${caseId}/workflow-graph`);
 }
 
-export async function getCaseDeadlines(caseId: string): Promise<DeadlineItem[]> {
-  return fetchApi<DeadlineItem[]>(`/cases/${caseId}/deadlines`);
+export interface CaseDeadlineAgendaResponse {
+  caseId: string;
+  generatedAt: string;
+  timezone: string;
+  items: WorkflowDeadlineItem[];
+  pagination: WorkflowAgendaResponse['pagination'];
+  availability: WorkflowAgendaResponse['availability'];
+}
+
+export async function getCaseDeadlines(caseId: string): Promise<CaseDeadlineAgendaResponse> {
+  return fetchApi<CaseDeadlineAgendaResponse>(`/cases/${caseId}/deadlines`);
 }
 
 export async function extractDeadlines(data: {

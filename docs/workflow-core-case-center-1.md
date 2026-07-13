@@ -106,3 +106,9 @@ The task/handoff workflow layer now has a backend-normalized case work-item cont
 ## WORKFLOW-CORE-DOCUMENTS-COMMUNICATIONS-1 Extension
 
 The case center workflow now has a safe document/communication companion contract documented in `docs/workflow-core-documents-communications-1.md` and `docs/workflow-core-case-activity-contract.md`. This extension preserves the case-centered posture: internal lawyer activity uses metadata-only document and communication sources, with no client portal exposure and no raw document/communication content.
+
+## Deadline and agenda extension
+
+`WORKFLOW-CORE-DEADLINES-AGENDA-NOTIFICATIONS-1` moves deadline/agenda handling into a canonical backend contract documented in `docs/workflow-core-deadline-agenda-contract.md`. Case Center now uses the shared deadline engine for case deadline urgency and Case Detail also shows a case agenda strip backed by `GET /api/v1/agenda`.
+
+The extension still uses existing production-compatible fields only: `Task.dueDate` and `Case.deadline`. It does not add hearings, reminders, recurrence, external calendar sync, AI date extraction, or legal significance inference.

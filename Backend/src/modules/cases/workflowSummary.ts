@@ -1,4 +1,5 @@
 import { prisma } from '../../prisma/prisma.service';
+import { deriveDeadlineUrgency as deriveCanonicalDeadlineUrgency } from '../agenda/deadlineEngine';
 
 export type WorkflowNextActionKind =
   | 'OVERDUE_TASK'
@@ -220,14 +221,9 @@ export function selectNextWorkflowAction(
 }
 
 function deadlineUrgency(dueAt: string, now: Date): DeadlineUrgency {
-  const due = new Date(dueAt);
-  if (Number.isNaN(due.getTime())) return 'LATER';
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const tomorrowStart = todayStart + 24 * 60 * 60 * 1000;
-  const soon = now.getTime() + 7 * 24 * 60 * 60 * 1000;
-  if (due.getTime() < todayStart) return 'OVERDUE';
-  if (due.getTime() < tomorrowStart) return 'TODAY';
-  if (due.getTime() <= soon) return 'SOON';
+  const urgency = deriveCanonicalDeadlineUrgency(dueAt, now);
+  if (urgency === 'TOMORROW' || urgency === 'THIS_WEEK') return 'SOON';
+  if (urgency === 'OVERDUE' || urgency === 'TODAY') return urgency;
   return 'LATER';
 }
 

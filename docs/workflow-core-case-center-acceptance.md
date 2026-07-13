@@ -64,3 +64,10 @@ Case Center next-action refresh must be verified after task start, submit, appro
 ## WORKFLOW-CORE-DOCUMENTS-COMMUNICATIONS-1 Acceptance Link
 
 Document and communication workflow acceptance is tracked separately in `docs/workflow-core-documents-communications-acceptance.md`. The extension keeps the existing Case Center acceptance posture intact and adds metadata-only activity/source-task checks.
+
+## Deadline and agenda acceptance extension
+
+- [ ] Case Center deadline urgency matches the backend deadline engine used by `/api/v1/agenda`.
+- [ ] Case Detail shows the case agenda strip when `GET /api/v1/agenda?scope=CASE&caseId=...` returns items.
+- [ ] Empty case agenda state is honest and does not imply hearings/reminders/external calendar support.
+- [ ] No Client Portal deadline visibility is created by this internal agenda work.
