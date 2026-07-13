@@ -36,3 +36,7 @@ No schema or migration change. No Azure/deploy/config/package change. The featur
 ## Responsibility / Workload / Time Follow-up
 
 Deadline agenda items now align with the workload view as operational attention signals. They are not performance metrics and do not create passive tracking or external calendar sync.
+
+## Related: WORKFLOW-CORE-LITIGATION-CASE-LIFECYCLE-1
+
+The litigation & case-lifecycle package builds on this module. It adds the canonical case-lifecycle contract (`GET /cases/:id/lifecycle`, close/reopen/archive) and the read-only litigation dossier (`GET /cases/:id/litigation-dossier`), and reuses this module's contracts rather than duplicating them. See `docs/workflow-core-litigation-case-lifecycle-1.md`.

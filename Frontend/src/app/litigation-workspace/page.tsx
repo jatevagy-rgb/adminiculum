@@ -17,6 +17,7 @@ import {
   type TipTapEditorSelectionState,
 } from "@/components/documents/editor/TipTapEditorExperimental";
 import { TipTapReviewPilotPanel } from "@/components/documents/editor/TipTapReviewPilotPanel";
+import { CaseMatterDossierPanel } from "@/components/litigation/CaseMatterDossierPanel";
 import { PleadingPreviewPanel } from "@/components/litigation/PleadingPreviewPanel";
 import { PleadingSectionsOverviewPanel } from "@/components/litigation/PleadingSectionsOverviewPanel";
 import {
@@ -902,6 +903,8 @@ function LitigationWorkspacePageContent() {
           hasContext={hasContext}
           caseContextError={caseContextError}
         />
+
+        {caseId ? <CaseMatterDossierPanel caseId={caseId} /> : null}
 
         {!hasContext ? (
           <MissingContextState />

@@ -31,3 +31,14 @@ A future automation must call a hardened backend endpoint, not the database. The
 ## WORKFLOW-CORE-RESPONSIBILITY-WORKLOAD-TIME-1 Reference
 
 The responsibility/workload/time pass stays inside the existing AI/n8n boundary: no AI staffing, no n8n automation, no passive tracking, no external calendar/team/email connector, and no automatic assignment or reassignment. It uses authenticated internal case/task/time persistence only.
+
+## Cross-reference: WORKFLOW-CORE-LITIGATION-CASE-LIFECYCLE-1
+
+The litigation/case-lifecycle package (`docs/workflow-core-litigation-case-lifecycle-1.md`)
+complies with this boundary: it introduces no AI API/SDK, no AI legal analysis, no
+AI-created claims/issues/evidence/deadlines, and no n8n ownership or DB access. The
+Node/Express backend remains the source of truth. Static guards in
+`Backend/tests/litigationCaseLifecycleStaticGuards.test.ts` assert the litigation/
+lifecycle source imports no AI provider and no n8n, and encodes no legal-merits/outcome
+scoring. Any future AI assistance must use the separately approved manual AI work-package
+model with human review.

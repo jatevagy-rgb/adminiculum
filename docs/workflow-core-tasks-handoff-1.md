@@ -82,3 +82,7 @@ The agenda page and Case Detail render mutation controls only when the backend c
 ## Responsibility / Workload / Time Follow-up
 
 Task handoff now treats reassignment as a supported mutation only when the actor can work on the task and the new assignee is already part of the case team. No automatic reassignment or AI assignment recommendation was added.
+
+## Related: WORKFLOW-CORE-LITIGATION-CASE-LIFECYCLE-1
+
+The litigation & case-lifecycle package builds on this module. It adds the canonical case-lifecycle contract (`GET /cases/:id/lifecycle`, close/reopen/archive) and the read-only litigation dossier (`GET /cases/:id/litigation-dossier`), and reuses this module's contracts rather than duplicating them. See `docs/workflow-core-litigation-case-lifecycle-1.md`.

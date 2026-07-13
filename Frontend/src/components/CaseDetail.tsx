@@ -6,6 +6,7 @@ import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, download
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
+import { CaseMatterDossierPanel } from "@/components/litigation/CaseMatterDossierPanel";
 
 type CaseDocument = {
   id: string;
@@ -1627,6 +1628,8 @@ export function CaseDetail({ params }: CaseDetailProps) {
                 </div>
               </div>
             </section>
+
+            <CaseMatterDossierPanel caseId={canonicalCaseId} compact />
 
             {workflowSummary?.latestCommunication && (
               <section className="border border-[rgba(22,32,26,0.10)] bg-white p-4">

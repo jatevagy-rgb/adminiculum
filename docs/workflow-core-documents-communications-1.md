@@ -54,3 +54,7 @@ No raw communication body, document workspace text, AI output, or timeline paylo
 ## Responsibility / Workload / Time Follow-up
 
 Document and communication task extraction can feed the task workload view, but time entries remain matter-based until a future persisted task/document/communication time-link model exists.
+
+## Related: WORKFLOW-CORE-LITIGATION-CASE-LIFECYCLE-1
+
+The litigation & case-lifecycle package builds on this module. It adds the canonical case-lifecycle contract (`GET /cases/:id/lifecycle`, close/reopen/archive) and the read-only litigation dossier (`GET /cases/:id/litigation-dossier`), and reuses this module's contracts rather than duplicating them. See `docs/workflow-core-litigation-case-lifecycle-1.md`.

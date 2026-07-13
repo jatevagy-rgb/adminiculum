@@ -116,3 +116,7 @@ The extension still uses existing production-compatible fields only: `Task.dueDa
 ## Responsibility / Workload / Time Follow-up
 
 WORKFLOW-CORE-RESPONSIBILITY-WORKLOAD-TIME-1 adds the canonical case responsibility DTO and workload entry point. Case Center remains the handoff source; workload/time data is operational and internal-only.
+
+## Related: WORKFLOW-CORE-LITIGATION-CASE-LIFECYCLE-1
+
+The litigation & case-lifecycle package builds on this module. It adds the canonical case-lifecycle contract (`GET /cases/:id/lifecycle`, close/reopen/archive) and the read-only litigation dossier (`GET /cases/:id/litigation-dossier`), and reuses this module's contracts rather than duplicating them. See `docs/workflow-core-litigation-case-lifecycle-1.md`.

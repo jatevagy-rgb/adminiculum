@@ -13,8 +13,44 @@ import { getCaseWorkItems } from './workItems';
 import { getCaseActivity } from './activity';
 import { AgendaRequestError, getCaseDeadlines } from '../agenda/service';
 import { getCaseResponsibility } from '../responsibility/service';
+import { getCaseLifecycle, closeCase, reopenCase, archiveCase, LifecycleServiceError } from './lifecycleService';
+import { getCaseLitigationDossier } from './litigationDossier';
 
 const router = Router();
+
+type LifecycleMutation = (
+  caseId: string,
+  actor: { userId: string; role?: string | null }
+) => Promise<unknown>;
+
+async function handleLifecycleMutation(
+  req: Request,
+  res: Response,
+  action: LifecycleMutation
+): Promise<void> {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+    const result = await action(caseId, { userId, role: req.user?.role });
+    res.json(result);
+  } catch (error) {
+    if (error instanceof LifecycleServiceError) {
+      res.status(error.statusCode).json({
+        status: error.statusCode,
+        code: error.code,
+        message: error.message,
+        ...(error.blockers ? { blockers: error.blockers } : {}),
+      });
+      return;
+    }
+    console.error('Case lifecycle mutation error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+}
 
 // ============================================================================
 // GET /cases
@@ -265,6 +301,67 @@ router.get('/:caseId/deadlines', authenticate, requireCaseReadAccess, async (req
     console.error('Get case deadlines error:', error);
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
+});
+
+// ============================================================================
+// GET /cases/:caseId/lifecycle
+// ============================================================================
+router.get('/:caseId/lifecycle', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+    const lifecycle = await getCaseLifecycle(caseId, { userId, role: req.user?.role });
+    if (!lifecycle) {
+      res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+      return;
+    }
+    res.json(lifecycle);
+  } catch (error) {
+    console.error('Get case lifecycle error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// GET /cases/:caseId/litigation-dossier
+// ============================================================================
+router.get('/:caseId/litigation-dossier', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+    const dossier = await getCaseLitigationDossier(caseId, { userId, role: req.user?.role });
+    if (!dossier) {
+      res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+      return;
+    }
+    res.json(dossier);
+  } catch (error) {
+    console.error('Get litigation dossier error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// POST /cases/:caseId/close | /reopen | /archive  (lifecycle transitions)
+// ============================================================================
+router.post('/:caseId/close', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  await handleLifecycleMutation(req, res, (caseId, actor) => closeCase(caseId, actor));
+});
+
+router.post('/:caseId/reopen', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  await handleLifecycleMutation(req, res, (caseId, actor) => reopenCase(caseId, actor));
+});
+
+router.post('/:caseId/archive', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  await handleLifecycleMutation(req, res, (caseId, actor) => archiveCase(caseId, actor));
 });
 
 // ============================================================================

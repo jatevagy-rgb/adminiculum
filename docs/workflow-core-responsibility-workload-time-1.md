@@ -17,3 +17,7 @@ Connect case responsibility, staffing, operational workload, and manual time-ent
 
 ## User Experience
 The workflow remains case-centered: Dashboard → Case Detail → Tasks / Workload / Time Entries. The UI presents operational counts and clear links only where existing persisted IDs support them.
+
+## Related: WORKFLOW-CORE-LITIGATION-CASE-LIFECYCLE-1
+
+The litigation & case-lifecycle package builds on this module. It adds the canonical case-lifecycle contract (`GET /cases/:id/lifecycle`, close/reopen/archive) and the read-only litigation dossier (`GET /cases/:id/litigation-dossier`), and reuses this module's contracts rather than duplicating them. See `docs/workflow-core-litigation-case-lifecycle-1.md`.

@@ -758,3 +758,15 @@ Internal responsibility, workload and manual time-entry coordination is treated 
 - Production apply readiness: still blocked by baseline posture.
 - CP-SCHEMA-1 readiness: still blocked.
 - Future schema/runtime changes require separate proof and PR.
+
+## WORKFLOW-CORE-LITIGATION-CASE-LIFECYCLE-1 Decision Note
+
+`WORKFLOW-CORE-LITIGATION-CASE-LIFECYCLE-1` connects the legal-work layer to the operational workflow using **existing production-compatible data only**: a canonical case-lifecycle contract (`GET /cases/:id/lifecycle`) and safe close/reopen/archive transitions built on the existing `CaseStatus` enum + `completedAt` column, plus a read-only litigation dossier (`GET /cases/:id/litigation-dossier`) aggregating documents by `DocumentCategory` (EVIDENCE/COURT_FILING), tasks, and the canonical deadline engine.
+
+- Implemented **without** `schema.prisma` edit, migration, `prisma migrate`/`db push`, or manual DB query.
+- **No** production deployment; **no** Client Portal change; **no** AI API/SDK; **no** n8n; **no** external filing/court integration; **no** Outlook/Graph enablement; **no** OpenAPI/CORS/Azure/package/lock change.
+- **No** automatic legal conclusions and **no** automatic case status/closure/reopen/pleading-filing from document/task events; lifecycle transitions are explicit, authorized actions only.
+- **No** raw `documents.workspaceText`, raw document/extracted text, or raw communication body/content exposure; metadata-only DTOs with explicit `select` and bounded queries.
+- Unsupported litigation/lifecycle concepts were **not simulated**: structured legal issues/claims/allegations/defences, evidence items & evidence↔issue relations and relation classification, pleading filing status/supersede, hearing/procedural-event typing, opposing party, court/authority reference, legal significance, burden of proof, and a dedicated `CLOSING`/`closedAt`/`archivedAt` schema are marked unavailable/deferred (`availability` flags) with the exact blocker documented in `docs/workflow-core-litigation-case-lifecycle-data-source-audit.md`.
+- Validation: backend `prisma validate` + `tsc --noEmit` + `jest` (33 suites / 344 tests, up from 30 / 305); frontend `tsc --noEmit` + build + `verify:prod-env`.
+- Production apply readiness: still blocked by baseline posture. CP-SCHEMA-1 readiness: still blocked. Future structured litigation models require a separate schema change, proof, and PR.

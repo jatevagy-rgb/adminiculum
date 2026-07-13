@@ -552,6 +552,149 @@ export async function getCaseActivity(caseId: string): Promise<CaseActivityRespo
   return fetchApi<CaseActivityResponse>(`/cases/${caseId}/activity?limit=30`);
 }
 
+// ===========================================================================
+// Case lifecycle + litigation dossier (WORKFLOW-CORE-LITIGATION-CASE-LIFECYCLE-1)
+// ===========================================================================
+
+export type CaseLifecycleCategory = 'INTAKE' | 'ACTIVE' | 'ON_HOLD' | 'CLOSING' | 'CLOSED' | 'ARCHIVED';
+
+export interface CaseClosureBlocker {
+  code:
+    | 'OPEN_TASKS'
+    | 'OVERDUE_TASKS'
+    | 'ACTIVE_REVIEW'
+    | 'OPEN_DEADLINES'
+    | 'ACTIVE_HANDOFF'
+    | 'UNRESOLVED_LITIGATION_ITEM'
+    | 'MISSING_RESPONSIBLE_LAWYER';
+  label: string;
+  count?: number;
+  href?: string | null;
+}
+
+export interface CaseLifecycleResponse {
+  caseId: string;
+  generatedAt: string;
+  status: string;
+  lifecycleCategory: CaseLifecycleCategory;
+  openedAt?: string | null;
+  closedAt?: string | null;
+  archivedAt?: string | null;
+  updatedAt?: string | null;
+  responsibleLawyer?: { id: string; displayName: string } | null;
+  blockers: CaseClosureBlocker[];
+  closureReadiness: { ready: boolean; reasons: string[] };
+  capabilities: {
+    canChangeStatus: boolean;
+    canStartClosing: boolean;
+    canClose: boolean;
+    canReopen: boolean;
+    canArchive: boolean;
+  };
+  availability: {
+    closingState: boolean;
+    closedAt: boolean;
+    archivedAt: boolean;
+    litigationBlockers: boolean;
+    closureChecklist: boolean;
+  };
+}
+
+export async function getCaseLifecycle(caseId: string): Promise<CaseLifecycleResponse> {
+  return fetchApi<CaseLifecycleResponse>(`/cases/${caseId}/lifecycle`);
+}
+
+export async function closeCaseLifecycle(caseId: string): Promise<CaseLifecycleResponse> {
+  return fetchApi<CaseLifecycleResponse>(`/cases/${caseId}/close`, { method: 'POST' });
+}
+
+export async function reopenCaseLifecycle(caseId: string): Promise<CaseLifecycleResponse> {
+  return fetchApi<CaseLifecycleResponse>(`/cases/${caseId}/reopen`, { method: 'POST' });
+}
+
+export async function archiveCaseLifecycle(caseId: string): Promise<CaseLifecycleResponse> {
+  return fetchApi<CaseLifecycleResponse>(`/cases/${caseId}/archive`, { method: 'POST' });
+}
+
+export interface LitigationDossierEvidence {
+  id: string;
+  displayName: string;
+  type?: string | null;
+  status?: string | null;
+  relation: 'SUPPORTING' | 'CONTRADICTING' | 'NEUTRAL' | 'UNCLASSIFIED';
+  issueIds: string[];
+  document?: { id: string; displayName: string; href?: string | null } | null;
+  capabilities: {
+    canOpen: boolean;
+    canCompare: boolean;
+    canCreateTask: boolean;
+    canLinkToIssue: boolean;
+    canUnlinkFromIssue: boolean;
+  };
+}
+
+export interface LitigationDossierPleading {
+  id: string;
+  displayName: string;
+  type?: string | null;
+  status?: string | null;
+  filedAt?: string | null;
+  updatedAt?: string | null;
+  relatedDocumentId?: string | null;
+  relatedTaskIds: string[];
+  capabilities: {
+    canOpen: boolean;
+    canCompare: boolean;
+    canCreateReviewTask: boolean;
+    canSubmitForReview: boolean;
+    canApprove: boolean;
+    canReturnForCorrection: boolean;
+    canMarkFiled: boolean;
+    canSupersede: boolean;
+  };
+}
+
+export interface LitigationDossierProceduralDate {
+  id: string;
+  title: string;
+  dueAt: string;
+  urgency: string;
+  sourceType: string;
+  href?: string | null;
+}
+
+export interface LitigationDossierResponse {
+  caseId: string;
+  generatedAt: string;
+  summary: {
+    activeIssues: number;
+    unresolvedIssues: number;
+    evidenceItems: number;
+    pleadingsInDraft: number;
+    pleadingsInReview: number;
+    filedPleadings: number;
+    upcomingProceduralDates: number;
+  };
+  issues: unknown[];
+  evidence: LitigationDossierEvidence[];
+  pleadings: LitigationDossierPleading[];
+  proceduralDates: LitigationDossierProceduralDate[];
+  availability: {
+    issues: boolean;
+    evidence: boolean;
+    issueEvidenceRelations: boolean;
+    pleadings: boolean;
+    filingStatus: boolean;
+    proceduralDates: boolean;
+    parties: boolean;
+    burdenOfProof: boolean;
+  };
+}
+
+export async function getCaseLitigationDossier(caseId: string): Promise<LitigationDossierResponse> {
+  return fetchApi<LitigationDossierResponse>(`/cases/${caseId}/litigation-dossier`);
+}
+
 export type WorkflowDeadlineUrgency = 'OVERDUE' | 'TODAY' | 'TOMORROW' | 'THIS_WEEK' | 'LATER';
 export type WorkflowDeadlineStatus = 'OPEN' | 'COMPLETED' | 'CANCELLED' | 'SUPERSEDED';
 
