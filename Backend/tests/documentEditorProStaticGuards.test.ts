@@ -107,7 +107,7 @@ describe('document editor pro — static safety', () => {
 
   it('keeps review comments unavailable without fake anchors or hidden persistence', () => {
     const qualityContract = read(path.join(EDITOR_LIB_DIR, 'reviewQuality.ts'));
-    expect(qualityContract.includes('branch: "C"')).toBe(true);
+    expect(qualityContract.includes('branch: "A"')).toBe(true);
     expect(qualityContract.includes('anchoredComments: false')).toBe(true);
     expect(qualityContract.includes('reviewerCanAccessCurrentSession: false')).toBe(true);
     expect(qualityContract.includes('Mentett források összehasonlítása')).toBe(true);

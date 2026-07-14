@@ -72,8 +72,8 @@ static/logic-backed items note their automated coverage.
     coupling; enforced by static guard).
 31. ☐ **Dirty review safety** — after editing, create/submit review shows the
     Mode C warning and does not upload, export, save, or clear dirty state.
-32. ☐ **Comments unavailable state** — side panel states document-level
-    comments are unavailable and does not show fake inline/anchored controls.
+32. ☐ **Document-level comments** — side panel creates, lists, resolves, and
+    reopens document-level comments; no fake inline/anchored controls appear.
 33. ☐ **Compare wording** — compare handoff says “Mentett források
     összehasonlítása” and does not claim live track changes.
 

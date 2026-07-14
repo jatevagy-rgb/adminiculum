@@ -13,19 +13,17 @@ Harden the professional editor as a daily review workbench while preserving Mode
 
 ## Selected comments branch
 
-Selected comments branch: **Branch C — comments remain unavailable**.
+Follow-up `DOCUMENT-COMMENTS-BACKEND-AND-EDITOR-1` upgraded this decision to **Branch A — document-level comments** using the existing `Comment.documentId` relation.
 
-Comment relation: `Comment.documentId` exists, but it is only a schema relation.
-
-Mutation support: none for document comments in the professional editor.
+Mutation support: create, resolve, and reopen. Delete and anchored comments remain unavailable.
 
 Anchored comments: false.
 
-Remaining blocker: dedicated document-comment routes with document/case access checks, explicit DTOs, bounded plain text, resolve/reopen transitions, and content-minimized audit.
+Remaining blocker: retention/delete policy and a real anchored-range model.
 
 ## Document comments contract
 
-The professional editor shows the unavailability truthfully. It does not simulate comments in memory and does not store selected text, anchors, comment text, or editor content in another field.
+The professional editor shows real document-level comments through explicit backend DTOs. It does not simulate comments in memory and does not store selected text, anchors, comment text, or editor content in another field.
 
 ## Review-state contract
 

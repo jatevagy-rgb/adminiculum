@@ -2763,6 +2763,68 @@ export async function getDocumentEditorMetadata(documentId: string): Promise<Doc
   return fetchApi<DocumentEditorDto>(`/documents/${encodeURIComponent(documentId)}/editor`);
 }
 
+export type DocumentCommentStatus = 'OPEN' | 'RESOLVED';
+
+export interface DocumentCommentDto {
+  id: string;
+  documentId: string;
+  author: {
+    id: string;
+    displayName: string;
+  };
+  content: string;
+  status: DocumentCommentStatus;
+  createdAt: string;
+  updatedAt?: string | null;
+  resolvedAt?: string | null;
+  capabilities: {
+    canResolve: boolean;
+    canReopen: boolean;
+    canDelete: false;
+  };
+}
+
+export interface DocumentCommentsResponse {
+  comments: DocumentCommentDto[];
+  pagination: {
+    limit: number;
+    offset: number;
+  };
+  availability: {
+    anchoredComments: false;
+    delete: false;
+  };
+}
+
+export async function getDocumentComments(documentId: string, params: { limit?: number; offset?: number } = {}): Promise<DocumentCommentsResponse> {
+  const search = new URLSearchParams();
+  if (params.limit !== undefined) search.set('limit', String(params.limit));
+  if (params.offset !== undefined) search.set('offset', String(params.offset));
+  const query = search.toString();
+  return fetchApi<DocumentCommentsResponse>(`/documents/${encodeURIComponent(documentId)}/comments${query ? `?${query}` : ''}`);
+}
+
+export async function createDocumentComment(documentId: string, content: string): Promise<DocumentCommentDto> {
+  return fetchApi<DocumentCommentDto>(`/documents/${encodeURIComponent(documentId)}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
+}
+
+export async function resolveDocumentComment(documentId: string, commentId: string): Promise<DocumentCommentDto> {
+  return fetchApi<DocumentCommentDto>(
+    `/documents/${encodeURIComponent(documentId)}/comments/${encodeURIComponent(commentId)}/resolve`,
+    { method: 'POST' }
+  );
+}
+
+export async function reopenDocumentComment(documentId: string, commentId: string): Promise<DocumentCommentDto> {
+  return fetchApi<DocumentCommentDto>(
+    `/documents/${encodeURIComponent(documentId)}/comments/${encodeURIComponent(commentId)}/reopen`,
+    { method: 'POST' }
+  );
+}
+
 export interface SaveWorkspaceVersionResult {
   id: string;
   name: string;

@@ -13,12 +13,12 @@ import {
 import { EDITOR_LIMITS } from '../../Frontend/src/lib/editor/editorModel';
 
 describe('document editor review quality contract', () => {
-  it('keeps comments in the unavailable branch until safe routes exist', () => {
-    expect(DOCUMENT_COMMENT_DECISION.branch).toBe('C');
-    expect(DOCUMENT_COMMENT_DECISION.mutationSupport).toBe(false);
+  it('keeps comments document-level only with anchored comments unavailable', () => {
+    expect(DOCUMENT_COMMENT_DECISION.branch).toBe('A');
+    expect(DOCUMENT_COMMENT_DECISION.mutationSupport).toBe(true);
     expect(DOCUMENT_COMMENT_DECISION.anchoredComments).toBe(false);
     expect(documentCommentUnavailableMessage()).toContain('Dokumentumszintű megjegyzések');
-    expect(documentCommentUnavailableMessage()).not.toMatch(/inline|kijelölt szöveg/i);
+    expect(documentCommentUnavailableMessage()).toContain('horgonyok nem támogatottak');
   });
 
   it('states the Mode C review boundary without claiming server persistence', () => {

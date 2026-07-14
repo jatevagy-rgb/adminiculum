@@ -39,7 +39,7 @@ This document intentionally keeps production apply blocked. It gives humans a co
 
 | Feature family | Current recommendation | Decision needed | Default safe decision | Human decision | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Document editor review/comments quality hardening | Keep Mode C quality hardening only | Future document-comment route requires separate design | `QUARANTINE` real comments until route/auth/audit exists | `QUARANTINE` for comments; Mode C hardening accepted | `DOCUMENT-EDITOR-REVIEW-COMMENTS-QUALITY-HARDENING-1` completed with comments Branch C; no `schema.prisma` edit, no migration, no manual DB query, no deployment, no editor server persistence, no fake anchored comments, no fake track changes, no reviewer access claim for unsaved content, no Client Portal, no AI, no n8n. Dependency audit remains four moderate advisories with no force fix. |
+| Document editor review/comments quality hardening | Keep Mode C quality hardening and document-level comments | Delete/anchored comments require future model/policy | `KEEP` document-level comments; `QUARANTINE` delete and anchored comments | `KEEP` Branch A comments without delete | `DOCUMENT-COMMENTS-BACKEND-AND-EDITOR-1` completed with existing `Comment.documentId`; no `schema.prisma` edit, no migration, no manual DB query, no deployment, no editor persistence, no fake anchors, no comment body in audit/notification/activity, no Client Portal, no AI, no n8n. Dependency audit remains four moderate advisories with no force fix. |
 
 ### KEEP
 

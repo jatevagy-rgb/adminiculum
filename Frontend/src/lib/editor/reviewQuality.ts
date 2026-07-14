@@ -2,12 +2,11 @@ import { EDITOR_LIMITS } from "./editorModel";
 import { DOCX_LIMITS } from "./docxInterop";
 
 export const DOCUMENT_COMMENT_DECISION = {
-  branch: "C",
-  relation: "Comment.documentId exists in Prisma, but no document-comment route/authorization contract is implemented.",
-  mutationSupport: false,
+  branch: "A",
+  relation: "Comment.documentId with authenticated Comment.userId author and owning Case authorization.",
+  mutationSupport: true,
   anchoredComments: false,
-  remainingBlocker:
-    "Document-level comments need a dedicated route/service with document access checks, bounded text DTOs, resolve/reopen transitions, and content-minimized audit before activation.",
+  remainingBlocker: "Deletion and anchored text comments remain unavailable until a retention/range model is approved.",
 } as const;
 
 export const MODE_C_REVIEW_WARNING =
@@ -47,7 +46,7 @@ export function compareSavedSourcesLabel(): string {
 }
 
 export function documentCommentUnavailableMessage(): string {
-  return "Dokumentumszintű megjegyzések jelenleg nem aktívak: nincs jóváhagyott kiszolgálói útvonal, resolve/reopen szerződés vagy tartalomszegény audit.";
+  return "Dokumentumszintű megjegyzések elérhetők a dokumentum rekordjához; szöveghez rögzített kommentek és kijelölés-alapú horgonyok nem támogatottak.";
 }
 
 export function editorLimitSummary(): string {

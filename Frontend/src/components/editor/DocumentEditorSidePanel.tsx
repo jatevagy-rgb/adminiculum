@@ -8,7 +8,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import type { CaseWorkItem } from "@/lib/api";
+import type { CaseWorkItem, DocumentCommentDto } from "@/lib/api";
 import type { EditorNode } from "@/lib/editor/editorModel";
 import { EDITOR_FIELDS, FieldResolutionContext, listTokenOccurrences } from "@/lib/editor/fieldTokens";
 import {
@@ -28,11 +28,30 @@ export type ReviewPanelState = {
   canCreateReviewTask: boolean;
 };
 
+export type DocumentCommentsPanelState = {
+  items: DocumentCommentDto[];
+  busy: boolean;
+  error: string | null;
+  draft: string;
+  maxLength: number;
+  availability: {
+    comments: boolean;
+    anchoredComments: false;
+    delete: false;
+  };
+  onDraftChange: (value: string) => void;
+  onCreate: () => void;
+  onResolve: (commentId: string) => void;
+  onReopen: (commentId: string) => void;
+  onRetry: () => void;
+};
+
 type SidePanelProps = {
   docJson: EditorNode | null;
   context: FieldResolutionContext;
   documentMeta: { id: string; caseId: string; name: string; version?: string | null } | null;
   review: ReviewPanelState;
+  comments: DocumentCommentsPanelState;
   readOnly: boolean;
   onInsertField: (fieldId: string) => void;
   onConvertResolvedTokens: () => void;
@@ -41,13 +60,14 @@ type SidePanelProps = {
   onPrint: () => void;
 };
 
-type PanelTab = "status" | "fields" | "review" | "export";
+type PanelTab = "status" | "fields" | "review" | "comments" | "export";
 
 export function DocumentEditorSidePanel({
   docJson,
   context,
   documentMeta,
   review,
+  comments,
   readOnly,
   onInsertField,
   onConvertResolvedTokens,
@@ -71,6 +91,7 @@ export function DocumentEditorSidePanel({
     { id: "status", label: "Állapot" },
     { id: "fields", label: `Változók${unresolvedCount > 0 ? ` (${unresolvedCount}!)` : ""}` },
     { id: "review", label: "Review" },
+    { id: "comments", label: `Megjegyzések${comments.items.filter((item) => item.status === "OPEN").length > 0 ? ` (${comments.items.filter((item) => item.status === "OPEN").length})` : ""}` },
     { id: "export", label: "Export" },
   ];
 
@@ -123,7 +144,8 @@ export function DocumentEditorSidePanel({
                 <li>Új dokumentumverzió létrehozása — a verziómentési útvonal ebben a környezetben nem érhető el.</li>
                 <li>Szerveroldali DOCX konverzió — nincs; a DOCX import/export helyi böngészős munkamenetként fut.</li>
                 <li>Élő változáskövetés szerkesztés közben — a verzió-összehasonlítás a támogatott redline-mechanizmus.</li>
-                <li>{documentCommentUnavailableMessage()}</li>
+                <li>Dokumentumszintű megjegyzések — külön szerveroldali metaadatként, nem szerkesztői tartalommentésként.</li>
+                <li>Szöveghez rögzített kommentek — továbbra sem érhetők el.</li>
                 <li>Valós idejű közös szerkesztés — nem cél és nem támogatott.</li>
               </ul>
             </div>
@@ -213,6 +235,104 @@ export function DocumentEditorSidePanel({
                 ügy- vagy ügyféladatot.
               </p>
             </div>
+          </div>
+        ) : null}
+
+        {tab === "comments" ? (
+          <div className="space-y-2">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[#7A8479]">Dokumentumszintű megjegyzések</p>
+              <p className="mt-1 text-[10.5px] leading-relaxed text-[#7A8479]">
+                Ezek a megjegyzések a dokumentum rekordjához kapcsolódnak. Nem szöveghez rögzített kommentek, nem mentik a jelenlegi szerkesztői tartalmat, és nem hoznak létre review-feladatot.
+              </p>
+            </div>
+            {!documentMeta || !comments.availability.comments ? (
+              <p className="rounded-[4px] border border-[rgba(22,32,26,0.12)] bg-white p-1.5 text-[11px] text-[#7A8479]">
+                {documentCommentUnavailableMessage()}
+              </p>
+            ) : (
+              <>
+                <label className="block text-[10.5px] font-semibold text-[#3D4842]" htmlFor="document-comment-draft">
+                  Új dokumentumszintű megjegyzés
+                </label>
+                <textarea
+                  id="document-comment-draft"
+                  value={comments.draft}
+                  maxLength={comments.maxLength}
+                  onChange={(event) => comments.onDraftChange(event.target.value)}
+                  onKeyDown={(event) => {
+                    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+                      event.preventDefault();
+                      comments.onCreate();
+                    }
+                    if (event.key === "Escape") {
+                      comments.onDraftChange("");
+                    }
+                  }}
+                  className="min-h-20 w-full rounded-[5px] border border-[rgba(22,32,26,0.18)] bg-white px-2 py-1 text-[11.5px] focus:border-[#082817] focus:outline-none"
+                  placeholder="Plain-text megjegyzés…"
+                  aria-describedby="document-comment-counter"
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <span id="document-comment-counter" className="text-[10px] text-[#7A8479]">
+                    {comments.draft.trim().length}/{comments.maxLength} karakter · Ctrl/Cmd+Enter beküldés
+                  </span>
+                  <button
+                    type="button"
+                    disabled={comments.busy || comments.draft.trim().length === 0}
+                    className="rounded-[4px] border border-[#082817] bg-[#082817] px-2 py-1 text-[10.5px] font-semibold text-[#F4EFDB] disabled:opacity-50"
+                    onClick={comments.onCreate}
+                  >
+                    Megjegyzés rögzítése
+                  </button>
+                </div>
+                {comments.error ? (
+                  <div className="rounded-[4px] border border-[#F2DAD6] bg-white p-1.5 text-[11px] text-[#8B2A2A]">
+                    <p>{comments.error}</p>
+                    <button type="button" className="mt-1 underline" onClick={comments.onRetry}>
+                      Újrapróbálás
+                    </button>
+                  </div>
+                ) : null}
+                {comments.busy ? <p className="text-[11px] text-[#7A8479]">Megjegyzések frissítése…</p> : null}
+                {comments.items.length === 0 ? (
+                  <p className="rounded-[4px] border border-[rgba(22,32,26,0.12)] bg-white p-1.5 text-[11px] italic text-[#7A8479]">
+                    Még nincs dokumentumszintű megjegyzés.
+                  </p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {comments.items.map((comment) => (
+                      <li key={comment.id} className="rounded-[5px] border border-[rgba(22,32,26,0.12)] bg-white p-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-[11px] font-semibold text-[#16201A]">{comment.author.displayName}</p>
+                            <p className="text-[10px] text-[#7A8479]">
+                              {new Date(comment.createdAt).toLocaleString("hu-HU")} · {comment.status === "RESOLVED" ? "lezárva" : "nyitott"}
+                            </p>
+                          </div>
+                          <span className={`shrink-0 rounded-[3px] px-1.5 py-0.5 text-[9.5px] font-bold ${comment.status === "RESOLVED" ? "bg-[#E2E8DA] text-[#123B27]" : "bg-[#FAEFCF] text-[#7d530a]"}`}>
+                            {comment.status === "RESOLVED" ? "Lezárva" : "Nyitott"}
+                          </span>
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap break-words text-[11.5px] leading-relaxed text-[#3D4842]">{comment.content}</p>
+                        <div className="mt-1 flex gap-1">
+                          {comment.capabilities.canResolve ? (
+                            <button type="button" disabled={comments.busy} className="rounded-[3px] border border-[rgba(8,40,23,0.3)] px-1.5 py-0.5 text-[10px] text-[#123B27]" onClick={() => comments.onResolve(comment.id)}>
+                              Lezárás
+                            </button>
+                          ) : null}
+                          {comment.capabilities.canReopen ? (
+                            <button type="button" disabled={comments.busy} className="rounded-[3px] border border-[rgba(22,32,26,0.15)] px-1.5 py-0.5 text-[10px]" onClick={() => comments.onReopen(comment.id)}>
+                              Újranyitás
+                            </button>
+                          ) : null}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
           </div>
         ) : null}
 

@@ -157,7 +157,7 @@ describe('document editor metadata route', () => {
     expect(res.body.capabilities.canEdit).toBe(false);
     expect(res.body.capabilities.canSave).toBe(false);
     expect(res.body.capabilities.canSaveNewVersion).toBe(false);
-    expect(res.body.availability).toMatchObject({ serverPersistence: false, autosave: false, contentVersions: false, restore: false, comments: false });
+    expect(res.body.availability).toMatchObject({ serverPersistence: false, autosave: false, contentVersions: false, restore: false, comments: true, anchoredComments: false });
     expect(JSON.stringify(res.body)).not.toMatch(/spItemId|spPath|spWebUrl|workspaceText|sharepoint/i);
   });
 
@@ -172,7 +172,7 @@ describe('document editor metadata route', () => {
     expect(res.body.capabilities.canEdit).toBe(true);
     expect(res.body.capabilities.canSave).toBe(false);
     expect(res.body.capabilities.canRestoreVersion).toBe(false);
-    expect(res.body.capabilities.canComment).toBe(false);
+    expect(res.body.capabilities.canComment).toBe(true);
     expect(res.body.document).toEqual({
       id: 'doc-1',
       caseId: 'case-1',

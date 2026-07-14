@@ -37,7 +37,7 @@ Full details: `docs/document-editor-pro-data-source-and-persistence-audit.md`.
 
 ## Quality hardening follow-up
 
-`DOCUMENT-EDITOR-REVIEW-COMMENTS-QUALITY-HARDENING-1` preserves this editor as a Mode C export-only workbench. It selects comments Branch C (unavailable), adds dirty-session confirmation before review task creation/submission, documents keyboard shortcuts and local limits, and keeps compare wording to saved sources only. See `docs/document-editor-review-comments-quality-hardening-1.md`.
+`DOCUMENT-EDITOR-REVIEW-COMMENTS-QUALITY-HARDENING-1` preserves this editor as a Mode C export-only workbench. Follow-up `DOCUMENT-COMMENTS-BACKEND-AND-EDITOR-1` adds Branch A document-level comments while leaving anchored comments unavailable. Dirty-session confirmation, keyboard shortcuts, local limits, and saved-source compare wording remain intact. See `docs/document-comments-backend-and-editor-1.md`.
 
 ## Canonical editor route
 

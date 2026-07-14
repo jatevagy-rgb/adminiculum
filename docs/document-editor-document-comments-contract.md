@@ -2,11 +2,11 @@
 
 ## Current branch
 
-Branch C — comments remain unavailable.
+Branch A — document-level comments are implemented without delete or anchors.
 
 ## Why unavailable
 
-The existing `Comment` model has `documentId`, `caseId`, `userId`, `content`, and `isResolved`, but the professional editor has no approved document-comment routes or DTO mapper. Without route-level document/case authorization and bounded content validation, enabling comments would risk mixing generic comments with real document-review comments.
+The existing `Comment` model has `documentId`, `caseId`, `userId`, `content`, and `isResolved`. `DOCUMENT-COMMENTS-BACKEND-AND-EDITOR-1` adds document-comment routes, DTO mapping, route-level document/case authorization, bounded content validation, and resolve/reopen transitions.
 
 ## Future minimum contract
 
@@ -15,7 +15,7 @@ The existing `Comment` model has `documentId`, `caseId`, `userId`, `content`, an
 - `POST /api/v1/documents/:documentId/comments/:commentId/resolve`
 - `POST /api/v1/documents/:documentId/comments/:commentId/reopen`
 
-Future DTOs must expose only id, documentId, author display name/id, plain text content, status, timestamps, and backend-derived capabilities.
+DTOs expose only id, documentId, author display name/id, plain text content, status, timestamps, and backend-derived capabilities.
 
 ## Explicit non-support
 

@@ -15,6 +15,13 @@ import { requireDocumentReadAccess, requireDocumentManageAccess } from './author
 import { safeWorkspaceTextLogContext } from './logging';
 import { createTaskFromDocumentSource, SourceLinkedTaskError } from '../tasks/services';
 import { getDocumentEditorMetadata } from '../documentEditor/service';
+import {
+  createDocumentComment,
+  DocumentCommentError,
+  listDocumentComments,
+  reopenDocumentComment,
+  resolveDocumentComment,
+} from './documentComments.service';
 
 const router = Router();
 const isDocumentProcessingEnabled = (): boolean =>
@@ -206,6 +213,59 @@ router.post('/:id/tasks', authenticate, requireDocumentReadAccess, async (req: R
     }
     console.error('Create document source task error:', error instanceof Error ? error.message : error);
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Task creation from document failed.' });
+  }
+});
+
+function sendDocumentCommentError(res: Response, error: unknown): void {
+  if (error instanceof DocumentCommentError) {
+    res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
+    return;
+  }
+  console.error('Document comment route error:', error instanceof Error ? error.message : error);
+  res.status(500).json({ status: 500, code: 'DOCUMENT_COMMENT_ERROR', message: 'Document comments could not be processed.' });
+}
+
+/**
+ * GET /api/v1/documents/:id/comments
+ * Document-level comments only. No selected text, anchors, editor JSON, or content persistence.
+ */
+router.get('/:id/comments', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await listDocumentComments(req, String(req.params.id || ''), req.query);
+    res.json(result);
+  } catch (error) {
+    sendDocumentCommentError(res, error);
+  }
+});
+
+/**
+ * POST /api/v1/documents/:id/comments
+ * Create bounded plain-text document-level comment. Author is always derived from auth.
+ */
+router.post('/:id/comments', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await createDocumentComment(req, String(req.params.id || ''), req.body);
+    res.status(201).json(result);
+  } catch (error) {
+    sendDocumentCommentError(res, error);
+  }
+});
+
+router.post('/:id/comments/:commentId/resolve', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await resolveDocumentComment(req, String(req.params.id || ''), String(req.params.commentId || ''));
+    res.json(result);
+  } catch (error) {
+    sendDocumentCommentError(res, error);
+  }
+});
+
+router.post('/:id/comments/:commentId/reopen', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await reopenDocumentComment(req, String(req.params.id || ''), String(req.params.commentId || ''));
+    res.json(result);
+  } catch (error) {
+    sendDocumentCommentError(res, error);
   }
 });
 

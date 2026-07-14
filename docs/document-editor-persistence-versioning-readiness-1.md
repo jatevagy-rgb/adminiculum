@@ -18,6 +18,8 @@ Selected mode: **Mode C — export-only working session**.
 
 Review hardening follow-up: dirty review task creation/submission must display the Mode C warning and must not upload, export, save, attach current browser content, or mark the session clean.
 
+Document comments follow-up: comments are document metadata and do not persist editor source content, current browser text, selected text, or Tiptap JSON.
+
 ## Hard-gate evaluation
 
 Mode A failed because there is no dedicated editor-content persistence model or service. Mode B failed because backend-controlled full-content load/save, exact `TIPTAP_JSON` association, version-content retrieval, restore, retention, deletion/archive, and stale-write token semantics are not proven.

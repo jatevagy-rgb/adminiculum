@@ -18,15 +18,20 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
 import {
   completeTask,
+  createDocumentComment,
   createDocumentSourceTask,
   getCaseSummary,
   getCaseWorkItems,
   getCaseWorkflowSummary,
+  getDocumentComments,
   getDocumentEditorMetadata,
   getEditorTemplateCapabilities,
+  reopenDocumentComment,
+  resolveDocumentComment,
   startTask,
   submitTask,
   type CaseWorkItem,
+  type DocumentCommentDto,
   type DocumentEditorDto,
   type EditorTemplateCapabilitiesDto,
 } from "@/lib/api";
@@ -65,7 +70,7 @@ import {
 } from "./editorSetup";
 import { DocumentEditorToolbar } from "./DocumentEditorToolbar";
 import { DocumentOutline } from "./DocumentOutline";
-import { DocumentEditorSidePanel, type ReviewPanelState } from "./DocumentEditorSidePanel";
+import { DocumentEditorSidePanel, type DocumentCommentsPanelState, type ReviewPanelState } from "./DocumentEditorSidePanel";
 
 const ZOOM_OPTIONS = [
   { value: 0.75, label: "75%" },
@@ -76,6 +81,7 @@ const ZOOM_OPTIONS = [
 ];
 
 const A4_WIDTH_PX = 794;
+const DOCUMENT_COMMENT_MAX_LENGTH = 2000;
 
 type DocumentMeta = {
   id: string;
@@ -117,6 +123,10 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
   const [workItems, setWorkItems] = useState<CaseWorkItem[]>([]);
   const [reviewBusy, setReviewBusy] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [documentComments, setDocumentComments] = useState<DocumentCommentDto[]>([]);
+  const [commentsBusy, setCommentsBusy] = useState(false);
+  const [commentsError, setCommentsError] = useState<string | null>(null);
+  const [commentDraft, setCommentDraft] = useState("");
 
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const docxInputRef = useRef<HTMLInputElement | null>(null);
@@ -224,6 +234,27 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
   useEffect(() => {
     void refreshWorkItems();
   }, [refreshWorkItems]);
+
+  const refreshDocumentComments = useCallback(async () => {
+    if (!meta || !editorContract?.availability.comments) {
+      setDocumentComments([]);
+      return;
+    }
+    setCommentsBusy(true);
+    try {
+      const response = await getDocumentComments(meta.id, { limit: 50 });
+      setDocumentComments(response.comments);
+      setCommentsError(null);
+    } catch {
+      setCommentsError("A dokumentumszintű megjegyzések nem tölthetők be.");
+    } finally {
+      setCommentsBusy(false);
+    }
+  }, [meta, editorContract]);
+
+  useEffect(() => {
+    void refreshDocumentComments();
+  }, [refreshDocumentComments]);
 
   // --- unsaved-content protection (export-only mode) ----------------------
   useEffect(() => {
@@ -527,6 +558,51 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
     },
   };
 
+  const commentsPanel: DocumentCommentsPanelState = {
+    items: documentComments,
+    busy: commentsBusy,
+    error: commentsError,
+    draft: commentDraft,
+    maxLength: DOCUMENT_COMMENT_MAX_LENGTH,
+    availability: {
+      comments: Boolean(meta && editorContract?.availability.comments),
+      anchoredComments: false,
+      delete: false,
+    },
+    onDraftChange: setCommentDraft,
+    onCreate: () => {
+      const content = commentDraft.trim();
+      if (!meta || !content) return;
+      setCommentsBusy(true);
+      createDocumentComment(meta.id, content)
+        .then(() => {
+          setCommentDraft("");
+          return refreshDocumentComments();
+        })
+        .catch(() => setCommentsError("A megjegyzés rögzítése sikertelen. Csak plain-text, legfeljebb 2000 karakteres tartalom küldhető."))
+        .finally(() => setCommentsBusy(false));
+    },
+    onResolve: (commentId) => {
+      if (!meta) return;
+      setCommentsBusy(true);
+      resolveDocumentComment(meta.id, commentId)
+        .then(() => refreshDocumentComments())
+        .catch(() => setCommentsError("A megjegyzés lezárása sikertelen."))
+        .finally(() => setCommentsBusy(false));
+    },
+    onReopen: (commentId) => {
+      if (!meta) return;
+      setCommentsBusy(true);
+      reopenDocumentComment(meta.id, commentId)
+        .then(() => refreshDocumentComments())
+        .catch(() => setCommentsError("A megjegyzés újranyitása sikertelen."))
+        .finally(() => setCommentsBusy(false));
+    },
+    onRetry: () => {
+      void refreshDocumentComments();
+    },
+  };
+
   const insertField = useCallback(
     (fieldId: string) => {
       editor?.chain().focus().insertContent({ type: "fieldToken", attrs: { fieldId } }).run();
@@ -777,6 +853,7 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
               context={context}
               documentMeta={meta}
               review={reviewPanel}
+              comments={commentsPanel}
               readOnly={false}
               onInsertField={insertField}
               onConvertResolvedTokens={convertTokens}
