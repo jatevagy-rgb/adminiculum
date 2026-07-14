@@ -12,3 +12,7 @@
 ## Decision
 
 No template bridge runtime was implemented. The safe V1 bridge is manual: authorized download first, then local DOCX import.
+
+## Template Assembly Runtime Audit Follow-Up
+
+The template runtime audit confirmed Branch C for the current package. Existing contract routes are auth-first and gated, but their current shapes include broad JSON and filesystem/SharePoint side effects that are not safe for automatic editor integration.

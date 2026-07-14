@@ -23,10 +23,12 @@ import {
   getCaseWorkItems,
   getCaseWorkflowSummary,
   getDocumentEditorMetadata,
+  getEditorTemplateCapabilities,
   startTask,
   submitTask,
   type CaseWorkItem,
   type DocumentEditorDto,
+  type EditorTemplateCapabilitiesDto,
 } from "@/lib/api";
 import { EditorNode, emptyEditorDocument } from "@/lib/editor/editorModel";
 import {
@@ -88,6 +90,8 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
   const [context, setContext] = useState<FieldResolutionContext>({});
   const [docJson, setDocJson] = useState<EditorNode>(emptyEditorDocument());
   const [dirty, setDirty] = useState(false);
+  const [templateCapabilities, setTemplateCapabilities] = useState<EditorTemplateCapabilitiesDto | null>(null);
+  const [templateCapabilitiesError, setTemplateCapabilitiesError] = useState<string | null>(null);
   const [activeClauseId, setActiveClauseId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [fitWidth, setFitWidth] = useState(false);
@@ -178,6 +182,23 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
       cancelled = true;
     };
   }, [documentId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getEditorTemplateCapabilities()
+      .then((capabilities) => {
+        if (!cancelled) {
+          setTemplateCapabilities(capabilities);
+          setTemplateCapabilitiesError(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setTemplateCapabilitiesError("A sablonképességek nem tölthetők be.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const refreshWorkItems = useCallback(async () => {
     if (!meta) return;
@@ -666,6 +687,44 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
           {notice}
         </p>
       ) : null}
+
+      <section className="border-b border-[rgba(22,32,26,0.12)] bg-[#F7F2E4] px-3 py-2 print:hidden" data-editor-chrome aria-label="Sablonból munkapéldány">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#7A6014]">Sablonból munkapéldány</p>
+            <p className="mt-0.5 text-[12px] text-[#3D4842]">
+              {templateCapabilities?.availability.generation
+                ? "A sablon generálási kapu elérhető; a tényleges munkafolyamat külön jóváhagyott kapcsolással nyílik meg."
+                : "A sablonkatalógus és a generálás jelenleg jóváhagyásra vár. Használjon engedélyezett letöltést, majd helyi DOCX importot."}
+            </p>
+            <p className="mt-0.5 text-[10.5px] text-[#7A8479]">
+              {templateCapabilitiesError ||
+                templateCapabilities?.reason ||
+                "Képességellenőrzés folyamatban; automatikus sablonválasztás és szerveroldali editor-mentés nincs."}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-[4px] border border-[rgba(22,32,26,0.16)] bg-white px-2 py-1 text-[10.5px] font-semibold text-[#3D4842]">
+              {templateCapabilities?.selectedBranch === "APPROVAL_READINESS_ONLY" ? "Branch C — approval readiness" : "Képességellenőrzés"}
+            </span>
+            <button
+              type="button"
+              disabled
+              className="cursor-not-allowed rounded-[4px] border border-[rgba(22,32,26,0.14)] bg-white px-2 py-1 text-[11px] font-semibold text-[#7A8479]"
+              title="A sablonból generálás csak külön jóváhagyott storage, jogosultsági és audit modell után kapcsolható."
+            >
+              Sablonkatalógus nem aktív
+            </button>
+            <button
+              type="button"
+              className="rounded-[4px] border border-[rgba(22,32,26,0.2)] bg-white px-2 py-1 text-[11px] font-semibold text-[#3D4842] hover:bg-[#FBF6E7]"
+              onClick={() => docxInputRef.current?.click()}
+            >
+              Helyi DOCX import
+            </button>
+          </div>
+        </div>
+      </section>
 
       {/* Workbench body */}
       <div className="flex min-h-0 flex-1">

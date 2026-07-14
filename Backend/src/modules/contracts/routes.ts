@@ -10,6 +10,7 @@ import { prisma } from '../../prisma/prisma.service';
 import { ADASVETEL_VARIABLES, TemplateCategory } from './types';
 import multer from 'multer';
 import { isDatabaseFoundationEnabled, sendFeatureUnavailable } from '../../middleware/featureAvailability';
+import { getEditorTemplateCapabilities } from './templateCapabilities';
 
 const router = Router();
 const isContractsEnabled = (): boolean =>
@@ -46,6 +47,11 @@ const upload = multer({
 });
 
 router.use(authenticate);
+
+router.get('/editor-template-capabilities', (_req: Request, res: Response): void => {
+  res.json(getEditorTemplateCapabilities());
+});
+
 router.use(requireContractsEnabled);
 
 /**

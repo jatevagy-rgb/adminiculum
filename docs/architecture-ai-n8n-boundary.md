@@ -74,3 +74,7 @@ DOCUMENT-EDITOR-PERSISTENCE-VERSIONING-READINESS-1 preserved Mode C and added no
 ## DOCX interoperability cross-reference
 
 DOCUMENT-EDITOR-DOCX-INTEROPERABILITY-TEMPLATE-BRIDGE-1 keeps DOCX conversion local to the browser and does not introduce AI, n8n, external conversion services, document persistence ownership, or automatic document modification.
+
+## Template Assembly Compliance Reference
+
+`DOCUMENT-EDITOR-TEMPLATE-ASSEMBLY-CLAUSE-CATALOG-1` is compliant with this boundary: no AI API/SDK, AI template selection, AI clause generation, AI variable resolution, n8n workflow, n8n persistence, external conversion service, or automatic database write was added.

@@ -223,3 +223,7 @@ This document is superseded/qualified by `docs/document-editor-persistence-versi
 ## DOCUMENT-EDITOR-DOCX-INTEROPERABILITY-TEMPLATE-BRIDGE-1 update
 
 The professional editor now supports **local browser-only DOCX import/export for a conservative supported subset**. This is not server persistence: no save, no autosave, no server version, no restore, no `workspaceText`, no external conversion service, no AI, and no n8n. Unsupported Word features are warned or rejected; the exported DOCX is a newly generated file, not Word-perfect round-trip fidelity.
+
+## Template Assembly Bridge Reference
+
+`DOCUMENT-EDITOR-TEMPLATE-ASSEMBLY-CLAUSE-CATALOG-1` adds an authenticated capability contract and a disabled/readiness editor panel only. Contract-template catalog, preview, generation, generated-DOCX handoff, and dynamic clause catalog remain unavailable in the professional editor until a separate approved contracts package exists. Mode C remains unchanged.

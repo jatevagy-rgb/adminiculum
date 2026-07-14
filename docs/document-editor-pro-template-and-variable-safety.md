@@ -52,3 +52,7 @@ pass them through.
 ## DOCUMENT-EDITOR-DOCX-INTEROPERABILITY-TEMPLATE-BRIDGE-1 update
 
 The professional editor now supports **local browser-only DOCX import/export for a conservative supported subset**. This is not server persistence: no save, no autosave, no server version, no restore, no `workspaceText`, no external conversion service, no AI, and no n8n. Unsupported Word features are warned or rejected; the exported DOCX is a newly generated file, not Word-perfect round-trip fidelity.
+
+## Template Assembly Variable Boundary
+
+`DOCUMENT-EDITOR-TEMPLATE-ASSEMBLY-CLAUSE-CATALOG-1` does not accept runtime generation variables from the editor. Future template variables must use explicit key/type/source allow-lists and must not use broad `templateData`, raw object paths, `workspaceText`, communication content, internal notes, or arbitrary nested JSON.

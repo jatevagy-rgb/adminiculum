@@ -2102,6 +2102,31 @@ export interface BundleOptionsResponse {
   options: BundleOptionItem[];
 }
 
+export interface EditorTemplateCapabilitiesDto {
+  availability: {
+    catalog: boolean;
+    templateDetail: boolean;
+    variablePreview: boolean;
+    generation: boolean;
+    generatedDocxDownload: boolean;
+    automaticLocalImport: boolean;
+    clauseCatalog: boolean;
+    customClauses: boolean;
+  };
+  featureFlags: {
+    templateGenerationEnabled: boolean;
+    documentProcessingEnabled: boolean;
+  };
+  limits: {
+    maxTemplates: number;
+    maxVariables: number;
+    maxStringLength: number;
+  };
+  selectedBranch: 'APPROVAL_READINESS_ONLY';
+  reason: string;
+  nextStep: string;
+}
+
 export interface CaseContractListItem {
   id: string;
   title: string;
@@ -2288,6 +2313,10 @@ export interface ContractComparisonResponse {
 export async function getContractTemplates(category?: string): Promise<ContractTemplateItem[]> {
   const query = category ? `?category=${encodeURIComponent(category)}` : '';
   return fetchApi<ContractTemplateItem[]>(`/contracts/templates${query}`);
+}
+
+export async function getEditorTemplateCapabilities(): Promise<EditorTemplateCapabilitiesDto> {
+  return fetchApi<EditorTemplateCapabilitiesDto>('/contracts/editor-template-capabilities');
 }
 
 export async function getContractTemplateById(templateId: string): Promise<ContractTemplateItem> {

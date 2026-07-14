@@ -95,3 +95,7 @@ Tests cover DOCX inspection, import/export, unsafe packages, warning detection, 
 ## Remaining interoperability work
 
 Potential future work: richer numbering import, image policy, headers/footers, a reviewed template-download bridge, worker-based large document conversion, and more extensive real-world DOCX fixture testing.
+
+## Template Assembly Follow-Up
+
+`DOCUMENT-EDITOR-TEMPLATE-ASSEMBLY-CLAUSE-CATALOG-1` keeps the previous manual bridge posture: authorized DOCX download outside the editor, then local browser DOCX import. Automatic template generation/import remains blocked by contracts storage, retention, permission, audit, enum/schema, and DTO decisions.

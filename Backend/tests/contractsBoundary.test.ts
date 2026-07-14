@@ -192,6 +192,43 @@ describe('contracts generation quarantine boundary', () => {
     expectNoContractsSideEffects();
   });
 
+  it('requires authentication before editor template capability disclosure', async () => {
+    const response = await requestJson(createApp(), 'GET', '/contracts/editor-template-capabilities', false);
+
+    expect(response.status).toBe(401);
+    expectNoContractsSideEffects();
+  });
+
+  it('returns an inert editor template capability contract without reaching contract storage', async () => {
+    const response = await requestJson(createApp(), 'GET', '/contracts/editor-template-capabilities', true);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      availability: {
+        catalog: false,
+        templateDetail: false,
+        variablePreview: false,
+        generation: false,
+        generatedDocxDownload: false,
+        automaticLocalImport: false,
+        clauseCatalog: false,
+        customClauses: false,
+      },
+      featureFlags: {
+        templateGenerationEnabled: false,
+        documentProcessingEnabled: false,
+      },
+      selectedBranch: 'APPROVAL_READINESS_ONLY',
+    });
+    const serialized = JSON.stringify(response.body).toLowerCase();
+    expect(serialized).not.toContain('filepath');
+    expect(serialized).not.toContain('templatepath');
+    expect(serialized).not.toContain('templatedata');
+    expect(serialized).not.toContain('sharepoint');
+    expect(serialized).not.toContain('process.env');
+    expectNoContractsSideEffects();
+  });
+
   it.each([
     ['POST', '/contracts/templates', undefined],
     ['POST', '/contracts/generate', { templateId: 'template-1', data: { name: 'Client' } }],

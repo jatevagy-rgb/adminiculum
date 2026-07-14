@@ -114,7 +114,7 @@ export function DocumentEditorSidePanel({
               <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-[#3D4842]">
                 <li>Mentés és háttérmentés a szerverre — nincs engedélyezett tartalom-perzisztencia.</li>
                 <li>Új dokumentumverzió létrehozása — a verziómentési útvonal ebben a környezetben nem érhető el.</li>
-                <li>DOCX export/import — nincs megbízható konverter a telepített állományban.</li>
+                <li>Szerveroldali DOCX konverzió — nincs; a DOCX import/export helyi böngészős munkamenetként fut.</li>
                 <li>Élő változáskövetés szerkesztés közben — a verzió-összehasonlítás a támogatott redline-mechanizmus.</li>
                 <li>Szöveghez rögzített kommentek — a Comment modellhez nincs kiszolgálói útvonal.</li>
                 <li>Valós idejű közös szerkesztés — nem cél és nem támogatott.</li>
@@ -255,6 +255,9 @@ export function DocumentEditorSidePanel({
                     ))}
                   </ul>
                 )}
+                <p className="rounded-[4px] border border-[rgba(185,122,15,0.25)] bg-[#FAEFCF] p-1.5 text-[10.5px] leading-relaxed text-[#7d530a]">
+                  A review-feladat a dokumentumhoz kapcsolódik, de a jelenlegi szerkesztési munkamenet tartalma nincs az Adminiculum szerverére mentve.
+                </p>
                 <p className="text-[10px] italic text-[#7A8479]">
                   A jóváhagyás belső munkafolyamat-jóváhagyás — nem elektronikus aláírás, nem benyújtás és nem az irat
                   jogi érvényességének igazolása. A jogosultságokat a szerver határozza meg.

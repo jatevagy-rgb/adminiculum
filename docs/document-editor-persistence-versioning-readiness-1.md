@@ -95,3 +95,7 @@ Approve storage model, retention/deletion/archive policy, content-version identi
 ## DOCUMENT-EDITOR-DOCX-INTEROPERABILITY-TEMPLATE-BRIDGE-1 update
 
 The professional editor now supports **local browser-only DOCX import/export for a conservative supported subset**. This is not server persistence: no save, no autosave, no server version, no restore, no `workspaceText`, no external conversion service, no AI, and no n8n. Unsupported Word features are warned or rejected; the exported DOCX is a newly generated file, not Word-perfect round-trip fidelity.
+
+## Template Assembly Mode C Confirmation
+
+The template assembly package preserves Mode C. Generated-template workflows do not create server editor content, autosave, versions, restore points, comments, or `workspaceText` persistence. Review tasks remain linked to stored document metadata, not the unsaved editor session.
