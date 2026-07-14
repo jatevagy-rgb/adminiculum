@@ -46,6 +46,7 @@ import { convertResolvedTokensToStaticText, type FieldResolutionContext } from "
 import { computeDocumentStats, editorDocToPlainText } from "@/lib/editor/plainTextExport";
 import { editorDocToStandaloneHtml } from "@/lib/editor/htmlExport";
 import { validateEditorDocument } from "@/lib/editor/editorSchemaValidator";
+import { exportEditorDocumentToDocx, importDocxFileToEditorDocument, summarizeDocxWarnings } from "@/lib/editor/docxInterop";
 import { findSearchMatches, getSearchStorage, SEARCH_PLUGIN_KEY, type SearchMatch } from "./extensions";
 import {
   applyClauseOperation,
@@ -108,6 +109,7 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
   const [reviewError, setReviewError] = useState<string | null>(null);
 
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
+  const docxInputRef = useRef<HTMLInputElement | null>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
   const editor = useEditor({
@@ -363,8 +365,7 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
   // --- exports (truthful: browser print, sanitized HTML, plain text) --------
   const exportBaseName = (meta?.name || "munkapeldany").replace(/\.[a-z0-9]+$/i, "").replace(/[^\p{L}\p{N}_-]+/gu, "_");
 
-  const download = useCallback((fileName: string, mimeType: string, content: string) => {
-    const blob = new Blob([content], { type: mimeType });
+  const downloadBlob = useCallback((fileName: string, blob: Blob) => {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -372,6 +373,11 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
     anchor.click();
     URL.revokeObjectURL(url);
   }, []);
+
+  const download = useCallback((fileName: string, mimeType: string, content: string) => {
+    const blob = new Blob([content], { type: mimeType });
+    downloadBlob(fileName, blob);
+  }, [downloadBlob]);
 
   const guardedExport = useCallback(
     (exporter: () => void) => {
@@ -396,9 +402,69 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
     guardedExport(() => download(`${exportBaseName}.txt`, "text/plain;charset=utf-8", editorDocToPlainText(docJson, context)));
   }, [guardedExport, download, exportBaseName, docJson, context]);
 
+  const exportDocx = useCallback(() => {
+    guardedExport(() => {
+      exportEditorDocumentToDocx(docJson, { filename: meta?.name || exportBaseName, context })
+        .then((result) => {
+          if (result.warnings.length > 0) {
+            setNotice(`DOCX export elkészült figyelmeztetéssel: ${result.warnings[0].message}`);
+            window.setTimeout(() => setNotice(null), 8000);
+          }
+          downloadBlob(result.filename, result.blob);
+        })
+        .catch(() => {
+          setNotice("A DOCX export nem futtatható a jelenlegi dokumentumszerkezettel.");
+          window.setTimeout(() => setNotice(null), 8000);
+        });
+    });
+  }, [guardedExport, docJson, meta, exportBaseName, context, downloadBlob]);
+
   const printDocument = useCallback(() => {
     guardedExport(() => window.print());
   }, [guardedExport]);
+
+  const importDocx = useCallback(
+    async (file: File) => {
+      setNotice("DOCX ellenőrzése és helyi átalakítása…");
+      try {
+        const result = await importDocxFileToEditorDocument(file);
+        if (!result.inspection.accepted) {
+          const firstError = result.inspection.blockingErrors[0]?.message || "A DOCX nem importálható biztonságosan.";
+          setNotice(firstError);
+          window.setTimeout(() => setNotice(null), 9000);
+          return;
+        }
+        const warningText = summarizeDocxWarnings(result.warnings);
+        const confirmed = window.confirm(
+          [
+            dirty ? "A jelenlegi szerkesztői munkamenet nincs szerverre mentve." : null,
+            result.warnings.length > 0 ? warningText : null,
+            "A DOCX import helyben fut, és nem menti a tartalmat szerverre. Lecseréli a jelenlegi tartalmat?",
+          ]
+            .filter(Boolean)
+            .join("\n\n")
+        );
+        if (!confirmed) {
+          setNotice("DOCX import megszakítva; a jelenlegi tartalom változatlan maradt.");
+          window.setTimeout(() => setNotice(null), 5000);
+          return;
+        }
+        editor?.commands.setContent(result.document as never, { emitUpdate: true });
+        setDocJson(result.document);
+        setDirty(true);
+        setNotice(
+          result.warnings.length > 0
+            ? `DOCX import kész figyelmeztetéssel: ${result.warnings[0].message}`
+            : "DOCX import kész. A munkamenet nincs szerverre mentve."
+        );
+        window.setTimeout(() => setNotice(null), 9000);
+      } catch {
+        setNotice("A DOCX import sikertelen volt.");
+        window.setTimeout(() => setNotice(null), 8000);
+      }
+    },
+    [dirty, editor]
+  );
 
   // --- review actions --------------------------------------------------------
   const reviewPanel: ReviewPanelState = {
@@ -484,6 +550,34 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <input
+            ref={docxInputRef}
+            type="file"
+            accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            className="hidden"
+            aria-hidden="true"
+            onChange={(event) => {
+              const file = event.target.files?.[0] || null;
+              event.currentTarget.value = "";
+              if (file) void importDocx(file);
+            }}
+          />
+          <button
+            type="button"
+            className="rounded-[4px] border border-[rgba(22,32,26,0.2)] px-2 py-1 text-[11px] font-semibold text-[#3D4842] hover:bg-[#FBF6E7]"
+            title="Helyi DOCX import: a fájl nem kerül feltöltésre, és a munkamenet nem lesz szerverre mentve."
+            onClick={() => docxInputRef.current?.click()}
+          >
+            DOCX import
+          </button>
+          <button
+            type="button"
+            className="rounded-[4px] border border-[rgba(22,32,26,0.2)] px-2 py-1 text-[11px] font-semibold text-[#3D4842] hover:bg-[#FBF6E7]"
+            title="Új DOCX fájl készül helyben; ez nem szerveroldali mentés."
+            onClick={exportDocx}
+          >
+            DOCX export
+          </button>
           <span
             className={`rounded-[4px] border px-2 py-1 text-[10.5px] font-bold ${
               dirty ? "border-[rgba(185,122,15,0.4)] bg-[#FAEFCF] text-[#7d530a]" : "border-[rgba(22,32,26,0.15)] bg-white text-[#3D4842]"

@@ -843,3 +843,9 @@ working session** (`docs/document-editor-pro-data-source-and-persistence-audit.m
 | Feature family | Current recommendation | Decision needed | Default safe decision | Human decision: KEEP / QUARANTINE / REMOVE / BRING-FORWARD / UNKNOWN | Notes |
 |---|---|---|---|---|---|
 | Document editor persistence / versioning readiness | QUARANTINE for server persistence; KEEP only export-only editor and metadata/capability readiness | Approve a real storage model, version identity, retention/delete/archive policy, and concurrency token before any save route | QUARANTINE | UNKNOWN | DOCUMENT-EDITOR-PERSISTENCE-VERSIONING-READINESS-1 completed in Mode C: no `schema.prisma` edit, no migration, no DB query, no deployment, no Client Portal change, no AI API, no n8n, no `workspaceText`, no unrelated-field storage, no fake autosave, no fake versions, no silent stale overwrite. Backend validator and metadata/capability endpoint are readiness-only. |
+
+## Document editor DOCX interoperability decision
+
+| Feature family | Current recommendation | Decision needed | Default safe decision | Human decision: KEEP / QUARANTINE / REMOVE / BRING-FORWARD / UNKNOWN | Notes |
+|---|---|---|---|---|---|
+| Document editor DOCX interoperability / template bridge | KEEP local subset import/export; QUARANTINE automatic template bridge and Word-perfect claims | Decide whether richer Word features, images, template bridge, or server-mediated conversion are product scope | KEEP local subset only | UNKNOWN | DOCUMENT-EDITOR-DOCX-INTEROPERABILITY-TEMPLATE-BRIDGE-1 completed with local browser DOCX import/export using `jszip`; no schema edit, migration, DB query, deployment, server editor persistence, fake save/autosave/version, Client Portal change, AI, n8n, or external conversion service. Unsupported Word features are not simulated. |

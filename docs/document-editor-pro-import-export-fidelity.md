@@ -29,3 +29,7 @@ the export with a visible notice.
 Editor JSON → HTML export → re-paste is *not* claimed to be lossless and is
 not a supported workflow; the working session plus exports are the supported
 paths in persistence mode C.
+
+## DOCUMENT-EDITOR-DOCX-INTEROPERABILITY-TEMPLATE-BRIDGE-1 update
+
+The professional editor now supports **local browser-only DOCX import/export for a conservative supported subset**. This is not server persistence: no save, no autosave, no server version, no restore, no `workspaceText`, no external conversion service, no AI, and no n8n. Unsupported Word features are warned or rejected; the exported DOCX is a newly generated file, not Word-perfect round-trip fidelity.

@@ -70,3 +70,7 @@ collaboration service.
 ## Document editor persistence readiness cross-reference
 
 DOCUMENT-EDITOR-PERSISTENCE-VERSIONING-READINESS-1 preserved Mode C and added no AI/n8n role in editor persistence. Future document persistence remains owned by Adminiculum backend storage/contracts only; n8n must not own editor state, versions, audit, restore, or conflict resolution.
+
+## DOCX interoperability cross-reference
+
+DOCUMENT-EDITOR-DOCX-INTEROPERABILITY-TEMPLATE-BRIDGE-1 keeps DOCX conversion local to the browser and does not introduce AI, n8n, external conversion services, document persistence ownership, or automatic document modification.
