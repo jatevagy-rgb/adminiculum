@@ -58,3 +58,11 @@ Document and communication task extraction can feed the task workload view, but 
 ## Related: WORKFLOW-CORE-LITIGATION-CASE-LIFECYCLE-1
 
 The litigation & case-lifecycle package builds on this module. It adds the canonical case-lifecycle contract (`GET /cases/:id/lifecycle`, close/reopen/archive) and the read-only litigation dossier (`GET /cases/:id/litigation-dossier`), and reuses this module's contracts rather than duplicating them. See `docs/workflow-core-litigation-case-lifecycle-1.md`.
+
+## Update — DOCUMENT-EDITOR-PRO-CONTRACT-WORKBENCH-1 (2026-07-14)
+
+Document drafting gained a canonical professional editor at
+`/documents/[documentId]/edit` (export-only working session — no server content
+persistence exists in this environment). Document-linked review tasks created from the
+editor use the same `POST /documents/:id/tasks` source-linked boundary documented here.
+See `docs/document-editor-pro-contract-workbench-1.md`.

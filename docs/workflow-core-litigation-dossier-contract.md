@@ -107,3 +107,9 @@ external-publication fields, raw Prisma rows.
   explicit `select`, `take = 100`.
 - Linked tasks: single bounded `findMany` by `documentId ∈ set`.
 - Procedural dates: canonical engine (bounded internally).
+
+## Update — DOCUMENT-EDITOR-PRO-CONTRACT-WORKBENCH-1 (2026-07-14)
+
+Pleading review remains task-backed; drafts can be worked on in the professional editor
+(`/documents/[documentId]/edit`, export-only session mode) and compared through the
+existing `/documents/compare` redline workflow. No pleading contract fields changed.

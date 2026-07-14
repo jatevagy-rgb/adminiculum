@@ -54,3 +54,15 @@ exists) and is never decided automatically. Static guards in
 `Backend/tests/intakeMatterOpeningStaticGuards.test.ts` assert the intake surface imports no
 AI provider, no n8n, no external CRM/identity/screening service, and contains no automatic
 merge/clearance/activation logic.
+
+## Cross-reference: DOCUMENT-EDITOR-PRO-CONTRACT-WORKBENCH-1
+
+The professional contract editor (`docs/document-editor-pro-contract-workbench-1.md`) complies
+with this boundary: no AI API/SDK, no AI clause generation, no AI contract analysis, no AI
+automatic document modification or review approval, no AI automatic database writes, and no
+n8n document-state ownership, editor persistence, or direct database access. The editor runs
+in export-only session mode (no server content persistence at all) and may later become a
+*source* for the separately approved manual AI work-package flow — no AI integration exists in
+it. Static guards in `Backend/tests/documentEditorProStaticGuards.test.ts` assert the editor
+surface imports no AI provider, no n8n, no external conversion SaaS, and no realtime
+collaboration service.

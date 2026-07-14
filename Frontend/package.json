@@ -12,6 +12,7 @@
   "dependencies": {
     "@azure/msal-browser": "^4.26.1",
     "@azure/msal-react": "^3.0.29",
+    "@tiptap/extension-table": "^3.26.0",
     "@tiptap/extension-underline": "^3.26.0",
     "@tiptap/pm": "^3.26.0",
     "@tiptap/react": "^3.26.0",

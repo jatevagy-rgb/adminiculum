@@ -128,3 +128,10 @@ Opening tasks created by the explicit intake bundle
 existing task pipeline, so a valid opening task can become the Case Center next action with no
 Case Center changes. Declined intakes (`CANCELLED`) leave active work queues. See
 `docs/workflow-core-intake-matter-opening-1.md`.
+
+## Update — DOCUMENT-EDITOR-PRO-CONTRACT-WORKBENCH-1 (2026-07-14)
+
+Review tasks created from the professional editor flow through the existing task
+transitions and therefore rank in the Case Center next-action engine unchanged. The editor
+adds no parallel next-action or work-item logic.
+See `docs/document-editor-pro-contract-workbench-1.md`.

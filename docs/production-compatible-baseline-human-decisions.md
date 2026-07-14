@@ -805,3 +805,35 @@ CANCELLED`), and a bounded intake queue (`GET /api/v1/intake`).
 - Production apply readiness: still blocked by baseline posture. CP-SCHEMA-1 readiness: still
   blocked. Structured conflict-review/engagement/party models require a separate schema change,
   proof, and PR.
+
+## DOCUMENT-EDITOR-PRO-CONTRACT-WORKBENCH-1 (2026-07-14)
+
+**Decision**: The professional contract editor was implemented using existing
+production-compatible capabilities only, in **persistence mode C — explicit export-only
+working session** (`docs/document-editor-pro-data-source-and-persistence-audit.md`).
+
+- Canonical route `/documents/[documentId]/edit` (the `/editor-lab` sandbox now redirects to a
+  blank working draft); the compare/litigation embedded review-suggestion workspace remains a
+  separate, unchanged surface.
+- Selected persistence mode C because every server content route is 501-gated behind
+  `ENABLE_DOCUMENT_PROCESSING` + `ENABLE_DOCUMENT_AI_PRIVACY_MODEL` (off in the production
+  posture) and writes to the forbidden `documents.workspaceText`; no dedicated editor-content
+  model exists. The UI states "Nincs szerverre mentve", warns before unload, and offers
+  truthful exports only (browser print/PDF, sanitized HTML, TXT).
+- Implemented **without** `schema.prisma` edit, migration, or manual DB query; **no**
+  deployment; **no** Client Portal change; **no** AI API; **no** n8n; **no** external
+  conversion service, e-signature, or court filing.
+- **No fake autosave** and **no fake track changes** — compare (`/documents/compare`) is the
+  truthful redline; comments are truthfully unavailable (the `Comment` model has no routes).
+- **No** `workspaceText` usage and **no** editor content stored in unrelated fields
+  (`templateData`, `variables`, `SystemSetting`, descriptions, timeline metadata, browser
+  storage) — all static-guarded.
+- One package addition (allowed by package policy, explained): official
+  `@tiptap/extension-table@3.26.0`, matching the installed Tiptap 3.26 line (+15 lockfile
+  lines).
+- Unsupported import/export/realtime features were **not simulated**: DOCX import/export,
+  server save/versioning, page numbers, headers/footers, anchored comments, live track
+  changes and realtime collaboration are absent and documented, not faked.
+- Validation: backend `prisma validate` + `tsc --noEmit` + Jest **43 suites / 468 tests**
+  (up from 38/408); frontend `tsc --noEmit` + production build + clean-env
+  `verify:prod-env` with the documented non-routable placeholder.

@@ -1829,3 +1829,142 @@ select {
   background: #0b1220;
   color: #e2e8f0;
 }
+
+/* ============================================================================
+   DOCUMENT-EDITOR-PRO-CONTRACT-WORKBENCH-1 — professional legal editor
+   A4 canvas, derived clause numbering, field tokens, page breaks, search
+   highlights, legal list markers, tables, and honest print layout.
+   ========================================================================== */
+
+.editor-a4-page {
+  min-height: 1123px; /* A4 @ 96dpi */
+  border-radius: 2px;
+}
+
+.legal-editor-content {
+  min-height: 1123px;
+  padding: 76px 72px; /* ~20mm visible page margins */
+  outline: none;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  line-height: 1.65;
+  color: #1f2821;
+}
+
+.legal-editor-content p { margin: 0.55em 0; }
+.legal-editor-content h1 { font-size: 24px; font-weight: 700; text-align: center; margin: 0.7em 0; color: #123b27; }
+.legal-editor-content h2 { font-size: 19px; font-weight: 700; margin: 0.9em 0 0.4em; color: #123b27; }
+.legal-editor-content h3 { font-size: 16.5px; font-weight: 600; margin: 0.8em 0 0.3em; color: #1f4a33; }
+.legal-editor-content blockquote { border-left: 3px solid #b28b2e; background: #fbf6e7; margin: 0.6em 0; padding: 0.4em 0.8em; font-style: italic; }
+.legal-editor-content hr { border: 0; border-top: 1px solid #9aa196; margin: 1em 0; }
+.legal-editor-content ul { list-style: disc; padding-left: 1.6em; margin: 0.4em 0; }
+.legal-editor-content ol { list-style: decimal; padding-left: 1.8em; margin: 0.4em 0; }
+.legal-editor-content li > p { margin: 0.2em 0; }
+
+/* Legal ordered-list marker styles: a) b) c) and (i) (ii) (iii) */
+.legal-editor-content ol[data-list-style="lower-alpha"] { list-style: none; counter-reset: legal-alpha; padding-left: 2em; }
+.legal-editor-content ol[data-list-style="lower-alpha"] > li { counter-increment: legal-alpha; position: relative; }
+.legal-editor-content ol[data-list-style="lower-alpha"] > li::before { content: counter(legal-alpha, lower-alpha) ")"; position: absolute; left: -1.7em; font-weight: 600; }
+.legal-editor-content ol[data-list-style="lower-roman"] { list-style: none; counter-reset: legal-roman; padding-left: 2.4em; }
+.legal-editor-content ol[data-list-style="lower-roman"] > li { counter-increment: legal-roman; position: relative; }
+.legal-editor-content ol[data-list-style="lower-roman"] > li::before { content: "(" counter(legal-roman, lower-roman) ")"; position: absolute; left: -2.2em; font-weight: 600; }
+
+/* Legal clause: hanging generated number from decoration attribute */
+.legal-editor-content .legal-clause { position: relative; padding-left: 3.2em; margin: 0.5em 0; }
+.legal-editor-content .legal-clause .legal-clause { padding-left: 2.8em; }
+.legal-editor-content .legal-clause[data-clause-no]::before {
+  content: attr(data-clause-no);
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  font-weight: 700;
+  color: #123b27;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  pointer-events: none;
+}
+.legal-editor-content .clause-heading { font-weight: 700; margin: 0.55em 0 0.15em; color: #16201a; }
+.legal-editor-content .legal-clause.ProseMirror-selectednode { outline: 2px solid #b28b2e; outline-offset: 2px; }
+
+/* Field token chip */
+.legal-editor-content .field-token {
+  display: inline-block;
+  border: 1px solid rgba(45, 74, 124, 0.35);
+  background: #eaeff6;
+  color: #2d4a7c;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-family: ui-monospace, "Cascadia Mono", monospace;
+  font-size: 0.82em;
+  white-space: nowrap;
+}
+.legal-editor-content .field-token.ProseMirror-selectednode { outline: 2px solid #2d4a7c; }
+
+/* Page break node */
+.legal-editor-content .page-break-node {
+  border-top: 2px dashed #9aa196;
+  margin: 1.2em -24px;
+  position: relative;
+  height: 14px;
+}
+.legal-editor-content .page-break-node::after {
+  content: "Oldaltörés";
+  position: absolute;
+  top: -0.75em;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  padding: 0 8px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7a8479;
+  font-family: var(--font-sans, sans-serif);
+}
+.legal-editor-content .page-break-node.ProseMirror-selectednode { outline: 2px solid #b28b2e; }
+
+/* Tables */
+.legal-editor-content table.editor-table { border-collapse: collapse; width: 100%; margin: 0.6em 0; table-layout: fixed; }
+.legal-editor-content table.editor-table td,
+.legal-editor-content table.editor-table th { border: 1px solid #6b7268; padding: 4px 8px; vertical-align: top; position: relative; }
+.legal-editor-content table.editor-table th { background: #f2eedf; font-weight: 700; }
+.legal-editor-content .selectedCell::after { content: ""; position: absolute; inset: 0; background: rgba(45, 74, 124, 0.12); pointer-events: none; }
+
+/* Search highlight */
+.legal-editor-content .search-hit { background: rgba(178, 139, 46, 0.28); border-radius: 2px; }
+.legal-editor-content .search-hit-active { background: rgba(178, 139, 46, 0.62); outline: 1px solid #8e6a1b; }
+
+/* Keyboard focus visibility inside the workbench chrome */
+[data-editor-chrome] button:focus-visible,
+[data-editor-chrome] input:focus-visible,
+[data-editor-chrome] select:focus-visible {
+  outline: 2px solid #082817;
+  outline-offset: 1px;
+}
+
+/* ---------------------------------------------------------------------------
+   Print: hide all workbench chrome, print the A4 canvas alone. The PDF is
+   produced by the browser's own print dialog — no server-side generation.
+   -------------------------------------------------------------------------- */
+@media print {
+  @page { size: A4; margin: 20mm; }
+  body * { visibility: hidden; }
+  .editor-print-root .editor-a4-page,
+  .editor-print-root .editor-a4-page * { visibility: visible; }
+  .editor-print-root .editor-a4-page {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: auto !important;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  .legal-editor-content { padding: 0; min-height: 0; }
+  .legal-editor-content .page-break-node { border: 0; height: 0; margin: 0; page-break-after: always; }
+  .legal-editor-content .page-break-node::after { content: none; }
+  .legal-editor-content table.editor-table,
+  .legal-editor-content .legal-clause { break-inside: avoid-page; }
+  .legal-editor-content h1, .legal-editor-content h2, .legal-editor-content h3 { break-after: avoid-page; }
+  .legal-editor-content .search-hit { background: transparent; outline: none; }
+  .legal-editor-content .field-token { border: 0; background: transparent; color: inherit; font-family: inherit; }
+}

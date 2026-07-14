@@ -238,3 +238,12 @@ Before implementation begins, the following decisions are needed:
 ---
 
 **End of planning document. Implementation not authorized until reviewed and approved.**
+---
+
+## Superseded (2026-07-14)
+
+The preliminary Editor Lab/Tiptap plan tracked here has been superseded by
+DOCUMENT-EDITOR-PRO-CONTRACT-WORKBENCH-1: `/editor-lab` now redirects to the canonical
+professional editor at `/documents/new/edit`. See
+`docs/document-editor-pro-contract-workbench-1.md` and the persistence audit in
+`docs/document-editor-pro-data-source-and-persistence-audit.md`.
