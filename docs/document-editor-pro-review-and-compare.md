@@ -34,7 +34,7 @@ existing compare workflow:
 
 - the editor links to
   `/documents/compare?caseId=…&documentId=…` labeled
-  **"Verziók összehasonlítása (redline)"**;
+  **"Mentett források összehasonlítása"**;
 - the compare page's embedded review-suggestion workspace (persisted
   `DocumentReviewSuggestion` records with `CONTRACT_WORKSPACE` /
   `LITIGATION_WORKSPACE` sources) remains the anchored-suggestion surface and

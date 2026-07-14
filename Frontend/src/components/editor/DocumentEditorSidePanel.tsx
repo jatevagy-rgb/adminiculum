@@ -11,6 +11,13 @@ import Link from "next/link";
 import type { CaseWorkItem } from "@/lib/api";
 import type { EditorNode } from "@/lib/editor/editorModel";
 import { EDITOR_FIELDS, FieldResolutionContext, listTokenOccurrences } from "@/lib/editor/fieldTokens";
+import {
+  documentCommentUnavailableMessage,
+  EDITOR_KEYBOARD_SHORTCUTS,
+  editorLimitSummary,
+  MODE_C_REVIEW_WARNING,
+  compareSavedSourcesLabel,
+} from "@/lib/editor/reviewQuality";
 
 export type ReviewPanelState = {
   items: CaseWorkItem[];
@@ -116,10 +123,24 @@ export function DocumentEditorSidePanel({
                 <li>Új dokumentumverzió létrehozása — a verziómentési útvonal ebben a környezetben nem érhető el.</li>
                 <li>Szerveroldali DOCX konverzió — nincs; a DOCX import/export helyi böngészős munkamenetként fut.</li>
                 <li>Élő változáskövetés szerkesztés közben — a verzió-összehasonlítás a támogatott redline-mechanizmus.</li>
-                <li>Szöveghez rögzített kommentek — a Comment modellhez nincs kiszolgálói útvonal.</li>
+                <li>{documentCommentUnavailableMessage()}</li>
                 <li>Valós idejű közös szerkesztés — nem cél és nem támogatott.</li>
               </ul>
             </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[#7A8479]">Billentyűzet</p>
+              <ul className="mt-1 space-y-0.5 text-[11px] text-[#3D4842]">
+                {EDITOR_KEYBOARD_SHORTCUTS.map((shortcut) => (
+                  <li key={shortcut.keys} className="flex justify-between gap-2">
+                    <span className="font-semibold">{shortcut.keys}</span>
+                    <span className="text-right">{shortcut.label}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <p className="rounded-[4px] border border-[rgba(22,32,26,0.12)] bg-white p-1.5 text-[10.5px] leading-relaxed text-[#3D4842]">
+              {editorLimitSummary()}
+            </p>
           </div>
         ) : null}
 
@@ -255,8 +276,11 @@ export function DocumentEditorSidePanel({
                     ))}
                   </ul>
                 )}
-                <p className="rounded-[4px] border border-[rgba(185,122,15,0.25)] bg-[#FAEFCF] p-1.5 text-[10.5px] leading-relaxed text-[#7d530a]">
-                  A review-feladat a dokumentumhoz kapcsolódik, de a jelenlegi szerkesztési munkamenet tartalma nincs az Adminiculum szerverére mentve.
+                <p
+                  className="rounded-[4px] border border-[rgba(185,122,15,0.25)] bg-[#FAEFCF] p-1.5 text-[10.5px] leading-relaxed text-[#7d530a]"
+                  title="a jelenlegi szerkesztési munkamenet tartalma nincs az Adminiculum szerverére mentve"
+                >
+                  {MODE_C_REVIEW_WARNING}
                 </p>
                 <p className="text-[10px] italic text-[#7A8479]">
                   A jóváhagyás belső munkafolyamat-jóváhagyás — nem elektronikus aláírás, nem benyújtás és nem az irat
@@ -267,7 +291,7 @@ export function DocumentEditorSidePanel({
                     href={`/documents/compare?caseId=${encodeURIComponent(documentMeta.caseId)}&documentId=${encodeURIComponent(documentMeta.id)}`}
                     className="block rounded-[4px] border border-[rgba(22,32,26,0.15)] px-2 py-1 text-center text-[11px] font-semibold text-[#2D4A7C] hover:bg-[#EAEFF6]"
                   >
-                    Verziók összehasonlítása (redline)
+                    {compareSavedSourcesLabel()}
                   </Link>
                 ) : null}
               </>

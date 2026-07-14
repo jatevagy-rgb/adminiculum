@@ -20,6 +20,8 @@ Added `jszip@3.10.1` to `Frontend` for local browser DOCX ZIP inspection, parsin
 
 Local file → `inspectDocxFile` → XML subset conversion → frontend schema validation → warning/confirmation → current in-memory Tiptap session. Export validates editor JSON and generates a new `.docx` package locally.
 
+Quality-hardening follow-up: local DOCX import/export remains separate from review. Review actions do not export or upload the current browser DOCX state automatically.
+
 ## DOCX security inspection
 
 Inspection enforces `.docx`, MIME allow-list, compressed size, entry count, per-entry size, total uncompressed size where available, required `word/document.xml`, path traversal rejection, macro rejection, embedded object rejection, and remote image/external image rejection.

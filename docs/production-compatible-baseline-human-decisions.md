@@ -35,6 +35,12 @@ This document intentionally keeps production apply blocked. It gives humans a co
 
 ## 4. Default safe decisions
 
+### Latest document-editor decision
+
+| Feature family | Current recommendation | Decision needed | Default safe decision | Human decision | Notes |
+| --- | --- | --- | --- | --- | --- |
+| Document editor review/comments quality hardening | Keep Mode C quality hardening only | Future document-comment route requires separate design | `QUARANTINE` real comments until route/auth/audit exists | `QUARANTINE` for comments; Mode C hardening accepted | `DOCUMENT-EDITOR-REVIEW-COMMENTS-QUALITY-HARDENING-1` completed with comments Branch C; no `schema.prisma` edit, no migration, no manual DB query, no deployment, no editor server persistence, no fake anchored comments, no fake track changes, no reviewer access claim for unsaved content, no Client Portal, no AI, no n8n. Dependency audit remains four moderate advisories with no force fix. |
+
 ### KEEP
 
 - Core baseline.

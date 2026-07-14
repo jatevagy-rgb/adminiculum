@@ -16,6 +16,8 @@ Prepare the professional document editor for future persistence and versioning w
 
 Selected mode: **Mode C — export-only working session**.
 
+Review hardening follow-up: dirty review task creation/submission must display the Mode C warning and must not upload, export, save, attach current browser content, or mark the session clean.
+
 ## Hard-gate evaluation
 
 Mode A failed because there is no dedicated editor-content persistence model or service. Mode B failed because backend-controlled full-content load/save, exact `TIPTAP_JSON` association, version-content retrieval, restore, retention, deletion/archive, and stale-write token semantics are not proven.

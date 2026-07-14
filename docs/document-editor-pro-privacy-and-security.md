@@ -20,6 +20,8 @@ existing task-review actions through the shared API client:
 `POST /documents/:id/tasks`, `POST /tasks/:id/(start|submit|complete)`.
 None of them carries document content.
 
+`DOCUMENT-EDITOR-REVIEW-COMMENTS-QUALITY-HARDENING-1` keeps document comments unavailable until a dedicated route/service and content-minimized audit contract exist. Dirty review actions warn that reviewer access is to the document record/task context, not the current unsaved browser content.
+
 ## Access control
 
 - The route requires authentication (`AuthenticatedApp`); document metadata

@@ -35,6 +35,10 @@ existing task-backed review and compare workflows.
 
 Full details: `docs/document-editor-pro-data-source-and-persistence-audit.md`.
 
+## Quality hardening follow-up
+
+`DOCUMENT-EDITOR-REVIEW-COMMENTS-QUALITY-HARDENING-1` preserves this editor as a Mode C export-only workbench. It selects comments Branch C (unavailable), adds dirty-session confirmation before review task creation/submission, documents keyboard shortcuts and local limits, and keeps compare wording to saved sources only. See `docs/document-editor-review-comments-quality-hardening-1.md`.
+
 ## Canonical editor route
 
 `/documents/[documentId]/edit` — `documentId = "new"` opens a standalone

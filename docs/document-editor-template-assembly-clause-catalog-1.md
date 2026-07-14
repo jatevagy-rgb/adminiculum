@@ -30,6 +30,8 @@ Generated-file behavior: no generated DOCX is created by this package; manual au
 
 Remaining blocker: approve a dedicated template DTO, variable allow-list, storage/retention/delete policy, permission model, audit minimization, enum/schema remediation, and route tests for enabled behavior.
 
+Review/comments quality follow-up: template assembly remains separate from review comments. No template runtime integration, editor persistence, fake review visibility, or automatic generated-file import is introduced by the quality hardening pass.
+
 ## Template capability contract
 
 Added `GET /api/v1/contracts/editor-template-capabilities` before the contracts feature gate. It requires authentication and returns explicit booleans only. It does not query Prisma, list templates, read files, expose environment values, expose storage paths, or call generation services.

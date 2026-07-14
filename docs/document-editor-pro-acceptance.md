@@ -54,12 +54,12 @@ static/logic-backed items note their automated coverage.
     Tasks/Workbench; "Review-ra küldés" when capability allows.
 22. ☐ **Approve/return** — approve/return buttons appear only with
     server-derived capability; transition refreshes the panel.
-23. ☐ **Open compare** — "Verziók összehasonlítása (redline)" deep-links to
+23. ☐ **Open compare** — "Mentett források összehasonlítása" deep-links to
     `/documents/compare` with case+document preselected.
 24. ☐ **Print/PDF** — chrome hidden, A4 margins, clause numbers preserved,
     page-break honored; browser PDF output labeled truthfully.
-25. — **DOCX export**: intentionally absent (no converter) — verify no DOCX
-    button exists and the Export tab explains the blocker.
+25. ☐ **DOCX export** — local browser export creates a new `.docx` package and
+    does not mark the session saved.
 26. ☐ **Reload in export-only mode** — with unsaved content, reload triggers
     the browser warning; after discard, content is gone and the UI never
     claimed it was saved.
@@ -70,6 +70,12 @@ static/logic-backed items note their automated coverage.
 29. ☐ **Focus mode** — hides both panels; canvas centered; toggle restores.
 30. ☐ **`/portal` regression smoke** — unchanged parked shell (no editor
     coupling; enforced by static guard).
+31. ☐ **Dirty review safety** — after editing, create/submit review shows the
+    Mode C warning and does not upload, export, save, or clear dirty state.
+32. ☐ **Comments unavailable state** — side panel states document-level
+    comments are unavailable and does not show fake inline/anchored controls.
+33. ☐ **Compare wording** — compare handoff says “Mentett források
+    összehasonlítása” and does not claim live track changes.
 
 ## Automated coverage summary
 

@@ -105,6 +105,30 @@ describe('document editor pro — static safety', () => {
     }
   });
 
+  it('keeps review comments unavailable without fake anchors or hidden persistence', () => {
+    const qualityContract = read(path.join(EDITOR_LIB_DIR, 'reviewQuality.ts'));
+    expect(qualityContract.includes('branch: "C"')).toBe(true);
+    expect(qualityContract.includes('anchoredComments: false')).toBe(true);
+    expect(qualityContract.includes('reviewerCanAccessCurrentSession: false')).toBe(true);
+    expect(qualityContract.includes('Mentett források összehasonlítása')).toBe(true);
+    for (const forbidden of [
+      'selectionRange',
+      'selectedText',
+      'textSelection',
+      'commentAnchor',
+      'comment body in audit',
+      'notification',
+      'activity',
+      'upload automatically',
+      'autosave',
+      'localStorage',
+      'sessionStorage',
+      'workspaceText',
+    ]) {
+      expect(`${forbidden}:${qualityContract.includes(forbidden)}`).toBe(`${forbidden}:false`);
+    }
+  });
+
   it('renders no unsanitized HTML and makes no direct SharePoint/Graph calls', () => {
     for (const file of editorFiles) {
       const source = read(file);

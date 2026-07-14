@@ -8,6 +8,8 @@ This boundary applies to workflow-core features that may later interact with aut
 
 Adminiculum backend remains the source of truth for workflow state. n8n, AI providers, calendar systems, email systems, and connector workers must not write directly into production business tables or infer legal workflow state without an approved backend API contract.
 
+`DOCUMENT-EDITOR-REVIEW-COMMENTS-QUALITY-HARDENING-1` complies with this boundary: no AI review/comment/redline generation, no editor-state automation, no n8n persistence, and no direct database automation were introduced.
+
 ## Allowed Now
 
 - Backend-owned deterministic logic over persisted fields.

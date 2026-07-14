@@ -49,6 +49,12 @@ import { computeDocumentStats, editorDocToPlainText } from "@/lib/editor/plainTe
 import { editorDocToStandaloneHtml } from "@/lib/editor/htmlExport";
 import { validateEditorDocument } from "@/lib/editor/editorSchemaValidator";
 import { exportEditorDocumentToDocx, importDocxFileToEditorDocument, summarizeDocxWarnings } from "@/lib/editor/docxInterop";
+import {
+  buildModeCReviewConfirmation,
+  compareSavedSourcesLabel,
+  isNearTextLimit,
+  shouldWarnBeforeReviewAction,
+} from "@/lib/editor/reviewQuality";
 import { findSearchMatches, getSearchStorage, SEARCH_PLUGIN_KEY, type SearchMatch } from "./extensions";
 import {
   applyClauseOperation,
@@ -247,6 +253,7 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
   // --- outline + stats -----------------------------------------------------
   const outline = useMemo(() => extractOutline(docJson), [docJson]);
   const stats = useMemo(() => computeDocumentStats(docJson), [docJson]);
+  const nearTextLimit = isNearTextLimit(stats.characters);
   const activeClauseNumber = useMemo(() => {
     if (!activeClauseId) return null;
     return outline.find((item) => item.clauseId === activeClauseId)?.number || null;
@@ -495,6 +502,7 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
     canCreateReviewTask: Boolean(meta),
     onCreateReviewTask: () => {
       if (!meta) return;
+      if (shouldWarnBeforeReviewAction(dirty) && !window.confirm(buildModeCReviewConfirmation(true))) return;
       setReviewBusy(true);
       createDocumentSourceTask(meta.id, { kind: "REVIEW" })
         .then(() => refreshWorkItems())
@@ -502,6 +510,7 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
         .finally(() => setReviewBusy(false));
     },
     onTaskTransition: (taskId, action) => {
+      if (action === "submit" && shouldWarnBeforeReviewAction(dirty) && !window.confirm(buildModeCReviewConfirmation(true))) return;
       setReviewBusy(true);
       const transition =
         action === "start"
@@ -688,6 +697,12 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
         </p>
       ) : null}
 
+      {nearTextLimit ? (
+        <p className="border-b border-[rgba(185,122,15,0.3)] bg-[#FAEFCF] px-3 py-1 text-[11.5px] text-[#7d530a] print:hidden" data-editor-chrome role="status">
+          A munkapéldány közelít a helyi szerkesztési karakterkorláthoz. Exportáljon gyakran, és nagy DOCX import előtt őrizze meg a jelenlegi példányt külön fájlban.
+        </p>
+      ) : null}
+
       <section className="border-b border-[rgba(22,32,26,0.12)] bg-[#F7F2E4] px-3 py-2 print:hidden" data-editor-chrome aria-label="Sablonból munkapéldány">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
@@ -783,7 +798,7 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
           <span title="Karakterszámból becsült érték — nem valós oldaltördelés">~{stats.approximatePages} oldal (becslés)</span>
           {activeClauseNumber ? <span className="font-semibold text-[#7A6014]">Aktuális pont: {activeClauseNumber}</span> : null}
         </div>
-        <span>Munkamenet-alapú szerkesztő · exportálás: Nyomtatás/PDF · HTML · TXT</span>
+        <span>Munkamenet-alapú szerkesztő · {compareSavedSourcesLabel()} · exportálás: Nyomtatás/PDF · HTML · TXT</span>
       </footer>
     </div>
   );
