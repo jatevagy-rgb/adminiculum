@@ -66,3 +66,7 @@ in export-only session mode (no server content persistence at all) and may later
 it. Static guards in `Backend/tests/documentEditorProStaticGuards.test.ts` assert the editor
 surface imports no AI provider, no n8n, no external conversion SaaS, and no realtime
 collaboration service.
+
+## Document editor persistence readiness cross-reference
+
+DOCUMENT-EDITOR-PERSISTENCE-VERSIONING-READINESS-1 preserved Mode C and added no AI/n8n role in editor persistence. Future document persistence remains owned by Adminiculum backend storage/contracts only; n8n must not own editor state, versions, audit, restore, or conflict resolution.

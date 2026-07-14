@@ -49,3 +49,7 @@ Real save/autosave/versioning requires either an approved dedicated
 editor-content model or an approved enablement of the gated file pipeline
 (storage, retention, permission and audit model included). Until then the
 editor stays honestly session-only.
+
+## DOCUMENT-EDITOR-PERSISTENCE-VERSIONING-READINESS-1 update
+
+This document is superseded/qualified by `docs/document-editor-persistence-versioning-readiness-1.md` for server persistence questions. The professional editor remains **Mode C — export-only working session**: no server save, no autosave, no real editor-content versions, no restore, no document-level comments, no `workspaceText`, no unrelated-field storage, no AI, and no n8n. The backend now exposes only a metadata/capability endpoint and a strict future `TIPTAP_JSON` validator.

@@ -76,3 +76,7 @@ documented for the future persistence mode, not implemented.
 Full draft content never appears in document lists, Case Activity, Dashboard,
 notifications, audit events, task DTOs, Case Center, work items, logs or error
 messages — in Mode C it never leaves the browser at all.
+
+## DOCUMENT-EDITOR-PERSISTENCE-VERSIONING-READINESS-1 update
+
+This document is superseded/qualified by `docs/document-editor-persistence-versioning-readiness-1.md` for server persistence questions. The professional editor remains **Mode C — export-only working session**: no server save, no autosave, no real editor-content versions, no restore, no document-level comments, no `workspaceText`, no unrelated-field storage, no AI, and no n8n. The backend now exposes only a metadata/capability endpoint and a strict future `TIPTAP_JSON` validator.

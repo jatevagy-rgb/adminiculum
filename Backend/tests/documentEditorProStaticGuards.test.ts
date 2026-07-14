@@ -148,9 +148,33 @@ describe('document editor pro — static safety', () => {
     expect(editorLab.includes('TipTapEditorExperimental')).toBe(false);
   });
 
-  it('backend gained no editor-content persistence module (mode C stays honest)', () => {
+  it('backend editor readiness module exposes validation/metadata only, not fake persistence', () => {
     const backendModules = path.join(__dirname, '..', 'src', 'modules');
-    expect(fs.existsSync(path.join(backendModules, 'documentEditor'))).toBe(false);
+    const documentEditorDir = path.join(backendModules, 'documentEditor');
+    expect(fs.existsSync(documentEditorDir)).toBe(true);
     expect(fs.existsSync(path.join(backendModules, 'editor'))).toBe(false);
+
+    const backendEditorFiles = listFiles(documentEditorDir);
+    expect(backendEditorFiles.map((file) => path.basename(file)).sort()).toEqual(['contentSchema.ts', 'service.ts']);
+
+    for (const file of backendEditorFiles) {
+      const source = read(file);
+      for (const forbidden of [
+        'workspaceText',
+        'saveWorkspaceDocumentVersion',
+        'save-workspace-version',
+        'uploadNewVersion',
+        'downloadDocument',
+        'spItemId',
+        'spPath',
+        'spWebUrl',
+        'localStorage',
+        'sessionStorage',
+        'openai',
+        'n8n',
+      ]) {
+        expect(`${path.basename(file)}:${forbidden}:${source.includes(forbidden)}`).toBe(`${path.basename(file)}:${forbidden}:false`);
+      }
+    }
   });
 });

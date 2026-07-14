@@ -65,3 +65,7 @@ Mode C writes nothing, so no new audit events exist. Review-task actions keep
 their existing content-minimized timeline behavior. When a persistence mode is
 approved, audit may record edited/saved/version/review/export events —
 **never document text or diffs**.
+
+## DOCUMENT-EDITOR-PERSISTENCE-VERSIONING-READINESS-1 update
+
+This document is superseded/qualified by `docs/document-editor-persistence-versioning-readiness-1.md` for server persistence questions. The professional editor remains **Mode C — export-only working session**: no server save, no autosave, no real editor-content versions, no restore, no document-level comments, no `workspaceText`, no unrelated-field storage, no AI, and no n8n. The backend now exposes only a metadata/capability endpoint and a strict future `TIPTAP_JSON` validator.

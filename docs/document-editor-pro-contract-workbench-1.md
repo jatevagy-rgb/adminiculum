@@ -215,3 +215,7 @@ only, no content versions.
 3. DOCX converter decision (import quality warnings, export fidelity tests).
 4. Template→editor conversion for `ContractTemplate` content.
 5. Page numbers/headers/footers once a truthful layout mechanism exists.
+
+## DOCUMENT-EDITOR-PERSISTENCE-VERSIONING-READINESS-1 update
+
+This document is superseded/qualified by `docs/document-editor-persistence-versioning-readiness-1.md` for server persistence questions. The professional editor remains **Mode C — export-only working session**: no server save, no autosave, no real editor-content versions, no restore, no document-level comments, no `workspaceText`, no unrelated-field storage, no AI, and no n8n. The backend now exposes only a metadata/capability endpoint and a strict future `TIPTAP_JSON` validator.

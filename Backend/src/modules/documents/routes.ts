@@ -14,6 +14,7 @@ import { isDatabaseFoundationEnabled, sendFeatureUnavailable } from '../../middl
 import { requireDocumentReadAccess, requireDocumentManageAccess } from './authorization';
 import { safeWorkspaceTextLogContext } from './logging';
 import { createTaskFromDocumentSource, SourceLinkedTaskError } from '../tasks/services';
+import { getDocumentEditorMetadata } from '../documentEditor/service';
 
 const router = Router();
 const isDocumentProcessingEnabled = (): boolean =>
@@ -205,6 +206,31 @@ router.post('/:id/tasks', authenticate, requireDocumentReadAccess, async (req: R
     }
     console.error('Create document source task error:', error instanceof Error ? error.message : error);
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Task creation from document failed.' });
+  }
+});
+
+/**
+ * GET /api/v1/documents/:id/editor
+ * Editor metadata/capability contract. Mode C only: no persisted editor content.
+ */
+router.get('/:id/editor', authenticate, requireDocumentReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const dto = await getDocumentEditorMetadata(req, String(req.params.id || ''));
+    if (!dto) {
+      res.status(404).json({
+        status: 404,
+        code: 'DOCUMENT_NOT_FOUND',
+        message: 'Document not found',
+      });
+      return;
+    }
+    res.json(dto);
+  } catch {
+    res.status(500).json({
+      status: 500,
+      code: 'DOCUMENT_EDITOR_METADATA_UNAVAILABLE',
+      message: 'Document editor metadata could not be loaded.',
+    });
   }
 });
 

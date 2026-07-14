@@ -76,3 +76,7 @@ static/logic-backed items note their automated coverage.
 Backend 43 suites / 468 tests, including: clause numbering & operations (15),
 schema validation (13), Word-paste sanitizer (9), field tokens / presets /
 HTML export / stats (12), editor static safety (11).
+
+## DOCUMENT-EDITOR-PERSISTENCE-VERSIONING-READINESS-1 update
+
+This document is superseded/qualified by `docs/document-editor-persistence-versioning-readiness-1.md` for server persistence questions. The professional editor remains **Mode C — export-only working session**: no server save, no autosave, no real editor-content versions, no restore, no document-level comments, no `workspaceText`, no unrelated-field storage, no AI, and no n8n. The backend now exposes only a metadata/capability endpoint and a strict future `TIPTAP_JSON` validator.

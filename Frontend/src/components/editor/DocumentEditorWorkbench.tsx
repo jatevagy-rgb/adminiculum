@@ -22,10 +22,11 @@ import {
   getCaseSummary,
   getCaseWorkItems,
   getCaseWorkflowSummary,
-  getDocumentById,
+  getDocumentEditorMetadata,
   startTask,
   submitTask,
   type CaseWorkItem,
+  type DocumentEditorDto,
 } from "@/lib/api";
 import { EditorNode, emptyEditorDocument } from "@/lib/editor/editorModel";
 import {
@@ -72,12 +73,15 @@ type DocumentMeta = {
   caseId: string;
   name: string;
   version?: string | null;
+  persistenceMode: DocumentEditorDto["persistence"]["mode"];
+  serverPersistence: boolean;
 };
 
 export function DocumentEditorWorkbench({ documentId }: { documentId: string | null }) {
   const router = useRouter();
 
   const [meta, setMeta] = useState<DocumentMeta | null>(null);
+  const [editorContract, setEditorContract] = useState<DocumentEditorDto | null>(null);
   const [metaError, setMetaError] = useState<string | null>(null);
   const [metaLoading, setMetaLoading] = useState(Boolean(documentId));
   const [context, setContext] = useState<FieldResolutionContext>({});
@@ -137,13 +141,18 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
     let cancelled = false;
     (async () => {
       try {
-        const document = await getDocumentById(documentId);
-        if (!document) {
-          if (!cancelled) setMetaError("A dokumentum nem található vagy nem érhető el.");
-          return;
-        }
+        const editorMetadata = await getDocumentEditorMetadata(documentId);
         if (cancelled) return;
-        setMeta({ id: document.id, caseId: document.caseId, name: document.fileName, version: document.version });
+        setEditorContract(editorMetadata);
+        const document = editorMetadata.document;
+        setMeta({
+          id: document.id,
+          caseId: document.caseId,
+          name: document.name,
+          version: document.currentVersion ? String(document.currentVersion) : null,
+          persistenceMode: editorMetadata.persistence.mode,
+          serverPersistence: editorMetadata.availability.serverPersistence,
+        });
         const [summary, workflow] = await Promise.all([
           getCaseSummary(document.caseId).catch(() => null),
           getCaseWorkflowSummary(document.caseId).catch(() => null),
@@ -155,7 +164,7 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
           clientDisplayName: summary?.case?.clientName || null,
           clientRole: workflow?.case?.clientRole || null,
           lawyerDisplayName: workflow?.responsibility?.responsibleLawyer?.displayName || null,
-          documentTitle: document.fileName || null,
+          documentTitle: document.name || null,
         });
       } catch {
         if (!cancelled) setMetaError("A dokumentum-metaadat nem tölthető be.");
@@ -470,7 +479,7 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
             <p className="truncate text-[10.5px] text-[#7A8479]">
               {context.caseReference ? `${context.caseReference} · ` : ""}
               {context.clientDisplayName ? `${context.clientDisplayName} · ` : ""}
-              Professzionális szerkesztő
+              {editorContract?.persistence.mode === "EXPORT_ONLY" ? "Export-only professzionális szerkesztő" : "Professzionális szerkesztő"}
             </p>
           </div>
         </div>

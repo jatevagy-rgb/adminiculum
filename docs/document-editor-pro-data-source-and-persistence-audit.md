@@ -74,3 +74,7 @@ with an approved storage/retention/audit model — both outside this package.
 No AI API, no n8n, no Client Portal change, no schema change, no migration,
 no external conversion SaaS, no e-signature, no court filing, no realtime
 collaboration.
+
+## DOCUMENT-EDITOR-PERSISTENCE-VERSIONING-READINESS-1 update
+
+This document is superseded/qualified by `docs/document-editor-persistence-versioning-readiness-1.md` for server persistence questions. The professional editor remains **Mode C — export-only working session**: no server save, no autosave, no real editor-content versions, no restore, no document-level comments, no `workspaceText`, no unrelated-field storage, no AI, and no n8n. The backend now exposes only a metadata/capability endpoint and a strict future `TIPTAP_JSON` validator.

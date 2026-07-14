@@ -837,3 +837,9 @@ working session** (`docs/document-editor-pro-data-source-and-persistence-audit.m
 - Validation: backend `prisma validate` + `tsc --noEmit` + Jest **43 suites / 468 tests**
   (up from 38/408); frontend `tsc --noEmit` + production build + clean-env
   `verify:prod-env` with the documented non-routable placeholder.
+
+## Document editor persistence/versioning readiness decision
+
+| Feature family | Current recommendation | Decision needed | Default safe decision | Human decision: KEEP / QUARANTINE / REMOVE / BRING-FORWARD / UNKNOWN | Notes |
+|---|---|---|---|---|---|
+| Document editor persistence / versioning readiness | QUARANTINE for server persistence; KEEP only export-only editor and metadata/capability readiness | Approve a real storage model, version identity, retention/delete/archive policy, and concurrency token before any save route | QUARANTINE | UNKNOWN | DOCUMENT-EDITOR-PERSISTENCE-VERSIONING-READINESS-1 completed in Mode C: no `schema.prisma` edit, no migration, no DB query, no deployment, no Client Portal change, no AI API, no n8n, no `workspaceText`, no unrelated-field storage, no fake autosave, no fake versions, no silent stale overwrite. Backend validator and metadata/capability endpoint are readiness-only. |
