@@ -922,3 +922,12 @@ were not touched.
 - Decision: **no release branch yet** unless a human explicitly accepts the reconstructed frontend commit and backend range, or stronger provenance is found.
 - Provenance hardening is required for future deploys: embed build metadata with git SHA, source branch, package-lock hash, artifact hash, build timestamp, and deployment ID.
 - No deployment, restart, Azure config change, DB query, migration, runtime change, schema change, release branch, or worktree creation occurred.
+
+## BASELINE-EVIDENCE-RECONCILIATION-AND-NARROW-RELEASE-1 — 2026-07-15
+
+- `docs/deployment-baseline-evidence-reconciliation.md` reconciles the active artifact forensics with the operator-provided backend deployment record.
+- Backend baseline is classified as `EXACT_COMMIT_PROVEN_BY_OPERATOR_DEPLOY_RECORD_AND_ARTIFACT` for `8ce26c0`, conditional on accepting the operator record tying deployment ID `f3129580-9574-429a-a1b3-f078b1319cd7` to that commit.
+- Frontend baseline remains `UNIQUE_COMMIT_MATCH_HIGH_CONFIDENCE` for `dc0780e`, not exact.
+- Human decision required: explicitly accept or reject frontend reconstructed baseline `dc0780e` before creating `release/editor-ops-workflow-1`.
+- Decision: **no release branch/worktree created**; release remains `NO_GO_FRONTEND_BASELINE_HUMAN_ACCEPTANCE_REQUIRED`.
+- No deployment, Azure change, DB query, migration, schema/runtime/package/auth/Client Portal/OpenAPI/CORS change, release branch, or release worktree creation occurred.

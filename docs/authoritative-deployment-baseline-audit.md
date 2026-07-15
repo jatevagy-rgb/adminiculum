@@ -182,6 +182,14 @@ Overall release-baseline posture after the forensic update: `active_artifact_git
 
 Release branch creation remains **blocked** unless a human explicitly accepts the reconstructed frontend commit and backend candidate range as sufficient for a narrow release baseline, or a stronger deploy provenance artifact is found.
 
+## Backend Operator Record Reconciliation — 2026-07-15
+
+`BASELINE-EVIDENCE-RECONCILIATION-AND-NARROW-RELEASE-1` reconciled an operator-provided backend deployment record with the active artifact fingerprint. The record ties active backend deployment ID `f3129580-9574-429a-a1b3-f078b1319cd7` to commit `8ce26c0` and states it was a backend-only Oryx ZIP from `HEAD:Backend`.
+
+Because the active backend artifact contains the Outlook Graph adapter/import-service markers expected from `8ce26c0` and lacks later agenda/workload/editor modules, there is no artifact contradiction. Backend classification is therefore strengthened to `EXACT_COMMIT_PROVEN_BY_OPERATOR_DEPLOY_RECORD_AND_ARTIFACT`, conditional on accepting the operator record.
+
+Frontend remains `UNIQUE_COMMIT_MATCH_HIGH_CONFIDENCE` for `dc0780e`, not exact. Release branch creation remains blocked until explicit human acceptance of the frontend reconstructed baseline.
+
 ## Required Next Evidence To Unblock
 
 One of the following is needed:

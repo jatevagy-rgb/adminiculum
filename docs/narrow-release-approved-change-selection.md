@@ -136,6 +136,20 @@ No release branch or worktree was created by the forensic task. If a human expli
 
 Future narrow-release planning should also add deploy-time provenance, such as an embedded build-info file containing `GIT_SHA`, source branch, build timestamp, package-lock hash, and artifact hash.
 
+## Baseline Reconciliation Gate — 2026-07-15
+
+`BASELINE-EVIDENCE-RECONCILIATION-AND-NARROW-RELEASE-1` reconciled the backend operator deployment record with the active artifact forensics in `docs/deployment-baseline-evidence-reconciliation.md`.
+
+Updated gate posture:
+
+| Gate | Status | Reason |
+|---|---|---|
+| Backend baseline | PASS, conditional on accepting the operator record | Same backend deployment ID `f3129580-9574-429a-a1b3-f078b1319cd7` is tied by operator handoff to commit `8ce26c0`; artifact markers do not contradict it. |
+| Frontend baseline | BLOCKED | Frontend `dc0780e` remains `UNIQUE_COMMIT_MATCH_HIGH_CONFIDENCE`, not exact; explicit human acceptance is still required. |
+| Release worktree | BLOCKED | No worktree or branch may be created until the frontend reconstructed baseline is accepted. |
+
+No candidate commit selection method was upgraded from `PENDING_BASELINE_PROOF` in this step. The next task may do so only after explicit frontend baseline acceptance.
+
 ## Safety Confirmation
 
 - `hotfix/runtime-shape-20260308` was not rewritten.
