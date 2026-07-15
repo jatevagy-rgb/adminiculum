@@ -35,6 +35,24 @@ const isSpItemIdUniqueConflict = (error: unknown): boolean => {
   return typeof target === 'string' && target.includes('spItemId');
 };
 
+const isMissingDatabaseObjectError = (error: unknown): boolean => {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === 'P2021' || error.code === 'P2022')
+  );
+};
+
+const countOptionalDependency = async (query: Promise<number>): Promise<number> => {
+  try {
+    return await query;
+  } catch (error) {
+    if (isMissingDatabaseObjectError(error)) {
+      return 0;
+    }
+    throw error;
+  }
+};
+
 // Map document types to SpFolder enum values
 const FOLDER_MAP: Record<string, string> = {
   'Contracts': 'DRAFTS',
@@ -56,6 +74,18 @@ const STATUS_MAP: Record<string, string> = {
   'FINAL': 'FINAL',
   'CLIENT_INPUT': 'CLIENT_INPUT',
 };
+
+export class DocumentDeleteError extends Error {
+  constructor(
+    public statusCode: number,
+    public code: string,
+    message: string,
+    public reason?: string
+  ) {
+    super(message);
+    this.name = 'DocumentDeleteError';
+  }
+}
 
 class DocumentsService {
   /**
@@ -191,6 +221,126 @@ class DocumentsService {
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt
     }));
+  }
+
+  /**
+   * Permanently delete a document only after dependency checks pass.
+   *
+   * The current schema has no soft-delete/archive field. Deletion therefore uses
+   * storage-first hard delete for SharePoint-backed files, then removes DB
+   * metadata in a transaction. Privacy-sensitive file names/content are not
+   * copied into the audit event.
+   */
+  async deleteDocument(documentId: string, userId?: string): Promise<void> {
+    const document = await prisma.document.findUnique({
+      where: { id: documentId },
+      select: {
+        id: true,
+        caseId: true,
+        documentType: true,
+        category: true,
+        folder: true,
+        spItemId: true,
+      },
+    });
+
+    if (!document) {
+      throw new DocumentDeleteError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
+    }
+
+    const [
+      anonymizedCount,
+      taskCount,
+      legalAnalysisCount,
+      pendingSuggestionCount,
+    ] = await Promise.all([
+      prisma.anonymousDocument.count({ where: { sourceDocId: documentId } }),
+      prisma.task.count({ where: { documentId } }),
+      prisma.legalAnalysis.count({ where: { documentId, documentSourceType: 'DOCUMENT' as any } }),
+      countOptionalDependency(
+        prisma.documentReviewSuggestion.count({ where: { documentId, status: 'PENDING' } })
+      ),
+    ]);
+
+    if (anonymizedCount > 0) {
+      throw new DocumentDeleteError(
+        409,
+        'DOCUMENT_DELETE_CONFLICT',
+        'A dokumentum nem törölhető, mert anonimizált változat kapcsolódik hozzá.',
+        'ANONYMIZED_DOCUMENT_EXISTS'
+      );
+    }
+    if (taskCount > 0) {
+      throw new DocumentDeleteError(
+        409,
+        'DOCUMENT_DELETE_CONFLICT',
+        'A dokumentum nem törölhető, mert feladat hivatkozik rá.',
+        'TASK_REFERENCE_EXISTS'
+      );
+    }
+    if (legalAnalysisCount > 0) {
+      throw new DocumentDeleteError(
+        409,
+        'DOCUMENT_DELETE_CONFLICT',
+        'A dokumentum nem törölhető, mert jogi elemzés hivatkozik rá.',
+        'LEGAL_ANALYSIS_REFERENCE_EXISTS'
+      );
+    }
+    if (pendingSuggestionCount > 0) {
+      throw new DocumentDeleteError(
+        409,
+        'DOCUMENT_DELETE_CONFLICT',
+        'A dokumentum nem törölhető, mert nyitott review-javaslat kapcsolódik hozzá.',
+        'PENDING_REVIEW_SUGGESTION_EXISTS'
+      );
+    }
+
+    if (document.spItemId) {
+      const removedFromStorage = await driveService.deleteDocument(document.spItemId);
+      if (!removedFromStorage) {
+        throw new DocumentDeleteError(
+          502,
+          'DOCUMENT_STORAGE_DELETE_FAILED',
+          'A dokumentum SharePoint-törlése nem sikerült. Az adatbázis nem módosult.',
+          'STORAGE_DELETE_FAILED'
+        );
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.communication.updateMany({
+        where: { documentId },
+        data: { documentId: null },
+      });
+      await tx.communicationAttachment.updateMany({
+        where: { documentId },
+        data: { documentId: null },
+      });
+
+      await tx.timelineEvent.create({
+        data: {
+          caseId: document.caseId,
+          userId,
+          documentId,
+          eventType: 'CUSTOM',
+          type: 'DOCUMENT_DELETED',
+          payload: {
+            documentId,
+            documentType: document.documentType || document.category || null,
+            folder: document.folder || null,
+            hadSharePointItem: Boolean(document.spItemId),
+            action: 'DOCUMENT_DELETED',
+          },
+          description: 'Document deleted',
+        } as any,
+        select: { id: true },
+      });
+
+      await tx.document.delete({
+        where: { id: documentId },
+        select: { id: true },
+      });
+    });
   }
 
   /**
@@ -496,7 +646,20 @@ class DocumentsService {
    */
   async getDocumentById(documentId: string): Promise<any | null> {
     const document = await prisma.document.findUnique({
-      where: { id: documentId }
+      where: { id: documentId },
+      select: {
+        id: true,
+        caseId: true,
+        fileName: true,
+        documentType: true,
+        spItemId: true,
+        spPath: true,
+        version: true,
+        folder: true,
+        isLatest: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
     if (!document) return null;

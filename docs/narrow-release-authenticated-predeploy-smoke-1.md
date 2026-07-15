@@ -225,3 +225,36 @@ Remaining approval item:
 `GO_FOR_EXPLICIT_PRODUCTION_DEPLOYMENT_APPROVAL`
 
 This document does not authorize deployment. It records that the authenticated local predeploy smoke gate has been completed and the narrow release is ready for an explicit deployment-approval prompt, subject to human acknowledgement of pre-existing dependency audit findings.
+
+## Document deletion follow-up smoke
+
+`DOCUMENT-DELETE-SAFETY-AND-UX-1` authenticated local smoke passed with synthetic local data:
+
+- case used: `46a0ff22-49e1-4296-b0f2-bf6a28b506b0`;
+- synthetic document ID: `0491d5d3-ad92-4bd6-a8fe-a58aaa59418b`;
+- delete request: `DELETE http://localhost:3001/api/v1/documents/0491d5d3-ad92-4bd6-a8fe-a58aaa59418b`;
+- delete response: `204`;
+- former direct document detail: `404`;
+- former editor metadata: `404`;
+- former comments endpoint: `404`;
+- forbidden content/storage leak count: `0`.
+
+Verified:
+
+1. synthetic local document appeared in the case document list;
+2. `Dokumentum törlése` opened explicit confirmation;
+3. `Mégse` cancelled and left the row intact;
+4. second confirmation with `Végleges törlés` removed the row;
+5. success feedback appeared;
+6. row remained absent after refresh;
+7. former direct document/editor/comment access returned safe missing behavior.
+
+Known local-only console noise:
+
+- `/api/v1/contracts/case/{caseId}` returned expected local `501` because contract generation is unavailable in this local smoke environment.
+
+Screenshots:
+
+`C:\Users\hubay\AppData\Local\Temp\adminiculum-doc-delete-browser-1784127543425`
+
+This is a local authenticated smoke only. It does not authorize deployment or production data use.

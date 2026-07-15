@@ -10,6 +10,7 @@ import {
   getCaseDocuments,
   downloadContract,
   downloadDocument,
+  deleteDocument,
   uploadCaseDocument,
   uploadGeneratedContractToSharePoint,
   createContractGenerationRevision,
@@ -238,6 +239,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [isCreatingRevision, setIsCreatingRevision] = useState<string | null>(null);
   const [isFinalizing, setIsFinalizing] = useState<string | null>(null);
   const [actionResult, setActionResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<DocumentItem | null>(null);
+  const [isDeletingDocument, setIsDeletingDocument] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [anonymizeModalContract, setAnonymizeModalContract] = useState<CaseContractListItem | null>(null);
   const [rehydrateModalDoc, setRehydrateModalDoc] = useState<{ id: string; name: string } | null>(null);
   const [rehydrateModalOpen, setRehydrateModalOpen] = useState(false);
@@ -627,6 +631,49 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const selectedUploadedDocument = selectedLedgerItem?.kind === 'uploaded' ? selectedLedgerItem.item : null;
   const selectedGeneratedContract = selectedLedgerItem?.kind === 'generated' ? selectedLedgerItem.item : selectedContract;
 
+  const openDeleteDocumentDialog = (document: DocumentItem) => {
+    setDeleteCandidate(document);
+    setDeleteError(null);
+    setActionResult(null);
+  };
+
+  const closeDeleteDocumentDialog = () => {
+    if (isDeletingDocument) return;
+    setDeleteCandidate(null);
+    setDeleteError(null);
+  };
+
+  const handleConfirmDeleteDocument = async () => {
+    if (!deleteCandidate || !caseRecord?.id) return;
+    setIsDeletingDocument(true);
+    setDeleteError(null);
+    setActionResult(null);
+    try {
+      await deleteDocument(deleteCandidate.id);
+      setSelectedLedgerItem(null);
+      setSelectedContract(null);
+      await loadData(false);
+      setActionResult({ type: 'success', message: 'A dokumentum törölve lett.' });
+      setDeleteCandidate(null);
+    } catch (err) {
+      console.error('Document delete failed:', err);
+      if (err instanceof ApiError && err.status === 409) {
+        setDeleteError(err.message || 'A dokumentum kapcsolódó munkafolyamat miatt nem törölhető.');
+      } else if (err instanceof ApiError && err.status === 403) {
+        setDeleteError('Nincs jogosultságod a dokumentum törléséhez.');
+      } else if (err instanceof ApiError && err.status === 404) {
+        setDeleteError('A dokumentum nem található vagy már törölték.');
+        await loadData(false);
+      } else if (err instanceof ApiError && err.status === 502) {
+        setDeleteError('A SharePoint-törlés nem sikerült, ezért az adatbázis nem módosult.');
+      } else {
+        setDeleteError('A dokumentum törlése nem sikerült. Próbáld újra később.');
+      }
+    } finally {
+      setIsDeletingDocument(false);
+    }
+  };
+
   // Load document notes when a contract is selected
   const loadDocumentNotes = useCallback(async (docId: string) => {
     setIsLoadingNotes(true);
@@ -867,6 +914,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     selectedUploadedDocument?.fileName ? `Típus: ${getDocumentKindLabel(selectedUploadedDocument.fileName)}` : selectedGeneratedContract?.fileName ? `Típus: ${getDocumentKindLabel(selectedGeneratedContract.fileName)}` : null,
   ].filter(Boolean);
   const canAnonymizeActiveDocument = Boolean(selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY');
+  const canDeleteSelectedDocument = Boolean(selectedUploadedDocument && caseRecord?.status !== 'ARCHIVED');
 
   return (
     <div className="flex min-h-0 flex-1 flex-col adm-shell-bg text-[var(--adm-text)] documents-surface">
@@ -1114,6 +1162,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 Anonimizálás
                               </AdminButton>
                             ) : null}
+                            {canDeleteSelectedDocument && selectedUploadedDocument ? (
+                              <AdminButton
+                                className="w-full justify-start border-[#d4b8b8] bg-white text-[#8b3a3a] hover:bg-[#fef2f2]"
+                                variant="neutral"
+                                onClick={() => openDeleteDocumentDialog(selectedUploadedDocument)}
+                                disabled={isDeletingDocument}
+                              >
+                                Dokumentum törlése
+                              </AdminButton>
+                            ) : null}
                             <AdminButton className="w-full justify-start" variant="neutral" onClick={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/communications`)}>
                               Kommunikáció
                             </AdminButton>
@@ -1199,6 +1257,45 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
         </main>
 
       </div>
+
+      {deleteCandidate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="ledger-delete-document-title">
+          <div className="w-full max-w-md rounded-[10px] border border-[var(--adm-border)] bg-white shadow-2xl">
+            <div className="rounded-t-[10px] border-b border-[var(--adm-border)] bg-[#8B2A2A] px-6 py-4">
+              <h2 id="ledger-delete-document-title" className="font-serif text-xl font-semibold text-white">Dokumentum törlése</h2>
+              <p className="mt-1 text-xs text-white/75">Ez a művelet nem vonható vissza.</p>
+            </div>
+            <div className="space-y-4 p-6">
+              <div>
+                <p className="truncate text-sm font-semibold text-[var(--adm-text)]">{deleteCandidate.fileName || 'Névtelen dokumentum'}</p>
+                <p className="mt-1 text-xs text-[var(--adm-text-muted)]">{deleteCandidate.documentType || 'Dokumentum'} {deleteCandidate.version ? `· ${deleteCandidate.version}` : ''}</p>
+              </div>
+              <div className="rounded-[10px] border border-[#FCD34D] bg-[#FEF3C7] p-3">
+                <p className="text-xs leading-relaxed text-[#92400E]">
+                  Biztosan törölni szeretnéd ezt a dokumentumot? A rendszer előbb ellenőrzi, hogy nincs-e kapcsolódó feladat,
+                  anonimizált változat, jogi elemzés vagy nyitott review-javaslat.
+                </p>
+              </div>
+              {deleteError ? (
+                <div className="rounded-[10px] border border-[#d4b8b8] bg-[#fef2f2] p-3 text-xs text-[#8b3a3a]">{deleteError}</div>
+              ) : null}
+              <div className="flex justify-end gap-3">
+                <AdminButton variant="neutral" onClick={closeDeleteDocumentDialog} disabled={isDeletingDocument}>
+                  Mégse
+                </AdminButton>
+                <AdminButton
+                  variant="neutral"
+                  className="border-[#8B2A2A] bg-[#8B2A2A] text-white hover:bg-[#6f2020]"
+                  onClick={handleConfirmDeleteDocument}
+                  disabled={isDeletingDocument}
+                >
+                  {isDeletingDocument ? 'Törlés...' : 'Végleges törlés'}
+                </AdminButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Anonymize Modal */}
       {anonymizeModalContract && (

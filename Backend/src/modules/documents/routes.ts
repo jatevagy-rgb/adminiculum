@@ -6,6 +6,7 @@
 import { Router, Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import documentsService from './services';
+import { DocumentDeleteError } from './services';
 import { extractText } from './textExtractor';
 import reviewSuggestionsRoutes from './reviewSuggestions.routes';
 import { authenticate } from '../../middleware/auth';
@@ -193,6 +194,36 @@ router.post('/:id/tasks', authenticate, requireDocumentReadAccess, async (req: R
     }
     console.error('Create document source task error:', error instanceof Error ? error.message : error);
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Task creation from document failed.' });
+  }
+});
+
+/**
+ * DELETE /api/v1/documents/:id
+ * Authorized hard delete for uploaded document metadata + SharePoint item.
+ * No soft-delete flag exists in the current schema, so deletion is blocked
+ * whenever dependent legal workflow records would be unsafe to detach.
+ */
+router.delete('/:id', authenticate, requireDocumentManageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).user?.userId;
+    await documentsService.deleteDocument(String(req.params.id || ''), userId);
+    res.status(204).send();
+  } catch (error) {
+    if (error instanceof DocumentDeleteError) {
+      res.status(error.statusCode).json({
+        status: error.statusCode,
+        code: error.code,
+        message: error.message,
+        ...(error.reason ? { reason: error.reason } : {}),
+      });
+      return;
+    }
+    console.error('Delete document error:', error instanceof Error ? error.message : error);
+    res.status(500).json({
+      status: 500,
+      code: 'DOCUMENT_DELETE_FAILED',
+      message: 'A dokumentum törlése nem sikerült.',
+    });
   }
 });
 

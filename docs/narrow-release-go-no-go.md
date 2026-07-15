@@ -17,6 +17,7 @@ Deployment action: none
 | Dependencies | REVIEW REQUIRED | Backend audit reports pre-existing 2 low / 9 moderate / 7 high / 1 critical; frontend audit reports 4 moderate. Package files unchanged in this release fix. |
 | Runtime compatibility | PASS | Authenticated local smoke found and fixed enum/projection drift in agenda/task/case summary read paths. |
 | Authenticated local smoke | PASS | See `docs/narrow-release-authenticated-predeploy-smoke-1.md`; local dev auth reused successfully and smoke matrix passed. |
+| Document delete safety | PASS | `DOCUMENT-DELETE-SAFETY-AND-UX-1` passed focused tests, full validation, and authenticated local browser delete smoke with synthetic data. |
 
 ## Current posture
 
@@ -32,7 +33,7 @@ This is not deployment approval. It means the release branch has passed local au
 
 ## Safety confirmation
 
-- Runtime changes: yes, narrow backend read-path compatibility fixes only.
+- Runtime changes: yes, narrow backend read-path compatibility fixes and authorized document deletion workflow only.
 - Schema changes: no.
 - Migration changes: no.
 - DB changes: no.
@@ -40,3 +41,13 @@ This is not deployment approval. It means the release branch has passed local au
 - Azure touched: no.
 - Client Portal enabled/exposed: no.
 - Deployment performed: no.
+
+## Document deletion blocker follow-up
+
+`DOCUMENT-DELETE-SAFETY-AND-UX-1` adds a narrow authorized document deletion workflow for mistakenly uploaded documents.
+
+- Backend: `DELETE /api/v1/documents/:id` uses existing document manage authorization, dependency preflight, SharePoint storage cleanup where `spItemId` exists, DB transaction cleanup, and content-minimal timeline audit.
+- Frontend: case document surfaces show a destructive delete action with explicit confirmation, loading state, safe error handling, and list refresh.
+- Safety: no schema/migration/Azure/config/package/OpenAPI/CORS/Client Portal/feature-flag changes.
+- Authenticated local browser deletion smoke passed with synthetic local data: delete `204`, former document/detail/editor/comment access `404`, row removed after refresh, and no forbidden content/storage leaks.
+- Deployment posture remains `GO_FOR_EXPLICIT_PRODUCTION_DEPLOYMENT_APPROVAL`, subject to separate human deployment approval and acknowledgement of pre-existing dependency audit findings.

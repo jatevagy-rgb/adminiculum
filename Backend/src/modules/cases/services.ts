@@ -237,6 +237,19 @@ class CasesService {
   async getCaseDocuments(caseId: string): Promise<any[]> {
     const documents = await prisma.document.findMany({
       where: { caseId },
+      select: {
+        id: true,
+        caseId: true,
+        fileName: true,
+        documentType: true,
+        spItemId: true,
+        spPath: true,
+        version: true,
+        folder: true,
+        isLatest: true,
+        createdAt: true,
+        updatedAt: true,
+      },
       orderBy: { createdAt: 'desc' }
     });
 

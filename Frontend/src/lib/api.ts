@@ -1440,6 +1440,12 @@ export async function uploadCaseDocument(data: {
   });
 }
 
+export async function deleteDocument(documentId: string): Promise<void> {
+  return fetchApi<void>(`/documents/${encodeURIComponent(documentId)}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function uploadDocumentNewVersion(documentId: string, fileContentBase64: string, comment?: string): Promise<DocumentItem> {
   return fetchApi<DocumentItem>(`/documents/${documentId}/version`, {
     method: 'POST',

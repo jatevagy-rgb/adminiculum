@@ -2,7 +2,7 @@
 
 import { useState, use, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, blockTask, unblockTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, getCaseWorkItems, getCaseActivity, getWorkflowAgenda, getCaseResponsibility, createDocumentSourceTask, createCommunicationSourceTask, type CaseWorkflowSummary, type CaseWorkItemsResponse, type CaseWorkItem, type CaseActivityResponse, type CaseActivityItem, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator, type WorkflowAgendaResponse, type WorkflowDeadlineItem, type CaseResponsibilityResponse } from "@/lib/api";
+import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, deleteDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, blockTask, unblockTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, getCaseWorkItems, getCaseActivity, getWorkflowAgenda, getCaseResponsibility, createDocumentSourceTask, createCommunicationSourceTask, ApiError, type DocumentItem, type CaseWorkflowSummary, type CaseWorkItemsResponse, type CaseWorkItem, type CaseActivityResponse, type CaseActivityItem, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator, type WorkflowAgendaResponse, type WorkflowDeadlineItem, type CaseResponsibilityResponse } from "@/lib/api";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
@@ -40,6 +40,17 @@ type CaseStoryEvent = {
 type CaseDetailProps = {
   params: Promise<{ caseId: string }>;
 };
+
+const mapDocumentItemToCaseDocument = (doc: DocumentItem): CaseDocument => ({
+  id: doc.id,
+  name: doc.fileName,
+  type: doc.documentType,
+  date: new Date(doc.createdAt).toLocaleDateString('hu-HU'),
+  createdAt: doc.createdAt,
+  updatedAt: doc.updatedAt,
+  status: doc.spWebUrl ? 'Ready' : 'Review Needed',
+  version: doc.version || undefined,
+});
 
 const statusChip: Record<string, string> = {
   "Client Input": "bg-[var(--adm-surface)] text-[var(--adm-text-muted)] border-[var(--adm-border)]",
@@ -249,6 +260,12 @@ export function CaseDetail({ params }: CaseDetailProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Document deletion state
+  const [deleteCandidate, setDeleteCandidate] = useState<CaseDocument | null>(null);
+  const [isDeletingDocument, setIsDeletingDocument] = useState(false);
+  const [deleteDocumentError, setDeleteDocumentError] = useState<string | null>(null);
+  const [deleteDocumentSuccess, setDeleteDocumentSuccess] = useState<string | null>(null);
 
   // Anonymization state
   const [anonymizeDoc, setAnonymizeDoc] = useState<{ id: string; title: string; templateName?: string; revisionNumber?: number; status: string } | null>(null);
@@ -563,16 +580,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
           deadline: record.deadline ?? null,
         });
       }
-      setDocuments(backendDocuments.map((doc) => ({
-        id: doc.id,
-        name: doc.fileName,
-        type: doc.documentType,
-        date: new Date(doc.createdAt).toLocaleDateString('hu-HU'),
-        createdAt: doc.createdAt,
-        updatedAt: doc.updatedAt,
-        status: doc.spWebUrl ? 'Ready' : 'Review Needed',
-        version: doc.version || undefined,
-      })));
+      setDocuments(backendDocuments.map(mapDocumentItemToCaseDocument));
     } catch (err) {
       console.error('Failed to load backend data:', err);
       setWorkflowSummaryError('Az ügyadatok betöltése közben hiba történt.');
@@ -580,6 +588,12 @@ export function CaseDetail({ params }: CaseDetailProps) {
       setIsLoadingWorkflowSummary(false);
     }
   }, [resolvedParams.caseId, caseRecord]);
+
+  const refreshCaseDocuments = useCallback(async () => {
+    if (!caseRecord?.id) return;
+    const docs = await getCaseDocuments(caseRecord.id);
+    setDocuments(docs.map(mapDocumentItemToCaseDocument));
+  }, [caseRecord?.id]);
 
   const toEpoch = (value?: string | null): number => {
     if (!value) return 0;
@@ -850,6 +864,46 @@ export function CaseDetail({ params }: CaseDetailProps) {
     }
   };
 
+  const openDeleteDocumentDialog = (doc: CaseDocument) => {
+    setDeleteCandidate(doc);
+    setDeleteDocumentError(null);
+    setDeleteDocumentSuccess(null);
+  };
+
+  const closeDeleteDocumentDialog = () => {
+    if (isDeletingDocument) return;
+    setDeleteCandidate(null);
+    setDeleteDocumentError(null);
+  };
+
+  const handleConfirmDeleteDocument = async () => {
+    if (!deleteCandidate) return;
+    setIsDeletingDocument(true);
+    setDeleteDocumentError(null);
+    setDeleteDocumentSuccess(null);
+    try {
+      await deleteDocument(deleteCandidate.id);
+      await refreshCaseDocuments();
+      setDeleteDocumentSuccess('A dokumentum törölve lett.');
+      setDeleteCandidate(null);
+    } catch (err) {
+      console.error('Document delete failed:', err);
+      if (err instanceof ApiError && err.status === 409) {
+        setDeleteDocumentError(err.message || 'A dokumentum kapcsolódó munkafolyamat miatt nem törölhető.');
+      } else if (err instanceof ApiError && err.status === 403) {
+        setDeleteDocumentError('Nincs jogosultságod a dokumentum törléséhez.');
+      } else if (err instanceof ApiError && err.status === 502) {
+        setDeleteDocumentError('A SharePoint-törlés nem sikerült, ezért az adatbázis nem módosult.');
+      } else if (err instanceof Error) {
+        setDeleteDocumentError(err.message);
+      } else {
+        setDeleteDocumentError('A dokumentum törlése nem sikerült.');
+      }
+    } finally {
+      setIsDeletingDocument(false);
+    }
+  };
+
   const handleDownloadContract = async (contractId: string, fileName: string) => {
     setIsDownloading(contractId);
     try {
@@ -888,17 +942,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
       });
       
       // Refresh documents list - use caseRecord.id (CUID) not resolvedParams.caseId (could be caseNumber)
-      const docs = await getCaseDocuments(caseRecord.id);
-      setDocuments(docs.map((doc) => ({
-        id: doc.id,
-        name: doc.fileName,
-        type: doc.documentType,
-        date: new Date(doc.createdAt).toLocaleDateString('hu-HU'),
-        createdAt: doc.createdAt,
-        updatedAt: doc.updatedAt,
-        status: doc.spWebUrl ? 'Ready' : 'Review Needed',
-        version: doc.version || undefined,
-      })));
+      await refreshCaseDocuments();
       
       // Reset file input
       if (fileInputRef.current) {
@@ -967,17 +1011,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
         setAnonymousDocuments(anonDocs);
         
         // Refresh regular documents to show the new saved draft
-        const docs = await getCaseDocuments(caseRecord.id);
-        setDocuments(docs.map((doc) => ({
-          id: doc.id,
-          name: doc.fileName,
-          type: doc.documentType,
-          date: new Date(doc.createdAt).toLocaleDateString('hu-HU'),
-          createdAt: doc.createdAt,
-          updatedAt: doc.updatedAt,
-          status: doc.spWebUrl ? 'Ready' : 'Review Needed',
-          version: doc.version || undefined,
-        })));
+        await refreshCaseDocuments();
         
         console.log(`Rehydrated draft saved: ${fileName} (${documentId})`);
       } catch (err) {
@@ -1206,6 +1240,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
   })();
 
   const activeDocument = documents[0] || null;
+  const canRequestDocumentDelete = !isArchived && Boolean(assignedLawyer);
   const documentWorkspaceHref = `/documents/compare?caseId=${canonicalCaseId}`;
   const litigationWorkspaceHref = activeDocument
     ? `/litigation-workspace?caseId=${canonicalCaseId}&documentId=${activeDocument.id}`
@@ -2009,6 +2044,9 @@ export function CaseDetail({ params }: CaseDetailProps) {
                       <button onClick={() => router.push(litigationWorkspaceHref)} className="border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text)]">{activeDocument ? 'Peres munkatér' : 'Dokumentumtár'}</button>
                       <button onClick={() => handleDocumentClick(activeDocument)} disabled={isDownloading === activeDocument.id} className="border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text)]">{isDownloading === activeDocument.id ? '...' : 'Letöltés'}</button>
                       <button onClick={() => handleAnonymizeDocument(activeDocument)} className="border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text)]">Anonimizálás</button>
+                      {canRequestDocumentDelete && (
+                        <button onClick={() => openDeleteDocumentDialog(activeDocument)} className="border border-[#d4b8b8] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#8b3a3a]">Törlés</button>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -2069,6 +2107,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                 <span className="text-[10px] text-[var(--adm-text-muted)]">{documents.length} fájl</span>
               </div>
               {uploadError && <div className="mb-2 border border-[#d4b8b8] bg-[#fef2f2] p-2 text-[10px] text-[#8b3a3a]">{uploadError}</div>}
+              {deleteDocumentSuccess && <div className="mb-2 border border-[#BFD1C3] bg-[#E2EDE5] p-2 text-[10px] text-[var(--adm-green-800)]">{deleteDocumentSuccess}</div>}
               {isUploading && <div className="mb-2 border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2 text-[10px] text-[var(--adm-text)]">Dokumentum feltöltése...</div>}
               {displayedDocs.length > 0 ? (
                 <div className="space-y-2">
@@ -2076,6 +2115,12 @@ export function CaseDetail({ params }: CaseDetailProps) {
                     <div key={doc.id} className={`border p-2 ${highlightedTimelineId && doc.linkedTimelineId === highlightedTimelineId ? 'border-[var(--adm-ochre-500)] bg-[var(--adm-sand-100)]' : 'border-[var(--adm-border)] bg-[var(--adm-surface)]'}`}>
                       <p className="truncate text-[12px] font-semibold text-[var(--adm-text)]">{doc.name}</p>
                       <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{doc.type} {doc.version ? `· ${doc.version}` : ''}</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button onClick={() => handleDocumentClick(doc)} disabled={isDownloading === doc.id} className="border border-[var(--adm-border)] bg-white px-2 py-1 text-[10px] font-semibold text-[var(--adm-text)]">{isDownloading === doc.id ? '...' : 'Letöltés'}</button>
+                        {canRequestDocumentDelete && (
+                          <button onClick={() => openDeleteDocumentDialog(doc)} className="border border-[#d4b8b8] bg-white px-2 py-1 text-[10px] font-semibold text-[#8b3a3a]">Törlés</button>
+                        )}
+                      </div>
                     </div>
                   ))}
                   {hasMoreDocs && <button onClick={() => setShowAllDocs(!showAllDocs)} className="w-full border border-[var(--adm-border)] py-2 text-[10px] font-semibold text-[var(--adm-ochre-500)]">{showAllDocs ? 'Kevesebb megjelenítése' : `Összes dokumentum (${documents.length})`}</button>}
@@ -2219,6 +2264,48 @@ export function CaseDetail({ params }: CaseDetailProps) {
           onSuccess={handleRehydrateSuccess}
           onSaveSuccess={handleRehydrateSaveSuccess}
         />
+      )}
+
+      {deleteCandidate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="delete-document-title">
+          <div className="w-full max-w-md border border-[var(--adm-border)] bg-white shadow-2xl">
+            <div className="border-b border-[var(--adm-border)] bg-[#8B2A2A] px-6 py-4">
+              <h2 id="delete-document-title" className="font-serif text-lg font-bold text-white">Dokumentum törlése</h2>
+              <p className="mt-1 text-xs text-white/75">Csak akkor folytasd, ha biztosan rossz irat került feltöltésre.</p>
+            </div>
+            <div className="space-y-4 p-6">
+              <div>
+                <p className="text-sm font-semibold text-[var(--adm-text)]">{deleteCandidate.name}</p>
+                <p className="mt-1 text-xs text-[var(--adm-text-muted)]">{deleteCandidate.type} {deleteCandidate.version ? `· ${deleteCandidate.version}` : ''}</p>
+              </div>
+              <div className="border border-[#FCD34D] bg-[#FEF3C7] p-3">
+                <p className="text-xs leading-relaxed text-[#92400E]">
+                  A törlés a SharePoint-fájlt és az Adminiculum dokumentumrekordot is eltávolítja. Ha feladat, anonimizált változat,
+                  jogi elemzés vagy nyitott review-javaslat kapcsolódik hozzá, a rendszer blokkolja a műveletet.
+                </p>
+              </div>
+              {deleteDocumentError && (
+                <div className="border border-[#d4b8b8] bg-[#fef2f2] p-3 text-xs text-[#8b3a3a]">{deleteDocumentError}</div>
+              )}
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={closeDeleteDocumentDialog}
+                  disabled={isDeletingDocument}
+                  className="border border-[var(--adm-border)] px-4 py-2 text-xs font-bold uppercase tracking-widest text-[var(--adm-text)] hover:bg-[var(--adm-surface)] disabled:opacity-50"
+                >
+                  Mégse
+                </button>
+                <button
+                  onClick={handleConfirmDeleteDocument}
+                  disabled={isDeletingDocument}
+                  className="bg-[#8B2A2A] px-5 py-2 text-xs font-bold uppercase tracking-widest text-white hover:opacity-90 disabled:opacity-50"
+                >
+                  {isDeletingDocument ? 'Törlés...' : 'Végleges törlés'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Complete Case Confirmation Modal */}
