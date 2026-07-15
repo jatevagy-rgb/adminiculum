@@ -30,9 +30,13 @@ describe('document editor template assembly bridge static safety', () => {
     const api = read('Frontend/src/lib/api.ts');
 
     expect(api).toContain('getEditorTemplateCapabilities');
-    expect(workbench).toContain('Sablonból munkapéldány');
-    expect(workbench).toContain('Sablonkatalógus nem aktív');
-    expect(workbench).toContain('Helyi DOCX import');
+    // The workbench still loads the capability contract; the template bridge
+    // copy lives in the side panel "Sablon" tab since the UX layout overhaul
+    // (the permanent header banner was removed deliberately).
+    expect(workbench).toContain('getEditorTemplateCapabilities');
+    expect(sidePanel).toContain('Sablonból munkapéldány');
+    expect(sidePanel).toContain('Sablonkatalógus nem aktív');
+    expect(sidePanel).toContain('Helyi DOCX import');
     expect(sidePanel).toContain('a jelenlegi szerkesztési munkamenet tartalma nincs az Adminiculum szerverére mentve');
 
     for (const forbidden of [

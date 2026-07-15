@@ -101,3 +101,18 @@ Potential future work: richer numbering import, image policy, headers/footers, a
 ## Template Assembly Follow-Up
 
 `DOCUMENT-EDITOR-TEMPLATE-ASSEMBLY-CLAUSE-CATALOG-1` keeps the previous manual bridge posture: authorized DOCX download outside the editor, then local browser DOCX import. Automatic template generation/import remains blocked by contracts storage, retention, permission, audit, enum/schema, and DTO decisions.
+
+## DOCUMENT-EDITOR-WORKBENCH-UX-LAYOUT-OVERHAUL-1 update
+
+The editor became a viewport-bound workbench: the editor route now uses the
+`fullViewport` application-shell mode (h-dvh, non-scrolling `<main>`), so the
+header, formatting toolbar and status bar stay visible while only the document
+viewport scrolls; the outline and side panel scroll independently and are
+collapsible with responsive defaults. DOCX import/export moved into the header
+"Export / Import" menu (also available on the side panel Export tab), the
+template-readiness banner moved into the side panel "Sablon" tab, and zoom
+moved to the status bar. All persistence semantics are unchanged: Mode C,
+"Munkamenet — nincs szerverre mentve", no autosave, no browser storage, no
+anchored comments, no track changes. See
+`docs/document-editor-workbench-ux-layout-overhaul-1.md` and
+`docs/document-editor-workbench-layout-contract.md`.

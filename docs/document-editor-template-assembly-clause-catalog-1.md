@@ -110,3 +110,18 @@ Validation must include backend tests, frontend typecheck/build, production-env 
 ## Remaining template work
 
 A future Branch A/B package may proceed only after the contracts family is approved, the production schema baseline is reconciled, DTOs are narrowed, variable allow-lists are implemented, enabled-route tests are added, and storage/retention/audit/privacy decisions are complete.
+
+## DOCUMENT-EDITOR-WORKBENCH-UX-LAYOUT-OVERHAUL-1 update
+
+The editor became a viewport-bound workbench: the editor route now uses the
+`fullViewport` application-shell mode (h-dvh, non-scrolling `<main>`), so the
+header, formatting toolbar and status bar stay visible while only the document
+viewport scrolls; the outline and side panel scroll independently and are
+collapsible with responsive defaults. DOCX import/export moved into the header
+"Export / Import" menu (also available on the side panel Export tab), the
+template-readiness banner moved into the side panel "Sablon" tab, and zoom
+moved to the status bar. All persistence semantics are unchanged: Mode C,
+"Munkamenet — nincs szerverre mentve", no autosave, no browser storage, no
+anchored comments, no track changes. See
+`docs/document-editor-workbench-ux-layout-overhaul-1.md` and
+`docs/document-editor-workbench-layout-contract.md`.

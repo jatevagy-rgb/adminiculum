@@ -861,3 +861,39 @@ working session** (`docs/document-editor-pro-data-source-and-persistence-audit.m
 | Feature family | Current recommendation | Decision needed | Default safe decision | Human decision: KEEP / QUARANTINE / REMOVE / BRING-FORWARD / UNKNOWN | Notes |
 |---|---|---|---|---|---|
 | Document editor template assembly / clause catalog | KEEP capability/readiness contract only; QUARANTINE runtime catalog, automatic generation/import bridge, and dynamic clause catalog | Approve contracts storage/retention/delete policy, permission model, audit minimization, schema/enum remediation, DTO allow-lists, enabled-route tests, and clause governance before runtime bridge | QUARANTINE runtime bridge | UNKNOWN | DOCUMENT-EDITOR-TEMPLATE-ASSEMBLY-CLAUSE-CATALOG-1 completed Branch C approval readiness. Added authenticated capability endpoint and disabled editor panel. No `schema.prisma` edit, migration, DB query, deployment, editor server persistence, Client Portal change, AI, n8n, automatic legal-clause selection, unapproved hardcoded substantive clause library, external converter, or automatic import. Dependency audit remediated critical Next advisories via safe minor update; four moderate advisories remain explicitly documented. |
+
+## DOCUMENT-EDITOR-WORKBENCH-UX-LAYOUT-OVERHAUL-1 (2026-07-15)
+
+**Decision**: The professional editor was converted into a viewport-bound
+workbench with persistent chrome and internal scrolling; persistence semantics
+were not touched.
+
+- **Root cause fixed**: the application shell's `min-h-screen` +
+  unconstrained `flex-1 overflow-y-auto` main meant the editor's `h-full`
+  resolved to auto — the page/body was the document scroll surface and the
+  header/toolbar scrolled away. A route-scoped `fullViewport` shell mode
+  (`h-dvh min-h-0 overflow-hidden`, non-scrolling `<main>`, footer yielded)
+  now binds the height chain; only the editor route opts in — every other
+  route keeps the historical page-scrolling shell.
+- Persistent workbench header (compact) and formatting toolbar; document
+  viewport is the single document scroll region; outline (240 px) and side
+  panel (340 px) scroll independently and collapse with responsive defaults
+  (≥1440 both open; 1280–1439 outline collapsed; <1280 both collapsed);
+  status bar hosts counts, comment/review/dirty truth and zoom; focus mode
+  restores the previous arrangement and exits on Escape.
+- Canvas zoom switched from `transform: scale` to layout-affecting CSS `zoom`
+  (correct scroll height at every level); page breaks render as visible
+  workspace bands while remaining real print breaks; the A4 paper gained
+  border/shadow contrast on a calmer workspace background.
+- The permanently large template banner moved into the side panel "Sablon"
+  tab; DOCX import/export moved into the header "Export / Import" menu; the
+  side panel Export tab's stale "DOCX unavailable" copy was corrected.
+- **No** `schema.prisma` edit; **no** migration; **no** DB query; **no**
+  deployment; **no** editor persistence (Mode C intact: no save, no autosave,
+  no versions, no browser durable storage — layout state is session memory);
+  **no** Client Portal change; **no** AI; **no** n8n; **no** package changes.
+- Tests: backend **52 suites / 544 tests** (from 50/515; new pure
+  layout-state suite + scroll-architecture guards; one template-assembly
+  assertion re-pointed to the banner's new side-panel home — intent
+  preserved). Frontend `tsc` + build + clean `verify:prod-env`
+  (`https://prod-env-verify.invalid`) all pass.

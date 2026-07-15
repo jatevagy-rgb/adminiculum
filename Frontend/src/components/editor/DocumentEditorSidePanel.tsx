@@ -8,7 +8,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import type { CaseWorkItem, DocumentCommentDto } from "@/lib/api";
+import type { CaseWorkItem, DocumentCommentDto, EditorTemplateCapabilitiesDto } from "@/lib/api";
 import type { EditorNode } from "@/lib/editor/editorModel";
 import { EDITOR_FIELDS, FieldResolutionContext, listTokenOccurrences } from "@/lib/editor/fieldTokens";
 import {
@@ -46,21 +46,29 @@ export type DocumentCommentsPanelState = {
   onRetry: () => void;
 };
 
+export type TemplatePanelState = {
+  capabilities: EditorTemplateCapabilitiesDto | null;
+  error: string | null;
+  onLocalDocxImport: () => void;
+};
+
 type SidePanelProps = {
   docJson: EditorNode | null;
   context: FieldResolutionContext;
   documentMeta: { id: string; caseId: string; name: string; version?: string | null } | null;
   review: ReviewPanelState;
   comments: DocumentCommentsPanelState;
+  template: TemplatePanelState;
   readOnly: boolean;
   onInsertField: (fieldId: string) => void;
   onConvertResolvedTokens: () => void;
   onExportHtml: () => void;
   onExportText: () => void;
+  onExportDocx: () => void;
   onPrint: () => void;
 };
 
-type PanelTab = "status" | "fields" | "review" | "comments" | "export";
+type PanelTab = "status" | "fields" | "review" | "comments" | "template" | "export";
 
 export function DocumentEditorSidePanel({
   docJson,
@@ -68,11 +76,13 @@ export function DocumentEditorSidePanel({
   documentMeta,
   review,
   comments,
+  template,
   readOnly,
   onInsertField,
   onConvertResolvedTokens,
   onExportHtml,
   onExportText,
+  onExportDocx,
   onPrint,
 }: SidePanelProps) {
   const [tab, setTab] = useState<PanelTab>("status");
@@ -87,11 +97,13 @@ export function DocumentEditorSidePanel({
     return EDITOR_FIELDS.filter((field) => field.label.toLowerCase().includes(query) || field.id.toLowerCase().includes(query));
   }, [fieldFilter]);
 
+  const openCommentCount = comments.items.filter((item) => item.status === "OPEN").length;
   const tabs: Array<{ id: PanelTab; label: string }> = [
     { id: "status", label: "Állapot" },
     { id: "fields", label: `Változók${unresolvedCount > 0 ? ` (${unresolvedCount}!)` : ""}` },
-    { id: "review", label: "Review" },
-    { id: "comments", label: `Megjegyzések${comments.items.filter((item) => item.status === "OPEN").length > 0 ? ` (${comments.items.filter((item) => item.status === "OPEN").length})` : ""}` },
+    { id: "review", label: `Review${review.items.length > 0 ? ` (${review.items.length})` : ""}` },
+    { id: "comments", label: `Megjegyz.${openCommentCount > 0 ? ` (${openCommentCount})` : ""}` },
+    { id: "template", label: "Sablon" },
     { id: "export", label: "Export" },
   ];
 
@@ -419,10 +431,47 @@ export function DocumentEditorSidePanel({
           </div>
         ) : null}
 
+        {tab === "template" ? (
+          <div className="space-y-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[#7A8479]">Sablonból munkapéldány</p>
+            <p className="text-[11.5px] leading-relaxed text-[#3D4842]">
+              {template.capabilities?.availability.generation
+                ? "A sablon generálási kapu elérhető; a tényleges munkafolyamat külön jóváhagyott kapcsolással nyílik meg."
+                : "A sablonkatalógus és a generálás jelenleg jóváhagyásra vár. Használjon engedélyezett letöltést, majd helyi DOCX importot."}
+            </p>
+            <p className="text-[10.5px] text-[#7A8479]">
+              {template.error ||
+                template.capabilities?.reason ||
+                "Képességellenőrzés folyamatban; automatikus sablonválasztás és szerveroldali editor-mentés nincs."}
+            </p>
+            <span className="inline-block rounded-[4px] border border-[rgba(22,32,26,0.16)] bg-white px-2 py-1 text-[10.5px] font-semibold text-[#3D4842]">
+              {template.capabilities?.selectedBranch === "APPROVAL_READINESS_ONLY" ? "Branch C — approval readiness" : "Képességellenőrzés"}
+            </span>
+            <button
+              type="button"
+              disabled
+              className="w-full cursor-not-allowed rounded-[4px] border border-[rgba(22,32,26,0.14)] bg-white px-2 py-1.5 text-[11px] font-semibold text-[#7A8479]"
+              title="A sablonból generálás csak külön jóváhagyott storage, jogosultsági és audit modell után kapcsolható."
+            >
+              Sablonkatalógus nem aktív
+            </button>
+            <button
+              type="button"
+              className="w-full rounded-[4px] border border-[rgba(22,32,26,0.2)] bg-white px-2 py-1.5 text-[11px] font-semibold text-[#3D4842] hover:bg-[#FBF6E7]"
+              onClick={template.onLocalDocxImport}
+            >
+              Helyi DOCX import
+            </button>
+          </div>
+        ) : null}
+
         {tab === "export" ? (
           <div className="space-y-2">
             <button type="button" className="w-full rounded-[4px] border border-[#062416] bg-[#082817] px-2 py-1.5 text-[11.5px] font-semibold text-[#F4EFDB] hover:bg-[#062416]" onClick={onPrint}>
               Nyomtatás / PDF (böngészőből)
+            </button>
+            <button type="button" className="w-full rounded-[4px] border border-[rgba(22,32,26,0.2)] px-2 py-1.5 text-[11.5px] font-semibold hover:bg-[#FBF6E7]" onClick={onExportDocx}>
+              DOCX export (helyi fájl)
             </button>
             <button type="button" className="w-full rounded-[4px] border border-[rgba(22,32,26,0.2)] px-2 py-1.5 text-[11.5px] font-semibold hover:bg-[#FBF6E7]" onClick={onExportHtml}>
               HTML letöltése (önálló, tisztított)
@@ -431,9 +480,9 @@ export function DocumentEditorSidePanel({
               Szöveges export (.txt, számozással)
             </button>
             <p className="text-[10px] italic leading-relaxed text-[#7A8479]">
-              A PDF a böngésző nyomtatási funkciójával készül — nem szerveroldali generálás. DOCX export nem érhető el:
-              nincs megbízható Tiptap→DOCX konverter a telepített állományban; ezt a korlátot a dokumentáció rögzíti. Az
-              exportok a feloldott mezőértékeket tartalmazzák; a feloldatlan mezők jelölve maradnak.
+              A PDF a böngésző nyomtatási funkciójával készül — nem szerveroldali generálás. A DOCX export helyben,
+              a böngészőben készül egy támogatott résszel; nem Word-tökéletes és nem szerveroldali mentés. Az exportok a
+              feloldott mezőértékeket tartalmazzák; a feloldatlan mezők jelölve maradnak.
             </p>
           </div>
         ) : null}

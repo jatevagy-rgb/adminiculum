@@ -22,7 +22,9 @@ export default function DocumentEditPage({ params }: EditorPageProps) {
   const documentId = resolved.documentId === "new" ? null : resolved.documentId;
 
   return (
-    <AuthenticatedApp section="case-detail">
+    // fullViewport: the editor is a viewport-bound workbench — the page/body
+    // never becomes the document scroll surface (see workbench layout docs).
+    <AuthenticatedApp section="case-detail" fullViewport>
       <Suspense fallback={<div className="p-4 text-[12px] text-[#7A8479]">Szerkesztő betöltése…</div>}>
         <DocumentEditorWorkbench documentId={documentId} />
       </Suspense>

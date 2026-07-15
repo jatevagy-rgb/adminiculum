@@ -90,3 +90,18 @@ This document is superseded/qualified by `docs/document-editor-persistence-versi
 ## DOCUMENT-EDITOR-DOCX-INTEROPERABILITY-TEMPLATE-BRIDGE-1 update
 
 The professional editor now supports **local browser-only DOCX import/export for a conservative supported subset**. This is not server persistence: no save, no autosave, no server version, no restore, no `workspaceText`, no external conversion service, no AI, and no n8n. Unsupported Word features are warned or rejected; the exported DOCX is a newly generated file, not Word-perfect round-trip fidelity.
+
+## DOCUMENT-EDITOR-WORKBENCH-UX-LAYOUT-OVERHAUL-1 update
+
+The editor became a viewport-bound workbench: the editor route now uses the
+`fullViewport` application-shell mode (h-dvh, non-scrolling `<main>`), so the
+header, formatting toolbar and status bar stay visible while only the document
+viewport scrolls; the outline and side panel scroll independently and are
+collapsible with responsive defaults. DOCX import/export moved into the header
+"Export / Import" menu (also available on the side panel Export tab), the
+template-readiness banner moved into the side panel "Sablon" tab, and zoom
+moved to the status bar. All persistence semantics are unchanged: Mode C,
+"Munkamenet — nincs szerverre mentve", no autosave, no browser storage, no
+anchored comments, no track changes. See
+`docs/document-editor-workbench-ux-layout-overhaul-1.md` and
+`docs/document-editor-workbench-layout-contract.md`.

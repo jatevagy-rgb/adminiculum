@@ -60,6 +60,18 @@ import {
   isNearTextLimit,
   shouldWarnBeforeReviewAction,
 } from "@/lib/editor/reviewQuality";
+import {
+  A4_PAGE_WIDTH_PX,
+  computeEffectiveZoom,
+  defaultWorkbenchLayout,
+  EDITOR_ZOOM_OPTIONS,
+  exitFocusMode,
+  SIDE_PANEL_WIDTH_PX,
+  toggleFocusMode,
+  toggleOutline,
+  toggleSidePanel,
+  type WorkbenchLayoutState,
+} from "@/lib/editor/workbenchLayout";
 import { findSearchMatches, getSearchStorage, SEARCH_PLUGIN_KEY, type SearchMatch } from "./extensions";
 import {
   applyClauseOperation,
@@ -68,19 +80,10 @@ import {
   findClausePosition,
   transformPastedExternalHtml,
 } from "./editorSetup";
-import { DocumentEditorToolbar } from "./DocumentEditorToolbar";
+import { DocumentEditorToolbar, MenuItem, ToolbarMenu } from "./DocumentEditorToolbar";
 import { DocumentOutline } from "./DocumentOutline";
 import { DocumentEditorSidePanel, type DocumentCommentsPanelState, type ReviewPanelState } from "./DocumentEditorSidePanel";
 
-const ZOOM_OPTIONS = [
-  { value: 0.75, label: "75%" },
-  { value: 0.9, label: "90%" },
-  { value: 1, label: "100%" },
-  { value: 1.1, label: "110%" },
-  { value: -1, label: "Szélességhez igazítás" },
-];
-
-const A4_WIDTH_PX = 794;
 const DOCUMENT_COMMENT_MAX_LENGTH = 2000;
 
 type DocumentMeta = {
@@ -107,7 +110,10 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
   const [activeClauseId, setActiveClauseId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [fitWidth, setFitWidth] = useState(false);
-  const [focusMode, setFocusMode] = useState(false);
+  // Workbench chrome layout (outline / side panel / focus mode) — session
+  // memory only, responsive defaults applied once from the real viewport.
+  const [layout, setLayout] = useState<WorkbenchLayoutState>(() => defaultWorkbenchLayout(1440));
+  const layoutInitializedRef = useRef(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   // Search / replace state
@@ -268,6 +274,13 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
     return () => window.removeEventListener("beforeunload", handler);
   }, [dirty]);
 
+  // --- responsive layout defaults (one-time, from the real viewport) --------
+  useEffect(() => {
+    if (layoutInitializedRef.current) return;
+    layoutInitializedRef.current = true;
+    setLayout(defaultWorkbenchLayout(window.innerWidth));
+  }, []);
+
   // --- fit-width zoom ------------------------------------------------------
   useEffect(() => {
     const element = canvasContainerRef.current;
@@ -279,7 +292,7 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
     return () => observer.disconnect();
   }, []);
 
-  const effectiveZoom = fitWidth && containerWidth > 0 ? Math.min(Math.max((containerWidth - 32) / A4_WIDTH_PX, 0.5), 1.6) : zoom;
+  const effectiveZoom = computeEffectiveZoom({ zoom, fitWidth, containerWidth });
 
   // --- outline + stats -----------------------------------------------------
   const outline = useMemo(() => extractOutline(docJson), [docJson]);
@@ -409,17 +422,22 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
     }
   }, [searchOpen, editor]);
 
-  // Ctrl+F opens the in-editor search.
+  // Ctrl+F opens the in-editor search; Escape leaves focus mode (menus and the
+  // search bar handle their own Escape first and stop propagation).
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
         event.preventDefault();
         setSearchOpen(true);
+        return;
+      }
+      if (event.key === "Escape" && !searchOpen) {
+        setLayout((current) => exitFocusMode(current));
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [searchOpen]);
 
   // --- exports (truthful: browser print, sanitized HTML, plain text) --------
   const exportBaseName = (meta?.name || "munkapeldany").replace(/\.[a-z0-9]+$/i, "").replace(/[^\p{L}\p{N}_-]+/gu, "_");
@@ -628,34 +646,59 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
 
   // --- render ----------------------------------------------------------------
   if (metaLoading) {
-    return <div className="p-6 text-[12px] text-[#7A8479]">Szerkesztő betöltése…</div>;
+    return (
+      <div className="flex h-full min-h-0 items-center justify-center bg-[#E7E3D4]">
+        <p className="text-[12px] text-[#7A8479]">Szerkesztő betöltése…</p>
+      </div>
+    );
   }
   if (metaError) {
     return (
-      <div className="mx-auto max-w-lg p-6">
-        <p className="rounded-[6px] border border-[#F2DAD6] bg-white p-4 text-[13px] text-[#8B2A2A]">{metaError}</p>
+      <div className="flex h-full min-h-0 items-start justify-center bg-[#E7E3D4] p-6">
+        <p className="max-w-lg rounded-[6px] border border-[#F2DAD6] bg-white p-4 text-[13px] text-[#8B2A2A]">{metaError}</p>
       </div>
     );
   }
 
+  const openCommentCount = documentComments.filter((item) => item.status === "OPEN").length;
+  const activeReviewItem = workItems.find((item) => item.workflowCategory !== "COMPLETED") || null;
+
   return (
-    <div className="editor-print-root flex h-full min-h-0 flex-col bg-[#EDE9DC]">
-      {/* Header */}
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-[rgba(22,32,26,0.15)] bg-[#FDFBF3] px-3 py-2 print:hidden" data-editor-chrome>
-        <div className="flex min-w-0 items-center gap-3">
-          <button type="button" className="rounded-[4px] border border-[rgba(22,32,26,0.2)] px-2 py-1 text-[11.5px] font-semibold text-[#3D4842] hover:bg-[#FBF6E7]" onClick={goBack}>
-            ← Vissza az ügyhöz
+    <div className="editor-print-root flex h-full min-h-0 flex-col overflow-hidden bg-[#E7E3D4]">
+      {/* Workbench header — compact, always visible */}
+      <header className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-[rgba(22,32,26,0.15)] bg-[#FDFBF3] px-3 py-1.5 print:hidden" data-editor-chrome>
+        <div className="flex min-w-0 items-center gap-2">
+          <button type="button" className="shrink-0 rounded-[4px] border border-[rgba(22,32,26,0.2)] px-2 py-1 text-[11.5px] font-semibold text-[#3D4842] hover:bg-[#FBF6E7]" onClick={goBack}>
+            ← Ügy
           </button>
           <div className="min-w-0">
-            <p className="truncate text-[13.5px] font-bold text-[#16201A]">{meta?.name || "Új munkapéldány (szerződéstervezet)"}</p>
-            <p className="truncate text-[10.5px] text-[#7A8479]">
-              {context.caseReference ? `${context.caseReference} · ` : ""}
-              {context.clientDisplayName ? `${context.clientDisplayName} · ` : ""}
-              {editorContract?.persistence.mode === "EXPORT_ONLY" ? "Export-only professzionális szerkesztő" : "Professzionális szerkesztő"}
+            <p className="truncate text-[13px] font-bold leading-tight text-[#16201A]" title={meta?.name || "Új munkapéldány"}>
+              {meta?.name || "Új munkapéldány (szerződéstervezet)"}
+            </p>
+            <p className="truncate text-[10px] leading-tight text-[#7A8479]">
+              {[context.caseReference, context.clientDisplayName, meta?.version ? `v${meta.version} (metaadat)` : null]
+                .filter(Boolean)
+                .join(" · ") || "Önálló munkapéldány"}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          {activeReviewItem ? (
+            <span
+              className="hidden rounded-[4px] border border-[rgba(45,74,124,0.25)] bg-[#EAEFF6] px-2 py-1 text-[10.5px] font-semibold text-[#2D4A7C] md:inline-block"
+              title={`Kapcsolódó feladat: ${activeReviewItem.title}`}
+            >
+              Review: {activeReviewItem.status}
+            </span>
+          ) : null}
+          <span
+            className={`rounded-[4px] border px-2 py-1 text-[10.5px] font-bold ${
+              dirty ? "border-[rgba(185,122,15,0.4)] bg-[#FAEFCF] text-[#7d530a]" : "border-[rgba(22,32,26,0.15)] bg-white text-[#3D4842]"
+            }`}
+            title="Ebben a környezetben nincs engedélyezett szerveroldali tartalommentés; a tartalom csak ebben a böngészőlapon él."
+          >
+            {dirty ? "Nem mentett — nincs szerverre mentve" : "Munkamenet — nincs szerverre mentve"}
+          </span>
           <input
             ref={docxInputRef}
             type="file"
@@ -668,56 +711,78 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
               if (file) void importDocx(file);
             }}
           />
+          <ToolbarMenu label="Export / Import ▾" title="Helyi export- és importműveletek (nem szerveroldali mentés)" widthClass="w-72">
+            {(close) => (
+              <>
+                <MenuItem
+                  label="Nyomtatás / PDF (böngészőből)"
+                  description="A PDF a böngésző nyomtatási funkciójával készül."
+                  onSelect={() => {
+                    printDocument();
+                    close();
+                  }}
+                />
+                <MenuItem
+                  label="DOCX export (helyi fájl)"
+                  description="Új DOCX készül helyben; ez nem szerveroldali mentés."
+                  onSelect={() => {
+                    exportDocx();
+                    close();
+                  }}
+                />
+                <MenuItem
+                  label="HTML letöltése"
+                  description="Önálló, tisztított HTML."
+                  onSelect={() => {
+                    exportHtml();
+                    close();
+                  }}
+                />
+                <MenuItem
+                  label="Szöveges export (.txt)"
+                  description="Számozással, helyi fájlként."
+                  onSelect={() => {
+                    exportText();
+                    close();
+                  }}
+                />
+                <MenuItem
+                  label="DOCX import (helyi fájl)"
+                  description="A fájl nem kerül feltöltésre; a jelenlegi tartalmat lecseréli."
+                  onSelect={() => {
+                    docxInputRef.current?.click();
+                    close();
+                  }}
+                />
+              </>
+            )}
+          </ToolbarMenu>
           <button
             type="button"
-            className="rounded-[4px] border border-[rgba(22,32,26,0.2)] px-2 py-1 text-[11px] font-semibold text-[#3D4842] hover:bg-[#FBF6E7]"
-            title="Helyi DOCX import: a fájl nem kerül feltöltésre, és a munkamenet nem lesz szerverre mentve."
-            onClick={() => docxInputRef.current?.click()}
+            aria-pressed={layout.outlineOpen}
+            title={layout.outlineOpen ? "Vázlat elrejtése" : "Vázlat megjelenítése"}
+            className={`rounded-[4px] border px-2 py-1 text-[11px] font-semibold ${layout.outlineOpen ? "border-[#082817] bg-[#082817] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.2)] text-[#3D4842] hover:bg-[#FBF6E7]"}`}
+            onClick={() => setLayout((current) => toggleOutline(current))}
           >
-            DOCX import
+            Vázlat
           </button>
           <button
             type="button"
-            className="rounded-[4px] border border-[rgba(22,32,26,0.2)] px-2 py-1 text-[11px] font-semibold text-[#3D4842] hover:bg-[#FBF6E7]"
-            title="Új DOCX fájl készül helyben; ez nem szerveroldali mentés."
-            onClick={exportDocx}
+            aria-pressed={layout.sidePanelOpen}
+            title={layout.sidePanelOpen ? "Oldalpanel elrejtése" : "Oldalpanel megjelenítése"}
+            className={`rounded-[4px] border px-2 py-1 text-[11px] font-semibold ${layout.sidePanelOpen ? "border-[#082817] bg-[#082817] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.2)] text-[#3D4842] hover:bg-[#FBF6E7]"}`}
+            onClick={() => setLayout((current) => toggleSidePanel(current))}
           >
-            DOCX export
+            Panel
           </button>
-          <span
-            className={`rounded-[4px] border px-2 py-1 text-[10.5px] font-bold ${
-              dirty ? "border-[rgba(185,122,15,0.4)] bg-[#FAEFCF] text-[#7d530a]" : "border-[rgba(22,32,26,0.15)] bg-white text-[#3D4842]"
-            }`}
-            title="Ebben a környezetben nincs engedélyezett szerveroldali tartalommentés."
-          >
-            {dirty ? "Nem mentett munkamenet — nincs szerverre mentve" : "Munkamenet — nincs szerverre mentve"}
-          </span>
-          <select
-            className="rounded-[4px] border border-[rgba(22,32,26,0.2)] bg-white px-1.5 py-1 text-[11px]"
-            aria-label="Nagyítás"
-            value={fitWidth ? -1 : zoom}
-            onChange={(event) => {
-              const value = Number(event.target.value);
-              if (value === -1) setFitWidth(true);
-              else {
-                setFitWidth(false);
-                setZoom(value);
-              }
-            }}
-          >
-            {ZOOM_OPTIONS.map((option) => (
-              <option key={option.label} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
           <button
             type="button"
-            aria-pressed={focusMode}
-            className={`rounded-[4px] border px-2 py-1 text-[11px] font-semibold ${focusMode ? "border-[#082817] bg-[#082817] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.2)] text-[#3D4842] hover:bg-[#FBF6E7]"}`}
-            onClick={() => setFocusMode((mode) => !mode)}
+            aria-pressed={layout.focusMode}
+            title={layout.focusMode ? "Panelek visszaállítása (Esc)" : "Fókusz mód: csak a dokumentum"}
+            className={`rounded-[4px] border px-2 py-1 text-[11px] font-semibold ${layout.focusMode ? "border-[#082817] bg-[#082817] text-[#F4EFDB]" : "border-[rgba(22,32,26,0.2)] text-[#3D4842] hover:bg-[#FBF6E7]"}`}
+            onClick={() => setLayout((current) => toggleFocusMode(current))}
           >
-            Fókusz mód
+            {layout.focusMode ? "Panelek visszaállítása" : "Fókusz mód"}
           </button>
         </div>
       </header>
@@ -779,48 +844,11 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
         </p>
       ) : null}
 
-      <section className="border-b border-[rgba(22,32,26,0.12)] bg-[#F7F2E4] px-3 py-2 print:hidden" data-editor-chrome aria-label="Sablonból munkapéldány">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#7A6014]">Sablonból munkapéldány</p>
-            <p className="mt-0.5 text-[12px] text-[#3D4842]">
-              {templateCapabilities?.availability.generation
-                ? "A sablon generálási kapu elérhető; a tényleges munkafolyamat külön jóváhagyott kapcsolással nyílik meg."
-                : "A sablonkatalógus és a generálás jelenleg jóváhagyásra vár. Használjon engedélyezett letöltést, majd helyi DOCX importot."}
-            </p>
-            <p className="mt-0.5 text-[10.5px] text-[#7A8479]">
-              {templateCapabilitiesError ||
-                templateCapabilities?.reason ||
-                "Képességellenőrzés folyamatban; automatikus sablonválasztás és szerveroldali editor-mentés nincs."}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-[4px] border border-[rgba(22,32,26,0.16)] bg-white px-2 py-1 text-[10.5px] font-semibold text-[#3D4842]">
-              {templateCapabilities?.selectedBranch === "APPROVAL_READINESS_ONLY" ? "Branch C — approval readiness" : "Képességellenőrzés"}
-            </span>
-            <button
-              type="button"
-              disabled
-              className="cursor-not-allowed rounded-[4px] border border-[rgba(22,32,26,0.14)] bg-white px-2 py-1 text-[11px] font-semibold text-[#7A8479]"
-              title="A sablonból generálás csak külön jóváhagyott storage, jogosultsági és audit modell után kapcsolható."
-            >
-              Sablonkatalógus nem aktív
-            </button>
-            <button
-              type="button"
-              className="rounded-[4px] border border-[rgba(22,32,26,0.2)] bg-white px-2 py-1 text-[11px] font-semibold text-[#3D4842] hover:bg-[#FBF6E7]"
-              onClick={() => docxInputRef.current?.click()}
-            >
-              Helyi DOCX import
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Workbench body */}
-      <div className="flex min-h-0 flex-1">
-        {!focusMode ? (
-          <aside className="hidden w-60 shrink-0 border-r border-[rgba(22,32,26,0.12)] bg-[#FDFBF3] lg:block print:hidden">
+      {/* Workbench body: the ONLY vertical scroll surfaces live inside here —
+          the document viewport and (independently) the two support rails. */}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {layout.outlineOpen ? (
+          <aside className="w-60 shrink-0 overflow-hidden border-r border-[rgba(22,32,26,0.12)] bg-[#FDFBF3] print:hidden" aria-label="Dokumentum vázlat sáv">
             <DocumentOutline
               outline={outline}
               activeClauseId={activeClauseId}
@@ -833,49 +861,87 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
           </aside>
         ) : null}
 
-        <div ref={canvasContainerRef} className="editor-canvas-scroll min-w-0 flex-1 overflow-auto px-4 py-5">
+        <div ref={canvasContainerRef} className="editor-canvas-scroll min-w-0 flex-1 overflow-auto px-4 py-6" data-editor-viewport>
           <div
-            className="editor-a4-page mx-auto bg-white shadow-[0_2px_14px_rgba(22,32,26,0.14)]"
+            className="editor-a4-page mx-auto bg-white"
             style={{
-              width: A4_WIDTH_PX,
-              transform: `scale(${effectiveZoom})`,
-              transformOrigin: "top center",
+              width: A4_PAGE_WIDTH_PX,
+              // CSS zoom (not transform) so the layout box and the viewport's
+              // scrollHeight track the visual size at every zoom level.
+              zoom: effectiveZoom,
             }}
           >
             <EditorContent editor={editor} />
           </div>
         </div>
 
-        {!focusMode ? (
-          <aside className="hidden w-72 shrink-0 border-l border-[rgba(22,32,26,0.12)] bg-[#FDFBF3] xl:block print:hidden">
+        {layout.sidePanelOpen ? (
+          <aside
+            className="shrink-0 overflow-hidden border-l border-[rgba(22,32,26,0.12)] bg-[#FDFBF3] print:hidden"
+            style={{ width: SIDE_PANEL_WIDTH_PX }}
+            aria-label="Szerkesztői oldalpanel"
+          >
             <DocumentEditorSidePanel
               docJson={docJson}
               context={context}
               documentMeta={meta}
               review={reviewPanel}
               comments={commentsPanel}
+              template={{
+                capabilities: templateCapabilities,
+                error: templateCapabilitiesError,
+                onLocalDocxImport: () => docxInputRef.current?.click(),
+              }}
               readOnly={false}
               onInsertField={insertField}
               onConvertResolvedTokens={convertTokens}
               onExportHtml={exportHtml}
               onExportText={exportText}
+              onExportDocx={exportDocx}
               onPrint={printDocument}
             />
           </aside>
         ) : null}
       </div>
 
-      {/* Status bar */}
-      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-[rgba(22,32,26,0.15)] bg-[#FDFBF3] px-3 py-1 text-[10.5px] text-[#7A8479] print:hidden" data-editor-chrome>
-        <div className="flex flex-wrap gap-3">
+      {/* Status bar — compact, always visible */}
+      <footer className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 border-t border-[rgba(22,32,26,0.15)] bg-[#FDFBF3] px-3 py-1 text-[10.5px] text-[#7A8479] print:hidden" data-editor-chrome>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
           <span>{stats.words} szó</span>
-          <span>{stats.characters} karakter</span>
-          <span>{stats.paragraphs} bekezdés</span>
+          <span className="hidden sm:inline">{stats.characters} karakter</span>
+          <span className="hidden md:inline">{stats.paragraphs} bekezdés</span>
           <span>{stats.clauses} pont</span>
           <span title="Karakterszámból becsült érték — nem valós oldaltördelés">~{stats.approximatePages} oldal (becslés)</span>
+          {openCommentCount > 0 ? <span title="Nyitott dokumentumszintű megjegyzések">{openCommentCount} nyitott megjegyzés</span> : null}
           {activeClauseNumber ? <span className="font-semibold text-[#7A6014]">Aktuális pont: {activeClauseNumber}</span> : null}
         </div>
-        <span>Munkamenet-alapú szerkesztő · {compareSavedSourcesLabel()} · exportálás: Nyomtatás/PDF · HTML · TXT</span>
+        <div className="flex items-center gap-2">
+          <span className={dirty ? "font-semibold text-[#7d530a]" : ""} title={compareSavedSourcesLabel()}>
+            {dirty ? "Nem mentett — nincs szerverre mentve" : "Nincs szerverre mentve"}
+          </span>
+          <label className="flex items-center gap-1">
+            <span className="sr-only">Nagyítás</span>
+            <select
+              className="rounded-[4px] border border-[rgba(22,32,26,0.2)] bg-white px-1 py-0.5 text-[10.5px]"
+              aria-label="Nagyítás"
+              value={fitWidth ? -1 : zoom}
+              onChange={(event) => {
+                const value = Number(event.target.value);
+                if (value === -1) setFitWidth(true);
+                else {
+                  setFitWidth(false);
+                  setZoom(value);
+                }
+              }}
+            >
+              {EDITOR_ZOOM_OPTIONS.map((option) => (
+                <option key={option.label} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </footer>
     </div>
   );

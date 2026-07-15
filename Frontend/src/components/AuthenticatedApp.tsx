@@ -83,9 +83,11 @@ type AuthenticatedAppProps = {
     | "calendar"
     | "search";
   children?: React.ReactNode;
+  /** Viewport-bound workbench shell (professional editor route only). */
+  fullViewport?: boolean;
 };
 
-export function AuthenticatedApp({ section = "dashboard", children }: AuthenticatedAppProps) {
+export function AuthenticatedApp({ section = "dashboard", children, fullViewport = false }: AuthenticatedAppProps) {
   const { instance, accounts, inProgress } = useMsal();
   const searchParams = useSearchParams();
   const account = accounts[0] || null;
@@ -414,5 +416,5 @@ export function AuthenticatedApp({ section = "dashboard", children }: Authentica
     );
   }
 
-  return <AppShell onSignOut={signOut} userProfile={profile} section={section}>{children}</AppShell>;
+  return <AppShell onSignOut={signOut} userProfile={profile} section={section} fullViewport={fullViewport}>{children}</AppShell>;
 }
