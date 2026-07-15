@@ -897,3 +897,10 @@ were not touched.
   assertion re-pointed to the banner's new side-panel home — intent
   preserved). Frontend `tsc` + build + clean `verify:prod-env`
   (`https://prod-env-verify.invalid`) all pass.
+
+## AUTHENTICATED-VISUAL-QA-AND-EDITOR-SCROLL-FIX-1 (2026-07-15)
+
+- Authenticated local browser QA verified `/documents/new/edit`, `/time-entries`, `/deadlines`, and `/clause-library`.
+- The editor scroll defect did not reproduce: browser scroll remained stationary, the central document viewport owned scrolling, and header/toolbar/status/right panel stayed visible at top, middle, and bottom at `1366×768`, with a second check at `1440×900`.
+- `/time-entries` kept entries/recording primary and reports secondary; `/deadlines` used compact operational hierarchy; `/clause-library` rendered the concise unavailable state when `ENABLE_CLAUSE_LIBRARY=false`.
+- No code/runtime/schema/migration/DB/Azure/OpenAPI/CORS/package/Client Portal/editor persistence/AI/n8n/Outlook change was made.
