@@ -2,6 +2,7 @@
 
 /**
  * /intake — WORKFLOW-CORE-INTAKE-MATTER-OPENING-1
+ * UX hardening: INTAKE-QUEUE-UX-HARDENING-1 (route-local only).
  *
  * Canonical internal intake surface: the intake queue (backend-derived
  * readiness, blockers and next steps) plus a controlled step-based new-matter
@@ -11,9 +12,14 @@
  * SharePoint side effects (documented limitation). Nothing is persisted in the
  * browser; the backend remains the source of truth. No conflict clearance is
  * recorded anywhere — the conflict step is a truthful unavailable notice.
+ *
+ * Hardening adds: queue retry/refresh, skeleton loading, polite live status,
+ * offset pagination on the existing API, pure unit-tested step validation with
+ * inline error messages, step-chip navigation, and focus management between
+ * wizard steps. No new endpoints, no schema impact, no browser persistence.
  */
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminBadge, AdminButton, AdminPanel, AdminSectionHeader } from "@/components/adminiculum/ui";
@@ -31,6 +37,15 @@ import {
   type IntakeQueueResponse,
   type User,
 } from "@/lib/api";
+import {
+  buildWizardSummary,
+  canNavigateToStep,
+  canSubmitWizard,
+  INITIAL_INTAKE_WIZARD_DATA,
+  INTAKE_WIZARD_STEPS,
+  type IntakeWizardData,
+  validateWizardStep,
+} from "@/lib/intake/intakeWizardState";
 
 const MATTER_TYPES = [
   { value: "CONTRACT_REVIEW", label: "Szerződés véleményezés" },
@@ -53,37 +68,7 @@ const OPENING_TASK_OPTIONS = [
   { code: "SET_INITIAL_DEADLINE", title: "Kezdő határidő beállítása" },
 ];
 
-const WIZARD_STEPS = ["Ügyfél", "Ügy", "Felelősség", "Összeférhetetlenség", "Nyitási terv", "Áttekintés"] as const;
-
-type WizardState = {
-  clientMode: "EXISTING" | "NEW";
-  selectedClient: { id: string; displayName: string } | null;
-  newClientName: string;
-  newClientEmail: string;
-  newClientPhone: string;
-  matterType: string;
-  clientRole: string;
-  description: string;
-  responsibleLawyerId: string;
-  collaboratorIds: string[];
-  selectedTaskCodes: string[];
-  initialDeadline: string;
-};
-
-const INITIAL_WIZARD: WizardState = {
-  clientMode: "EXISTING",
-  selectedClient: null,
-  newClientName: "",
-  newClientEmail: "",
-  newClientPhone: "",
-  matterType: "OTHER",
-  clientRole: "",
-  description: "",
-  responsibleLawyerId: "",
-  collaboratorIds: [],
-  selectedTaskCodes: [],
-  initialDeadline: "",
-};
+const QUEUE_PAGE_SIZE = 20;
 
 const inputClass =
   "w-full rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-3 py-2 text-[13px] text-[#16201A] focus:border-[#082817] focus:outline-none focus:ring-1 focus:ring-[#082817]";
@@ -101,10 +86,24 @@ function IntakePageContent() {
 // Intake queue
 // ---------------------------------------------------------------------------
 
+function QueueSkeleton() {
+  return (
+    <ul className="space-y-2" aria-hidden="true">
+      {[0, 1, 2].map((row) => (
+        <li key={row} className="animate-pulse rounded-[6px] border border-[rgba(22,32,26,0.10)] px-3 py-2.5">
+          <div className="h-3.5 w-2/5 rounded bg-[#E2E8DA]" />
+          <div className="mt-2 h-3 w-3/5 rounded bg-[#EFEBDC]" />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function IntakeQueuePanel() {
   const [queue, setQueue] = useState<IntakeQueueResponse | null>(null);
   const [scope, setScope] = useState<"MY_INTAKES" | "MY_CASES" | "TEAM">("MY_INTAKES");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "NEEDS_ATTENTION" | "READY">("ALL");
+  const [offset, setOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -112,17 +111,25 @@ function IntakeQueuePanel() {
     setLoading(true);
     setError(null);
     try {
-      setQueue(await getIntakeQueue({ scope, status: statusFilter, limit: 50 }));
+      setQueue(await getIntakeQueue({ scope, status: statusFilter, limit: QUEUE_PAGE_SIZE, offset }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Az ügyfelvételi sor nem tölthető be.");
     } finally {
       setLoading(false);
     }
-  }, [scope, statusFilter]);
+  }, [scope, statusFilter, offset]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const changeFilters = useCallback((next: () => void) => {
+    setOffset(0);
+    next();
+  }, []);
+
+  const pageStart = queue && queue.items.length > 0 ? offset + 1 : 0;
+  const pageEnd = queue ? offset + queue.items.length : 0;
 
   return (
     <AdminPanel className="overflow-hidden">
@@ -131,11 +138,11 @@ function IntakeQueuePanel() {
         title="Beérkezési sor"
         subtitle="Beérkezési állapotban lévő ügyek — backend-számított készenléttel és hiányokkal."
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <select
               className={inputClass}
               value={scope}
-              onChange={(event) => setScope(event.target.value as typeof scope)}
+              onChange={(event) => changeFilters(() => setScope(event.target.value as typeof scope))}
               aria-label="Sor hatóköre"
             >
               <option value="MY_INTAKES">Saját beérkezések</option>
@@ -145,13 +152,16 @@ function IntakeQueuePanel() {
             <select
               className={inputClass}
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+              onChange={(event) => changeFilters(() => setStatusFilter(event.target.value as typeof statusFilter))}
               aria-label="Szűrő"
             >
               <option value="ALL">Mind</option>
               <option value="NEEDS_ATTENTION">Figyelmet igényel</option>
               <option value="READY">Aktiválható</option>
             </select>
+            <AdminButton size="sm" variant="neutral" disabled={loading} onClick={() => void load()} aria-label="Sor frissítése">
+              Frissítés
+            </AdminButton>
           </div>
         }
       />
@@ -166,12 +176,39 @@ function IntakeQueuePanel() {
       ) : null}
 
       <div className="px-4 py-3">
+        {/* Polite live region: announces load/error/empty transitions. */}
+        <p className="sr-only" role="status" aria-live="polite">
+          {loading
+            ? "Az ügyfelvételi sor betöltése folyamatban."
+            : error
+              ? "Az ügyfelvételi sor betöltése sikertelen."
+              : queue
+                ? `${queue.items.length} tétel megjelenítve.`
+                : ""}
+        </p>
+
         {loading ? (
-          <p className="text-[12px] text-[#7A8479]">Betöltés…</p>
+          <QueueSkeleton />
         ) : error ? (
-          <p className="text-[12px] text-[#8B2A2A]">{error}</p>
+          <div className="rounded-[6px] border border-[#F2DAD6] bg-white px-3 py-3">
+            <p className="text-[12px] text-[#8B2A2A]">{error}</p>
+            <AdminButton size="sm" variant="neutral" className="mt-2" onClick={() => void load()}>
+              Újrapróbálás
+            </AdminButton>
+          </div>
         ) : !queue || queue.items.length === 0 ? (
-          <p className="text-[12px] italic text-[#7A8479]">Nincs beérkezési állapotban lévő ügy ebben a nézetben.</p>
+          <div className="rounded-[6px] border border-dashed border-[rgba(22,32,26,0.18)] px-3 py-4 text-center">
+            <p className="text-[12px] italic text-[#7A8479]">
+              {offset > 0
+                ? "Ezen az oldalon nincs több tétel."
+                : "Nincs beérkezési állapotban lévő ügy ebben a nézetben."}
+            </p>
+            {offset > 0 ? (
+              <AdminButton size="sm" variant="ghost" className="mt-2" onClick={() => setOffset(0)}>
+                Vissza az első oldalra
+              </AdminButton>
+            ) : null}
+          </div>
         ) : (
           <ul className="space-y-2">
             {queue.items.map((item) => (
@@ -208,6 +245,30 @@ function IntakeQueuePanel() {
             ))}
           </ul>
         )}
+
+        {queue && !error && (offset > 0 || queue.pagination.hasMore) ? (
+          <nav className="mt-3 flex items-center justify-between gap-2" aria-label="Lapozás az ügyfelvételi sorban">
+            <AdminButton
+              size="sm"
+              variant="neutral"
+              disabled={loading || offset === 0}
+              onClick={() => setOffset((current) => Math.max(0, current - QUEUE_PAGE_SIZE))}
+            >
+              ← Előző
+            </AdminButton>
+            <span className="text-[11px] text-[#7A8479]">
+              {pageStart}–{pageEnd}. tétel{queue.pagination.hasMore ? " · további tételek elérhetők" : ""}
+            </span>
+            <AdminButton
+              size="sm"
+              variant="neutral"
+              disabled={loading || !queue.pagination.hasMore}
+              onClick={() => setOffset((current) => current + QUEUE_PAGE_SIZE)}
+            >
+              Következő →
+            </AdminButton>
+          </nav>
+        ) : null}
       </div>
     </AdminPanel>
   );
@@ -222,49 +283,84 @@ type WizardResultLine = { label: string; ok: boolean; detail?: string };
 function NewMatterWizard() {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
-  const [state, setState] = useState<WizardState>(INITIAL_WIZARD);
+  const [state, setState] = useState<IntakeWizardData>(INITIAL_INTAKE_WIZARD_DATA);
+  const [showStepErrors, setShowStepErrors] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
+  const [usersError, setUsersError] = useState<string | null>(null);
   const [lookupQuery, setLookupQuery] = useState("");
   const [candidates, setCandidates] = useState<ClientLookupCandidate[]>([]);
   const [lookupBusy, setLookupBusy] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ caseId: string | null; lines: WizardResultLine[] } | null>(null);
+  const stepHeadingRef = useRef<HTMLHeadingElement | null>(null);
+
+  const loadUsers = useCallback(() => {
+    getUsers()
+      .then((loaded) => {
+        setUsers(loaded);
+        setUsersError(null);
+      })
+      .catch(() => setUsersError("A felhasználólista nem tölthető be — a felelős ügyvéd később is kijelölhető."));
+  }, []);
 
   useEffect(() => {
-    if (!open) return;
-    getUsers()
-      .then(setUsers)
-      .catch(() => setUsers([]));
-  }, [open]);
+    if (open) loadUsers();
+  }, [open, loadUsers]);
 
-  const patch = useCallback((changes: Partial<WizardState>) => {
+  // Keyboard/AT users land on the step heading after every step change.
+  useEffect(() => {
+    if (open && !result) stepHeadingRef.current?.focus();
+  }, [step, open, result]);
+
+  const patch = useCallback((changes: Partial<IntakeWizardData>) => {
     setState((previous) => ({ ...previous, ...changes }));
+    setShowStepErrors(false);
   }, []);
 
   const runLookup = useCallback(async () => {
     if (lookupQuery.trim().length < 2) return;
     setLookupBusy(true);
+    setLookupError(null);
     try {
       const response = await lookupClients(lookupQuery.trim());
       setCandidates(response.candidates);
     } catch {
       setCandidates([]);
+      setLookupError("A keresés sikertelen. Próbálja újra.");
     } finally {
       setLookupBusy(false);
     }
   }, [lookupQuery]);
 
-  const clientReady =
-    state.clientMode === "EXISTING" ? Boolean(state.selectedClient) : Boolean(state.newClientName.trim());
-  const matterReady = Boolean(state.description.trim() && state.clientRole.trim());
+  const currentStep = INTAKE_WIZARD_STEPS[step];
+  const stepValidation = validateWizardStep(currentStep.id, state);
 
-  const stepReady = useMemo(() => {
-    if (step === 0) return clientReady;
-    if (step === 1) return matterReady;
-    return true;
-  }, [step, clientReady, matterReady]);
+  const goToStep = useCallback(
+    (targetIndex: number) => {
+      if (!canNavigateToStep(targetIndex, step, state)) {
+        setShowStepErrors(true);
+        return;
+      }
+      setShowStepErrors(false);
+      setStep(targetIndex);
+    },
+    [step, state]
+  );
+
+  const goNext = useCallback(() => {
+    if (!stepValidation.ok) {
+      setShowStepErrors(true);
+      return;
+    }
+    goToStep(step + 1);
+  }, [stepValidation.ok, goToStep, step]);
 
   const submit = useCallback(async () => {
+    if (submitting || !canSubmitWizard(state)) {
+      setShowStepErrors(true);
+      return;
+    }
     setSubmitting(true);
     const lines: WizardResultLine[] = [];
     let caseId: string | null = null;
@@ -365,14 +461,16 @@ function NewMatterWizard() {
       setResult({ caseId, lines });
       setSubmitting(false);
     }
-  }, [state]);
+  }, [state, submitting]);
 
   const reset = useCallback(() => {
-    setState(INITIAL_WIZARD);
+    setState(INITIAL_INTAKE_WIZARD_DATA);
     setStep(0);
     setResult(null);
     setCandidates([]);
     setLookupQuery("");
+    setLookupError(null);
+    setShowStepErrors(false);
   }, []);
 
   if (!open) {
@@ -395,7 +493,7 @@ function NewMatterWizard() {
     return (
       <AdminPanel className="overflow-hidden">
         <AdminSectionHeader eyebrow="Ügyfelvétel" title="Eredmény" />
-        <ul className="space-y-1 px-4 py-3">
+        <ul className="space-y-1 px-4 py-3" role="status" aria-live="polite">
           {result.lines.map((line, index) => (
             <li key={index} className={`text-[12.5px] ${line.ok ? "text-[#123B27]" : "text-[#8B2A2A]"}`}>
               {line.ok ? "✓" : "✗"} {line.label}
@@ -433,8 +531,8 @@ function NewMatterWizard() {
     <AdminPanel className="overflow-hidden">
       <AdminSectionHeader
         eyebrow="Ügyfelvétel"
-        title={`Új ügy — ${WIZARD_STEPS[step]}`}
-        subtitle={`${step + 1}/${WIZARD_STEPS.length} lépés`}
+        title={`Új ügy — ${currentStep.label}`}
+        subtitle={`${step + 1}/${INTAKE_WIZARD_STEPS.length} lépés`}
         action={
           <AdminButton
             size="sm"
@@ -449,30 +547,53 @@ function NewMatterWizard() {
         }
       />
 
-      <div className="flex flex-wrap gap-1 border-b border-[rgba(22,32,26,0.10)] px-4 py-2">
-        {WIZARD_STEPS.map((label, index) => (
-          <span
-            key={label}
-            className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold ${
-              index === step
-                ? "bg-[#082817] text-[#F4EFDB]"
-                : index < step
-                  ? "bg-[#E2E8DA] text-[#123B27]"
-                  : "bg-[#FBF6E7] text-[#7A8479]"
-            }`}
-          >
-            {index + 1}. {label}
-          </span>
-        ))}
-      </div>
+      <nav className="flex flex-wrap gap-1 border-b border-[rgba(22,32,26,0.10)] px-4 py-2" aria-label="Ügyfelvételi lépések">
+        {INTAKE_WIZARD_STEPS.map((wizardStep, index) => {
+          const reachable = canNavigateToStep(index, step, state);
+          return (
+            <button
+              key={wizardStep.id}
+              type="button"
+              aria-current={index === step ? "step" : undefined}
+              disabled={!reachable}
+              title={reachable ? wizardStep.label : "Előbb töltse ki a korábbi lépéseket"}
+              onClick={() => goToStep(index)}
+              className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                index === step
+                  ? "bg-[#082817] text-[#F4EFDB]"
+                  : index < step
+                    ? "bg-[#E2E8DA] text-[#123B27] hover:bg-[#D3DCC9]"
+                    : "bg-[#FBF6E7] text-[#7A8479] hover:bg-[#F2ECD8]"
+              }`}
+            >
+              {index + 1}. {wizardStep.label}
+            </button>
+          );
+        })}
+      </nav>
 
       <div className="space-y-3 px-4 py-4">
-        {step === 0 ? (
+        <h3 ref={stepHeadingRef} tabIndex={-1} className="sr-only">
+          {step + 1}. lépés: {currentStep.label}
+        </h3>
+
+        {showStepErrors && !stepValidation.ok ? (
+          <div className="rounded-[6px] border border-[rgba(185,122,15,0.4)] bg-[#FAEFCF] px-3 py-2" role="alert">
+            <ul className="list-disc space-y-0.5 pl-4 text-[12px] text-[#7d530a]">
+              {stepValidation.errors.map((message) => (
+                <li key={message}>{message}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {currentStep.id === "client" ? (
           <div className="space-y-3">
-            <div className="flex gap-2">
+            <div className="flex gap-2" role="group" aria-label="Ügyfél módja">
               <AdminButton
                 size="sm"
                 variant={state.clientMode === "EXISTING" ? "primary" : "neutral"}
+                aria-pressed={state.clientMode === "EXISTING"}
                 onClick={() => patch({ clientMode: "EXISTING" })}
               >
                 Meglévő ügyfél
@@ -480,6 +601,7 @@ function NewMatterWizard() {
               <AdminButton
                 size="sm"
                 variant={state.clientMode === "NEW" ? "primary" : "neutral"}
+                aria-pressed={state.clientMode === "NEW"}
                 onClick={() => patch({ clientMode: "NEW", selectedClient: null })}
               >
                 Új ügyfél
@@ -493,6 +615,7 @@ function NewMatterWizard() {
                     className={inputClass}
                     placeholder="Ügyfél keresése (min. 2 karakter)…"
                     value={lookupQuery}
+                    aria-label="Ügyfél keresése"
                     onChange={(event) => setLookupQuery(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") void runLookup();
@@ -502,6 +625,11 @@ function NewMatterWizard() {
                     Keresés
                   </AdminButton>
                 </div>
+                {lookupError ? (
+                  <p className="text-[11.5px] text-[#8B2A2A]" role="alert">
+                    {lookupError}
+                  </p>
+                ) : null}
                 {candidates.length > 0 ? (
                   <ul className="space-y-1.5">
                     {candidates.map((candidate) => (
@@ -523,6 +651,7 @@ function NewMatterWizard() {
                         <AdminButton
                           size="xs"
                           variant={state.selectedClient?.id === candidate.id ? "primary" : "neutral"}
+                          aria-pressed={state.selectedClient?.id === candidate.id}
                           onClick={() => patch({ selectedClient: { id: candidate.id, displayName: candidate.displayName } })}
                         >
                           {state.selectedClient?.id === candidate.id ? "Kiválasztva" : "Kiválasztás"}
@@ -531,7 +660,7 @@ function NewMatterWizard() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-[11.5px] italic text-[#7A8479]">
+                  <p className="text-[11.5px] italic text-[#7A8479]" role="status">
                     {lookupBusy
                       ? "Keresés…"
                       : "Nincs találat vagy még nem futott keresés. A találat-egyezés nem duplikátum-megerősítés."}
@@ -543,18 +672,21 @@ function NewMatterWizard() {
                 <input
                   className={inputClass}
                   placeholder="Ügyfél neve *"
+                  aria-label="Új ügyfél neve (kötelező)"
                   value={state.newClientName}
                   onChange={(event) => patch({ newClientName: event.target.value })}
                 />
                 <input
                   className={inputClass}
                   placeholder="E-mail"
+                  aria-label="Új ügyfél e-mail címe"
                   value={state.newClientEmail}
                   onChange={(event) => patch({ newClientEmail: event.target.value })}
                 />
                 <input
                   className={inputClass}
                   placeholder="Telefon"
+                  aria-label="Új ügyfél telefonszáma"
                   value={state.newClientPhone}
                   onChange={(event) => patch({ newClientPhone: event.target.value })}
                 />
@@ -567,7 +699,7 @@ function NewMatterWizard() {
           </div>
         ) : null}
 
-        {step === 1 ? (
+        {currentStep.id === "matter" ? (
           <div className="grid gap-2 sm:grid-cols-2">
             <select
               className={inputClass}
@@ -584,6 +716,7 @@ function NewMatterWizard() {
             <input
               className={inputClass}
               placeholder="Ügyfél szerep (pl. MEGBÍZÓ, VEVŐ) *"
+              aria-label="Ügyfél szerep (kötelező)"
               value={state.clientRole}
               onChange={(event) => patch({ clientRole: event.target.value })}
             />
@@ -591,13 +724,14 @@ function NewMatterWizard() {
               className={`${inputClass} sm:col-span-2`}
               rows={3}
               placeholder="Rövid belső ügyleírás *"
+              aria-label="Rövid belső ügyleírás (kötelező)"
               value={state.description}
               onChange={(event) => patch({ description: event.target.value })}
             />
           </div>
         ) : null}
 
-        {step === 2 ? (
+        {currentStep.id === "responsibility" ? (
           <div className="space-y-2">
             <label className="block text-[11px] font-semibold text-[#3D4842]" htmlFor="intake-lawyer">
               Felelős ügyvéd (emberi döntés — nincs automatikus javaslat)
@@ -615,8 +749,16 @@ function NewMatterWizard() {
                 </option>
               ))}
             </select>
+            {usersError ? (
+              <p className="text-[11px] text-[#8B2A2A]" role="alert">
+                {usersError}{" "}
+                <button type="button" className="underline" onClick={loadUsers}>
+                  Újrapróbálás
+                </button>
+              </p>
+            ) : null}
             <p className="text-[11px] font-semibold text-[#3D4842]">Munkatársak</p>
-            <div className="grid gap-1 sm:grid-cols-2">
+            <div className="grid gap-1 sm:grid-cols-2" role="group" aria-label="Munkatársak kiválasztása">
               {users.map((user) => (
                 <label key={user.id} className="flex items-center gap-2 text-[12px] text-[#16201A]">
                   <input
@@ -637,7 +779,7 @@ function NewMatterWizard() {
           </div>
         ) : null}
 
-        {step === 3 ? (
+        {currentStep.id === "conflict" ? (
           <div className="rounded-[6px] border border-dashed border-[rgba(22,32,26,0.20)] bg-[#FBF6E7] px-3 py-3">
             <p className="text-[12.5px] font-semibold text-[#16201A]">Összeférhetetlenségi ellenőrzés — nem elérhető</p>
             <p className="mt-1 text-[12px] leading-relaxed text-[#3D4842]">
@@ -649,12 +791,12 @@ function NewMatterWizard() {
           </div>
         ) : null}
 
-        {step === 4 ? (
+        {currentStep.id === "openingPlan" ? (
           <div className="space-y-3">
             <p className="text-[11px] font-semibold text-[#3D4842]">
               Nyitó feladatok (csak a kifejezetten kiválasztottak jönnek létre — automatikus létrehozás nincs)
             </p>
-            <div className="grid gap-1 sm:grid-cols-2">
+            <div className="grid gap-1 sm:grid-cols-2" role="group" aria-label="Nyitó feladatok kiválasztása">
               {OPENING_TASK_OPTIONS.map((option) => (
                 <label key={option.code} className="flex items-start gap-2 text-[12px] text-[#16201A]">
                   <input
@@ -688,24 +830,18 @@ function NewMatterWizard() {
           </div>
         ) : null}
 
-        {step === 5 ? (
+        {currentStep.id === "review" ? (
           <div className="space-y-2 text-[12.5px] text-[#16201A]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7A8479]">Pontosan ez jön létre:</p>
             <ul className="space-y-1">
-              <li>
-                • Ügyfél:{" "}
-                {state.clientMode === "EXISTING"
-                  ? `meglévő — ${state.selectedClient?.displayName}`
-                  : `új — ${state.newClientName}`}
-              </li>
-              <li>
-                • Ügy: {MATTER_TYPES.find((matterType) => matterType.value === state.matterType)?.label} · szerep:{" "}
-                {state.clientRole || "—"}
-              </li>
-              <li>• Felelős ügyvéd: {users.find((user) => user.id === state.responsibleLawyerId)?.name || "később"}</li>
-              <li>• Munkatársak: {state.collaboratorIds.length} fő</li>
-              <li>• Nyitó feladatok: {state.selectedTaskCodes.length} db</li>
-              <li>• Kezdő határidő: {state.initialDeadline || "nincs"}</li>
+              {buildWizardSummary(state, {
+                matterTypeLabel: MATTER_TYPES.find((matterType) => matterType.value === state.matterType)?.label,
+                responsibleLawyerName: users.find((user) => user.id === state.responsibleLawyerId)?.name || null,
+              }).map((line) => (
+                <li key={line.label}>
+                  • {line.label}: {line.value}
+                </li>
+              ))}
             </ul>
             <p className="text-[11px] italic text-[#7A8479]">
               Nem elérhető és ezért nem jön létre: összeférhetetlenségi bejegyzés, megbízás-elfogadási állapot, felek /
@@ -717,15 +853,15 @@ function NewMatterWizard() {
       </div>
 
       <div className="flex items-center justify-between border-t border-[rgba(22,32,26,0.10)] px-4 py-3">
-        <AdminButton size="sm" variant="ghost" disabled={step === 0 || submitting} onClick={() => setStep((current) => Math.max(0, current - 1))}>
+        <AdminButton size="sm" variant="ghost" disabled={step === 0 || submitting} onClick={() => goToStep(step - 1)}>
           ← Vissza
         </AdminButton>
-        {step < WIZARD_STEPS.length - 1 ? (
-          <AdminButton size="sm" variant="primary" disabled={!stepReady} onClick={() => setStep((current) => current + 1)}>
+        {step < INTAKE_WIZARD_STEPS.length - 1 ? (
+          <AdminButton size="sm" variant="primary" disabled={submitting} onClick={goNext}>
             Tovább →
           </AdminButton>
         ) : (
-          <AdminButton size="sm" variant="primary" disabled={submitting || !clientReady || !matterReady} onClick={() => void submit()}>
+          <AdminButton size="sm" variant="primary" disabled={submitting || !canSubmitWizard(state)} onClick={() => void submit()}>
             {submitting ? "Létrehozás…" : "Létrehozás"}
           </AdminButton>
         )}
