@@ -300,8 +300,6 @@ export async function getCaseWorkItems(
         assignedById: true,
         documentId: true,
         sourceCommunicationId: true,
-        stuckReason: true,
-        stuckSince: true,
         assignedTo: { select: { id: true, name: true, email: true } },
         assignedBy: { select: { id: true, name: true, email: true } },
       },
@@ -361,7 +359,9 @@ export async function getCaseWorkItems(
   ]);
 
   const taskItems = tasks.map((task) => {
-    const workflowCategory = deriveWorkflowCategory(task.status, task.stuckReason);
+    const stuckReason = null;
+    const stuckSince = null;
+    const workflowCategory = deriveWorkflowCategory(task.status, stuckReason);
     const urgency = deriveUrgency(task.dueDate, now);
     const capabilities = deriveTaskCapabilities(task, currentUserId, currentUserRole);
     const item = {
@@ -388,11 +388,11 @@ export async function getCaseWorkItems(
           }
         : null,
       handoff: null,
-      blocker: task.stuckReason || task.stuckSince
+      blocker: stuckReason || stuckSince
         ? {
-            category: task.stuckReason ? String(task.stuckReason) : null,
-            safeLabel: task.stuckReason ? String(task.stuckReason).replace(/_/g, ' ') : 'Blokkolt feladat',
-            since: task.stuckSince ? task.stuckSince.toISOString() : null,
+            category: stuckReason ? String(stuckReason) : null,
+            safeLabel: stuckReason ? String(stuckReason).replace(/_/g, ' ') : 'Blokkolt feladat',
+            since: stuckSince ? stuckSince.toISOString() : null,
           }
         : null,
       source: task.documentId

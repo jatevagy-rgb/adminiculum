@@ -91,6 +91,28 @@ const taskRescheduleSelect = {
   updatedAt: true,
 } as const;
 
+const taskReadSelect = {
+  id: true,
+  title: true,
+  description: true,
+  taskType: true,
+  type: true,
+  status: true,
+  priority: true,
+  assignedToId: true,
+  assignedById: true,
+  documentId: true,
+  caseId: true,
+  workflowEvent: true,
+  matterId: true,
+  dueDate: true,
+  startedAt: true,
+  completedAt: true,
+  submittedAt: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
 async function getTaskForTransition(taskId: string) {
   return prisma.task.findUnique({
     where: { id: taskId },
@@ -340,7 +362,8 @@ export async function getCaseTasks(caseId: string, filters?: { status?: string; 
       ...(filters?.status && { status: filters.status as any }),
       ...(filters?.assignedTo && { assignedToId: filters.assignedTo })
     },
-    include: {
+    select: {
+      ...taskReadSelect,
       assignedTo: {
         select: { id: true, name: true, role: true }
       }
@@ -359,7 +382,8 @@ export async function getCaseTasks(caseId: string, filters?: { status?: string; 
 export async function getTask(taskId: string) {
   return prisma.task.findUnique({
     where: { id: taskId },
-    include: {
+    select: {
+      ...taskReadSelect,
       case: true,
       assignedTo: true
     }
@@ -832,7 +856,8 @@ export async function getUserTasks(userId: string, filters?: { status?: string; 
       ...(filters?.status && { status: filters.status as any }),
       ...(filters?.caseId && { caseId: filters.caseId })
     },
-    include: {
+    select: {
+      ...taskReadSelect,
       case: {
         select: { id: true, caseNumber: true, clientName: true, matterType: true }
       }

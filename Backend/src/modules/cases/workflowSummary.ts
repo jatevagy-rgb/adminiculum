@@ -334,8 +334,6 @@ export async function getCaseWorkflowSummary(
         createdAt: true,
         updatedAt: true,
         documentId: true,
-        stuckReason: true,
-        stuckSince: true,
       },
     }),
     prisma.document.findMany({

@@ -283,6 +283,15 @@ class CasesService {
     // Get active documents
     const documents = await prisma.document.findMany({
       where: { caseId },
+      select: {
+        id: true,
+        fileName: true,
+        documentType: true,
+        version: true,
+        folder: true,
+        spPath: true,
+        createdAt: true,
+      },
       orderBy: { createdAt: 'desc' }
     });
 

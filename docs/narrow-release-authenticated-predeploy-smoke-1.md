@@ -7,134 +7,211 @@ Deployment action: none
 
 ## Release commit
 
-- Expected release commit: `e321feb`
-- Observed release commit before smoke: `e321feb`
-- Baseline assembly commit: `27ab674`
-- Frontend accepted baseline: `dc0780e` (`UNIQUE_COMMIT_MATCH_HIGH_CONFIDENCE`)
-- Backend accepted baseline: `8ce26c0` (`EXACT_COMMIT_PROVEN_BY_OPERATOR_DEPLOY_RECORD_AND_ARTIFACT`)
-- Primary hotfix worktree was inspected only and not modified.
+- Starting release HEAD for this rerun: `e0d568d`.
+- This smoke reused the accepted component baselines and narrow release branch created from the human-approved baseline acceptance.
+- Frontend accepted baseline: `dc0780e` (`UNIQUE_COMMIT_MATCH_HIGH_CONFIDENCE`).
+- Backend accepted baseline: `8ce26c0` (`EXACT_COMMIT_PROVEN_BY_OPERATOR_DEPLOY_RECORD_AND_ARTIFACT`).
+- Primary hotfix worktree was inspected for prior smoke evidence and local env variable names only; accidental tracked edits in the primary checkout were reverted before this release commit.
 - Claude worktree/commit `24bc6c5` was not merged, cherry-picked, copied, or modified.
 
-## Authentication method
+## Prior successful auth method reused
 
-Intended method: repository-supported localhost development authentication through the frontend local-dev bootstrap and backend `POST /api/v1/auth/login` route.
+Prior successful local QA evidence was taken from `C:\Users\hubay\Documents\Adminiculum\docs\authenticated-visual-qa-and-editor-scroll-fix-1.md` and commit `6800b13`.
 
-Result: authentication was not established because the current shell did not contain a usable safe local `DATABASE_URL` or dev DB credential. Local PostgreSQL was detected on port `5432`, but standard local development credential probes failed. No further credential guessing was performed, no secrets were printed, and no env files were created or modified.
+The reused method was the repository-supported localhost development flow:
 
-Recorded values:
+- Backend: `http://localhost:3001`
+- Frontend: `http://localhost:3000`
+- Frontend local-dev auth enabled by process environment only.
+- Existing local development database on localhost.
+- No synthetic browser token, no localStorage profile injection, and no fake auth state.
 
-- Backend URL intended for smoke: `http://localhost:3001`
-- Frontend URL intended for smoke: `http://localhost:3000`
-- Authentication method: local development auth bootstrap
-- Authenticated display name: not available
-- Authentication established: no
+## Local environment source
+
+The release worktree still has no copied env files. For this smoke only, the current PowerShell process imported values from the primary checkout's local development env files:
+
+- `C:\Users\hubay\Documents\Adminiculum\Backend\.env`
+- `C:\Users\hubay\Documents\Adminiculum\Frontend\.env.local`
+
+Only variable presence and sanitized targets were recorded. No secret values were printed, copied, committed, or written into the release worktree.
+
+Sanitized environment proof:
+
+- `DATABASE_URL`: present.
+- Database host: `localhost`.
+- Database port: `5432`.
+- Database name: `adminiculum`.
+- Local DB target: yes.
+- `NEXT_PUBLIC_BACKEND_BASE_URL`: `http://localhost:3001`.
+- `NEXT_PUBLIC_ENABLE_LOCAL_DEV_AUTH`: `true`.
+- `ENABLE_CLIENT_PORTAL`: absent/off.
+- `ENABLE_OUTLOOK_IMPORT`: absent/off.
+
+## Local database safety
+
+A read-only local database proof was run against the sanitized `DATABASE_URL` target only.
+
+- Connected DB: `adminiculum`.
+- Connected address: localhost/loopback.
+- Connected port: `5432`.
+- Production DB targeted: no.
+- Clone DB targeted: no.
+- DDL/DML executed: no.
+- Prisma migrate/deploy/dev/db-push executed: no.
+- Secrets printed: no.
+
+## Authentication result
+
+Authentication succeeded through the local development flow.
+
+Observed authenticated shell:
+
+- Display name: `dr. HUBAY Gyula Máté`.
+- Role marker: `ADMIN`.
+- Auth error visible: no.
+- `GET /api/v1/auth/me`: `200` during browser session.
+- Unauthenticated `GET /api/v1/auth/me`: `401` in pre-smoke direct backend probe.
+
+## Runtime compatibility fixes made during smoke
+
+Authenticated smoke exposed production-compatible local DB drift in read-only workflow surfaces. The release branch was patched narrowly:
+
+- Agenda task filters now use only valid `TaskStatus` enum values for task queries.
+- Task list/detail read projections exclude future-only task intelligence columns absent from the production-compatible DB.
+- Case work-item and workflow-summary read projections no longer select absent task blocker columns; blocker output remains `null` unless backed by persisted fields.
+- Case summary document projection excludes absent document version-integer drift fields and selects only fields used by the response.
+
+No schema, migration, feature flag, auth, Azure, Client Portal, OpenAPI, CORS, package, or deployment changes were made.
 
 ## Backend startup
 
-Backend startup was not completed because the local development backend requires a valid `DATABASE_URL` for Prisma-backed auth and application routes. The shell-level boolean env check showed no `DATABASE_URL`, `JWT_SECRET`, local dev login env, or feature flag values set.
+Backend started from the release worktree using process-only local env.
 
-Read-only/local checks performed:
-
-- Confirmed local PostgreSQL listener on `5432`.
-- Attempted sanitized local connection probes only against localhost.
-- Did not connect to production.
-- Did not run migrations, `prisma db push`, manual SQL, or any DDL/DML.
-
-Backend health and authenticated route checks remain blocked until a safe local dev DB connection is supplied.
+- Command: `npm.cmd run dev` from `C:\Users\hubay\Documents\Adminiculum-release-editor-ops\Backend`.
+- URL: `http://localhost:3001`.
+- `/health`: `200`.
+- Startup validation: passed with local development configuration.
+- Production/Azure touched: no.
 
 ## Frontend startup
 
-Frontend authenticated browser startup was not performed because backend local authentication could not bootstrap. No browser session was faked and no localStorage token/profile was injected.
+Frontend started from the release worktree using process-only local env.
 
-Previously completed release artifact checks remain valid for commit `e321feb` before this smoke package:
-
-- Frontend TypeScript passed.
-- Frontend Next build passed.
-- `verify:prod-env` passed.
-- Strict frontend artifact scan passed.
+- Command: `npm.cmd run dev` from `C:\Users\hubay\Documents\Adminiculum-release-editor-ops\Frontend`.
+- URL: `http://localhost:3000`.
+- Authenticated shell rendered without auth error.
+- Known Next workspace-root warning observed; no runtime blocker.
 
 ## Route smoke matrix
 
-| Route | Navigation success | Visible title | Loading completion | State | Console/API result | Release status |
-| --- | --- | --- | --- | --- | --- | --- |
-| `/` | Not run | Not captured | Not captured | Auth blocked | Backend local auth unavailable | BLOCKED |
-| `/cases` | Not run | Not captured | Not captured | Auth blocked | Backend local auth unavailable | BLOCKED |
-| accessible Case Detail | Not run | Not captured | Not captured | Auth blocked | Backend local auth unavailable | BLOCKED |
-| `/tasks` | Not run | Not captured | Not captured | Auth blocked | Backend local auth unavailable | BLOCKED |
-| `/deadlines` | Not run | Not captured | Not captured | Auth blocked | Backend local auth unavailable | BLOCKED |
-| `/workload` | Not run | Not captured | Not captured | Auth blocked | Backend local auth unavailable | BLOCKED |
-| `/time-entries` | Not run | Not captured | Not captured | Auth blocked | Backend local auth unavailable | BLOCKED |
-| `/intake` | Not run | Not captured | Not captured | Auth blocked | Backend local auth unavailable | BLOCKED |
-| `/litigation-workspace` | Not run | Not captured | Not captured | Auth blocked | Backend local auth unavailable | BLOCKED |
-| `/documents/new/edit` | Not run | Not captured | Not captured | Auth blocked | Backend local auth unavailable | BLOCKED |
-| `/documents/compare` | Not run | Not captured | Not captured | Auth blocked | Backend local auth unavailable | BLOCKED |
-| `/notifications` | Not run | Not captured | Not captured | Auth blocked | Backend local auth unavailable | BLOCKED |
-| `/clause-library` | Not run | Not captured | Not captured | Auth blocked | Backend local auth unavailable | BLOCKED |
-| `/portal` | Not run | Not captured | Not captured | Auth blocked | Backend local auth unavailable | BLOCKED |
+Final clean Playwright smoke output directory:
 
-## Dashboard and Case Center
+`C:\Users\hubay\AppData\Local\Temp\adminiculum-release-smoke-playwright-1784121057185`
 
-Not executed because authenticated local shell could not be established. No Client Portal content was observed or exposed.
-
-## Tasks and handoff
-
-Not executed because authenticated local shell could not be established. No task mutation was performed.
-
-## Deadlines and agenda
-
-Not executed because authenticated local shell could not be established. No screenshot was captured.
-
-## Workload and time entries
-
-Not executed because authenticated local shell could not be established. No screenshot was captured.
-
-## Intake
-
-Not executed because authenticated local shell could not be established. The parked Claude intake hardening commit `24bc6c5` remains `PARKED_FOR_FUTURE_RELEASE` and was not integrated.
-
-## Litigation workspace
-
-Not executed because authenticated local shell could not be established.
+| Route | Result | Authenticated shell | Console/API errors | Notes |
+| --- | --- | --- | --- | --- |
+| `/` | PASS | yes | 0 | Dashboard rendered with `Itt folytasd`. |
+| `/cases` | PASS | yes | 0 | Case list rendered. |
+| accessible Case Detail | SKIPPED | n/a | n/a | No case detail anchor was selected by the smoke script. |
+| `/tasks` | PASS | yes | 0 | Task page rendered after compatibility fixes. |
+| `/deadlines` | PASS | yes | 0 | Agenda page rendered after compatibility fixes. |
+| `/workload` | PASS | yes | 0 | Workload page rendered. |
+| `/time-entries` | PASS | yes | 0 | Time entries page rendered. |
+| `/intake` | PASS | yes | 0 | Intake page rendered; no mutation. |
+| `/litigation-workspace` | PASS | yes | 0 | Workspace rendered. |
+| `/documents/new/edit` | PASS | yes | 0 | Editor rendered. |
+| `/documents/compare` | PASS | yes | 0 | Compare page rendered. |
+| `/notifications` | PASS | yes | 0 | Communication workspace rendered. |
+| `/clause-library` | PASS | yes | 0 | Clause library rendered. |
+| `/portal` | PARKED | no | expected 404 | No Client Portal frontend route exposed in this release. |
 
 ## Editor top/middle/bottom
 
-Not executed because authenticated local shell could not be established. No synthetic auth state was injected.
+Editor smoke used `/documents/new/edit` at `1366x768` and `1440x900`.
 
-| Position | Document viewport `scrollTop` | `window.scrollY` | Result |
-| --- | ---: | ---: | --- |
-| Top | Not captured | Not captured | BLOCKED |
-| Middle | Not captured | Not captured | BLOCKED |
-| Bottom | Not captured | Not captured | BLOCKED |
+| Viewport | Position | Document scrollTop | Window scrollY | Header | Toolbar | Mode warning | Result |
+| --- | --- | ---: | ---: | --- | --- | --- | --- |
+| 1366x768 | Top | 0 | 0 | visible | visible | visible | PASS |
+| 1366x768 | Middle | 2039 | 0 | visible | visible | visible | PASS |
+| 1366x768 | Bottom | 4078 | 0 | visible | visible | visible | PASS |
+| 1440x900 | Top | 0 | 0 | visible | visible | visible | PASS |
+| 1440x900 | Middle | 1973 | 0 | visible | visible | visible | PASS |
+| 1440x900 | Bottom | 3946 | 0 | visible | visible | visible | PASS |
 
-## Document compare
+No editor save/export/review/comment mutation was performed.
 
-Not executed because authenticated local shell could not be established.
+## Operational pages
 
-## Comments and review
+- `/deadlines`: rendered without agenda API 500 after enum filter fix.
+- `/workload`: rendered without console/API errors.
+- `/time-entries`: rendered without console/API errors.
+- `/tasks`: rendered without task/work-item API 500 after projection fixes.
 
-Not executed because authenticated local shell could not be established. No comment mutation was performed.
+## Intake
+
+`/intake` rendered successfully. No intake mutation was performed. Parked Claude intake commit `24bc6c5` remains absent from the release branch.
 
 ## Clause library
 
-Not executed because authenticated local shell could not be established. No feature flags were changed.
+`/clause-library` rendered successfully. No feature flags were changed.
 
 ## Client Portal
 
-Not executed in browser because authenticated local shell could not be established. No portal code was changed. Existing release diff checks still show no Client Portal expansion in the release branch.
+`/portal` returned the expected frontend 404 parked state. No Client Portal runtime, route expansion, or feature enablement was introduced.
 
 ## Network and console audit
 
-Browser network and console audit was not performed because authenticated startup was blocked before browser verification. No Graph, SharePoint, AI, n8n, workspaceText, raw document-content, or Client Portal API calls were made by this smoke run.
+Final smoke forbidden-resource scan returned zero matches for:
+
+- Graph/Microsoft Graph.
+- SharePoint.
+- OpenAI/API provider calls.
+- n8n.
+- `workspaceText` persistence.
+- production Azure backend URLs.
 
 ## Screenshots inspected
 
-No screenshots were captured because the authenticated browser smoke did not start.
+Screenshots captured in:
+
+`C:\Users\hubay\AppData\Local\Temp\adminiculum-release-smoke-playwright-1784121057185`
+
+Key files:
+
+- `deadlines-1366.png`
+- `time-entries-1366.png`
+- `clause-library-1366.png`
+- `editor-1366x768-top.png`
+- `editor-1366x768-middle.png`
+- `editor-1366x768-bottom.png`
+- `editor-1440x900-top.png`
+- `editor-1440x900-middle.png`
+- `editor-1440x900-bottom.png`
+
+## Validation
+
+Validation commands run after the compatibility fixes:
+
+- `git status` / branch preflight: release branch `release/editor-ops-workflow-1`, starting HEAD `e0d568d`.
+- `git diff --check`: passed with Windows LF/CRLF warnings only.
+- `cd Backend && npx.cmd prisma validate`: passed with process-scoped placeholder `DATABASE_URL` for schema parsing only.
+- `cd Backend && npx.cmd tsc --noEmit`: passed.
+- `cd Backend && npm.cmd test -- --runInBand`: passed, 38 suites / 400 tests.
+- `cd Backend && npm.cmd run build`: passed.
+- `cd Backend && npm.cmd audit --json`: completed with existing dependency findings: 2 low, 9 moderate, 7 high, 1 critical.
+- `cd Frontend && npx.cmd tsc --noEmit`: passed.
+- `cd Frontend && npm.cmd run build`: passed after stopping local dev server; known `<img>` warning in `ClientHouseStylePanel.tsx` and workspace-root warning observed.
+- `cd Frontend && npm.cmd run verify:prod-env`: passed.
+- Clean production-safe artifact verification: `.next` removed, process-only public production env injected, build passed, `npm.cmd run verify:prod-env` passed, strict URL/API-target artifact scan passed.
+- `cd Frontend && npm.cmd audit --json`: completed with 4 moderate findings.
 
 ## Release blockers
 
-Release blocker found: `NO_GO_AUTHENTICATED_SMOKE_BLOCKER`.
+The prior blocker `NO_GO_AUTHENTICATED_SMOKE_BLOCKER` is resolved.
 
-The blocker is environmental/authentication setup for local smoke, not an observed runtime regression in the release branch. A safe local development database connection is required to run the repository-supported local auth bootstrap honestly.
+Remaining approval item:
+
+- Dependency audit findings are present and appear pre-existing to this narrow release; backend/frontend package files were not changed in this smoke fix. Deployment approver should explicitly acknowledge these findings.
 
 ## Parked Claude intake commit
 
@@ -143,28 +220,8 @@ The blocker is environmental/authentication setup for local smoke, not an observ
 - Status: `PARKED_FOR_FUTURE_RELEASE`
 - Release branch ancestry check: not present in `release/editor-ops-workflow-1`
 
-## Validation
-
-Validation commands run after the blocked smoke:
-
-- `git status` / branch preflight: clean at start on `release/editor-ops-workflow-1`, HEAD `e321feb`.
-- `git merge-base --is-ancestor 24bc6c5 HEAD`: not ancestor; Claude commit absent.
-- `cd Backend && npx.cmd prisma validate`: passed with process-scoped placeholder `DATABASE_URL` for schema parsing only.
-- `cd Backend && npx.cmd tsc --noEmit`: passed.
-- `cd Backend && npm.cmd test -- --runInBand`: passed, 38 suites / 400 tests.
-- `cd Backend && npm.cmd run build`: passed.
-- `cd Backend && npm.cmd audit --json`: completed with existing dependency findings: 2 low, 9 moderate, 7 high, 1 critical.
-- `cd Frontend && npx.cmd tsc --noEmit`: passed.
-- `cd Frontend && npm.cmd run build`: passed; known `<img>` warning in `ClientHouseStylePanel.tsx` and workspace-root warning observed.
-- `cd Frontend && npm.cmd audit --json`: completed with 4 moderate findings.
-- Clean production-safe artifact verification: `.next` removed, process-only public production env injected, build passed, `npm.cmd run verify:prod-env` passed, strict URL/API-target artifact scan passed.
-- `git diff --check`: passed after documentation update.
-- `git diff --cached --check`: passed after explicit staging.
-
-This document records the authenticated smoke blocker and does not authorize deployment.
-
 ## Deployment recommendation
 
-`NO_GO_AUTHENTICATED_SMOKE_BLOCKER`
+`GO_FOR_EXPLICIT_PRODUCTION_DEPLOYMENT_APPROVAL`
 
-Do not deploy from this smoke package. Re-run authenticated local predeploy smoke after supplying a safe local development `DATABASE_URL`/credential path without printing secrets or modifying env files.
+This document does not authorize deployment. It records that the authenticated local predeploy smoke gate has been completed and the narrow release is ready for an explicit deployment-approval prompt, subject to human acknowledgement of pre-existing dependency audit findings.

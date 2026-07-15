@@ -50,6 +50,7 @@ const MAX_RANGE_DAYS = 45;
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 100;
 const CLOSED_STATUSES = new Set<WorkflowDeadlineStatus>(['COMPLETED', 'CANCELLED', 'SUPERSEDED']);
+const CLOSED_TASK_STATUS_VALUES = ['COMPLETED', 'DONE', 'CANCELLED'];
 
 function applicationTimezone(): string {
   return process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -184,9 +185,9 @@ function displayUser(user?: { id: string; name?: string | null; email?: string |
 function taskStatusFilter(status: 'OPEN' | 'COMPLETED' | 'ALL') {
   if (status === 'ALL') return {};
   if (status === 'COMPLETED') {
-    return { status: { in: ['COMPLETED', 'DONE', 'APPROVED', 'CANCELLED'] } as any };
+    return { status: { in: CLOSED_TASK_STATUS_VALUES } as any };
   }
-  return { status: { notIn: ['COMPLETED', 'DONE', 'APPROVED', 'REJECTED', 'DECLINED', 'CANCELLED', 'ARCHIVED'] } as any };
+  return { status: { notIn: CLOSED_TASK_STATUS_VALUES } as any };
 }
 
 function caseStatusFilter(status: 'OPEN' | 'COMPLETED' | 'ALL') {
