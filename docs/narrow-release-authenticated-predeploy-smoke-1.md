@@ -168,5 +168,3 @@ This document records the authenticated smoke blocker and does not authorize dep
 `NO_GO_AUTHENTICATED_SMOKE_BLOCKER`
 
 Do not deploy from this smoke package. Re-run authenticated local predeploy smoke after supplying a safe local development `DATABASE_URL`/credential path without printing secrets or modifying env files.
-
-
