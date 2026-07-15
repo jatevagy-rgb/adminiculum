@@ -123,6 +123,19 @@ No worktree was created.
 
 Reason: exact deployed baseline commit is not proven.
 
+## Forensic Update — 2026-07-15
+
+`ACTIVE-ARTIFACT-GIT-BASELINE-FORENSICS-1` narrowed the active artifact mapping:
+
+| Component | Current reconstructed baseline evidence | Release-branch implication |
+|---|---|---|
+| Frontend | Unique deployment-window source tuple match: `dc0780e`; no embedded git SHA. | Candidate baseline is high-confidence but still not exact. |
+| Backend | Runtime-equivalent range including `2cf1594` and `8ce26c0`; active deployment timestamp falls after both and before later feature commits. | Candidate baseline range is narrowed but not unique. |
+
+No release branch or worktree was created by the forensic task. If a human explicitly accepts the reconstructed baseline evidence, the next release-planning task may choose a baseline strategy using frontend candidate `dc0780e` and backend range `2cf1594` / `8ce26c0`. Without that approval or stronger provenance, branch creation remains blocked.
+
+Future narrow-release planning should also add deploy-time provenance, such as an embedded build-info file containing `GIT_SHA`, source branch, build timestamp, package-lock hash, and artifact hash.
+
 ## Safety Confirmation
 
 - `hotfix/runtime-shape-20260308` was not rewritten.

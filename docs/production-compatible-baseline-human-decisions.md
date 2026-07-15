@@ -913,3 +913,12 @@ were not touched.
 - Current branch contains protected schema/migration/package changes in the candidate range, including CP-SCHEMA-1 artifacts, so it must not be treated as a simple editor/ops/workflow release branch.
 - Production apply readiness remains **blocked**; CP-SCHEMA-1 remains **blocked**; no DB apply, runtime change, deployment, Azure change, or feature enablement was authorized by this readiness decision.
 - Required before future GO: authoritative deployed frontend/backend commit proof, security acceptance/remediation for audit findings, explicit environment/feature-flag confirmation, and a narrowed or separately approved release branch.
+
+## ACTIVE-ARTIFACT-GIT-BASELINE-FORENSICS-1 — 2026-07-15
+
+- Active artifact forensic reconstruction downloaded read-only Kudu `wwwroot` snapshots for active frontend deployment `d21de1cb-46a1-4994-8bcd-45749c42d14e` and backend deployment `f3129580-9574-429a-a1b3-f078b1319cd7` into a local temp directory outside the repo.
+- Frontend baseline evidence is now `UNIQUE_COMMIT_MATCH_HIGH_CONFIDENCE` for `dc0780e`, but not exact because the artifact contains no embedded git SHA.
+- Backend baseline evidence is `COMMIT_RANGE_NARROWED`, with runtime-equivalent candidates including `2cf1594` and `8ce26c0`; no unique backend source commit is proven.
+- Decision: **no release branch yet** unless a human explicitly accepts the reconstructed frontend commit and backend range, or stronger provenance is found.
+- Provenance hardening is required for future deploys: embed build metadata with git SHA, source branch, package-lock hash, artifact hash, build timestamp, and deployment ID.
+- No deployment, restart, Azure config change, DB query, migration, runtime change, schema change, release branch, or worktree creation occurred.

@@ -165,6 +165,23 @@ Reason:
 
 Per task rule: **do not create a release branch until the active deployed baseline is proven**.
 
+## Forensic Reconstruction Update — 2026-07-15
+
+`ACTIVE-ARTIFACT-GIT-BASELINE-FORENSICS-1` performed a deeper read-only artifact fingerprint pass after this initial audit. It downloaded active `wwwroot` snapshots from Kudu into a local temp directory outside the repo, hashed the ZIPs, inspected safe package/manifest/source markers, and compared normalized deployed source tuples against repository history.
+
+Updated findings:
+
+| Component | Active deployment ID | Updated repository mapping | Updated confidence |
+|---|---|---|---|
+| Frontend | `d21de1cb-46a1-4994-8bcd-45749c42d14e` | Unique deployment-window source tuple match: `dc0780e` | `UNIQUE_COMMIT_MATCH_HIGH_CONFIDENCE`, not exact |
+| Backend | `f3129580-9574-429a-a1b3-f078b1319cd7` | Runtime-equivalent candidate range including `2cf1594` and `8ce26c0` | `COMMIT_RANGE_NARROWED`, not unique |
+
+The frontend is now a high-confidence unique reconstructed match for practical comparison, but no embedded git SHA was present in the artifact. The backend remains a narrowed range because runtime-equivalent docs-only commits can produce indistinguishable backend artifacts.
+
+Overall release-baseline posture after the forensic update: `active_artifact_git_baseline_commit_ranges_narrowed`.
+
+Release branch creation remains **blocked** unless a human explicitly accepts the reconstructed frontend commit and backend candidate range as sufficient for a narrow release baseline, or a stronger deploy provenance artifact is found.
+
 ## Required Next Evidence To Unblock
 
 One of the following is needed:
