@@ -12,11 +12,13 @@
   "dependencies": {
     "@azure/msal-browser": "^4.26.1",
     "@azure/msal-react": "^3.0.29",
+    "@tiptap/extension-table": "^3.26.0",
     "@tiptap/extension-underline": "^3.26.0",
     "@tiptap/pm": "^3.26.0",
     "@tiptap/react": "^3.26.0",
     "@tiptap/starter-kit": "^3.26.0",
-    "next": "15.2.4",
+    "jszip": "^3.10.1",
+    "next": "^15.5.20",
     "react": "19.2.1",
     "react-dom": "19.2.1"
   },
@@ -26,9 +28,9 @@
     "@types/react-dom": "^19.0.4",
     "autoprefixer": "^10.4.27",
     "eslint": "^8.46.0",
-    "eslint-config-next": "15.2.4",
+    "eslint-config-next": "^15.5.20",
     "playwright": "^1.59.1",
-    "postcss": "^8.5.8",
+    "postcss": "^8.5.10",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.2"
   },

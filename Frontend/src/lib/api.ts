@@ -276,6 +276,735 @@ export async function getCaseById(caseId: string): Promise<CaseListItem> {
   return fetchApi<CaseListItem>(`/cases/${caseId}`);
 }
 
+export type CaseWorkflowNextActionKind =
+  | 'OVERDUE_TASK'
+  | 'HANDOFF_REVIEW'
+  | 'DOCUMENT_REVIEW'
+  | 'DUE_SOON_TASK'
+  | 'UPCOMING_DEADLINE'
+  | 'BLOCKED_ITEM'
+  | 'OPEN_TASK';
+
+export interface CaseWorkflowSummary {
+  caseId: string;
+  generatedAt: string;
+  case: {
+    displayName: string;
+    reference?: string | null;
+    status?: string | null;
+    clientRole?: string | null;
+    updatedAt?: string | null;
+  };
+  nextAction: {
+    kind: CaseWorkflowNextActionKind;
+    title: string;
+    explanation: string;
+    dueAt?: string | null;
+    sourceType: 'TASK' | 'DEADLINE' | 'DOCUMENT_REVIEW' | 'HANDOFF';
+    sourceId?: string | null;
+    href?: string | null;
+    scope: 'MY_WORK' | 'CASE';
+  } | null;
+  waitingOn: {
+    category: 'CLIENT' | 'COUNTERPARTY' | 'AUTHORITY' | 'INTERNAL' | 'UNKNOWN';
+    label: string;
+    since?: string | null;
+    sourceType?: string | null;
+    sourceId?: string | null;
+  } | null;
+  nextDeadline: {
+    id: string;
+    title: string;
+    dueAt: string;
+    urgency: 'OVERDUE' | 'TODAY' | 'SOON' | 'LATER';
+    href?: string | null;
+  } | null;
+  taskStats: {
+    open: number;
+    overdue: number;
+    dueSoon: number;
+    blocked: number;
+    review: number;
+  };
+  latestCommunication: {
+    id: string;
+    subject?: string | null;
+    contentPreview?: string | null;
+    occurredAt?: string | null;
+    direction?: string | null;
+    attachmentCount?: number;
+    sourceTaskCount?: number;
+    href?: string | null;
+  } | null;
+  activeReview: {
+    id: string;
+    documentId?: string | null;
+    displayName: string;
+    status?: string | null;
+    responsibleName?: string | null;
+    updatedAt?: string | null;
+    href?: string | null;
+  } | null;
+  responsibility: {
+    responsibleLawyer?: {
+      id: string;
+      displayName: string;
+    } | null;
+    collaborators: Array<{
+      id: string;
+      displayName: string;
+      role?: string | null;
+    }>;
+  };
+  handoff: {
+    id: string;
+    status: string;
+    fromName?: string | null;
+    toName?: string | null;
+    updatedAt?: string | null;
+    href?: string | null;
+  } | null;
+  availability: {
+    tasks: boolean;
+    deadlines: boolean;
+    communications: boolean;
+    reviews: boolean;
+    collaborators: boolean;
+    handoff: boolean;
+  };
+}
+
+export async function getCaseWorkflowSummary(caseId: string): Promise<CaseWorkflowSummary> {
+  return fetchApi<CaseWorkflowSummary>(`/cases/${caseId}/workflow-summary`);
+}
+
+export interface CaseResponsibilityResponse {
+  case: {
+    id: string;
+    caseNumber: string;
+    title: string;
+    status: string;
+    deadline: string | null;
+    matterId: string | null;
+  };
+  responsibleLawyer: { id: string; name: string | null; email: string | null; role: string | null } | null;
+  createdBy: { id: string; name: string | null; email: string | null; role: string | null } | null;
+  collaborators: CaseCollaborator[];
+  work: {
+    openTaskCount: number;
+    overdueTaskCount: number;
+    dueSoonTaskCount: number;
+    reviewTaskCount: number;
+    blockedTaskCount: number;
+    assignedPeople: Array<{
+      user: { id: string; name: string | null; email: string | null; role: string | null };
+      openTaskCount: number;
+      overdueTaskCount: number;
+      dueSoonTaskCount: number;
+    }>;
+  };
+  time: {
+    supported: boolean;
+    matterId: string | null;
+    totalMinutes: number | null;
+    currentUserMinutes: number;
+    activeTimerSupported: boolean;
+  };
+  capabilities: {
+    canChangeResponsibleLawyer: boolean;
+    canAddCollaborator: boolean;
+    canRemoveCollaborator: boolean;
+    canChangeCollaboratorRole: boolean;
+    canAssignWork: boolean;
+    canRecordTime: boolean;
+    canViewCaseTime: boolean;
+    canViewTeamWorkload: boolean;
+  };
+}
+
+export async function getCaseResponsibility(caseId: string): Promise<CaseResponsibilityResponse> {
+  return fetchApi<CaseResponsibilityResponse>(`/cases/${caseId}/responsibility`);
+}
+
+export interface CaseWorkItemCapabilities {
+  canStart: boolean;
+  canComplete: boolean;
+  canBlock: boolean;
+  canUnblock: boolean;
+  canSubmitForReview: boolean;
+  canApprove: boolean;
+  canReturnForCorrection: boolean;
+  canCreateHandoff: boolean;
+  canAcceptHandoff: boolean;
+  canReturnHandoff: boolean;
+  canOpenSource: boolean;
+}
+
+export interface CaseWorkItem {
+  id: string;
+  type: 'TASK' | 'REVIEW' | 'HANDOFF' | 'DOCUMENT' | 'COMMUNICATION';
+  title: string;
+  safeDescription?: string | null;
+  status: string;
+  workflowCategory: 'OPEN' | 'IN_PROGRESS' | 'BLOCKED' | 'WAITING' | 'REVIEW' | 'HANDOFF' | 'COMPLETED';
+  priority?: string | null;
+  dueAt?: string | null;
+  completedAt?: string | null;
+  updatedAt?: string | null;
+  caseId: string;
+  isMine: boolean;
+  assignee?: { id: string; displayName: string } | null;
+  createdBy?: { id: string; displayName: string } | null;
+  review?: {
+    reviewer?: { id: string; displayName: string } | null;
+    state?: string | null;
+    requestedAt?: string | null;
+    reviewedAt?: string | null;
+  } | null;
+  handoff?: {
+    id: string;
+    status: string;
+    from?: { id: string; displayName: string } | null;
+    to?: { id: string; displayName: string } | null;
+    updatedAt?: string | null;
+  } | null;
+  blocker?: {
+    category?: string | null;
+    safeLabel?: string | null;
+    since?: string | null;
+  } | null;
+  source?: {
+    type?: 'DOCUMENT' | 'COMMUNICATION' | 'DEADLINE' | 'CASE' | null;
+    id?: string | null;
+    displayName?: string | null;
+    href?: string | null;
+  } | null;
+  urgency: 'OVERDUE' | 'TODAY' | 'SOON' | 'LATER' | 'NONE';
+  capabilities: CaseWorkItemCapabilities;
+  href?: string | null;
+}
+
+export interface CaseWorkItemsResponse {
+  caseId: string;
+  generatedAt: string;
+  summary: {
+    open: number;
+    mine: number;
+    overdue: number;
+    dueSoon: number;
+    blocked: number;
+    waiting: number;
+    reviewRequired: number;
+    handoffRequired: number;
+    completedRecently: number;
+  };
+  items: CaseWorkItem[];
+  availability: {
+    taskTransitions: boolean;
+    blockerState: boolean;
+    waitingState: boolean;
+    reviewWorkflow: boolean;
+    handoffWorkflow: boolean;
+  };
+}
+
+export async function getCaseWorkItems(caseId: string): Promise<CaseWorkItemsResponse> {
+  return fetchApi<CaseWorkItemsResponse>(`/cases/${caseId}/work-items`);
+}
+
+export interface CaseActivityItem {
+  id: string;
+  kind: 'TASK' | 'DOCUMENT' | 'COMMUNICATION' | 'TIMELINE';
+  source: 'tasks' | 'documents' | 'communications' | 'timeline_events';
+  title: string;
+  safeDescription: string | null;
+  occurredAt: string;
+  caseId: string;
+  documentId?: string | null;
+  communicationId?: string | null;
+  taskId?: string | null;
+  href?: string | null;
+  meta: {
+    status?: string | null;
+    type?: string | null;
+    attachmentCount?: number;
+    sourceTaskCount?: number;
+  };
+}
+
+export interface CaseActivityResponse {
+  caseId: string;
+  generatedAt: string;
+  pagination: {
+    limit: number;
+    offset: number;
+    returned: number;
+  };
+  items: CaseActivityItem[];
+  privacy: {
+    rawDocumentTextIncluded: false;
+    rawCommunicationBodyIncluded: false;
+    attachmentBytesIncluded: false;
+  };
+}
+
+export async function getCaseActivity(caseId: string): Promise<CaseActivityResponse> {
+  return fetchApi<CaseActivityResponse>(`/cases/${caseId}/activity?limit=30`);
+}
+
+// ===========================================================================
+// Case lifecycle + litigation dossier (WORKFLOW-CORE-LITIGATION-CASE-LIFECYCLE-1)
+// ===========================================================================
+
+export type CaseLifecycleCategory = 'INTAKE' | 'ACTIVE' | 'ON_HOLD' | 'CLOSING' | 'CLOSED' | 'ARCHIVED';
+
+export interface CaseClosureBlocker {
+  code:
+    | 'OPEN_TASKS'
+    | 'OVERDUE_TASKS'
+    | 'ACTIVE_REVIEW'
+    | 'OPEN_DEADLINES'
+    | 'ACTIVE_HANDOFF'
+    | 'UNRESOLVED_LITIGATION_ITEM'
+    | 'MISSING_RESPONSIBLE_LAWYER';
+  label: string;
+  count?: number;
+  href?: string | null;
+}
+
+export interface CaseLifecycleResponse {
+  caseId: string;
+  generatedAt: string;
+  status: string;
+  lifecycleCategory: CaseLifecycleCategory;
+  openedAt?: string | null;
+  closedAt?: string | null;
+  archivedAt?: string | null;
+  updatedAt?: string | null;
+  responsibleLawyer?: { id: string; displayName: string } | null;
+  blockers: CaseClosureBlocker[];
+  closureReadiness: { ready: boolean; reasons: string[] };
+  capabilities: {
+    canChangeStatus: boolean;
+    canStartClosing: boolean;
+    canClose: boolean;
+    canReopen: boolean;
+    canArchive: boolean;
+  };
+  availability: {
+    closingState: boolean;
+    closedAt: boolean;
+    archivedAt: boolean;
+    litigationBlockers: boolean;
+    closureChecklist: boolean;
+  };
+}
+
+export async function getCaseLifecycle(caseId: string): Promise<CaseLifecycleResponse> {
+  return fetchApi<CaseLifecycleResponse>(`/cases/${caseId}/lifecycle`);
+}
+
+export async function closeCaseLifecycle(caseId: string): Promise<CaseLifecycleResponse> {
+  return fetchApi<CaseLifecycleResponse>(`/cases/${caseId}/close`, { method: 'POST' });
+}
+
+export async function reopenCaseLifecycle(caseId: string): Promise<CaseLifecycleResponse> {
+  return fetchApi<CaseLifecycleResponse>(`/cases/${caseId}/reopen`, { method: 'POST' });
+}
+
+export async function archiveCaseLifecycle(caseId: string): Promise<CaseLifecycleResponse> {
+  return fetchApi<CaseLifecycleResponse>(`/cases/${caseId}/archive`, { method: 'POST' });
+}
+
+export interface LitigationDossierEvidence {
+  id: string;
+  displayName: string;
+  type?: string | null;
+  status?: string | null;
+  relation: 'SUPPORTING' | 'CONTRADICTING' | 'NEUTRAL' | 'UNCLASSIFIED';
+  issueIds: string[];
+  document?: { id: string; displayName: string; href?: string | null } | null;
+  capabilities: {
+    canOpen: boolean;
+    canCompare: boolean;
+    canCreateTask: boolean;
+    canLinkToIssue: boolean;
+    canUnlinkFromIssue: boolean;
+  };
+}
+
+export interface LitigationDossierPleading {
+  id: string;
+  displayName: string;
+  type?: string | null;
+  status?: string | null;
+  filedAt?: string | null;
+  updatedAt?: string | null;
+  relatedDocumentId?: string | null;
+  relatedTaskIds: string[];
+  capabilities: {
+    canOpen: boolean;
+    canCompare: boolean;
+    canCreateReviewTask: boolean;
+    canSubmitForReview: boolean;
+    canApprove: boolean;
+    canReturnForCorrection: boolean;
+    canMarkFiled: boolean;
+    canSupersede: boolean;
+  };
+}
+
+export interface LitigationDossierProceduralDate {
+  id: string;
+  title: string;
+  dueAt: string;
+  urgency: string;
+  sourceType: string;
+  href?: string | null;
+}
+
+export interface LitigationDossierResponse {
+  caseId: string;
+  generatedAt: string;
+  summary: {
+    activeIssues: number;
+    unresolvedIssues: number;
+    evidenceItems: number;
+    pleadingsInDraft: number;
+    pleadingsInReview: number;
+    filedPleadings: number;
+    upcomingProceduralDates: number;
+  };
+  issues: unknown[];
+  evidence: LitigationDossierEvidence[];
+  pleadings: LitigationDossierPleading[];
+  proceduralDates: LitigationDossierProceduralDate[];
+  availability: {
+    issues: boolean;
+    evidence: boolean;
+    issueEvidenceRelations: boolean;
+    pleadings: boolean;
+    filingStatus: boolean;
+    proceduralDates: boolean;
+    parties: boolean;
+    burdenOfProof: boolean;
+  };
+}
+
+export async function getCaseLitigationDossier(caseId: string): Promise<LitigationDossierResponse> {
+  return fetchApi<LitigationDossierResponse>(`/cases/${caseId}/litigation-dossier`);
+}
+
+// ===========================================================================
+// Intake & matter opening (WORKFLOW-CORE-INTAKE-MATTER-OPENING-1)
+// ===========================================================================
+
+export interface IntakeChecklistItem {
+  code:
+    | 'CLIENT_SELECTED'
+    | 'CLIENT_IDENTITY'
+    | 'CLIENT_ROLE'
+    | 'RESPONSIBLE_LAWYER'
+    | 'CONFLICT_REVIEW'
+    | 'MATTER_DESCRIPTION'
+    | 'INITIAL_TASKS'
+    | 'INITIAL_DEADLINE';
+  label: string;
+  required: boolean;
+  complete: boolean;
+  available: boolean;
+  href?: string | null;
+}
+
+export interface IntakeBlockerItem {
+  code: string;
+  label: string;
+  href?: string | null;
+}
+
+export interface IntakeReadinessSummary {
+  readyForActivation: boolean;
+  completedRequiredItems: number;
+  totalRequiredItems: number;
+}
+
+export interface MatterIntakeReadinessResponse {
+  caseId: string;
+  generatedAt: string;
+  case: {
+    displayName: string;
+    reference?: string | null;
+    status: string;
+    clientRole?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+  };
+  client: {
+    id: string;
+    displayName: string;
+    type?: string | null;
+    identityStatus?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  } | null;
+  responsibility: {
+    responsibleLawyer?: { id: string; displayName: string } | null;
+    collaborators: Array<{ id: string; displayName: string; role?: string | null }>;
+  };
+  conflictReview: {
+    status: 'UNAVAILABLE' | 'NOT_RECORDED' | 'REVIEW_REQUIRED' | 'CLEARED' | 'BLOCKED';
+    reviewedAt?: string | null;
+    reviewer?: { id: string; displayName: string } | null;
+    safeLabel?: string | null;
+  };
+  checklist: IntakeChecklistItem[];
+  blockers: IntakeBlockerItem[];
+  readiness: IntakeReadinessSummary;
+  capabilities: {
+    canEditClientLink: boolean;
+    canEditClientRole: boolean;
+    canChangeResponsibleLawyer: boolean;
+    canManageCollaborators: boolean;
+    canRecordConflictReview: boolean;
+    canCreateOpeningTasks: boolean;
+    canSetInitialDeadline: boolean;
+    canActivateMatter: boolean;
+    canDeclineMatter: boolean;
+  };
+  availability: {
+    clientIdentity: boolean;
+    clientRole: boolean;
+    parties: boolean;
+    opposingParties: boolean;
+    conflictReviewPersistence: boolean;
+    engagementState: boolean;
+    openingTaskBundle: boolean;
+    initialDeadline: boolean;
+  };
+}
+
+export async function getCaseIntakeReadiness(caseId: string): Promise<MatterIntakeReadinessResponse> {
+  return fetchApi<MatterIntakeReadinessResponse>(`/cases/${caseId}/intake-readiness`);
+}
+
+export interface CreateOpeningTasksResponse {
+  caseId: string;
+  created: Array<{ id: string; code: string; title: string; dueAt: string | null }>;
+  skippedExisting: string[];
+  availableCodes: Array<{ code: string; title: string }>;
+}
+
+export async function createOpeningTasks(
+  caseId: string,
+  tasks: Array<{ code: string; assigneeId?: string; dueAt?: string }>
+): Promise<CreateOpeningTasksResponse> {
+  return fetchApi<CreateOpeningTasksResponse>(`/cases/${caseId}/opening-tasks`, {
+    method: 'POST',
+    body: JSON.stringify({ tasks }),
+  });
+}
+
+export async function activateMatterIntake(caseId: string): Promise<MatterIntakeReadinessResponse> {
+  return fetchApi<MatterIntakeReadinessResponse>(`/cases/${caseId}/activate`, { method: 'POST' });
+}
+
+export async function declineMatterIntake(caseId: string): Promise<MatterIntakeReadinessResponse> {
+  return fetchApi<MatterIntakeReadinessResponse>(`/cases/${caseId}/decline-intake`, { method: 'POST' });
+}
+
+export interface IntakeQueueResponse {
+  generatedAt: string;
+  summary: {
+    total: number;
+    missingClient: number;
+    missingResponsibleLawyer: number;
+    conflictReviewRequired: number;
+    readyForActivation: number;
+    blocked: number;
+  };
+  items: Array<{
+    caseId: string;
+    displayName: string;
+    reference?: string | null;
+    status: string;
+    client?: { id: string; displayName: string } | null;
+    responsibleLawyer?: { id: string; displayName: string } | null;
+    readiness: IntakeReadinessSummary;
+    blockers: Array<{ code: string; label: string }>;
+    nextStep?: { code: string; label: string; href?: string | null } | null;
+    updatedAt?: string | null;
+    href: string;
+  }>;
+  pagination: { limit: number; offset: number; hasMore: boolean };
+  availability: {
+    conflictReview: boolean;
+    engagementState: boolean;
+    teamScope: boolean;
+  };
+}
+
+export async function getIntakeQueue(params: {
+  scope?: 'MY_INTAKES' | 'MY_CASES' | 'TEAM';
+  status?: 'ALL' | 'NEEDS_ATTENTION' | 'READY';
+  limit?: number;
+  offset?: number;
+} = {}): Promise<IntakeQueueResponse> {
+  const query = new URLSearchParams();
+  if (params.scope) query.set('scope', params.scope);
+  if (params.status) query.set('status', params.status);
+  if (params.limit) query.set('limit', String(params.limit));
+  if (params.offset) query.set('offset', String(params.offset));
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return fetchApi<IntakeQueueResponse>(`/intake${suffix}`);
+}
+
+export interface ClientLookupCandidate {
+  id: string;
+  displayName: string;
+  type?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  matchSignals: Array<'EXACT_EMAIL' | 'EXACT_REGISTRATION_ID' | 'EXACT_TAX_ID' | 'SIMILAR_NAME'>;
+  warning: 'REVIEW_REQUIRED';
+  capabilities: { canSelect: boolean; canEdit: boolean };
+}
+
+export async function lookupClients(query: string): Promise<{ query: string; candidates: ClientLookupCandidate[] }> {
+  return fetchApi<{ query: string; candidates: ClientLookupCandidate[] }>(
+    `/clients/lookup?q=${encodeURIComponent(query)}`
+  );
+}
+
+export type WorkflowDeadlineUrgency = 'OVERDUE' | 'TODAY' | 'TOMORROW' | 'THIS_WEEK' | 'LATER';
+export type WorkflowDeadlineStatus = 'OPEN' | 'COMPLETED' | 'CANCELLED' | 'SUPERSEDED';
+
+export interface WorkflowDeadlineItem {
+  id: string;
+  sourceType: 'TASK' | 'CASE_DEADLINE';
+  sourceId: string;
+  caseId: string;
+  title: string;
+  safeDescription?: string | null;
+  startsAt?: string | null;
+  dueAt: string;
+  allDay: boolean;
+  status: WorkflowDeadlineStatus;
+  urgency: WorkflowDeadlineUrgency;
+  importance: 'CRITICAL' | 'HIGH' | 'NORMAL' | 'LOW' | 'UNSPECIFIED';
+  legalSignificance: null;
+  responsibility: {
+    assignee?: { id: string; displayName: string } | null;
+    responsibleLawyer?: { id: string; displayName: string } | null;
+  };
+  source: {
+    type: 'TASK' | 'CASE';
+    id: string;
+    displayName?: string | null;
+    href?: string | null;
+  };
+  capabilities: {
+    canOpen: boolean;
+    canComplete: boolean;
+    canReopen: boolean;
+    canReschedule: boolean;
+    canCancel: boolean;
+    canCreateTask: boolean;
+  };
+  href?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface WorkflowAgendaResponse {
+  generatedAt: string;
+  timezone: string;
+  range: { from: string; to: string };
+  scope: 'MY_WORK' | 'MY_CASES' | 'CASE';
+  summary: {
+    overdue: number;
+    today: number;
+    tomorrow: number;
+    thisWeek: number;
+    later: number;
+    completedRecently: number;
+  };
+  days: Array<{ date: string; items: WorkflowDeadlineItem[] }>;
+  pagination: { limit: number; offset: number; hasMore: boolean };
+  availability: {
+    taskDueDates: boolean;
+    caseDeadlines: boolean;
+    hearings: boolean;
+    reminders: boolean;
+    teamScope: boolean;
+    externalCalendar: false;
+  };
+}
+
+export async function getWorkflowAgenda(params?: {
+  from?: string;
+  to?: string;
+  scope?: 'MY_WORK' | 'MY_CASES' | 'CASE';
+  status?: 'OPEN' | 'COMPLETED' | 'ALL';
+  caseId?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<WorkflowAgendaResponse> {
+  const query = new URLSearchParams();
+  if (params?.from) query.set('from', params.from);
+  if (params?.to) query.set('to', params.to);
+  if (params?.scope) query.set('scope', params.scope);
+  if (params?.status) query.set('status', params.status);
+  if (params?.caseId) query.set('caseId', params.caseId);
+  if (params?.limit) query.set('limit', String(params.limit));
+  if (params?.offset) query.set('offset', String(params.offset));
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return fetchApi<WorkflowAgendaResponse>(`/agenda${suffix}`);
+}
+
+export async function rescheduleTaskDeadline(taskId: string, dueAt: string | null): Promise<TaskItem> {
+  return fetchApi<TaskItem>(`/tasks/${taskId}/reschedule`, {
+    method: 'POST',
+    body: JSON.stringify({ dueAt }),
+  });
+}
+
+export interface SourceLinkedTaskResponse {
+  success: boolean;
+  task: {
+    id: string;
+    title: string;
+    caseId: string;
+    documentId?: string | null;
+    sourceCommunicationId?: string | null;
+    status: string;
+    dueDate: string | null;
+  };
+  source: {
+    type: 'DOCUMENT' | 'COMMUNICATION';
+    id: string;
+    caseId: string;
+  };
+}
+
+export async function createDocumentSourceTask(
+  documentId: string,
+  data: { kind: 'REVIEW' | 'FOLLOW_UP'; title?: string; assigneeId?: string; dueAt?: string }
+): Promise<SourceLinkedTaskResponse> {
+  return fetchApi<SourceLinkedTaskResponse>(`/documents/${documentId}/tasks`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function createCommunicationSourceTask(
+  communicationId: string,
+  data: { kind: 'FOLLOW_UP' | 'REVIEW_ATTACHMENT'; title?: string; assigneeId?: string; dueAt?: string }
+): Promise<SourceLinkedTaskResponse> {
+  return fetchApi<SourceLinkedTaskResponse>(`/communications/${communicationId}/tasks`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
 // Case Assignment
 export interface AssignCaseData {
   userId: string;
@@ -408,6 +1137,20 @@ export async function completeTask(taskId: string, approved: boolean, notes?: st
   return fetchApi<TaskItem>(`/tasks/${taskId}/complete`, {
     method: 'POST',
     body: JSON.stringify({ approved, notes }),
+  });
+}
+
+export async function blockTask(taskId: string, reason: string): Promise<TaskItem> {
+  return fetchApi<TaskItem>(`/tasks/${taskId}/block`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function unblockTask(taskId: string): Promise<TaskItem> {
+  return fetchApi<TaskItem>(`/tasks/${taskId}/unblock`, {
+    method: 'POST',
+    body: JSON.stringify({}),
   });
 }
 
@@ -572,8 +1315,17 @@ export async function getWorkflowGraph(caseId: string): Promise<WorkflowGraph> {
   return fetchApi<WorkflowGraph>(`/cases/${caseId}/workflow-graph`);
 }
 
-export async function getCaseDeadlines(caseId: string): Promise<DeadlineItem[]> {
-  return fetchApi<DeadlineItem[]>(`/cases/${caseId}/deadlines`);
+export interface CaseDeadlineAgendaResponse {
+  caseId: string;
+  generatedAt: string;
+  timezone: string;
+  items: WorkflowDeadlineItem[];
+  pagination: WorkflowAgendaResponse['pagination'];
+  availability: WorkflowAgendaResponse['availability'];
+}
+
+export async function getCaseDeadlines(caseId: string): Promise<CaseDeadlineAgendaResponse> {
+  return fetchApi<CaseDeadlineAgendaResponse>(`/cases/${caseId}/deadlines`);
 }
 
 export async function extractDeadlines(data: {
@@ -1350,6 +2102,31 @@ export interface BundleOptionsResponse {
   options: BundleOptionItem[];
 }
 
+export interface EditorTemplateCapabilitiesDto {
+  availability: {
+    catalog: boolean;
+    templateDetail: boolean;
+    variablePreview: boolean;
+    generation: boolean;
+    generatedDocxDownload: boolean;
+    automaticLocalImport: boolean;
+    clauseCatalog: boolean;
+    customClauses: boolean;
+  };
+  featureFlags: {
+    templateGenerationEnabled: boolean;
+    documentProcessingEnabled: boolean;
+  };
+  limits: {
+    maxTemplates: number;
+    maxVariables: number;
+    maxStringLength: number;
+  };
+  selectedBranch: 'APPROVAL_READINESS_ONLY';
+  reason: string;
+  nextStep: string;
+}
+
 export interface CaseContractListItem {
   id: string;
   title: string;
@@ -1536,6 +2313,10 @@ export interface ContractComparisonResponse {
 export async function getContractTemplates(category?: string): Promise<ContractTemplateItem[]> {
   const query = category ? `?category=${encodeURIComponent(category)}` : '';
   return fetchApi<ContractTemplateItem[]>(`/contracts/templates${query}`);
+}
+
+export async function getEditorTemplateCapabilities(): Promise<EditorTemplateCapabilitiesDto> {
+  return fetchApi<EditorTemplateCapabilitiesDto>('/contracts/editor-template-capabilities');
 }
 
 export async function getContractTemplateById(templateId: string): Promise<ContractTemplateItem> {
@@ -1923,6 +2704,125 @@ export interface DocumentReviewData {
 
 export async function getDocumentById(documentId: string): Promise<DocumentReviewData | null> {
   return fetchApi<DocumentReviewData | null>(`/documents/${documentId}`);
+}
+
+export interface DocumentEditorDto {
+  document: {
+    id: string;
+    caseId: string;
+    name: string;
+    category: string;
+    documentType?: string | null;
+    currentVersion?: number | null;
+    updatedAt?: string | null;
+  };
+  persistence: {
+    mode: 'DEDICATED_EDITOR' | 'FILE_BACKED_VERSION' | 'EXPORT_ONLY';
+    serverSaved: boolean;
+    savedAt?: string | null;
+    versionToken?: string | null;
+    contentAvailable: boolean;
+  };
+  content: null;
+  review: {
+    status?: string | null;
+    relatedTaskId?: string | null;
+  };
+  capabilities: {
+    canView: boolean;
+    canEdit: boolean;
+    canSave: boolean;
+    canSaveNewVersion: boolean;
+    canListVersions: boolean;
+    canOpenVersion: boolean;
+    canRestoreVersion: boolean;
+    canSubmitForReview: boolean;
+    canApprove: boolean;
+    canReturnForCorrection: boolean;
+    canCompare: boolean;
+    canComment: boolean;
+    canExportHtml: boolean;
+    canExportText: boolean;
+    canPrint: boolean;
+    canExportDocx: boolean;
+  };
+  availability: {
+    serverPersistence: boolean;
+    autosave: boolean;
+    contentVersions: boolean;
+    restore: boolean;
+    comments: boolean;
+    anchoredComments: false;
+    docxImport: false;
+    docxExport: false;
+    liveTrackChanges: false;
+  };
+}
+
+export async function getDocumentEditorMetadata(documentId: string): Promise<DocumentEditorDto> {
+  return fetchApi<DocumentEditorDto>(`/documents/${encodeURIComponent(documentId)}/editor`);
+}
+
+export type DocumentCommentStatus = 'OPEN' | 'RESOLVED';
+
+export interface DocumentCommentDto {
+  id: string;
+  documentId: string;
+  author: {
+    id: string;
+    displayName: string;
+  };
+  content: string;
+  status: DocumentCommentStatus;
+  createdAt: string;
+  updatedAt?: string | null;
+  resolvedAt?: string | null;
+  capabilities: {
+    canResolve: boolean;
+    canReopen: boolean;
+    canDelete: false;
+  };
+}
+
+export interface DocumentCommentsResponse {
+  comments: DocumentCommentDto[];
+  pagination: {
+    limit: number;
+    offset: number;
+  };
+  availability: {
+    anchoredComments: false;
+    delete: false;
+  };
+}
+
+export async function getDocumentComments(documentId: string, params: { limit?: number; offset?: number } = {}): Promise<DocumentCommentsResponse> {
+  const search = new URLSearchParams();
+  if (params.limit !== undefined) search.set('limit', String(params.limit));
+  if (params.offset !== undefined) search.set('offset', String(params.offset));
+  const query = search.toString();
+  return fetchApi<DocumentCommentsResponse>(`/documents/${encodeURIComponent(documentId)}/comments${query ? `?${query}` : ''}`);
+}
+
+export async function createDocumentComment(documentId: string, content: string): Promise<DocumentCommentDto> {
+  return fetchApi<DocumentCommentDto>(`/documents/${encodeURIComponent(documentId)}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
+}
+
+export async function resolveDocumentComment(documentId: string, commentId: string): Promise<DocumentCommentDto> {
+  return fetchApi<DocumentCommentDto>(
+    `/documents/${encodeURIComponent(documentId)}/comments/${encodeURIComponent(commentId)}/resolve`,
+    { method: 'POST' }
+  );
+}
+
+export async function reopenDocumentComment(documentId: string, commentId: string): Promise<DocumentCommentDto> {
+  return fetchApi<DocumentCommentDto>(
+    `/documents/${encodeURIComponent(documentId)}/comments/${encodeURIComponent(commentId)}/reopen`,
+    { method: 'POST' }
+  );
 }
 
 export interface SaveWorkspaceVersionResult {
@@ -2735,6 +3635,58 @@ export async function deleteTimeEntry(id: string): Promise<{ message: string }> 
   return fetchApi<{ message: string }>(`/time-entries/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
+}
+
+export interface WorkflowWorkloadResponse {
+  scope: 'MY_WORK' | 'MY_CASES' | 'TEAM';
+  generatedAt: string;
+  summary: {
+    caseCount: number;
+    openTaskCount: number;
+    overdueTaskCount: number;
+    dueSoonTaskCount: number;
+    recordedMinutes: number;
+    activeTimerSupported: boolean;
+  };
+  people: Array<{
+    user: { id: string; name: string | null; email: string | null; role: string | null };
+    openTaskCount: number;
+    overdueTaskCount: number;
+    dueSoonTaskCount: number;
+    reviewTaskCount: number;
+    blockedTaskCount: number;
+    recordedMinutes: number;
+    caseCount: number;
+  }>;
+  cases: Array<{
+    id: string;
+    caseNumber: string;
+    title: string;
+    status: string;
+    deadline: string | null;
+    matterId: string | null;
+    responsibleLawyerId: string | null;
+    openTaskCount: number;
+    overdueTaskCount: number;
+    dueSoonTaskCount: number;
+  }>;
+  availability: {
+    teamScope: boolean;
+    caseTime: boolean;
+    activeTimer: boolean;
+    passiveTracking: boolean;
+  };
+}
+
+export async function getWorkflowWorkload(params?: {
+  scope?: 'MY_WORK' | 'MY_CASES' | 'TEAM';
+  caseId?: string;
+}): Promise<WorkflowWorkloadResponse> {
+  const queryParams = new URLSearchParams();
+  if (params?.scope) queryParams.set('scope', params.scope);
+  if (params?.caseId) queryParams.set('caseId', params.caseId);
+  const query = queryParams.toString();
+  return fetchApi<WorkflowWorkloadResponse>(`/workload${query ? `?${query}` : ''}`);
 }
 
 export async function getTimesheetReportTemplates(): Promise<TimesheetReportTemplate[]> {

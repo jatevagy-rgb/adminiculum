@@ -3,7 +3,12 @@
 // ============================================================================
 
 import { PrismaClient } from '@prisma/client';
-import prisma from '../../config/database.js';
+import prisma from '../../config/database';
+import {
+  SupportedTaskAction,
+  validateTaskTransition,
+  WorkflowTransitionError,
+} from '../cases/workItems';
 
 const TaskStatus = {
   TODO: 'TODO',
@@ -52,6 +57,7 @@ const TimelineType = {
   TASK_SUBMITTED: 'TASK_SUBMITTED',
   TASK_COMPLETED: 'TASK_COMPLETED',
   TASK_REJECTED: 'TASK_REJECTED',
+  DEADLINE_SET: 'DEADLINE_SET',
   CHECKED_OUT: 'CHECKED_OUT',
   CHECKED_IN: 'CHECKED_IN',
   VERSION_CREATED: 'VERSION_CREATED',
@@ -71,6 +77,104 @@ type TaskStatus = typeof TaskStatus[keyof typeof TaskStatus];
 type TaskPriority = typeof TaskPriority[keyof typeof TaskPriority];
 type TimelineType = typeof TimelineType[keyof typeof TimelineType];
 type UserRole = typeof UserRole[keyof typeof UserRole];
+
+const taskRescheduleSelect = {
+  id: true,
+  title: true,
+  description: true,
+  status: true,
+  priority: true,
+  dueDate: true,
+  caseId: true,
+  assignedToId: true,
+  assignedById: true,
+  updatedAt: true,
+} as const;
+
+async function getTaskForTransition(taskId: string) {
+  return prisma.task.findUnique({
+    where: { id: taskId },
+    select: {
+      id: true,
+      title: true,
+      caseId: true,
+      status: true,
+      dueDate: true,
+      assignedToId: true,
+      assignedById: true,
+      stuckReason: true,
+      stuckSince: true,
+    },
+  });
+}
+
+async function userCanActOnTask(task: { caseId: string; assignedToId?: string | null; assignedById?: string | null }, userId: string): Promise<{ allowed: boolean; role: string | null }> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true },
+  });
+  if (!user) return { allowed: false, role: null };
+
+  if (['ADMIN', 'PARTNER'].includes(String(user.role))) {
+    return { allowed: true, role: String(user.role) };
+  }
+
+  if (task.assignedToId === userId || task.assignedById === userId) {
+    return { allowed: true, role: String(user.role) };
+  }
+
+  const caseRecord = await prisma.case.findUnique({
+    where: { id: task.caseId },
+    select: { assignedLawyerId: true, createdById: true },
+  });
+  if (caseRecord?.assignedLawyerId === userId || caseRecord?.createdById === userId) {
+    return { allowed: true, role: String(user.role) };
+  }
+
+  const collaborator = await prisma.caseCollaborator.findFirst({
+    where: { caseId: task.caseId, userId },
+    select: { id: true },
+  });
+  return { allowed: Boolean(collaborator), role: String(user.role) };
+}
+
+async function transitionTask(taskId: string, userId: string, action: SupportedTaskAction, extraData: Record<string, unknown> = {}) {
+  if (!userId) {
+    throw new WorkflowTransitionError(401, 'NOT_AUTHENTICATED', 'Authenticated user is required.');
+  }
+
+  const existing = await getTaskForTransition(taskId);
+  if (!existing) {
+    throw new WorkflowTransitionError(404, 'TASK_NOT_FOUND', 'Task not found.');
+  }
+
+  const actor = await userCanActOnTask(existing, userId);
+  if (!actor.allowed) {
+    throw new WorkflowTransitionError(403, 'TASK_ACTION_FORBIDDEN', 'You are not allowed to perform this task action.');
+  }
+
+  const transition = validateTaskTransition(existing, action, userId, actor.role);
+  const task = await prisma.task.update({
+    where: { id: taskId },
+    data: {
+      ...transition.data,
+      ...extraData,
+    } as any,
+  });
+
+  await createTimelineEvent({
+    caseId: task.caseId,
+    userId,
+    type: transition.timelineType as TimelineType,
+    payload: {
+      taskId,
+      taskTitle: task.title,
+      action,
+    },
+  });
+
+  return task;
+}
 
 function mapAnyTaskTypeToPrisma(taskType?: string): TaskType {
   const normalized = String(taskType || '').trim().toUpperCase();
@@ -181,6 +285,7 @@ export async function createTask(data: {
   requiredSkills?: string[];
   dueDate?: Date;
   documentId?: string;
+  sourceCommunicationId?: string;
 }) {
   const prismaTaskType = mapAnyTaskTypeToPrisma((data.taskType as string | undefined) || (data.type as string | undefined));
 
@@ -197,7 +302,8 @@ export async function createTask(data: {
       assignedById: data.assignedBy,
       requiredSkills: data.requiredSkills || TASK_TYPE_SKILLS[prismaTaskType] || [],
       dueDate: data.dueDate,
-      documentId: data.documentId
+      documentId: data.documentId,
+      sourceCommunicationId: data.sourceCommunicationId
     } as any,
     include: {
       case: true,
@@ -264,63 +370,256 @@ export async function getTask(taskId: string) {
  * Start a task (TODO -> IN_PROGRESS)
  */
 export async function startTask(taskId: string, userId: string) {
-  const task = await prisma.task.update({
-    where: { id: taskId },
-    data: {
-      status: 'IN_PROGRESS',
-      startedAt: new Date()
+  return transitionTask(taskId, userId, 'START');
+}
+
+export class SourceLinkedTaskError extends Error {
+  constructor(public statusCode: number, public code: string, message: string) {
+    super(message);
+    this.name = 'SourceLinkedTaskError';
+  }
+}
+
+const DOCUMENT_TASK_KINDS = new Set(['REVIEW', 'FOLLOW_UP']);
+const COMMUNICATION_TASK_KINDS = new Set(['FOLLOW_UP', 'REVIEW_ATTACHMENT']);
+
+function parseSourceTaskBody(
+  body: unknown,
+  allowedKinds: Set<string>,
+  fallbackTitle: string,
+): { title: string; assigneeId?: string; dueAt?: Date; kind: string } {
+  const payload = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+  for (const forbidden of ['status', 'caseId', 'createdById', 'assignedById', 'description', 'priority', 'content', 'workspaceText']) {
+    if (forbidden in payload) {
+      throw new SourceLinkedTaskError(400, 'UNSUPPORTED_TASK_PAYLOAD_FIELD', `Field ${forbidden} is not accepted for source-linked task creation.`);
     }
+  }
+
+  const kind = String(payload.kind || '').trim().toUpperCase();
+  if (!kind || !allowedKinds.has(kind)) {
+    throw new SourceLinkedTaskError(400, 'INVALID_SOURCE_TASK_KIND', 'Unsupported source-linked task kind.');
+  }
+
+  let dueAt: Date | undefined;
+  if (payload.dueAt) {
+    const parsed = new Date(String(payload.dueAt));
+    if (Number.isNaN(parsed.getTime())) {
+      throw new SourceLinkedTaskError(400, 'INVALID_DUE_DATE', 'Invalid dueAt value.');
+    }
+    dueAt = parsed;
+  }
+
+  const titleInput = typeof payload.title === 'string' ? payload.title.trim() : '';
+  const assigneeId = typeof payload.assigneeId === 'string' && payload.assigneeId.trim() ? payload.assigneeId.trim() : undefined;
+  return {
+    title: titleInput || fallbackTitle,
+    assigneeId,
+    dueAt,
+    kind,
+  };
+}
+
+function sourceKindToTaskType(kind: string): TaskType {
+  if (kind === 'REVIEW' || kind === 'REVIEW_ATTACHMENT') return TaskType.REVIEW_CONTRACT;
+  return TaskType.OTHER;
+}
+
+export async function createTaskFromDocumentSource(documentId: string, userId: string, body: unknown) {
+  if (!userId) {
+    throw new SourceLinkedTaskError(401, 'NOT_AUTHENTICATED', 'Authenticated user is required.');
+  }
+
+  const document = await prisma.document.findUnique({
+    where: { id: documentId },
+    select: {
+      id: true,
+      caseId: true,
+      name: true,
+      fileName: true,
+      documentType: true,
+    },
+  });
+  if (!document) {
+    throw new SourceLinkedTaskError(404, 'DOCUMENT_NOT_FOUND', 'Document not found.');
+  }
+
+  const parsed = parseSourceTaskBody(body, DOCUMENT_TASK_KINDS, `Dokumentum feldolgozása: ${document.fileName || document.name}`);
+  const task = await createTask({
+    caseId: document.caseId,
+    title: parsed.title,
+    taskType: sourceKindToTaskType(parsed.kind),
+    type: parsed.kind === 'REVIEW' ? 'DOCUMENT_REVIEW' : 'DOCUMENT_FOLLOW_UP',
+    priority: TaskPriority.MEDIUM,
+    assignedTo: parsed.assigneeId,
+    assignedBy: userId,
+    dueDate: parsed.dueAt,
+    documentId: document.id,
   });
 
-  await createTimelineEvent({
-    caseId: task.caseId,
-    userId,
-    type: TimelineType.TASK_STARTED,
-    payload: { taskId, taskTitle: task.title }
+  return {
+    success: true,
+    task: {
+      id: task.id,
+      title: task.title,
+      caseId: task.caseId,
+      documentId: task.documentId,
+      status: task.status,
+      dueDate: task.dueDate ? task.dueDate.toISOString() : null,
+    },
+    source: {
+      type: 'DOCUMENT',
+      id: document.id,
+      caseId: document.caseId,
+    },
+  };
+}
+
+export async function createTaskFromCommunicationSource(communicationId: string, userId: string, body: unknown) {
+  if (!userId) {
+    throw new SourceLinkedTaskError(401, 'NOT_AUTHENTICATED', 'Authenticated user is required.');
+  }
+
+  const communication = await prisma.communication.findUnique({
+    where: { id: communicationId },
+    select: {
+      id: true,
+      caseId: true,
+      subject: true,
+    },
+  });
+  if (!communication) {
+    throw new SourceLinkedTaskError(404, 'COMMUNICATION_NOT_FOUND', 'Communication not found.');
+  }
+  if (!communication.caseId) {
+    throw new SourceLinkedTaskError(409, 'COMMUNICATION_NOT_LINKED_TO_CASE', 'Communication must be linked to a case before creating a task.');
+  }
+
+  const parsed = parseSourceTaskBody(body, COMMUNICATION_TASK_KINDS, `Kommunikáció feldolgozása: ${communication.subject || communication.id}`);
+  const task = await createTask({
+    caseId: communication.caseId,
+    title: parsed.title,
+    taskType: sourceKindToTaskType(parsed.kind),
+    type: parsed.kind === 'REVIEW_ATTACHMENT' ? 'COMMUNICATION_ATTACHMENT_REVIEW' : 'COMMUNICATION_FOLLOW_UP',
+    priority: TaskPriority.MEDIUM,
+    assignedTo: parsed.assigneeId,
+    assignedBy: userId,
+    dueDate: parsed.dueAt,
+    sourceCommunicationId: communication.id,
   });
 
-  return task;
+  return {
+    success: true,
+    task: {
+      id: task.id,
+      title: task.title,
+      caseId: task.caseId,
+      sourceCommunicationId: task.sourceCommunicationId,
+      status: task.status,
+      dueDate: task.dueDate ? task.dueDate.toISOString() : null,
+    },
+    source: {
+      type: 'COMMUNICATION',
+      id: communication.id,
+      caseId: communication.caseId,
+    },
+  };
 }
 
 /**
  * Submit task for review (IN_PROGRESS -> IN_REVIEW)
  */
 export async function submitTask(taskId: string, userId: string, notes?: string) {
-  const task = await prisma.task.update({
-    where: { id: taskId },
-    data: {
-      status: 'IN_REVIEW',
-      submittedAt: new Date()
-    }
-  });
-
-  await createTimelineEvent({
-    caseId: task.caseId,
-    userId,
-    type: TimelineType.TASK_SUBMITTED,
-    payload: { taskId, taskTitle: task.title, notes }
-  });
-
-  return task;
+  return transitionTask(taskId, userId, 'SUBMIT_FOR_REVIEW', notes ? { lastProgressAt: new Date() } : {});
 }
 
 /**
  * Complete a task (IN_REVIEW -> DONE)
  */
 export async function completeTask(taskId: string, userId: string, approved: boolean, notes?: string) {
+  return transitionTask(taskId, userId, approved ? 'APPROVE' : 'RETURN_FOR_CORRECTION', notes ? { lastProgressAt: new Date() } : {});
+}
+
+export async function blockTask(taskId: string, userId: string, reason: string) {
+  const allowedReasons = new Set([
+    'INFORMATION_MISSING',
+    'CLIENT_WAITING',
+    'LEGAL_RESEARCH',
+    'TECHNICAL_BLOCK',
+    'DEPENDENCY',
+    'INTERNAL_REVIEW',
+    'EXTERNAL_APPROVAL',
+  ]);
+  const normalizedReason = String(reason || '').trim().toUpperCase();
+  if (!allowedReasons.has(normalizedReason)) {
+    throw new WorkflowTransitionError(400, 'INVALID_STUCK_REASON', 'Invalid blocker reason.');
+  }
+  return transitionTask(taskId, userId, 'BLOCK', { stuckReason: normalizedReason });
+}
+
+export async function unblockTask(taskId: string, userId: string) {
+  return transitionTask(taskId, userId, 'UNBLOCK');
+}
+
+export async function rescheduleTaskDueDate(taskId: string, userId: string, body: unknown) {
+  if (!userId) {
+    throw new WorkflowTransitionError(401, 'NOT_AUTHENTICATED', 'Authenticated user is required.');
+  }
+  const payload = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+  const allowed = new Set(['dueAt']);
+  for (const key of Object.keys(payload)) {
+    if (!allowed.has(key)) {
+      throw new WorkflowTransitionError(400, 'UNSUPPORTED_RESCHEDULE_FIELD', `Field ${key} is not accepted for task rescheduling.`);
+    }
+  }
+  if (!('dueAt' in payload)) {
+    throw new WorkflowTransitionError(400, 'DUE_AT_REQUIRED', 'dueAt is required.');
+  }
+
+  let dueDate: Date | null = null;
+  if (payload.dueAt !== null && payload.dueAt !== '') {
+    const parsed = new Date(String(payload.dueAt));
+    if (Number.isNaN(parsed.getTime())) {
+      throw new WorkflowTransitionError(400, 'INVALID_DUE_DATE', 'Invalid dueAt value.');
+    }
+    dueDate = parsed;
+  }
+
+  const existing = await getTaskForTransition(taskId);
+  if (!existing) {
+    throw new WorkflowTransitionError(404, 'TASK_NOT_FOUND', 'Task not found.');
+  }
+  const status = String(existing.status || '').toUpperCase();
+  if (['COMPLETED', 'DONE', 'CANCELLED', 'ARCHIVED'].includes(status)) {
+    throw new WorkflowTransitionError(409, 'TASK_DEADLINE_NOT_OPEN', 'Closed task deadlines cannot be rescheduled.');
+  }
+  const actor = await userCanActOnTask(existing, userId);
+  if (!actor.allowed) {
+    throw new WorkflowTransitionError(403, 'TASK_ACTION_FORBIDDEN', 'You are not allowed to reschedule this task.');
+  }
+
+  const currentDue = existing as typeof existing & { dueDate?: Date | null };
+  const same =
+    (!dueDate && !currentDue.dueDate) ||
+    (dueDate && currentDue.dueDate && dueDate.getTime() === currentDue.dueDate.getTime());
+  if (same) {
+    return prisma.task.findUnique({ where: { id: taskId }, select: taskRescheduleSelect });
+  }
+
   const task = await prisma.task.update({
     where: { id: taskId },
-    data: {
-      status: approved ? 'DONE' : 'IN_PROGRESS',
-      completedAt: approved ? new Date() : null
-    }
+    data: { dueDate } as any,
+    select: taskRescheduleSelect,
   });
 
   await createTimelineEvent({
     caseId: task.caseId,
     userId,
-    type: approved ? TimelineType.TASK_COMPLETED : TimelineType.TASK_REJECTED,
-    payload: { taskId, taskTitle: task.title, notes }
+    type: TimelineType.DEADLINE_SET,
+    payload: {
+      taskId,
+      source: 'task_due_date',
+      dueAt: dueDate ? dueDate.toISOString() : null,
+    },
   });
 
   return task;
@@ -330,6 +629,48 @@ export async function completeTask(taskId: string, userId: string, approved: boo
  * Reassign a task
  */
 export async function reassignTask(taskId: string, newAssigneeId: string, reassignedBy: string) {
+  if (!reassignedBy) {
+    throw new WorkflowTransitionError(401, 'NOT_AUTHENTICATED', 'Authenticated user is required.');
+  }
+
+  const existingTask = await getTaskForTransition(taskId);
+  if (!existingTask) {
+    throw new WorkflowTransitionError(404, 'TASK_NOT_FOUND', 'Task not found.');
+  }
+
+  const actorAccess = await userCanActOnTask(existingTask, reassignedBy);
+  if (!actorAccess.allowed) {
+    throw new WorkflowTransitionError(403, 'TASK_ACCESS_FORBIDDEN', 'You do not have access to reassign this task.');
+  }
+
+  const assignee = await prisma.user.findUnique({
+    where: { id: newAssigneeId },
+    select: { id: true, role: true, isActive: true },
+  });
+  if (!assignee || assignee.isActive === false) {
+    throw new WorkflowTransitionError(400, 'ASSIGNEE_NOT_AVAILABLE', 'Assignee is not available.');
+  }
+
+  const caseRecord = await prisma.case.findUnique({
+    where: { id: existingTask.caseId },
+    select: { assignedLawyerId: true, createdById: true },
+  });
+  const isCaseMember =
+    caseRecord?.assignedLawyerId === newAssigneeId ||
+    caseRecord?.createdById === newAssigneeId ||
+    Boolean(await prisma.caseCollaborator.findFirst({
+      where: { caseId: existingTask.caseId, userId: newAssigneeId },
+      select: { id: true },
+    }));
+
+  if (!isCaseMember && !['ADMIN', 'PARTNER'].includes(String(assignee.role))) {
+    throw new WorkflowTransitionError(403, 'ASSIGNEE_NOT_CASE_MEMBER', 'Task assignee must already be part of the case team.');
+  }
+
+  if (existingTask.assignedToId === newAssigneeId) {
+    return getTask(taskId);
+  }
+
   const task = await prisma.task.update({
     where: { id: taskId },
     data: {
@@ -532,6 +873,7 @@ async function createTimelineEvent(data: {
     TASK_SUBMITTED: 'CUSTOM',
     TASK_COMPLETED: 'TASK_COMPLETED',
     TASK_REJECTED: 'TASK_BLOCKED',
+    DEADLINE_SET: 'DEADLINE_SET',
     CHECKED_OUT: 'CUSTOM',
     CHECKED_IN: 'CUSTOM',
     VERSION_CREATED: 'DOCUMENT_VERSION_CREATED',
@@ -565,6 +907,9 @@ export default {
   startTask,
   submitTask,
   completeTask,
+  blockTask,
+  unblockTask,
+  rescheduleTaskDueDate,
   reassignTask,
   getTaskRecommendations,
   autoGenerateTask,

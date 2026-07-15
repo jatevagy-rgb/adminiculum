@@ -10,9 +10,18 @@ import { extractText } from './textExtractor';
 import reviewSuggestionsRoutes from './reviewSuggestions.routes';
 import { authenticate } from '../../middleware/auth';
 import { prisma } from '../../prisma/prisma.service';
+import { requireDocumentReadAccess, requireDocumentManageAccess } from './authorization';
+import { createTaskFromDocumentSource, SourceLinkedTaskError } from '../tasks/services';
+import { getDocumentEditorMetadata } from '../documentEditor/service';
+import {
+  createDocumentComment,
+  DocumentCommentError,
+  listDocumentComments,
+  reopenDocumentComment,
+  resolveDocumentComment,
+} from './documentComments.service';
 
 const router = Router();
-
 router.use('/:documentId/review-suggestions', reviewSuggestionsRoutes);
 
 /**
@@ -163,6 +172,104 @@ router.get('/case/:caseId', authenticate, async (req: Request, res: Response): P
       status: 500, 
       code: 'INTERNAL_ERROR', 
       message: 'Internal server error' 
+    });
+  }
+});
+
+/**
+ * POST /api/v1/documents/:id/tasks
+ * Create a safe source-linked task from document metadata only.
+ */
+router.post('/:id/tasks', authenticate, requireDocumentReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).user?.userId;
+    const { id } = req.params as { id: string };
+    const result = await createTaskFromDocumentSource(id, userId, req.body);
+    res.status(201).json(result);
+  } catch (error) {
+    if (error instanceof SourceLinkedTaskError) {
+      res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
+      return;
+    }
+    console.error('Create document source task error:', error instanceof Error ? error.message : error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Task creation from document failed.' });
+  }
+});
+
+function sendDocumentCommentError(res: Response, error: unknown): void {
+  if (error instanceof DocumentCommentError) {
+    res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
+    return;
+  }
+  console.error('Document comment route error:', error instanceof Error ? error.message : error);
+  res.status(500).json({ status: 500, code: 'DOCUMENT_COMMENT_ERROR', message: 'Document comments could not be processed.' });
+}
+
+/**
+ * GET /api/v1/documents/:id/comments
+ * Document-level comments only. No selected text, anchors, editor JSON, or content persistence.
+ */
+router.get('/:id/comments', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await listDocumentComments(req, String(req.params.id || ''), req.query);
+    res.json(result);
+  } catch (error) {
+    sendDocumentCommentError(res, error);
+  }
+});
+
+/**
+ * POST /api/v1/documents/:id/comments
+ * Create bounded plain-text document-level comment. Author is always derived from auth.
+ */
+router.post('/:id/comments', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await createDocumentComment(req, String(req.params.id || ''), req.body);
+    res.status(201).json(result);
+  } catch (error) {
+    sendDocumentCommentError(res, error);
+  }
+});
+
+router.post('/:id/comments/:commentId/resolve', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await resolveDocumentComment(req, String(req.params.id || ''), String(req.params.commentId || ''));
+    res.json(result);
+  } catch (error) {
+    sendDocumentCommentError(res, error);
+  }
+});
+
+router.post('/:id/comments/:commentId/reopen', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await reopenDocumentComment(req, String(req.params.id || ''), String(req.params.commentId || ''));
+    res.json(result);
+  } catch (error) {
+    sendDocumentCommentError(res, error);
+  }
+});
+
+/**
+ * GET /api/v1/documents/:id/editor
+ * Editor metadata/capability contract. Mode C only: no persisted editor content.
+ */
+router.get('/:id/editor', authenticate, requireDocumentReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const dto = await getDocumentEditorMetadata(req, String(req.params.id || ''));
+    if (!dto) {
+      res.status(404).json({
+        status: 404,
+        code: 'DOCUMENT_NOT_FOUND',
+        message: 'Document not found',
+      });
+      return;
+    }
+    res.json(dto);
+  } catch {
+    res.status(500).json({
+      status: 500,
+      code: 'DOCUMENT_EDITOR_METADATA_UNAVAILABLE',
+      message: 'Document editor metadata could not be loaded.',
     });
   }
 });

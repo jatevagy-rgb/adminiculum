@@ -127,3 +127,7 @@ src/modules/contracts/
 
 - `contract_templates` - Template definitions
 - `contract_generations` - Generated document records
+
+## Editor Template Bridge Status
+
+`DOCUMENT-EDITOR-TEMPLATE-ASSEMBLY-CLAUSE-CATALOG-1` does not enable contract generation in the professional editor. The only added editor-facing contract is the authenticated, content-free capability endpoint at `/api/v1/contracts/editor-template-capabilities`. Existing template catalog, generation, preview, download, SharePoint upload, revision, and cleanup routes remain behind the contracts feature gates.

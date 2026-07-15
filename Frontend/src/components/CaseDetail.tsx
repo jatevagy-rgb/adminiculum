@@ -2,10 +2,12 @@
 
 import { useState, use, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator } from "@/lib/api";
+import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, blockTask, unblockTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, getCaseWorkItems, getCaseActivity, getWorkflowAgenda, getCaseResponsibility, createDocumentSourceTask, createCommunicationSourceTask, type CaseWorkflowSummary, type CaseWorkItemsResponse, type CaseWorkItem, type CaseActivityResponse, type CaseActivityItem, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator, type WorkflowAgendaResponse, type WorkflowDeadlineItem, type CaseResponsibilityResponse } from "@/lib/api";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
+import { CaseMatterDossierPanel } from "@/components/litigation/CaseMatterDossierPanel";
+import { CaseIntakeReadinessPanel } from "@/components/intake/CaseIntakeReadinessPanel";
 
 type CaseDocument = {
   id: string;
@@ -132,6 +134,73 @@ const getTaskDueDateTone = (dueDate?: string | null): string => {
   if (dueTs < tomorrowStart) return "bg-[var(--adm-surface)] text-[var(--adm-ochre-500)] border-[#f9c74f]";
   return "bg-[#E2EDE5] text-[var(--adm-green-800)] border-[#A6C0AF]";
 };
+
+const WORKFLOW_ACTION_LABELS: Record<string, string> = {
+  OVERDUE_TASK: "Lejárt feladat",
+  HANDOFF_REVIEW: "Átadás ellenőrzése",
+  DOCUMENT_REVIEW: "Dokumentum-review",
+  DUE_SOON_TASK: "Közeli feladat",
+  UPCOMING_DEADLINE: "Közelgő határidő",
+  BLOCKED_ITEM: "Blokkolt tétel",
+  OPEN_TASK: "Nyitott feladat",
+};
+
+const DEADLINE_URGENCY_LABELS: Record<string, string> = {
+  OVERDUE: "Lejárt",
+  TODAY: "Ma esedékes",
+  TOMORROW: "Holnap",
+  THIS_WEEK: "Ezen a héten",
+  SOON: "Hamarosan",
+  LATER: "Későbbi",
+};
+
+const WORK_ITEM_CATEGORY_LABELS: Record<string, string> = {
+  OPEN: "Nyitott",
+  IN_PROGRESS: "Folyamatban",
+  BLOCKED: "Blokkolva",
+  WAITING: "Várakozik",
+  REVIEW: "Review",
+  HANDOFF: "Átadás",
+  COMPLETED: "Kész",
+};
+
+const WORK_ITEM_TYPE_LABELS: Record<string, string> = {
+  TASK: "Feladat",
+  REVIEW: "Review",
+  HANDOFF: "Átadás",
+  DOCUMENT: "Dokumentum",
+  COMMUNICATION: "Kommunikáció",
+};
+
+const CASE_ACTIVITY_KIND_LABELS: Record<string, string> = {
+  TASK: "Feladat",
+  DOCUMENT: "Dokumentum",
+  COMMUNICATION: "Kommunikáció",
+  TIMELINE: "Ügyesemény",
+};
+
+const WORK_ITEM_URGENCY_LABELS: Record<string, string> = {
+  OVERDUE: "Lejárt",
+  TODAY: "Ma",
+  SOON: "Közelgő",
+  LATER: "Későbbi",
+  NONE: "Nincs határidő",
+};
+
+const formatWorkflowDate = (value?: string | null): string => {
+  if (!value) return "Nincs határidő";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Nincs határidő";
+  return date.toLocaleString("hu-HU", { dateStyle: "medium", timeStyle: "short" });
+};
+
+const formatMinutes = (minutes?: number | null): string => {
+  if (!minutes) return "0 óra";
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} óra ${rest} perc` : `${hours} óra`;
+};
+
 export function CaseDetail({ params }: CaseDetailProps) {
   const resolvedParams = use(params);
   const router = useRouter();
@@ -148,6 +217,15 @@ export function CaseDetail({ params }: CaseDetailProps) {
   }[]>([]);
   const [timelineEvents, setTimelineEvents] = useState<TimelineEventItem[]>([]);
   const [communications, setCommunications] = useState<CommunicationItem[]>([]);
+  const [workflowSummary, setWorkflowSummary] = useState<CaseWorkflowSummary | null>(null);
+  const [workItems, setWorkItems] = useState<CaseWorkItemsResponse | null>(null);
+  const [caseActivity, setCaseActivity] = useState<CaseActivityResponse | null>(null);
+  const [caseAgenda, setCaseAgenda] = useState<WorkflowAgendaResponse | null>(null);
+  const [caseResponsibility, setCaseResponsibility] = useState<CaseResponsibilityResponse | null>(null);
+  const [isLoadingWorkflowSummary, setIsLoadingWorkflowSummary] = useState(false);
+  const [workflowSummaryError, setWorkflowSummaryError] = useState<string | null>(null);
+  const [workItemsError, setWorkItemsError] = useState<string | null>(null);
+  const [workItemFilter, setWorkItemFilter] = useState<'all' | 'mine' | 'overdue' | 'soon' | 'review' | 'handoff' | 'blocked'>('all');
   const [isDownloading, setIsDownloading] = useState<string | null>(null);
   const [caseRecord, setCaseRecord] = useState<{
     id: string;
@@ -439,18 +517,39 @@ export function CaseDetail({ params }: CaseDetailProps) {
         return;
       }
 
-      const [contracts, timeline, caseList, backendDocuments, anonDocs, communicationsResponse] = await Promise.all([
+      setIsLoadingWorkflowSummary(true);
+      setWorkflowSummaryError(null);
+      setWorkItemsError(null);
+      const [contracts, timeline, caseList, backendDocuments, anonDocs, communicationsResponse, workflowSummaryResponse, workItemsResponse, caseActivityResponse, caseAgendaResponse, caseResponsibilityResponse] = await Promise.all([
         getCaseContracts(effectiveCaseId).catch(() => []),
         getCaseTimeline(effectiveCaseId).catch(() => []),
         getCases(1, 200).catch(() => ({ data: [] })),
         getCaseDocuments(effectiveCaseId).catch(() => []),
         getCaseAnonymousDocuments(effectiveCaseId).catch(() => []),
         getCommunications({ caseId: effectiveCaseId, limit: 50 }).catch(() => ({ communications: [], pagination: { total: 0, limit: 50, offset: 0 } })),
+        getCaseWorkflowSummary(effectiveCaseId).catch((error) => {
+          console.error('Failed to load workflow summary:', error);
+          setWorkflowSummaryError('A workflow összefoglaló most nem érhető el.');
+          return null;
+        }),
+        getCaseWorkItems(effectiveCaseId).catch((error) => {
+          console.error('Failed to load case work items:', error);
+          setWorkItemsError('A Case Workbench most nem érhető el.');
+          return null;
+        }),
+        getCaseActivity(effectiveCaseId).catch(() => null),
+        getWorkflowAgenda({ scope: 'CASE', caseId: effectiveCaseId, status: 'OPEN', limit: 20 }).catch(() => null),
+        getCaseResponsibility(effectiveCaseId).catch(() => null),
       ]);
       setGeneratedContracts(contracts);
       setTimelineEvents(timeline);
       setAnonymousDocuments(anonDocs);
       setCommunications(communicationsResponse.communications || []);
+      setWorkflowSummary(workflowSummaryResponse);
+      setWorkItems(workItemsResponse);
+      setCaseActivity(caseActivityResponse);
+      setCaseAgenda(caseAgendaResponse);
+      setCaseResponsibility(caseResponsibilityResponse);
       const record = caseList.data.find((item) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId) || null;
       if (!caseRecord && record) {
         setCaseRecord({
@@ -476,6 +575,9 @@ export function CaseDetail({ params }: CaseDetailProps) {
       })));
     } catch (err) {
       console.error('Failed to load backend data:', err);
+      setWorkflowSummaryError('Az ügyadatok betöltése közben hiba történt.');
+    } finally {
+      setIsLoadingWorkflowSummary(false);
     }
   }, [resolvedParams.caseId, caseRecord]);
 
@@ -974,40 +1076,67 @@ export function CaseDetail({ params }: CaseDetailProps) {
   };
 
   // Task action handlers
-  const handleStartTask = async (taskId: string) => {
-    setActionTaskId(taskId);
+  const refreshWorkSurfaces = async () => {
+    await Promise.all([
+      loadTasks(),
+      loadBackendData(),
+    ]);
+  };
+
+  const runWorkbenchTaskAction = async (
+    taskId: string,
+    action: 'start' | 'submit' | 'approve' | 'return' | 'block' | 'unblock'
+  ) => {
+    setActionTaskId(`${taskId}:${action}`);
     try {
-      await startTask(taskId);
-      await loadTasks();
+      if (action === 'start') await startTask(taskId);
+      if (action === 'submit') await submitTask(taskId);
+      if (action === 'approve') await completeTask(taskId, true);
+      if (action === 'return') await completeTask(taskId, false);
+      if (action === 'block') await blockTask(taskId, 'DEPENDENCY');
+      if (action === 'unblock') await unblockTask(taskId);
+      await refreshWorkSurfaces();
     } catch (err) {
-      console.error('Failed to start task:', err);
+      console.error('Task workflow action failed:', err);
+      await refreshWorkSurfaces();
     } finally {
       setActionTaskId(null);
     }
+  };
+
+  const createSourceTask = async (item: CaseWorkItem | CaseActivityItem, kind: 'REVIEW' | 'FOLLOW_UP' | 'REVIEW_ATTACHMENT') => {
+    const isActivityItem = 'kind' in item;
+    const sourceType = isActivityItem ? item.kind : item.source?.type || null;
+    const sourceId = isActivityItem
+      ? (item.documentId || item.communicationId || null)
+      : (item.source?.id || null);
+    if (!sourceId) return;
+    setActionTaskId(`source:${sourceId}:${kind}`);
+    try {
+      if (sourceType === 'DOCUMENT' && kind !== 'REVIEW_ATTACHMENT') {
+        await createDocumentSourceTask(sourceId, { kind: kind === 'REVIEW' ? 'REVIEW' : 'FOLLOW_UP' });
+      } else if (sourceType === 'COMMUNICATION' && kind !== 'REVIEW') {
+        await createCommunicationSourceTask(sourceId, { kind });
+      }
+      await refreshWorkSurfaces();
+    } catch (err) {
+      console.error('Source-linked task creation failed:', err);
+      await refreshWorkSurfaces();
+    } finally {
+      setActionTaskId(null);
+    }
+  };
+
+  const handleStartTask = async (taskId: string) => {
+    await runWorkbenchTaskAction(taskId, 'start');
   };
 
   const handleSubmitTask = async (taskId: string) => {
-    setActionTaskId(taskId);
-    try {
-      await submitTask(taskId);
-      await loadTasks();
-    } catch (err) {
-      console.error('Failed to submit task:', err);
-    } finally {
-      setActionTaskId(null);
-    }
+    await runWorkbenchTaskAction(taskId, 'submit');
   };
 
   const handleCompleteTask = async (taskId: string, approved: boolean) => {
-    setActionTaskId(taskId);
-    try {
-      await completeTask(taskId, approved);
-      await loadTasks();
-    } catch (err) {
-      console.error('Failed to complete task:', err);
-    } finally {
-      setActionTaskId(null);
-    }
+    await runWorkbenchTaskAction(taskId, approved ? 'approve' : 'return');
   };
 
   const fileToBase64 = (file: File): Promise<string> => {
@@ -1088,6 +1217,34 @@ export function CaseDetail({ params }: CaseDetailProps) {
   const openTasks = tasks.filter(
     (task) => !['COMPLETED', 'APPROVED', 'REJECTED', 'DECLINED', 'CANCELLED', 'ARCHIVED'].includes(String(task.status || '').toUpperCase())
   );
+  const activityItems = caseActivity?.items || [];
+  const workbenchItems = workItems?.items || [];
+  const filteredWorkbenchItems = workbenchItems.filter((item) => {
+    if (workItemFilter === 'mine') return item.isMine;
+    if (workItemFilter === 'overdue') return item.urgency === 'OVERDUE';
+    if (workItemFilter === 'soon') return item.urgency === 'TODAY' || item.urgency === 'SOON';
+    if (workItemFilter === 'review') return item.workflowCategory === 'REVIEW';
+    if (workItemFilter === 'handoff') return item.workflowCategory === 'HANDOFF';
+    if (workItemFilter === 'blocked') return item.workflowCategory === 'BLOCKED' || item.workflowCategory === 'WAITING';
+    return true;
+  });
+  const workbenchFilters = [
+    { key: 'all' as const, label: 'Összes', count: workItems?.summary.open ?? workbenchItems.length },
+    { key: 'mine' as const, label: 'Saját munkám', count: workItems?.summary.mine ?? 0 },
+    { key: 'overdue' as const, label: 'Lejárt', count: workItems?.summary.overdue ?? 0 },
+    { key: 'soon' as const, label: 'Közelgő', count: workItems?.summary.dueSoon ?? 0 },
+    { key: 'review' as const, label: 'Review', count: workItems?.summary.reviewRequired ?? 0 },
+    { key: 'handoff' as const, label: 'Átadás', count: workItems?.summary.handoffRequired ?? 0 },
+    ...(workItems?.availability.blockerState ? [{ key: 'blocked' as const, label: 'Blokkolt / várakozó', count: (workItems?.summary.blocked ?? 0) + (workItems?.summary.waiting ?? 0) }] : []),
+  ];
+  const caseAgendaItems = (caseAgenda?.days || []).flatMap((day) => day.items);
+  const overdueCaseAgendaItems = caseAgendaItems.filter((item) => item.status === 'OPEN' && item.urgency === 'OVERDUE');
+  const nextCaseAgendaItem = caseAgendaItems.find((item) => item.status === 'OPEN') || null;
+  const agendaToneClass = (item: WorkflowDeadlineItem) => {
+    if (item.urgency === 'OVERDUE') return 'border-[#d4b8b8] bg-[#FEF2F2] text-[#8b3a3a]';
+    if (item.urgency === 'TODAY' || item.urgency === 'TOMORROW' || item.urgency === 'THIS_WEEK') return 'border-[#f9c74f] bg-[var(--adm-sand-100)] text-[#6B4B14]';
+    return 'border-[var(--adm-border)] bg-white text-[var(--adm-text-muted)]';
+  };
   const quickActions = [
     {
       title: 'Dokumentum-review',
@@ -1167,6 +1324,14 @@ export function CaseDetail({ params }: CaseDetailProps) {
             label: 'Irat feltöltése',
             action: () => fileInputRef.current?.click(),
           };
+  const workflowNextAction = workflowSummary?.nextAction || null;
+  const workflowScopeLabel = workflowNextAction?.scope === 'MY_WORK' ? 'Saját feladatom' : 'Ügyszintű következő lépés';
+  const workflowActionLabel = workflowNextAction ? (WORKFLOW_ACTION_LABELS[workflowNextAction.kind] || 'Következő lépés') : null;
+  const workflowDeadlineTone = workflowSummary?.nextDeadline?.urgency === 'OVERDUE'
+    ? 'border-[#d4b8b8] bg-[#FEF2F2] text-[#8b3a3a]'
+    : workflowSummary?.nextDeadline?.urgency === 'TODAY'
+      ? 'border-[#f9c74f] bg-[var(--adm-sand-100)] text-[var(--adm-ochre-500)]'
+      : 'border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]';
 
   if (!caseRecord && timelineEvents.length === 0 && generatedContracts.length === 0 && documents.length === 0) {
     return (
@@ -1225,10 +1390,12 @@ export function CaseDetail({ params }: CaseDetailProps) {
                       <p className="mt-1 text-[13px] font-semibold text-[var(--adm-text)]">{assignedLawyer.name}</p>
                       <p className="text-[10px] text-[var(--adm-text-muted)]">{assignedLawyer.email}</p>
                     </>
-                  ) : (
+                  ) : caseResponsibility?.capabilities.canChangeResponsibleLawyer ? (
                     <button onClick={() => { setShowAssignDropdown(!showAssignDropdown); loadAvailableUsers(); }} className="mt-1 text-[11px] font-semibold text-[var(--adm-ochre-500)]">
                       + Felelős ügyvéd hozzárendelése
                     </button>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Nincs kijelölve</p>
                   )}
                   {showAssignDropdown && (
                     <div className="absolute left-3 top-full z-50 mt-1 max-h-48 w-64 overflow-y-auto border border-[var(--adm-border)] bg-white shadow-lg">
@@ -1250,7 +1417,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                 <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
                   <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Résztvevők</p>
                   <p className="mt-1 text-[13px] font-semibold text-[var(--adm-text)]">{collaborators.length || 0} résztvevő</p>
-                  {!isArchived && (
+                  {!isArchived && caseResponsibility?.capabilities.canAddCollaborator && (
                     <div className="relative">
                       <button onClick={() => { setShowCollaboratorDropdown(!showCollaboratorDropdown); loadAvailableUsers(); }} className="mt-1 text-[10px] font-semibold text-[var(--adm-ochre-500)]">+ Résztvevő hozzáadása</button>
                       {showCollaboratorDropdown && (
@@ -1321,6 +1488,452 @@ export function CaseDetail({ params }: CaseDetailProps) {
             </section>
 
             <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleFileUpload} className="hidden" disabled={isArchived} />
+
+            <section aria-labelledby="case-center-heading" className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+              <div className="border border-[var(--adm-green-900)] bg-[var(--adm-green-800)] p-5 text-[var(--adm-ivory-50)] shadow-[0_10px_24px_rgba(31,74,51,0.18)]">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[rgba(255,255,255,0.72)]">Itt folytasd</p>
+                    <h2 id="case-center-heading" className="mt-1 font-serif text-[24px] leading-tight">
+                      {isLoadingWorkflowSummary
+                        ? 'Workflow összefoglaló betöltése'
+                        : workflowNextAction?.title || 'Nincs sürgős következő lépés'}
+                    </h2>
+                  </div>
+                  {workflowActionLabel && (
+                    <span className="border border-[rgba(255,255,255,0.35)] bg-[rgba(255,255,255,0.12)] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em]">
+                      {workflowActionLabel}
+                    </span>
+                  )}
+                </div>
+
+                {workflowSummaryError ? (
+                  <p className="mt-4 border border-[rgba(255,255,255,0.28)] bg-[rgba(255,255,255,0.10)] p-3 text-[12px] leading-relaxed">
+                    {workflowSummaryError} A meglévő ügytörténet és feladatlista továbbra is használható.
+                  </p>
+                ) : workflowNextAction ? (
+                  <>
+                    <p className="mt-4 max-w-2xl text-[13px] leading-relaxed text-[rgba(255,255,255,0.84)]">{workflowNextAction.explanation}</p>
+                    <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px]">
+                      <span className="border border-[rgba(255,255,255,0.25)] px-2 py-1">{workflowScopeLabel}</span>
+                      <span className="border border-[rgba(255,255,255,0.25)] px-2 py-1">{formatWorkflowDate(workflowNextAction.dueAt)}</span>
+                    </div>
+                    {workflowNextAction.href && (
+                      <button
+                        type="button"
+                        onClick={() => router.push(workflowNextAction.href as string)}
+                        className="mt-5 bg-[var(--adm-ochre-500)] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-[var(--adm-green-800)]"
+                      >
+                        Munkalépés megnyitása
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-4 max-w-2xl text-[13px] leading-relaxed text-[rgba(255,255,255,0.84)]">
+                      Nincs lejárt vagy közeli határidejű feladat a biztonságos workflow összefoglalóban. Érdemes átnézni az ügytörténetet vagy a feladatlistát.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/tasks?caseId=${canonicalCaseId}`)}
+                      className="mt-5 bg-white px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)] focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-[var(--adm-green-800)]"
+                    >
+                      Feladatlista megnyitása
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+                <div className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Aktuális állapot</h3>
+                  <div className="mt-3 grid gap-2 text-[11px] text-[var(--adm-text)]">
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Ügystátusz</span>
+                      <b>{getCaseStatusLabel(workflowSummary?.case.status || caseRecord?.status)}</b>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Várakozás</span>
+                      <b>{workflowSummary?.waitingOn?.label || 'Nincs strukturált várakozási adat'}</b>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Következő határidő</span>
+                      <span className={`border px-2 py-0.5 text-[10px] ${workflowDeadlineTone}`}>
+                        {workflowSummary?.nextDeadline
+                          ? `${DEADLINE_URGENCY_LABELS[workflowSummary.nextDeadline.urgency]} · ${formatWorkflowDate(workflowSummary.nextDeadline.dueAt)}`
+                          : 'Nincs rögzített határidő'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Felelős</span>
+                      <b>{workflowSummary?.responsibility.responsibleLawyer?.displayName || assignedLawyer?.name || 'Nincs kijelölve'}</b>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Résztvevők</span>
+                      <b>{workflowSummary?.responsibility.collaborators.length ?? collaborators.length} fő</b>
+                    </div>
+                  </div>
+                  <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Munka és idő</p>
+                    <p className="mt-1 text-[13px] font-semibold text-[var(--adm-text)]">
+                      {caseResponsibility?.work.openTaskCount ?? workflowSummary?.taskStats.open ?? openTasks.length} nyitott · {caseResponsibility?.work.overdueTaskCount ?? workflowSummary?.taskStats.overdue ?? 0} lejárt
+                    </p>
+                    <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">
+                      {caseResponsibility?.time.supported
+                        ? `Rögzített idő: ${formatMinutes(caseResponsibility.time.totalMinutes ?? caseResponsibility.time.currentUserMinutes)}`
+                        : 'Időrögzítés csak matter-kapcsolattal támogatott'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => router.push(caseResponsibility?.time.matterId ? `/time-entries?caseId=${canonicalCaseId}&matterId=${caseResponsibility.time.matterId}` : `/workload?caseId=${canonicalCaseId}`)}
+                      className="mt-2 text-[10px] font-semibold text-[var(--adm-ochre-500)]"
+                    >
+                      Munkateher / idő megnyitása
+                    </button>
+                  </div>
+                </div>
+
+                <div className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Munka mozgásban</h3>
+                  <div className="mt-3 grid grid-cols-5 gap-1.5 text-center">
+                    {[
+                      ['Nyitott', workflowSummary?.taskStats.open ?? openTasks.length],
+                      ['Lejárt', workflowSummary?.taskStats.overdue ?? 0],
+                      ['48 óra', workflowSummary?.taskStats.dueSoon ?? 0],
+                      ['Blokk', workflowSummary?.taskStats.blocked ?? 0],
+                      ['Review', workflowSummary?.taskStats.review ?? 0],
+                    ].map(([label, value]) => (
+                      <div key={label} className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2">
+                        <p className="text-[14px] font-bold text-[var(--adm-text)]">{value}</p>
+                        <p className="text-[9px] text-[var(--adm-text-muted)]">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {workflowSummary?.activeReview ? (
+                    <button
+                      type="button"
+                      onClick={() => workflowSummary.activeReview?.href && router.push(workflowSummary.activeReview.href)}
+                      className="mt-3 w-full border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2 text-left focus:outline-none focus:ring-2 focus:ring-[var(--adm-ochre-500)]"
+                    >
+                      <p className="truncate text-[12px] font-semibold text-[var(--adm-text)]">{workflowSummary.activeReview.displayName}</p>
+                      <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">Aktív dokumentum-review · {workflowSummary.activeReview.status || 'Nincs státuszadat'}</p>
+                    </button>
+                  ) : (
+                    <p className="mt-3 border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-2 text-[10px] text-[var(--adm-text-muted)]">Nincs biztonságosan azonosított aktív review.</p>
+                  )}
+                  {workflowSummary?.handoff ? (
+                    <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Átadás: {workflowSummary.handoff.status}</p>
+                  ) : (
+                    <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Átadás: nincs aktív, production-kompatibilis összefoglaló forrás.</p>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <CaseIntakeReadinessPanel caseId={canonicalCaseId} />
+
+            <CaseMatterDossierPanel caseId={canonicalCaseId} compact />
+
+            {workflowSummary?.latestCommunication && (
+              <section className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Legutóbbi kommunikáció</p>
+                    <h2 className="mt-1 text-[15px] font-semibold text-[var(--adm-text)]">{workflowSummary.latestCommunication.subject || 'Nincs tárgy'}</h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.push(workflowSummary.latestCommunication?.href || `/cases/${canonicalCaseId}/communications`)}
+                    className="border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text)] focus:outline-none focus:ring-2 focus:ring-[var(--adm-ochre-500)]"
+                  >
+                    Kommunikációs napló
+                  </button>
+                </div>
+                <p className="mt-2 text-[12px] leading-relaxed text-[var(--adm-text-muted)]">
+                  {workflowSummary.latestCommunication.contentPreview || 'Ehhez a kommunikációhoz csak metaadat érhető el az összefoglalóban.'}
+                </p>
+                <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">
+                  {formatWorkflowDate(workflowSummary.latestCommunication.occurredAt)} · Mellékletek: {workflowSummary.latestCommunication.attachmentCount || 0} · Forrásfeladatok: {workflowSummary.latestCommunication.sourceTaskCount || 0}
+                </p>
+              </section>
+            )}
+
+            <section aria-labelledby="case-agenda-heading" className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Határidő agenda</p>
+                  <h2 id="case-agenda-heading" className="mt-1 font-serif text-[22px] text-[var(--adm-text)]">Ügyhatáridők és feladat leadások</h2>
+                  <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-[var(--adm-text-muted)]">
+                    Backend agenda szerződésből érkező ügyhatáridő és strukturált feladat leadási dátum. Nincs külső naptárszinkron, AI dátumfelismerés vagy jogi jelentőség-következtetés.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/deadlines?scope=CASE&caseId=${encodeURIComponent(canonicalCaseId)}`)}
+                  className="border border-[var(--adm-border)] bg-white px-3 py-2 text-[10px] font-semibold text-[var(--adm-text)] focus:outline-none focus:ring-2 focus:ring-[var(--adm-ochre-500)]"
+                >
+                  Agenda megnyitása
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Következő</p>
+                  <p className="mt-1 truncate text-[13px] font-semibold text-[var(--adm-text)]">{nextCaseAgendaItem?.title || 'Nincs nyitott határidő'}</p>
+                  <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{nextCaseAgendaItem ? formatWorkflowDate(nextCaseAgendaItem.dueAt) : 'Csak rögzített dátumok jelennek meg.'}</p>
+                </div>
+                <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Lejárt</p>
+                  <p className="mt-1 text-[18px] font-bold text-[#8b3a3a]">{overdueCaseAgendaItems.length}</p>
+                  <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">Nyitott, lejárt agendaelem.</p>
+                </div>
+                <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Források</p>
+                  <p className="mt-1 text-[13px] font-semibold text-[var(--adm-text)]">{caseAgenda?.availability.caseDeadlines ? 'Ügy + feladat' : 'Feladat leadások'}</p>
+                  <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">Tárgyalás/reminder mező nincs ebben a modellben.</p>
+                </div>
+              </div>
+
+              {caseAgendaItems.length > 0 ? (
+                <div className="mt-4 space-y-2">
+                  {caseAgendaItems.slice(0, 6).map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => router.push(item.href || item.source.href || `/cases/${canonicalCaseId}`)}
+                      className="w-full border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-left focus:outline-none focus:ring-2 focus:ring-[var(--adm-ochre-500)]"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="truncate text-[13px] font-semibold text-[var(--adm-text)]">{item.title}</p>
+                        <span className={`border px-2 py-0.5 text-[9px] font-semibold ${agendaToneClass(item)}`}>
+                          {DEADLINE_URGENCY_LABELS[item.urgency] || item.urgency}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">
+                        {item.source.displayName || item.sourceType} · {formatWorkflowDate(item.dueAt)} · {item.responsibility.assignee?.displayName || item.responsibility.responsibleLawyer?.displayName || 'Nincs kijelölt felelős'}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-[11px] text-[var(--adm-text-muted)]">
+                  Nincs strukturált ügyhatáridő vagy feladat leadási dátum a jelenlegi agendaablakban.
+                </p>
+              )}
+            </section>
+
+            <section aria-labelledby="case-workbench-heading" className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Case Workbench</p>
+                  <h2 id="case-workbench-heading" className="mt-1 font-serif text-[22px] text-[var(--adm-text)]">Ügyhöz tartozó munkasor</h2>
+                  <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-[var(--adm-text-muted)]">
+                    Backendből normalizált feladat- és leadási lista. A műveletgombok csak akkor jelennek meg, ha a szerver szerint az adott lépés engedélyezett.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/tasks?caseId=${encodeURIComponent(canonicalCaseId)}`)}
+                  className="border border-[var(--adm-border)] bg-white px-3 py-2 text-[10px] font-semibold text-[var(--adm-text)] focus:outline-none focus:ring-2 focus:ring-[var(--adm-ochre-500)]"
+                >
+                  Globális munkasor
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-2 sm:grid-cols-5">
+                {[
+                  ['Nyitott', workItems?.summary.open ?? 0],
+                  ['Saját', workItems?.summary.mine ?? 0],
+                  ['Lejárt', workItems?.summary.overdue ?? 0],
+                  ['Review', workItems?.summary.reviewRequired ?? 0],
+                  ['Átadás', workItems?.summary.handoffRequired ?? 0],
+                ].map(([label, value]) => (
+                  <div key={label} className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2 text-center">
+                    <p className="text-[16px] font-bold text-[var(--adm-text)]">{value}</p>
+                    <p className="text-[9px] uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">{label}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {workbenchFilters.map((filter) => (
+                  <button
+                    key={filter.key}
+                    type="button"
+                    onClick={() => setWorkItemFilter(filter.key)}
+                    className={`border px-3 py-1.5 text-[10px] font-semibold ${
+                      workItemFilter === filter.key
+                        ? 'border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-white'
+                        : 'border-[var(--adm-border)] bg-white text-[var(--adm-text)] hover:bg-[var(--adm-surface)]'
+                    }`}
+                  >
+                    {filter.label} · {filter.count}
+                  </button>
+                ))}
+              </div>
+
+              {workItemsError ? (
+                <p className="mt-4 border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-[11px] text-[var(--adm-text-muted)]">
+                  {workItemsError} A régi feladatlista továbbra is elérhető a jobb oldali panelben.
+                </p>
+              ) : filteredWorkbenchItems.length > 0 ? (
+                <div className="mt-4 space-y-3">
+                  {filteredWorkbenchItems.slice(0, 10).map((item: CaseWorkItem) => (
+                    <article key={item.id} className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="border border-[var(--adm-border)] bg-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">
+                              {WORK_ITEM_TYPE_LABELS[item.type] || item.type}
+                            </span>
+                            <span className="border border-[var(--adm-border)] bg-white px-2 py-0.5 text-[9px] font-semibold text-[var(--adm-text)]">
+                              {WORK_ITEM_CATEGORY_LABELS[item.workflowCategory] || item.workflowCategory}
+                            </span>
+                            <span className={`border px-2 py-0.5 text-[9px] font-semibold ${
+                              item.urgency === 'OVERDUE'
+                                ? 'border-[#d4b8b8] bg-[#FEF2F2] text-[#8b3a3a]'
+                                : item.urgency === 'TODAY' || item.urgency === 'SOON'
+                                  ? 'border-[#f9c74f] bg-[var(--adm-sand-100)] text-[#6B4B14]'
+                                  : 'border-[var(--adm-border)] bg-white text-[var(--adm-text-muted)]'
+                            }`}>
+                              {WORK_ITEM_URGENCY_LABELS[item.urgency] || item.urgency}
+                            </span>
+                          </div>
+                          <h3 className="mt-2 truncate text-[14px] font-semibold text-[var(--adm-text)]">{item.title}</h3>
+                          <p className="mt-1 text-[11px] leading-relaxed text-[var(--adm-text-muted)]">
+                            {item.safeDescription || 'Nincs biztonságos rövid leírás ehhez a munkatételhez.'}
+                          </p>
+                          <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">
+                            Felelős: {item.assignee?.displayName || 'Nincs kijelölve'} · Határidő: {item.dueAt ? new Date(item.dueAt).toLocaleDateString('hu-HU') : 'Nincs'} · Státusz: {getTaskStatusLabel(item.status)}
+                          </p>
+                          {item.blocker && (
+                            <p className="mt-1 text-[10px] font-semibold text-[#8b3a3a]">
+                              Blokkolás: {item.blocker.safeLabel || 'Strukturált blokkoló'} {item.blocker.since ? `· ${new Date(item.blocker.since).toLocaleDateString('hu-HU')}` : ''}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                          {item.href && (
+                            <button type="button" onClick={() => router.push(item.href as string)} className="border border-[var(--adm-border)] bg-white px-2 py-1 text-[9px] font-semibold text-[var(--adm-text)]">
+                              Megnyitás
+                            </button>
+                          )}
+                          {item.source?.href && item.capabilities.canOpenSource && (
+                            <button type="button" onClick={() => router.push(item.source?.href as string)} className="border border-[var(--adm-border)] bg-white px-2 py-1 text-[9px] font-semibold text-[var(--adm-text)]">
+                              Forrás
+                            </button>
+                          )}
+                          {item.type === 'DOCUMENT' && item.source?.id && (
+                            <button type="button" onClick={() => createSourceTask(item, 'REVIEW')} disabled={Boolean(actionTaskId)} className="border border-[var(--adm-ochre-500)] bg-white px-2 py-1 text-[9px] font-semibold text-[var(--adm-ochre-500)] disabled:opacity-50">
+                              Review feladat
+                            </button>
+                          )}
+                          {item.type === 'COMMUNICATION' && item.source?.id && (
+                            <button type="button" onClick={() => createSourceTask(item, 'FOLLOW_UP')} disabled={Boolean(actionTaskId)} className="border border-[var(--adm-ochre-500)] bg-white px-2 py-1 text-[9px] font-semibold text-[var(--adm-ochre-500)] disabled:opacity-50">
+                              Utánkövetés
+                            </button>
+                          )}
+                          {item.type === 'TASK' && item.capabilities.canStart && (
+                            <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'start')} disabled={Boolean(actionTaskId)} className="bg-[var(--adm-green-800)] px-2 py-1 text-[9px] font-semibold text-white disabled:opacity-50">Elkezdem</button>
+                          )}
+                          {item.type === 'TASK' && item.capabilities.canSubmitForReview && (
+                            <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'submit')} disabled={Boolean(actionTaskId)} className="bg-[var(--adm-ochre-500)] px-2 py-1 text-[9px] font-semibold text-white disabled:opacity-50">Review-ra küldöm</button>
+                          )}
+                          {item.type === 'TASK' && item.capabilities.canApprove && (
+                            <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'approve')} disabled={Boolean(actionTaskId)} className="bg-[var(--adm-green-800)] px-2 py-1 text-[9px] font-semibold text-white disabled:opacity-50">Jóváhagyom</button>
+                          )}
+                          {item.type === 'TASK' && item.capabilities.canReturnForCorrection && (
+                            <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'return')} disabled={Boolean(actionTaskId)} className="border border-[#8B2A2A] bg-white px-2 py-1 text-[9px] font-semibold text-[#8B2A2A] disabled:opacity-50">Visszaküldöm</button>
+                          )}
+                          {item.type === 'TASK' && item.capabilities.canBlock && (
+                            <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'block')} disabled={Boolean(actionTaskId)} className="border border-[#8B2A2A] bg-white px-2 py-1 text-[9px] font-semibold text-[#8B2A2A] disabled:opacity-50">Blokkolom</button>
+                          )}
+                          {item.type === 'TASK' && item.capabilities.canUnblock && (
+                            <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'unblock')} disabled={Boolean(actionTaskId)} className="bg-[var(--adm-green-800)] px-2 py-1 text-[9px] font-semibold text-white disabled:opacity-50">Blokkolás feloldása</button>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[11px] text-[var(--adm-text-muted)]">
+                  Nincs megjeleníthető munkatétel ebben a szűrőben. A nem támogatott várakozási/review/átadási állapotok nem kerülnek szimulálásra.
+                </p>
+              )}
+
+              <p className="mt-3 text-[10px] text-[var(--adm-text-soft)]">
+                Elérhetőség: feladatműveletek {workItems?.availability.taskTransitions ? 'aktív' : 'nem elérhető'} · blokkolás {workItems?.availability.blockerState ? 'strukturált' : 'nem támogatott'} · várakozás {workItems?.availability.waitingState ? 'strukturált' : 'nem támogatott'} · leadás {workItems?.availability.handoffWorkflow ? 'aktív' : 'nem elérhető'}.
+              </p>
+            </section>
+
+            <section aria-labelledby="case-activity-heading" className="border border-[rgba(22,32,26,0.10)] bg-white p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Ügyaktivitás</p>
+                  <h2 id="case-activity-heading" className="mt-1 font-serif text-[22px] text-[var(--adm-text)]">Dokumentumok és kommunikációk mozgása</h2>
+                  <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-[var(--adm-text-muted)]">
+                    Egységes, olvasási lista feladatokból, dokumentum-metaadatokból, kommunikációs metaadatokból és timeline eseményekből. Nyers iratszöveg, teljes üzenettörzs és mellékletfájl nem jelenik meg.
+                  </p>
+                </div>
+                <span className="border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text-muted)]">
+                  {caseActivity?.pagination.returned ?? 0} tétel
+                </span>
+              </div>
+
+              {activityItems.length > 0 ? (
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                  {activityItems.slice(0, 8).map((item) => (
+                    <article key={item.id} className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="border border-[var(--adm-border)] bg-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">
+                          {CASE_ACTIVITY_KIND_LABELS[item.kind] || item.kind}
+                        </span>
+                        {item.meta.status && (
+                          <span className="border border-[var(--adm-border)] bg-white px-2 py-0.5 text-[9px] font-semibold text-[var(--adm-text)]">
+                            {getTaskStatusLabel(item.meta.status)}
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="mt-2 truncate text-[14px] font-semibold text-[var(--adm-text)]">{item.title}</h3>
+                      <p className="mt-1 text-[11px] leading-relaxed text-[var(--adm-text-muted)]">
+                        {item.safeDescription || 'Csak biztonságos metaadat érhető el ehhez az eseményhez.'}
+                      </p>
+                      <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">
+                        {formatWorkflowDate(item.occurredAt)}
+                        {typeof item.meta.attachmentCount === 'number' ? ` · Melléklet-metaadat: ${item.meta.attachmentCount}` : ''}
+                        {typeof item.meta.sourceTaskCount === 'number' ? ` · Forrásfeladat: ${item.meta.sourceTaskCount}` : ''}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {item.href && (
+                          <button type="button" onClick={() => router.push(item.href as string)} className="border border-[var(--adm-border)] bg-white px-2 py-1 text-[9px] font-semibold text-[var(--adm-text)]">
+                            Megnyitás
+                          </button>
+                        )}
+                        {item.kind === 'DOCUMENT' && item.documentId && (
+                          <button type="button" onClick={() => createSourceTask(item, 'REVIEW')} disabled={Boolean(actionTaskId)} className="border border-[var(--adm-ochre-500)] bg-white px-2 py-1 text-[9px] font-semibold text-[var(--adm-ochre-500)] disabled:opacity-50">
+                            Review feladat
+                          </button>
+                        )}
+                        {item.kind === 'COMMUNICATION' && item.communicationId && (
+                          <button type="button" onClick={() => createSourceTask(item, 'FOLLOW_UP')} disabled={Boolean(actionTaskId)} className="border border-[var(--adm-ochre-500)] bg-white px-2 py-1 text-[9px] font-semibold text-[var(--adm-ochre-500)] disabled:opacity-50">
+                            Utánkövetés
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[11px] text-[var(--adm-text-muted)]">
+                  Nincs biztonságosan megjeleníthető ügyaktivitás. A rendszer nem szimulál dokumentum- vagy kommunikációs eseményeket.
+                </p>
+              )}
+
+              <p className="mt-3 text-[10px] text-[var(--adm-text-soft)]">
+                Privacy guard: iratszöveg {caseActivity?.privacy.rawDocumentTextIncluded ? 'megjelenik' : 'nem jelenik meg'} · üzenettörzs {caseActivity?.privacy.rawCommunicationBodyIncluded ? 'megjelenik' : 'nem jelenik meg'} · mellékletfájl {caseActivity?.privacy.attachmentBytesIncluded ? 'megjelenik' : 'nem jelenik meg'}.
+              </p>
+            </section>
 
             <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {quickActions.map((action) => (

@@ -3,11 +3,32 @@
 // ============================================================================
 
 import { Router, Request, Response } from 'express';
-import taskService, { TaskValidationError } from './services.js';
-import { authenticate, requireRole } from '../../middleware/auth.js';
+import taskService, { TaskValidationError } from './services';
+import { authenticate, requireRole } from '../../middleware/auth';
 import { buildPrismaErrorResponse } from '../../utils/prismaError';
+import {
+  ensureNoArbitraryTaskStatusPayload,
+  WorkflowTransitionError,
+} from '../cases/workItems';
 
 const router = Router();
+
+function sendTaskWorkflowError(res: Response, error: unknown, fallbackMessage: string): void {
+  if (error instanceof WorkflowTransitionError) {
+    res.status(error.statusCode).json({
+      status: error.statusCode,
+      code: error.code,
+      message: error.message,
+    });
+    return;
+  }
+  const prismaErr = buildPrismaErrorResponse(error);
+  if (prismaErr) {
+    res.status(prismaErr.status).json(prismaErr.body);
+    return;
+  }
+  res.status(500).json({ error: fallbackMessage });
+}
 
 const FRONTEND_TO_PRISMA_TASK_TYPE: Record<string, string> = {
   CONTRACT_REVIEW: 'REVIEW_CONTRACT',
@@ -188,6 +209,7 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
 // ============================================================================
 router.post('/:id/start', authenticate, async (req: Request, res: Response) => {
   try {
+    ensureNoArbitraryTaskStatusPayload(req.body);
     const idParam = req.params.id;
     const id = Array.isArray(idParam) ? idParam[0] : idParam;
     const userId = (req as any).user?.userId;
@@ -196,11 +218,7 @@ router.post('/:id/start', authenticate, async (req: Request, res: Response) => {
     res.json(task);
   } catch (error) {
     console.error('Error starting task:', error);
-    const prismaErr = buildPrismaErrorResponse(error);
-    if (prismaErr) {
-      return res.status(prismaErr.status).json(prismaErr.body);
-    }
-    res.status(500).json({ error: 'Hiba a feladat elkezdésekor' });
+    sendTaskWorkflowError(res, error, 'Hiba a feladat elkezdésekor');
   }
 });
 
@@ -209,6 +227,7 @@ router.post('/:id/start', authenticate, async (req: Request, res: Response) => {
 // ============================================================================
 router.post('/:id/submit', authenticate, async (req: Request, res: Response) => {
   try {
+    ensureNoArbitraryTaskStatusPayload(req.body);
     const idParam = req.params.id;
     const id = Array.isArray(idParam) ? idParam[0] : idParam;
     const { notes } = req.body;
@@ -218,11 +237,7 @@ router.post('/:id/submit', authenticate, async (req: Request, res: Response) => 
     res.json(task);
   } catch (error) {
     console.error('Error submitting task:', error);
-    const prismaErr = buildPrismaErrorResponse(error);
-    if (prismaErr) {
-      return res.status(prismaErr.status).json(prismaErr.body);
-    }
-    res.status(500).json({ error: 'Hiba a feladat beküldésekor' });
+    sendTaskWorkflowError(res, error, 'Hiba a feladat beküldésekor');
   }
 });
 
@@ -231,6 +246,7 @@ router.post('/:id/submit', authenticate, async (req: Request, res: Response) => 
 // ============================================================================
 router.post('/:id/complete', authenticate, async (req: Request, res: Response) => {
   try {
+    ensureNoArbitraryTaskStatusPayload(req.body);
     const idParam = req.params.id;
     const id = Array.isArray(idParam) ? idParam[0] : idParam;
     const { approved, notes } = req.body;
@@ -244,11 +260,65 @@ router.post('/:id/complete', authenticate, async (req: Request, res: Response) =
     res.json(task);
   } catch (error) {
     console.error('Error completing task:', error);
-    const prismaErr = buildPrismaErrorResponse(error);
-    if (prismaErr) {
-      return res.status(prismaErr.status).json(prismaErr.body);
+    sendTaskWorkflowError(res, error, 'Hiba a feladat lezárásakor');
+  }
+});
+
+// ============================================================================
+// POST /api/v1/tasks/:id/block - Feladat blokkolása strukturált okkal
+// ============================================================================
+router.post('/:id/block', authenticate, async (req: Request, res: Response) => {
+  try {
+    ensureNoArbitraryTaskStatusPayload(req.body);
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
+    const userId = (req as any).user?.userId;
+    const reason = String(req.body?.reason || '').trim();
+
+    if (!reason) {
+      return res.status(400).json({ status: 400, code: 'STUCK_REASON_REQUIRED', message: 'reason is required' });
     }
-    res.status(500).json({ error: 'Hiba a feladat lezárásakor' });
+
+    const task = await taskService.blockTask(id, userId, reason);
+    res.json(task);
+  } catch (error) {
+    console.error('Error blocking task:', error);
+    sendTaskWorkflowError(res, error, 'Hiba a feladat blokkolásakor');
+  }
+});
+
+// ============================================================================
+// POST /api/v1/tasks/:id/unblock - Feladat blokkolásának feloldása
+// ============================================================================
+router.post('/:id/unblock', authenticate, async (req: Request, res: Response) => {
+  try {
+    ensureNoArbitraryTaskStatusPayload(req.body);
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
+    const userId = (req as any).user?.userId;
+
+    const task = await taskService.unblockTask(id, userId);
+    res.json(task);
+  } catch (error) {
+    console.error('Error unblocking task:', error);
+    sendTaskWorkflowError(res, error, 'Hiba a feladat blokkolásának feloldásakor');
+  }
+});
+
+// ============================================================================
+// POST /api/v1/tasks/:id/reschedule - Feladathatáridő átütemezése
+// ============================================================================
+router.post('/:id/reschedule', authenticate, async (req: Request, res: Response) => {
+  try {
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
+    const userId = (req as any).user?.userId;
+
+    const task = await taskService.rescheduleTaskDueDate(id, userId, req.body);
+    res.json(task);
+  } catch (error) {
+    console.error('Error rescheduling task deadline:', error);
+    sendTaskWorkflowError(res, error, 'Hiba a feladathatáridő átütemezésekor');
   }
 });
 
@@ -276,11 +346,14 @@ router.post('/:id/reassign', authenticate, async (req: Request, res: Response) =
 
     const task = await taskService.reassignTask(id, newAssigneeId, reassignedBy);
     res.json(task);
-  } catch (error) {
+    } catch (error) {
     console.error('Error reassigning task:', error);
-    const prismaErr = buildPrismaErrorResponse(error);
-    if (prismaErr) {
-      return res.status(prismaErr.status).json(prismaErr.body);
+    if (error instanceof WorkflowTransitionError) {
+      return res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
+    }
+      const prismaErr = buildPrismaErrorResponse(error);
+      if (prismaErr) {
+        return res.status(prismaErr.status).json(prismaErr.body);
     }
     res.status(500).json({ error: 'Hiba a feladat átadásakor' });
   }

@@ -7,8 +7,57 @@ import { Router, Request, Response } from 'express';
 import casesService from './services';
 import { workflowService } from '../workflow';
 import { authenticate } from '../../middleware/auth';
+import { requireCaseCollaboratorManageAccess, requireCaseManageAccess, requireCaseReadAccess } from './authorization';
+import { getCaseWorkflowSummary } from './workflowSummary';
+import { getCaseWorkItems } from './workItems';
+import { getCaseActivity } from './activity';
+import { AgendaRequestError, getCaseDeadlines } from '../agenda/service';
+import { getCaseResponsibility } from '../responsibility/service';
+import { getCaseLifecycle, closeCase, reopenCase, archiveCase, LifecycleServiceError } from './lifecycleService';
+import { getCaseLitigationDossier } from './litigationDossier';
+import {
+  activateMatter,
+  createOpeningTasks,
+  declineIntake,
+  getCaseIntakeReadiness,
+  IntakeServiceError,
+} from './intakeService';
 
 const router = Router();
+
+type LifecycleMutation = (
+  caseId: string,
+  actor: { userId: string; role?: string | null }
+) => Promise<unknown>;
+
+async function handleLifecycleMutation(
+  req: Request,
+  res: Response,
+  action: LifecycleMutation
+): Promise<void> {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+    const result = await action(caseId, { userId, role: req.user?.role });
+    res.json(result);
+  } catch (error) {
+    if (error instanceof LifecycleServiceError) {
+      res.status(error.statusCode).json({
+        status: error.statusCode,
+        code: error.code,
+        message: error.message,
+        ...(error.blockers ? { blockers: error.blockers } : {}),
+      });
+      return;
+    }
+    console.error('Case lifecycle mutation error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+}
 
 // ============================================================================
 // GET /cases
@@ -62,7 +111,7 @@ router.get('/:caseId/documents', authenticate, async (req: Request, res: Respons
   }
 });
 
-router.get('/:caseId/workflow', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId/workflow', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const workflow = await casesService.getWorkflow(caseId);
@@ -116,7 +165,7 @@ router.get('/:caseId/workflow-history', authenticate, async (req: Request, res: 
 // ============================================================================
 // GET /cases/:caseId/summary
 // ============================================================================
-router.get('/:caseId/summary', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId/summary', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const summary = await casesService.getCaseSummary(caseId);
@@ -131,6 +180,283 @@ router.get('/:caseId/summary', authenticate, async (req: Request, res: Response)
     console.error('Get case summary error:', error);
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
+});
+
+// ============================================================================
+// GET /cases/:caseId/workflow-summary
+// ============================================================================
+router.get('/:caseId/workflow-summary', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+
+    const summary = await getCaseWorkflowSummary(caseId, userId);
+
+    if (!summary) {
+      res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+      return;
+    }
+
+    res.json(summary);
+  } catch (error) {
+    console.error('Get workflow summary error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// GET /cases/:caseId/work-items
+// ============================================================================
+router.get('/:caseId/work-items', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+
+    const workItems = await getCaseWorkItems(caseId, userId, req.user?.role);
+
+    if (!workItems) {
+      res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+      return;
+    }
+
+    res.json(workItems);
+  } catch (error) {
+    console.error('Get case work items error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// GET /cases/:caseId/responsibility
+// ============================================================================
+router.get('/:caseId/responsibility', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+
+    const result = await getCaseResponsibility(caseId, { userId, role: req.user?.role });
+    if (!result) {
+      res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+      return;
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Get case responsibility error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// GET /cases/:caseId/activity
+// ============================================================================
+router.get('/:caseId/activity', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const activity = await getCaseActivity(caseId, {
+      limit: req.query.limit,
+      offset: req.query.offset,
+      type: req.query.type,
+    });
+
+    if (!activity) {
+      res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+      return;
+    }
+
+    res.json(activity);
+  } catch (error) {
+    console.error('Get case activity error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// GET /cases/:caseId/deadlines
+// ============================================================================
+router.get('/:caseId/deadlines', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+    const result = await getCaseDeadlines(caseId, userId, {
+      status: req.query.status,
+      limit: req.query.limit,
+      offset: req.query.offset,
+    });
+    res.json(result);
+  } catch (error) {
+    if (error instanceof AgendaRequestError) {
+      res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
+      return;
+    }
+    console.error('Get case deadlines error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// GET /cases/:caseId/lifecycle
+// ============================================================================
+router.get('/:caseId/lifecycle', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+    const lifecycle = await getCaseLifecycle(caseId, { userId, role: req.user?.role });
+    if (!lifecycle) {
+      res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+      return;
+    }
+    res.json(lifecycle);
+  } catch (error) {
+    console.error('Get case lifecycle error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// GET /cases/:caseId/litigation-dossier
+// ============================================================================
+router.get('/:caseId/litigation-dossier', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+    const dossier = await getCaseLitigationDossier(caseId, { userId, role: req.user?.role });
+    if (!dossier) {
+      res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+      return;
+    }
+    res.json(dossier);
+  } catch (error) {
+    console.error('Get litigation dossier error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// GET /cases/:caseId/intake-readiness
+// ============================================================================
+router.get('/:caseId/intake-readiness', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+    const readiness = await getCaseIntakeReadiness(caseId, { userId, role: req.user?.role });
+    if (!readiness) {
+      res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+      return;
+    }
+    res.json(readiness);
+  } catch (error) {
+    console.error('Get intake readiness error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+function sendIntakeError(res: Response, error: unknown, label: string): void {
+  if (error instanceof IntakeServiceError) {
+    res.status(error.statusCode).json({
+      status: error.statusCode,
+      code: error.code,
+      message: error.message,
+      ...(error.blockers ? { blockers: error.blockers } : {}),
+    });
+    return;
+  }
+  console.error(`${label} error:`, error);
+  res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+}
+
+// ============================================================================
+// POST /cases/:caseId/opening-tasks — explicit, user-confirmed bundle only
+// ============================================================================
+router.post('/:caseId/opening-tasks', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+    const result = await createOpeningTasks(caseId, { userId, role: req.user?.role }, req.body);
+    res.status(201).json(result);
+  } catch (error) {
+    sendIntakeError(res, error, 'Create opening tasks');
+  }
+});
+
+// ============================================================================
+// POST /cases/:caseId/activate | /decline-intake — explicit intake transitions
+// ============================================================================
+router.post('/:caseId/activate', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+    const result = await activateMatter(caseId, { userId, role: req.user?.role });
+    res.json(result);
+  } catch (error) {
+    sendIntakeError(res, error, 'Activate matter');
+  }
+});
+
+router.post('/:caseId/decline-intake', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+    const result = await declineIntake(caseId, { userId, role: req.user?.role });
+    res.json(result);
+  } catch (error) {
+    sendIntakeError(res, error, 'Decline intake');
+  }
+});
+
+// ============================================================================
+// POST /cases/:caseId/close | /reopen | /archive  (lifecycle transitions)
+// ============================================================================
+router.post('/:caseId/close', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  await handleLifecycleMutation(req, res, (caseId, actor) => closeCase(caseId, actor));
+});
+
+router.post('/:caseId/reopen', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  await handleLifecycleMutation(req, res, (caseId, actor) => reopenCase(caseId, actor));
+});
+
+router.post('/:caseId/archive', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  await handleLifecycleMutation(req, res, (caseId, actor) => archiveCase(caseId, actor));
 });
 
 // ============================================================================
@@ -155,7 +481,7 @@ router.get('/:caseId/client-house-style', authenticate, async (req: Request, res
 // ============================================================================
 // GET /cases/:caseId
 // ============================================================================
-router.get('/:caseId', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const caseData = await casesService.getCaseById(caseId);
@@ -233,7 +559,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
 // ============================================================================
 // PATCH /cases/:caseId - Partial update (deadline, priority, description)
 // ============================================================================
-router.patch('/:caseId', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.patch('/:caseId', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const { caseId } = req.params as { caseId: string };
@@ -334,7 +660,7 @@ router.patch('/:caseId/status', authenticate, async (req: Request, res: Response
 // ============================================================================
 // POST /cases/:caseId/assign
 // ============================================================================
-router.post('/:caseId/assign', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:caseId/assign', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const assignedById = (req as any).user?.userId;
     const { caseId } = req.params as { caseId: string };
@@ -369,7 +695,7 @@ router.get('/dashboard/stats', authenticate, async (req: Request, res: Response)
 // ============================================================================
 // GET /cases/:caseId/collaborators
 // ============================================================================
-router.get('/:caseId/collaborators', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId/collaborators', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const caseId = req.params.caseId as string;
     const collaborators = await casesService.getCaseCollaborators(caseId);
@@ -383,7 +709,7 @@ router.get('/:caseId/collaborators', authenticate, async (req: Request, res: Res
 // ============================================================================
 // POST /cases/:caseId/collaborators
 // ============================================================================
-router.post('/:caseId/collaborators', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:caseId/collaborators', authenticate, requireCaseCollaboratorManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const caseId = req.params.caseId as string;
     const { userId, role } = req.body as { userId: string; role?: string };
@@ -406,13 +732,17 @@ router.post('/:caseId/collaborators', authenticate, async (req: Request, res: Re
 // ============================================================================
 // DELETE /cases/:caseId/collaborators/:collaboratorId
 // ============================================================================
-router.delete('/:caseId/collaborators/:collaboratorId', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.delete('/:caseId/collaborators/:collaboratorId', authenticate, requireCaseCollaboratorManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const collaboratorId = req.params.collaboratorId as string;
     await casesService.removeCaseCollaborator(collaboratorId);
     res.status(204).send();
-  } catch (error) {
+  } catch (error: any) {
     console.error('Remove collaborator error:', error);
+    if (error?.code === 'P2025') {
+      res.status(404).json({ status: 404, code: 'COLLABORATOR_NOT_FOUND', message: 'Collaborator not found for this case' });
+      return;
+    }
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 });

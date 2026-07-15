@@ -7,6 +7,8 @@ import {
   getCommunications,
   getCurrentUser,
   getDashboardStats,
+  getIntakeQueue,
+  getWorkflowAgenda,
   getMyTasks,
   getNewsFeed,
   getUnreadNotificationsCount,
@@ -14,7 +16,10 @@ import {
   type CommunicationItem,
   type CurrentUser,
   type DashboardStats,
+  type IntakeQueueResponse,
   type TaskItem,
+  type WorkflowAgendaResponse,
+  type WorkflowDeadlineItem,
 } from "@/lib/api";
 import { toCommunicationSignal, type CommunicationSignal } from "@/lib/communicationIntake";
 
@@ -69,6 +74,72 @@ function KpiCard({ label, value, tone, zeroHint, href }: KpiCardProps) {
         <span className="adm-work-tile__caption">{value === 0 ? zeroHint : "Aktív tétel"}</span>
       </span>
     </Link>
+  );
+}
+
+/**
+ * Bounded intake panel (WORKFLOW-CORE-INTAKE-MATTER-OPENING-1): my intakes
+ * requiring attention, ready/blocked counts, next few items, link to /intake.
+ * Uses the canonical intake API; renders nothing when there is no intake work.
+ */
+function DashboardIntakePanel() {
+  const [queue, setQueue] = useState<IntakeQueueResponse | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getIntakeQueue({ scope: "MY_INTAKES", limit: 5 })
+      .then((response) => {
+        if (!cancelled) setQueue(response);
+      })
+      .catch(() => {
+        if (!cancelled) setQueue(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!queue || queue.summary.total === 0) return null;
+
+  return (
+    <section>
+      <article className="adm-panel overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--adm-border)] px-4 py-3 lg:px-5">
+          <div>
+            <p className="adm-kicker text-[var(--adm-green-800)]">Ügyfelvétel</p>
+            <h3 className="adm-heading mt-0.5 text-[20px] leading-tight">Beérkezési sor</h3>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1 text-[10.5px] font-semibold text-[var(--adm-text-muted)]">
+              Aktiválható: {queue.summary.readyForActivation}
+            </span>
+            <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1 text-[10.5px] font-semibold text-[var(--adm-text-muted)]">
+              Hiányos: {queue.summary.blocked}
+            </span>
+            <Link href="/intake" className="adm-link-button px-3 py-1.5 text-[11px]">
+              Ügyfelvételi sor
+            </Link>
+          </div>
+        </div>
+        <ul className="divide-y divide-[var(--adm-border)]">
+          {queue.items.slice(0, 5).map((item) => (
+            <li key={item.caseId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 lg:px-5">
+              <div className="min-w-0">
+                <Link href={item.href} className="text-[12px] font-semibold text-[var(--adm-text)] hover:underline">
+                  {item.displayName}
+                </Link>
+                <p className="text-[10.5px] text-[var(--adm-text-muted)]">
+                  {item.nextStep ? item.nextStep.label : "Aktiválásra kész"}
+                </p>
+              </div>
+              <span className="text-[10.5px] font-semibold text-[var(--adm-text-soft)]">
+                {item.readiness.completedRequiredItems}/{item.readiness.totalRequiredItems}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </article>
+    </section>
   );
 }
 
@@ -228,6 +299,7 @@ export function Dashboard() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [cases, setCases] = useState<CaseListItem[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [agenda, setAgenda] = useState<WorkflowAgendaResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -243,11 +315,12 @@ export function Dashboard() {
       const me = await getCurrentUser();
       setCurrentUser(me);
 
-      const [comm, myTasks, myCases, dashboardStats] = await Promise.all([
+      const [comm, myTasks, myCases, dashboardStats, workflowAgenda] = await Promise.all([
         getCommunications({ limit: 8 }).catch(() => null),
         getMyTasks().catch(() => null),
         getCases(1, 12, me.id).catch(() => null),
         getDashboardStats().catch(() => null),
+        getWorkflowAgenda({ scope: "MY_WORK", status: "OPEN", limit: 8 }).catch(() => null),
       ]);
 
       const nextWarnings: string[] = [];
@@ -276,9 +349,15 @@ export function Dashboard() {
         nextWarnings.push("Dashboard statisztikák most nem érhetők el.");
       }
 
+      if (workflowAgenda) setAgenda(workflowAgenda);
+      else {
+        setAgenda(null);
+        nextWarnings.push("Agenda határidőnézet átmenetileg nem érhető el.");
+      }
+
       setWarnings(nextWarnings);
 
-      if (!myTasks && !myCases && !dashboardStats) {
+      if (!myTasks && !myCases && !dashboardStats && !workflowAgenda) {
         setError("A dashboard fő adatai nem érhetők el.");
       }
     } catch (e) {
@@ -325,12 +404,9 @@ export function Dashboard() {
   const activeCase = cases[0] || null;
   const reviewQueue = tasks.filter((task) => mapTaskBucket(task) === "review").slice(0, 6);
 
-  const upcomingDeadlines = useMemo(() => {
-    return tasks
-      .filter((task) => !!task.dueDate && mapTaskBucket(task) !== "done")
-      .sort((a, b) => new Date(a.dueDate || "").getTime() - new Date(b.dueDate || "").getTime())
-      .slice(0, 5);
-  }, [tasks]);
+  const upcomingDeadlines = useMemo<WorkflowDeadlineItem[]>(() => {
+    return (agenda?.days || []).flatMap((day) => day.items).slice(0, 8);
+  }, [agenda]);
 
   const recentDocuments = useMemo(() => {
     if (!stats?.recentActivity?.length) return [] as DashboardStats["recentActivity"];
@@ -434,6 +510,7 @@ export function Dashboard() {
   const quickOpenLinks = [
     { href: "/cases", label: "Ügyek", description: "Aktív ügyek és új ügy indítása" },
     { href: "/tasks", label: "Feladatok", description: "Mai teendők és review sor" },
+    { href: "/workload", label: "Munkateher", description: "Felelősség, feladat és rögzített idő" },
     { href: "/documents/compare", label: "Dokumentum-review", description: "Összevetés és szerződésmunka" },
     { href: "/litigation-workspace", label: "Peres munkatér", description: "Stratégiai peres jegyzetek" },
   ];
@@ -487,14 +564,14 @@ export function Dashboard() {
         href: `/tasks?taskId=${review.id}`,
       });
     }
-    const deadline = upcomingDeadlines.find((task) => mapTaskBucket(task) !== "review");
+    const deadline = upcomingDeadlines.find((item) => item.status === "OPEN");
     if (deadline) {
       items.push({
-        id: `mai-deadline-${deadline.id}`,
+        id: `mai-deadline-${deadline.sourceId}`,
         kind: "Határidő",
         title: deadline.title,
-        detail: `${displayDate(deadline.dueDate)} · ${deadline.case?.caseNumber || "Feladat"}`,
-        href: `/tasks?taskId=${deadline.id}`,
+        detail: `${displayDate(deadline.dueAt)} · ${deadline.source.displayName || deadline.sourceType}`,
+        href: deadline.href || deadline.source.href || "/deadlines",
       });
     }
     const importantCommunication = externalComms.find((signal) => signal.requiresReview) || externalComms[0];
@@ -517,12 +594,14 @@ export function Dashboard() {
   );
   const agendaItems = useMemo(
     () =>
-      upcomingDeadlines.slice(0, 5).map((task) => ({
-        id: task.id,
-        title: task.title,
-        date: task.dueDate,
-        caseNumber: task.case?.caseNumber || "Feladat",
-        urgent: mapTaskBucket(task) === "urgent",
+      upcomingDeadlines.slice(0, 5).map((item) => ({
+        id: item.id,
+        title: item.title,
+        date: item.dueAt,
+        caseNumber: item.source.displayName || item.sourceType,
+        href: item.href || item.source.href || "/deadlines",
+        urgent: item.urgency === "OVERDUE" || item.urgency === "TODAY",
+        label: item.urgency === "OVERDUE" ? "Lejárt" : item.urgency === "TODAY" ? "Ma" : "Határidő",
       })),
     [upcomingDeadlines],
   );
@@ -622,6 +701,9 @@ export function Dashboard() {
           <KpiCard label="Külső kommunikáció" value={externalComms.length} tone="cyan" zeroHint="Nincs új külső jelzés" href="/notifications?view=external" />
           <KpiCard label="Belső kommunikáció" value={internalComms.length} tone="petrol" zeroHint="Nincs új belső jelzés" href="/notifications?view=internal" />
         </section>
+
+        {/* 3b — Bounded intake panel (renders only when intake work exists) */}
+        <DashboardIntakePanel />
 
         {/* 4 + 5 — Dominant "Itt folytasd" workbench + review/handoff side column */}
         <section className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.38fr)_minmax(330px,0.72fr)]">
@@ -851,17 +933,17 @@ export function Dashboard() {
                   {agendaItems.map((item) => (
                     <Link
                       key={item.id}
-                      href={`/tasks?taskId=${item.id}`}
+                      href={item.href}
                       className={`block rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 bg-white p-2.5 ${item.urgent ? "border-l-[var(--adm-critical-600)] hover:bg-[#FBEDED]" : "border-l-[var(--adm-warm-400)] hover:bg-[#FFF9E8]"}`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="min-w-0 flex-1 truncate font-semibold text-[var(--adm-text)]">{item.title}</p>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-[0.08em] ${item.urgent ? "bg-[#F4DADA] text-[var(--adm-critical-600)]" : "bg-[#FFF3CB] text-[var(--adm-warm-600)]"}`}>{item.urgent ? "Sürgős" : "Határidő"}</span>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[8.5px] font-bold uppercase tracking-[0.08em] ${item.urgent ? "bg-[#F4DADA] text-[var(--adm-critical-600)]" : "bg-[#FFF3CB] text-[var(--adm-warm-600)]"}`}>{item.label}</span>
                       </div>
                       <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{displayDate(item.date)} · {item.caseNumber}</p>
                     </Link>
                   ))}
-                  <p className="text-[10px] text-[var(--adm-text-muted)]">A lista a betöltött határidős feladatokra szűkül.</p>
+                  <p className="text-[10px] text-[var(--adm-text-muted)]">A lista a backend agenda szerződésből érkező saját nyitott határidőket mutatja.</p>
                 </>
               )}
             </div>

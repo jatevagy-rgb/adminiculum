@@ -121,3 +121,7 @@ To remove this pack cleanly:
 
 - **v1.0.0** — Initial active status
 - **Phase 4A** — Corrected disabled response from `503` to `501` to match standard; added this manifest
+
+## Editor Capability Endpoint
+
+`GET /api/v1/contracts/editor-template-capabilities` is intentionally mounted before the contracts storage gate so authenticated clients can render a truthful disabled/readiness state. It performs no Prisma query, file read, generation, download, SharePoint call, or audit write.

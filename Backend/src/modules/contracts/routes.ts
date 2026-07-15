@@ -3,20 +3,28 @@
  * API endpoints for contract template management and document generation
  */
 
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import contractsService from './services';
 import { authenticate } from '../../middleware/auth';
 import { prisma } from '../../prisma/prisma.service';
 import { ADASVETEL_VARIABLES, TemplateCategory } from './types';
 import multer from 'multer';
+import { isDatabaseFoundationEnabled, sendFeatureUnavailable } from '../../middleware/featureAvailability';
+import { getEditorTemplateCapabilities } from './templateCapabilities';
 
 const router = Router();
-const isContractsEnabled = process.env.ENABLE_CONTRACT_GENERATION === 'true';
-const requireContractsEnabled = (req: Request, res: Response, next: () => void) => {
-  if (!isContractsEnabled) {
-    res.status(501).json({
-      error: 'Not Implemented',
-      message: 'Contract generation is disabled. Set ENABLE_CONTRACT_GENERATION=true to enable.'
+const isContractsEnabled = (): boolean =>
+  isDatabaseFoundationEnabled('ENABLE_CONTRACT_GENERATION') &&
+  isDatabaseFoundationEnabled('ENABLE_CONTRACT_GENERATION_STORAGE_MODEL');
+
+const requireContractsEnabled = (_req: Request, res: Response, next: NextFunction): void => {
+  if (!isContractsEnabled()) {
+    sendFeatureUnavailable(res, {
+      feature: 'CONTRACTS',
+      message: 'Contract generation is not available in this environment.',
+      reason: 'CONTRACTS_NOT_ENABLED',
+      nextStep:
+        'Contracts require an approved storage, retention, permission, and audit model before they can be enabled.',
     });
     return;
   }
@@ -37,6 +45,14 @@ const upload = multer({
     }
   },
 });
+
+router.use(authenticate);
+
+router.get('/editor-template-capabilities', (_req: Request, res: Response): void => {
+  res.json(getEditorTemplateCapabilities());
+});
+
+router.use(requireContractsEnabled);
 
 /**
  * GET /api/v1/contracts/templates
