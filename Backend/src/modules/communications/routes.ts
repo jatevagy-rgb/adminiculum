@@ -18,6 +18,11 @@ import {
 } from '../../middleware/featureAvailability';
 import { prisma } from '../../prisma/prisma.service';
 import { buildPrismaErrorResponse } from '../../utils/prismaError';
+import {
+  importOutlookMessages,
+  OutlookImportServiceError,
+  runOutlookImportDryRun,
+} from './outlookImport.service';
 
 const router = Router();
 const requireCommunicationsFoundation = requireDatabaseFoundation({
@@ -25,6 +30,18 @@ const requireCommunicationsFoundation = requireDatabaseFoundation({
   enabled: () => isDatabaseFoundationEnabled('ENABLE_COMMUNICATIONS_PERSISTENCE'),
   message: 'Communication persistence is not available in this environment.',
   nextStep: 'Complete the communications database reconciliation before enabling this operation.',
+});
+
+// Separate gate for the Outlook / Microsoft Graph import boundary. Default off.
+// This guards the dry-run contract below; no Graph connection or mailbox access
+// exists yet — the endpoint only normalizes a provider-shaped payload and reports
+// what would be imported, without writing.
+const requireOutlookImportFoundation = requireDatabaseFoundation({
+  feature: 'OUTLOOK_IMPORT',
+  enabled: () => isDatabaseFoundationEnabled('ENABLE_OUTLOOK_IMPORT'),
+  message: 'Outlook import is not available in this environment.',
+  reason: 'OUTLOOK_IMPORT_NOT_ENABLED',
+  nextStep: 'Enable ENABLE_OUTLOOK_IMPORT once the Graph import contract is reviewed and approved.',
 });
 
 function logPrismaRouteError(route: string, error: unknown): void {
@@ -928,4 +945,59 @@ router.get('/:id/attachments', authenticate, requireCommunicationsFoundation, as
   }
 });
 
+// ============================================================================
+// POST /api/v1/communications/outlook/import-dry-run
+// ----------------------------------------------------------------------------
+// Phase-2 Outlook import boundary — DRY RUN ONLY. Gated by ENABLE_OUTLOOK_IMPORT
+// (default off). Accepts a provider-shaped (mocked) email payload, normalizes it
+// into the future Communication shape, performs READ-ONLY duplicate detection by
+// externalMessageId, and reports what WOULD be imported. It never connects to
+// Microsoft Graph, never reads a real mailbox, and NEVER writes communications or
+// attachments. No AI classification, no persisted thread — direction is a simple
+// transparent derivation from sender vs mailbox.
+// ============================================================================
+
+router.post('/outlook/import-dry-run', authenticate, requireOutlookImportFoundation, async (req: Request, res: Response) => {
+  try {
+    const result = await runOutlookImportDryRun((req.body || {}) as Record<string, any>);
+    res.json(result);
+  } catch (error) {
+    if (error instanceof OutlookImportServiceError) {
+      if (error.logRoute) logPrismaRouteError(error.logRoute, error);
+      res.status(error.status).json(error.responseBody);
+      return;
+    }
+    logPrismaRouteError('POST /communications/outlook/import-dry-run', error);
+    res.status(500).json({ error: 'Error running Outlook import dry-run' });
+  }
+});
+
+// ============================================================================
+// POST /api/v1/communications/outlook/import
+// ----------------------------------------------------------------------------
+// Phase-3 Outlook import CORE — gated by ENABLE_OUTLOOK_IMPORT (default off).
+// Writes Communication rows from a provider-shaped (mock) payload using the SAME
+// normalization as the dry-run. This is NOT the Graph connector and NOT automatic
+// sync: no Graph call, no mailbox read, no secrets. Dedupe by externalMessageId
+// (existing rows are never re-created). Attachments store metadata only (no
+// binaries), deduped within a message by providerAttachmentId. No case/client/
+// document/task relationships are inferred (caseId/clientId/documentId stay null).
+// No AI classification.
+// ============================================================================
+
+router.post('/outlook/import', authenticate, requireOutlookImportFoundation, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const result = await importOutlookMessages((req.body || {}) as Record<string, any>, userId);
+    res.status(201).json(result);
+  } catch (error) {
+    if (error instanceof OutlookImportServiceError) {
+      if (error.logRoute) logPrismaRouteError(error.logRoute, error);
+      res.status(error.status).json(error.responseBody);
+      return;
+    }
+    logPrismaRouteError('POST /communications/outlook/import', error);
+    res.status(500).json({ error: 'Error importing Outlook communications' });
+  }
+});
 export default router;
