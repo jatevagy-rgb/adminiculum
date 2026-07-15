@@ -135,239 +135,141 @@ function ClauseLibraryPageContent() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto adm-board-page">
-      <div className="adm-board-container max-w-[1520px] space-y-4">
-        <section className="adm-board-hero overflow-hidden">
-          <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="space-y-2 p-4">
-              <div className="inline-flex items-center gap-2 rounded-[5px] border border-[#1F4A33] bg-[#1F4A33] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#F4EFDB]">
-                Klauzulatár
-              </div>
-              <div>
-                <h1 className="font-serif text-[36px] font-medium leading-tight text-[#1F2821]">Klauzulatár</h1>
-                <p className="mt-1 max-w-3xl text-[13px] text-[#6D6A62]">
-                  Előkészített foundation felület jóváhagyott szerződéses szövegblokkokhoz. Jelenleg nem aktív termékfunkció.
-                </p>
-              </div>
+      <div className="adm-board-container max-w-[1240px] space-y-4">
+        <section className="adm-board-panel p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="font-serif text-[30px] font-medium leading-tight text-[#1F2821]">Záradéktár</h1>
+              <p className="mt-1 text-[13px] text-[#6D6A62]">Jóváhagyott szerződéses záradékok belső gyűjteménye.</p>
             </div>
-            <div className="adm-board-rail grid rounded-none border-0 p-4 text-[11px]">
-              <div>
-                <p className="font-semibold text-[var(--adm-ivory-50)]">Adatforrás</p>
-                <p className="mt-1 text-[var(--adm-ivory-100)]/75">{isFeatureDisabled ? "Foundation állapot" : "Backend végpont"}</p>
-              </div>
-              <div className="mt-3 border-t border-white/10 pt-3">
-                <p className="font-semibold text-[var(--adm-ivory-50)]">Beszúrás</p>
-                <p className="mt-1 text-[var(--adm-ivory-100)]/75">Későbbi patchben aktiválható</p>
-              </div>
-              <div className="mt-3 border-t border-white/10 pt-3">
-                <p className="font-semibold text-[var(--adm-ivory-50)]">Későbbi munkamód</p>
-                <p className="mt-1 text-[var(--adm-ivory-100)]/75">Külső prompt workflow előkészítés, nem automatikus generálás</p>
-              </div>
-            </div>
+            {!isFeatureDisabled && !isLoading && !error && <AdminStatusPill tone="green">Elérhető</AdminStatusPill>}
           </div>
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="space-y-4">
-            <section className="adm-board-panel p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="font-serif text-xl font-medium text-[#1F2821]">Szűrés és keresés</h2>
-                <AdminStatusPill tone={isFeatureDisabled ? "gold" : "green"}>
-                  {isFeatureDisabled ? "Foundation állapot" : "Valós lista"}
-                </AdminStatusPill>
-              </div>
-              <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
-                  Keresés
-                  <input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Cím, összefoglaló vagy kulcsszó"
-                    className="mt-2 w-full rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[#1F2821]"
-                  />
-                </label>
-                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
-                  Kategória
-                  <select
-                    value={categoryFilter}
-                    onChange={(event) => setCategoryFilter(event.target.value as "ALL" | ClauseCategory)}
-                    className="mt-2 w-full rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[#1F2821]"
-                  >
-                    <option value="ALL">Minden kategória</option>
-                    {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
-                  Szerződéstípus
-                  <select
-                    value={contractTypeFilter}
-                    onChange={(event) => setContractTypeFilter(event.target.value as "ALL" | ClauseContractType)}
-                    className="mt-2 w-full rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[#1F2821]"
-                  >
-                    <option value="ALL">Minden szerződéstípus</option>
-                    {Object.entries(CONTRACT_TYPE_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
-                  Nyelv
-                  <select
-                    disabled
-                    title="Nyelvi metaadat későbbi patchben lesz strukturáltan kezelhető."
-                    className="mt-2 w-full rounded border border-[#DDD7CA] bg-[#F6F2E8] px-3 py-2 text-xs normal-case tracking-normal text-[#7B776D] disabled:cursor-not-allowed"
-                  >
-                    <option>Előkészítés alatt</option>
-                  </select>
-                </label>
-                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
-                  Kockázati profil
-                  <select
-                    disabled
-                    title="A kockázati profil külön mezőként későbbi patchben lesz kezelhető."
-                    className="mt-2 w-full rounded border border-[#DDD7CA] bg-[#F6F2E8] px-3 py-2 text-xs normal-case tracking-normal text-[#7B776D] disabled:cursor-not-allowed"
-                  >
-                    <option>Előkészítés alatt</option>
-                  </select>
-                </label>
-                <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
-                  Ügyfél / house style
-                  <select
-                    disabled
-                    title="A kliens- és house style-kompatibilitás későbbi patchben lesz kapcsolható."
-                    className="mt-2 w-full rounded border border-[#DDD7CA] bg-[#F6F2E8] px-3 py-2 text-xs normal-case tracking-normal text-[#7B776D] disabled:cursor-not-allowed"
-                  >
-                    <option>Előkészítés alatt</option>
-                  </select>
-                </label>
-              </div>
-              <label className="mt-3 inline-flex items-center gap-2 text-xs text-[#514D45]">
-                <input
-                  type="checkbox"
-                  checked={includeInactive}
-                  onChange={(event) => setIncludeInactive(event.target.checked)}
-                />
-                Archivált tételek mutatása
-              </label>
-            </section>
-
-            <section className="adm-board-panel p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h2 className="font-serif text-xl font-medium text-[#1F2821]">Záradéklista</h2>
-                  <p className="mt-1 text-[11px] text-[#6D6A62]">
-                    Valós clause adatok esetén listáz, egyébként őszinte empty vagy disabled state jelenik meg.
-                  </p>
-                </div>
-                <AdminButton size="sm" variant="neutral" onClick={() => globalThis.location.reload()}>
-                  Frissítés
+        {isLoading && clauses.length === 0 ? (
+          <section className="adm-board-panel p-6 text-sm text-[#6D6A62]">Záradéktár betöltése…</section>
+        ) : isFeatureDisabled ? (
+          <section className="adm-board-panel p-6">
+            <div className="max-w-2xl">
+              <p className="text-base font-semibold text-[#1F2821]">Ezen a környezeten a záradéktár még nem érhető el.</p>
+              <p className="mt-2 text-sm leading-6 text-[#514D45]">
+                A funkció csak jóváhagyott záradékforrás és jogosultsági modell mellett kapcsolható be.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <AdminButton size="sm" variant="primary" onClick={() => { window.location.href = "/documents/new/edit"; }}>
+                  Szerződésszerkesztő megnyitása
+                </AdminButton>
+                <AdminButton size="sm" variant="neutral" onClick={() => { window.location.href = "/documents/compare"; }}>
+                  Vissza a dokumentumokhoz
                 </AdminButton>
               </div>
-
-              {featureDisabledMessage ? (
-                <div className="adm-board-empty adm-board-empty-compact mt-3">
-                  <p className="text-sm font-semibold text-[#1F2821]">A záradékkönyvtár jelenleg nincs bekapcsolva.</p>
-                  <p className="mt-2 text-[11px] text-[#514D45]">
-                    Ez egy előkészített foundation felület. Az aktív záradéktár későbbi backend engedélyezés és jogosultsági ellenőrzés után használható.
-                  </p>
-                </div>
-              ) : error ? (
-                <div className="mt-3 rounded-[8px] border border-[#F2DAD6] bg-[#FFF5F3] p-4 text-sm text-[#8B2A2A]">
-                  {error}
-                  <p className="mt-2 text-[11px] text-[#8B2A2A]">
-                    A Klauzulatár oldala betöltve marad, de a lista jelenleg nem elérhető.
-                  </p>
-                </div>
-              ) : isLoading ? (
-                <div className="adm-board-empty adm-board-empty-compact mt-3 text-xs text-[#7B776D]">Klauzulatár betöltése…</div>
-              ) : clauses.length === 0 ? (
-                <div className="adm-board-empty adm-board-empty-compact mt-3">
-                  <p className="text-sm font-semibold text-[#1F2821]">Még nincs jóváhagyott klauzula.</p>
-                  <p className="mt-2 text-[11px] text-[#6D6A62]">
-                    A klauzulatár feltöltése és jóváhagyási workflow-ja későbbi patchben aktiválható.
-                  </p>
-                </div>
-              ) : (
-                <div className="mt-3 grid gap-3">
-                  {clauses.map((clause) => (
-                    <article
-                      key={clause.id}
-                      className={`rounded-[8px] border p-4 transition-colors ${
-                        selectedClauseId === clause.id
-                          ? "border-[#C8B98A] bg-[#FBF6E7]"
-                          : "border-[#EEE7D9] bg-[#FBF9F3]"
-                      }`}
+            </div>
+          </section>
+        ) : error ? (
+          <section className="rounded-[8px] border border-[#F2DAD6] bg-[#FFF5F3] p-4 text-sm text-[#8B2A2A]">
+            {error}
+          </section>
+        ) : (
+          <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="space-y-4">
+              <section className="adm-board-panel p-4">
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_220px_auto] md:items-end">
+                  <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
+                    Keresés
+                    <input
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder="Cím, összefoglaló vagy kulcsszó"
+                      className="mt-2 w-full rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[#1F2821]"
+                    />
+                  </label>
+                  <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
+                    Kategória
+                    <select
+                      value={categoryFilter}
+                      onChange={(event) => setCategoryFilter(event.target.value as "ALL" | ClauseCategory)}
+                      className="mt-2 w-full rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[#1F2821]"
                     >
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="space-y-1">
-                          <h3 className="text-sm font-semibold text-[#1F2821]">{clause.title}</h3>
-                          <p className="text-[11px] text-[#6D6A62]">{CATEGORY_LABELS[clause.category]} · {CONTRACT_TYPE_LABELS[clause.contractType]}</p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <AdminBadge tone={clause.isActive ? "green" : "neutral"}>{getStatusLabel(clause)}</AdminBadge>
-                          <AdminBadge tone="gold">{CLAUSE_KIND_LABELS[clause.clauseKind]}</AdminBadge>
-                          <AdminStatusPill tone="neutral">Kockázat: előkészítés alatt</AdminStatusPill>
-                          <AdminStatusPill tone="neutral">Nyelv: nincs metaadat</AdminStatusPill>
-                        </div>
-                      </div>
-                      <p className="mt-3 text-[12px] leading-6 text-[#514D45]">{previewText(clause)}</p>
-                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex flex-wrap gap-1.5">
-                          {(clause.keywords || []).slice(0, 5).map((keyword) => (
-                            <span key={`${clause.id}-${keyword}`} className="rounded-full border border-[#DDD7CA] bg-white px-2 py-0.5 text-[10px] text-[#514D45]">
-                              {keyword}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <AdminButton size="xs" variant="neutral" onClick={() => setSelectedClauseId(clause.id)}>
-                            Megnyitás
-                          </AdminButton>
-                          <button
-                            type="button"
-                            disabled
-                            title="A dokumentumba illesztés későbbi patchben lesz aktiválható."
-                            className="rounded-[5px] border border-[#DDD7CA] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#7B776D] disabled:cursor-not-allowed"
-                          >
-                            Beszúrás
-                          </button>
-                        </div>
-                      </div>
-                    </article>
-                  ))}
+                      <option value="ALL">Minden kategória</option>
+                      {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">
+                    Szerződéstípus
+                    <select
+                      value={contractTypeFilter}
+                      onChange={(event) => setContractTypeFilter(event.target.value as "ALL" | ClauseContractType)}
+                      className="mt-2 w-full rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs normal-case tracking-normal text-[#1F2821]"
+                    >
+                      <option value="ALL">Minden szerződéstípus</option>
+                      {Object.entries(CONTRACT_TYPE_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="inline-flex items-center gap-2 rounded border border-[#DDD7CA] bg-white px-3 py-2 text-xs text-[#514D45]">
+                    <input type="checkbox" checked={includeInactive} onChange={(event) => setIncludeInactive(event.target.checked)} />
+                    Archiváltak
+                  </label>
                 </div>
-              )}
-            </section>
-          </div>
+              </section>
 
-          <aside className="space-y-4">
-            <section className="adm-board-panel p-4">
-              <h2 className="font-serif text-xl font-medium text-[#1F2821]">Záradék részletei</h2>
+              <section className="adm-board-panel p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="font-serif text-xl font-medium text-[#1F2821]">Záradékok</h2>
+                  <AdminButton size="sm" variant="neutral" onClick={() => globalThis.location.reload()}>
+                    Frissítés
+                  </AdminButton>
+                </div>
+                {clauses.length === 0 ? (
+                  <div className="adm-board-empty adm-board-empty-compact mt-3">
+                    <p className="text-sm font-semibold text-[#1F2821]">Nincs találat.</p>
+                    <p className="mt-2 text-[11px] text-[#6D6A62]">Módosítsd a keresést vagy a szűrőket.</p>
+                  </div>
+                ) : (
+                  <div className="mt-3 divide-y divide-[#EEE7D9] overflow-hidden rounded-[8px] border border-[#EEE7D9] bg-white">
+                    {clauses.map((clause) => (
+                      <button
+                        key={clause.id}
+                        type="button"
+                        onClick={() => setSelectedClauseId(clause.id)}
+                        className={`w-full p-3 text-left transition-colors ${selectedClauseId === clause.id ? "bg-[#FBF6E7]" : "hover:bg-[#FBF9F3]"}`}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <h3 className="text-sm font-semibold text-[#1F2821]">{clause.title}</h3>
+                            <p className="mt-1 text-[11px] text-[#6D6A62]">{CATEGORY_LABELS[clause.category]} · {CONTRACT_TYPE_LABELS[clause.contractType]}</p>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            <AdminBadge tone={clause.isActive ? "green" : "neutral"}>{getStatusLabel(clause)}</AdminBadge>
+                            <AdminBadge tone="gold">{CLAUSE_KIND_LABELS[clause.clauseKind]}</AdminBadge>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-[12px] leading-5 text-[#514D45]">{previewText(clause)}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+
+            <aside className="adm-board-panel p-4">
+              <h2 className="font-serif text-xl font-medium text-[#1F2821]">Részletek</h2>
               {!selectedClause ? (
                 <div className="adm-board-empty adm-board-empty-compact mt-3 text-[11px] text-[#6D6A62]">
-                  Válassz ki egy záradékot a listából a részletek megnyitásához.
+                  Válassz záradékot a részletekhez.
                 </div>
               ) : (
                 <div className="mt-3 space-y-3">
                   <div className="rounded-[8px] border border-[#EEE7D9] bg-[#FBF9F3] p-3">
                     <h3 className="text-sm font-semibold text-[#1F2821]">{selectedClause.title}</h3>
-                    <p className="mt-1 text-[11px] text-[#6D6A62]">{selectedClause.summary || "Ehhez a tételhez még nincs külön rövid magyarázat rögzítve."}</p>
+                    <p className="mt-1 text-[11px] text-[#6D6A62]">{selectedClause.summary || "Nincs külön rövid magyarázat rögzítve."}</p>
                   </div>
                   <div className="rounded-[8px] border border-[#EEE7D9] bg-white p-3 text-[11px] text-[#514D45]">
                     <p><span className="font-semibold text-[#1F2821]">Státusz:</span> {getStatusLabel(selectedClause)}</p>
                     <p className="mt-1"><span className="font-semibold text-[#1F2821]">Utolsó frissítés:</span> {formatDate(selectedClause.updatedAt)}</p>
-                    <p className="mt-1"><span className="font-semibold text-[#1F2821]">House style kompatibilitás:</span> Későbbi patchben kapcsolható.</p>
-                    <p className="mt-1"><span className="font-semibold text-[#1F2821]">Kapcsolódó jogi referencia:</span> Külön mezőként későbbi patchben.</p>
-                  </div>
-                  <div className="rounded-[8px] border border-[#EEE7D9] bg-white p-3 text-[11px] text-[#514D45]">
-                    <p className="font-semibold text-[#1F2821]">Használati iránymutatás</p>
-                    <p className="mt-1">Mikor használd: a strukturált “when to use” mező későbbi patchben kerül be.</p>
-                    <p className="mt-1">Mikor ne használd: a strukturált “when not to use” mező későbbi patchben kerül be.</p>
                   </div>
                   <div className="rounded-[8px] border border-[#EEE7D9] bg-white p-3">
                     <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Szövegelőnézet</p>
@@ -377,26 +279,9 @@ function ClauseLibraryPageContent() {
                   </div>
                 </div>
               )}
-            </section>
-
-            <section className="adm-board-panel p-4">
-              <h2 className="font-serif text-xl font-medium text-[#1F2821]">Kapcsolódó munkamódok</h2>
-              <div className="mt-3 space-y-2">
-                {[
-                  "Szerződéskészítés",
-                  "Szerződésátnézés",
-                  "Perirat szövegblokkok",
-                  "Ügyfél house style",
-                ].map((item) => (
-                  <div key={item} className="flex items-center justify-between rounded-[6px] border border-[#EEE7D9] bg-[#FBF9F3] px-3 py-2">
-                    <span className="text-[11px] text-[#1F2821]">{item}</span>
-                    <AdminStatusPill tone="neutral">Foundation</AdminStatusPill>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </aside>
-        </section>
+            </aside>
+          </section>
+        )}
       </div>
     </div>
   );

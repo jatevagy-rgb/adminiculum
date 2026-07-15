@@ -39,6 +39,8 @@ import {
   type TimesheetReportArtifactPayload,
   type SaveTimesheetReportInstanceInput,
   getCaseSummary,
+  getCurrentUser,
+  type CurrentUser,
 } from "@/lib/api";
 
 const WORK_TYPES = ["TANÁCSADÁS", "IRATELENÉS", "FELÜLVIZSGÁLAT", "KOMMUNIKÁCIÓ", "KUTATÁS", "EGYÉB"];
@@ -100,14 +102,19 @@ function TimeEntriesPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [activeTab, setActiveTab] = useState<"entries" | "reports">("entries");
+  const [entrySearch, setEntrySearch] = useState("");
+  const [entryPeriod, setEntryPeriod] = useState<string>(new Date().toISOString().slice(0, 7));
+  const [entryMatterFilter, setEntryMatterFilter] = useState("");
 
   const [showModal, setShowModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [templates, setTemplates] = useState<TimesheetReportTemplate[]>([]);
-  const [presets, setPresets] = useState<TimesheetPreset[]>([]);
-  const [selectedPresetId, setSelectedPresetId] = useState<string>("");
+  const [presets, setBeállításkészlets] = useState<TimesheetPreset[]>([]);
+  const [selectedBeállításkészletId, setSelectedBeállításkészletId] = useState<string>("");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [reportPeriod, setReportPeriod] = useState<string>(new Date().toISOString().slice(0, 7));
   const [reportClientName, setReportClientName] = useState<string>("");
@@ -117,9 +124,9 @@ function TimeEntriesPageContent() {
   const [reportPendingNote, setReportPendingNote] = useState<string>("");
   const [reportClientClosingText, setReportClientClosingText] = useState<string>("");
   const [reportDefaultLawyerName, setReportDefaultLawyerName] = useState<string>("");
-  const [presetClientContextId, setPresetClientContextId] = useState<string>("");
-  const [presetLawyerContextName, setPresetLawyerContextName] = useState<string>("");
-  const [lastPresetResolution, setLastPresetResolution] = useState<TimesheetPreset["resolution"] | null>(null);
+  const [presetClientContextId, setBeállításkészletClientContextId] = useState<string>("");
+  const [presetLawyerContextName, setBeállításkészletLawyerContextName] = useState<string>("");
+  const [lastBeállításkészletResolution, setLastBeállításkészletResolution] = useState<TimesheetPreset["resolution"] | null>(null);
   const [reportCarriedHours, setReportCarriedHours] = useState<number>(0);
   const [reportOvertimeHours, setReportOvertimeHours] = useState<number>(0);
   const [reportAboveThresholdHours, setReportAboveThresholdHours] = useState<number>(0);
@@ -211,6 +218,12 @@ function TimeEntriesPageContent() {
   }, [loadEntries]);
 
   useEffect(() => {
+    getCurrentUser()
+      .then(setCurrentUser)
+      .catch(() => setCurrentUser(null));
+  }, []);
+
+  useEffect(() => {
     const loadTemplates = async () => {
       try {
         const [data, presetsData] = await Promise.all([
@@ -218,12 +231,12 @@ function TimeEntriesPageContent() {
           getTimesheetReportPresets(),
         ]);
         setTemplates(data);
-        setPresets(presetsData);
+        setBeállításkészlets(presetsData);
         if (data.length > 0) {
           setSelectedTemplateId((current) => current || data[0].id);
         }
         if (presetsData.length > 0) {
-          setSelectedPresetId((current) => current || presetsData[0].id);
+          setSelectedBeállításkészletId((current) => current || presetsData[0].id);
         }
       } catch (err) {
         console.error("Failed to load timesheet report templates:", err);
@@ -367,10 +380,40 @@ function TimeEntriesPageContent() {
     return map;
   }, [entries]);
 
+  const filteredEntries = useMemo(() => {
+    const normalizedSearch = entrySearch.trim().toLocaleLowerCase("hu-HU");
+
+    return entries.filter((entry) => {
+      if (entryPeriod && !String(entry.workDate || "").startsWith(entryPeriod)) {
+        return false;
+      }
+      if (entryMatterFilter && entry.matterId !== entryMatterFilter) {
+        return false;
+      }
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      const matter = entry.matter || matterById.get(entry.matterId);
+      const haystack = [
+        entry.description,
+        WORK_TYPE_LABEL_MAP[entry.workType] ?? entry.workType,
+        matter?.title,
+        matter?.client?.name,
+        ...(entry.matter?.cases || []).map((caseItem) => `${caseItem.caseNumber || ""} ${caseItem.title || ""}`),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase("hu-HU");
+
+      return haystack.includes(normalizedSearch);
+    });
+  }, [entries, entryMatterFilter, entryPeriod, entrySearch, matterById]);
+
   const groupedByClient: GroupedClient[] = useMemo(() => {
     const clientsMap = new Map<string, GroupedClient>();
 
-    for (const entry of entries) {
+    for (const entry of filteredEntries) {
       const sourceMatter = matterById.get(entry.matterId);
       const entryMatter = entry.matter || sourceMatter || null;
       const linkedCases = entry.matter?.cases || [];
@@ -447,7 +490,7 @@ function TimeEntriesPageContent() {
           .sort((a, b) => b.totalMinutes - a.totalMinutes),
       }))
       .sort((a, b) => b.totalMinutes - a.totalMinutes);
-  }, [entries, matterById, clientNameById]);
+  }, [filteredEntries, matterById, clientNameById]);
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") {
@@ -499,17 +542,17 @@ function TimeEntriesPageContent() {
   );
 
   const totals = useMemo(() => {
-    const totalMinutes = entries.reduce((sum, entry) => sum + entry.minutes, 0);
-    const billableMinutes = entries.reduce((sum, entry) => sum + (entry.billable ? entry.minutes : 0), 0);
+    const totalMinutes = filteredEntries.reduce((sum, entry) => sum + entry.minutes, 0);
+    const billableMinutes = filteredEntries.reduce((sum, entry) => sum + (entry.billable ? entry.minutes : 0), 0);
     const nonBillableMinutes = Math.max(totalMinutes - billableMinutes, 0);
     return {
-      totalEntries: entries.length,
+      totalEntries: filteredEntries.length,
       totalMinutes,
       totalClients: groupedByClient.length,
       billableMinutes,
       nonBillableMinutes,
     };
-  }, [entries, groupedByClient.length]);
+  }, [filteredEntries, groupedByClient.length]);
 
   const modalCaseOptions = useMemo(
     () =>
@@ -753,7 +796,7 @@ function TimeEntriesPageContent() {
       }
     } catch (err) {
       console.error("Failed to render timesheet report output:", err);
-      alert("Nem sikerült az output-ready munkaóra-kimutatás renderelése");
+      alert("Nem sikerült az munkaóra-kimutatás renderelése");
     } finally {
       setIsGeneratingReport(false);
     }
@@ -795,7 +838,7 @@ function TimeEntriesPageContent() {
       }
     } catch (err) {
       console.error("Failed to render timesheet report DOCX output:", err);
-      alert("Nem sikerült a DOCX output-ready munkaóra-kimutatás renderelése");
+      alert("Nem sikerült a DOCX munkaóra-kimutatás renderelése");
     } finally {
       setIsGeneratingReport(false);
     }
@@ -853,7 +896,7 @@ function TimeEntriesPageContent() {
     }
   };
 
-  const handleApplyPreset = async () => {
+  const handleApplyBeállításkészlet = async () => {
     try {
       const resolvedContextClientName =
         reportClientOptions.find((item) => item.id === presetClientContextId)?.name ||
@@ -862,7 +905,7 @@ function TimeEntriesPageContent() {
       const resolvedContextLawyerName = presetLawyerContextName || reportDefaultLawyerName || undefined;
 
       const preset = await resolveTimesheetPreset({
-        presetId: selectedPresetId || undefined,
+        presetId: selectedBeállításkészletId || undefined,
         templateId: selectedTemplateId || undefined,
         clientId: presetClientContextId || autofillClientId || undefined,
         clientName: resolvedContextClientName,
@@ -876,7 +919,7 @@ function TimeEntriesPageContent() {
       setReportPendingNote((current) => (current.trim().length > 0 ? current : preset.defaults.pendingOpenMattersNote || ""));
       setReportClientClosingText((current) => (current.trim().length > 0 ? current : preset.defaults.clientClosingText || ""));
       setReportDefaultLawyerName((current) => (current.trim().length > 0 ? current : preset.defaults.lawyerName || current));
-      setLastPresetResolution(preset.resolution || null);
+      setLastBeállításkészletResolution(preset.resolution || null);
     } catch (err) {
       console.error("Failed to apply timesheet preset:", err);
       alert("Nem sikerült a preset alkalmazása");
@@ -931,7 +974,7 @@ function TimeEntriesPageContent() {
       matterName: reportMatterName.trim() || undefined,
       caseId: autofillCaseId || undefined,
       caseReference: reportCaseReference.trim() || undefined,
-      presetId: selectedPresetId || undefined,
+      presetId: selectedBeállításkészletId || undefined,
       monthlyClosure: reportMonthlyClosure.trim() || undefined,
       pendingOpenMattersNote: reportPendingNote.trim() || undefined,
       clientClosingText: reportClientClosingText.trim() || undefined,
@@ -956,7 +999,7 @@ function TimeEntriesPageContent() {
     reportMatterName,
     autofillCaseId,
     reportCaseReference,
-    selectedPresetId,
+    selectedBeállításkészletId,
     reportMonthlyClosure,
     reportPendingNote,
     reportClientClosingText,
@@ -1004,7 +1047,7 @@ function TimeEntriesPageContent() {
       applyLoadedInstanceToEditor(instance);
     } catch (err) {
       console.error("Failed to load timesheet report instance:", err);
-      alert("Nem sikerült betölteni a mentett riportot");
+      alert("Nem sikerült betölteni a mentett kimutatást");
     }
   };
 
@@ -1024,7 +1067,7 @@ function TimeEntriesPageContent() {
       await loadReportInstances();
     } catch (err) {
       console.error("Failed to save timesheet report instance:", err);
-      alert("Nem sikerült menteni a riport példányt");
+      alert("Nem sikerült menteni a kimutatást");
     } finally {
       setIsSavingReportInstance(false);
     }
@@ -1032,14 +1075,12 @@ function TimeEntriesPageContent() {
 
   return (
     <div className="flex-1 p-2 md:p-4 time-entries-surface bg-[var(--adm-surface)]">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-6 rounded-xl adm-board-panel-tight p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-4 rounded-xl adm-board-panel-tight p-4">
             <div>
               <h1 className="text-2xl font-serif text-[var(--adm-text)]">Munkaórák</h1>
-              <p className="text-sm text-[var(--adm-text-muted)] mt-1">Munkaóra-rögzítés és elszámolási munkapad</p>
               <p className="text-xs text-[var(--adm-text-muted)] mt-1">
-                {totals.totalEntries} bejegyzés · {formatMinutes(totals.totalMinutes)} összesen
+                {entryPeriod} · {formatMinutes(totals.totalMinutes)} rögzített idő · {currentUser?.name || currentUser?.email || "Bejelentkezett felhasználó"}
               </p>
-              <p className="text-[10px] text-[var(--adm-text-soft)] mt-1">Nézet: ügyfél → ügy → bejegyzés</p>
             </div>
             <button
               onClick={handleCreate}
@@ -1114,15 +1155,70 @@ function TimeEntriesPageContent() {
           )}
           {!error && loadWarning && <div className="mb-6 p-4 bg-[var(--adm-surface)] border border-[var(--adm-border)] text-[var(--adm-text-muted)] text-xs rounded">{loadWarning}</div>}
 
+          <div className="mb-4 rounded-xl border border-[var(--adm-border)] bg-white p-3">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap gap-2">
+                {[
+                  ["entries", "Bejegyzések"],
+                  ["reports", "Kimutatás"],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setActiveTab(value as "entries" | "reports")}
+                    className={`rounded border px-3 py-2 text-[11px] font-semibold ${
+                      activeTab === value
+                        ? "border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)]"
+                        : "border-[var(--adm-border)] bg-white text-[var(--adm-text)] hover:bg-[var(--adm-surface)]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {activeTab === "entries" && (
+                <div className="grid flex-1 gap-2 sm:grid-cols-[160px_minmax(0,1fr)_220px] lg:max-w-3xl">
+                  <input
+                    type="month"
+                    value={entryPeriod}
+                    onChange={(event) => setEntryPeriod(event.target.value)}
+                    className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
+                    aria-label="Időszak"
+                  />
+                  <input
+                    value={entrySearch}
+                    onChange={(event) => setEntrySearch(event.target.value)}
+                    placeholder="Keresés ügyben, ügyfélnél vagy leírásban"
+                    className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
+                  />
+                  <select
+                    value={entryMatterFilter}
+                    onChange={(event) => setEntryMatterFilter(event.target.value)}
+                    className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
+                    aria-label="Munkacsomag szűrő"
+                  >
+                    <option value="">Minden munkacsomag</option>
+                    {matters.map((matter) => (
+                      <option key={matter.id} value={matter.id}>
+                        {matter.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {activeTab === "reports" && (
           <div className="mb-6 border border-[var(--adm-border)] rounded-xl bg-white p-4 space-y-4">
             <div>
-              <h2 className="text-sm font-semibold text-[var(--adm-text)]">Munkaóra-kimutatás</h2>
-              <p className="text-[10px] text-[var(--adm-text-muted)] mt-1">Preset, sorfeltöltés, riport és outputok egy munkapadban.</p>
+              <h2 className="text-sm font-semibold text-[var(--adm-text)]">Kimutatás</h2>
+              <p className="text-[10px] text-[var(--adm-text-muted)] mt-1">Elszámolási kimutatás összeállítása a rögzített munkaórákból.</p>
             </div>
 
             <div className="border border-[var(--adm-border)] rounded p-3 bg-[var(--adm-surface)] space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-[var(--adm-text)]">Mentett riport példányok</p>
+                <p className="text-xs font-semibold text-[var(--adm-text)]">Mentett kimutatások</p>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={loadReportInstances}
@@ -1136,13 +1232,13 @@ function TimeEntriesPageContent() {
                     disabled={isSavingReportInstance}
                     className="px-3 py-1 text-[10px] rounded bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] disabled:opacity-50"
                   >
-                    {isSavingReportInstance ? "Mentés..." : selectedReportInstanceId ? "Példány frissítése" : "Új példány mentése"}
+                    {isSavingReportInstance ? "Mentés..." : selectedReportInstanceId ? "Kimutatás frissítése" : "Kimutatás mentése"}
                   </button>
                 </div>
               </div>
               <div className="max-h-40 overflow-auto border border-[var(--adm-border)] rounded bg-white">
                 {savedReportInstances.length === 0 ? (
-                  <p className="p-2 text-[10px] text-[var(--adm-text-muted)]">Nincs mentett riport példány.</p>
+                  <p className="p-2 text-[10px] text-[var(--adm-text-muted)]">Nincs mentett kimutatás.</p>
                 ) : (
                   savedReportInstances.map((instance) => {
                     const isActive = selectedReportInstanceId === instance.id;
@@ -1167,11 +1263,11 @@ function TimeEntriesPageContent() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Preset</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Beállításkészlet</label>
                 <div className="flex items-center gap-2">
                   <select
-                    value={selectedPresetId}
-                    onChange={(e) => setSelectedPresetId(e.target.value)}
+                    value={selectedBeállításkészletId}
+                    onChange={(e) => setSelectedBeállításkészletId(e.target.value)}
                     className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm"
                   >
                     {presets.map((preset) => (
@@ -1180,17 +1276,17 @@ function TimeEntriesPageContent() {
                       </option>
                     ))}
                   </select>
-                  <button onClick={handleApplyPreset} className="px-3 py-2 text-[10px] border border-[var(--adm-border)] rounded bg-white hover:bg-[var(--adm-surface)]">
+                  <button onClick={handleApplyBeállításkészlet} className="px-3 py-2 text-[10px] border border-[var(--adm-border)] rounded bg-white hover:bg-[var(--adm-surface)]">
                     Alkalmaz
                   </button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
                   <select
                     value={presetClientContextId}
-                    onChange={(e) => setPresetClientContextId(e.target.value)}
+                    onChange={(e) => setBeállításkészletClientContextId(e.target.value)}
                     className="px-2 py-1 border border-[var(--adm-border)] rounded text-xs"
                   >
-                    <option value="">Preset ügyfél kontextus (opcionális)</option>
+                    <option value="">Beállításkészlet ügyfél kontextus (opcionális)</option>
                     {reportClientOptions.map((item) => (
                       <option key={item.id} value={item.id}>{item.name}</option>
                     ))}
@@ -1198,9 +1294,9 @@ function TimeEntriesPageContent() {
                   <>
                     <input
                       value={presetLawyerContextName}
-                      onChange={(e) => setPresetLawyerContextName(e.target.value)}
+                      onChange={(e) => setBeállításkészletLawyerContextName(e.target.value)}
                       className="px-2 py-1 border border-[var(--adm-border)] rounded text-xs"
-                      placeholder="Preset jogász kontextus (opcionális)"
+                      placeholder="Beállításkészlet jogász kontextus (opcionális)"
                       list="preset-lawyers"
                     />
                     <datalist id="preset-lawyers">
@@ -1210,13 +1306,13 @@ function TimeEntriesPageContent() {
                     </datalist>
                   </>
                 </div>
-                {lastPresetResolution && (
+                {lastBeállításkészletResolution && (
                   <div className="mt-2 p-2 border border-[var(--adm-border)] rounded bg-[var(--adm-surface)]">
                     <p className="text-[10px] text-[var(--adm-text-muted)]">
-                      Rétegek: {lastPresetResolution.appliedLayers.join(" → ")}
+                      Rétegek: {lastBeállításkészletResolution.appliedLayers.join(" → ")}
                     </p>
                     <p className="text-[10px] text-[var(--adm-text-muted)] mt-1">
-                      Források — záradék: {lastPresetResolution.fieldSources.monthlyClosure || "—"}, pending: {lastPresetResolution.fieldSources.pendingOpenMattersNote || "—"}, jogász: {lastPresetResolution.fieldSources.lawyerName || "—"}, client záró: {lastPresetResolution.fieldSources.clientClosingText || "—"}
+                      Források — záradék: {lastBeállításkészletResolution.fieldSources.monthlyClosure || "—"}, pending: {lastBeállításkészletResolution.fieldSources.pendingOpenMattersNote || "—"}, jogász: {lastBeállításkészletResolution.fieldSources.lawyerName || "—"}, client záró: {lastBeállításkészletResolution.fieldSources.clientClosingText || "—"}
                     </p>
                     <p className="text-[10px] text-[var(--adm-text-soft)] mt-1">Kézi mező-értékek nem íródnak felül preset alkalmazáskor.</p>
                   </div>
@@ -1273,7 +1369,7 @@ function TimeEntriesPageContent() {
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Havi záradék (preset/default)</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Havi záró megjegyzés</label>
                 <textarea
                   value={reportMonthlyClosure}
                   onChange={(e) => setReportMonthlyClosure(e.target.value)}
@@ -1283,7 +1379,7 @@ function TimeEntriesPageContent() {
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Pending/open note (preset/default)</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Nyitott tételek megjegyzése</label>
                 <textarea
                   value={reportPendingNote}
                   onChange={(e) => setReportPendingNote(e.target.value)}
@@ -1323,7 +1419,7 @@ function TimeEntriesPageContent() {
                 />
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Default jogász név</label>
+                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-1">Jogász neve</label>
                 <input
                   value={reportDefaultLawyerName}
                   onChange={(e) => setReportDefaultLawyerName(e.target.value)}
@@ -1343,7 +1439,7 @@ function TimeEntriesPageContent() {
             </div>
 
             <div className="border border-[var(--adm-border)] rounded p-3 bg-[var(--adm-surface)] space-y-3">
-              <p className="text-xs font-semibold text-[var(--adm-text)]">Automatikus sorfeltöltés mentett munkaórákból</p>
+              <p className="text-xs font-semibold text-[var(--adm-text)]">Sorok betöltése rögzített munkaórákból</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <select
                   value={autofillClientId}
@@ -1414,7 +1510,7 @@ function TimeEntriesPageContent() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-[var(--adm-text)]">Munka sorok</p>
+                <p className="text-xs font-semibold text-[var(--adm-text)]">Kimutatássorok</p>
                 <button onClick={addReportRow} className="px-2 py-1 text-[10px] border border-[var(--adm-border)] rounded">+ Sor</button>
               </div>
               {reportRows.map((row, idx) => (
@@ -1460,14 +1556,14 @@ function TimeEntriesPageContent() {
                   disabled={isGeneratingReport}
                   className="px-3 py-2 bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] text-xs rounded disabled:opacity-50"
                 >
-                  {isGeneratingReport ? "Generálás..." : "Riport generálása"}
+                  {isGeneratingReport ? "Generálás..." : "Kimutatás összeállítása"}
                 </button>
                 <button
                   onClick={handleRenderReportOutput}
                   disabled={isGeneratingReport}
                   className="px-3 py-2 bg-[#8B7A56] text-white text-xs rounded disabled:opacity-50"
                 >
-                  {isGeneratingReport ? "Generálás..." : "Előnézet generálása"}
+                  {isGeneratingReport ? "Generálás..." : "Előnézet"}
                 </button>
                 <button
                   onClick={handleRenderReportDocxOutput}
@@ -1481,12 +1577,12 @@ function TimeEntriesPageContent() {
 
             {generatedReport && (
               <div className="bg-[var(--adm-ivory-100)] border border-[var(--adm-border)] rounded p-3">
-                <p className="text-xs font-semibold text-[var(--adm-text)]">Generált összesítés</p>
+                <p className="text-xs font-semibold text-[var(--adm-text)]">Kimutatás összesítése</p>
                 <p className="text-[10px] text-[var(--adm-text-muted)] mt-1">
-                  Sorok: {generatedReport.totals.rowCount} · Total: {generatedReport.totals.totalHours} óra · Final: {generatedReport.totals.finalHours} óra
+                  Sorok: {generatedReport.totals.rowCount} · Összesen: {generatedReport.totals.totalHours} óra · Záró érték: {generatedReport.totals.finalHours} óra
                 </p>
                 <details className="mt-2">
-                  <summary className="cursor-pointer text-[10px] text-[var(--adm-text-muted)]">Technikai részletek</summary>
+                  <summary className="cursor-pointer text-[10px] text-[var(--adm-text-muted)]">Részletek</summary>
                   <pre className="mt-2 text-[10px] text-[var(--adm-text-muted)] overflow-auto max-h-48">
                     {JSON.stringify(generatedReport.exportPayload, null, 2)}
                   </pre>
@@ -1497,13 +1593,13 @@ function TimeEntriesPageContent() {
             {renderedReport?.renderedOutput && (
               <div className="bg-[var(--adm-ivory-100)] border border-[var(--adm-border)] rounded p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-[var(--adm-text)]">Generált kimutatás</p>
+                  <p className="text-xs font-semibold text-[var(--adm-text)]">Elkészült kimutatás</p>
                   <button onClick={handleDownloadRenderedOutput} className="px-2 py-1 text-[10px] border border-[var(--adm-border)] rounded bg-white">
                     Letöltés ({renderedReport.renderedOutput.fileName})
                   </button>
                 </div>
                 <p className="text-[10px] text-[var(--adm-text-muted)] mt-1">
-                  Formátum: {renderedReport.renderedOutput.format} · MIME: {renderedReport.renderedOutput.mimeType}
+                  Formátum: {renderedReport.renderedOutput.format}
                 </p>
                 {renderedReport.renderedOutput.format === "TEXT_V1" && renderedReport.renderedOutput.content ? (
                   <pre className="mt-2 text-[10px] text-[var(--adm-text-muted)] overflow-auto max-h-48 whitespace-pre-wrap">
@@ -1517,7 +1613,7 @@ function TimeEntriesPageContent() {
 
             <div className="bg-[var(--adm-ivory-100)] border border-[var(--adm-border)] rounded p-3">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-[var(--adm-text)]">Korábbi renderelt outputok</p>
+                <p className="text-xs font-semibold text-[var(--adm-text)]">Korábbi letöltések</p>
                 {selectedReportInstanceId && (
                   <button
                     onClick={() => loadReportArtifacts(selectedReportInstanceId)}
@@ -1529,9 +1625,9 @@ function TimeEntriesPageContent() {
                 )}
               </div>
               {!selectedReportInstanceId ? (
-                <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Válassz mentett riport példányt az output történethez.</p>
+                <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Válassz mentett kimutatást a korábbi letöltésekhez.</p>
               ) : reportArtifacts.length === 0 ? (
-                <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Még nincs mentett renderelt output ehhez a riporthoz.</p>
+                <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Még nincs korábbi letöltés ehhez a kimutatáshoz.</p>
               ) : (
                 <div className="mt-2 space-y-1">
                   {reportArtifacts.map((artifact) => (
@@ -1554,8 +1650,11 @@ function TimeEntriesPageContent() {
               )}
             </div>
           </div>
+          )}
 
-          <div className="mb-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+          {activeTab === "entries" && (
+          <>
+          <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl border border-[var(--adm-border)] bg-white p-3 md:grid-cols-4">
             <div className="p-4 bg-white border border-[var(--adm-border)] rounded-lg">
               <p className="text-2xl font-serif text-[var(--adm-text)]">{formatMinutes(totals.totalMinutes)}</p>
               <p className="text-[10px] text-[var(--adm-text-muted)]">Összes munkaóra</p>
@@ -1583,6 +1682,19 @@ function TimeEntriesPageContent() {
               <button onClick={handleCreate} className="px-4 py-2 bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] text-xs rounded hover:bg-[#173824]">
                 Első bejegyzés rögzítése
               </button>
+            </div>
+          ) : filteredEntries.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-[var(--adm-border)] bg-white p-8 text-center">
+              <p className="text-sm font-semibold text-[var(--adm-text)]">Nincs találat ebben a nézetben.</p>
+              <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Módosítsd a szűrőket, vagy rögzíts új munkaórát.</p>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                <button onClick={() => { setEntrySearch(""); setEntryMatterFilter(""); }} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]">
+                  Szűrők törlése
+                </button>
+                <button onClick={handleCreate} className="rounded bg-[var(--adm-green-800)] px-3 py-2 text-xs text-[var(--adm-ivory-50)]">
+                  Munkaóra rögzítése
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid lg:grid-cols-[300px_minmax(0,1fr)] gap-4">
@@ -1721,6 +1833,8 @@ function TimeEntriesPageContent() {
                 )}
               </div>
             </div>
+          )}
+          </>
           )}
       
 
