@@ -80,6 +80,27 @@ Backend ZIP contains backend source expected by the Oryx source-deploy path, pac
 | --- | --- | ---: | ---: | --- |
 | Backend intake fix | `C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-backend-editor-ops-intake-fix-e4e0c00.zip` | 1495221 | 551 | `76eacc73a19fa35d0bd092590d45b14d891288ccd37776a58bf44d7a84bea359` |
 
+## Frontend OneDeploy Repackaged Artifact
+
+`FRONTEND-ONEDEPLOY-400-ROOT-CAUSE-AND-REPACKAGE-1` diagnosed the rejected frontend artifact as `ZIP_CONTENT_MODEL_INCOMPATIBLE`: the original frontend ZIP was a local Windows-built partial `.next` package, while the frontend App Service is configured for Oryx/source deployment.
+
+| Component | File | Size bytes | File count | SHA-256 |
+| --- | --- | ---: | ---: | --- |
+| Frontend repack1 | `C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-frontend-editor-ops-7392a6c-repack1.zip` | 2394192 | 117 | `29c840461c302befddefb2a4f585134c9fbd0c5ddf66c702c4dada9d67ab15f0` |
+
+Repack1 is an Oryx source ZIP: it contains source/config/public/scripts and `release-manifest.json`; it excludes local `.next`, `node_modules`, `.env*`, backend files, docs, test output, logs, uploads, and local artifact junk. The repository source was not changed.
+
+Raw corrected artifact scan:
+
+- `localhost:3001`: `0`
+- `http://localhost`: `0`
+- `127.0.0.1`: `0`
+- `/api/v1/auth/login`: `0`
+- `mesterséges intelligencia`: `0`
+- `n8n`: `0`
+
+Local extraction/build/start verification passed from the corrected ZIP: `npm ci`, `npm run build`, `npm run verify:prod-env`, `next start -p 3317`, and local route smoke for `/`, `/cases`, `/tasks`, and `/notifications`.
+
 Replacement artifact details:
 
 - Source commit: `e4e0c00`.

@@ -13,6 +13,26 @@ Final classification:
 
 `backend_only_intake_compat_redeployment_1_success`
 
+## Frontend Deployment Blocker Diagnosis
+
+The later frontend-only deployment attempt using `adminiculum-frontend-editor-ops-7392a6c.zip` failed in OneDeploy.
+
+- Failed frontend deployment ID: `7d8f083b-ecf9-448c-a9ed-e9a04de34ad0`
+- Failed artifact SHA-256: `6939271e34658852dcaab3b46df2d39256350744fb46baadf1f383eaa7d7a5a4`
+- Active frontend remained: `d21de1cb-46a1-4994-8bcd-45749c42d14e`
+- Azure log text: `Deployment Failed. deployer = OneDeploy deploymentPath = OneDeploy`
+- Root cause: `ZIP_CONTENT_MODEL_INCOMPATIBLE`
+
+The rejected package was a local Windows-built partial `.next` package. The frontend App Service is Oryx/source-build oriented and expects source files to be built in the Linux App Service environment.
+
+Corrected frontend artifact prepared, but not deployed:
+
+- File: `C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-frontend-editor-ops-7392a6c-repack1.zip`
+- SHA-256: `29c840461c302befddefb2a4f585134c9fbd0c5ddf66c702c4dada9d67ab15f0`
+- Package model: Oryx source ZIP, no local `.next`.
+
+Production was not changed by the diagnosis/repackage task.
+
 ## Artifacts
 
 | Component | Artifact | SHA-256 | Deployment result |

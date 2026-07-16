@@ -64,6 +64,23 @@ On 2026-07-16 the backend narrow release artifact was deployed and then rolled b
 
 Do not redeploy the `7392a6c` backend artifact. The replacement intake-compatible backend artifact was deployed successfully as `1a976a8f-ecbb-4d15-a899-339b9d7444bf`; rollback remains available but was not required.
 
+## Frontend OneDeploy 400 Repackage Note
+
+The frontend deployment attempt for `adminiculum-frontend-editor-ops-7392a6c.zip` failed before replacing the active frontend deployment.
+
+- Failed frontend deployment ID: `7d8f083b-ecf9-448c-a9ed-e9a04de34ad0`.
+- Active frontend deployment stayed `d21de1cb-46a1-4994-8bcd-45749c42d14e`.
+- No frontend rollback was required.
+- Root cause: `ZIP_CONTENT_MODEL_INCOMPATIBLE`; the failed package was a local Windows-built partial `.next` package.
+- Corrected package prepared but not deployed: `C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-frontend-editor-ops-7392a6c-repack1.zip`.
+- Corrected SHA-256: `29c840461c302befddefb2a4f585134c9fbd0c5ddf66c702c4dada9d67ab15f0`.
+
+If the corrected frontend deployment is later approved and fails, rollback remains the active frontend forensic artifact:
+
+```powershell
+az webapp deploy --resource-group Adminiculum --name adminiculumfrontend-austriaeast-01 --type zip --src-path "C:\Users\hubay\AppData\Local\Temp\adminiculum-artifact-forensics\frontend-wwwroot.zip"
+```
+
 
 ## Backend-Only Intake Compatibility Redeployment
 

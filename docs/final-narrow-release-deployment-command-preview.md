@@ -31,7 +31,7 @@ Expected backend artifact SHA-256:
 
 ## Frontend Deploy Command Preview
 
-Do not run until explicit deployment approval:
+The original frontend command below used the first `7392a6c` frontend ZIP and is superseded because OneDeploy rejected that artifact as `ZIP_CONTENT_MODEL_INCOMPATIBLE`.
 
 ```powershell
 az webapp deploy `
@@ -44,6 +44,24 @@ az webapp deploy `
 Expected frontend artifact SHA-256:
 
 `6939271e34658852dcaab3b46df2d39256350744fb46baadf1f383eaa7d7a5a4`
+
+## Corrected Frontend Deploy Command Preview
+
+Do not run until explicit deployment approval:
+
+```powershell
+az webapp deploy `
+  --resource-group Adminiculum `
+  --name adminiculumfrontend-austriaeast-01 `
+  --type zip `
+  --src-path "C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-frontend-editor-ops-7392a6c-repack1.zip"
+```
+
+Expected corrected frontend artifact SHA-256:
+
+`29c840461c302befddefb2a4f585134c9fbd0c5ddf66c702c4dada9d67ab15f0`
+
+Correction rationale: the corrected package is an Oryx source ZIP and does not include a locally built Windows `.next` output. The frontend App Service has `SCM_DO_BUILD_DURING_DEPLOYMENT=true`, `ENABLE_ORYX_BUILD=true`, `WEBSITE_RUN_FROM_PACKAGE=0`, Node `20-lts`, and startup command `npm run start`.
 
 ## Deployment ID Capture
 

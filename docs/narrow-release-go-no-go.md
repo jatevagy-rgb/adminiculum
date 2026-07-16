@@ -78,7 +78,24 @@ This is not deployment approval. It means the release branch has passed local au
 - Post-rollback smoke: `/health` `200`, unauth communications `401`, bogus route `404`, authenticated communications `200`, authenticated intake `404` prior-baseline behavior.
 - Final posture: `NO_GO_FOR_THIS_RELEASE_ARTIFACT_UNTIL_INTAKE_ENUM_COMPATIBILITY_FIX`.
 
-The next release attempt must first fix and validate the intake queue production enum compatibility issue on a separate release branch/artifact.
+## Frontend OneDeploy 400 Repackage Gate
+
+`FRONTEND-ONEDEPLOY-400-ROOT-CAUSE-AND-REPACKAGE-1` diagnosed the failed frontend deployment attempt.
+
+- Failed frontend deployment ID: `7d8f083b-ecf9-448c-a9ed-e9a04de34ad0`.
+- Active frontend remained: `d21de1cb-46a1-4994-8bcd-45749c42d14e`.
+- Exact available Azure failure text: `Deployment Failed. deployer = OneDeploy deploymentPath = OneDeploy`.
+- Root cause: `ZIP_CONTENT_MODEL_INCOMPATIBLE`.
+- Original frontend ZIP was a local Windows-built partial `.next` package.
+- Corrected frontend ZIP is an Oryx source package: `C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-frontend-editor-ops-7392a6c-repack1.zip`.
+- Corrected frontend SHA-256: `29c840461c302befddefb2a4f585134c9fbd0c5ddf66c702c4dada9d67ab15f0`.
+- Corrected artifact local extraction/build/start smoke passed.
+
+Current posture:
+
+`GO_FOR_CORRECTED_FRONTEND_REDEPLOYMENT_APPROVAL`
+
+This is not deployment approval. A separate explicit frontend-only deployment prompt is still required. This supersedes the earlier intake-compatibility no-go for the frontend phase because the intake-compatible backend artifact has already been deployed and smoke-tested.
 
 ## Intake task status compatibility fix follow-up
 
