@@ -149,9 +149,9 @@ The prior failed backend artifact `adminiculum-backend-editor-ops-7392a6c.zip` m
 
 ## Deployment Recommendation
 
-`GO_FOR_BACKEND_ONLY_REDEPLOYMENT_APPROVAL`
+`BACKEND_ONLY_REDEPLOYMENT_SUCCESS`
 
-Next step: request explicit backend-only redeployment approval for the replacement artifact. Do not deploy frontend, run migrations, change app settings, or alter feature flags.
+Backend-only redeployment approval was granted, the replacement artifact was deployed successfully, and post-deploy smoke passed. No frontend deploy, migration, app setting change, or feature flag change occurred.
 
 
 ## Intake Compatibility Completion Smoke And Artifact
@@ -217,4 +217,76 @@ Artifact scan:
 
 Final posture for this completion step:
 
-`GO_FOR_BACKEND_ONLY_REDEPLOYMENT_APPROVAL`
+`BACKEND_ONLY_REDEPLOYMENT_SUCCESS`
+
+
+## Backend-Only Intake Compatibility Redeployment
+
+`BACKEND-ONLY-REDEPLOY-INTAKE-COMPAT-1` was executed on 2026-07-16 after explicit human approval.
+
+Deployment command used:
+
+```powershell
+az webapp deploy --resource-group Adminiculum --name adminiculumbackend-b1-01 --type zip --src-path "C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-backend-editor-ops-intake-fix-e4e0c00.zip"
+```
+
+Deployment result:
+
+- Deployment ID: `1a976a8f-ecbb-4d15-a899-339b9d7444bf`.
+- Azure status: `RuntimeSuccessful`.
+- Resource: `adminiculumbackend-b1-01`.
+- Region: `Austria East`.
+- Artifact SHA-256 verified before deploy: `76eacc73a19fa35d0bd092590d45b14d891288ccd37776a58bf44d7a84bea359`.
+- Runtime fix source commit: `e4e0c00`.
+- Release branch documentation commit before deploy: `bd05fdc`.
+- Release identifier: `editor-ops-workflow-intake-fix-1`.
+
+Post-deploy smoke:
+
+| Check | Result |
+| --- | --- |
+| `GET /health` | `200` |
+| unauthenticated `GET /api/v1/communications?limit=8` | `401` |
+| bogus route | `404` |
+| unauthenticated `GET /api/v1/intake` | `401` |
+| authenticated `GET /api/v1/auth/me` | `200` |
+| authenticated `GET /api/v1/intake` | `200`, safe DTO (`generatedAt`, `summary`, `items`, `pagination`, `availability`) |
+| authenticated `GET /api/v1/agenda` | `200` |
+| authenticated `GET /api/v1/workload` | `200` |
+| authenticated `GET /api/v1/tasks` | `200` |
+| authenticated `GET /api/v1/cases` | `200` |
+| authenticated `GET /api/v1/cases/smoke-case/lifecycle` | `404 CASE_NOT_FOUND`, safe missing state |
+| authenticated `GET /api/v1/communications?limit=8` | `200`, safe list shape |
+| authenticated editor metadata missing smoke document | `404`, safe missing state |
+| authenticated document comments missing smoke document | `404 DOCUMENT_NOT_FOUND`, safe missing state |
+| Client Portal spoofed summary/export | `501 CLIENT_PORTAL_NOT_ENABLED` |
+| Outlook import gate | `501 OUTLOOK_IMPORT_NOT_ENABLED` |
+| contract generation gate | `501 CONTRACTS_NOT_ENABLED` |
+
+Feature/app setting posture after deploy:
+
+- `ENABLE_COMMUNICATIONS_PERSISTENCE=true`.
+- `ENABLE_CLIENT_PORTAL_PUBLIC=false`.
+- `ENABLE_OUTLOOK_IMPORT` absent/off.
+- Contract generation remains gated.
+- No Azure app settings or feature flags were changed.
+
+Network/log audit:
+
+- No smoke response contained raw Prisma error text, stack trace, `workspaceText`, AI/n8n markers, or sensitive content.
+- Invalid-token intake response remained sanitized as `401` with no Prisma/stack leakage.
+- No production mutation smoke was performed.
+
+Frontend state:
+
+- Frontend was not deployed.
+- Frontend App Service remained `Running` with `lastModifiedTimeUtc` `2026-06-25T20:29:59.863333`.
+
+Rollback status:
+
+- Rollback was not required.
+- Rollback artifact remained available and hash-verified before deployment: `8ece0510ed5546abafc6ec5e001b066bbc98d2f2cd05fa4e3f9b0696d8709949`.
+
+Final classification:
+
+`backend_only_intake_compat_redeployment_1_success`
