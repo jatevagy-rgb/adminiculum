@@ -339,6 +339,7 @@ describe('GET /cases/:caseId/workflow-summary', () => {
     expect(response.body.caseId).toBe('case-1');
     expect(response.body.nextAction.kind).toBe('OVERDUE_TASK');
     expect(response.body.latestCommunication.contentPreview).toBe('Rövid, biztonságos kommunikációs előnézet.');
+    expect(response.body.latestCommunication.direction).toBeNull();
     expect(JSON.stringify(response.body)).not.toContain('workspaceText');
     expect(JSON.stringify(response.body)).not.toContain('raw document');
     expect(JSON.stringify(response.body)).not.toContain('full email body');
@@ -357,7 +358,7 @@ describe('GET /cases/:caseId/workflow-summary', () => {
     }));
     expect(prisma.communication.findMany).toHaveBeenCalledWith(expect.objectContaining({
       take: 1,
-      select: expect.not.objectContaining({ content: true }),
+      select: expect.not.objectContaining({ content: true, direction: true }),
     }));
     expect(prisma.document.findMany).toHaveBeenCalledWith(expect.objectContaining({
       take: 20,

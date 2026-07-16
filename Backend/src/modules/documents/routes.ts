@@ -340,8 +340,20 @@ router.get('/:id', authenticate, async (req: Request, res: Response): Promise<vo
  */
 router.get('/:id/text', authenticate, async (req: Request, res: Response): Promise<void> => {
   try {
-const { id } = req.params as { id: string };
-    const document = await prisma.document.findUnique({ where: { id } });
+    const { id } = req.params as { id: string };
+    const document = await prisma.document.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        documentType: true,
+        workspaceText: true,
+        updatedAt: true,
+        spItemId: true,
+        mimeType: true,
+        fileName: true,
+        name: true,
+      },
+    });
 
     if (!document) {
       res.status(404).json({ status: 404, code: 'NOT_FOUND', message: 'Document not found' });

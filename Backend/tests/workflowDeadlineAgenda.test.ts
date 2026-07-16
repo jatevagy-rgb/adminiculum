@@ -204,6 +204,35 @@ describe('workflow deadlines agenda and notifications', () => {
     expect(inaccessible.body.code).toBe('CASE_NOT_FOUND');
   });
 
+  it('uses only persisted CaseStatus values for case deadline filters', async () => {
+    mockPrismaService.case.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'case-1',
+          caseNumber: 'CASE-1',
+          title: 'Teszt ügy',
+          clientName: 'Teszt ügyfél',
+          priority: 'MEDIUM',
+          status: 'IN_REVIEW',
+          deadline: null,
+          completedAt: null,
+          updatedAt: new Date('2026-07-12T09:00:00.000Z'),
+          assignedLawyerId: 'user-1',
+          assignedLawyer: { id: 'user-1', name: 'Ügyvéd', email: 'lawyer@example.test' },
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const response = await requestJson(createApp(), 'GET', '/agenda?scope=CASE&caseId=case-1&status=OPEN');
+
+    expect(response.status).toBe(200);
+    expect(mockPrismaService.case.findMany).toHaveBeenLastCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        status: { notIn: ['FINAL', 'CANCELLED', 'ARCHIVED'] },
+      }),
+    }));
+  });
+
   it('reschedules task due date through an explicit mutation and content-minimal timeline event', async () => {
     mockTaskDb.task.findUnique.mockResolvedValue({
       id: 'task-1',

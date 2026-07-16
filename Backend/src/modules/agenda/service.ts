@@ -1,4 +1,5 @@
 import { prisma } from '../../prisma/prisma.service';
+import type { CaseStatus } from '@prisma/client';
 import { CLOSED_TASK_STATUSES } from '../tasks/taskStatus';
 import {
   compactSafeText,
@@ -14,6 +15,8 @@ import {
 } from './deadlineEngine';
 
 export type AgendaScope = 'MY_WORK' | 'MY_CASES' | 'CASE';
+
+const CLOSED_CASE_STATUSES = ['FINAL', 'CANCELLED', 'ARCHIVED'] satisfies CaseStatus[];
 
 export interface WorkflowAgendaDto {
   generatedAt: string;
@@ -193,9 +196,9 @@ function taskStatusFilter(status: 'OPEN' | 'COMPLETED' | 'ALL') {
 function caseStatusFilter(status: 'OPEN' | 'COMPLETED' | 'ALL') {
   if (status === 'ALL') return {};
   if (status === 'COMPLETED') {
-    return { OR: [{ completedAt: { not: null } }, { status: { in: ['COMPLETED', 'DONE', 'APPROVED', 'ARCHIVED'] } as any }] };
+    return { OR: [{ completedAt: { not: null } }, { status: { in: CLOSED_CASE_STATUSES } }] };
   }
-  return { completedAt: null, status: { notIn: ['COMPLETED', 'DONE', 'APPROVED', 'ARCHIVED', 'CANCELLED'] } as any };
+  return { completedAt: null, status: { notIn: CLOSED_CASE_STATUSES } };
 }
 
 export function makeDefaultAgendaRange(now = new Date()): { from: Date; to: Date } {

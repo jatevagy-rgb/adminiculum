@@ -184,3 +184,42 @@ describe('document editor metadata route', () => {
     });
   });
 });
+
+describe('document text route production-compatible projection', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('uses an explicit drift-safe document projection and returns a safe unavailable state', async () => {
+    (prisma as any).document.findUnique.mockResolvedValueOnce({
+      id: 'doc-1',
+      documentType: 'CLIENT_INPUT',
+      workspaceText: null,
+      updatedAt: new Date('2026-07-14T08:00:00.000Z'),
+      spItemId: null,
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      fileName: 'Szerződés.docx',
+      name: 'Szerződés.docx',
+    });
+
+    const res = await requestJson(createApp(), 'GET', '/documents/doc-1/text');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      documentId: 'doc-1',
+      source: 'UPLOADED',
+      text: '',
+    });
+    expect((prisma as any).document.findUnique).toHaveBeenCalledWith({
+      where: { id: 'doc-1' },
+      select: {
+        id: true,
+        documentType: true,
+        workspaceText: true,
+        updatedAt: true,
+        spItemId: true,
+        mimeType: true,
+        fileName: true,
+        name: true,
+      },
+    });
+  });
+});

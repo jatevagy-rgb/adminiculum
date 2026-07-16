@@ -2397,6 +2397,8 @@ export async function downloadContract(generationId: string): Promise<Blob> {
 }
 
 export async function getCaseContracts(caseId: string): Promise<CaseContractListItem[]> {
+  const capabilities = await getEditorTemplateCapabilities().catch(() => null);
+  if (!capabilities?.availability.generation) return [];
   return fetchApi<CaseContractListItem[]>(`/contracts/case/${caseId}`);
 }
 
