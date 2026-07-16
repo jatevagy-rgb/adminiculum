@@ -73,3 +73,14 @@ All blocking scan counts are `0`.
 Frontend ZIP contains runtime/build-focused Next output, public assets, package/config files, and release manifest. It excludes source tree, `.env*`, `.next/cache`, and local dev files.
 
 Backend ZIP contains backend source expected by the Oryx source-deploy path, package files, Prisma schema/migrations unchanged from baseline, templates, and release manifest. It excludes frontend, tests, docs, `.env*`, `.git`, local artifacts, coverage, and audit dumps.
+
+## Intake fix artifact status
+
+No replacement backend artifact has been produced for `INTAKE-TASK-STATUS-PRODUCTION-COMPAT-FIX-1` yet.
+
+Reason:
+
+- The code fix and automated validation passed.
+- Live local authenticated `/api/v1/intake` smoke could not be completed because no local DB/auth environment variables were available in this Codex session.
+
+Do not redeploy the failed backend artifact `adminiculum-backend-editor-ops-7392a6c.zip`. A new backend-only artifact must be generated only after live local authenticated intake smoke passes.

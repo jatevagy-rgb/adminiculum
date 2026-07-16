@@ -124,3 +124,17 @@ Frontend verification:
 ## Follow-Up Required
 
 The intake route regression must be fixed offline on a separate release branch before another production deploy attempt. The likely fix area is deployed enum compatibility in the intake queue task-status exclusion query.
+
+## Intake task status production compatibility fix
+
+`INTAKE-TASK-STATUS-PRODUCTION-COMPAT-FIX-1` implemented the narrow backend code fix for the failed production intake smoke, but it is not yet a deployable artifact.
+
+- Failed release deployment ID preserved: `24f6a5a5-4004-4b7d-98ba-f91d5737fc52`.
+- Root cause: `Task.status notIn` filters included values absent from the deployed/generated `TaskStatus` enum.
+- Valid `TaskStatus` values: `PENDING`, `IN_PROGRESS`, `SUBMITTED`, `UNDER_REVIEW`, `COMPLETED`, `CANCELLED`, `BLOCKED`, `TODO`, `IN_REVIEW`, `DONE`.
+- Removed invalid runtime Prisma filter values: `APPROVED`, `REJECTED`, `DECLINED`, `ARCHIVED`.
+- Automated backend and frontend validation passed.
+- Live local authenticated intake smoke was blocked because no local DB/auth env was available in this Codex session.
+- No backend artifact was generated.
+- No deployment was performed.
+- Current posture: `NO_GO_LOCAL_COMPATIBILITY_BLOCKER` until live local intake smoke is completed and a fresh backend-only artifact is generated.

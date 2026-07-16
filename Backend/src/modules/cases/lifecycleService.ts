@@ -10,6 +10,7 @@
  */
 
 import { prisma } from '../../prisma/prisma.service';
+import { CLOSED_TASK_STATUSES, REVIEW_TASK_STATUSES } from '../tasks/taskStatus';
 import {
   CaseClosureBlocker,
   CaseLifecycleAction,
@@ -23,8 +24,6 @@ import {
   validateCaseLifecycleTransition,
 } from './lifecycle';
 
-const OPEN_TASK_EXCLUDED = ['COMPLETED', 'DONE', 'APPROVED', 'REJECTED', 'DECLINED', 'CANCELLED', 'ARCHIVED'];
-const REVIEW_TASK_STATUSES = ['SUBMITTED', 'UNDER_REVIEW', 'IN_REVIEW'];
 const ACTIVE_HANDOFF_STATUSES = ['DRAFT', 'PREPARED', 'SUBMITTED', 'IN_REVIEW'];
 
 const PRIVILEGED_ROLES = new Set(['ADMIN', 'PARTNER']);
@@ -95,15 +94,15 @@ async function loadCaseRow(caseId: string): Promise<LifecycleCaseRow | null> {
  */
 async function collectBlockers(caseRow: LifecycleCaseRow, now: Date): Promise<CaseClosureBlocker[]> {
   const [openTaskCount, overdueTaskCount, activeReviewCount, activeHandoffCount] = await Promise.all([
-    prisma.task.count({ where: { caseId: caseRow.id, status: { notIn: OPEN_TASK_EXCLUDED as any } } }),
+    prisma.task.count({ where: { caseId: caseRow.id, status: { notIn: CLOSED_TASK_STATUSES } } }),
     prisma.task.count({
       where: {
         caseId: caseRow.id,
-        status: { notIn: OPEN_TASK_EXCLUDED as any },
+        status: { notIn: CLOSED_TASK_STATUSES },
         dueDate: { lt: now },
       },
     }),
-    prisma.task.count({ where: { caseId: caseRow.id, status: { in: REVIEW_TASK_STATUSES as any } } }),
+    prisma.task.count({ where: { caseId: caseRow.id, status: { in: REVIEW_TASK_STATUSES } } }),
     prisma.lawyerHandoffPackage.count({
       where: { caseId: caseRow.id, status: { in: ACTIVE_HANDOFF_STATUSES as any } },
     }),

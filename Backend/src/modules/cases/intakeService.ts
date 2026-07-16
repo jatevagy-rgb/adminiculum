@@ -10,6 +10,7 @@
 
 import { prisma } from '../../prisma/prisma.service';
 import { createTask } from '../tasks/services';
+import { CLOSED_TASK_STATUSES } from '../tasks/taskStatus';
 import {
   ACTIVATION_TARGET_STATUS,
   DECLINE_TARGET_STATUS,
@@ -31,7 +32,6 @@ import {
 } from './intakeReadiness';
 
 const PRIVILEGED_ROLES = new Set(['ADMIN', 'PARTNER']);
-const OPEN_TASK_EXCLUDED = ['COMPLETED', 'DONE', 'APPROVED', 'REJECTED', 'DECLINED', 'CANCELLED', 'ARCHIVED'];
 const QUEUE_SCAN_LIMIT = 200;
 const QUEUE_MAX_LIMIT = 50;
 
@@ -178,7 +178,7 @@ export async function getCaseIntakeReadiness(
   if (!caseRow) return null;
 
   const [openTaskCount, collaborators] = await Promise.all([
-    prisma.task.count({ where: { caseId, status: { notIn: OPEN_TASK_EXCLUDED as any } } }),
+    prisma.task.count({ where: { caseId, status: { notIn: CLOSED_TASK_STATUSES } } }),
     prisma.caseCollaborator.findMany({
       where: { caseId },
       orderBy: { addedAt: 'asc' },
@@ -341,7 +341,7 @@ export async function createOpeningTasks(
     where: {
       caseId,
       type: { in: parsed.map((item) => openingTaskTypeForCode(item.code)) },
-      status: { notIn: OPEN_TASK_EXCLUDED as any },
+      status: { notIn: CLOSED_TASK_STATUSES },
     },
     select: { type: true },
   });
@@ -403,7 +403,7 @@ async function applyIntakeTransition(
   let decision;
   if (action === 'ACTIVATE') {
     const openTaskCount = await prisma.task.count({
-      where: { caseId, status: { notIn: OPEN_TASK_EXCLUDED as any } },
+      where: { caseId, status: { notIn: CLOSED_TASK_STATUSES } },
     });
     const checklist = deriveIntakeChecklist(checklistInputFromRow(caseRow, openTaskCount));
     const blockers = deriveIntakeBlockers(checklist);
@@ -557,7 +557,7 @@ export async function getIntakeQueue(params: {
   const taskCounts = new Map<string, number>();
   if (caseIds.length > 0) {
     const openTasks = await prisma.task.findMany({
-      where: { caseId: { in: caseIds }, status: { notIn: OPEN_TASK_EXCLUDED as any } },
+      where: { caseId: { in: caseIds }, status: { notIn: CLOSED_TASK_STATUSES } },
       select: { caseId: true },
       take: 2000,
     });

@@ -31,6 +31,7 @@ jest.mock('../src/prisma/prisma.service', () => ({
 
 import { prisma } from '../src/prisma/prisma.service';
 import intakeRoutes from '../src/modules/intake/routes';
+import { CLOSED_TASK_STATUSES } from '../src/modules/tasks/taskStatus';
 
 type TestResponse = { status: number; body: any };
 
@@ -160,6 +161,29 @@ describe('GET /intake queue', () => {
     const blockedItem = res.body.items.find((item: any) => item.caseId === 'b');
     expect(blockedItem.nextStep.code).toBe('CLIENT_ROLE');
     expect(blockedItem.blockers.map((blocker: any) => blocker.code)).toContain('MISSING_RESPONSIBLE_LAWYER');
+  });
+
+  it('queries open task counts with only deployed TaskStatus enum values', async () => {
+    (prisma.case.findMany as jest.Mock).mockResolvedValue([queueCase('a')]);
+    (prisma.task.findMany as jest.Mock).mockResolvedValue([{ caseId: 'a' }]);
+    const res = await requestJson(createApp(), 'GET', '/intake', AUTH);
+    expect(res.status).toBe(200);
+    expect(res.body.summary.readyForActivation).toBe(1);
+
+    const taskQuery = (prisma.task.findMany as jest.Mock).mock.calls[0][0];
+    expect(taskQuery.where.status.notIn).toEqual(CLOSED_TASK_STATUSES);
+    expect(taskQuery.where.status.notIn).not.toEqual(expect.arrayContaining(['APPROVED', 'REJECTED', 'DECLINED', 'ARCHIVED']));
+    expect(taskQuery.include).toBeUndefined();
+  });
+
+  it('returns a successful empty queue response without broad task includes', async () => {
+    (prisma.case.findMany as jest.Mock).mockResolvedValue([]);
+    const res = await requestJson(createApp(), 'GET', '/intake', AUTH);
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual([]);
+    expect(res.body.summary.total).toBe(0);
+    expect(res.body.pagination.limit).toBeLessThanOrEqual(50);
+    expect(prisma.task.findMany).not.toHaveBeenCalled();
   });
 
   it('applies NEEDS_ATTENTION / READY filters and pagination bounds', async () => {

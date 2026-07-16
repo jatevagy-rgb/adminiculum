@@ -94,3 +94,12 @@ Run after the approved backend-first, frontend-second deployment sequence:
 - Frontend network calls use `https://adminiculumbackend-b1-01.azurewebsites.net`, not localhost.
 - Client Portal spoofed summary/export remains guarded as previously documented.
 - No Azure app settings, feature flags, database state, migrations, or production secrets are changed during smoke.
+
+## Intake fix deployment preview status
+
+`INTAKE-TASK-STATUS-PRODUCTION-COMPAT-FIX-1` has no deployment command preview yet because no replacement backend artifact was generated. The next backend-only deployment preview must be created only after:
+
+1. live local authenticated `/api/v1/intake` smoke passes without `500`;
+2. a new backend-only ZIP is produced outside the repository;
+3. artifact SHA-256 and scan results are recorded;
+4. explicit backend-only redeployment approval is granted.

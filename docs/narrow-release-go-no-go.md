@@ -79,3 +79,14 @@ This is not deployment approval. It means the release branch has passed local au
 - Final posture: `NO_GO_FOR_THIS_RELEASE_ARTIFACT_UNTIL_INTAKE_ENUM_COMPATIBILITY_FIX`.
 
 The next release attempt must first fix and validate the intake queue production enum compatibility issue on a separate release branch/artifact.
+
+## Intake task status compatibility fix follow-up
+
+A narrow backend fix now aligns intake/lifecycle/agenda task-status filters with the generated Prisma `TaskStatus` enum. The failed release artifact remains blocked.
+
+- Fix area: `Backend/src/modules/tasks/taskStatus.ts`, `Backend/src/modules/cases/intakeService.ts`, `Backend/src/modules/cases/lifecycleService.ts`, `Backend/src/modules/agenda/service.ts`.
+- Tests: added task-status compatibility guard and intake queue filter assertions.
+- Backend/frontend validation passed.
+- No schema, migration, frontend runtime, config, feature flag, package, OpenAPI, CORS, Azure, AI/n8n, or Client Portal change.
+- No new backend artifact yet because live local authenticated intake smoke was blocked by missing local DB/auth env.
+- Current go/no-go: `NO_GO_LOCAL_COMPATIBILITY_BLOCKER`.
