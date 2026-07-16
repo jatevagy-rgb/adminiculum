@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import { CompactState, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
+import { getCaseMatterTypeLabel } from "@/lib/caseLabels";
 
 type WorkRow = {
   id: string;
@@ -151,7 +152,7 @@ export function CaseCenterOverview({
             <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-4 py-3">
               <div>
                 <h2 id="case-active-work-heading" className="font-serif text-[20px] font-medium text-[var(--adm-text)]">Aktív munka</h2>
-                <p className="mt-0.5 text-[10px] text-[var(--adm-text-muted)]">{matterType}</p>
+                <p className="mt-0.5 text-[10px] text-[var(--adm-text-muted)]">{getCaseMatterTypeLabel(matterType)}</p>
               </div>
               <Link href={`/tasks?caseId=${encodeURIComponent(caseId)}`} className="text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">Minden feladat</Link>
             </div>

@@ -875,6 +875,21 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   };
 
   const activeDocument = selectedUploadedDocument || selectedGeneratedContract;
+  const houseStyleValueLabels: Record<string, string> = {
+    HU: "Magyar",
+    EN: "Angol",
+    BILINGUAL: "Kétnyelvű",
+    HU_ONLY: "Csak magyar",
+    EN_ONLY: "Csak angol",
+    BILINGUAL_TWO_COLUMN: "Kétnyelvű két hasábban",
+  };
+  const houseStyleSummary = clientHouseStyle
+    ? [
+        clientHouseStyle.preferredLanguage ? houseStyleValueLabels[clientHouseStyle.preferredLanguage] || clientHouseStyle.preferredLanguage : null,
+        clientHouseStyle.documentLanguageMode ? houseStyleValueLabels[clientHouseStyle.documentLanguageMode] || clientHouseStyle.documentLanguageMode : null,
+        clientHouseStyle.fontFamily || null,
+      ].filter(Boolean).join(" · ")
+    : "";
   const houseStyleHasContent = Boolean(clientHouseStyle && [
     clientHouseStyle.officialName,
     clientHouseStyle.shortName,
@@ -1200,7 +1215,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     </div>
                     {clientHouseStyle ? (
                       <div className="mt-3 space-y-2 rounded bg-white p-2 text-[11px] text-[#3D4842]">
-                        <p>{[clientHouseStyle.preferredLanguage, clientHouseStyle.documentLanguageMode, clientHouseStyle.fontFamily].filter(Boolean).join(" · ") || "Profil létrehozva, de nincs kitöltve."}</p>
+                        <p>{houseStyleSummary || "Profil létrehozva, de nincs kitöltve."}</p>
                         <p>Fejlécminta: <b>{clientHouseStyle.headerAssetPath ? "Van" : "Nincs"}</b></p>
                       </div>
                     ) : null}

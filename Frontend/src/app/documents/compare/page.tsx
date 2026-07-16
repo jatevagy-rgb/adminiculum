@@ -317,10 +317,10 @@ const tipTapReviewSuggestionTypeLabel: Record<EditorReviewSuggestionType, string
 };
 
 const localReviewPersistenceLabel: Record<LocalReviewMarkType, string> = {
-  highlight: "Helyi kiemelés — mentés későbbi patchben.",
-  comment: "Helyi megjegyzés — szerveroldali mentés későbbi patchben.",
-  replacement: "Helyi cserejavaslat — mentés későbbi patchben.",
-  deletion: "Helyi törlési javaslat — mentés későbbi patchben.",
+  highlight: "Helyi kiemelés — csak ebben a munkamenetben.",
+  comment: "Helyi megjegyzés — csak ebben a munkamenetben.",
+  replacement: "Helyi cserejavaslat — csak ebben a munkamenetben.",
+  deletion: "Helyi törlési javaslat — csak ebben a munkamenetben.",
 };
 
 const DEFAULT_NETWORK_ERROR_MESSAGE = "A művelet nem érhető el. Ellenőrizd a kapcsolatot vagy próbáld újra.";
@@ -1405,9 +1405,9 @@ const filteredClauseTools = useMemo(() => {
       ...nextStepLines,
       "",
       "Korlátok",
-      "- Ez helyi/frontendes munkasegédlet, nem backend review napló.",
+      "- A review-jelölések csak ebben a munkamenetben érhetők el.",
       "- Ez nem Word track changes.",
-      "- A tartós review suggestion persistence későbbi backend-fejlesztés.",
+      "- Tartós review-napló ezen a felületen nem érhető el.",
     ].join("\n");
   }, [
     activeDraftText,
@@ -1477,7 +1477,7 @@ const filteredClauseTools = useMemo(() => {
     : !editorDraft.trim()
       ? "Nincs mit menteni."
       : selectedDocument.kind === "contract" && contractEditDraftError
-        ? "Módosított munkapéldány mentése későbbi backend patchben lesz aktiválható."
+        ? "A módosított munkapéldány tartós mentése nem érhető el."
         : selectedDocument.kind === "contract"
           ? "Helyi szerkesztések mentése edit-draftként."
           : "Munkapéldány mentése a Dokumentumtárba.";
@@ -1707,7 +1707,7 @@ const filteredClauseTools = useMemo(() => {
           key: "justify",
           label: "Sorkizárt",
           disabled: true,
-          title: "A helyi szerkesztőben a valódi sorkizárt tördelés későbbi patchben lesz aktiválható.",
+          title: "A sorkizárt tördelés ebben a szerkesztőben nem érhető el.",
         },
       ],
     },
@@ -1861,7 +1861,7 @@ const filteredClauseTools = useMemo(() => {
       },
     ]);
     setLocalCommentDraft("");
-    setEditorNotice("Helyi megjegyzés hozzáadva. Mentés későbbi patchben lesz bekötve.");
+    setEditorNotice("Helyi megjegyzés hozzáadva erre a munkamenetre.");
   };
 
   const createLocalReviewMark = (
@@ -1897,10 +1897,10 @@ const filteredClauseTools = useMemo(() => {
     setWorkspaceMainTab("review");
     setEditorNotice(
       status === "accepted"
-        ? "A helyi review-jel elfogadva. Mentés későbbi patchben."
+        ? "A helyi review-jel elfogadva erre a munkamenetre."
         : status === "rejected"
-          ? "A helyi review-jel elutasítva. Mentés későbbi patchben."
-          : "A helyi review-jel szerkesztve jelölést kapott. Mentés későbbi patchben."
+          ? "A helyi review-jel elutasítva erre a munkamenetre."
+          : "A helyi review-jel szerkesztve jelölést kapott erre a munkamenetre."
     );
   };
 
@@ -1973,7 +1973,7 @@ const filteredClauseTools = useMemo(() => {
       setEditingReviewMarkId(null);
       setComposerMode(null);
       setComposerDraft("");
-      setEditorNotice("A helyi megjegyzés frissítve. Szerveroldali mentés későbbi patchben.");
+      setEditorNotice("A helyi megjegyzés frissítve erre a munkamenetre.");
       return;
     }
 
@@ -1999,7 +1999,7 @@ const filteredClauseTools = useMemo(() => {
     setEditingReviewMarkId(null);
     setComposerMode(null);
     setComposerDraft("");
-    setEditorNotice("Helyi megjegyzés létrejött. Szerveroldali mentés későbbi patchben.");
+    setEditorNotice("Helyi megjegyzés létrejött erre a munkamenetre.");
   }
 
   function handleSubmitProposedChange() {
@@ -2022,8 +2022,8 @@ const filteredClauseTools = useMemo(() => {
       setWorkspaceMainTab("review");
       setEditorNotice(
         composerMode === "replacement"
-          ? "A helyi cserejavaslat frissítve. Mentés későbbi patchben."
-          : "A helyi törlési javaslat frissítve. Mentés későbbi patchben."
+          ? "A helyi cserejavaslat frissítve erre a munkamenetre."
+          : "A helyi törlési javaslat frissítve erre a munkamenetre."
       );
       return;
     }
@@ -2040,8 +2040,8 @@ const filteredClauseTools = useMemo(() => {
     setWorkspaceMainTab("review");
     setEditorNotice(
       composerMode === "replacement"
-        ? "Helyi szövegcsere-javaslat rögzítve. Mentés későbbi patchben."
-        : "Helyi törlési javaslat rögzítve. Mentés későbbi patchben."
+        ? "Helyi szövegcsere-javaslat rögzítve erre a munkamenetre."
+        : "Helyi törlési javaslat rögzítve erre a munkamenetre."
     );
   }
 
@@ -2582,7 +2582,7 @@ return (
                   <section className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[var(--adm-text)]">
                     <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Átadási csomagok</p>
                     <p className="mt-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">
-                      Ügykörnyezet nélkül csak a helyi átadási munkaszöveg használható. Válassz ügyhöz tartozó dokumentumot a backend csomagkezeléshez.
+                      Ügykörnyezet nélkül csak a helyi átadási munkaszöveg használható. Válassz ügyhöz tartozó dokumentumot a leadási csomaghoz.
                     </p>
                   </section>
                 )}
@@ -2782,7 +2782,7 @@ return (
                               Mégse
                             </AdminButton>
                           </div>
-                          <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Helyi döntés — mentés későbbi patchben.</p>
+                          <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Helyi döntés — csak ebben a munkamenetben.</p>
                         </div>
                       ) : null}
 
@@ -2818,7 +2818,7 @@ return (
                                 <button
                                   type="button"
                                   onClick={() => applyLocalReviewDecision(mark.id, "accepted")}
-                                  title="Helyi döntés — mentés későbbi patchben."
+                                  title="Helyi döntés — csak ebben a munkamenetben."
                                   className="rounded-[5px] border border-[#BFDDBF] bg-white/80 px-2 py-1 text-[10px] text-[#1E6A34]"
                                 >
                                   Elfogadás
@@ -2826,7 +2826,7 @@ return (
                                 <button
                                   type="button"
                                   onClick={() => applyLocalReviewDecision(mark.id, "rejected")}
-                                  title="Helyi döntés — mentés későbbi patchben."
+                                  title="Helyi döntés — csak ebben a munkamenetben."
                                   className="rounded-[5px] border border-[#E5C3C3] bg-white/80 px-2 py-1 text-[10px] text-[#8B2A2A]"
                                 >
                                   Elutasítás
@@ -2834,7 +2834,7 @@ return (
                                 <button
                                   type="button"
                                   onClick={() => openReviewMarkEditor(mark)}
-                                  title="Helyi döntés — mentés későbbi patchben."
+                                  title="Helyi döntés — csak ebben a munkamenetben."
                                   className="rounded-[5px] border border-[#D9CFEA] bg-white/80 px-2 py-1 text-[10px] text-[#63428E]"
                                 >
                                   Szerkesztés
@@ -2878,7 +2878,7 @@ return (
                   {workspaceMainTab === "comments" ? (
                     <section className="space-y-3">
                       <div className="rounded-[6px] border border-[#C8D8F0] bg-[#F1F6FE] px-3 py-2 text-[11px] text-[#244B7A]">
-                        Helyi megjegyzés — szerveroldali mentés későbbi patchben.
+                        Helyi megjegyzés — csak ebben a munkamenetben.
                       </div>
                       {composerMode === "comment" ? (
                         <div className="rounded-[8px] border border-[#C8D8F0] bg-white p-3">

@@ -19,6 +19,7 @@ import {
   type CurrentUser,
   type User,
 } from "@/lib/api";
+import { getCaseDisplayTitle, getCaseMatterTypeLabel } from "@/lib/caseLabels";
 import { AdminBadge, AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import { CompactState, OperationalPageHeader, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 
@@ -194,8 +195,7 @@ function toInputDateTimeLocal(date: Date) {
 }
 
 function formatMatterType(value?: string | null) {
-  const found = matterTypes.find((item) => item.value === value);
-  return found?.label || value?.replace(/_/g, " ").toLocaleLowerCase("hu-HU") || "Nincs megadva";
+  return getCaseMatterTypeLabel(value);
 }
 
 function formatDeadlinePreview(value?: string) {
@@ -732,7 +732,7 @@ export function CasesList() {
                       <span className="text-sm text-[var(--adm-text)]">{item.clientName || "Nincs megadva"}</span>
                     </div>
                   </td>
-                  <td className="max-w-[280px] px-3 py-2.5 text-[13px] text-[#3D4842]"><span className="block truncate">{item.title}</span></td>
+                  <td className="max-w-[280px] px-3 py-2.5 text-[13px] text-[#3D4842]"><span className="block truncate">{getCaseDisplayTitle(item)}</span></td>
                   <td className="px-3 py-2.5 text-[12px] text-[#3D4842]">{formatMatterType(item.matterType)}</td>
                   <td className="px-3 py-2.5"><AdminStatusPill tone={item.status === "OPEN" ? "green" : "neutral"}>{statusLabel[item.status] || item.status}</AdminStatusPill></td>
                   <td className="px-3 py-2.5 text-xs text-[#3D4842]">{item.assignedLawyer?.name || "Nincs felelős"}</td>

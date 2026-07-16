@@ -30,6 +30,8 @@ describe('document editor template assembly bridge static safety', () => {
     const api = read('Frontend/src/lib/api.ts');
 
     expect(api).toContain('getEditorTemplateCapabilities');
+    expect(api).toContain('const capabilities = await getEditorTemplateCapabilities();');
+    expect(api).not.toContain('getEditorTemplateCapabilities().catch(() => null)');
     // The workbench still loads the capability contract; the template bridge
     // copy lives in the side panel "Sablon" tab since the UX layout overhaul
     // (the permanent header banner was removed deliberately).

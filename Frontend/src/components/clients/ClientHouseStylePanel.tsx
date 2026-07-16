@@ -122,6 +122,12 @@ function hasProfileContent(profile: ClientHouseStyleProfile | null): boolean {
   return Object.keys(EMPTY_FORM).some((key) => Boolean(String(profile[key as FieldKey] || "").trim()));
 }
 
+function getProfileOptionLabel(key: FieldKey, value?: string | null): string | null {
+  if (!value) return null;
+  const field = GROUPS.flatMap((group) => group.fields).find((candidate) => candidate.key === key);
+  return field?.options?.find((option) => option.value === value)?.label || value;
+}
+
 export function ClientHouseStylePanel({ clientId, clientName, compact = false, onSaved }: ClientHouseStylePanelProps) {
   const [profile, setProfile] = useState<ClientHouseStyleProfile | null>(null);
   const [form, setForm] = useState<UpsertClientHouseStyleProfilePayload>(EMPTY_FORM);
@@ -190,8 +196,8 @@ export function ClientHouseStylePanel({ clientId, clientName, compact = false, o
   };
 
   const summary = [
-    profile?.preferredLanguage || null,
-    profile?.documentLanguageMode || null,
+    getProfileOptionLabel("preferredLanguage", profile?.preferredLanguage),
+    getProfileOptionLabel("documentLanguageMode", profile?.documentLanguageMode),
     profile?.fontFamily || null,
     profile?.headingStyle || null,
     profile?.headerAssetPath ? "fejlécminta" : null,
@@ -241,7 +247,7 @@ export function ClientHouseStylePanel({ clientId, clientName, compact = false, o
             )}
             {profile?.brandingNotes ? <p className="mt-2 whitespace-pre-wrap text-[11px] text-[#3D4842]">{profile.brandingNotes}</p> : null}
             <p className="mt-2 text-[10px] leading-4 text-[var(--adm-text-muted)]">
-              Ez a fejlécminta jelenleg prompt- és dokumentum-előkészítési referencia. A Word-dokumentumba történő automatikus beillesztés külön export patchben készül el.
+              Ez a fejlécminta dokumentum-előkészítési referencia. Az automatikus Word-beillesztés ezen a felületen nem érhető el.
             </p>
           </div>
           <AdminButton size="sm" variant="neutral" onClick={() => setIsEditing(true)}>Szerkesztés</AdminButton>

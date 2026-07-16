@@ -9,6 +9,11 @@ describe('ops pages UX cleanup static guards', () => {
   const timeEntriesPage = read('Frontend/src/app/time-entries/page.tsx');
   const deadlinesPage = read('Frontend/src/app/deadlines/page.tsx');
   const clauseLibraryPage = read('Frontend/src/app/clause-library/page.tsx');
+  const dashboard = read('Frontend/src/components/DashboardFocused.tsx');
+  const caseLabels = read('Frontend/src/lib/caseLabels.ts');
+  const intakePage = read('Frontend/src/app/intake/page.tsx');
+  const houseStylePanel = read('Frontend/src/components/clients/ClientHouseStylePanel.tsx');
+  const caseDocumentsPage = read('Frontend/src/app/cases/[caseId]/documents/page.tsx');
   const combinedPages = [timeEntriesPage, deadlinesPage, clauseLibraryPage].join('\n');
 
   it('keeps the time-entry page operational-first with reports secondary', () => {
@@ -37,6 +42,23 @@ describe('ops pages UX cleanup static guards', () => {
 
   it('does not add forbidden local persistence, fake data, or workflow claims', () => {
     expect(combinedPages).not.toMatch(/localStorage|sessionStorage|mockData|fake|mesterséges intelligencia|n8n|workspaceText/);
+  });
+
+  it('keeps the dashboard card grid truthful when a source is unavailable', () => {
+    expect(dashboard).toContain('value: number | null');
+    expect(dashboard).toContain('caseResult?.pagination.total ?? null');
+    expect(dashboard).toContain('value === null ? "Most nem elérhető"');
+    expect(dashboard).toContain('<SummaryCard label="Ügyek"');
+    expect(dashboard).not.toContain('<SummaryCard label="Aktív ügyek"');
+  });
+
+  it('maps case and profile enum values to user-facing labels', () => {
+    expect(caseLabels).toContain('REAL_ESTATE_SALE: "Ingatlan-adásvétel"');
+    expect(caseLabels).toContain('CLIENT_INPUT: "Ügyféltől érkezett"');
+    expect(houseStylePanel).toContain('getProfileOptionLabel("documentLanguageMode"');
+    expect(caseDocumentsPage).toContain('HU_ONLY: "Csak magyar"');
+    expect(caseDocumentsPage).not.toContain('[clientHouseStyle.preferredLanguage, clientHouseStyle.documentLanguageMode');
+    expect(intakePage).not.toContain('backend-számított készenléttel');
   });
 
   it('does not touch protected shared shell/editor files in this guard scope', () => {

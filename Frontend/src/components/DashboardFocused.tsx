@@ -20,6 +20,7 @@ import {
   type WorkflowAgendaResponse,
   type WorkflowDeadlineItem,
 } from "@/lib/api";
+import { getCaseDisplayTitle } from "@/lib/caseLabels";
 import { CompactState, OperationalPageHeader, QuietLink, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 
 type NewsArticle = {
@@ -41,10 +42,24 @@ type FocusItem = {
 
 type SummaryCardProps = {
   label: string;
-  value: number;
+  value: number | null;
   emptyLabel: string;
   href: string;
   tone: "petrol" | "amber" | "gold" | "navy";
+};
+
+type DashboardAvailability = {
+  tasks: boolean;
+  cases: boolean;
+  agenda: boolean;
+  stats: boolean;
+};
+
+const unavailableDashboardData: DashboardAvailability = {
+  tasks: false,
+  cases: false,
+  agenda: false,
+  stats: false,
 };
 
 const completedStatuses = new Set(["COMPLETED", "DONE", "APPROVED", "FINALIZED", "ARCHIVED", "CANCELLED"]);
@@ -126,8 +141,10 @@ function SummaryCard({ label, value, emptyLabel, href, tone }: SummaryCardProps)
     <Link href={href} className={`${toneClass} min-h-[92px] p-3 transition-transform hover:-translate-y-0.5`}>
       <span className="block text-[10px] font-bold uppercase tracking-[0.14em] opacity-85">{label}</span>
       <span className={`mt-2 flex items-end justify-between gap-3 border px-3 py-2 ${panelClass}`}>
-        <span className="font-serif text-[27px] font-medium leading-none">{value}</span>
-        <span className="text-right text-[10px] font-semibold opacity-85">{value === 0 ? emptyLabel : "Aktív tétel"}</span>
+        <span className="font-serif text-[27px] font-medium leading-none">{value ?? "—"}</span>
+        <span className="text-right text-[10px] font-semibold opacity-85">
+          {value === null ? "Most nem elérhető" : value === 0 ? emptyLabel : "Aktív tétel"}
+        </span>
       </span>
     </Link>
   );
@@ -142,12 +159,15 @@ export function DashboardFocused() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [intake, setIntake] = useState<IntakeQueueResponse | null>(null);
   const [news, setNews] = useState<NewsArticle[]>([]);
+  const [caseTotal, setCaseTotal] = useState<number | null>(null);
+  const [availability, setAvailability] = useState<DashboardAvailability>(unavailableDashboardData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
+    setAvailability(unavailableDashboardData);
     try {
       const me = await getCurrentUser();
       setCurrentUser(me);
@@ -166,7 +186,14 @@ export function DashboardFocused() {
       setAgenda(agendaResult);
       setStats(statsResult);
       setIntake(intakeResult);
-      setError(!taskResult && !caseResult && !agendaResult && !statsResult);
+      setCaseTotal(caseResult?.pagination.total ?? null);
+      setAvailability({
+        tasks: taskResult !== null,
+        cases: caseResult !== null,
+        agenda: agendaResult !== null,
+        stats: statsResult !== null,
+      });
+      setError(!taskResult || !caseResult || !agendaResult || !statsResult);
     } catch {
       setError(true);
     } finally {
@@ -234,7 +261,7 @@ export function DashboardFocused() {
       items.push({
         id: `case-${firstCase.id}`,
         label: "Aktív ügy",
-        title: firstCase.title || firstCase.caseNumber,
+        title: getCaseDisplayTitle(firstCase),
         meta: `${firstCase.caseNumber} · ${firstCase.clientName || "Nincs ügyféladat"}`,
         href: `/cases/${encodeURIComponent(firstCase.id)}`,
         action: "Ügy megnyitása",
@@ -248,9 +275,19 @@ export function DashboardFocused() {
   const queue = focusItems.slice(1, 5);
   const visibleCommunications = communications.slice(0, 4);
   const activeCase = cases[0] || null;
-  const activeCaseCount = cases.filter(
-    (item) => !["CLOSED", "ARCHIVED", "FINAL", "CANCELLED"].includes(String(item.status || "").toUpperCase()),
-  ).length;
+  const caseCount = availability.cases
+    ? caseTotal
+    : availability.stats
+      ? stats?.stats.totalCases ?? null
+      : null;
+  const openTaskCount = availability.tasks ? openTasks.length : null;
+  const deadlineCount = availability.agenda ? deadlines.length : null;
+  const reviewCount = availability.stats
+    ? stats?.stats.inReview ?? 0
+    : availability.tasks
+      ? reviewTasks.length
+      : null;
+  const focusDataComplete = availability.tasks && availability.cases && availability.agenda;
 
   return (
     <div className="min-h-full bg-[var(--adm-ivory-50)] px-4 py-4 lg:px-6">
@@ -266,7 +303,7 @@ export function DashboardFocused() {
           }
         />
 
-        {error ? <SafePanelError onRetry={() => void load()} detail="A fő munkalista most nem érhető el; a többi munkaterület továbbra is használható." /> : null}
+        {error ? <SafePanelError onRetry={() => void load()} detail="Egyes napi munkalisták most nem érhetők el; a betöltött adatok továbbra is használhatók." /> : null}
 
         <section aria-labelledby="dashboard-next-heading">
           <div className="mb-2 flex items-center justify-between">
@@ -277,6 +314,12 @@ export function DashboardFocused() {
             <CompactState title="A következő lépés betöltése…" />
           ) : primary ? (
             <FocusRow item={primary} dominant />
+          ) : !focusDataComplete ? (
+            <CompactState
+              title="A következő lépés most nem tölthető be teljesen."
+              detail="Próbáld újra, vagy nyisd meg közvetlenül az ügyek és feladatok listáját."
+              action={<QuietLink href="/tasks">Feladatok megnyitása</QuietLink>}
+            />
           ) : (
             <CompactState
               title="Nincs kiemelt következő lépés."
@@ -287,10 +330,10 @@ export function DashboardFocused() {
         </section>
 
         <section className="grid grid-cols-2 gap-2.5 lg:grid-cols-4" aria-label="Napi munka összefoglaló">
-          <SummaryCard label="Aktív ügyek" value={activeCaseCount} emptyLabel="Nincs aktív ügy" href="/cases" tone="petrol" />
-          <SummaryCard label="Nyitott feladatok" value={openTasks.length} emptyLabel="Nincs nyitott feladat" href="/tasks" tone="amber" />
-          <SummaryCard label="Közeli határidők" value={deadlines.length} emptyLabel="Nincs közeli határidő" href="/deadlines" tone="gold" />
-          <SummaryCard label="Review tételek" value={stats?.stats.inReview ?? reviewTasks.length} emptyLabel="Nincs review tétel" href="/reviews" tone="navy" />
+          <SummaryCard label="Ügyek" value={caseCount} emptyLabel="Nincs ügy" href="/cases" tone="petrol" />
+          <SummaryCard label="Nyitott feladatok" value={openTaskCount} emptyLabel="Nincs nyitott feladat" href="/tasks" tone="amber" />
+          <SummaryCard label="Közeli határidők" value={deadlineCount} emptyLabel="Nincs közeli határidő" href="/deadlines" tone="gold" />
+          <SummaryCard label="Review tételek" value={reviewCount} emptyLabel="Nincs review tétel" href="/reviews" tone="navy" />
         </section>
 
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.7fr)]">

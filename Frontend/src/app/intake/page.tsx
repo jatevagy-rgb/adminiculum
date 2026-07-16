@@ -129,7 +129,7 @@ function IntakeQueuePanel() {
       <AdminSectionHeader
         eyebrow="Ügyfelvétel"
         title="Beérkezési sor"
-        subtitle="Beérkezési állapotban lévő ügyek — backend-számított készenléttel és hiányokkal."
+        subtitle="Beérkezési állapotban lévő ügyek, készenléti állapottal és hiányzó adatokkal."
         action={
           <div className="flex gap-2">
             <select

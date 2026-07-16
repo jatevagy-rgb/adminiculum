@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { AdminStatusPill } from "@/components/adminiculum/ui";
+import { getCaseDisplayTitle, getCaseStatusLabel } from "@/lib/caseLabels";
 
 export type CaseWorkspaceNavTab = "overview" | "documents" | "tasks" | "communications" | "deadlines" | "time";
 
@@ -22,23 +23,6 @@ const itemClass = (active: boolean) =>
       ? "border-[var(--adm-ochre-500)] text-[var(--adm-green-800)]"
       : "border-transparent text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]"
   }`;
-
-const statusLabel = (status?: string | null) => {
-  switch (String(status || "").toUpperCase()) {
-    case "OPEN":
-      return "Nyitott";
-    case "ON_HOLD":
-      return "Függőben";
-    case "CLOSED":
-      return "Lezárt";
-    case "ARCHIVED":
-      return "Archivált";
-    case "DRAFT":
-      return "Piszkozat";
-    default:
-      return status || "Nincs állapotadat";
-  }
-};
 
 const formatDeadline = (deadline?: string | null) => {
   if (!deadline) return null;
@@ -72,9 +56,9 @@ export function CaseWorkspaceNav({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="truncate font-serif text-[24px] font-medium leading-tight text-[var(--adm-text)]">
-              {title || "Ügy megnevezése nem elérhető"}
+              {getCaseDisplayTitle({ title, clientName })}
             </h1>
-            {status ? <AdminStatusPill tone={String(status).toUpperCase() === "OPEN" ? "green" : "neutral"}>{statusLabel(status)}</AdminStatusPill> : null}
+            {status ? <AdminStatusPill tone={String(status).toUpperCase() === "OPEN" ? "green" : "neutral"}>{getCaseStatusLabel(status)}</AdminStatusPill> : null}
           </div>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--adm-text-muted)]">
             {caseNumber ? <span className="font-semibold text-[var(--adm-text)]">{caseNumber}</span> : null}
