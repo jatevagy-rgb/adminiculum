@@ -47,3 +47,19 @@ Rollback command previews only, do not run without approval:
 az webapp deploy --resource-group Adminiculum --name adminiculumfrontend-austriaeast-01 --type zip --src-path "C:\Users\hubay\AppData\Local\Temp\adminiculum-artifact-forensics\frontend-wwwroot.zip"
 az webapp deploy --resource-group Adminiculum --name adminiculumbackend-b1-01 --type zip --src-path "C:\Users\hubay\AppData\Local\Temp\adminiculum-artifact-forensics\backend-wwwroot.zip"
 ```
+
+## Executed backend rollback after production deploy attempt
+
+On 2026-07-16 the backend narrow release artifact was deployed and then rolled back after a release-blocking smoke failure.
+
+- Failed backend release deployment ID: `24f6a5a5-4004-4b7d-98ba-f91d5737fc52`.
+- Trigger: authenticated `GET /api/v1/intake` returned `500`.
+- Rollback artifact used: `C:\Users\hubay\AppData\Local\Temp\adminiculum-artifact-forensics\backend-wwwroot.zip`.
+- Rollback artifact SHA-256 verified before final smoke: `8ece0510ed5546abafc6ec5e001b066bbc98d2f2cd05fa4e3f9b0696d8709949`.
+- Rollback deployment completed through OneDeploy/Kudu after the operator-side command was interrupted.
+- Kudu rollback deployment log timestamp: `2026-07-16T08:21:20Z` to `2026-07-16T08:21:22Z`.
+- Final active backend deployment version from startup log: `48ff2e32-c3af-4463-ad8c-245d0ff6f10d`.
+- Post-rollback backend smoke: health `200`, auth-first communications `401`, bogus route `404`, authenticated communications `200`, authenticated intake `404` prior-baseline behavior.
+- Frontend rollback was not needed because frontend was not deployed.
+
+Do not redeploy the `7392a6c` backend artifact without a separate intake enum-compatibility fix and a new validation/artifact cycle.

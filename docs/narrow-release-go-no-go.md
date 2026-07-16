@@ -64,3 +64,18 @@ This is not deployment approval. It means the release branch has passed local au
 - Corrective artifact-scan fix: baked local development email/password defaults removed from frontend/backend auth code.
 - Zero-diff gates remain green for schema, migrations, Client Portal expansion, OpenAPI/Swagger, CORS, Azure/deploy config, AI/n8n, Outlook/Graph enablement, contract generation enablement, and editor persistence.
 - Final posture: `GO_FOR_EXPLICIT_PRODUCTION_DEPLOYMENT` pending separate human deployment approval.
+
+## Production deployment attempt and rollback
+
+`PRODUCTION-DEPLOY-NARROW-EDITOR-OPS-1` was approved and started on 2026-07-16. Backend deployment completed, but backend smoke found a release-blocking regression before any frontend deployment.
+
+- Backend release deployment ID: `24f6a5a5-4004-4b7d-98ba-f91d5737fc52`.
+- Failed smoke: authenticated `GET /api/v1/intake` returned `500`.
+- Safe root-cause clue: Prisma validation rejected the intake queue `Task.status notIn` values as invalid for deployed `TaskStatus`.
+- Frontend release artifact was not deployed.
+- Backend rollback completed with prior known-good artifact `backend-wwwroot.zip`.
+- Final active backend deployment version after rollback: `48ff2e32-c3af-4463-ad8c-245d0ff6f10d`.
+- Post-rollback smoke: `/health` `200`, unauth communications `401`, bogus route `404`, authenticated communications `200`, authenticated intake `404` prior-baseline behavior.
+- Final posture: `NO_GO_FOR_THIS_RELEASE_ARTIFACT_UNTIL_INTAKE_ENUM_COMPATIBILITY_FIX`.
+
+The next release attempt must first fix and validate the intake queue production enum compatibility issue on a separate release branch/artifact.
