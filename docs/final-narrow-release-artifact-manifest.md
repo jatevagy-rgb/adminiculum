@@ -101,6 +101,14 @@ Raw corrected artifact scan:
 
 Local extraction/build/start verification passed from the corrected ZIP: `npm ci`, `npm run build`, `npm run verify:prod-env`, `next start -p 3317`, and local route smoke for `/`, `/cases`, `/tasks`, and `/notifications`.
 
+Deployment result:
+
+- Frontend deployment ID: `9650525c-d465-468d-8171-f830128b9e7b`.
+- Final Azure status: active success.
+- Initial CLI result: `504 GatewayTimeout`, later completed in Kudu/OneDeploy.
+- Oryx build summary: `Errors (0)`, `Warnings (0)`.
+- This artifact is now the active production frontend baseline.
+
 Replacement artifact details:
 
 - Source commit: `e4e0c00`.

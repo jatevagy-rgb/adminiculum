@@ -63,6 +63,15 @@ Expected corrected frontend artifact SHA-256:
 
 Correction rationale: the corrected package is an Oryx source ZIP and does not include a locally built Windows `.next` output. The frontend App Service has `SCM_DO_BUILD_DURING_DEPLOYMENT=true`, `ENABLE_ORYX_BUILD=true`, `WEBSITE_RUN_FROM_PACKAGE=0`, Node `20-lts`, and startup command `npm run start`.
 
+Execution result:
+
+- Executed on 2026-07-16 under `CORRECTED-FRONTEND-ORYX-REDEPLOY-1`.
+- Frontend deployment ID: `9650525c-d465-468d-8171-f830128b9e7b`.
+- Initial CLI result: `504 GatewayTimeout`.
+- Final Kudu/OneDeploy result: active success.
+- Oryx summary: `Found 0 issue(s)`, `Errors (0)`, `Warnings (0)`.
+- No backend deployment, migration, database operation, Azure app-setting change, or feature-flag change was performed.
+
 ## Deployment ID Capture
 
 After each approved deploy, capture:

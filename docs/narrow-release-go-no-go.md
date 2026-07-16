@@ -97,6 +97,24 @@ Current posture:
 
 This is not deployment approval. A separate explicit frontend-only deployment prompt is still required. This supersedes the earlier intake-compatibility no-go for the frontend phase because the intake-compatible backend artifact has already been deployed and smoke-tested.
 
+## Corrected Frontend Deployment Closeout
+
+The corrected frontend redeployment was approved and executed.
+
+- Deployment ID: `9650525c-d465-468d-8171-f830128b9e7b`.
+- Artifact SHA-256: `29c840461c302befddefb2a4f585134c9fbd0c5ddf66c702c4dada9d67ab15f0`.
+- Final Azure status: active success.
+- Oryx build: `Errors (0)`, `Warnings (0)`.
+- Frontend route smoke passed for `/`, `/cases`, `/tasks`, `/deadlines`, `/workload`, `/time-entries`, `/intake`, `/litigation-workspace`, `/documents/new/edit`, `/documents/compare`, `/notifications`, and `/clause-library`.
+- Direct `/portal` returned `404`; the login shell still shows the parked portal card.
+- Authenticated backend/API smoke passed with delegated token.
+- Browser authentication reached the Microsoft credential prompt; no credentials were entered.
+- No rollback was needed.
+
+Current production posture:
+
+`CORRECTED_FRONTEND_DEPLOYMENT_SUCCESS`
+
 ## Intake task status compatibility fix follow-up
 
 A narrow backend fix now aligns intake/lifecycle/agenda task-status filters with the generated Prisma `TaskStatus` enum. The failed release artifact remains blocked.

@@ -205,3 +205,18 @@ This is not deployment approval. It means the OneDeploy 400 root cause is unders
 Final classification:
 
 `frontend_onedeploy_400_1_go_for_corrected_redeployment`
+
+## Corrected Redeployment Result
+
+The corrected deployment was later approved and executed as `CORRECTED-FRONTEND-ORYX-REDEPLOY-1`.
+
+- Deployment ID: `9650525c-d465-468d-8171-f830128b9e7b`.
+- Artifact: `C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-frontend-editor-ops-7392a6c-repack1.zip`.
+- SHA-256: `29c840461c302befddefb2a4f585134c9fbd0c5ddf66c702c4dada9d67ab15f0`.
+- Initial CLI result: `504 GatewayTimeout`.
+- Final Kudu/OneDeploy status: success and active.
+- Oryx final summary: `Found 0 issue(s)`, `Errors (0)`, `Warnings (0)`.
+- Final log line: `Deployment successful. deployer = OneDeploy deploymentPath = OneDeploy`.
+- Active frontend deployment is now `9650525c-d465-468d-8171-f830128b9e7b`.
+
+The intermediate SCM restart status was transient; no rollback was required.

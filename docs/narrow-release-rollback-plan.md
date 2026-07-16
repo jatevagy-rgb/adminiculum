@@ -81,6 +81,15 @@ If the corrected frontend deployment is later approved and fails, rollback remai
 az webapp deploy --resource-group Adminiculum --name adminiculumfrontend-austriaeast-01 --type zip --src-path "C:\Users\hubay\AppData\Local\Temp\adminiculum-artifact-forensics\frontend-wwwroot.zip"
 ```
 
+## Corrected Frontend Deployment Rollback Status
+
+`CORRECTED-FRONTEND-ORYX-REDEPLOY-1` completed successfully after an initial CLI `504 GatewayTimeout`.
+
+- Active frontend deployment after completion: `9650525c-d465-468d-8171-f830128b9e7b`.
+- Oryx summary: `Errors (0)`, `Warnings (0)`.
+- Rollback required: no.
+- Rollback artifact remains available for future use if a later smoke finds a release-blocking issue.
+
 
 ## Backend-Only Intake Compatibility Redeployment
 

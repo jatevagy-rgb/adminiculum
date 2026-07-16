@@ -33,6 +33,87 @@ Corrected frontend artifact prepared, but not deployed:
 
 Production was not changed by the diagnosis/repackage task.
 
+## Corrected Frontend Oryx Redeployment
+
+`CORRECTED-FRONTEND-ORYX-REDEPLOY-1` was executed on 2026-07-16 after explicit human approval.
+
+Deployment command used:
+
+```powershell
+az webapp deploy --resource-group Adminiculum --name adminiculumfrontend-austriaeast-01 --type zip --src-path "C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-frontend-editor-ops-7392a6c-repack1.zip"
+```
+
+Deployment result:
+
+- Frontend deployment ID: `9650525c-d465-468d-8171-f830128b9e7b`.
+- Azure final status: `Success` / active.
+- Initial CLI result: `504 GatewayTimeout`; Kudu later completed and activated the deployment.
+- Corrected artifact SHA-256 verified before deploy: `29c840461c302befddefb2a4f585134c9fbd0c5ddf66c702c4dada9d67ab15f0`.
+- Source runtime commit recorded in artifact manifest: `7392a6c`.
+- Packaging revision: `repack1`.
+- Backend active deployment remained: `1a976a8f-ecbb-4d15-a899-339b9d7444bf`.
+
+Final Azure/Oryx evidence:
+
+- Oryx accepted the source ZIP.
+- Node resolved to `20.20.2`.
+- `npm install` completed.
+- `next build` completed.
+- Next generated `22/22` static pages.
+- Oryx summary: `Found 0 issue(s)`, `Errors (0)`, `Warnings (0)`.
+- Final log line: `Deployment successful. deployer = OneDeploy deploymentPath = OneDeploy`.
+
+Smoke after activation:
+
+| Check | Result |
+| --- | --- |
+| `/` | `200` |
+| `/cases` | `200` |
+| `/tasks` | `200` |
+| `/deadlines` | `200` |
+| `/workload` | `200` |
+| `/time-entries` | `200` |
+| `/intake` | `200` |
+| `/litigation-workspace` | `200` |
+| `/documents/new/edit` | `200` |
+| `/documents/compare` | `200` |
+| `/notifications` | `200` |
+| `/clause-library` | `200` |
+| direct `/portal` | `404` safe inactive route |
+| login shell portal card | parked / `HAMAROSAN` |
+| backend `/health` | `200` |
+| authenticated `/api/v1/intake` | `200` |
+| authenticated `/api/v1/agenda` | `200` |
+| authenticated `/api/v1/tasks` | `200` |
+| authenticated `/api/v1/cases` | `200` |
+| authenticated `/api/v1/communications?limit=8` | `200` safe shape |
+| unauthenticated `/api/v1/communications?limit=8` | `401` |
+
+Browser smoke notes:
+
+- Production login shell loads without `Hitelesítési hiba`.
+- Microsoft login button redirects to the expected tenant/client auth URL.
+- The in-app browser reached a Microsoft credential prompt; no credentials were entered.
+- Authenticated browser shell could not be completed in this run because no signed-in browser session was available and the browser automation scope does not expose writable local storage.
+- Authenticated API smoke was completed with a delegated token; token was not printed and temporary token file was deleted.
+- Browser console for checked unauthenticated shell/routes had no captured errors/warnings.
+
+Network and exposure checks:
+
+- Fetched deployed Next JS assets from `/` and scanned for local/risky markers.
+- No `localhost:3001`, `http://localhost`, `127.0.0.1`, `/api/v1/auth/login`, `graph.microsoft.com`, `api.openai.com`, or `n8n` markers were found.
+- No backend deploy, schema migration, DB operation, Azure app-setting change, feature-flag change, Client Portal enablement, Outlook enablement, AI/n8n enablement, or rollback occurred.
+
+Rollback status:
+
+- Rollback was not needed.
+- Prior frontend rollback artifact remains available: `C:\Users\hubay\AppData\Local\Temp\adminiculum-artifact-forensics\frontend-wwwroot.zip`.
+- Rollback SHA-256 remains `53081a3cc46dc28e97b12c6f82b403fc2bcfdc304a9b737672c4a560c226e8dc`.
+
+Final classification:
+
+`corrected_frontend_oryx_deployment_1_success`
+
 ## Artifacts
 
 | Component | Artifact | SHA-256 | Deployment result |
