@@ -95,11 +95,35 @@ Run after the approved backend-first, frontend-second deployment sequence:
 - Client Portal spoofed summary/export remains guarded as previously documented.
 - No Azure app settings, feature flags, database state, migrations, or production secrets are changed during smoke.
 
-## Intake fix deployment preview status
+## Intake Fix Backend-Only Redeployment Preview
 
-`INTAKE-TASK-STATUS-PRODUCTION-COMPAT-FIX-1` has no deployment command preview yet because no replacement backend artifact was generated. The next backend-only deployment preview must be created only after:
+Do not run until explicit backend-only redeployment approval:
 
-1. live local authenticated `/api/v1/intake` smoke passes without `500`;
-2. a new backend-only ZIP is produced outside the repository;
-3. artifact SHA-256 and scan results are recorded;
-4. explicit backend-only redeployment approval is granted.
+```powershell
+az webapp deploy `
+  --resource-group Adminiculum `
+  --name adminiculumbackend-b1-01 `
+  --type zip `
+  --src-path "C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-backend-editor-ops-intake-fix-e4e0c00.zip"
+```
+
+Expected replacement backend artifact SHA-256:
+
+`76eacc73a19fa35d0bd092590d45b14d891288ccd37776a58bf44d7a84bea359`
+
+Constraints for this redeployment path:
+
+- Deploy backend only.
+- Do not deploy frontend.
+- Do not run migrations.
+- Do not change Azure app settings or feature flags.
+- Do not enable Client Portal, AI/n8n, Outlook import, or contract generation.
+- Do not use the failed backend artifact `adminiculum-backend-editor-ops-7392a6c.zip`.
+
+Required post-redeploy smoke:
+
+- `GET /health` returns `200`.
+- Unauthenticated protected API request returns `401`.
+- Authenticated `GET /api/v1/intake` returns `200` with safe DTO shape and no Prisma enum error.
+- Authenticated `GET /api/v1/agenda`, `/api/v1/workload`, `/api/v1/tasks`, and `/api/v1/cases` do not return broad `500`.
+- Frontend remains untouched and previously deployed frontend state remains unchanged.

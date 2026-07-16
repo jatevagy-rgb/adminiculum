@@ -88,5 +88,25 @@ A narrow backend fix now aligns intake/lifecycle/agenda task-status filters with
 - Tests: added task-status compatibility guard and intake queue filter assertions.
 - Backend/frontend validation passed.
 - No schema, migration, frontend runtime, config, feature flag, package, OpenAPI, CORS, Azure, AI/n8n, or Client Portal change.
-- No new backend artifact yet because live local authenticated intake smoke was blocked by missing local DB/auth env.
-- Current go/no-go: `NO_GO_LOCAL_COMPATIBILITY_BLOCKER`.
+- Live local authenticated intake smoke passed and a replacement backend-only artifact was generated.
+- Replacement artifact: `C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-backend-editor-ops-intake-fix-e4e0c00.zip`.
+- Replacement SHA-256: `76eacc73a19fa35d0bd092590d45b14d891288ccd37776a58bf44d7a84bea359`.
+- Current go/no-go: `GO_FOR_BACKEND_ONLY_REDEPLOYMENT_APPROVAL`.
+
+
+## Intake compatibility artifact completion
+
+`COMPLETE-INTAKE-COMPAT-SMOKE-AND-BACKEND-ARTIFACT-1` completed the missing runtime proof and replacement artifact.
+
+- Source commit: `e4e0c00`.
+- Backend replacement artifact: `C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-backend-editor-ops-intake-fix-e4e0c00.zip`.
+- SHA-256: `76eacc73a19fa35d0bd092590d45b14d891288ccd37776a58bf44d7a84bea359`.
+- Authenticated local backend intake smoke: PASS (`200`, safe DTO, no Prisma enum error).
+- Related agenda/workload/tasks/cases read smoke: PASS; lifecycle missing smoke case returned safe `404`, not `500`.
+- Frontend `/intake` compatibility smoke: PASS with unchanged frontend runtime.
+- Backend tests/build: PASS; frontend typecheck/build/production-env guard: PASS.
+- Dependency audit remains review-required due inherited backend findings; package files unchanged.
+- Prior failed backend artifact `adminiculum-backend-editor-ops-7392a6c.zip` remains forbidden for redeploy.
+- Current go/no-go: `GO_FOR_BACKEND_ONLY_REDEPLOYMENT_APPROVAL`.
+
+This is not deployment approval. It authorizes asking for a separate backend-only redeployment approval prompt using the replacement artifact only.

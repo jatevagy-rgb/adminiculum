@@ -134,7 +134,23 @@ The intake route regression must be fixed offline on a separate release branch b
 - Valid `TaskStatus` values: `PENDING`, `IN_PROGRESS`, `SUBMITTED`, `UNDER_REVIEW`, `COMPLETED`, `CANCELLED`, `BLOCKED`, `TODO`, `IN_REVIEW`, `DONE`.
 - Removed invalid runtime Prisma filter values: `APPROVED`, `REJECTED`, `DECLINED`, `ARCHIVED`.
 - Automated backend and frontend validation passed.
-- Live local authenticated intake smoke was blocked because no local DB/auth env was available in this Codex session.
-- No backend artifact was generated.
-- No deployment was performed.
-- Current posture: `NO_GO_LOCAL_COMPATIBILITY_BLOCKER` until live local intake smoke is completed and a fresh backend-only artifact is generated.
+- Live local authenticated intake smoke was later completed successfully using process-only local env loading from the primary worktree.
+- A replacement backend-only artifact was generated from `e4e0c00`.
+- No deployment was performed after the replacement artifact was generated.
+- Current posture: `GO_FOR_BACKEND_ONLY_REDEPLOYMENT_APPROVAL`; explicit backend-only deployment approval is still required.
+
+
+## Intake Fix Completion Artifact
+
+`COMPLETE-INTAKE-COMPAT-SMOKE-AND-BACKEND-ARTIFACT-1` supersedes the earlier local compatibility blocker.
+
+- Source commit: `e4e0c00`.
+- Backend artifact: `C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-backend-editor-ops-intake-fix-e4e0c00.zip`.
+- Backend artifact SHA-256: `76eacc73a19fa35d0bd092590d45b14d891288ccd37776a58bf44d7a84bea359`.
+- Local authenticated `GET /api/v1/intake` smoke passed with `200` and safe empty DTO shape.
+- Related authenticated read smoke passed for agenda, workload, tasks, and cases; missing smoke lifecycle route returned safe `404 CASE_NOT_FOUND`.
+- Frontend `/intake` compatibility smoke passed locally against the fixed backend with unchanged frontend code.
+- Production remains rolled back to active backend version `48ff2e32-c3af-4463-ad8c-245d0ff6f10d`.
+- Frontend remains undeployed.
+- No deployment, schema change, migration, DB operation, Azure config change, feature flag change, Client Portal enablement, AI/n8n enablement, or frontend runtime change occurred.
+- Current posture: `GO_FOR_BACKEND_ONLY_REDEPLOYMENT_APPROVAL` pending explicit human approval.

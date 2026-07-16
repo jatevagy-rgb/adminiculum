@@ -13,9 +13,9 @@ This patch removes invalid task-status assumptions from runtime Prisma filters a
 
 Current classification for this pass:
 
-`intake_task_status_compat_fix_1_no_go_local_compatibility`
+`intake_compat_artifact_1_go_for_backend_only_redeployment`
 
-The code fix is implemented and automated validation passed, but a live local authenticated backend smoke could not be completed in this Codex session because no local `DATABASE_URL` / auth runtime environment was available and no checked-in local `.env` exists. No backend artifact was generated and no deployment was performed.
+The code fix is implemented, automated validation passed, live local authenticated intake smoke passed, and a backend-only replacement artifact was generated. No deployment was performed.
 
 ## Valid TaskStatus Values
 
@@ -111,9 +111,9 @@ Known inherited dependency audit summary:
 - Backend: 2 low / 9 moderate / 7 high / 1 critical.
 - Package files were not changed by this fix.
 
-## Local Authenticated Smoke
+## Superseded Local Authenticated Smoke Blocker
 
-Blocked in this Codex session:
+This earlier blocker has been superseded by the completed process-only local-env smoke below. Earlier blocked state was:
 
 - `[bool]$env:DATABASE_URL` was false.
 - `[bool]$env:JWT_SECRET` was false.
@@ -139,10 +139,82 @@ Relative to `5f2e7a8`:
 
 ## Artifact Status
 
-No backend artifact was generated in this pass because the live local authenticated intake smoke was blocked. The prior failed backend artifact `adminiculum-backend-editor-ops-7392a6c.zip` must not be redeployed.
+A replacement backend-only artifact was generated after successful authenticated local smoke.
+
+- Artifact: `C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-backend-editor-ops-intake-fix-e4e0c00.zip`
+- SHA-256: `76eacc73a19fa35d0bd092590d45b14d891288ccd37776a58bf44d7a84bea359`
+- Source commit: `e4e0c00`
+
+The prior failed backend artifact `adminiculum-backend-editor-ops-7392a6c.zip` must not be redeployed.
 
 ## Deployment Recommendation
 
-`NO_GO_LOCAL_COMPATIBILITY_BLOCKER`
+`GO_FOR_BACKEND_ONLY_REDEPLOYMENT_APPROVAL`
 
-Next step: rerun this fix in a shell/session with the proven safe local DB/auth environment available, complete live local `/api/v1/intake` smoke, then generate a backend-only artifact and request explicit backend-only redeployment approval.
+Next step: request explicit backend-only redeployment approval for the replacement artifact. Do not deploy frontend, run migrations, change app settings, or alter feature flags.
+
+
+## Intake Compatibility Completion Smoke And Artifact
+
+`COMPLETE-INTAKE-COMPAT-SMOKE-AND-BACKEND-ARTIFACT-1` completed on 2026-07-16 with no additional runtime code changes.
+
+Reused local environment safely:
+
+- Primary worktree local env sources were read process-only from `C:\Users\hubay\Documents\Adminiculum`.
+- No env files were copied into the release worktree.
+- Secrets and token values were not printed.
+- Local DB target was verified as `localhost:5432/adminiculum` before runtime smoke.
+- A local JWT was generated from the existing active local ADMIN user for smoke only; the token was not persisted or printed.
+
+Authenticated backend smoke:
+
+| Check | Result |
+| --- | --- |
+| `GET /health` | `200` |
+| unauthenticated `GET /api/v1/intake` | `401` |
+| authenticated `GET /api/v1/intake` | `200` |
+| intake DTO | `generatedAt`, `summary`, `items`, `pagination`, `availability` |
+| item count | `0` |
+| pagination | `limit=50`, `offset=0`, `hasMore=false` |
+| Prisma enum error | none |
+| schema mismatch / migration request | none |
+
+Related read smoke:
+
+| Check | Result |
+| --- | --- |
+| authenticated `GET /api/v1/agenda` | `200`, bounded pagination |
+| authenticated `GET /api/v1/workload` | `200` |
+| authenticated `GET /api/v1/tasks` | `200` |
+| authenticated `GET /api/v1/cases` | `200` |
+| authenticated `GET /api/v1/cases/smoke-case/lifecycle` | `404 CASE_NOT_FOUND`, safe missing state, no enum/runtime `500` |
+
+Frontend compatibility smoke:
+
+- Unchanged release frontend was run locally against the fixed backend.
+- `/intake` loaded under an authenticated local session.
+- Frontend called `GET /api/v1/intake?scope=MY_INTAKES&status=ALL&limit=50` and received `200`.
+- Auth bootstrap called `GET /api/v1/auth/me` and received `200`.
+- No auth error, redirect loop, request failure, or console-blocking error was observed.
+- No frontend runtime code change was required.
+
+Backend artifact:
+
+- Path: `C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-backend-editor-ops-intake-fix-e4e0c00.zip`
+- SHA-256: `76eacc73a19fa35d0bd092590d45b14d891288ccd37776a58bf44d7a84bea359`
+- Size bytes: `1495221`
+- File count: `551`
+- Source commit: `e4e0c00`
+- Component: backend only
+- `Backend/scripts` intentionally excluded because it contains local seed/helper sample credentials and is not required for the Oryx source artifact.
+
+Artifact scan:
+
+- Contains `src/modules/tasks/taskStatus.ts`, `src/modules/cases/intakeService.ts`, `src/modules/cases/lifecycleService.ts`, and `src/modules/agenda/service.ts`.
+- Contains `package.json`, `package-lock.json`, `prisma/schema.prisma`, `prisma/migrations`, `templates`, `dist`, and `release-manifest.json`.
+- Contains no `Frontend/`, `docs/`, `tests/`, `node_modules/`, env files, seed/helper scripts, sample passwords, local user email literals, AI/n8n provider endpoints, Azure audit data, or Client Portal expansion.
+- Literal `.env.local` scan hits are only `.dockerignore` and `process.env.LOCAL_DEV_*` source references; no `.env*` file is present in the ZIP.
+
+Final posture for this completion step:
+
+`GO_FOR_BACKEND_ONLY_REDEPLOYMENT_APPROVAL`

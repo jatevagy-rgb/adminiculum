@@ -74,13 +74,18 @@ Frontend ZIP contains runtime/build-focused Next output, public assets, package/
 
 Backend ZIP contains backend source expected by the Oryx source-deploy path, package files, Prisma schema/migrations unchanged from baseline, templates, and release manifest. It excludes frontend, tests, docs, `.env*`, `.git`, local artifacts, coverage, and audit dumps.
 
-## Intake fix artifact status
+## Intake Fix Backend Replacement Artifact
 
-No replacement backend artifact has been produced for `INTAKE-TASK-STATUS-PRODUCTION-COMPAT-FIX-1` yet.
+| Component | File | Size bytes | File count | SHA-256 |
+| --- | --- | ---: | ---: | --- |
+| Backend intake fix | `C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-backend-editor-ops-intake-fix-e4e0c00.zip` | 1495221 | 551 | `76eacc73a19fa35d0bd092590d45b14d891288ccd37776a58bf44d7a84bea359` |
 
-Reason:
+Replacement artifact details:
 
-- The code fix and automated validation passed.
-- Live local authenticated `/api/v1/intake` smoke could not be completed because no local DB/auth environment variables were available in this Codex session.
-
-Do not redeploy the failed backend artifact `adminiculum-backend-editor-ops-7392a6c.zip`. A new backend-only artifact must be generated only after live local authenticated intake smoke passes.
+- Source commit: `e4e0c00`.
+- Component: backend only.
+- Includes backend `src`, `dist`, `prisma`, `templates`, package files, Docker/Oryx config, and `release-manifest.json`.
+- Excludes `Frontend/`, docs, tests, `node_modules`, env files, seed/helper scripts, coverage, Azure audit data, and previous ZIPs.
+- `Backend/scripts` excluded intentionally because local helper scripts contain sample credential literals and are not required for the Oryx source artifact.
+- Artifact scan found no sample password, local user email literal, AI/n8n endpoints, Client Portal expansion, or env files.
+- This artifact supersedes the failed backend artifact `adminiculum-backend-editor-ops-7392a6c.zip` for the intake compatibility redeployment path.
