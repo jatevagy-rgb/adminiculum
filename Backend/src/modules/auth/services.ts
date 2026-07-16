@@ -29,16 +29,15 @@ interface ApiError {
   error: string;
 }
 
-const DEFAULT_LOCAL_DEV_EMAIL = 'hubay.mate@balintfy.onmicrosoft.hu';
-const DEFAULT_LOCAL_DEV_PASSWORD = 'Password123!';
 const DEFAULT_LOCAL_DEV_NAME = 'dr. HUBAY Gyula Máté';
 
 const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production';
 
 function isLocalDevLogin(email: string, password: string): boolean {
   if (isProduction) return false;
-  const configuredEmail = (process.env.LOCAL_DEV_LOGIN_EMAIL || process.env.DEV_LOGIN_EMAIL || DEFAULT_LOCAL_DEV_EMAIL).trim().toLowerCase();
-  const configuredPassword = process.env.LOCAL_DEV_LOGIN_PASSWORD || process.env.DEV_LOGIN_PASSWORD || DEFAULT_LOCAL_DEV_PASSWORD;
+  const configuredEmail = (process.env.LOCAL_DEV_LOGIN_EMAIL || process.env.DEV_LOGIN_EMAIL || '').trim().toLowerCase();
+  const configuredPassword = process.env.LOCAL_DEV_LOGIN_PASSWORD || process.env.DEV_LOGIN_PASSWORD || '';
+  if (!configuredEmail || !configuredPassword) return false;
   return email.trim().toLowerCase() === configuredEmail && password === configuredPassword;
 }
 

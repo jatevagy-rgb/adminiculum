@@ -131,8 +131,12 @@ export function AuthenticatedApp({ section = "dashboard", children, fullViewport
     setBootstrapError(null);
     setAuthState("bootstrapping");
 
-    const devEmail = process.env.NEXT_PUBLIC_LOCAL_DEV_LOGIN_EMAIL || process.env.NEXT_PUBLIC_DEV_LOGIN_EMAIL || "hubay.mate@balintfy.onmicrosoft.hu";
-    const devPassword = process.env.NEXT_PUBLIC_DEV_LOGIN_PASSWORD || "Password123!";
+    const devEmail = process.env.NEXT_PUBLIC_LOCAL_DEV_LOGIN_EMAIL || process.env.NEXT_PUBLIC_DEV_LOGIN_EMAIL;
+    const devPassword = process.env.NEXT_PUBLIC_DEV_LOGIN_PASSWORD;
+
+    if (!devEmail || !devPassword) {
+      throw new Error("Local dev login requires explicit local development credentials.");
+    }
 
     try {
       const devLoginPath = `/api/v1/auth/${String.fromCharCode(108, 111, 103, 105, 110)}`;
