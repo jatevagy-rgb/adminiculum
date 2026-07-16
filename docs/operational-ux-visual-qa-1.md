@@ -49,7 +49,7 @@ Horizontal overflow: `0`
 
 Visible raw `Internal server error`: `0`
 
-Visible raw `CLIENT_INPUT`, `TODO`, or `DOCUMENT_DELETED`: `0` after display mapping
+Visible raw case matter/status enums or `DOCUMENT_DELETED`: `0` after display mapping
 
 Visible future-backend/track-changes implementation copy on target first views: `0`
 
@@ -98,6 +98,14 @@ The compact semantic card grid was restored after product-owner feedback and rec
 - At `1366×768`, the summary grid ends around `417px` and the `Mai munka` section starts around `446px`, so the operational list remains visible in the first viewport.
 - Updated screenshots were captured process-locally and were not committed.
 
+Independent review later corrected the summary source:
+
+- the `Ügyek` card uses `pagination.total`, not the first 20 records;
+- unavailable sources render `—` / `Most nem elérhető`, not false zero;
+- partial core-source failures produce a compact retryable panel error.
+
+The four-card layout remains unchanged.
+
 ## Runtime Regression QA
 
 - Case agenda request: pass after case-status filter correction.
@@ -114,11 +122,28 @@ The compact semantic card grid was restored after product-owner feedback and rec
 - Frontend package has no `test` script; no package change was made.
 - Backend Prisma validate: pass.
 - Backend `tsc --noEmit`: pass.
-- Backend focused guard tests: 6 suites / 43 tests pass.
-- Backend full tests: 42 suites / 420 tests pass.
+- Backend focused guard tests: passed in repeated targeted runs.
+- Backend full tests: 42 suites / 422 tests pass.
 - Backend build: pass.
 - `git diff --check`: pass.
 
+## Independent Review Recheck
+
+- Target matrix: 15 routes × 3 viewports.
+- HTTP results: 45/45 `200`.
+- Auth errors: 0.
+- Visible raw internal errors: 0.
+- Unexpected `500`: 0.
+- Unexpected `501`: 0.
+- Horizontal overflow: 0.
+- `HU_ONLY` follow-up: mapped to `Magyar` / `Csak magyar`.
+- Case matter/status follow-up: mapped to Hungarian display labels.
+- Dashboard exact case total observed: 21.
+
+The sanitized review output remains outside the repository:
+
+`C:\Users\hubay\AppData\Local\Temp\adminiculum-operational-ux-review-runtime`
+
 ## Result
 
-Authenticated visual QA is complete. The branch is suitable for review but has not been deployed.
+Authenticated visual QA and independent recheck are complete. The reviewed commit is suitable for human release approval but has not been deployed.

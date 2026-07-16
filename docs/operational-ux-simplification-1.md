@@ -195,3 +195,30 @@ The gated contract-generation list also produced expected `501` noise on case/do
 - No package or lockfile change.
 - No OpenAPI, CORS, auth, Client Portal, AI/n8n, Outlook/Graph, or feature-flag change.
 - Authenticated QA used the established local database and local development auth only.
+
+## Independent Review Addendum
+
+An isolated independent review continued from the product-owner-approved source follow-up `84774be`, which retained the simplified four-card dashboard grid. Review corrections were committed as `01949dc`.
+
+Corrections made during review:
+
+- dashboard case count now uses the API pagination total;
+- unavailable dashboard sources no longer display false zero values;
+- unexpected contract capability errors are no longer hidden as a disabled empty list;
+- case matter/status values use Hungarian display labels;
+- remaining technical copy and `HU_ONLY` display values were removed from target surfaces;
+- focused static tests were strengthened.
+
+Final independent evidence:
+
+- 45/45 authenticated route/viewport checks returned `200`;
+- 42/42 backend suites and 422/422 tests passed;
+- extracted frontend artifact built, passed the production env guard, and passed 15/15 route smoke;
+- extracted backend artifact built and passed health/auth boundary smoke;
+- all protected-area zero-diff gates remained zero.
+
+Independent decision:
+
+`GO_FOR_OPERATIONAL_UX_RELEASE_APPROVAL`
+
+This does not authorize deployment.
