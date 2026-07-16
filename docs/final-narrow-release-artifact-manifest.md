@@ -161,3 +161,52 @@ Rollback status:
 Final classification:
 
 `backend_only_intake_compat_redeployment_1_success`
+
+
+## Frontend-Only Editor Ops Deployment Attempt Blocked
+
+`FRONTEND-ONLY-DEPLOY-NARROW-EDITOR-OPS-1` was attempted on 2026-07-16 after explicit human approval, but Azure OneDeploy rejected the prepared frontend ZIP before activation.
+
+Artifact integrity before deploy:
+
+- Artifact: `C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-frontend-editor-ops-7392a6c.zip`.
+- SHA-256 verified: `6939271e34658852dcaab3b46df2d39256350744fb46baadf1f383eaa7d7a5a4`.
+- Manifest source commit: `7392a6c`.
+- Manifest branch: `release/editor-ops-workflow-1`.
+- Manifest component: `frontend`.
+- Manifest release identifier: `editor-ops-workflow-1`.
+- Production public backend URL in manifest: `https://adminiculumbackend-b1-01.azurewebsites.net`.
+
+Deployment command attempted:
+
+```powershell
+az webapp deploy --resource-group Adminiculum --name adminiculumfrontend-austriaeast-01 --type zip --src-path "C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-frontend-editor-ops-7392a6c.zip"
+```
+
+Azure result:
+
+- Failed frontend deployment ID: `7d8f083b-ecf9-448c-a9ed-e9a04de34ad0`.
+- Deployment status: `3` / failed.
+- OneDeploy log: Oryx build was invoked, build summary reported `Errors (0)` / `Warnings (0)`, then final deployment failed.
+- The failed deployment is inactive.
+- The previous active frontend deployment remained active: `d21de1cb-46a1-4994-8bcd-45749c42d14e`.
+- Frontend App Service remained `Running` with `lastModifiedTimeUtc` `2026-06-25T20:29:59.863333`.
+
+Safety verification after failed attempt:
+
+- Backend stayed healthy on deployment `1a976a8f-ecbb-4d15-a899-339b9d7444bf`.
+- Backend smoke after failed attempt: `/health` `200`, authenticated intake `200`, agenda `200`, tasks `200`, cases `200`.
+- Frontend smoke routes on the still-active baseline returned `200` for `/`, `/cases`, `/tasks`, and `/notifications`.
+- Frontend app settings were not changed; `NEXT_PUBLIC_BACKEND_BASE_URL` remained `https://adminiculumbackend-b1-01.azurewebsites.net`.
+- No backend deploy, schema change, migration, DB operation, app-setting change, feature-flag change, Client Portal enablement, Outlook enablement, AI/n8n enablement, or rollback occurred.
+
+Assessment:
+
+- This is not a runtime smoke failure of the new frontend because the new frontend did not activate.
+- This is not a rollback case because the prior frontend deployment stayed active.
+- Current frontend deployment posture is blocked on Azure/OneDeploy artifact activation.
+- A future retry needs an explicit follow-up decision on deploy mechanics/artifact shape; do not silently rebuild or upload a different frontend artifact under this approval.
+
+Final classification:
+
+`frontend_only_editor_ops_deployment_1_blocked_azure_operation`
