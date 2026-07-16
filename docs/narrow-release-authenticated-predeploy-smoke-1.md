@@ -258,3 +258,16 @@ Screenshots:
 `C:\Users\hubay\AppData\Local\Temp\adminiculum-doc-delete-browser-1784127543425`
 
 This is a local authenticated smoke only. It does not authorize deployment or production data use.
+
+## Final document deletion rerun
+
+After artifact-scan credential hardening, document deletion browser smoke was rerun with explicit local dev credentials injected process-only.
+
+- Result: PASS.
+- Synthetic document ID: `df1b602e-1e37-46f4-ab31-1d0cc413abb7`.
+- Delete response: `204`.
+- Former detail/editor/comments: `404` / `404` / `404`.
+- Forbidden network/content leak count: `0`.
+- Screenshots: `C:\Users\hubay\AppData\Local\Temp\adminiculum-doc-delete-browser-1784188351802`.
+
+No production data was used.

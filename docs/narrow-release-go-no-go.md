@@ -51,3 +51,16 @@ This is not deployment approval. It means the release branch has passed local au
 - Safety: no schema/migration/Azure/config/package/OpenAPI/CORS/Client Portal/feature-flag changes.
 - Authenticated local browser deletion smoke passed with synthetic local data: delete `204`, former document/detail/editor/comment access `404`, row removed after refresh, and no forbidden content/storage leaks.
 - Deployment posture remains `GO_FOR_EXPLICIT_PRODUCTION_DEPLOYMENT_APPROVAL`, subject to separate human deployment approval and acknowledgement of pre-existing dependency audit findings.
+
+## Final artifact closeout update
+
+`FINAL-NARROW-RELEASE-DIFF-AND-ARTIFACT-1` completed after the document delete blocker.
+
+- Artifact source commit: `7392a6c`.
+- Frontend artifact: `C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-frontend-editor-ops-7392a6c.zip`.
+- Backend artifact: `C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-backend-editor-ops-7392a6c.zip`.
+- Frontend SHA-256: `6939271e34658852dcaab3b46df2d39256350744fb46baadf1f383eaa7d7a5a4`.
+- Backend SHA-256: `fb0626cf16a9457f0235dfc19e9eb4b51d30f2f1459c075430ebb95b4c3112c6`.
+- Corrective artifact-scan fix: baked local development email/password defaults removed from frontend/backend auth code.
+- Zero-diff gates remain green for schema, migrations, Client Portal expansion, OpenAPI/Swagger, CORS, Azure/deploy config, AI/n8n, Outlook/Graph enablement, contract generation enablement, and editor persistence.
+- Final posture: `GO_FOR_EXPLICIT_PRODUCTION_DEPLOYMENT` pending separate human deployment approval.
