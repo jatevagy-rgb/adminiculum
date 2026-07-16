@@ -28,8 +28,8 @@ describe('ops pages UX cleanup static guards', () => {
   });
 
   it('renders one truthful unavailable clause-library state without fake catalog controls', () => {
-    expect(clauseLibraryPage).toContain('Ezen a környezeten a záradéktár még nem érhető el.');
-    expect(clauseLibraryPage).toContain('Szerződésszerkesztő megnyitása');
+    expect(clauseLibraryPage).toContain('A záradéktár jelenleg nem érhető el.');
+    expect(clauseLibraryPage).toContain('Vissza a dokumentumokhoz');
     expect(clauseLibraryPage).not.toMatch(/foundation|Foundation|későbbi patch|Jelenleg nem aktív termékfunkció|Kapcsolódó munkamódok/);
     expect(clauseLibraryPage).not.toContain('Kockázati profil');
     expect(clauseLibraryPage).not.toContain('House style kompatibilitás');

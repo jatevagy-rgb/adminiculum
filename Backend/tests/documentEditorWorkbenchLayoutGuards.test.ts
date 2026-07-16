@@ -96,7 +96,7 @@ describe('layout state stays truthful and session-only', () => {
 
   it('workbench keeps the honest Mode C session status', () => {
     const source = workbench().toLowerCase();
-    expect(source.includes('nincs szerverre mentve')).toBe(true);
+    expect(source.includes('a munkapéldány helyi szerkesztésű; a végleges dokumentumot exportálni kell.')).toBe(true);
     expect(source.includes('autosave')).toBe(false);
   });
 

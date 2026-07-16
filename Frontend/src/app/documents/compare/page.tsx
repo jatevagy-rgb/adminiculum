@@ -1784,7 +1784,7 @@ const filteredClauseTools = useMemo(() => {
         <div className="mb-2 flex items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Review-hivatkozások</p>
-            <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">A kijelölt helyi kiemelések és megjegyzés-horgonyok itt jelennek meg. Ez nem Word változáskövetés.</p>
+            <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">A kijelölt kiemelések és megjegyzések itt követhetők.</p>
           </div>
           <span className="rounded-full border border-[var(--adm-border)] bg-white px-2 py-1 text-[10px] font-semibold text-[var(--adm-text)]">
             {resolvedLocalReviewMarks.filter((mark) => mark.isResolved).length} helyi review-jel
@@ -2408,61 +2408,6 @@ return (
             </details>
           </header>
 
-          <section className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Ügyvédi review mód</p>
-                <h2 className="mt-1 font-serif text-[20px] font-medium text-[var(--adm-text)]">Mit ellenőrizz először?</h2>
-                <p className="mt-1 max-w-3xl text-[11px] leading-5 text-[var(--adm-text-muted)]">
-                  Először válaszd ki az aktuális dokumentumot és az összevetési alapot, majd nézd át a munkapéldány szövegét,
-                  a kijelöléshez kötött helyi review-jeleket és a blokk-szintű összevetést.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setWorkspaceMainTab("edit")}
-                  className="rounded-[5px] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-green-800)] hover:bg-[var(--adm-surface)]"
-                >
-                  Munkapéldány
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWorkspaceMainTab("review")}
-                  className="rounded-[5px] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-green-800)] hover:bg-[var(--adm-surface)]"
-                >
-                  Review jelek
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setWorkspaceMainTab("history");
-                    activateCompareMode();
-                  }}
-                  className="rounded-[5px] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-green-800)] hover:bg-[var(--adm-surface)]"
-                >
-                  Összehasonlítás
-                </button>
-              </div>
-            </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-3">
-              <div className="rounded-[8px] border border-[var(--adm-border)] bg-white px-3 py-2">
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Munkapéldány</p>
-                <p className="mt-1 text-[11px] leading-4 text-[var(--adm-text)]">A szerkesztés és export a meglévő munkapéldány-logikát használja.</p>
-              </div>
-              <div className="rounded-[8px] border border-[var(--adm-border)] bg-white px-3 py-2">
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Összehasonlítás</p>
-                <p className="mt-1 text-[11px] leading-4 text-[var(--adm-text)]">Metaadat és elérhető blokk-szintű eltérések segítik a döntést.</p>
-              </div>
-              <div className="rounded-[8px] border border-[var(--adm-border)] bg-white px-3 py-2">
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Helyi review</p>
-                <p className="mt-1 text-[11px] leading-4 text-[var(--adm-text)]">
-                  Ez nem Word track changes, hanem Adminiculum review munkanézet. A tartós review napló későbbi backend-fejlesztés.
-                </p>
-              </div>
-            </div>
-          </section>
-
           <section className="rounded-[10px] border border-[var(--adm-border)] bg-white px-3 py-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap gap-1 rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-1">
@@ -2578,7 +2523,7 @@ return (
                       <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Ügyvédi átadás</p>
                       <h2 className="mt-1 font-serif text-lg font-medium">Review átadási csomag</h2>
                       <p className="mt-1 text-[11px] leading-5 text-[var(--adm-text-muted)]">
-                        Másolható helyi munkasegédlet kollégának vagy vezető ügyvédnek. Kinyitva szerkeszthető és másolható.
+                        Rövid átadási összefoglaló kollégának vagy vezető ügyvédnek.
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -2620,7 +2565,7 @@ return (
                       </AdminButton>
                     </div>
                     <p className="rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">
-                      Helyi munkasegédlet, nem backend review napló vagy Word változáskövetés; a tartós review-mentés későbbi fejlesztés.
+                      A munkapéldány helyi szerkesztésű; a végleges dokumentumot exportálni kell.
                     </p>
                   </div>
                 </details>
@@ -2673,7 +2618,7 @@ return (
                           <p><span className="font-semibold text-[var(--adm-text)]">Verzió:</span> v{selectedDocument?.revisionNumber || 1}</p>
                         </div>
                         <div className={`mt-3 rounded-[6px] border px-3 py-2 text-[11px] font-semibold ${isDraftDirty ? "border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)] text-[var(--adm-ochre-500)]" : "border-[#D9E6D9] bg-[#F5FAF5] text-[#2F5A37]"}`}>
-                          {isDraftDirty ? "Nem mentett helyi módosítások." : "A helyi munkapéldány szerkeszthető, de nem Word változáskövetés."}
+                          {isDraftDirty ? "Nem mentett helyi módosítások." : "A munkapéldány szerkesztésre kész."}
                         </div>
                         {workspaceSaveState.type ? (
                           <div className={`mt-3 rounded-[6px] border px-3 py-2 text-[11px] font-semibold ${
@@ -3078,7 +3023,7 @@ return (
                 <DocumentEditorShell
                   ref={editorTextAreaRef}
                   title="Szerkeszthető munkapéldány"
-                  subtitle={`Helyi szerkesztési nézet. Nem Word változáskövetés. Forrás: ${workspaceTextSourceLabel}`}
+                  subtitle={`Szerkesztési nézet · Forrás: ${workspaceTextSourceLabel}`}
                   value={editorDraft}
                   onChange={(value) => {
                     setEditorDraft(value);
@@ -3343,7 +3288,7 @@ return (
                     <div className="flex items-center justify-between gap-4">
                       <div>
                         <h2 className="text-sm font-semibold text-[var(--adm-text)]">Előzmények és technikai összevetés</h2>
-                        <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Audit és technikai ellenőrző nézet. Ez Adminiculumon belüli szöveg-összevetés, nem Word változáskövetés.</p>
+                        <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Verziók és elérhető blokk-szintű eltérések ellenőrzése.</p>
                       </div>
                       <span className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-1 text-[10px] text-[var(--adm-text)]">
                         {workspaceViewMode === "compare" ? "Aktív technikai nézet" : "Másodlagos audit nézet"}

@@ -425,12 +425,20 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
   }
 
   return (
-    <div className="flex-1 flex min-h-0">
-      <CaseWorkspaceNav caseId={caseContextId} caseNumber={caseRecord.caseNumber} title={caseRecord.title} clientName={caseRecord.clientName} activeTab="communications" helperText="Kommunikációs bejegyzések és kapcsolt utánkövetési feladatok." />
+    <div className="flex min-h-0 flex-1 flex-col bg-[var(--adm-ivory-50)]">
+      <CaseWorkspaceNav
+        caseId={caseContextId}
+        caseNumber={caseRecord.caseNumber}
+        title={caseRecord.title}
+        clientName={caseRecord.clientName}
+        activeTab="communications"
+        status={caseRecord.status}
+      />
+      <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)]">
       {/* LEFT PANE - Communication ledger */}
-      <aside className="w-80 border-r border-[#DDD7CA] bg-[#F6F2E8] flex flex-col">
+      <aside className="flex min-h-[360px] flex-col border-r border-[#DDD7CA] bg-[#F6F2E8] xl:min-h-0">
         {/* Case Participants Block */}
-        <div className="px-4 py-3 border-b border-[#DDD7CA]">
+        <div className="hidden px-4 py-3 border-b border-[#DDD7CA]">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-[9px] uppercase tracking-[0.28em] text-[#1F4A33]">Résztvevők</h3>
             {isLoadingCollaborators && (
@@ -462,9 +470,8 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
         </div>
         
         <div className="p-3 border-b border-[#DDD7CA]">
-          <h2 className="text-[11px] uppercase tracking-[0.24em] text-[#1F4A33]">Ügykommunikáció</h2>
-          <h3 className="mt-1 text-[10px] uppercase tracking-[0.22em] text-[#7B776D]">Kommunikációs napló</h3>
-          <p className="text-[9px] text-[#9C9890] mt-0.5">Belső ügykommunikációs feed</p>
+          <h2 className="font-serif text-lg font-semibold text-[#1F2821]">Kommunikáció</h2>
+          <p className="mt-0.5 text-[10px] text-[#7B776D]">{communications.length} bejegyzés</p>
         </div>
         
         {/* Quick note input - chat-like internal note creation */}
@@ -558,7 +565,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
           )}
         </div>
         
-        <div className="p-3 border-t border-[#DDD7CA]">
+        <div className="hidden p-3 border-t border-[#DDD7CA]">
           <button 
             onClick={() => router.push(`/cases/${caseContextId}`)}
             className="w-full text-left px-3 py-2 text-xs text-[#514D45] hover:bg-[#ECE6DA] rounded flex items-center gap-2"
@@ -572,10 +579,10 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
       </aside>
 
       {/* CENTER PANE - Selected communication */}
-      <main className="flex-1 flex flex-col min-h-0 bg-[#FBF6E7]">
+      <main className="flex min-h-[420px] min-w-0 flex-col bg-[#FBF6E7] xl:min-h-0">
         {!selectedComm ? (
-          <div className="flex-1 flex items-center justify-center px-6">
-            <div className="text-center max-w-sm bg-white border border-[#DDD7CA] rounded-xl p-6">
+            <div className="flex flex-1 items-center justify-center px-6">
+            <div className="max-w-sm rounded-lg border border-[#DDD7CA] bg-white p-4 text-center">
               {error && (
                 <div className="mb-4 p-3 bg-[#FEF2F2] border border-[#FECACA] rounded">
                   <p className="text-xs text-[#DC2626]">{error}</p>
@@ -583,11 +590,6 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
               )}
               {!error && (
                 <>
-                  <div className="w-12 h-12 rounded-full bg-[#F6F2E8] border border-[#DDD7CA] flex items-center justify-center mx-auto mb-3">
-                    <svg className="w-6 h-6 text-[#C9A227]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5H4.5A2.25 2.25 0 002.25 6.5m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                    </svg>
-                  </div>
                   {communications.length === 0 ? (
                     <>
                       <p className="text-sm font-medium text-[#1F2821]">Még nincs ügykommunikáció</p>
@@ -621,9 +623,6 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
               <h2 className="text-sm font-serif text-[#1F2821] leading-tight line-clamp-2">
                 {selectedComm.subject}
               </h2>
-              <p className="mt-2 text-[10px] text-[#7B776D]">
-                Belső ügykommunikációs napló, nem élő chat.
-              </p>
             </div>
 
             {/* Action Results */}
@@ -806,15 +805,16 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
         )}
       </main>
 
-      {/* RIGHT PANE - Kommunikációs utánkövetés */}
-      <aside className="w-72 border-l border-[#DDD7CA] bg-[#F6F2E8] flex flex-col overflow-y-auto">
+      {/* Selected communication follow-up */}
+      {selectedComm ? (
+      <aside className="border-t border-[#DDD7CA] bg-[#F6F2E8] xl:col-start-2">
         <div className="p-4 border-b border-[#DDD7CA]">
-          <h3 className="text-[10px] uppercase tracking-[0.28em] text-[#7B776D]">Kommunikációs utánkövetés</h3>
+          <h3 className="font-serif text-base font-semibold text-[#1F2821]">Utánkövetés</h3>
         </div>
         
-        <div className="p-4 space-y-6">
+        <div className="grid gap-3 p-4 lg:grid-cols-2">
           {/* Ügy kontextus */}
-          <details className="border border-[#DDD7CA] rounded">
+          <details className="hidden border border-[#DDD7CA] rounded">
             <summary className="px-3 py-2 bg-[#F6F2E8] cursor-pointer text-[10px] uppercase tracking-[0.2em] text-[#7B776D] hover:bg-[#ECE6DA]">
               Ügy kontextus
             </summary>
@@ -969,14 +969,8 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
             </>
           )}
           
-          {!selectedComm && (
-            <div className="text-center text-[#9C9890] text-xs py-8">
-              {COMMUNICATION_UNSELECTED_LABEL}
-            </div>
-          )}
-          
           {/* Navigation */}
-          <div className="pt-4 border-t border-[#DDD7CA]">
+          <div className="hidden pt-4 border-t border-[#DDD7CA]">
             <div className="space-y-2 mb-2">
               <button
                 onClick={() => router.push(`/cases/${caseContextId}/documents`)}
@@ -1006,6 +1000,8 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
           </div>
         </div>
       </aside>
+      ) : null}
+      </div>
     </div>
   );
 }

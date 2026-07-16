@@ -56,7 +56,6 @@ import { validateEditorDocument } from "@/lib/editor/editorSchemaValidator";
 import { exportEditorDocumentToDocx, importDocxFileToEditorDocument, summarizeDocxWarnings } from "@/lib/editor/docxInterop";
 import {
   buildModeCReviewConfirmation,
-  compareSavedSourcesLabel,
   isNearTextLimit,
   shouldWarnBeforeReviewAction,
 } from "@/lib/editor/reviewQuality";
@@ -215,7 +214,7 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
         }
       })
       .catch(() => {
-        if (!cancelled) setTemplateCapabilitiesError("A sablonképességek nem tölthetők be.");
+        if (!cancelled) setTemplateCapabilitiesError("A sablonadat nem tölthető be.");
       });
     return () => {
       cancelled = true;
@@ -514,9 +513,9 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
         const warningText = summarizeDocxWarnings(result.warnings);
         const confirmed = window.confirm(
           [
-            dirty ? "A jelenlegi szerkesztői munkamenet nincs szerverre mentve." : null,
+            dirty ? "A jelenlegi nem exportált módosítások elvesznek." : null,
             result.warnings.length > 0 ? warningText : null,
-            "A DOCX import helyben fut, és nem menti a tartalmat szerverre. Lecseréli a jelenlegi tartalmat?",
+            "A DOCX import lecseréli a jelenlegi tartalmat. Folytatja?",
           ]
             .filter(Boolean)
             .join("\n\n")
@@ -532,7 +531,7 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
         setNotice(
           result.warnings.length > 0
             ? `DOCX import kész figyelmeztetéssel: ${result.warnings[0].message}`
-            : "DOCX import kész. A munkamenet nincs szerverre mentve."
+            : "DOCX import kész."
         );
         window.setTimeout(() => setNotice(null), 9000);
       } catch {
@@ -637,7 +636,7 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
   }, [editor, context]);
 
   const goBack = useCallback(() => {
-    if (dirty && !window.confirm("A tartalom nincs szerverre mentve, és az oldal elhagyásával elvész. Elhagyja az oldalt?")) {
+    if (dirty && !window.confirm("A nem exportált módosítások elvesznek. Elhagyja az oldalt?")) {
       return;
     }
     if (meta) router.push(`/cases/${encodeURIComponent(meta.caseId)}`);
@@ -695,9 +694,9 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
             className={`rounded-[4px] border px-2 py-1 text-[10.5px] font-bold ${
               dirty ? "border-[rgba(185,122,15,0.4)] bg-[#FAEFCF] text-[#7d530a]" : "border-[rgba(22,32,26,0.15)] bg-white text-[#3D4842]"
             }`}
-            title="Ebben a környezetben nincs engedélyezett szerveroldali tartalommentés; a tartalom csak ebben a böngészőlapon él."
+            title="A módosításokat exporttal lehet megőrizni."
           >
-            {dirty ? "Nem mentett — nincs szerverre mentve" : "Munkamenet — nincs szerverre mentve"}
+            {dirty ? "Nem mentett" : "Munkapéldány"}
           </span>
           <input
             ref={docxInputRef}
@@ -711,20 +710,20 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
               if (file) void importDocx(file);
             }}
           />
-          <ToolbarMenu label="Export / Import ▾" title="Helyi export- és importműveletek (nem szerveroldali mentés)" widthClass="w-72">
+          <ToolbarMenu label="Export / import ▾" title="Dokumentum export és import" widthClass="w-72">
             {(close) => (
               <>
                 <MenuItem
                   label="Nyomtatás / PDF (böngészőből)"
-                  description="A PDF a böngésző nyomtatási funkciójával készül."
+                  description="PDF készítése a nyomtatási nézetből."
                   onSelect={() => {
                     printDocument();
                     close();
                   }}
                 />
                 <MenuItem
-                  label="DOCX export (helyi fájl)"
-                  description="Új DOCX készül helyben; ez nem szerveroldali mentés."
+                  label="DOCX export"
+                  description="Szerkeszthető DOCX fájl készítése."
                   onSelect={() => {
                     exportDocx();
                     close();
@@ -732,7 +731,7 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
                 />
                 <MenuItem
                   label="HTML letöltése"
-                  description="Önálló, tisztított HTML."
+                  description="Tisztított HTML fájl."
                   onSelect={() => {
                     exportHtml();
                     close();
@@ -740,15 +739,15 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
                 />
                 <MenuItem
                   label="Szöveges export (.txt)"
-                  description="Számozással, helyi fájlként."
+                  description="Számozott szöveges fájl."
                   onSelect={() => {
                     exportText();
                     close();
                   }}
                 />
                 <MenuItem
-                  label="DOCX import (helyi fájl)"
-                  description="A fájl nem kerül feltöltésre; a jelenlegi tartalmat lecseréli."
+                  label="DOCX import"
+                  description="A jelenlegi munkapéldány tartalmának cseréje."
                   onSelect={() => {
                     docxInputRef.current?.click();
                     close();
@@ -788,6 +787,10 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
       </header>
 
       <DocumentEditorToolbar editor={editor} readOnly={false} onToggleSearch={() => setSearchOpen((open) => !open)} onPrint={printDocument} />
+
+      <p className="border-b border-[rgba(185,122,15,0.3)] bg-[#FAEFCF] px-3 py-1 text-[11px] text-[#7d530a] print:hidden" data-editor-chrome>
+        A munkapéldány helyi szerkesztésű; a végleges dokumentumot exportálni kell.
+      </p>
 
       {searchOpen ? (
         <div className="flex flex-wrap items-center gap-2 border-b border-[rgba(22,32,26,0.12)] bg-white px-3 py-1.5 print:hidden" data-editor-chrome>
@@ -861,7 +864,7 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
           </aside>
         ) : null}
 
-        <div ref={canvasContainerRef} className="editor-canvas-scroll min-w-0 flex-1 overflow-auto px-4 py-6" data-editor-viewport>
+        <div ref={canvasContainerRef} className="editor-canvas-scroll min-w-0 flex-1 overflow-auto px-4 py-3" data-editor-viewport>
           <div
             className="editor-a4-page mx-auto bg-white"
             style={{
@@ -916,9 +919,6 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
           {activeClauseNumber ? <span className="font-semibold text-[#7A6014]">Aktuális pont: {activeClauseNumber}</span> : null}
         </div>
         <div className="flex items-center gap-2">
-          <span className={dirty ? "font-semibold text-[#7d530a]" : ""} title={compareSavedSourcesLabel()}>
-            {dirty ? "Nem mentett — nincs szerverre mentve" : "Nincs szerverre mentve"}
-          </span>
           <label className="flex items-center gap-1">
             <span className="sr-only">Nagyítás</span>
             <select

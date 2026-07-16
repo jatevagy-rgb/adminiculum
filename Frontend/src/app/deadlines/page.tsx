@@ -202,7 +202,7 @@ function DeadlinesAgendaContent() {
 
   return (
     <div className="deadlines-surface min-h-screen bg-[var(--adm-surface)]">
-      <div className="mx-auto max-w-[1480px] p-4 md:p-6">
+      <div className="mx-auto max-w-[1480px] p-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="font-serif text-[28px] text-[var(--adm-text)]">Határidők</h1>
@@ -227,7 +227,7 @@ function DeadlinesAgendaContent() {
           </div>
         </div>
 
-        <div className="mt-5 grid gap-2 sm:grid-cols-5">
+        <div className="mt-3 grid gap-2 sm:grid-cols-5">
           {[
             ["OVERDUE", "Lejárt", agenda?.summary.overdue ?? 0],
             ["TODAY", "Ma", agenda?.summary.today ?? 0],
@@ -235,9 +235,9 @@ function DeadlinesAgendaContent() {
             ["THIS_WEEK", "Ezen a héten", agenda?.summary.thisWeek ?? 0],
             ["LATER", "Később", agenda?.summary.later ?? 0],
           ].map(([valueKey, label, value]) => (
-            <button key={label} type="button" onClick={() => setUrgencyFilter(urgencyFilter === valueKey ? "ALL" : valueKey as WorkflowDeadlineUrgency)} className={`border p-3 text-center ${urgencyFilter === valueKey ? "border-[var(--adm-ochre-500)] bg-[var(--adm-ivory-100)]" : "border-[var(--adm-border)] bg-white hover:bg-[var(--adm-surface)]"}`}>
-              <p className="text-[18px] font-bold text-[var(--adm-text)]">{value}</p>
-              <p className="text-[9px] uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">{label}</p>
+            <button key={label} type="button" onClick={() => setUrgencyFilter(urgencyFilter === valueKey ? "ALL" : valueKey as WorkflowDeadlineUrgency)} className={`flex items-center justify-between border px-3 py-2 text-left ${urgencyFilter === valueKey ? "border-[var(--adm-ochre-500)] bg-[var(--adm-ivory-100)]" : "border-[var(--adm-border)] bg-white hover:bg-[var(--adm-surface)]"}`}>
+              <p className="text-[10px] font-semibold text-[var(--adm-text-muted)]">{label}</p>
+              <p className="text-[14px] font-bold text-[var(--adm-text)]">{value}</p>
             </button>
           ))}
         </div>
@@ -245,19 +245,14 @@ function DeadlinesAgendaContent() {
         {error && <p className="mt-4 border border-[#d4b8b8] bg-[#FEF2F2] p-3 text-xs text-[#8b3a3a]">{error}</p>}
 
         {loading ? (
-          <p className="mt-8 text-center text-xs text-[var(--adm-text-muted)]">Agenda betöltése…</p>
+          <p className="mt-5 text-xs text-[var(--adm-text-muted)]">Határidők betöltése…</p>
         ) : visibleItems.length === 0 ? (
-          <div className="mt-6 rounded-xl border border-dashed border-[var(--adm-border)] bg-white p-6">
+          <div className="mt-4 rounded-lg border border-dashed border-[var(--adm-border)] bg-white p-4">
             <p className="text-sm font-semibold text-[var(--adm-text)]">Nincs határidős tétel ebben a nézetben.</p>
-            <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Módosítsd a szűrőket, vagy adj határidőt egy feladathoz vagy ügyhöz.</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Link href="/tasks" className="border border-[var(--adm-border)] bg-white px-3 py-2 text-xs">Feladatok</Link>
-              <Link href="/cases" className="border border-[var(--adm-border)] bg-white px-3 py-2 text-xs">Ügyek</Link>
-              <button type="button" onClick={() => { setUrgencyFilter("ALL"); setStatus("OPEN"); }} className="border border-[var(--adm-border)] bg-white px-3 py-2 text-xs">Szűrők törlése</button>
-            </div>
+            <button type="button" onClick={() => { setUrgencyFilter("ALL"); setStatus("OPEN"); }} className="mt-3 border border-[var(--adm-border)] bg-white px-3 py-1.5 text-xs">Szűrők törlése</button>
           </div>
         ) : (
-          <div className="mt-6 space-y-4">
+          <div className="mt-4 space-y-4">
             {groupedItems.map((group) => (
               <section key={group.urgency} className="rounded-xl border border-[var(--adm-border)] bg-white p-3">
                 <div className="mb-2 flex items-center justify-between">

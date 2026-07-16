@@ -93,8 +93,8 @@ describe('document editor pro — static safety', () => {
 
   it('claims no fake save/autosave and no fake track changes', () => {
     const workbench = read(path.join(EDITOR_COMPONENT_DIR, 'DocumentEditorWorkbench.tsx'));
-    // The honest session status must be present…
-    expect(workbench.includes('nincs szerverre mentve')).toBe(true);
+    // The concise export-only warning must remain visible once.
+    expect(workbench.includes('A munkapéldány helyi szerkesztésű; a végleges dokumentumot exportálni kell.')).toBe(true);
     // …and no autosave / track-changes vocabulary may appear anywhere.
     for (const file of editorFiles) {
       const lower = read(file).toLowerCase();

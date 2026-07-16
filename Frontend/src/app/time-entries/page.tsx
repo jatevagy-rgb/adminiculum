@@ -1075,7 +1075,7 @@ function TimeEntriesPageContent() {
 
   return (
     <div className="flex-1 p-2 md:p-4 time-entries-surface bg-[var(--adm-surface)]">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-4 rounded-xl adm-board-panel-tight p-4">
+          <div className="mb-3 flex flex-col gap-3 rounded-xl adm-board-panel-tight p-3 md:flex-row md:items-start md:justify-between">
             <div>
               <h1 className="text-2xl font-serif text-[var(--adm-text)]">Munkaórák</h1>
               <p className="text-xs text-[var(--adm-text-muted)] mt-1">
@@ -1091,7 +1091,7 @@ function TimeEntriesPageContent() {
           </div>
 
           {deepLinkedCaseId && caseResolutionState.status !== "idle" && (
-            <div className="mb-5 rounded-xl border border-[var(--adm-ochre-500)] bg-[var(--adm-surface)] px-4 py-3">
+            <div className="mb-3 rounded-lg border border-[var(--adm-ochre-500)] bg-[var(--adm-surface)] px-3 py-2">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] px-2 py-0.5 bg-[var(--adm-ochre-500)] text-white uppercase tracking-wide">Ügyhöz kapcsolt munkaóra</span>
@@ -1115,24 +1115,7 @@ function TimeEntriesPageContent() {
                   href={`/cases/${deepLinkedCaseId}`}
                   className="px-3 py-1 text-[10px] border border-[#1F4A33] bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:bg-[#173824] rounded shrink-0"
                 >
-                  ← Vissza az ügyhöz
-                </Link>
-              </div>
-              <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">
-                Az időrögzítés az ügyhöz kapcsolt munkacsomaghoz történik, ha elérhető.
-              </p>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Link href={`/cases/${deepLinkedCaseId}/documents`} className="px-2 py-1 text-[10px] adm-board-panel-tight text-[var(--adm-text)] rounded hover:bg-[var(--adm-ivory-100)]">
-                  Dokumentumtár
-                </Link>
-                <Link href={`/cases/${deepLinkedCaseId}/communications`} className="px-2 py-1 text-[10px] adm-board-panel-tight text-[var(--adm-text)] rounded hover:bg-[var(--adm-ivory-100)]">
-                  Kommunikáció
-                </Link>
-                <Link href={`/documents/compare?caseId=${deepLinkedCaseId}`} className="px-2 py-1 text-[10px] border border-[var(--adm-ochre-500)] bg-[var(--adm-ochre-500)] text-white rounded hover:bg-[#9C7723]">
-                  Szerződés-workspace
-                </Link>
-                <Link href={`/cases/${deepLinkedCaseId}/handoff`} className="px-2 py-1 text-[10px] adm-board-panel-tight text-[var(--adm-text)] rounded hover:bg-[var(--adm-ivory-100)]">
-                  Leadási csomag
+                  Ügy megnyitása
                 </Link>
               </div>
             </div>
@@ -1654,40 +1637,38 @@ function TimeEntriesPageContent() {
 
           {activeTab === "entries" && (
           <>
-          <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl border border-[var(--adm-border)] bg-white p-3 md:grid-cols-4">
-            <div className="p-4 bg-white border border-[var(--adm-border)] rounded-lg">
-              <p className="text-2xl font-serif text-[var(--adm-text)]">{formatMinutes(totals.totalMinutes)}</p>
-              <p className="text-[10px] text-[var(--adm-text-muted)]">Összes munkaóra</p>
+          <div className="mb-3 grid grid-cols-2 gap-x-6 gap-y-2 rounded-lg border border-[var(--adm-border)] bg-white px-4 py-2 md:grid-cols-4">
+            <div>
+              <p className="text-lg font-serif text-[var(--adm-text)]">{formatMinutes(totals.totalMinutes)}</p>
+              <p className="text-[10px] text-[var(--adm-text-muted)]">Munkaóra</p>
             </div>
-            <div className="p-4 bg-white border border-[var(--adm-border)] rounded-lg">
-              <p className="text-2xl font-serif text-[var(--adm-text)]">{totals.totalEntries}</p>
-              <p className="text-[10px] text-[var(--adm-text-muted)]">Összes bejegyzés</p>
+            <div>
+              <p className="text-lg font-serif text-[var(--adm-text)]">{totals.totalEntries}</p>
+              <p className="text-[10px] text-[var(--adm-text-muted)]">Bejegyzés</p>
             </div>
-            <div className="p-4 bg-[#ECF7F0] border border-[#CFE5D9] rounded-lg">
-              <p className="text-2xl font-serif text-[var(--adm-green-800)]">{formatMinutes(totals.billableMinutes)}</p>
+            <div>
+              <p className="text-lg font-serif text-[var(--adm-green-800)]">{formatMinutes(totals.billableMinutes)}</p>
               <p className="text-[10px] text-[#315442]">Számlázható idő</p>
             </div>
-            <div className="p-4 bg-white border border-[var(--adm-border)] rounded-lg">
-              <p className="text-2xl font-serif text-[var(--adm-text)]">{totals.totalClients}</p>
-              <p className="text-[10px] text-[var(--adm-text-muted)]">Érintett ügyfelek</p>
-              <p className="text-[10px] text-[var(--adm-text-soft)] mt-1">Nem számlázható: {formatMinutes(totals.nonBillableMinutes)}</p>
+            <div>
+              <p className="text-lg font-serif text-[var(--adm-text)]">{totals.totalClients}</p>
+              <p className="text-[10px] text-[var(--adm-text-muted)]">Ügyfél · nem számlázható {formatMinutes(totals.nonBillableMinutes)}</p>
             </div>
           </div>
 
           {isLoading ? (
-            <div className="text-center py-12 text-xs text-[var(--adm-text-soft)]">Munkaórák betöltése...</div>
+            <div className="py-5 text-xs text-[var(--adm-text-soft)]">Munkaórák betöltése...</div>
           ) : entries.length === 0 ? (
-            <div className="text-center py-12 border border-dashed border-[var(--adm-border)]">
-              <p className="text-xs text-[var(--adm-text-soft)] mb-4">Még nincs rögzített munkaóra</p>
+            <div className="rounded-lg border border-dashed border-[var(--adm-border)] bg-white p-4 text-center">
+              <p className="mb-3 text-xs text-[var(--adm-text-soft)]">Még nincs rögzített munkaóra.</p>
               <button onClick={handleCreate} className="px-4 py-2 bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] text-xs rounded hover:bg-[#173824]">
                 Első bejegyzés rögzítése
               </button>
             </div>
           ) : filteredEntries.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-[var(--adm-border)] bg-white p-8 text-center">
+            <div className="rounded-lg border border-dashed border-[var(--adm-border)] bg-white p-4 text-center">
               <p className="text-sm font-semibold text-[var(--adm-text)]">Nincs találat ebben a nézetben.</p>
-              <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Módosítsd a szűrőket, vagy rögzíts új munkaórát.</p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
                 <button onClick={() => { setEntrySearch(""); setEntryMatterFilter(""); }} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]">
                   Szűrők törlése
                 </button>

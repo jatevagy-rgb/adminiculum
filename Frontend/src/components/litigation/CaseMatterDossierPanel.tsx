@@ -68,7 +68,8 @@ export function CaseMatterDossierPanel({ caseId, compact = false }: Props) {
       setLifecycle(lc);
       setDossier(ds);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Nem sikerült betölteni az ügy dossziéját.");
+      console.error("Case matter dossier load failed:", err);
+      setError("Ez az adat jelenleg nem érhető el.");
     } finally {
       setLoading(false);
     }
@@ -88,7 +89,8 @@ export function CaseMatterDossierPanel({ caseId, compact = false }: Props) {
         // Refresh the dossier so procedural dates / counts stay consistent.
         void getCaseLitigationDossier(caseId).then(setDossier).catch(() => undefined);
       } catch (err) {
-        setActionError(err instanceof Error ? err.message : "A művelet nem hajtható végre.");
+        console.error("Case lifecycle action failed:", err);
+        setActionError("A művelet nem hajtható végre.");
       } finally {
         setBusy(false);
       }

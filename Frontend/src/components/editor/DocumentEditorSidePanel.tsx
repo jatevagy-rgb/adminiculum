@@ -13,9 +13,6 @@ import type { EditorNode } from "@/lib/editor/editorModel";
 import { EDITOR_FIELDS, FieldResolutionContext, listTokenOccurrences } from "@/lib/editor/fieldTokens";
 import {
   documentCommentUnavailableMessage,
-  EDITOR_KEYBOARD_SHORTCUTS,
-  editorLimitSummary,
-  MODE_C_REVIEW_WARNING,
   compareSavedSourcesLabel,
 } from "@/lib/editor/reviewQuality";
 
@@ -130,51 +127,23 @@ export function DocumentEditorSidePanel({
         {tab === "status" ? (
           <div className="space-y-3">
             <div className="rounded-[6px] border border-[rgba(185,122,15,0.35)] bg-[#FAEFCF] p-2.5">
-              <p className="text-[11px] font-bold text-[#7d530a]">Munkamenet-alapú szerkesztés — nincs szerverre mentve</p>
-              <p className="mt-1 text-[11px] leading-relaxed text-[#7d530a]">
-                Ebben a környezetben nincs engedélyezett dokumentumtartalom-mentési útvonal, ezért a szerkesztett
-                tartalom csak ebben a böngészőlapon él. Az oldal elhagyása vagy újratöltése a nem exportált tartalmat
-                elveti. Használja az Export fület (nyomtatás/PDF, HTML, szöveg) a megőrzéshez.
-              </p>
+              <p className="text-[11px] font-bold text-[#7d530a]">Export szükséges</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-[#7d530a]">A módosítások megőrzéséhez válassz exportformátumot.</p>
             </div>
             {documentMeta ? (
               <div className="space-y-1">
-                <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[#7A8479]">Dokumentum-kontextus</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[#7A8479]">Dokumentum</p>
                 <p>{documentMeta.name}</p>
                 <p className="text-[11px] text-[#7A8479]">
-                  Verzió (metaadat): {documentMeta.version || "n/a"} · A kontextus csak metaadat — a szerveren tárolt
-                  fájltartalom itt nem kerül betöltésre.
+                  Verzió: {documentMeta.version || "n/a"}
                 </p>
               </div>
             ) : (
-              <p className="text-[11px] text-[#7A8479]">Önálló munkapéldány — nincs kapcsolt dokumentum.</p>
+              <p className="text-[11px] text-[#7A8479]">Önálló munkapéldány.</p>
             )}
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[#7A8479]">Nem elérhető funkciók (őszintén)</p>
-              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-[#3D4842]">
-                <li>Mentés és háttérmentés a szerverre — nincs engedélyezett tartalom-perzisztencia.</li>
-                <li>Új dokumentumverzió létrehozása — a verziómentési útvonal ebben a környezetben nem érhető el.</li>
-                <li>Szerveroldali DOCX konverzió — nincs; a DOCX import/export helyi böngészős munkamenetként fut.</li>
-                <li>Élő változáskövetés szerkesztés közben — a verzió-összehasonlítás a támogatott redline-mechanizmus.</li>
-                <li>Dokumentumszintű megjegyzések — külön szerveroldali metaadatként, nem szerkesztői tartalommentésként.</li>
-                <li>Szöveghez rögzített kommentek — továbbra sem érhetők el.</li>
-                <li>Valós idejű közös szerkesztés — nem cél és nem támogatott.</li>
-              </ul>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[#7A8479]">Billentyűzet</p>
-              <ul className="mt-1 space-y-0.5 text-[11px] text-[#3D4842]">
-                {EDITOR_KEYBOARD_SHORTCUTS.map((shortcut) => (
-                  <li key={shortcut.keys} className="flex justify-between gap-2">
-                    <span className="font-semibold">{shortcut.keys}</span>
-                    <span className="text-right">{shortcut.label}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <p className="rounded-[4px] border border-[rgba(22,32,26,0.12)] bg-white p-1.5 text-[10.5px] leading-relaxed text-[#3D4842]">
-              {editorLimitSummary()}
-            </p>
+            <button type="button" className="w-full rounded-[4px] border border-[#082817] bg-[#082817] px-2 py-1.5 text-[11px] font-semibold text-[#F4EFDB]" onClick={onExportDocx}>
+              DOCX export
+            </button>
           </div>
         ) : null}
 
@@ -254,9 +223,7 @@ export function DocumentEditorSidePanel({
           <div className="space-y-2">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[#7A8479]">Dokumentumszintű megjegyzések</p>
-              <p className="mt-1 text-[10.5px] leading-relaxed text-[#7A8479]">
-                Ezek a megjegyzések a dokumentum rekordjához kapcsolódnak. Nem szöveghez rögzített kommentek, nem mentik a jelenlegi szerkesztői tartalmat, és nem hoznak létre review-feladatot.
-              </p>
+              <p className="mt-1 text-[10.5px] leading-relaxed text-[#7A8479]">A dokumentumhoz kapcsolt általános megjegyzések.</p>
             </div>
             {!documentMeta || !comments.availability.comments ? (
               <p className="rounded-[4px] border border-[rgba(22,32,26,0.12)] bg-white p-1.5 text-[11px] text-[#7A8479]">
@@ -408,12 +375,6 @@ export function DocumentEditorSidePanel({
                     ))}
                   </ul>
                 )}
-                <p
-                  className="rounded-[4px] border border-[rgba(185,122,15,0.25)] bg-[#FAEFCF] p-1.5 text-[10.5px] leading-relaxed text-[#7d530a]"
-                  title="a jelenlegi szerkesztési munkamenet tartalma nincs az Adminiculum szerverére mentve"
-                >
-                  {MODE_C_REVIEW_WARNING}
-                </p>
                 <p className="text-[10px] italic text-[#7A8479]">
                   A jóváhagyás belső munkafolyamat-jóváhagyás — nem elektronikus aláírás, nem benyújtás és nem az irat
                   jogi érvényességének igazolása. A jogosultságokat a szerver határozza meg.
@@ -435,26 +396,9 @@ export function DocumentEditorSidePanel({
           <div className="space-y-2">
             <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[#7A8479]">Sablonból munkapéldány</p>
             <p className="text-[11.5px] leading-relaxed text-[#3D4842]">
-              {template.capabilities?.availability.generation
-                ? "A sablon generálási kapu elérhető; a tényleges munkafolyamat külön jóváhagyott kapcsolással nyílik meg."
-                : "A sablonkatalógus és a generálás jelenleg jóváhagyásra vár. Használjon engedélyezett letöltést, majd helyi DOCX importot."}
+              {template.capabilities?.availability.generation ? "A sablonos dokumentumkészítés elérhető." : "A sablonkatalógus jelenleg nem érhető el."}
             </p>
-            <p className="text-[10.5px] text-[#7A8479]">
-              {template.error ||
-                template.capabilities?.reason ||
-                "Képességellenőrzés folyamatban; automatikus sablonválasztás és szerveroldali editor-mentés nincs."}
-            </p>
-            <span className="inline-block rounded-[4px] border border-[rgba(22,32,26,0.16)] bg-white px-2 py-1 text-[10.5px] font-semibold text-[#3D4842]">
-              {template.capabilities?.selectedBranch === "APPROVAL_READINESS_ONLY" ? "Branch C — approval readiness" : "Képességellenőrzés"}
-            </span>
-            <button
-              type="button"
-              disabled
-              className="w-full cursor-not-allowed rounded-[4px] border border-[rgba(22,32,26,0.14)] bg-white px-2 py-1.5 text-[11px] font-semibold text-[#7A8479]"
-              title="A sablonból generálás csak külön jóváhagyott storage, jogosultsági és audit modell után kapcsolható."
-            >
-              Sablonkatalógus nem aktív
-            </button>
+            {template.error ? <p className="text-[10.5px] text-[#7A8479]">A sablonadat nem tölthető be.</p> : null}
             <button
               type="button"
               className="w-full rounded-[4px] border border-[rgba(22,32,26,0.2)] bg-white px-2 py-1.5 text-[11px] font-semibold text-[#3D4842] hover:bg-[#FBF6E7]"
@@ -479,11 +423,7 @@ export function DocumentEditorSidePanel({
             <button type="button" className="w-full rounded-[4px] border border-[rgba(22,32,26,0.2)] px-2 py-1.5 text-[11.5px] font-semibold hover:bg-[#FBF6E7]" onClick={onExportText}>
               Szöveges export (.txt, számozással)
             </button>
-            <p className="text-[10px] italic leading-relaxed text-[#7A8479]">
-              A PDF a böngésző nyomtatási funkciójával készül — nem szerveroldali generálás. A DOCX export helyben,
-              a böngészőben készül egy támogatott résszel; nem Word-tökéletes és nem szerveroldali mentés. Az exportok a
-              feloldott mezőértékeket tartalmazzák; a feloldatlan mezők jelölve maradnak.
-            </p>
+            <p className="text-[10px] italic leading-relaxed text-[#7A8479]">Export előtt ellenőrizd a dokumentum tartalmát és a feloldatlan mezőket.</p>
           </div>
         ) : null}
       </div>

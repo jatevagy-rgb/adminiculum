@@ -22,7 +22,7 @@ function read(file: string): string {
 function extractDeleteDocumentBody(source: string): string {
   const start = source.indexOf('async deleteDocument(');
   expect(start).toBeGreaterThanOrEqual(0);
-  const end = source.indexOf('\n  /**\n   * Search documents', start);
+  const end = source.indexOf('async searchDocuments(', start);
   expect(end).toBeGreaterThan(start);
   return source.slice(start, end);
 }

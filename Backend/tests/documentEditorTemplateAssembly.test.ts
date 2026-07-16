@@ -35,9 +35,9 @@ describe('document editor template assembly bridge static safety', () => {
     // (the permanent header banner was removed deliberately).
     expect(workbench).toContain('getEditorTemplateCapabilities');
     expect(sidePanel).toContain('Sablonból munkapéldány');
-    expect(sidePanel).toContain('Sablonkatalógus nem aktív');
+    expect(sidePanel).toContain('A sablonkatalógus jelenleg nem érhető el.');
     expect(sidePanel).toContain('Helyi DOCX import');
-    expect(sidePanel).toContain('a jelenlegi szerkesztési munkamenet tartalma nincs az Adminiculum szerverére mentve');
+    expect(workbench).toContain('A munkapéldány helyi szerkesztésű; a végleges dokumentumot exportálni kell.');
 
     for (const forbidden of [
       'generateContract(',

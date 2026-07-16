@@ -17,7 +17,6 @@ import {
   type TipTapEditorSelectionState,
 } from "@/components/documents/editor/TipTapEditorExperimental";
 import { TipTapReviewPilotPanel } from "@/components/documents/editor/TipTapReviewPilotPanel";
-import { CaseMatterDossierPanel } from "@/components/litigation/CaseMatterDossierPanel";
 import { PleadingPreviewPanel } from "@/components/litigation/PleadingPreviewPanel";
 import { PleadingSectionsOverviewPanel } from "@/components/litigation/PleadingSectionsOverviewPanel";
 import {
@@ -115,6 +114,21 @@ type LitigationDocumentContext = {
   text: string;
   textField?: string;
   unavailableReason?: string;
+};
+
+const litigationDocumentTypeLabel: Record<string, string> = {
+  CLIENT_INPUT: "Ügyféltől érkezett irat",
+  DRAFT: "Munkapéldány",
+  MODIFIED_WORKING_COPY: "Módosított munkapéldány",
+  FINAL: "Végleges irat",
+  EVIDENCE: "Bizonyíték",
+};
+
+const litigationDocumentFolderLabel: Record<string, string> = {
+  CLIENT_INPUT: "Ügyfélanyag",
+  DRAFTS: "Munkapéldányok",
+  FINAL: "Végleges iratok",
+  EVIDENCE: "Bizonyítékok",
 };
 
 type PleadingChapterSeed = {
@@ -904,8 +918,6 @@ function LitigationWorkspacePageContent() {
           caseContextError={caseContextError}
         />
 
-        {caseId ? <CaseMatterDossierPanel caseId={caseId} /> : null}
-
         {!hasContext ? (
           <MissingContextState />
         ) : (
@@ -915,8 +927,6 @@ function LitigationWorkspacePageContent() {
               currentStepIndex={currentStepIndex}
               onNavigate={navigateToStep}
             />
-
-            <LitigationWorkflowGuidance />
 
             {currentStep === "intake" ? (
               <IntakeWorkspace
@@ -1040,18 +1050,15 @@ function WorkflowHeader({
   caseContextError: string | null;
 }) {
   return (
-    <section className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+    <section className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <AdminBadge tone="green">Ügyhöz kötött peres munkafolyamat</AdminBadge>
-            <AdminStatusPill tone="gold">Helyi vázlat — nincs szerveroldali mentés.</AdminStatusPill>
+            <AdminBadge tone="green">Peres munkatér</AdminBadge>
+            <AdminStatusPill tone="gold">A végleges iratot exportálni kell.</AdminStatusPill>
           </div>
           <div>
-            <h1 className="font-serif text-[30px] font-medium leading-tight text-[var(--adm-text)]">Peres beadvány-munkafolyamat</h1>
-            <p className="mt-1 max-w-4xl text-[13px] text-[var(--adm-text-muted)]">
-              Ügyhöz és feltöltött ellenfél-iratához kötött háromlépéses állítás-, válaszút- és szerkesztési munkaterület.
-            </p>
+            <h1 className="font-serif text-[27px] font-medium leading-tight text-[var(--adm-text)]">Peres beadvány</h1>
           </div>
           <div className="flex flex-wrap items-center gap-2 pt-1">
             {caseId ? (
@@ -1060,18 +1067,18 @@ function WorkflowHeader({
                   href={`/cases/${encodeURIComponent(caseId)}`}
                   className="inline-flex items-center justify-center rounded-[6px] border border-[var(--adm-border)] bg-white px-3 py-2 text-[12px] font-semibold text-[var(--adm-text)] transition-colors hover:border-[var(--adm-green-800)] hover:bg-[var(--adm-surface)]"
                 >
-                  ← Ügy áttekintése
+                  Ügy áttekintése
                 </Link>
                 <Link
                   href={`/cases/${encodeURIComponent(caseId)}/documents`}
                   className="inline-flex items-center justify-center rounded-[6px] border border-[var(--adm-border)] bg-white px-3 py-2 text-[12px] font-semibold text-[var(--adm-text)] transition-colors hover:border-[var(--adm-green-800)] hover:bg-[var(--adm-surface)]"
                 >
-                  ← Dokumentumtár
+                  Dokumentumtár
                 </Link>
               </>
             ) : (
               <div className="rounded-[6px] border border-dashed border-[var(--adm-border)] bg-white px-3 py-2 text-[11px] text-[var(--adm-text-muted)]">
-                Az ügy áttekintése és a Dokumentumtár megnyitásához előbb ügyazonosító szükséges.
+                A munkatér indításához ügy és dokumentum szükséges.
               </div>
             )}
           </div>
@@ -1081,7 +1088,7 @@ function WorkflowHeader({
             </p>
           ) : null}
         </div>
-        <div className="grid gap-2 rounded-[8px] border border-[var(--adm-border)] bg-white p-3 text-[11px] text-[var(--adm-text)] sm:grid-cols-5">
+        <div className="grid gap-x-5 gap-y-2 rounded-[8px] border border-[var(--adm-border)] bg-white px-3 py-2 text-[11px] text-[var(--adm-text)] sm:grid-cols-2 xl:min-w-[520px] xl:grid-cols-4">
           <div>
             <p className="font-semibold text-[var(--adm-text)]">Ügy száma</p>
             <p className="mt-1 break-all">{caseNumber || "Nincs megadva"}</p>
@@ -1093,10 +1100,6 @@ function WorkflowHeader({
           <div>
             <p className="font-semibold text-[var(--adm-text)]">Ügyfél</p>
             <p className="mt-1 break-all">{clientName || "Ügyféladat nem érhető el"}</p>
-          </div>
-          <div>
-            <p className="font-semibold text-[var(--adm-text)]">Munkafolyamat</p>
-            <p className="mt-1 break-all">{formatWorkspaceMode(mode)}</p>
           </div>
           <div>
             <p className="font-semibold text-[var(--adm-text)]">Státusz</p>
@@ -1141,7 +1144,7 @@ function WorkflowNavigation({
   onNavigate: (step: LitigationWorkspaceStep) => void;
 }) {
   return (
-    <section className="rounded-[10px] border border-[var(--adm-border)] bg-white p-4">
+    <section className="rounded-[10px] border border-[var(--adm-border)] bg-white p-2">
       <div className="grid gap-2 xl:grid-cols-3">
         {workspaceSteps.map((step, index) => {
           const active = currentStep === step.key;
@@ -1151,7 +1154,7 @@ function WorkflowNavigation({
               key={step.key}
               type="button"
               onClick={() => onNavigate(step.key)}
-              className={`min-h-[92px] rounded-[8px] border p-3 text-left transition-colors ${
+              className={`min-h-[56px] rounded-[8px] border px-3 py-2 text-left transition-colors ${
                 active
                   ? "border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)]"
                   : completed
@@ -1160,46 +1163,11 @@ function WorkflowNavigation({
               }`}
             >
               <span className="text-[11px] font-bold uppercase tracking-[0.14em]">{step.label}</span>
-              <span className="mt-2 block font-serif text-lg font-medium leading-tight">{step.title}</span>
-              <span className={`mt-1 block text-[11px] leading-5 ${active ? "text-[var(--adm-ivory-50)]" : "text-[var(--adm-text-muted)]"}`}>
-                {step.description}
-              </span>
+              <span className="ml-2 font-serif text-base font-medium leading-tight">{step.title}</span>
             </button>
           );
         })}
       </div>
-    </section>
-  );
-}
-
-function LitigationWorkflowGuidance() {
-  return (
-    <section className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-4 py-3">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Peres stratégiai munkatér</p>
-          <h2 className="mt-1 font-serif text-[19px] font-medium text-[var(--adm-text)]">Munkamódszer</h2>
-          <p className="mt-1 max-w-3xl text-[12px] leading-5 text-[var(--adm-text-muted)]">
-            A munkafolyamat ellenoldali pontból saját válaszba, majd beadványrészbe vezet. A mentés böngésző-local jellegű;
-            nincs backend peres review-napló, TipTap JSON mentés vagy Word változáskövetés.
-          </p>
-        </div>
-        <AdminStatusPill tone="gold">Helyi vázlat · nem végleges beadvány</AdminStatusPill>
-      </div>
-      <ul className="mt-3 grid gap-x-6 gap-y-2 border-t border-[var(--adm-border)] pt-3 text-[11px] leading-5 text-[var(--adm-text)] md:grid-cols-3">
-        <li className="flex gap-2">
-          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--adm-ochre-500)]" />
-          <span>Rögzítsd az ellenfél iratából a rövid címmel azonosított, megválaszolandó pontokat.</span>
-        </li>
-        <li className="flex gap-2">
-          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--adm-ochre-500)]" />
-          <span>Kapcsolj hozzájuk rendezhető saját válaszblokkokat, majd építs belőlük szerkeszthető fejezeteket.</span>
-        </li>
-        <li className="flex gap-2">
-          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--adm-ochre-500)]" />
-          <span>Az előnézet és a .txt munkacsomag ügyvédi ellenőrzést és átadást segít, nem végleges benyújtást.</span>
-        </li>
-      </ul>
     </section>
   );
 }
@@ -1265,9 +1233,13 @@ function IntakeWorkspace({
 }) {
   const documentTextRef = useRef<HTMLTextAreaElement | null>(null);
   const documentMetaItems = [
-    documentContext?.documentType ? `Típus: ${documentContext.documentType}` : null,
+    documentContext?.documentType
+      ? `Típus: ${litigationDocumentTypeLabel[documentContext.documentType.toUpperCase()] || documentContext.documentType}`
+      : null,
     documentContext?.status ? `Státusz: ${documentContext.status}` : null,
-    documentContext?.folder ? `Mappa: ${documentContext.folder}` : null,
+    documentContext?.folder
+      ? `Mappa: ${litigationDocumentFolderLabel[documentContext.folder.toUpperCase()] || documentContext.folder}`
+      : null,
     documentContext?.version ? `Verzió: ${documentContext.version}` : null,
   ].filter((item): item is string => Boolean(item));
   const hasDocumentText = localExtractedText.trim().length > 0;
@@ -2036,7 +2008,7 @@ function AssemblyWorkspace({
     try {
       window.localStorage.setItem(localDraftStorageKey, JSON.stringify(draft));
       refreshLocalDraftInfo();
-      showLocalDraftMessage("Helyi vázlat mentve.", "success");
+      showLocalDraftMessage("Munkamenet mentve.", "success");
     } catch {
       showLocalDraftMessage("A helyi vázlat mentése nem sikerült ebben a böngészőben.", "error");
     }
@@ -2059,7 +2031,7 @@ function AssemblyWorkspace({
       setTipTapAssemblyDraft(parsedDraft.pleadingEditorText);
       setPleadingPreviewCopyState("idle");
       setLocalDraftInfo({ exists: true, savedAt: parsedDraft.savedAt });
-      showLocalDraftMessage("Helyi vázlat betöltve.", "success");
+      showLocalDraftMessage("Munkamenet betöltve.", "success");
     } catch {
       showLocalDraftMessage("A helyi mentés sérült vagy nem olvasható.", "error");
       setLocalDraftInfo({ exists: true });
@@ -2203,9 +2175,7 @@ function AssemblyWorkspace({
       `Munkaterület: ${localDraftWorkspaceLabel}`,
       "",
       "Figyelmeztetés",
-      "Ez nem végleges beadvány.",
-      "Nem Word-export, hanem helyi munkacsomag másoláshoz vagy letöltéshez.",
-      "Az adatbázisba mentés későbbi fejlesztés.",
+      "Ügyvédi ellenőrzés szükséges a véglegesítés előtt.",
       readySectionsWithOpenNextActions.length
         ? `Figyelem: ${readySectionsWithOpenNextActions.length} késznek jelölt szakasznál még nyitott teendő szerepel.`
         : "Nincs késznek jelölt szakasz nyitott teendővel.",
@@ -2517,10 +2487,7 @@ function AssemblyWorkspace({
           <div className="rounded-[8px] border border-[var(--adm-border)] bg-white p-3">
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Automatikus vázlat</p>
             <p className="mt-2 text-[12px] leading-5 text-[var(--adm-text)]">
-              A beadványszerkesztő a válaszblokkok címeiből és helyi sorrendjéből készít tiszta peres dokumentum-vázat. Hiányzó ügyadatnál kitöltendő jelölés marad.
-            </p>
-            <p className="mt-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">
-              A sorrend helyi vázlat, még nincs adatbázisba mentve. A válaszblokkok külön is beilleszthetők a helyi beadványvázlatba; ez szerkeszthető szöveget ad hozzá, nem végleges iratmentés.
+              A válaszblokkokból szerkeszthető beadványváz készíthető.
             </p>
             <AdminButton variant="gold" size="sm" onClick={onApplyGeneratedSkeleton} className="mt-3">
               Vázlat frissítése válaszblokkokból
@@ -2530,30 +2497,27 @@ function AssemblyWorkspace({
           <div className="rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Helyi munkamenet</p>
-                <h3 className="mt-1 font-serif text-[15px] font-medium text-[var(--adm-text)]">Helyi mentés</h3>
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Munkamenet</p>
+                <h3 className="mt-1 font-serif text-[15px] font-medium text-[var(--adm-text)]">Mentés ezen az eszközön</h3>
               </div>
               <AdminStatusPill tone={localDraftInfo.exists ? "gold" : "green"}>
-                {localDraftInfo.exists ? "Van helyi vázlat" : "Nincs helyi vázlat"}
+                {localDraftInfo.exists ? "Mentve" : "Nincs mentés"}
               </AdminStatusPill>
             </div>
-            <p className="mt-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">
-              Ez csak böngészőben tárolt helyi munkamenet. Nem adatbázisba mentés. Csak ezen az eszközön érhető el.
-            </p>
             {localDraftInfo.exists ? (
               <p className="mt-1 text-[11px] font-semibold text-[var(--adm-ochre-500)]">
-                Van korábbi helyi vázlat ehhez a munkaterülethez. Utolsó helyi mentés: {formatLocalDraftSavedAt(localDraftInfo.savedAt)}.
+                Utolsó mentés: {formatLocalDraftSavedAt(localDraftInfo.savedAt)}.
               </p>
             ) : null}
             <div className="mt-3 flex flex-wrap gap-2">
               <AdminButton variant="gold" size="sm" onClick={saveLocalDraft}>
-                Helyi vázlat mentése
+                Munkamenet mentése
               </AdminButton>
               <AdminButton variant="neutral" size="sm" onClick={loadLocalDraft} disabled={!localDraftInfo.exists}>
-                Helyi vázlat betöltése
+                Munkamenet betöltése
               </AdminButton>
               <AdminButton variant="neutral" size="sm" onClick={clearLocalDraft} disabled={!localDraftInfo.exists}>
-                Helyi mentés törlése
+                Mentés törlése
               </AdminButton>
             </div>
             {localDraftMessage ? (
@@ -2593,10 +2557,10 @@ function AssemblyWorkspace({
                 <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Beadvány munkacsomag</p>
                 <h3 className="mt-1 font-serif text-[16px] font-medium text-[var(--adm-text)]">Ügyvédi munkacsomag</h3>
               </div>
-              <AdminStatusPill tone="gold">Helyi munkacsomag</AdminStatusPill>
+              <AdminStatusPill tone="gold">Munkacsomag</AdminStatusPill>
             </div>
             <p className="mt-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">
-              Ez nem végleges Word-export, hanem helyi munkacsomag másoláshoz vagy letöltéshez. Az adatbázisba mentés későbbi fejlesztés.
+              Ügyvédi ellenőrzéshez másolható vagy letölthető munkacsomag.
             </p>
             <div className="mt-3 grid gap-2 rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[11px] text-[var(--adm-text)]">
               <p className="font-semibold">
@@ -2800,9 +2764,9 @@ function AssemblyWorkspace({
         textareaClassName="text-[16.5px]"
         minHeightClassName="min-h-[820px]"
         isDirty={editorWasTouched}
-        dirtyLabel="Nem mentett helyi beadványvázlat."
-        cleanLabel={pleadingEditorText.trim() ? "Helyi beadványvázlat előkészítve." : undefined}
-        status={<AdminStatusPill tone="gold">Helyi vázlat</AdminStatusPill>}
+        dirtyLabel="Nem mentett munkapéldány."
+        cleanLabel={pleadingEditorText.trim() ? "Munkapéldány előkészítve." : undefined}
+        status={<AdminStatusPill tone="gold">Munkapéldány</AdminStatusPill>}
         badges={
           <>
             <AdminBadge tone="neutral">{responseBlocks.length} saját válasz</AdminBadge>
@@ -2883,19 +2847,8 @@ function AssemblyWorkspace({
                 </span>
               </div>
             ) : null}
-            <div className={`grid gap-3 rounded-[10px] border border-[var(--adm-border)] bg-white text-[11px] text-[var(--adm-text)] md:grid-cols-3 ${isTipTapAssemblyPreviewEnabled ? "p-3" : "p-4"}`}>
-              <div>
-                <p className="font-semibold text-[var(--adm-text)]">Forráslogika</p>
-                <p className="mt-1">{responseBlocks.length} saját válasz alapján előkészítve</p>
-              </div>
-              <div>
-                <p className="font-semibold text-[var(--adm-text)]">Fejezetképzés</p>
-                <p className="mt-1">A válaszblokkok szerkesztett címe és helyi sorrendje szerint előkészítve</p>
-              </div>
-              <div>
-                <p className="font-semibold text-[var(--adm-text)]">Mentés/export</p>
-                <p className="mt-1">Helyi vázlat; végleges iratmentés nincs bekötve</p>
-              </div>
+            <div className={`rounded-[10px] border border-[var(--adm-border)] bg-white text-[11px] text-[var(--adm-text)] ${isTipTapAssemblyPreviewEnabled ? "p-3" : "p-4"}`}>
+              {responseBlocks.length} válaszblokk alapján előkészítve.
             </div>
             <div className={`rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] ${isTipTapAssemblyPreviewEnabled ? "p-3" : "p-4"}`}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2913,7 +2866,7 @@ function AssemblyWorkspace({
             </div>
           </div>
         }
-        helperText="Helyi vázlat · AI nélkül · nincs szerveroldali mentés."
+        helperText="A munkapéldány helyi szerkesztésű; a végleges dokumentumot exportálni kell."
         />
       </div>
     </section>

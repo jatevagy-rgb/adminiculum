@@ -46,15 +46,15 @@ function makeApiErrorMessage(error: unknown): string {
     if (error.status === 0) {
       return "A művelet nem érhető el. Ellenőrizd a kapcsolatot vagy próbáld újra.";
     }
-    return error.message;
+    return "A záradéktár jelenleg nem érhető el.";
   }
   if (error instanceof Error) {
     if (/networkerror|failed to fetch|load failed/i.test(error.message)) {
       return "A művelet nem érhető el. Ellenőrizd a kapcsolatot vagy próbáld újra.";
     }
-    return error.message;
+    return "A záradéktár jelenleg nem érhető el.";
   }
-  return "Ismeretlen hiba";
+  return "A záradéktár jelenleg nem érhető el.";
 }
 
 function previewText(clause: ClauseLibraryItem): string {
@@ -149,16 +149,13 @@ function ClauseLibraryPageContent() {
         {isLoading && clauses.length === 0 ? (
           <section className="adm-board-panel p-6 text-sm text-[#6D6A62]">Záradéktár betöltése…</section>
         ) : isFeatureDisabled ? (
-          <section className="adm-board-panel p-6">
+          <section className="adm-board-panel p-5">
             <div className="max-w-2xl">
-              <p className="text-base font-semibold text-[#1F2821]">Ezen a környezeten a záradéktár még nem érhető el.</p>
+              <p className="text-base font-semibold text-[#1F2821]">A záradéktár jelenleg nem érhető el.</p>
               <p className="mt-2 text-sm leading-6 text-[#514D45]">
-                A funkció csak jóváhagyott záradékforrás és jogosultsági modell mellett kapcsolható be.
+                A dokumentumok és a meglévő munkapéldányok továbbra is megnyithatók.
               </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <AdminButton size="sm" variant="primary" onClick={() => { window.location.href = "/documents/new/edit"; }}>
-                  Szerződésszerkesztő megnyitása
-                </AdminButton>
+              <div className="mt-4">
                 <AdminButton size="sm" variant="neutral" onClick={() => { window.location.href = "/documents/compare"; }}>
                   Vissza a dokumentumokhoz
                 </AdminButton>

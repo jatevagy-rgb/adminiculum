@@ -281,13 +281,12 @@ export function HandoffPackagePanel({
           {activePackages.length} aktív
         </span>
       </div>
-      <p className="mb-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">Ügyvédi review-ra előkészített belső munkacsomag.</p>
       {contextLabel ? (
         <p className="mb-2 rounded border border-[var(--adm-border)] bg-white px-2 py-1 text-[9px] text-[var(--adm-text-muted)]">
           Kapcsolt munkadokumentum: <span className="font-semibold">{contextLabel}</span>
         </p>
       ) : null}
-      <p className="mb-3 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-ivory-100)] px-3 py-2 text-[10px] leading-4 text-[var(--adm-text-muted)]">
+      <p className="mb-3 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-ivory-100)] px-3 py-2 text-[11px] leading-4 text-[var(--adm-text-muted)]">
         Ez a csomag előkészítő munkairat. Ügyvédi jóváhagyás nélkül nem minősül végleges jogi állásfoglalásnak.
       </p>
 
@@ -297,8 +296,8 @@ export function HandoffPackagePanel({
             <p className="text-[11px] font-bold text-[var(--adm-text)]">Új átadási csomag</p>
             <p className="mt-1 text-[10px] leading-4 text-[var(--adm-text-muted)]">
               {hasDocumentContext
-                ? "A kiválasztott ügy- és dokumentumkörnyezetből piszkozat készíthető."
-                : "Válassz munkadokumentumot a dokumentumtárban vagy a szerződés-workspace-ben a létrehozáshoz."}
+                ? "A kiválasztott dokumentumból piszkozat készíthető."
+                : "Válassz munkadokumentumot a dokumentumtárban a létrehozáshoz."}
             </p>
           </div>
           <button
@@ -323,13 +322,12 @@ export function HandoffPackagePanel({
       )}
 
       {!isLoading && !error && activePackages.length === 0 && (
-        <div className="adm-board-empty min-h-[150px] px-4 py-5 text-center">
-          <span className="material-symbols-outlined text-2xl text-[#c3c8c1]">inbox</span>
-          <p className="text-[11px] text-[var(--adm-text-muted)] mt-2">
+        <div className="adm-board-empty px-4 py-4 text-center">
+          <p className="text-[12px] font-semibold text-[var(--adm-text)]">
             Nincs aktív átadási csomag ehhez az ügyhöz.
           </p>
-          <p className="mt-1 text-[9px] text-[var(--adm-text-muted)]">
-            Az archivált csomagok az audit miatt megmaradnak, de az aktív listában nem jelennek meg.
+          <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">
+            {hasDocumentContext ? "Készíts piszkozatot a kiválasztott dokumentumból." : "Előbb válassz dokumentumot a Dokumentumtárban."}
           </p>
         </div>
       )}
@@ -410,10 +408,6 @@ export function HandoffPackagePanel({
                       )}
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[9px] text-[var(--adm-text-muted)]">Kommunikációs összefoglaló</span>
-                      <span className="text-[9px] text-[var(--adm-text-muted)]">Későbbi patchben</span>
-                    </div>
-                    <div className="flex items-center justify-between">
                       <span className="text-[9px] text-[var(--adm-text-muted)]">Előkészítő összefoglaló</span>
                       {pkg.preparerSummary?.trim() ? (
                         <span className="text-[9px] text-[var(--adm-green-800)] font-bold">Megadva</span>
@@ -438,30 +432,6 @@ export function HandoffPackagePanel({
 
                 {/* Következő lépés */}
                 <p className="text-[9px] text-[var(--adm-text-muted)] italic mb-2">Következő lépés: {nextAction}</p>
-
-                {/* Timestamps */}
-                <div className="flex items-center gap-3 text-[9px] text-[var(--adm-text-muted)] mb-2 border-t border-[var(--adm-border)] pt-2">
-                  <span>
-                    Létrehozva:{" "}
-                    {pkg.createdAt
-                      ? new Date(pkg.createdAt).toLocaleDateString("hu-HU", {
-                          day: "2-digit",
-                          month: "2-digit",
-                          year: "numeric",
-                        })
-                      : "—"}
-                  </span>
-                  <span>
-                    Frissítve:{" "}
-                    {pkg.updatedAt
-                      ? new Date(pkg.updatedAt).toLocaleDateString("hu-HU", {
-                          day: "2-digit",
-                          month: "2-digit",
-                          year: "numeric",
-                        })
-                      : "—"}
-                  </span>
-                </div>
 
                 {editingPackageId === pkg.id ? (
                   <div className="border-t border-[var(--adm-border)] pt-2">
@@ -538,8 +508,8 @@ export function HandoffPackagePanel({
                     <details className="mt-1">
                       <summary className="text-[9px] text-[var(--adm-text-muted)] cursor-pointer">További műveletek</summary>
                       <div className="mt-1 space-y-1">
-                        <p className="text-[9px] text-[var(--adm-text-muted)]">Export későbbi patchben.</p>
-                        <p className="text-[9px] text-[var(--adm-text-muted)]">Jóváhagyási workflow későbbi patchben.</p>
+                        <p className="text-[9px] text-[var(--adm-text-muted)]">Az export nem érhető el.</p>
+                        <p className="text-[9px] text-[var(--adm-text-muted)]">A jóváhagyás a Review sorban követhető.</p>
                       </div>
                     </details>
                     <details className="mt-1">

@@ -47,7 +47,7 @@ describe('document comments static safety', () => {
   it('renders comments as React text and labels them as document-level only', () => {
     const sidePanel = read(sidePanelPath);
     expect(sidePanel).toContain('Dokumentumszintű megjegyzések');
-    expect(sidePanel.toLowerCase()).toContain('nem szöveghez rögzített kommentek');
+    expect(sidePanel).toContain('A dokumentumhoz kapcsolt általános megjegyzések.');
     expect(sidePanel).not.toContain('dangerouslySetInnerHTML');
     expect(sidePanel).not.toContain('selectedText');
     expect(sidePanel).not.toContain('localStorage');
