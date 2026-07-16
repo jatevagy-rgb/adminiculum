@@ -1,8 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { AdminStatusPill } from "@/components/adminiculum/ui";
 
-export type CaseWorkspaceNavTab = "overview" | "documents" | "workspace" | "communications" | "versions" | "time";
+export type CaseWorkspaceNavTab = "overview" | "documents" | "tasks" | "communications" | "deadlines" | "time";
 
 type CaseWorkspaceNavProps = {
   caseId: string;
@@ -10,46 +11,86 @@ type CaseWorkspaceNavProps = {
   title?: string | null;
   clientName?: string | null;
   activeTab: CaseWorkspaceNavTab;
-  activeDocumentId?: string | null;
-  helperText?: string;
+  status?: string | null;
+  responsibleName?: string | null;
+  deadline?: string | null;
 };
 
 const itemClass = (active: boolean) =>
-  `rounded-[5px] border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+  `border-b-2 px-1 py-2 text-[11px] font-semibold transition-colors ${
     active
-      ? "border-[#B58A2A] bg-[#F7F0D9] text-[#1F4A33]"
-      : "border-[#D7CCB0] bg-white text-[#1F2821] hover:bg-[#F7F0D9]"
+      ? "border-[var(--adm-ochre-500)] text-[var(--adm-green-800)]"
+      : "border-transparent text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]"
   }`;
 
-export function CaseWorkspaceNav({ caseId, caseNumber, title, clientName, activeTab, activeDocumentId, helperText }: CaseWorkspaceNavProps) {
-  const router = useRouter();
-  const workspaceHref = activeDocumentId
-    ? `/documents/compare?caseId=${encodeURIComponent(caseId)}&documentId=${encodeURIComponent(activeDocumentId)}`
-    : `/documents/compare?caseId=${encodeURIComponent(caseId)}`;
+const statusLabel = (status?: string | null) => {
+  switch (String(status || "").toUpperCase()) {
+    case "OPEN":
+      return "Nyitott";
+    case "ON_HOLD":
+      return "Függőben";
+    case "CLOSED":
+      return "Lezárt";
+    case "ARCHIVED":
+      return "Archivált";
+    case "DRAFT":
+      return "Piszkozat";
+    default:
+      return status || "Nincs állapotadat";
+  }
+};
+
+const formatDeadline = (deadline?: string | null) => {
+  if (!deadline) return null;
+  const parsed = new Date(deadline);
+  return Number.isNaN(parsed.getTime()) ? deadline : parsed.toLocaleDateString("hu-HU");
+};
+
+export function CaseWorkspaceNav({
+  caseId,
+  caseNumber,
+  title,
+  clientName,
+  activeTab,
+  status,
+  responsibleName,
+  deadline,
+}: CaseWorkspaceNavProps) {
+  const tabs = [
+    { id: "overview" as const, label: "Áttekintés", href: `/cases/${caseId}` },
+    { id: "documents" as const, label: "Dokumentumok", href: `/cases/${caseId}/documents` },
+    { id: "tasks" as const, label: "Feladatok", href: `/tasks?caseId=${encodeURIComponent(caseId)}` },
+    { id: "communications" as const, label: "Kommunikáció", href: `/cases/${caseId}/communications` },
+    { id: "deadlines" as const, label: "Határidők", href: `/deadlines?scope=CASE&caseId=${encodeURIComponent(caseId)}` },
+    { id: "time" as const, label: "Munkaórák", href: `/time-entries?caseId=${encodeURIComponent(caseId)}` },
+  ];
+  const visibleDeadline = formatDeadline(deadline);
 
   return (
-    <section className="rounded-[10px] border border-[#D8CFB6] bg-[#FBF6E7] p-3">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#1F4A33]">Ügy munkaterület</p>
-          <p className="text-[13px] font-semibold leading-tight text-[#1F2821]">{title || "Ügy megnevezése nem elérhető"}</p>
-          <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-[#6D6A62]">
-            {caseNumber ? <span>{caseNumber}</span> : null}
-            {clientName ? <span>{clientName}</span> : null}
+    <section className="border-b border-[var(--adm-border)] bg-[rgba(251,249,244,0.96)] px-4 pt-3 lg:px-5">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="truncate font-serif text-[24px] font-medium leading-tight text-[var(--adm-text)]">
+              {title || "Ügy megnevezése nem elérhető"}
+            </h1>
+            {status ? <AdminStatusPill tone={String(status).toUpperCase() === "OPEN" ? "green" : "neutral"}>{statusLabel(status)}</AdminStatusPill> : null}
           </div>
-        </div>
-        <div className="rounded-[6px] border border-[#D8CFB6] bg-white px-3 py-2 text-[11px] text-[#514D45]">
-          {helperText || "Ügyközpontú munkafelület, egységes navigációval."}
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--adm-text-muted)]">
+            {caseNumber ? <span className="font-semibold text-[var(--adm-text)]">{caseNumber}</span> : null}
+            {clientName ? <span>{clientName}</span> : null}
+            {responsibleName ? <span>Felelős: {responsibleName}</span> : null}
+            {visibleDeadline ? <span>Következő határidő: {visibleDeadline}</span> : null}
+          </div>
         </div>
       </div>
 
-      <nav className="mt-3 flex flex-wrap gap-2">
-        <button type="button" onClick={() => router.push(`/cases/${caseId}`)} className={itemClass(activeTab === "overview")}>Ügy áttekintése</button>
-        <button type="button" onClick={() => router.push(`/cases/${caseId}/documents`)} className={itemClass(activeTab === "documents")}>Dokumentumtár</button>
-        <button type="button" onClick={() => router.push(workspaceHref)} className={itemClass(activeTab === "workspace")}>Szerződés-workspace</button>
-        <button type="button" onClick={() => router.push(`/cases/${caseId}/communications`)} className={itemClass(activeTab === "communications")}>Kommunikáció</button>
-        <button type="button" onClick={() => router.push(`/documents/compare?caseId=${encodeURIComponent(caseId)}`)} className={itemClass(activeTab === "versions")}>Előzmények</button>
-        <button type="button" onClick={() => router.push(`/time-entries?caseId=${encodeURIComponent(caseId)}`)} className={itemClass(activeTab === "time")}>Munkaórák</button>
+      <nav className="mt-2 flex flex-wrap gap-x-5" aria-label="Ügy munkaterület">
+        {tabs.map((tab) => (
+          <Link key={tab.id} href={tab.href} className={itemClass(activeTab === tab.id)} aria-current={activeTab === tab.id ? "page" : undefined}>
+            {tab.label}
+          </Link>
+        ))}
       </nav>
     </section>
   );

@@ -6,6 +6,7 @@ import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, download
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
+import { CaseCenterOverview } from "@/components/cases/CaseCenterOverview";
 import { CaseMatterDossierPanel } from "@/components/litigation/CaseMatterDossierPanel";
 import { CaseIntakeReadinessPanel } from "@/components/intake/CaseIntakeReadinessPanel";
 
@@ -41,10 +42,18 @@ type CaseDetailProps = {
   params: Promise<{ caseId: string }>;
 };
 
+const documentTypeLabel: Record<string, string> = {
+  CLIENT_INPUT: "Ügyféltől érkezett",
+  DRAFT: "Munkapéldány",
+  MODIFIED_WORKING_COPY: "Módosított munkapéldány",
+  FINAL: "Végleges irat",
+  EVIDENCE: "Bizonyíték",
+};
+
 const mapDocumentItemToCaseDocument = (doc: DocumentItem): CaseDocument => ({
   id: doc.id,
   name: doc.fileName,
-  type: doc.documentType,
+  type: documentTypeLabel[String(doc.documentType || "").toUpperCase()] || doc.documentType,
   date: new Date(doc.createdAt).toLocaleDateString('hu-HU'),
   createdAt: doc.createdAt,
   updatedAt: doc.updatedAt,
@@ -889,13 +898,11 @@ export function CaseDetail({ params }: CaseDetailProps) {
     } catch (err) {
       console.error('Document delete failed:', err);
       if (err instanceof ApiError && err.status === 409) {
-        setDeleteDocumentError(err.message || 'A dokumentum kapcsolódó munkafolyamat miatt nem törölhető.');
+        setDeleteDocumentError('A dokumentum kapcsolódó munkafolyamat miatt nem törölhető.');
       } else if (err instanceof ApiError && err.status === 403) {
         setDeleteDocumentError('Nincs jogosultságod a dokumentum törléséhez.');
       } else if (err instanceof ApiError && err.status === 502) {
         setDeleteDocumentError('A SharePoint-törlés nem sikerült, ezért az adatbázis nem módosult.');
-      } else if (err instanceof Error) {
-        setDeleteDocumentError(err.message);
       } else {
         setDeleteDocumentError('A dokumentum törlése nem sikerült.');
       }
@@ -950,7 +957,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
       }
     } catch (err) {
       console.error('Upload failed:', err);
-      setUploadError(err instanceof Error ? err.message : 'Upload failed');
+      setUploadError('A dokumentum feltöltése sikertelen.');
     } finally {
       setIsUploading(false);
     }
@@ -1384,8 +1391,11 @@ export function CaseDetail({ params }: CaseDetailProps) {
     );
   }
 
+  const renderLegacyWorkspace = false;
+
   return (
-    <div className="flex-1 min-h-0 overflow-hidden bg-[var(--adm-border)]">
+    <div className="flex-1 min-h-0 bg-[var(--adm-ivory-50)]">
+      {renderLegacyWorkspace && caseRecord ? (
       <div className="mx-auto flex h-full max-w-[1480px] flex-col overflow-hidden border-x border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] shadow-[0_24px_60px_rgba(22,32,26,0.16)]">
         <CaseWorkspaceNav
           caseId={canonicalCaseId}
@@ -1393,8 +1403,9 @@ export function CaseDetail({ params }: CaseDetailProps) {
           title={displayTitle}
           clientName={displayClient}
           activeTab="overview"
-          activeDocumentId={activeDocument?.id}
-          helperText="Ügyáttekintés, dokumentumok és munkafolyamatok egy helyen."
+          status={caseRecord?.status}
+          responsibleName={assignedLawyer?.name}
+          deadline={caseRecord?.deadline}
         />
         <div className="min-h-0 flex flex-1 overflow-hidden">
         <main className="min-w-0 flex-1 overflow-y-auto">
@@ -1659,7 +1670,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                   {workflowSummary?.handoff ? (
                     <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Átadás: {workflowSummary.handoff.status}</p>
                   ) : (
-                    <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Átadás: nincs aktív, production-kompatibilis összefoglaló forrás.</p>
+                    <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Nincs aktív leadási csomag.</p>
                   )}
                 </div>
               </div>
@@ -1763,7 +1774,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                   <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Case Workbench</p>
                   <h2 id="case-workbench-heading" className="mt-1 font-serif text-[22px] text-[var(--adm-text)]">Ügyhöz tartozó munkasor</h2>
                   <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-[var(--adm-text-muted)]">
-                    Backendből normalizált feladat- és leadási lista. A műveletgombok csak akkor jelennek meg, ha a szerver szerint az adott lépés engedélyezett.
+                    Aktív feladatok és leadási tételek.
                   </p>
                 </div>
                 <button
@@ -2227,6 +2238,195 @@ export function CaseDetail({ params }: CaseDetailProps) {
         </aside>
         </div>
       </div>
+      ) : (
+        <CaseCenterOverview
+          caseId={canonicalCaseId}
+          caseNumber={displayCaseNumber}
+          title={displayTitle}
+          clientName={displayClient}
+          matterType={displayMatterType}
+          status={caseRecord?.status}
+          responsibleName={assignedLawyer?.name}
+          deadline={caseRecord?.deadline}
+          nextStep={{
+            title: nextStep.title,
+            detail: nextStep.helper,
+            actionLabel: nextStep.label,
+            onAction: nextStep.action,
+          }}
+          activeWork={(filteredWorkbenchItems.length > 0
+            ? filteredWorkbenchItems.map((item) => ({
+                id: item.id,
+                title: item.title,
+                meta: `${item.assignee?.displayName || "Nincs kijelölt felelős"} · ${item.dueAt ? new Date(item.dueAt).toLocaleDateString("hu-HU") : "Nincs határidő"}`,
+                href: item.href || `/tasks?taskId=${encodeURIComponent(item.id)}`,
+                status: item.status,
+              }))
+            : openTasks.map((task) => ({
+                id: task.id,
+                title: task.title,
+                meta: `${task.assignedTo?.name || "Nincs kijelölt felelős"} · ${task.dueDate ? new Date(task.dueDate).toLocaleDateString("hu-HU") : "Nincs határidő"}`,
+                href: `/tasks?taskId=${encodeURIComponent(task.id)}`,
+                status: task.status,
+              }))).slice(0, 5)}
+          activeWorkError={Boolean(workItemsError)}
+          onReloadActiveWork={() => void loadBackendData()}
+          documents={documents.slice(0, 5).map((document) => ({
+            id: document.id,
+            title: document.name,
+            meta: `${document.type}${document.version ? ` · ${document.version}` : ""} · ${document.date}`,
+            onOpen: () => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/documents?documentId=${encodeURIComponent(document.id)}`),
+            onDownload: () => void handleDocumentClick(document),
+            onDelete: canRequestDocumentDelete ? () => openDeleteDocumentDialog(document) : undefined,
+          }))}
+          onOpenDocuments={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/documents`)}
+          onUploadDocument={!isArchived ? () => fileInputRef.current?.click() : undefined}
+          deadlineSummary={nextCaseAgendaItem ? {
+            title: nextCaseAgendaItem.title,
+            meta: `${new Date(nextCaseAgendaItem.dueAt).toLocaleString("hu-HU")} · ${nextCaseAgendaItem.source.displayName || nextCaseAgendaItem.sourceType}`,
+            href: nextCaseAgendaItem.href || nextCaseAgendaItem.source.href || `/deadlines?scope=CASE&caseId=${encodeURIComponent(canonicalCaseId)}`,
+          } : caseRecord?.deadline ? {
+            title: "Ügyhatáridő",
+            meta: new Date(caseRecord.deadline).toLocaleDateString("hu-HU"),
+            href: `/deadlines?scope=CASE&caseId=${encodeURIComponent(canonicalCaseId)}`,
+          } : null}
+          communicationSummary={latestCommunication ? {
+            title: latestCommunication.subject || "Nincs tárgy",
+            meta: `${latestCommunication.senderName || latestCommunication.senderEmail || "Kommunikáció"}${latestCommunication.createdAt ? ` · ${new Date(latestCommunication.createdAt).toLocaleDateString("hu-HU")}` : ""}`,
+            href: `/cases/${encodeURIComponent(canonicalCaseId)}/communications`,
+          } : null}
+          events={latestStoryEvents.slice(0, 5).map((event) => ({
+            id: event.id,
+            title: event.title,
+            meta: `${event.sourceLabel} · ${new Date(event.timestamp).toLocaleString("hu-HU", { dateStyle: "short", timeStyle: "short" })}`,
+            href: event.link || null,
+          }))}
+          hiddenInputs={
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.txt"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+          }
+          managementSlot={
+            <div className="grid gap-4 lg:grid-cols-2">
+              <section className="space-y-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Felelős ügyvéd</p>
+                  <p className="mt-1 text-[13px] font-semibold text-[var(--adm-text)]">{assignedLawyer?.name || "Nincs kijelölve"}</p>
+                  {!isArchived && caseResponsibility?.capabilities.canChangeResponsibleLawyer ? (
+                    <button type="button" onClick={() => { setShowAssignDropdown(!showAssignDropdown); void loadAvailableUsers(); }} className="mt-1 text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">
+                      Felelős módosítása
+                    </button>
+                  ) : null}
+                  {showAssignDropdown ? (
+                    <div className="mt-2 max-h-44 overflow-y-auto border border-[var(--adm-border)] bg-white">
+                      {isLoadingUsers ? <p className="p-2 text-[11px] text-[var(--adm-text-muted)]">Felhasználók betöltése…</p> : availableUsers.map((user) => (
+                        <button key={user.id} type="button" onClick={() => void handleAssignLawyer(user.id)} disabled={isAssigning} className="block w-full border-b border-[var(--adm-border)] px-3 py-2 text-left text-[11px] hover:bg-[var(--adm-surface)]">
+                          <span className="font-semibold text-[var(--adm-text)]">{user.name}</span>
+                          <span className="ml-2 text-[var(--adm-text-muted)]">{user.email}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Határidő</p>
+                  {isEditingDeadline ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <input type="date" value={deadlineInput} onChange={(event) => setDeadlineInput(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]" />
+                      <button type="button" onClick={() => void handleSaveDeadline()} disabled={isSavingDeadline} className="bg-[var(--adm-green-800)] px-3 py-2 text-[11px] font-semibold text-white">Mentés</button>
+                      <button type="button" onClick={handleCancelDeadline} className="border border-[var(--adm-border)] px-3 py-2 text-[11px]">Mégse</button>
+                    </div>
+                  ) : (
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="text-[13px] font-semibold text-[var(--adm-text)]">{caseRecord?.deadline ? new Date(caseRecord.deadline).toLocaleDateString("hu-HU") : "Nincs megadva"}</span>
+                      {!isArchived ? <button type="button" onClick={startEditingDeadline} className="text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">Módosítás</button> : null}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Ügyfél szerepe</p>
+                  {isEditingClientRole ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <select value={clientRoleInput} onChange={(event) => setClientRoleInput(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]">
+                        <option value="">Nincs megadva</option>
+                        <option value="MEGBIZÓ">Megbízó</option>
+                        <option value="ELLENÉRTDEKŰ FÉL">Ellenérdekű fél</option>
+                        <option value="PARTNER">Partner</option>
+                        <option value="EGYÉB">Egyéb</option>
+                      </select>
+                      <button type="button" onClick={() => void handleSaveClientRole()} className="bg-[var(--adm-green-800)] px-3 py-2 text-[11px] font-semibold text-white">Mentés</button>
+                      <button type="button" onClick={handleCancelClientRole} className="border border-[var(--adm-border)] px-3 py-2 text-[11px]">Mégse</button>
+                    </div>
+                  ) : (
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="text-[13px] font-semibold text-[var(--adm-text)]">{caseRecord?.clientRole || "Nincs megadva"}</span>
+                      {!isArchived ? <button type="button" onClick={handleEditClientRole} className="text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">Módosítás</button> : null}
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Résztvevők</p>
+                    {!isArchived && caseResponsibility?.capabilities.canAddCollaborator ? (
+                      <button type="button" onClick={() => { setShowCollaboratorDropdown(!showCollaboratorDropdown); void loadAvailableUsers(); }} className="text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">Hozzáadás</button>
+                    ) : null}
+                  </div>
+                  {collaborators.length > 0 ? (
+                    <div className="mt-2 space-y-1">
+                      {collaborators.slice(0, 6).map((collaborator) => (
+                        <div key={collaborator.id} className="flex items-center justify-between gap-2 border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[11px]">
+                          <span className="font-semibold text-[var(--adm-text)]">{collaborator.user.name}</span>
+                          {caseResponsibility?.capabilities.canRemoveCollaborator ? <button type="button" onClick={() => void handleRemoveCollaborator(collaborator.id)} className="text-[10px] text-[var(--adm-terracotta-700)] hover:underline">Eltávolítás</button> : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="mt-2 text-[11px] text-[var(--adm-text-muted)]">Nincs további résztvevő.</p>}
+                  {showCollaboratorDropdown ? (
+                    <div className="mt-2 border border-[var(--adm-border)] bg-white p-2">
+                      <select value={collaboratorRole} onChange={(event) => setCollaboratorRole(event.target.value)} className="adm-board-field mb-2 w-full px-3 py-2 text-[11px]">
+                        <option value="COLLABORATOR">Résztvevő</option>
+                        <option value="REVIEWER">Ellenőrző</option>
+                        <option value="ASSISTANT">Asszisztens</option>
+                      </select>
+                      <div className="max-h-40 overflow-y-auto">
+                        {availableUsers.filter((user) => user.id !== assignedLawyer?.id && !collaborators.some((collaborator) => collaborator.userId === user.id)).map((user) => (
+                          <button key={user.id} type="button" onClick={() => void handleAddCollaborator(user.id)} className="block w-full border-b border-[var(--adm-border)] px-3 py-2 text-left text-[11px] hover:bg-[var(--adm-surface)]">{user.name}</button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                {workflowGraph?.possibleTransitions?.length ? (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Ügyállapot</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {workflowGraph.possibleTransitions.map((status) => (
+                        <button key={status} type="button" onClick={() => void handleWorkflowTransition(status)} disabled={isTransitioning || isArchived} className="border border-[var(--adm-border)] bg-white px-3 py-2 text-[10px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">
+                          {getWorkflowStatusLabel(status)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {!isArchived && assignedLawyer ? (
+                  <button type="button" onClick={() => setShowCompleteConfirm(true)} className="text-[11px] font-semibold text-[var(--adm-terracotta-700)] hover:underline">Ügy lezárása és archiválása</button>
+                ) : null}
+              </section>
+            </div>
+          }
+        />
+      )}
 
       {/* Anonymize Modal for Client Documents */}
       {anonymizeDoc && (

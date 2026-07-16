@@ -3,20 +3,24 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  ApiError,
   addCaseCollaborator,
   createCase,
   createClient,
   createTask,
   getCases,
   getClients,
+  getCurrentUser,
   getUsers,
   type CaseListItem,
   type Client,
   type CreateCaseData,
   type CreateClientData,
+  type CurrentUser,
   type User,
 } from "@/lib/api";
 import { AdminBadge, AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
+import { CompactState, OperationalPageHeader, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 
 const CLIENT_COLOR_PALETTE = [
   { bg: "#1F4A33", border: "#173824", label: "legal-green" },
@@ -42,6 +46,7 @@ const statusLabel: Record<string, string> = {
   CLOSED: "Lezárt",
   DRAFT: "Piszkozat",
   ARCHIVED: "Archivált",
+  CLIENT_INPUT: "Ügyféltől érkezett",
 };
 
 const matterTypes = [
@@ -205,6 +210,7 @@ function formatDeadlinePreview(value?: string) {
 export function CasesList() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [scopeFilter, setScopeFilter] = useState<"ACTIVE" | "MINE" | "CLOSED">("ACTIVE");
   const [practiceArea, setPracticeArea] = useState("all");
   const [clientName, setClientName] = useState("");
   const [workPriorityFilter, setWorkPriorityFilter] = useState("all");
@@ -229,6 +235,7 @@ export function CasesList() {
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [backendCases, setBackendCases] = useState<CaseListItem[]>([]);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [isLoadingCases, setIsLoadingCases] = useState(true);
   const [caseLoadError, setCaseLoadError] = useState<string | null>(null);
   const requestedNewCase = searchParams?.get("newCase") === "1";
@@ -511,15 +518,12 @@ export function CasesList() {
       }
     } catch (err) {
       console.error("Failed to create case:", err);
-      let displayMessage = "Az ügy létrehozása sikertelen.";
-      if (err instanceof Error && err.name === "ApiError") {
-        const apiErr = err as any;
-        displayMessage = (apiErr as any).status === 0
-          ? "A szerver nem érhető el. Kérjük, próbáld később."
-          : (apiErr as any).message || displayMessage;
-      } else if (err instanceof Error) {
-        displayMessage = err.message || displayMessage;
-      }
+      const displayMessage =
+        err instanceof ApiError && err.status === 0
+          ? "A szolgáltatás nem érhető el. Próbáld újra később."
+          : err instanceof ApiError && err.status === 409
+            ? "Az ügy nem hozható létre a megadott adatokkal."
+            : "Az ügy létrehozása sikertelen.";
       setCreateError(displayMessage);
     } finally {
       setIsCreating(false);
@@ -540,7 +544,8 @@ export function CasesList() {
       setClientMode("existing");
       setClientMessage("Az új ügyfél mentve és kiválasztva.");
     } catch (err) {
-      setClientMessage(err instanceof Error ? err.message : "Az ügyfél mentése sikertelen.");
+      console.error("Failed to create client:", err);
+      setClientMessage("Az ügyfél mentése sikertelen.");
     } finally {
       setIsSavingClient(false);
     }
@@ -574,11 +579,12 @@ export function CasesList() {
     setIsLoadingCases(true);
     setCaseLoadError(null);
     try {
-      const response = await getCases(1, 200);
+      const [response, me] = await Promise.all([getCases(1, 200), getCurrentUser()]);
       setBackendCases(response.data);
+      setCurrentUser(me);
     } catch (err) {
       console.error("Failed to load cases:", err);
-      setCaseLoadError(err instanceof Error ? err.message : "Az ügylista betöltése sikertelen.");
+      setCaseLoadError("Az ügylista betöltése sikertelen.");
     } finally {
       setIsLoadingCases(false);
     }
@@ -620,54 +626,58 @@ export function CasesList() {
   const filteredCases = useMemo(() => {
     const normalizedQuery = clientName.trim().toLowerCase();
     return backendCases.filter((item) => {
+      const status = String(item.status || "").toUpperCase();
+      const scopeMatch =
+        scopeFilter === "ACTIVE"
+          ? !["CLOSED", "ARCHIVED"].includes(status)
+          : scopeFilter === "CLOSED"
+            ? ["CLOSED", "ARCHIVED"].includes(status)
+            : item.assignedLawyer?.id === currentUser?.id && !["CLOSED", "ARCHIVED"].includes(status);
       const practiceMatch = practiceArea === "all" || item.matterType === practiceArea;
       const clientMatch = !normalizedQuery || (item.clientName ?? "").toLowerCase().includes(normalizedQuery);
       const workPriorityMatch = workPriorityFilter === "all" || deriveWorkPriorityLabel(item.priority) === workPriorityFilter;
-      return practiceMatch && clientMatch && workPriorityMatch;
+      return scopeMatch && practiceMatch && clientMatch && workPriorityMatch;
     });
-  }, [backendCases, practiceArea, clientName, workPriorityFilter, deriveWorkPriorityLabel]);
+  }, [backendCases, clientName, currentUser?.id, deriveWorkPriorityLabel, practiceArea, scopeFilter, workPriorityFilter]);
 
   const caseEntrypointStats = useMemo(() => {
-    const openCases = backendCases.filter((item) => String(item.status || "").toUpperCase() === "OPEN").length;
+    const activeCases = backendCases.filter(
+      (item) => !["CLOSED", "ARCHIVED"].includes(String(item.status || "").toUpperCase()),
+    ).length;
     const assignedCases = backendCases.filter((item) => Boolean(item.assignedLawyer?.name)).length;
     const highAttentionCases = backendCases.filter((item) => deriveWorkPriorityLabel(item.priority) === "Magas").length;
-    return { openCases, assignedCases, highAttentionCases };
+    return { activeCases, assignedCases, highAttentionCases };
   }, [backendCases, deriveWorkPriorityLabel]);
 
   return (
-    <section className="space-y-4">
-      <div className="adm-board-hero grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_300px] lg:p-5">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Home Office ügyindító</p>
-          <h1 className="mt-1 font-serif text-[31px] font-medium leading-tight text-[var(--adm-text)]">Ügyek — jogi műveleti lista</h1>
-          <p className="mt-1.5 max-w-3xl text-[13px] leading-5 text-[var(--adm-text-muted)]">
-            A dashboard gyorslinkje innen vezet tovább az ügy dokumentumtárába, feladataiba és review munkanézeteibe. A lista valós betöltött ügyadatokra épül; a pontos priorizálás későbbi backend-alapú fejlesztés.
-          </p>
-          <div className="mt-3 grid max-w-3xl gap-2 text-[11px] text-[var(--adm-text-muted)] sm:grid-cols-3">
-            <span className="adm-board-strip px-3 py-2"><b className="block font-serif text-xl text-[var(--adm-text)]">{caseEntrypointStats.openCases}</b>Nyitott ügy</span>
-            <span className="adm-board-strip px-3 py-2"><b className="block font-serif text-xl text-[var(--adm-text)]">{caseEntrypointStats.assignedCases}</b>Felelőssel</span>
-            <span className="adm-board-strip border-[#E6C987] bg-[var(--adm-sand-100)] px-3 py-2"><b className="block font-serif text-xl text-[#7A5311]">{caseEntrypointStats.highAttentionCases}</b>Magas prioritás</span>
-          </div>
-          <div className="adm-board-tabs mt-3">
-            <span className="adm-board-tab adm-board-tab-active">Aktív ügyek</span>
-            <span className="adm-board-tab">Rám vár</span>
-            <span className="adm-board-tab">Lezárt ügyek</span>
-          </div>
-        </div>
-        <div className="adm-board-rail flex flex-col justify-center gap-3 p-4">
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-sage-300)]">Munkasorrend</p>
-          <p className="text-[11px] leading-5 text-[var(--adm-ivory-100)]/75">Új ügyet a szűrősor elsődleges gombja indít. Ez a panel a folytatási irányokat tartja külön.</p>
-          <div className="grid gap-1.5 text-[11px]">
-            <button type="button" onClick={() => router.push("/tasks")} className="rounded-[var(--adm-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-left font-semibold text-[var(--adm-ivory-50)] hover:bg-white/10">Feladatokból folytatom</button>
-            <button type="button" onClick={() => router.push("/reviews")} className="rounded-[var(--adm-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-left font-semibold text-[var(--adm-ivory-50)] hover:bg-white/10">Review sorból indulok</button>
-          </div>
-        </div>
-      </div>
+    <section className="space-y-3">
+      <OperationalPageHeader
+        title="Ügyek"
+        count={`${filteredCases.length} ügy`}
+        subtitle="Válassz ügyet a következő feladat, dokumentum vagy határidő megnyitásához."
+        primaryAction={<AdminButton variant="primary" onClick={() => setShowNewCaseModal(true)}>Új ügy</AdminButton>}
+      />
 
-      <div className="adm-board-panel-tight flex flex-wrap items-end gap-3 p-3">
+      <div className="flex flex-col gap-3 border border-[var(--adm-border)] bg-white p-3 lg:flex-row lg:items-end">
+        <div className="flex flex-wrap gap-1">
+          {[
+            ["ACTIVE", "Aktív", caseEntrypointStats.activeCases],
+            ["MINE", "Rám vár", backendCases.filter((item) => item.assignedLawyer?.id === currentUser?.id && !["CLOSED", "ARCHIVED"].includes(String(item.status || "").toUpperCase())).length],
+            ["CLOSED", "Lezárt", backendCases.filter((item) => ["CLOSED", "ARCHIVED"].includes(String(item.status || "").toUpperCase())).length],
+          ].map(([value, label, count]) => (
+            <button
+              key={String(value)}
+              type="button"
+              onClick={() => setScopeFilter(value as "ACTIVE" | "MINE" | "CLOSED")}
+              className={`px-3 py-2 text-[11px] font-semibold ${scopeFilter === value ? "bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)]" : "bg-[var(--adm-surface)] text-[var(--adm-text)] hover:bg-[var(--adm-sand-100)]"}`}
+            >
+              {label} <span className="ml-1 opacity-70">{count}</span>
+            </button>
+          ))}
+        </div>
         <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
           Szakterület
-          <select value={practiceArea} onChange={(e) => setPracticeArea(e.target.value)} className="adm-board-field mt-2 block h-10 w-48 px-2 text-xs">
+          <select value={practiceArea} onChange={(e) => setPracticeArea(e.target.value)} className="adm-board-field mt-1 block h-9 w-44 px-2 text-xs">
             <option value="all">Mind</option>
             {matterTypes.filter((type) => type.value !== "CUSTOM").map((type) => (
               <option key={type.value} value={type.value}>{type.label}</option>
@@ -675,12 +685,12 @@ export function CasesList() {
           </select>
         </label>
         <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
-          Ügyfél neve
-          <input value={clientName} onChange={(e) => setClientName(e.target.value)} className="adm-board-field mt-2 block h-10 w-52 px-2 text-xs" placeholder="Ügyfél keresése" />
+          Ügyfél
+          <input value={clientName} onChange={(e) => setClientName(e.target.value)} className="adm-board-field mt-1 block h-9 w-48 px-2 text-xs" placeholder="Ügyfél keresése" />
         </label>
         <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
           Munkaprioritás
-          <select value={workPriorityFilter} onChange={(e) => setWorkPriorityFilter(e.target.value)} className="adm-board-field mt-2 block h-10 w-44 px-2 text-xs">
+          <select value={workPriorityFilter} onChange={(e) => setWorkPriorityFilter(e.target.value)} className="adm-board-field mt-1 block h-9 w-40 px-2 text-xs">
             <option value="all">Mind</option>
             <option value="Alacsony">Alacsony</option>
             <option value="Közepes">Közepes</option>
@@ -688,72 +698,59 @@ export function CasesList() {
           </select>
         </label>
         <div className="ml-auto flex flex-wrap gap-2">
-          <AdminButton variant="neutral" onClick={() => { setPracticeArea("all"); setClientName(""); setWorkPriorityFilter("all"); }}>Szűrők törlése</AdminButton>
-          <AdminButton variant="primary" onClick={() => setShowNewCaseModal(true)}>Új ügy létrehozása</AdminButton>
+          <AdminButton size="sm" variant="neutral" onClick={() => { setPracticeArea("all"); setClientName(""); setWorkPriorityFilter("all"); }}>Szűrők törlése</AdminButton>
         </div>
       </div>
 
-      <div className="adm-board-panel overflow-hidden p-3">
+      <div className="overflow-hidden border border-[var(--adm-border)] bg-white">
         {isLoadingCases ? (
-          <div className="py-12 text-center text-xs text-[var(--adm-text-muted)]">Ügyek betöltése...</div>
+          <div className="p-4"><CompactState title="Ügyek betöltése…" /></div>
         ) : caseLoadError ? (
-          <div className="border-b border-[rgba(22,32,26,0.10)] p-6 text-center text-xs text-[var(--adm-terracotta-700)]">
-            <p>{caseLoadError}</p>
-            <button onClick={loadCases} className="mt-3 text-[var(--adm-ochre-500)] underline">Újrapróbálkozás</button>
-          </div>
+          <div className="p-4"><SafePanelError onRetry={() => void loadCases()} /></div>
         ) : (
-          <table className="w-full border-separate border-spacing-y-2 text-left">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[1060px] text-left">
             <thead>
-              <tr className="text-[10px] uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
-                <th className="px-3 py-1.5">Ügyszám</th>
-                <th className="px-3 py-1.5">Ügyfél</th>
-                <th className="px-3 py-1.5">Ügy címe</th>
-                <th className="px-3 py-1.5">Szakterület</th>
-                <th className="px-3 py-1.5">Státusz</th>
-                <th className="px-3 py-1.5">Felelős</th>
-                <th className="px-3 py-1.5">Munkaprioritás</th>
-                <th className="px-3 py-1.5 text-right">Művelet</th>
+              <tr className="border-b border-[var(--adm-border)] bg-[var(--adm-surface)] text-[10px] uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">
+                <th className="px-3 py-2.5">Ügyszám</th>
+                <th className="px-3 py-2.5">Ügyfél</th>
+                <th className="px-3 py-2.5">Ügy</th>
+                <th className="px-3 py-2.5">Szakterület</th>
+                <th className="px-3 py-2.5">Státusz</th>
+                <th className="px-3 py-2.5">Felelős</th>
+                <th className="px-3 py-2.5">Prioritás</th>
+                <th className="px-3 py-2.5 text-right">Következő lépés</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-[var(--adm-border)]">
               {filteredCases.map((item) => (
-                <tr key={item.id} className="adm-board-list-row cursor-pointer" onClick={() => router.push(`/cases/${item.id}/documents`)}>
-                  <td className="px-3 py-3 text-xs font-semibold text-[var(--adm-text)]">{item.caseNumber}</td>
-                  <td className="px-3 py-3">
+                <tr key={item.id} className="cursor-pointer hover:bg-[var(--adm-surface)]" onClick={() => router.push(`/cases/${item.id}`)}>
+                  <td className="px-3 py-2.5 text-xs font-semibold text-[var(--adm-text)]">{item.caseNumber}</td>
+                  <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2">
                       <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: item.clientColor || getClientColor(item.clientName).bg }} />
                       <span className="text-sm text-[var(--adm-text)]">{item.clientName || "Nincs megadva"}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-3 text-sm text-[#3D4842]">{item.title}</td>
-                  <td className="px-3 py-3 text-sm text-[#3D4842]">{formatMatterType(item.matterType)}</td>
-                  <td className="px-3 py-3"><AdminStatusPill tone={item.status === "OPEN" ? "green" : "neutral"}>{statusLabel[item.status] || item.status}</AdminStatusPill></td>
-                  <td className="px-3 py-3 text-xs text-[#3D4842]">{item.assignedLawyer?.name || "Nincs hozzárendelve"}</td>
-                  <td className="px-3 py-3"><AdminBadge tone={deriveWorkPriorityLabel(item.priority) === "Magas" ? "amber" : "neutral"}>{deriveWorkPriorityLabel(item.priority)}</AdminBadge></td>
-                  <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex flex-wrap justify-end gap-1.5">
-                      <AdminButton className="min-w-[92px] justify-center" size="sm" variant="primary" onClick={() => router.push(`/cases/${item.id}`)}>Megnyitás</AdminButton>
-                      <AdminButton className="min-w-[112px] justify-center" size="sm" variant="neutral" onClick={() => router.push(`/cases/${item.id}/documents`)}>Dokumentumtár</AdminButton>
-                    </div>
+                  <td className="max-w-[280px] px-3 py-2.5 text-[13px] text-[#3D4842]"><span className="block truncate">{item.title}</span></td>
+                  <td className="px-3 py-2.5 text-[12px] text-[#3D4842]">{formatMatterType(item.matterType)}</td>
+                  <td className="px-3 py-2.5"><AdminStatusPill tone={item.status === "OPEN" ? "green" : "neutral"}>{statusLabel[item.status] || item.status}</AdminStatusPill></td>
+                  <td className="px-3 py-2.5 text-xs text-[#3D4842]">{item.assignedLawyer?.name || "Nincs felelős"}</td>
+                  <td className="px-3 py-2.5"><AdminBadge tone={deriveWorkPriorityLabel(item.priority) === "Magas" ? "amber" : "neutral"}>{deriveWorkPriorityLabel(item.priority)}</AdminBadge></td>
+                  <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                    <AdminButton size="sm" variant="primary" onClick={() => router.push(`/cases/${item.id}`)}>Ügy megnyitása</AdminButton>
                   </td>
                 </tr>
               ))}
               {filteredCases.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-xs text-[var(--adm-text-muted)]">
-                    <p>Nincs megjeleníthető ügy.</p>
-                    <p className="mt-1">Nincs találat a beállított szűrőkre; módosítsd a szűrést vagy hozz létre új ügyet.</p>
-                  </td>
+                  <td colSpan={8} className="p-4"><CompactState title="Nincs megjeleníthető ügy." detail="Módosítsd a szűrőket, vagy hozz létre új ügyet." /></td>
                 </tr>
               )}
             </tbody>
           </table>
+          </div>
         )}
-      </div>
-
-      <div className="adm-board-panel-tight flex flex-wrap items-center justify-between gap-3 p-4">
-        <p className="text-xs text-[var(--adm-text-muted)]">Megjelenítve: {filteredCases.length} / {backendCases.length} ügy</p>
-        <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Az új ügy létrehozása után a Dokumentumtár nyílik meg</span>
       </div>
 
       {showNewCaseModal && (

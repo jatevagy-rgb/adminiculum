@@ -1,17 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
+import { CompactState, OperationalPageHeader, QuietLink, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
+import { AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import {
-  completeTask,
   blockTask,
+  completeTask,
   createTask,
   getCaseCollaborators,
   getCaseSummary,
   getCaseWorkItems,
   getCases,
+  getCurrentUser,
   getUsers,
   reassignTask,
   startTask,
@@ -22,6 +25,7 @@ import {
   type CaseSummaryResponse,
   type CaseWorkItemCapabilities,
   type CreateTaskData,
+  type CurrentUser,
   type User,
 } from "@/lib/api";
 
@@ -32,11 +36,10 @@ type LedgerTask = {
   status: string;
   priority: string;
   dueDate?: string | null;
-  assignedTo?: { id: string; name: string; role?: string } | null;
+  assignedTo?: { id: string; name: string } | null;
   workflowCategory?: string;
   urgency?: string;
   capabilities?: CaseWorkItemCapabilities;
-  sourceHref?: string | null;
   case: {
     id: string;
     caseNumber: string;
@@ -46,6 +49,8 @@ type LedgerTask = {
   };
 };
 
+type QuickFilter = "open" | "mine" | "overdue" | "review";
+
 const TASK_TYPES = [
   { value: "CONTRACT_REVIEW", label: "Szerződés ellenőrzése" },
   { value: "CONTRACT_DRAFTING", label: "Szerződés szerkesztése" },
@@ -54,33 +59,6 @@ const TASK_TYPES = [
   { value: "CLIENT_COMMUNICATION", label: "Ügyfélkommunikáció" },
   { value: "ADMIN_SUPPORT", label: "Adminisztratív támogatás" },
 ];
-
-const priorityChip: Record<string, string> = {
-  URGENT: "bg-[var(--adm-terracotta-100)] text-[var(--adm-terracotta-700)] border-[#FCA5A5]",
-  HIGH: "bg-[#FEF3C7] text-[#92400E] border-[#FCD34D]",
-  MEDIUM: "bg-[#EDE9FE] text-[#5B21B6] border-[#C4B5FD]",
-  LOW: "bg-[var(--adm-sage-100)] text-[var(--adm-green-800)] border-[#BFD1C3]",
-};
-
-const statusChip: Record<string, string> = {
-  TODO: "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]",
-  ASSIGNED: "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]",
-  PENDING: "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]",
-  IN_PROGRESS: "bg-[#DBEAFE] text-[#1D4ED8] border-[#93C5FD]",
-  IN_REVIEW: "bg-[#FEF3C7] text-[#92400E] border-[#FCD34D]",
-  SUBMITTED: "bg-[#FEF3C7] text-[#92400E] border-[#FCD34D]",
-  REVIEW_NEEDED: "bg-[#FEF3C7] text-[#92400E] border-[#FCD34D]",
-  REVIEW_SUBMITTED: "bg-[#FEF3C7] text-[#92400E] border-[#FCD34D]",
-  DONE: "bg-[var(--adm-sage-100)] text-[var(--adm-green-800)] border-[#A6C0AF]",
-  COMPLETED: "bg-[var(--adm-sage-100)] text-[var(--adm-green-800)] border-[#A6C0AF]",
-  APPROVED: "bg-[var(--adm-sage-100)] text-[var(--adm-green-800)] border-[#A6C0AF]",
-  FINALIZED: "bg-[var(--adm-sage-100)] text-[var(--adm-green-800)] border-[#A6C0AF]",
-  REJECTED: "bg-[var(--adm-terracotta-100)] text-[#991B1B] border-[#FCA5A5]",
-  DECLINED: "bg-[var(--adm-terracotta-100)] text-[#991B1B] border-[#FCA5A5]",
-  BLOCKED: "bg-[var(--adm-terracotta-100)] text-[#991B1B] border-[#FCA5A5]",
-  CANCELLED: "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]",
-  ARCHIVED: "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]",
-};
 
 const statusLabel: Record<string, string> = {
   TODO: "Teendő",
@@ -109,6 +87,38 @@ const priorityLabel: Record<string, string> = {
   LOW: "Alacsony",
 };
 
+const closedStatuses = new Set(["DONE", "COMPLETED", "APPROVED", "FINALIZED", "CANCELLED", "ARCHIVED"]);
+
+function isOpen(status?: string | null) {
+  return !closedStatuses.has(String(status || "").toUpperCase());
+}
+
+function isOverdue(task: LedgerTask) {
+  if (!task.dueDate || !isOpen(task.status)) return false;
+  const due = new Date(task.dueDate);
+  return !Number.isNaN(due.getTime()) && due.getTime() < new Date().setHours(0, 0, 0, 0);
+}
+
+function isReview(task: LedgerTask) {
+  const status = String(task.status || "").toUpperCase();
+  return ["IN_REVIEW", "SUBMITTED", "REVIEW_NEEDED", "REVIEW_SUBMITTED"].includes(status) || task.workflowCategory === "REVIEW";
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("hu-HU");
+}
+
+function taskStatusTone(status?: string): "green" | "gold" | "amber" | "burgundy" | "neutral" | "blue" {
+  const value = String(status || "").toUpperCase();
+  if (["DONE", "COMPLETED", "APPROVED", "FINALIZED"].includes(value)) return "green";
+  if (["IN_REVIEW", "SUBMITTED", "REVIEW_NEEDED", "REVIEW_SUBMITTED"].includes(value)) return "gold";
+  if (value === "BLOCKED" || value === "REJECTED") return "burgundy";
+  if (value === "IN_PROGRESS") return "blue";
+  return "neutral";
+}
+
 export default function TasksPage() {
   return (
     <AuthenticatedApp section="tasks">
@@ -118,29 +128,28 @@ export default function TasksPage() {
 }
 
 function TasksPageContent() {
+  const searchParams = useSearchParams();
+  const deepLinkedTaskId = searchParams?.get("taskId") || null;
+  const deepLinkedCaseId = searchParams?.get("caseId") || null;
+
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [cases, setCases] = useState<CaseListItem[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [tasks, setTasks] = useState<LedgerTask[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const searchParams = useSearchParams();
-  const deepLinkedTaskId = searchParams ? searchParams.get("taskId") ?? null : null;
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(deepLinkedTaskId);
   const [selectedCaseSummary, setSelectedCaseSummary] = useState<CaseSummaryResponse | null>(null);
-  const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
   const [caseCollaborators, setCaseCollaborators] = useState<CaseCollaborator[]>([]);
-  const [collaboratorsLoading, setCollaboratorsLoading] = useState(false);
-
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("open");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("OPEN");
+  const [caseFilter, setCaseFilter] = useState(deepLinkedCaseId || "all");
   const [priorityFilter, setPriorityFilter] = useState("all");
-  const [assigneeFilter, setAssigneeFilter] = useState("all");
-  const [caseFilter, setCaseFilter] = useState("all");
-
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [createData, setCreateData] = useState<CreateTaskData>({
-    caseId: "",
+    caseId: deepLinkedCaseId || "",
     title: "",
     type: "CONTRACT_REVIEW",
     priority: "MEDIUM",
@@ -148,237 +157,151 @@ function TasksPageContent() {
     dueDate: "",
     assignedTo: "",
   });
+  const focusedRowRef = useRef<HTMLTableRowElement | null>(null);
 
-  const loadTasksWorkspace = useCallback(async () => {
+  const loadTasks = useCallback(async () => {
     setIsLoading(true);
-    setError(null);
+    setError(false);
     try {
-      const [casesResponse, usersResponse] = await Promise.all([getCases(1, 200), getUsers()]);
-      const caseList = casesResponse.data;
-      setCases(caseList);
-      setUsers(usersResponse);
-
+      const [caseResponse, userResponse, me] = await Promise.all([getCases(1, 200), getUsers(), getCurrentUser()]);
+      const caseList = caseResponse.data;
       const tasksByCase = await Promise.all(
         caseList.map(async (caseItem) => {
           const workItems = await getCaseWorkItems(caseItem.id).catch(() => null);
           return (workItems?.items || [])
             .filter((item) => item.type === "TASK")
             .map((task) => ({
-            id: task.id,
-            title: task.title,
-            description: task.safeDescription ?? null,
-            status: task.status,
-            priority: task.priority || "MEDIUM",
-            dueDate: task.dueAt ?? null,
-            workflowCategory: task.workflowCategory,
-            urgency: task.urgency,
-            capabilities: task.capabilities,
-            sourceHref: task.source?.href || null,
-            assignedTo: task.assignee
-              ? {
-                  id: task.assignee.id,
-                  name: task.assignee.displayName,
-                  role: undefined,
-                }
-              : null,
-            case: {
-              id: caseItem.id,
-              caseNumber: caseItem.caseNumber,
-              clientName: caseItem.clientName,
-              matterType: caseItem.matterType,
-              title: caseItem.title,
-            },
-          })) as LedgerTask[];
-        })
+              id: task.id,
+              title: task.title,
+              description: task.safeDescription ?? null,
+              status: task.status,
+              priority: task.priority || "MEDIUM",
+              dueDate: task.dueAt ?? null,
+              workflowCategory: task.workflowCategory,
+              urgency: task.urgency,
+              capabilities: task.capabilities,
+              assignedTo: task.assignee ? { id: task.assignee.id, name: task.assignee.displayName } : null,
+              case: {
+                id: caseItem.id,
+                caseNumber: caseItem.caseNumber,
+                clientName: caseItem.clientName,
+                matterType: caseItem.matterType,
+                title: caseItem.title,
+              },
+            })) as LedgerTask[];
+        }),
       );
-
-      const mergedById = new Map<string, LedgerTask>();
-      tasksByCase.flat().forEach((task) => {
-        if (!mergedById.has(task.id)) {
-          mergedById.set(task.id, task);
-        }
-      });
-
-      const flattened = Array.from(mergedById.values())
-        .sort((a, b) => {
-          const priorityOrder: Record<string, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
-          return (priorityOrder[a.priority] ?? 99) - (priorityOrder[b.priority] ?? 99);
-        });
-
-      setTasks(flattened);
-      if (deepLinkedTaskId && flattened.some((t) => t.id === deepLinkedTaskId)) {
-        setSelectedTaskId(deepLinkedTaskId);
-      } else if (flattened.length > 0 && !selectedTaskId) {
-        setSelectedTaskId(flattened[0].id);
-      }
-    } catch (err) {
-      console.error("Failed to load task workstation:", err);
-      setError("A feladatlista most nem érhető el.");
+      const merged = new Map<string, LedgerTask>();
+      tasksByCase.flat().forEach((task) => merged.set(task.id, task));
+      setCases(caseList);
+      setUsers(userResponse);
+      setCurrentUser(me);
+      setTasks(Array.from(merged.values()));
+      if (deepLinkedTaskId && merged.has(deepLinkedTaskId)) setSelectedTaskId(deepLinkedTaskId);
+    } catch (loadError) {
+      console.error("Failed to load tasks:", loadError);
+      setError(true);
     } finally {
       setIsLoading(false);
     }
-  }, [selectedTaskId, deepLinkedTaskId]);
+  }, [deepLinkedTaskId]);
 
   useEffect(() => {
-    loadTasksWorkspace();
-  }, [loadTasksWorkspace]);
+    void loadTasks();
+  }, [loadTasks]);
 
-  const selectedTask = useMemo(
-    () => tasks.find((task) => task.id === selectedTaskId) ?? null,
-    [tasks, selectedTaskId]
-  );
-
-  // Deep-link focus: which task was opened via /tasks?taskId=..., and whether it loaded.
-  const deepLinkedTask = useMemo(
-    () => (deepLinkedTaskId ? tasks.find((task) => task.id === deepLinkedTaskId) ?? null : null),
-    [tasks, deepLinkedTaskId],
-  );
-  const deepLinkMissing = Boolean(deepLinkedTaskId) && !isLoading && !deepLinkedTask;
-  const deepLinkRowRef = useRef<HTMLTableRowElement | null>(null);
-  const deepLinkScrolledRef = useRef(false);
-  useEffect(() => {
-    if (deepLinkedTask && deepLinkRowRef.current && !deepLinkScrolledRef.current) {
-      deepLinkRowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
-      deepLinkScrolledRef.current = true;
-    }
-  }, [deepLinkedTask]);
-
-  const selectedCreateCase = useMemo(
-    () => cases.find((caseItem) => caseItem.id === createData.caseId) ?? null,
-    [cases, createData.caseId]
-  );
+  const selectedTask = useMemo(() => tasks.find((task) => task.id === selectedTaskId) || null, [selectedTaskId, tasks]);
 
   useEffect(() => {
-    const loadSummaryAndCollaborators = async () => {
-      if (!selectedTask?.case?.id) {
-        setSelectedCaseSummary(null);
-        setCaseCollaborators([]);
-        return;
-      }
-      try {
-        const [summary, collaborators] = await Promise.all([
-          getCaseSummary(selectedTask.case.id),
-          getCaseCollaborators(selectedTask.case.id).catch(() => [] as CaseCollaborator[]),
-        ]);
-        setSelectedCaseSummary(summary);
-        setCaseCollaborators(collaborators);
-      } catch {
-        setSelectedCaseSummary(null);
-        setCaseCollaborators([]);
-      }
-    };
-    loadSummaryAndCollaborators();
-  }, [selectedTask?.case?.id]);
-
-  // Load collaborators when case selection changes in create modal
-  useEffect(() => {
-    if (!createData.caseId) {
+    if (!selectedTask) {
+      setSelectedCaseSummary(null);
       setCaseCollaborators([]);
       return;
     }
-    setCollaboratorsLoading(true);
-    getCaseCollaborators(createData.caseId)
-      .then((collabs) => setCaseCollaborators(collabs))
-      .catch(() => setCaseCollaborators([]))
-      .finally(() => setCollaboratorsLoading(false));
-  }, [createData.caseId]);
+    Promise.all([
+      getCaseSummary(selectedTask.case.id).catch(() => null),
+      getCaseCollaborators(selectedTask.case.id).catch(() => [] as CaseCollaborator[]),
+    ]).then(([summary, collaborators]) => {
+      setSelectedCaseSummary(summary);
+      setCaseCollaborators(collaborators);
+    });
+  }, [selectedTask]);
+
+  useEffect(() => {
+    if (deepLinkedTaskId && selectedTask && focusedRowRef.current) {
+      focusedRowRef.current.scrollIntoView({ block: "center" });
+    }
+  }, [deepLinkedTaskId, selectedTask]);
 
   const filteredTasks = useMemo(() => {
-    const normalized = search.trim().toLowerCase();
-    return tasks.filter((task) => {
-      const isOpenTask = !["DONE", "COMPLETED", "CANCELLED", "ARCHIVED"].includes(String(task.status || "").toUpperCase());
-      const statusMatch = statusFilter === "all" || (statusFilter === "OPEN" ? isOpenTask : task.status === statusFilter);
-      const priorityMatch = priorityFilter === "all" || task.priority === priorityFilter;
-      const assigneeMatch =
-        assigneeFilter === "all" ||
-        (assigneeFilter === "unassigned" && !task.assignedTo) ||
-        task.assignedTo?.id === assigneeFilter;
-      const caseMatch = caseFilter === "all" || task.case.id === caseFilter;
-      const searchMatch =
-        !normalized ||
-        task.title.toLowerCase().includes(normalized) ||
-        (task.description || "").toLowerCase().includes(normalized) ||
-        task.case.caseNumber.toLowerCase().includes(normalized) ||
-        (task.case.clientName || "").toLowerCase().includes(normalized);
-      return statusMatch && priorityMatch && assigneeMatch && caseMatch && searchMatch;
-    });
-  }, [tasks, search, statusFilter, priorityFilter, assigneeFilter, caseFilter]);
+    const query = search.trim().toLocaleLowerCase("hu-HU");
+    return tasks
+      .filter((task) => {
+        if (quickFilter === "open" && !isOpen(task.status)) return false;
+        if (quickFilter === "mine" && task.assignedTo?.id !== currentUser?.id) return false;
+        if (quickFilter === "overdue" && !isOverdue(task)) return false;
+        if (quickFilter === "review" && !isReview(task)) return false;
+        if (caseFilter !== "all" && task.case.id !== caseFilter) return false;
+        if (priorityFilter !== "all" && task.priority !== priorityFilter) return false;
+        if (!query) return true;
+        return `${task.title} ${task.description || ""} ${task.case.caseNumber} ${task.case.clientName}`
+          .toLocaleLowerCase("hu-HU")
+          .includes(query);
+      })
+      .sort((left, right) => {
+        if (isOverdue(left) !== isOverdue(right)) return isOverdue(left) ? -1 : 1;
+        if (left.dueDate && right.dueDate) return new Date(left.dueDate).getTime() - new Date(right.dueDate).getTime();
+        return left.title.localeCompare(right.title, "hu-HU");
+      });
+  }, [caseFilter, currentUser?.id, priorityFilter, quickFilter, search, tasks]);
 
-  const taskEntrypointStats = useMemo(() => {
-    const isOpen = (status?: string) => !["DONE", "COMPLETED", "CANCELLED", "ARCHIVED"].includes(String(status || "").toUpperCase());
-    const openTasks = tasks.filter((task) => isOpen(task.status));
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const tomorrowStart = new Date(todayStart);
-    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-    const dueToday = openTasks.filter((task) => {
-      if (!task.dueDate) return false;
-      const due = new Date(task.dueDate);
-      return due.getTime() >= todayStart.getTime() && due.getTime() < tomorrowStart.getTime();
-    }).length;
+  const counts = useMemo(
+    () => ({
+      open: tasks.filter((task) => isOpen(task.status)).length,
+      mine: tasks.filter((task) => task.assignedTo?.id === currentUser?.id && isOpen(task.status)).length,
+      overdue: tasks.filter(isOverdue).length,
+      review: tasks.filter(isReview).length,
+    }),
+    [currentUser?.id, tasks],
+  );
 
-    return {
-      openTasks: openTasks.length,
-      unassignedTasks: openTasks.filter((task) => !task.assignedTo).length,
-      dueToday,
-    };
-  }, [tasks]);
-
-  const runTaskAction = async (taskId: string, action: "start" | "submit" | "approve" | "reject" | "block" | "unblock") => {
-    setIsActionLoading(taskId + action);
+  const runAction = async (task: LedgerTask, action: "start" | "submit" | "approve" | "return" | "block" | "unblock") => {
+    setBusyKey(`${task.id}:${action}`);
     try {
-      if (action === "start") await startTask(taskId);
-      if (action === "submit") await submitTask(taskId);
-      if (action === "approve") await completeTask(taskId, true);
-      if (action === "reject") await completeTask(taskId, false);
-      if (action === "block") await blockTask(taskId, "DEPENDENCY");
-      if (action === "unblock") await unblockTask(taskId);
-      await loadTasksWorkspace();
-    } catch (err) {
-      console.error("Task action failed:", err);
-      alert("A feladatművelet sikertelen.");
+      if (action === "start") await startTask(task.id);
+      if (action === "submit") await submitTask(task.id);
+      if (action === "approve") await completeTask(task.id, true);
+      if (action === "return") await completeTask(task.id, false);
+      if (action === "block") await blockTask(task.id, "DEPENDENCY");
+      if (action === "unblock") await unblockTask(task.id);
+      await loadTasks();
+    } catch (actionError) {
+      console.error("Task action failed:", actionError);
+      window.alert("A feladatművelet nem hajtható végre.");
     } finally {
-      setIsActionLoading(null);
+      setBusyKey(null);
     }
   };
 
-  const getDueBadge = (dueDate?: string | null) => {
-    if (!dueDate) return null;
-    const due = new Date(dueDate);
-    const now = new Date();
-    const todayStart = new Date(now);
-    todayStart.setHours(0, 0, 0, 0);
-    const tomorrowStart = new Date(todayStart);
-    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-    if (due.getTime() < todayStart.getTime()) {
-      return { label: "lejárt", className: "text-[var(--adm-terracotta-700)]" };
-    }
-    if (due.getTime() >= todayStart.getTime() && due.getTime() < tomorrowStart.getTime()) {
-      return { label: "ma esedékes", className: "text-[#B45309]" };
-    }
-    return { label: "határidős", className: "text-[var(--adm-green-800)]" };
-  };
-
-  const handleReassign = async (taskId: string, newAssigneeId: string) => {
-    if (!newAssigneeId) return;
-    setIsActionLoading(taskId + "reassign");
+  const handleReassign = async (task: LedgerTask, userId: string) => {
+    if (!userId) return;
+    setBusyKey(`${task.id}:reassign`);
     try {
-      await reassignTask(taskId, newAssigneeId);
-      await loadTasksWorkspace();
-    } catch (err) {
-      console.error("Task reassignment failed:", err);
-      alert("Az átadás sikertelen.");
+      await reassignTask(task.id, userId);
+      await loadTasks();
+    } catch (actionError) {
+      console.error("Task reassignment failed:", actionError);
+      window.alert("Az átadás nem hajtható végre.");
     } finally {
-      setIsActionLoading(null);
+      setBusyKey(null);
     }
   };
 
   const handleCreateTask = async () => {
     if (!createData.caseId || !createData.title.trim() || !createData.type) {
-      alert("Az ügy, cím és típus kötelező.");
+      window.alert("Az ügy, a cím és a típus kötelező.");
       return;
     }
-
     setIsSaving(true);
     try {
       await createTask({
@@ -388,7 +311,7 @@ function TasksPageContent() {
       });
       setShowCreateModal(false);
       setCreateData({
-        caseId: "",
+        caseId: deepLinkedCaseId || "",
         title: "",
         type: "CONTRACT_REVIEW",
         priority: "MEDIUM",
@@ -396,490 +319,259 @@ function TasksPageContent() {
         dueDate: "",
         assignedTo: "",
       });
-      await loadTasksWorkspace();
-    } catch (err) {
-      console.error("Task creation failed:", err);
-      alert("A feladat létrehozása sikertelen.");
+      await loadTasks();
+    } catch (createError) {
+      console.error("Task creation failed:", createError);
+      window.alert("A feladat létrehozása sikertelen.");
     } finally {
       setIsSaving(false);
     }
   };
 
-  return (
-    <div className="flex-1 flex min-h-0">
-      <main className="flex-1 overflow-y-auto adm-board-page">
-        <div className="adm-board-container max-w-[1320px]">
-          <div className="adm-board-hero mb-4 flex items-center justify-between gap-4 p-4">
-            <div>
-              <p className="adm-kicker">Operatív munkasor</p>
-              <h1 className="mt-1 font-serif text-[32px] leading-tight text-[var(--adm-text)]">Feladatok és határidők</h1>
-              <p className="text-xs text-[var(--adm-text-muted)] mt-1">{filteredTasks.length} feladat a szűrés szerint</p>
-              <p className="text-[10px] text-[var(--adm-text-soft)] mt-1">Operatív munkasor: teendők, review alatti elemek és határidős feladatok.</p>
-              {deepLinkedTask ? (
-                <p className="mt-2 inline-flex flex-wrap items-center gap-1.5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)] px-2.5 py-1 text-[11px] text-[var(--adm-text)]">
-                  <span className="font-bold uppercase tracking-[0.12em] text-[#6B4B14]">Megnyitott feladat</span>
-                  <span className="font-semibold">{deepLinkedTask.title}</span>
-                  <span className="text-[var(--adm-text-muted)]">· {deepLinkedTask.case.caseNumber}</span>
-                </p>
-              ) : deepLinkMissing ? (
-                <p className="mt-2 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2.5 py-1 text-[11px] text-[var(--adm-text-muted)]">
-                  A hivatkozott feladat nem szerepel a betöltött listában — lehet, hogy lezárult, vagy másik felelőshöz tartozik.
-                </p>
-              ) : null}
-            </div>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="rounded-[var(--adm-radius-sm)] px-4 py-2 bg-[var(--adm-green-950)] text-white text-xs uppercase tracking-[0.2em] hover:bg-[#243D2D]"
-            >
-              + Új feladat
-            </button>
-          </div>
+  const primaryActionFor = (task: LedgerTask) => {
+    if (task.capabilities?.canStart) return { label: "Indítás", action: "start" as const };
+    if (task.capabilities?.canSubmitForReview) return { label: "Review-ra küldés", action: "submit" as const };
+    if (task.capabilities?.canApprove) return { label: "Jóváhagyás", action: "approve" as const };
+    if (task.capabilities?.canReturnForCorrection) return { label: "Visszaküldés", action: "return" as const };
+    if (task.capabilities?.canUnblock) return { label: "Feloldás", action: "unblock" as const };
+    return null;
+  };
 
-          <section className="adm-board-panel-tight mb-4 grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_300px]">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Home Office feladatindító</p>
-              <h2 className="mt-1 font-serif text-xl font-medium text-[var(--adm-text)]">Itt válaszd ki a következő operatív lépést</h2>
-              <p className="mt-2 text-xs leading-5 text-[var(--adm-text-muted)]">
-                A feladatlista valós ügyhöz kötött teendőket mutat, munkaprioritás szerint rendezve. A határidőket és az ügyvédi kontextust továbbra is külön kell mérlegelni.
-              </p>
-              <div className="adm-board-tabs mt-3 text-[11px] text-[var(--adm-text-muted)]">
-                <span className="adm-board-tab adm-board-tab-active">Nyitott: {taskEntrypointStats.openTasks}</span>
-                <span className="adm-board-tab">Nincs felelős: {taskEntrypointStats.unassignedTasks}</span>
-                <span className="adm-board-tab">Ma esedékes: {taskEntrypointStats.dueToday}</span>
+  const quickFilters: Array<{ id: QuickFilter; label: string; count: number }> = [
+    { id: "open", label: "Nyitott", count: counts.open },
+    { id: "mine", label: "Saját", count: counts.mine },
+    { id: "overdue", label: "Lejárt", count: counts.overdue },
+    { id: "review", label: "Review", count: counts.review },
+  ];
+
+  return (
+    <div className="min-h-full bg-[var(--adm-ivory-50)] p-4 lg:p-5">
+      <div className="mx-auto max-w-[1440px] space-y-3">
+        <OperationalPageHeader
+          title="Feladatok"
+          count={`${filteredTasks.length} tétel`}
+          subtitle="Nyisd meg a következő ügyhöz kötött feladatot, vagy adj át munkát."
+          primaryAction={<AdminButton variant="primary" onClick={() => setShowCreateModal(true)}>Új feladat</AdminButton>}
+        />
+
+        <section className="flex flex-col gap-2 border border-[var(--adm-border)] bg-white p-3 lg:flex-row lg:items-center">
+          <div className="flex flex-wrap gap-1">
+            {quickFilters.map((filter) => (
+              <button
+                key={filter.id}
+                type="button"
+                onClick={() => setQuickFilter(filter.id)}
+                className={`px-3 py-2 text-[11px] font-semibold ${quickFilter === filter.id ? "bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)]" : "bg-[var(--adm-surface)] text-[var(--adm-text)] hover:bg-[var(--adm-sand-100)]"}`}
+              >
+                {filter.label} <span className="ml-1 opacity-70">{filter.count}</span>
+              </button>
+            ))}
+          </div>
+          <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-[minmax(180px,1fr)_190px_150px] lg:ml-3">
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Feladat, ügy vagy ügyfél keresése" className="adm-board-field min-w-0 px-3 py-2 text-[11px]" />
+            <select value={caseFilter} onChange={(event) => setCaseFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]">
+              <option value="all">Minden ügy</option>
+              {cases.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber}</option>)}
+            </select>
+            <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]">
+              <option value="all">Minden prioritás</option>
+              <option value="URGENT">Magas</option>
+              <option value="HIGH">Magas</option>
+              <option value="MEDIUM">Közepes</option>
+              <option value="LOW">Alacsony</option>
+            </select>
+          </div>
+        </section>
+
+        {error ? <SafePanelError onRetry={() => void loadTasks()} /> : null}
+
+        <div className={`grid min-h-0 gap-3 ${selectedTask ? "xl:grid-cols-[minmax(0,1fr)_300px]" : ""}`}>
+          <section className="min-w-0 overflow-hidden border border-[var(--adm-border)] bg-white">
+            {isLoading ? (
+              <div className="p-4"><CompactState title="Feladatok betöltése…" /></div>
+            ) : filteredTasks.length === 0 ? (
+              <div className="p-4">
+                <CompactState
+                  title={tasks.length === 0 ? "Nincs rögzített feladat." : "Nincs találat a kiválasztott nézetben."}
+                  detail={tasks.length === 0 ? "Hozz létre feladatot egy meglévő ügyhöz." : "Módosítsd a szűrőket."}
+                  action={<AdminButton size="sm" variant="primary" onClick={() => setShowCreateModal(true)}>Új feladat</AdminButton>}
+                />
               </div>
-            </div>
-            <div className="adm-board-rail p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Gyors folytatás</p>
-              <p className="mt-1 text-[11px] leading-5 text-[var(--adm-ivory-100)]/75">Válassz feladatot a jobb oldali kontextushoz, vagy nyisd meg az ügylistát, ha ügyből indulnál.</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Link href="/cases" className="rounded adm-board-panel-tight px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ügyek megnyitása</Link>
-                <Link href="/documents/compare" className="rounded adm-board-panel-tight px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Dokumentum-review</Link>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[980px] text-left">
+                  <thead className="border-b border-[var(--adm-border)] bg-[var(--adm-surface)]">
+                    <tr className="text-[10px] uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">
+                      <th className="px-3 py-2.5">Feladat</th>
+                      <th className="px-3 py-2.5">Ügy</th>
+                      <th className="px-3 py-2.5">Prioritás</th>
+                      <th className="px-3 py-2.5">Határidő</th>
+                      <th className="px-3 py-2.5">Felelős</th>
+                      <th className="px-3 py-2.5">Státusz</th>
+                      <th className="px-3 py-2.5 text-right">Következő lépés</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--adm-border)]">
+                    {filteredTasks.map((task) => {
+                      const primaryAction = primaryActionFor(task);
+                      const active = selectedTaskId === task.id;
+                      return (
+                        <tr
+                          key={task.id}
+                          ref={task.id === deepLinkedTaskId ? focusedRowRef : undefined}
+                          className={active ? "bg-[var(--adm-sand-100)]/45" : "hover:bg-[var(--adm-surface)]"}
+                        >
+                          <td className="px-3 py-2.5">
+                            <button type="button" onClick={() => setSelectedTaskId(task.id)} className="max-w-[320px] text-left">
+                              <span className="block truncate text-[13px] font-semibold text-[var(--adm-text)]">{task.title}</span>
+                              {task.description ? <span className="mt-0.5 block truncate text-[10px] text-[var(--adm-text-muted)]">{task.description}</span> : null}
+                            </button>
+                          </td>
+                          <td className="px-3 py-2.5 text-[11px] text-[var(--adm-text-muted)]">
+                            <Link href={`/cases/${task.case.id}`} className="font-semibold text-[var(--adm-text)] hover:underline">{task.case.caseNumber}</Link>
+                            <span className="mt-0.5 block max-w-[180px] truncate">{task.case.clientName}</span>
+                          </td>
+                          <td className="px-3 py-2.5 text-[11px] font-semibold text-[var(--adm-text)]">{priorityLabel[task.priority] || "Közepes"}</td>
+                          <td className={`px-3 py-2.5 text-[11px] ${isOverdue(task) ? "font-semibold text-[var(--adm-terracotta-700)]" : "text-[var(--adm-text-muted)]"}`}>{formatDate(task.dueDate)}</td>
+                          <td className="px-3 py-2.5 text-[11px] text-[var(--adm-text-muted)]">{task.assignedTo?.name || "Nincs felelős"}</td>
+                          <td className="px-3 py-2.5"><AdminStatusPill tone={taskStatusTone(task.status)}>{statusLabel[String(task.status).toUpperCase()] || "Nincs állapotadat"}</AdminStatusPill></td>
+                          <td className="px-3 py-2.5 text-right">
+                            {primaryAction ? (
+                              <AdminButton size="sm" variant="primary" disabled={busyKey === `${task.id}:${primaryAction.action}`} onClick={() => void runAction(task, primaryAction.action)}>
+                                {primaryAction.label}
+                              </AdminButton>
+                            ) : (
+                              <AdminButton size="sm" variant="neutral" onClick={() => setSelectedTaskId(task.id)}>Megnyitás</AdminButton>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            </div>
+            )}
           </section>
 
-          {isLoading ? (
-            <div className="adm-board-empty text-xs text-[var(--adm-text-muted)]">Feladatok betöltése...</div>
-          ) : error ? (
-            <div className="adm-board-empty border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)]">
-              <p className="font-serif text-lg text-[#7A2F2F]">{error}</p>
-              <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Próbáld újra, vagy indulj egy meglévő ügyből.</p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <button onClick={loadTasksWorkspace} className="rounded border border-[#8B3A3A] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#8B3A3A] hover:bg-[#FFF0ED]">Újrapróbálás</button>
-                <button onClick={() => setShowCreateModal(true)} className="rounded bg-[var(--adm-green-950)] px-3 py-1.5 text-[11px] font-semibold text-white">Új feladat</button>
-                <Link href="/cases" className="rounded adm-board-panel-tight px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ügyek megnyitása</Link>
+          {selectedTask ? (
+            <aside className="self-start border border-[var(--adm-border)] bg-white">
+              <div className="flex items-start justify-between border-b border-[var(--adm-border)] px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Feladat</p>
+                  <h2 className="mt-1 text-[15px] font-semibold text-[var(--adm-text)]">{selectedTask.title}</h2>
+                </div>
+                <button type="button" onClick={() => setSelectedTaskId(null)} className="px-2 text-lg text-[var(--adm-text-muted)]" aria-label="Feladatpanel bezárása">×</button>
               </div>
-            </div>
-          ) : filteredTasks.length === 0 ? (
-            <div className="adm-board-empty space-y-2 text-xs text-[var(--adm-text-muted)]">
-              <p className="font-serif text-lg text-[var(--adm-text)]">{tasks.length === 0 ? "Nincs betöltött feladat." : "Nincs találat a kiválasztott szűrőkkel."}</p>
-              <p>{tasks.length === 0 ? "Új feladat létrehozásához válassz ügyet, majd add meg a feladat címét és határidejét." : "Módosítsd a szűrőket, vagy nyisd meg az ügylistát másik munkafolyamat választásához."}</p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <button onClick={() => setShowCreateModal(true)} className="rounded bg-[var(--adm-green-950)] px-3 py-1.5 text-[11px] font-semibold text-white">Új feladat</button>
-                <Link href="/cases" className="rounded adm-board-panel-tight px-3 py-1.5 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ügyek megnyitása</Link>
-              </div>
-            </div>
-          ) : (
-            <div className="adm-board-panel-tight overflow-hidden">
-              <table className="w-full text-left">
-                <thead className="bg-[var(--adm-ivory-100)] border-b border-[var(--adm-border)]">
-                  <tr className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)]">
-                    <th className="px-4 py-3">Feladat</th>
-                    <th className="px-4 py-3">Ügy</th>
-                    <th className="px-4 py-3">Prioritás</th>
-                    <th className="px-4 py-3">Határidő</th>
-                    <th className="px-4 py-3">Felelős</th>
-                    <th className="px-4 py-3">Státusz</th>
-                    <th className="px-4 py-3">Művelet</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTasks.map((task) => {
-                    const isDeepLinked = task.id === deepLinkedTaskId;
-                    return (
-                    <tr
-                      key={task.id}
-                      ref={isDeepLinked ? deepLinkRowRef : undefined}
-                      onClick={() => setSelectedTaskId(task.id)}
-                      className={`border-b border-[var(--adm-border)] cursor-pointer ${
-                        isDeepLinked
-                          ? "bg-[var(--adm-sand-100)] shadow-[inset_4px_0_0_var(--adm-ochre-500)]"
-                          : selectedTaskId === task.id
-                            ? "bg-[var(--adm-surface)]"
-                            : "hover:bg-[var(--adm-surface)]"
-                      }`}
-                    >
-                      <td className="px-4 py-3">
-                        <p className="text-sm font-semibold text-[var(--adm-text)]">{task.title}</p>
-                        <p className="text-[11px] text-[var(--adm-text-muted)] truncate max-w-[280px]">{task.description || "Nincs leírás"}</p>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-[var(--adm-text-muted)]">{task.case.caseNumber}</td>
-                      <td className="px-4 py-3">
-                        <span className={`text-[10px] uppercase px-2 py-1 border ${priorityChip[task.priority] || priorityChip.MEDIUM}`}>
-                          {priorityLabel[String(task.priority || "").toUpperCase()] || "Közepes"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-[var(--adm-text-muted)]">
-                        {task.dueDate ? new Date(task.dueDate).toLocaleDateString("hu-HU") : "Nincs határidő"}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-[var(--adm-text-muted)]">{task.assignedTo?.name || "Nincs hozzárendelve"}</td>
-                      <td className="px-4 py-3">
-                        <span className={`text-[10px] uppercase px-2 py-1 border ${statusChip[String(task.status || "").toUpperCase()] || statusChip.TODO}`}>
-                          {statusLabel[String(task.status || "").toUpperCase()] || "Ismeretlen állapot"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        {task.capabilities?.canStart && (
-                          <button
-                            onClick={() => runTaskAction(task.id, "start")}
-                            disabled={isActionLoading === task.id + "start"}
-                            className="text-[10px] px-2 py-1 bg-[var(--adm-green-950)] text-white"
-                          >
-                            Indítás
-                          </button>
-                        )}
-                        {task.capabilities?.canSubmitForReview && (
-                          <button
-                            onClick={() => runTaskAction(task.id, "submit")}
-                            disabled={isActionLoading === task.id + "submit"}
-                            className="text-[10px] px-2 py-1 bg-[#B45309] text-white"
-                          >
-                            Beküldés
-                          </button>
-                        )}
-                        {(task.capabilities?.canApprove || task.capabilities?.canReturnForCorrection) && (
-                          <div className="flex gap-1">
-                            {task.capabilities?.canApprove && (
-                              <button
-                                onClick={() => runTaskAction(task.id, "approve")}
-                                disabled={isActionLoading === task.id + "approve"}
-                                className="text-[10px] px-2 py-1 bg-[#059669] text-white"
-                              >
-                                Jóváhagy
-                              </button>
-                            )}
-                            {task.capabilities?.canReturnForCorrection && (
-                              <button
-                                onClick={() => runTaskAction(task.id, "reject")}
-                                disabled={isActionLoading === task.id + "reject"}
-                                className="text-[10px] px-2 py-1 bg-[#DC2626] text-white"
-                              >
-                                Visszaad
-                              </button>
-                            )}
-                          </div>
-                        )}
-                        {task.capabilities?.canBlock && (
-                          <button
-                            onClick={() => runTaskAction(task.id, "block")}
-                            disabled={isActionLoading === task.id + "block"}
-                            className="ml-1 text-[10px] px-2 py-1 border border-[#DC2626] text-[#991B1B]"
-                          >
-                            Blokkol
-                          </button>
-                        )}
-                        {task.capabilities?.canUnblock && (
-                          <button
-                            onClick={() => runTaskAction(task.id, "unblock")}
-                            disabled={isActionLoading === task.id + "unblock"}
-                            className="ml-1 text-[10px] px-2 py-1 bg-[#059669] text-white"
-                          >
-                            Felold
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </main>
+              <div className="space-y-4 p-4">
+                {selectedTask.description ? <p className="text-[12px] leading-5 text-[var(--adm-text-muted)]">{selectedTask.description}</p> : null}
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+                  <dt className="text-[var(--adm-text-muted)]">Ügy</dt>
+                  <dd className="text-right font-semibold"><Link href={`/cases/${selectedTask.case.id}`} className="hover:underline">{selectedTask.case.caseNumber}</Link></dd>
+                  <dt className="text-[var(--adm-text-muted)]">Határidő</dt>
+                  <dd className="text-right font-semibold">{formatDate(selectedTask.dueDate)}</dd>
+                  <dt className="text-[var(--adm-text-muted)]">Felelős</dt>
+                  <dd className="text-right font-semibold">{selectedTask.assignedTo?.name || "Nincs felelős"}</dd>
+                </dl>
 
-      <aside className="w-80 bg-white overflow-y-auto">
-        <div className="p-4 space-y-5">
-          <div>
-            <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Feladat kontextus</h2>
-            {!selectedTask ? (
-              <p className="text-xs text-[var(--adm-text-soft)]">Válassz feladatot a részletekhez.</p>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-[var(--adm-text)]">{selectedTask.title}</p>
-                <p className="text-xs text-[var(--adm-text-muted)]">{selectedTask.description || "Nincs részletes leírás"}</p>
-                        <p className="text-[11px] text-[var(--adm-text-muted)]">Prioritás: {priorityLabel[String(selectedTask.priority || "").toUpperCase()] || "Közepes"}</p>
-                        <p className="text-[11px] text-[var(--adm-text-muted)]">Státusz: {statusLabel[String(selectedTask.status || "").toUpperCase()] || "Ismeretlen állapot"}</p>
-                        <p className="text-[11px] text-[var(--adm-text-muted)]">
-                          Határidő: {selectedTask.dueDate ? new Date(selectedTask.dueDate).toLocaleDateString("hu-HU") : "Nincs határidő"}
-                        </p>
-                        {(() => {
-                          const dueBadge = getDueBadge(selectedTask.dueDate);
-                          if (!dueBadge) return null;
-                          return <p className={`text-[11px] font-semibold ${dueBadge.className}`}>{dueBadge.label}</p>;
-                        })()}
-                <label className="block text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mt-3">
+                <label className="block text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">
                   Átadás
-                  <select
-                    onChange={(e) => handleReassign(selectedTask.id, e.target.value)}
-                    className="mt-1 w-full px-2 py-2 border border-[var(--adm-border)] text-xs"
-                    defaultValue=""
-                  >
-                    <option value="" disabled>
-                      Felelős kiválasztása
-                    </option>
-                    {caseCollaborators.length > 0 && (
-                      <>
-                        <option value="" disabled className="text-[#8B5CF6] font-medium">— Résztvevők —</option>
-                        {caseCollaborators.map((collab) => (
-                          <option key={collab.id} value={collab.user.id}>
-                            {collab.user.name}
-                          </option>
-                        ))}
-                        <option value="" disabled>— Többi felhasználó —</option>
-                      </>
-                    )}
-                    {users.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.name}
-                      </option>
+                  <select defaultValue="" onChange={(event) => void handleReassign(selectedTask, event.target.value)} className="adm-board-field mt-2 w-full px-3 py-2 text-[11px]">
+                    <option value="" disabled>Felelős kiválasztása</option>
+                    {caseCollaborators.map((collaborator) => (
+                      <option key={collaborator.id} value={collaborator.user.id}>{collaborator.user.name}</option>
+                    ))}
+                    {users.filter((user) => !caseCollaborators.some((collaborator) => collaborator.user.id === user.id)).map((user) => (
+                      <option key={user.id} value={user.id}>{user.name}</option>
                     ))}
                   </select>
-                  {caseCollaborators.length > 0 && (
-                    <p className="text-[10px] text-[#8B5CF6] mt-0.5">
-                      {caseCollaborators.length} résztvevő az ügyön
-                    </p>
-                  )}
                 </label>
-              </div>
-            )}
-          </div>
 
-          <div className="border-t border-[var(--adm-border)] pt-4">
-            <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Kapcsolt ügy</h3>
-            {!selectedTask ? (
-              <p className="text-xs text-[var(--adm-text-soft)]">Nincs kiválasztott ügy.</p>
-            ) : (
-              <div className="space-y-2">
-                <Link href={`/cases/${selectedTask.case.id}`} className="text-sm font-semibold text-[var(--adm-text)] hover:text-[var(--adm-ochre-500)]">
-                  {selectedTask.case.caseNumber}
-                </Link>
-                <p className="text-xs text-[var(--adm-text-muted)]">{selectedTask.case.clientName || "Ismeretlen ügyfél"}</p>
-                <p className="text-xs text-[var(--adm-text-muted)]">{selectedTask.case.matterType || "Nincs ügytípus"}</p>
-                {selectedCaseSummary ? (
-                  <div className="mt-2 p-2 bg-[var(--adm-ivory-100)] border border-[var(--adm-border)]">
-                    <p className="text-[11px] text-[var(--adm-text-muted)]">Dokumentumok: {selectedCaseSummary.stats.totalDocuments}</p>
-                    <p className="text-[11px] text-[var(--adm-text-muted)]">Ellenőrzés alatt: {selectedCaseSummary.stats.pendingReview}</p>
+                <div className="flex flex-wrap gap-2">
+                  {selectedTask.capabilities?.canBlock ? (
+                    <AdminButton size="sm" variant="danger" onClick={() => void runAction(selectedTask, "block")}>Blokkolás</AdminButton>
+                  ) : null}
+                  {selectedTask.capabilities?.canUnblock ? (
+                    <AdminButton size="sm" variant="neutral" onClick={() => void runAction(selectedTask, "unblock")}>Feloldás</AdminButton>
+                  ) : null}
+                </div>
+
+                <div className="border-t border-[var(--adm-border)] pt-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Ügykörnyezet</p>
+                  <p className="mt-2 text-[11px] text-[var(--adm-text-muted)]">
+                    {selectedCaseSummary ? `${selectedCaseSummary.stats.totalDocuments} dokumentum · ${selectedCaseSummary.stats.pendingReview} review alatt` : "Az ügyösszegzés jelenleg nem érhető el."}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <QuietLink href={`/cases/${selectedTask.case.id}`}>Ügy megnyitása</QuietLink>
+                    <QuietLink href={`/cases/${selectedTask.case.id}/documents`}>Dokumentumok</QuietLink>
                   </div>
-                ) : (
-                  <p className="text-[11px] text-[var(--adm-text-soft)]">Ügy-összegzés nem érhető el.</p>
-                )}
+                </div>
               </div>
-            )}
-          </div>
-
-          <div className="border-t border-[var(--adm-border)] pt-4">
-            <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Friss ügyesemények</h3>
-            {!selectedCaseSummary?.last5TimelineEvents?.length ? (
-              <p className="text-xs text-[var(--adm-text-soft)]">Nincs megjeleníthető idővonal-esemény.</p>
-            ) : (
-              <div className="space-y-2">
-                {selectedCaseSummary.last5TimelineEvents.slice(0, 4).map((item) => (
-                  <div key={item.id} className="p-2 border border-[var(--adm-border)]">
-                    <p className="text-[11px] font-semibold text-[var(--adm-text)]">{item.type}</p>
-                    <p className="text-[10px] text-[var(--adm-text-muted)]">{new Date(item.createdAt).toLocaleString("hu-HU")}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="border-t border-[var(--adm-border)] pt-4">
-            <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Kapcsolt munkafolyamatok</h3>
-            <div className="space-y-1">
-              <Link href="/reviews" className="adm-link-button block px-3 py-2 text-xs">Review sor</Link>
-              <Link href="/notifications" className="adm-link-button block px-3 py-2 text-xs">Értesítések</Link>
-              <Link
-                href={selectedTask ? `/documents/compare?caseId=${encodeURIComponent(selectedTask.case.id)}` : "/documents/compare"}
-                className="adm-link-button block px-3 py-2 text-xs"
-              >
-                Szerződés-workspace
-              </Link>
-              <Link
-                href={selectedTask ? `/cases/${selectedTask.case.id}/documents` : "/cases"}
-                className="adm-link-button block px-3 py-2 text-xs"
-              >
-                Dokumentumtár
-              </Link>
-              <Link
-                href={selectedTask ? `/cases/${selectedTask.case.id}/communications` : "/cases"}
-                className="adm-link-button block px-3 py-2 text-xs"
-              >
-                Kommunikáció
-              </Link>
-              <Link
-                href={selectedTask ? `/cases/${selectedTask.case.id}/handoff` : "/cases"}
-                className="adm-link-button block px-3 py-2 text-xs"
-              >
-                Leadási csomag
-              </Link>
-              <Link href="/time-entries" className="adm-link-button block px-3 py-2 text-xs">Munkaórák</Link>
-            </div>
-          </div>
+            </aside>
+          ) : null}
         </div>
-      </aside>
+      </div>
 
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg border border-[var(--adm-border)]">
-            <div className="px-6 py-4 border-b border-[var(--adm-border)]">
-              <h2 className="text-lg font-serif text-[var(--adm-text)]">Új feladat</h2>
+      {showCreateModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="create-task-title">
+          <div className="w-full max-w-lg border border-[var(--adm-border)] bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-5 py-4">
+              <h2 id="create-task-title" className="font-serif text-[22px] text-[var(--adm-text)]">Új feladat</h2>
+              <button type="button" onClick={() => setShowCreateModal(false)} className="text-lg text-[var(--adm-text-muted)]" aria-label="Bezárás">×</button>
             </div>
-            <div className="p-6 space-y-4">
-              <label className="block text-xs text-[var(--adm-text-muted)]">
-                Ügy *
-                <select
-                  value={createData.caseId}
-                  onChange={(e) => setCreateData((prev) => ({ ...prev, caseId: e.target.value }))}
-                  className="mt-1 w-full px-3 py-2 border border-[var(--adm-border)] text-sm"
-                >
+            <div className="space-y-4 p-5">
+              <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">
+                Ügy
+                <select value={createData.caseId} onChange={(event) => setCreateData((current) => ({ ...current, caseId: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]">
                   <option value="">Válassz ügyet</option>
-                  {cases.map((caseItem) => (
-                    <option key={caseItem.id} value={caseItem.id}>
-                      {caseItem.caseNumber} · {caseItem.clientName}
-                    </option>
-                  ))}
+                  {cases.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber} · {caseItem.clientName}</option>)}
                 </select>
-                <span className="mt-1 block text-[10px] text-[var(--adm-text-soft)]">
-                  Az ügy kiválasztása határozza meg az ügyfélkörnyezetet.
-                </span>
-                {selectedCreateCase?.clientName && (
-                  <span className="mt-1 block text-[10px] font-semibold text-[var(--adm-text-muted)]">
-                    Kapcsolt ügyfél: {selectedCreateCase.clientName}
-                  </span>
-                )}
               </label>
-
-              <label className="block text-xs text-[var(--adm-text-muted)]">
-                Cím *
-                <input
-                  value={createData.title}
-                  onChange={(e) => setCreateData((prev) => ({ ...prev, title: e.target.value }))}
-                  className="mt-1 w-full px-3 py-2 border border-[var(--adm-border)] text-sm"
-                  placeholder="Feladat címe"
-                />
+              <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">
+                Cím
+                <input value={createData.title} onChange={(event) => setCreateData((current) => ({ ...current, title: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]" />
               </label>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block text-xs text-[var(--adm-text-muted)]">
-                  Típus *
-                  <select
-                    value={createData.type}
-                    onChange={(e) => setCreateData((prev) => ({ ...prev, type: e.target.value }))}
-                    className="mt-1 w-full px-3 py-2 border border-[var(--adm-border)] text-sm"
-                  >
-                    {TASK_TYPES.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">
+                  Típus
+                  <select value={createData.type} onChange={(event) => setCreateData((current) => ({ ...current, type: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]">
+                    {TASK_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                   </select>
                 </label>
-                <label className="block text-xs text-[var(--adm-text-muted)]">
+                <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">
                   Prioritás
-                  <select
-                    value={createData.priority}
-                    onChange={(e) => setCreateData((prev) => ({ ...prev, priority: e.target.value }))}
-                    className="mt-1 w-full px-3 py-2 border border-[var(--adm-border)] text-sm"
-                  >
+                  <select value={createData.priority} onChange={(event) => setCreateData((current) => ({ ...current, priority: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]">
                     <option value="LOW">Alacsony</option>
                     <option value="MEDIUM">Közepes</option>
                     <option value="HIGH">Magas</option>
-                    <option value="URGENT">Sürgős</option>
+                    <option value="URGENT">Magas</option>
                   </select>
                 </label>
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block text-xs text-[var(--adm-text-muted)]">
+              <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">
+                Leírás
+                <textarea value={createData.description || ""} onChange={(event) => setCreateData((current) => ({ ...current, description: event.target.value }))} rows={3} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]" />
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">
                   Határidő
-                  <input
-                    type="date"
-                    value={createData.dueDate || ""}
-                    onChange={(e) => setCreateData((prev) => ({ ...prev, dueDate: e.target.value }))}
-                    className="mt-1 w-full px-3 py-2 border border-[var(--adm-border)] text-sm"
-                  />
+                  <input type="date" value={createData.dueDate || ""} onChange={(event) => setCreateData((current) => ({ ...current, dueDate: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]" />
                 </label>
-                <label className="block text-xs text-[var(--adm-text-muted)]">
+                <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">
                   Felelős
-                  {collaboratorsLoading ? (
-                    <span className="mt-1 w-full px-3 py-2 border border-[var(--adm-border)] text-xs text-[var(--adm-text-soft)] block">
-                      Résztvevők betöltése...
-                    </span>
-                  ) : (
-                    <select
-                      value={createData.assignedTo || ""}
-                      onChange={(e) => setCreateData((prev) => ({ ...prev, assignedTo: e.target.value }))}
-                      className="mt-1 w-full px-3 py-2 border border-[var(--adm-border)] text-sm"
-                    >
-                      <option value="">Nincs hozzárendelve</option>
-                      {caseCollaborators.length > 0 && (
-                        <>
-                          <option value="" disabled className="text-[#8B5CF6] font-medium">— Résztvevők —</option>
-                          {caseCollaborators.map((collab) => (
-                            <option key={collab.id} value={collab.user.id}>
-                              {collab.user.name}
-                            </option>
-                          ))}
-                          <option value="" disabled>— Többi felhasználó —</option>
-                        </>
-                      )}
-                      {users.map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  {caseCollaborators.length > 0 && !collaboratorsLoading && (
-                    <p className="text-[10px] text-[#8B5CF6] mt-0.5">
-                      {caseCollaborators.length} résztvevő az ügyön — előnyben részesítve
-                    </p>
-                  )}
+                  <select value={createData.assignedTo || ""} onChange={(event) => setCreateData((current) => ({ ...current, assignedTo: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]">
+                    <option value="">Nincs kijelölve</option>
+                    {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+                  </select>
                 </label>
               </div>
-
-              <label className="block text-xs text-[var(--adm-text-muted)]">
-                Leírás
-                <textarea
-                  value={createData.description || ""}
-                  onChange={(e) => setCreateData((prev) => ({ ...prev, description: e.target.value }))}
-                  className="mt-1 w-full px-3 py-2 border border-[var(--adm-border)] text-sm"
-                  rows={3}
-                  placeholder="Feladat részletei"
-                />
-              </label>
             </div>
-            <div className="px-6 py-4 border-t border-[var(--adm-border)] flex justify-end gap-2">
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="px-4 py-2 border border-[var(--adm-border)] text-xs uppercase tracking-[0.2em] text-[var(--adm-text-muted)]"
-                disabled={isSaving}
-              >
-                Mégsem
-              </button>
-              <button
-                onClick={handleCreateTask}
-                className="px-4 py-2 bg-[var(--adm-green-950)] text-white text-xs uppercase tracking-[0.2em]"
-                disabled={isSaving}
-              >
-                {isSaving ? "Mentés..." : "Létrehozás"}
-              </button>
+            <div className="flex justify-end gap-2 border-t border-[var(--adm-border)] px-5 py-4">
+              <AdminButton variant="neutral" onClick={() => setShowCreateModal(false)}>Mégse</AdminButton>
+              <AdminButton variant="primary" disabled={isSaving} onClick={() => void handleCreateTask()}>{isSaving ? "Mentés…" : "Feladat létrehozása"}</AdminButton>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
-

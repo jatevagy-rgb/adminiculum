@@ -2,7 +2,7 @@
 
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
-import { Dashboard } from "./Dashboard";
+import { DashboardFocused } from "./DashboardFocused";
 import { CasesList } from "./CasesList";
 import { useUiPack } from "@/lib/uiPack";
 
@@ -70,7 +70,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
   ) : shouldRenderCasesDefault ? (
     <CasesList />
   ) : shouldRenderDashboardDefault ? (
-    <Dashboard />
+    <DashboardFocused />
   ) : (
     <div className="text-xs text-[#7B776D]">Nincs elérhető tartalom ebben a szekcióban.</div>
   );
