@@ -54,6 +54,7 @@ Specialist document and litigation workspaces remain contextual entry points ins
 ### Dashboard
 
 - Prioritizes one real task, deadline, or active matter.
+- Preserves a simplified four-card semantic summary grid for active matters, tasks, deadlines, and review.
 - Uses a compact daily queue, deadline panel, review panel, and optional communication signal.
 - News and recent document activity are collapsed below operational work.
 - Deleted document events cannot become the primary action.
@@ -137,7 +138,7 @@ Specialist document and litigation workspaces remain contextual entry points ins
 
 ## Removed Or Downgraded UI
 
-- Dashboard KPI/card grid, quick-open duplication, and competing news prominence.
+- Six-card dashboard KPI dock reduced to four compact operational cards; quick-open duplication and competing news prominence removed.
 - Tasks and cases launcher essays and duplicate navigation.
 - Repeated case context and long permanent case side rail.
 - Multiple empty communication columns.

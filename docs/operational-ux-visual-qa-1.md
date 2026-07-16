@@ -19,7 +19,7 @@ All rows were checked at `1366×768`, `1440×900`, and `1920×1080`.
 
 | Route | Authenticated | Primary work visible | First-view content | Console / request result | Overflow | Screenshot | Result |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `/` | yes | `Itt folytasd` | primary matter plus daily work/deadline/review areas | no blocking error; no unexpected 500/501 | none | yes | pass |
+| `/` | yes | `Itt folytasd` | primary matter, four compact summary cards, and daily work/deadline/review areas | no blocking error; no unexpected 500/501 | none | yes | pass |
 | `/cases` | yes | case filter and rows | at least five case rows at 1366×768 | no blocking error | none | yes | pass |
 | populated case detail | yes | one `Következő lépés` CTA | active work, documents, deadline, communication | no raw error; no 500/501 | none | yes | pass |
 | case documents | yes | document upload and selected document | first real document auto-selected | no 500/501 | none | yes | pass |
@@ -87,6 +87,16 @@ For the populated local case:
 - main content receives the dominant width.
 
 Empty states were also observed for communications, deadlines, time entries, and intake. Each contracts to one useful message/action instead of retaining a large empty card grid.
+
+## Dashboard Card Grid Follow-Up
+
+The compact semantic card grid was restored after product-owner feedback and rechecked at all three required viewports.
+
+- Exactly four real-data cards are shown: active matters, open tasks, nearby deadlines, and review items.
+- Dashboard returned `200` and remained authenticated at all three sizes.
+- No console error, failed API request, raw technical label, or horizontal overflow was observed.
+- At `1366×768`, the summary grid ends around `417px` and the `Mai munka` section starts around `446px`, so the operational list remains visible in the first viewport.
+- Updated screenshots were captured process-locally and were not committed.
 
 ## Runtime Regression QA
 

@@ -39,6 +39,14 @@ type FocusItem = {
   tone: "green" | "amber" | "blue";
 };
 
+type SummaryCardProps = {
+  label: string;
+  value: number;
+  emptyLabel: string;
+  href: string;
+  tone: "petrol" | "amber" | "gold" | "navy";
+};
+
 const completedStatuses = new Set(["COMPLETED", "DONE", "APPROVED", "FINALIZED", "ARCHIVED", "CANCELLED"]);
 
 function formatDate(value?: string | null) {
@@ -99,6 +107,28 @@ function FocusRow({ item, dominant = false }: { item: FocusItem; dominant?: bool
           {item.action} →
         </span>
       </div>
+    </Link>
+  );
+}
+
+function SummaryCard({ label, value, emptyLabel, href, tone }: SummaryCardProps) {
+  const toneClass =
+    tone === "amber"
+      ? "bg-[#FD9E02] text-[#3E2400]"
+      : tone === "gold"
+        ? "bg-[#FFB703] text-[#4A3300]"
+        : tone === "navy"
+          ? "bg-[#023047] text-white"
+          : "bg-[#126782] text-white";
+  const panelClass = tone === "amber" || tone === "gold" ? "bg-black/[0.07] border-black/[0.12]" : "bg-white/[0.14] border-white/[0.24]";
+
+  return (
+    <Link href={href} className={`${toneClass} min-h-[92px] p-3 transition-transform hover:-translate-y-0.5`}>
+      <span className="block text-[10px] font-bold uppercase tracking-[0.14em] opacity-85">{label}</span>
+      <span className={`mt-2 flex items-end justify-between gap-3 border px-3 py-2 ${panelClass}`}>
+        <span className="font-serif text-[27px] font-medium leading-none">{value}</span>
+        <span className="text-right text-[10px] font-semibold opacity-85">{value === 0 ? emptyLabel : "Aktív tétel"}</span>
+      </span>
     </Link>
   );
 }
@@ -218,6 +248,9 @@ export function DashboardFocused() {
   const queue = focusItems.slice(1, 5);
   const visibleCommunications = communications.slice(0, 4);
   const activeCase = cases[0] || null;
+  const activeCaseCount = cases.filter(
+    (item) => !["CLOSED", "ARCHIVED", "FINAL", "CANCELLED"].includes(String(item.status || "").toUpperCase()),
+  ).length;
 
   return (
     <div className="min-h-full bg-[var(--adm-ivory-50)] px-4 py-4 lg:px-6">
@@ -251,6 +284,13 @@ export function DashboardFocused() {
               action={<QuietLink href="/cases">Ügyek megnyitása</QuietLink>}
             />
           )}
+        </section>
+
+        <section className="grid grid-cols-2 gap-2.5 lg:grid-cols-4" aria-label="Napi munka összefoglaló">
+          <SummaryCard label="Aktív ügyek" value={activeCaseCount} emptyLabel="Nincs aktív ügy" href="/cases" tone="petrol" />
+          <SummaryCard label="Nyitott feladatok" value={openTasks.length} emptyLabel="Nincs nyitott feladat" href="/tasks" tone="amber" />
+          <SummaryCard label="Közeli határidők" value={deadlines.length} emptyLabel="Nincs közeli határidő" href="/deadlines" tone="gold" />
+          <SummaryCard label="Review tételek" value={stats?.stats.inReview ?? reviewTasks.length} emptyLabel="Nincs review tétel" href="/reviews" tone="navy" />
         </section>
 
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.7fr)]">
