@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import {
   getCaseSummary,
@@ -201,6 +202,9 @@ export default function ReviewsPage() {
 }
 
 function ReviewsPageContent() {
+  const searchParams = useSearchParams();
+  const deepLinkedTaskId = searchParams?.get("taskId") || null;
+  const deepLinkedQueueId = deepLinkedTaskId ? `task-${deepLinkedTaskId}` : null;
   const [uiPack] = useUiPack();
   const isSignalTiles = uiPack === "signal_tiles_console";
   const p = {
@@ -224,7 +228,7 @@ function ReviewsPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [queue, setQueue] = useState<QueueItem[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(deepLinkedQueueId);
   // Collaborator-aware reassign state
   const [reviewAssignees, setReviewAssignees] = useState<User[]>([]);
   const [reviewReassignLoading, setReviewReassignLoading] = useState(false);
@@ -373,14 +377,16 @@ function ReviewsPageContent() {
           (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
         );
         setQueue(merged);
-        if (merged.length > 0) setSelectedId(merged[0].id);
+        if (merged.length > 0) {
+          setSelectedId(merged.some((item) => item.id === deepLinkedQueueId) ? deepLinkedQueueId : merged[0].id);
+        }
     } catch (err) {
       console.error("Review queue load failed:", err);
       setError("A review sor most nem érhető el.");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [deepLinkedQueueId]);
 
   useEffect(() => {
     loadReviewQueue();
@@ -643,7 +649,7 @@ function ReviewsPageContent() {
                                   {priorityCfg.label}
                                 </span>
                                 <span title="Nem beküldő által választott adat; a meglévő státusz és prioritás alapján számított javaslat" className={`border px-1.5 py-0.5 text-[10px] ${attention.className}`}>
-                                  Javasolt: {attention.label}
+                                  Javasolt figyelmi szint: {attention.label}
                                 </span>
                               </div>
                               <p className="text-xs text-[var(--adm-text-muted)] mt-1">{item.caseNumber} · {item.caseTitle} · {item.clientName}</p>
@@ -652,7 +658,7 @@ function ReviewsPageContent() {
                                   <span className="font-medium">Munkavégző:</span> {item.assigneeName}
                                 </span>
                                 <span className="text-[10px] text-[var(--adm-text-muted)]"><span className="font-medium">Beküldő:</span> {item.submitterName}</span>
-                                <span className="text-[10px] text-[var(--adm-text-muted)]">Becsült review: {REVIEW_EFFORT[getAttentionLevel(item)]}</span>
+                                <span className="text-[10px] text-[var(--adm-text-muted)]">Javasolt review-idő: {REVIEW_EFFORT[getAttentionLevel(item)]}</span>
                                 {(item.collaboratorCount ?? 0) > 0 && (
                                   <span className="inline-flex items-center justify-center w-4 h-4 text-[9px] font-medium bg-[#8B5CF6] text-white rounded-full" title={`${item.collaboratorCount} résztvevő`}>
                                     +{item.collaboratorCount}
@@ -908,7 +914,8 @@ function ReviewsPageContent() {
                 )}
                 <p className="text-[11px] text-[var(--adm-text-muted)]">Beküldve / sorba került: {formatDate(selected.timestamp)}</p>
                 <p className="text-[11px] text-[var(--adm-text-muted)]">Beküldő: {selected.submitterName}</p>
-                <p className="text-[11px] text-[var(--adm-text-muted)]">Becsült review idő: {REVIEW_EFFORT[getAttentionLevel(selected)]}</p>
+                <p className="text-[11px] text-[var(--adm-text-muted)]">Javasolt figyelmi szint: {ATTENTION_CONFIG[getAttentionLevel(selected)].label}</p>
+                <p className="text-[11px] text-[var(--adm-text-muted)]">Javasolt review-idő: {REVIEW_EFFORT[getAttentionLevel(selected)]}</p>
                 {selected.daysWaiting !== null && selected.daysWaiting !== undefined && (
                   <p className={`text-[11px] font-medium ${(selected.daysWaiting ?? 0) >= 3 ? "text-[var(--adm-terracotta-700)]" : "text-[var(--adm-text-muted)]"}`}>
                     {selected.daysWaiting === 0 ? "Ma került a sorba" : `${selected.daysWaiting} napja a sorban`}

@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import { prisma } from '../../prisma/prisma.service';
 
 const PRIVILEGED_ROLES = new Set(['ADMIN', 'PARTNER']);
+const REVIEWER_ROLES = new Set(['LAWYER', 'COLLAB_LAWYER']);
 
 function sendForbidden(res: Response): void {
   res.status(403).json({
@@ -106,7 +107,7 @@ export async function requireHandoffPackageAccess(
   try {
     const packageRecord = await prisma.lawyerHandoffPackage.findUnique({
       where: { id },
-      select: { caseId: true },
+      select: { caseId: true, preparedById: true },
     });
 
     if (!packageRecord) {
@@ -132,8 +133,79 @@ export async function requireHandoffPackageAccess(
       return;
     }
 
+    res.locals.handoffPackage = packageRecord;
     next();
   } catch {
     sendAuthorizationError(res);
   }
+}
+
+export async function requireHandoffReviewAccess(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const user = req.user;
+  const packageRecord = res.locals.handoffPackage as { caseId: string; preparedById?: string | null } | undefined;
+  if (!user?.userId || !packageRecord) {
+    sendAuthorizationError(res);
+    return;
+  }
+
+  if (packageRecord.preparedById === user.userId) {
+    res.status(403).json({
+      status: 403,
+      code: 'HANDOFF_SELF_REVIEW_FORBIDDEN',
+      message: 'The preparer cannot review their own handoff.',
+    });
+    return;
+  }
+
+  if (PRIVILEGED_ROLES.has(user.role)) {
+    next();
+    return;
+  }
+
+  try {
+    const caseRecord = await prisma.case.findUnique({
+      where: { id: packageRecord.caseId },
+      select: { assignedLawyerId: true },
+    });
+    if (caseRecord?.assignedLawyerId === user.userId && REVIEWER_ROLES.has(user.role)) {
+      next();
+      return;
+    }
+
+    res.status(403).json({
+      status: 403,
+      code: 'HANDOFF_REVIEW_FORBIDDEN',
+      message: 'You are not authorized to review this handoff.',
+    });
+  } catch {
+    sendAuthorizationError(res);
+  }
+}
+
+export function requireHandoffWriteAccess(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  const user = req.user;
+  const packageRecord = res.locals.handoffPackage as { preparedById?: string | null } | undefined;
+  if (!user?.userId || !packageRecord) {
+    sendAuthorizationError(res);
+    return;
+  }
+
+  if (PRIVILEGED_ROLES.has(user.role) || packageRecord.preparedById === user.userId) {
+    next();
+    return;
+  }
+
+  res.status(403).json({
+    status: 403,
+    code: 'HANDOFF_WRITE_FORBIDDEN',
+    message: 'Only the preparer or an administrator can modify this handoff.',
+  });
 }

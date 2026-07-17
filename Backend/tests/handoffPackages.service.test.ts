@@ -181,4 +181,95 @@ describe('handoff package adjacent foundation checks', () => {
       status: 'ARCHIVED',
     });
   });
+
+  it('blocks terminal review states through the generic update route', async () => {
+    (prisma.lawyerHandoffPackage.findUnique as jest.Mock).mockResolvedValue({
+      id: 'package-1',
+      status: 'SUBMITTED',
+    });
+
+    await expect(
+      handoffPackagesService.updateHandoffPackage('package-1', { status: 'APPROVED' })
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'HANDOFF_TRANSITION_REQUIRES_EXPLICIT_ROUTE',
+    });
+    expect(prisma.lawyerHandoffPackage.update).not.toHaveBeenCalled();
+  });
+
+  it('requires submission before a handoff can be reviewed', async () => {
+    (prisma.lawyerHandoffPackage.findUnique as jest.Mock).mockResolvedValue({
+      id: 'package-1',
+      status: 'DRAFT',
+    });
+
+    await expect(
+      handoffPackagesService.reviewHandoffPackage('package-1', { decision: 'APPROVED', userId: 'reviewer-1' })
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'HANDOFF_NOT_READY',
+    });
+    expect(prisma.lawyerHandoffPackage.update).not.toHaveBeenCalled();
+  });
+
+  it('requires a reviewer note when returning a submitted handoff', async () => {
+    (prisma.lawyerHandoffPackage.findUnique as jest.Mock).mockResolvedValue({
+      id: 'package-1',
+      status: 'SUBMITTED',
+    });
+
+    await expect(
+      handoffPackagesService.reviewHandoffPackage('package-1', {
+        decision: 'REJECTED_NEEDS_REVISION',
+        userId: 'reviewer-1',
+      })
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'REVIEW_COMMENT_REQUIRED',
+    });
+    expect(prisma.lawyerHandoffPackage.update).not.toHaveBeenCalled();
+  });
+
+  it('records an approved submitted handoff through the explicit review method', async () => {
+    const existing = {
+      id: 'package-1',
+      caseId: 'case-1',
+      status: 'SUBMITTED',
+      packageType: 'STANDARD',
+      sourceDocumentId: null,
+      anonymizedDocumentId: null,
+      generatedContractId: null,
+      legalAnalysisId: null,
+      reviewNotesId: null,
+      preparerSummary: 'Elkészült munka',
+      preparedById: 'worker-1',
+      submittedAt: new Date('2026-07-17T08:00:00.000Z'),
+      reviewedById: null,
+      reviewedAt: null,
+      reviewDecision: null,
+      reviewComment: null,
+      createdAt: new Date('2026-07-17T07:00:00.000Z'),
+      updatedAt: new Date('2026-07-17T08:00:00.000Z'),
+    };
+    (prisma.lawyerHandoffPackage.findUnique as jest.Mock).mockResolvedValue(existing);
+    (prisma.lawyerHandoffPackage.update as jest.Mock).mockResolvedValue({
+      ...existing,
+      status: 'APPROVED',
+      reviewedById: 'reviewer-1',
+      reviewedAt: new Date('2026-07-17T09:00:00.000Z'),
+      reviewDecision: 'APPROVED',
+    });
+    (prisma.timelineEvent.create as jest.Mock).mockResolvedValue({});
+
+    const result = await handoffPackagesService.reviewHandoffPackage('package-1', {
+      decision: 'APPROVED',
+      userId: 'reviewer-1',
+    });
+
+    expect(result.status).toBe('APPROVED');
+    expect(prisma.lawyerHandoffPackage.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'APPROVED', reviewedById: 'reviewer-1' }),
+    }));
+    expect(prisma.timelineEvent.create).toHaveBeenCalled();
+  });
 });

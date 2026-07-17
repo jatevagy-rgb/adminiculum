@@ -164,6 +164,31 @@ describe('task workflow transition routes', () => {
     expect(prismaMock.task.update).not.toHaveBeenCalled();
   });
 
+  it('rejects self-review even when the assignee has a lawyer role', async () => {
+    prismaMock.task.findUnique.mockResolvedValue(openTask({ status: 'IN_REVIEW' }));
+
+    const app = createApp();
+    const response = await requestJson(app, 'POST', '/tasks/task-1/complete', { approved: true });
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('TASK_ACTION_FORBIDDEN');
+    expect(prismaMock.task.update).not.toHaveBeenCalled();
+  });
+
+  it('allows the non-assignee task supervisor to approve review work', async () => {
+    const reviewTask = openTask({ status: 'IN_REVIEW', assignedToId: 'worker-1', assignedById: 'user-1' });
+    prismaMock.task.findUnique.mockResolvedValue(reviewTask);
+    prismaMock.task.update.mockResolvedValue({ ...reviewTask, status: 'DONE' });
+
+    const app = createApp();
+    const response = await requestJson(app, 'POST', '/tasks/task-1/complete', { approved: true });
+
+    expect(response.status).toBe(200);
+    expect(prismaMock.task.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'DONE' }),
+    }));
+  });
+
   it('blocks and unblocks only with structured blocker state', async () => {
     prismaMock.task.findUnique.mockResolvedValueOnce(openTask({ status: 'IN_PROGRESS' }));
     prismaMock.task.update.mockResolvedValueOnce({ ...openTask(), status: 'BLOCKED', stuckReason: 'DEPENDENCY' });

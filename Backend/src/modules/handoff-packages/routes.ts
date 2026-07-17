@@ -16,6 +16,8 @@ import {
 import {
   requireHandoffCaseAccess,
   requireHandoffPackageAccess,
+  requireHandoffReviewAccess,
+  requireHandoffWriteAccess,
 } from './authorization';
 
 const router = Router();
@@ -129,7 +131,7 @@ router.get('/handoff-packages/:id', authenticate, requireHandoffFoundation, requ
 });
 
 // PATCH /api/v1/handoff-packages/:id
-router.patch('/handoff-packages/:id', authenticate, requireHandoffFoundation, requireHandoffPackageAccess, async (req: Request, res: Response): Promise<void> => {
+router.patch('/handoff-packages/:id', authenticate, requireHandoffFoundation, requireHandoffPackageAccess, requireHandoffWriteAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const {
@@ -161,7 +163,7 @@ router.patch('/handoff-packages/:id', authenticate, requireHandoffFoundation, re
 });
 
 // POST /api/v1/handoff-packages/:id/archive
-router.post('/handoff-packages/:id/archive', authenticate, requireHandoffFoundation, requireHandoffPackageAccess, async (req: Request, res: Response): Promise<void> => {
+router.post('/handoff-packages/:id/archive', authenticate, requireHandoffFoundation, requireHandoffPackageAccess, requireHandoffWriteAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const pkg = await handoffPackagesService.archiveHandoffPackage(id);
@@ -173,7 +175,7 @@ router.post('/handoff-packages/:id/archive', authenticate, requireHandoffFoundat
 });
 
 // POST /api/v1/handoff-packages/:id/review
-router.post('/handoff-packages/:id/review', authenticate, requireHandoffFoundation, requireHandoffPackageAccess, async (req: Request, res: Response): Promise<void> => {
+router.post('/handoff-packages/:id/review', authenticate, requireHandoffFoundation, requireHandoffPackageAccess, requireHandoffReviewAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const { decision, reviewComment } = req.body || {};

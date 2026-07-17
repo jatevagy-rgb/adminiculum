@@ -114,7 +114,8 @@ describe('workflow work item pure functions', () => {
   it('exposes task capabilities only for permitted structured states', () => {
     expect(deriveTaskCapabilities({ status: 'TODO', assignedToId: 'user-1' }, 'user-1').canStart).toBe(true);
     expect(deriveTaskCapabilities({ status: 'IN_PROGRESS', assignedToId: 'user-1' }, 'user-1').canSubmitForReview).toBe(true);
-    expect(deriveTaskCapabilities({ status: 'IN_REVIEW', assignedToId: 'user-1' }, 'user-1').canApprove).toBe(true);
+    expect(deriveTaskCapabilities({ status: 'IN_REVIEW', assignedToId: 'user-1' }, 'user-1', 'LAWYER').canApprove).toBe(false);
+    expect(deriveTaskCapabilities({ status: 'IN_REVIEW', assignedToId: 'worker-1', assignedById: 'user-1' }, 'user-1', 'LAWYER').canApprove).toBe(true);
     expect(deriveTaskCapabilities({ status: 'DONE', assignedToId: 'user-1' }, 'user-1').canStart).toBe(false);
     expect(deriveTaskCapabilities({ status: 'TODO', assignedToId: 'user-2' }, 'user-1').canStart).toBe(false);
   });
@@ -122,7 +123,8 @@ describe('workflow work item pure functions', () => {
   it('validates supported and forbidden transitions with explicit statuses', () => {
     expect(validateTaskTransition({ status: 'TODO', assignedToId: 'user-1' }, 'START', 'user-1').status).toBe('IN_PROGRESS');
     expect(validateTaskTransition({ status: 'IN_PROGRESS', assignedToId: 'user-1' }, 'SUBMIT_FOR_REVIEW', 'user-1').status).toBe('IN_REVIEW');
-    expect(validateTaskTransition({ status: 'IN_REVIEW', assignedToId: 'user-1' }, 'APPROVE', 'user-1').status).toBe('DONE');
+    expect(validateTaskTransition({ status: 'IN_REVIEW', assignedToId: 'worker-1', assignedById: 'user-1' }, 'APPROVE', 'user-1', 'LAWYER').status).toBe('DONE');
+    expect(() => validateTaskTransition({ status: 'IN_REVIEW', assignedToId: 'user-1' }, 'APPROVE', 'user-1', 'LAWYER')).toThrow('not allowed');
     expect(() => validateTaskTransition({ status: 'DONE', assignedToId: 'user-1' }, 'START', 'user-1')).toThrow('state');
     expect(() => validateTaskTransition({ status: 'TODO', assignedToId: 'user-2' }, 'START', 'user-1')).toThrow('not allowed');
   });

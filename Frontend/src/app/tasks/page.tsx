@@ -8,7 +8,6 @@ import { CompactState, OperationalPageHeader, QuietLink, SafePanelError } from "
 import { AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import {
   blockTask,
-  completeTask,
   createTask,
   getCaseCollaborators,
   getCaseSummary,
@@ -18,7 +17,6 @@ import {
   getUsers,
   reassignTask,
   startTask,
-  submitTask,
   unblockTask,
   type CaseCollaborator,
   type CaseListItem,
@@ -40,6 +38,16 @@ type LedgerTask = {
   workflowCategory?: string;
   urgency?: string;
   capabilities?: CaseWorkItemCapabilities;
+  review?: {
+    state?: string | null;
+    requestedAt?: string | null;
+    reviewedAt?: string | null;
+  } | null;
+  handoff?: {
+    id: string;
+    status: string;
+    updatedAt?: string | null;
+  } | null;
   source?: {
     type?: "DOCUMENT" | "COMMUNICATION" | "DEADLINE" | "CASE" | null;
     id?: string | null;
@@ -76,10 +84,10 @@ const statusLabel: Record<string, string> = {
   SUBMITTED: "Beküldve",
   REVIEW_NEEDED: "Review alatt",
   REVIEW_SUBMITTED: "Beküldve",
-  DONE: "Kész",
-  COMPLETED: "Kész",
+  DONE: "Lezárva",
+  COMPLETED: "Lezárva",
   APPROVED: "Jóváhagyva",
-  FINALIZED: "Kész",
+  FINALIZED: "Lezárva",
   REJECTED: "Visszaküldve",
   DECLINED: "Visszaküldve",
   BLOCKED: "Elakadt",
@@ -144,19 +152,30 @@ function taskAttentionLabel(task: LedgerTask) {
   return "Normál";
 }
 
-function taskSubmissionLabel(task: LedgerTask) {
-  const status = String(task.status || "").toUpperCase();
-  if (["SUBMITTED", "IN_REVIEW", "UNDER_REVIEW", "REVIEW_NEEDED", "REVIEW_SUBMITTED"].includes(status)) return "Leadva, review-ra vár";
-  if (closedStatuses.has(status)) return "Lezárt";
-  if (status === "IN_PROGRESS") return "Folyamatban";
-  if (status === "BLOCKED") return "Elakadt";
-  return "Még nincs leadás";
+function taskHandoffLabel(task: LedgerTask) {
+  if (!task.handoff) return "Nincs kapcsolt Leadás";
+  const labels: Record<string, string> = {
+    DRAFT: "Piszkozat",
+    PREPARED: "Előkészítve",
+    SUBMITTED: "Leadva",
+    IN_REVIEW: "Review alatt",
+    APPROVED: "Jóváhagyva",
+    REJECTED: "Visszaküldve",
+    ARCHIVED: "Archiválva",
+  };
+  return labels[String(task.handoff.status || "").toUpperCase()] || "Nincs állapotadat";
 }
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("hu-HU");
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("hu-HU", { dateStyle: "short", timeStyle: "short" });
 }
 
 function taskStatusTone(status?: string): "green" | "gold" | "amber" | "burgundy" | "neutral" | "blue" {
@@ -235,6 +254,8 @@ function TasksPageContent() {
               workflowCategory: task.workflowCategory,
               urgency: task.urgency,
               capabilities: task.capabilities,
+              review: task.review,
+              handoff: task.handoff,
               source: task.source,
               assignedTo: task.assignee ? { id: task.assignee.id, name: task.assignee.displayName } : null,
               case: {
@@ -330,15 +351,13 @@ function TasksPageContent() {
     [currentUser?.id, tasks],
   );
 
-  const runAction = async (task: LedgerTask, action: "start" | "submit" | "approve" | "return" | "block" | "unblock") => {
+  const runAction = async (task: LedgerTask, action: "start" | "block" | "unblock") => {
     setBusyKey(`${task.id}:${action}`);
     try {
       if (action === "start") await startTask(task.id);
-      if (action === "submit") await submitTask(task.id);
-      if (action === "approve") await completeTask(task.id, true);
-      if (action === "return") await completeTask(task.id, false);
       if (action === "block") await blockTask(task.id, "DEPENDENCY");
       if (action === "unblock") await unblockTask(task.id);
+      setSelectedTaskId(task.id);
       await loadTasks();
     } catch (actionError) {
       console.error("Task action failed:", actionError);
@@ -394,12 +413,13 @@ function TasksPageContent() {
   };
 
   const primaryActionFor = (task: LedgerTask) => {
-    if (task.capabilities?.canStart) return { label: "Indítás", action: "start" as const };
-    if (task.capabilities?.canSubmitForReview) return { label: "Review-ra küldés", action: "submit" as const };
-    if (task.capabilities?.canApprove) return { label: "Jóváhagyás", action: "approve" as const };
-    if (task.capabilities?.canReturnForCorrection) return { label: "Visszaküldés", action: "return" as const };
-    if (task.capabilities?.canUnblock) return { label: "Feloldás", action: "unblock" as const };
-    return null;
+    if (task.capabilities?.canStart) return { kind: "mutation" as const, label: "Indítás", action: "start" as const };
+    if (isReview(task) && (task.capabilities?.canApprove || task.capabilities?.canReturnForCorrection)) {
+      return { kind: "link" as const, label: "Review megnyitása", href: `/reviews?taskId=${encodeURIComponent(task.id)}` };
+    }
+    if (task.capabilities?.canUnblock) return { kind: "mutation" as const, label: "Feloldás", action: "unblock" as const };
+    if (isReview(task)) return { kind: "select" as const, label: "Állapot megtekintése" };
+    return { kind: "select" as const, label: closedStatuses.has(String(task.status).toUpperCase()) ? "Megtekintés" : "Megnyitás" };
   };
 
   const quickFilters: Array<{ id: QuickFilter; label: string; count: number }> = [
@@ -494,17 +514,16 @@ function TasksPageContent() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1210px] text-left">
+                <table className="w-full min-w-[1080px] text-left">
                   <thead className="border-b border-[var(--adm-border)] bg-[var(--adm-surface)]">
                     <tr className="text-[10px] uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">
                       <th className="px-3 py-2.5">Feladat</th>
-                      <th className="px-3 py-2.5">Ügy</th>
-                      <th className="px-3 py-2.5">Ügyfél</th>
+                      <th className="px-3 py-2.5">Ügy / ügyfél</th>
+                      <th className="px-3 py-2.5">Felelős</th>
                       <th className="px-3 py-2.5">Prioritás</th>
                       <th className="px-3 py-2.5">Határidő</th>
-                      <th className="px-3 py-2.5">Felelős</th>
-                      <th className="px-3 py-2.5">Státusz</th>
-                      <th className="px-3 py-2.5">Review / leadás</th>
+                      <th className="px-3 py-2.5">Állapot</th>
+                      <th className="px-3 py-2.5">Leadás</th>
                       <th className="px-3 py-2.5 text-right">Következő lépés</th>
                     </tr>
                   </thead>
@@ -527,23 +546,27 @@ function TasksPageContent() {
                           <td className="px-3 py-2.5 text-[11px] text-[var(--adm-text-muted)]">
                             <Link href={`/cases/${task.case.id}`} className="font-semibold text-[var(--adm-text)] hover:underline">{task.case.caseNumber}</Link>
                             {task.case.title ? <span className="mt-0.5 block max-w-[180px] truncate">{task.case.title}</span> : null}
+                            <span className="mt-0.5 block max-w-[180px] truncate">{task.case.clientName || "Nincs ügyféladat"}</span>
                           </td>
-                          <td className="px-3 py-2.5 text-[11px] text-[var(--adm-text-muted)]">{task.case.clientName || "Nincs ügyféladat"}</td>
+                          <td className="px-3 py-2.5 text-[11px] text-[var(--adm-text-muted)]">{task.assignedTo?.name || "Nincs felelős"}</td>
                           <td className="px-3 py-2.5 text-[11px] font-semibold text-[var(--adm-text)]">{priorityLabel[task.priority] || "Közepes"}</td>
                           <td className={`px-3 py-2.5 text-[11px] ${isOverdue(task) ? "font-semibold text-[var(--adm-terracotta-700)]" : "text-[var(--adm-text-muted)]"}`}>{formatDate(task.dueDate)}</td>
-                          <td className="px-3 py-2.5 text-[11px] text-[var(--adm-text-muted)]">{task.assignedTo?.name || "Nincs felelős"}</td>
-                          <td className="px-3 py-2.5"><AdminStatusPill tone={taskStatusTone(task.status)}>{statusLabel[String(task.status).toUpperCase()] || "Nincs állapotadat"}</AdminStatusPill></td>
+                          <td className="px-3 py-2.5">
+                            <AdminStatusPill tone={taskStatusTone(task.status)}>{statusLabel[String(task.status).toUpperCase()] || "Nincs állapotadat"}</AdminStatusPill>
+                            {task.review?.requestedAt ? <span className="mt-1 block text-[10px] text-[var(--adm-text-muted)]">Review kérve: {formatDateTime(task.review.requestedAt)}</span> : null}
+                          </td>
                           <td className="px-3 py-2.5 text-[10px] text-[var(--adm-text-muted)]">
-                            <span className="block font-semibold text-[var(--adm-text)]">Javasolt: {taskAttentionLabel(task)}</span>
-                            <span className="mt-0.5 block">{taskSubmissionLabel(task)}</span>
+                            <span className="block font-semibold text-[var(--adm-text)]">{taskHandoffLabel(task)}</span>
                           </td>
                           <td className="px-3 py-2.5 text-right">
-                            {primaryAction ? (
+                            {primaryAction.kind === "mutation" ? (
                               <AdminButton size="sm" variant="primary" disabled={busyKey === `${task.id}:${primaryAction.action}`} onClick={() => void runAction(task, primaryAction.action)}>
                                 {primaryAction.label}
                               </AdminButton>
+                            ) : primaryAction.kind === "link" ? (
+                              <Link href={primaryAction.href} className="adm-link-button adm-link-button-primary inline-flex px-3 py-2 text-[11px] font-semibold">{primaryAction.label}</Link>
                             ) : (
-                              <AdminButton size="sm" variant="neutral" onClick={() => setSelectedTaskId(task.id)}>Megnyitás</AdminButton>
+                              <AdminButton size="sm" variant="neutral" onClick={() => setSelectedTaskId(task.id)}>{primaryAction.label}</AdminButton>
                             )}
                           </td>
                         </tr>
@@ -579,7 +602,7 @@ function TasksPageContent() {
                   <dd className="text-right font-semibold">{statusLabel[String(selectedTask.status).toUpperCase()] || "Nincs állapotadat"}</dd>
                   <dt className="text-[var(--adm-text-muted)]">Prioritás</dt>
                   <dd className="text-right font-semibold">{priorityLabel[selectedTask.priority] || "Közepes"}</dd>
-                  <dt className="text-[var(--adm-text-muted)]">Javasolt figyelem</dt>
+                  <dt className="text-[var(--adm-text-muted)]">Javasolt figyelmi szint</dt>
                   <dd className="text-right font-semibold">{taskAttentionLabel(selectedTask)}</dd>
                 </dl>
 
@@ -613,13 +636,14 @@ function TasksPageContent() {
                   ) : null}
                 </div>
 
-                {["SUBMITTED", "IN_REVIEW", "UNDER_REVIEW", "REVIEW_NEEDED", "REVIEW_SUBMITTED", "DONE", "COMPLETED", "APPROVED", "FINALIZED"].includes(String(selectedTask.status).toUpperCase()) ? (
-                  <div className="border-t border-[var(--adm-border)] pt-3">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Leadás</p>
-                    <p className="mt-2 text-[11px] text-[var(--adm-text-muted)]">{taskSubmissionLabel(selectedTask)}</p>
-                    <div className="mt-3"><QuietLink href={`/cases/${selectedTask.case.id}/handoff`}>Leadás megnyitása</QuietLink></div>
-                  </div>
-                ) : null}
+                <div className="border-t border-[var(--adm-border)] pt-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Leadás</p>
+                  <p className="mt-2 text-[11px] font-semibold text-[var(--adm-text)]">{taskHandoffLabel(selectedTask)}</p>
+                  {!selectedTask.handoff ? (
+                    <p className="mt-1 text-[11px] leading-4 text-[var(--adm-text-muted)]">Ehhez a feladathoz nincs igazoltan kapcsolt Leadás. Az ügy Leadás nézetében ellenőrizheted az ügyhöz tartozó piszkozatokat.</p>
+                  ) : null}
+                  <div className="mt-3"><QuietLink href={`/cases/${selectedTask.case.id}/handoff`}>Ügy Leadásai</QuietLink></div>
+                </div>
 
                 <div className="border-t border-[var(--adm-border)] pt-3">
                   <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Ügykörnyezet</p>

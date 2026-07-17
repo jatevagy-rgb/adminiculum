@@ -24,8 +24,8 @@ describe('getReviewTasksForUser', () => {
     expect(prismaMock.task.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'IN_REVIEW'] },
+        NOT: { assignedToId: 'user-1' },
         OR: [
-          { assignedToId: 'user-1' },
           { assignedById: 'user-1' },
           { case: { assignedLawyerId: 'user-1' } },
           { case: { createdById: 'user-1' } },
@@ -42,6 +42,7 @@ describe('getReviewTasksForUser', () => {
 
     const query = prismaMock.task.findMany.mock.calls[0][0];
     expect(query.where.status).toEqual({ in: ['SUBMITTED', 'UNDER_REVIEW', 'IN_REVIEW'] });
+    expect(query.where.NOT).toEqual({ assignedToId: 'admin-1' });
     expect(query.where.OR).toBeUndefined();
   });
 

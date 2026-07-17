@@ -525,7 +525,7 @@ describe('database foundation route guards', () => {
       updatedAt: new Date('2026-06-23T00:00:00.000Z'),
     };
     (prisma.lawyerHandoffPackage.findUnique as jest.Mock)
-      .mockResolvedValueOnce({ caseId: 'case-1' })
+      .mockResolvedValueOnce({ caseId: 'case-1', preparedById: 'user-1' })
       .mockResolvedValueOnce(existing);
     (prisma.case.findUnique as jest.Mock).mockResolvedValue({
       id: 'case-1',
@@ -571,6 +571,71 @@ describe('database foundation route guards', () => {
       code: 'HANDOFF_PACKAGE_NOT_FOUND',
     });
     expect(prisma.lawyerHandoffPackage.update).not.toHaveBeenCalled();
+  });
+
+  it('blocks same-case users from modifying another preparer handoff', async () => {
+    process.env.ENABLE_HANDOFF_PACKAGES = 'true';
+    (prisma.lawyerHandoffPackage.findUnique as jest.Mock).mockResolvedValue({
+      caseId: 'case-1',
+      preparedById: 'worker-1',
+    });
+    (prisma.case.findUnique as jest.Mock).mockResolvedValue({
+      id: 'case-1',
+      assignedLawyerId: 'user-1',
+    });
+
+    const response = await requestJson(
+      createApp(),
+      'PATCH',
+      '/handoff-packages/package-1'
+    );
+
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({ code: 'HANDOFF_WRITE_FORBIDDEN' });
+    expect(prisma.lawyerHandoffPackage.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects a preparer attempting to review their own handoff', async () => {
+    process.env.ENABLE_HANDOFF_PACKAGES = 'true';
+    (prisma.lawyerHandoffPackage.findUnique as jest.Mock).mockResolvedValue({
+      caseId: 'case-1',
+      preparedById: 'user-1',
+    });
+    (prisma.case.findUnique as jest.Mock).mockResolvedValue({
+      id: 'case-1',
+      assignedLawyerId: 'user-1',
+    });
+
+    const response = await requestJson(
+      createApp(),
+      'POST',
+      '/handoff-packages/package-1/review'
+    );
+
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({ code: 'HANDOFF_SELF_REVIEW_FORBIDDEN' });
+    expect(prisma.lawyerHandoffPackage.update).not.toHaveBeenCalled();
+  });
+
+  it('lets the assigned lawyer reach handoff review validation for another preparer', async () => {
+    process.env.ENABLE_HANDOFF_PACKAGES = 'true';
+    (prisma.lawyerHandoffPackage.findUnique as jest.Mock).mockResolvedValue({
+      caseId: 'case-1',
+      preparedById: 'worker-1',
+    });
+    (prisma.case.findUnique as jest.Mock).mockResolvedValue({
+      id: 'case-1',
+      assignedLawyerId: 'user-1',
+    });
+
+    const response = await requestJson(
+      createApp(),
+      'POST',
+      '/handoff-packages/package-1/review'
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ code: 'DECISION_REQUIRED' });
   });
 
   it.each([

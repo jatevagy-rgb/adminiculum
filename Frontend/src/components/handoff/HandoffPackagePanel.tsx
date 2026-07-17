@@ -73,7 +73,7 @@ function getNextAction(pkg: LawyerHandoffPackageRecord): string {
     case "DRAFT": {
       const missing = getMissingItems(pkg);
       if (missing.length > 0) {
-        return "Egészítsd ki a csomagot, majd küldd be ügyvédi review-ra.";
+        return "Egészítsd ki a Leadást, majd küldd be ügyvédi review-ra.";
       }
       return "Beküldhető ügyvédi review-ra.";
     }
@@ -84,11 +84,11 @@ function getNextAction(pkg: LawyerHandoffPackageRecord): string {
     case "IN_REVIEW":
       return "Ügyvédi review folyamatban.";
     case "APPROVED":
-      return "A csomag ügyvéd által jóváhagyva.";
+      return "A Leadás ügyvéd által jóváhagyva.";
     case "REJECTED":
-      return "A csomag javításra visszaküldve.";
+      return "A Leadás javításra visszaküldve.";
     case "ARCHIVED":
-      return "Archivált csomag.";
+      return "Archivált Leadás.";
     default:
       return "";
   }
@@ -96,9 +96,9 @@ function getNextAction(pkg: LawyerHandoffPackageRecord): string {
 
 function getHandoffErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.status === 403) return "Jogosultság hiányzik az átadási csomag művelethez.";
+    if (error.status === 403) return "Jogosultság hiányzik a Leadás művelethez.";
     if (error.status === 501) return "A funkció jelenleg nem elérhető ebben a környezetben.";
-    if (error.status === 404) return "Az átadási csomag vagy kapcsolódó ügy nem található.";
+    if (error.status === 404) return "A Leadás vagy a kapcsolódó ügy nem található.";
   }
   return "A művelet nem sikerült. Próbáld újra később.";
 }
@@ -147,7 +147,7 @@ export function HandoffPackagePanel({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError("Nem sikerült betölteni a leadási csomagokat.");
+          setError("Nem sikerült betölteni a Leadásokat.");
           console.error("listCaseHandoffPackages error:", err);
         }
       })
@@ -195,7 +195,7 @@ export function HandoffPackagePanel({
 
   const handleCreateDraft = async () => {
     if (!hasDocumentContext) {
-      setCreateError("Válassz ügyhöz tartozó dokumentumot az átadási csomag létrehozásához.");
+      setCreateError("Válassz ügyhöz tartozó dokumentumot a Leadás létrehozásához.");
       return;
     }
 
@@ -213,7 +213,7 @@ export function HandoffPackagePanel({
         packageType: "STANDARD",
       });
       setPackages((prev) => [created, ...prev.filter((pkg) => pkg.id !== created.id && pkg.status !== "ARCHIVED")]);
-      setCreateMessage("Átadási csomag piszkozatként létrehozva.");
+      setCreateMessage("Leadás piszkozatként létrehozva.");
     } catch (err) {
       setCreateError(getHandoffErrorMessage(err));
     } finally {
@@ -238,7 +238,7 @@ export function HandoffPackagePanel({
 
   const handleArchivePackage = async (pkg: LawyerHandoffPackageRecord) => {
     const confirmed = window.confirm(
-      "Archiválod ezt az átadási csomagot? Az audit miatt megmarad, de az aktív listából eltűnik."
+      "Archiválod ezt a Leadást? Az audit miatt megmarad, de az aktív listából eltűnik."
     );
     if (!confirmed) return;
 
@@ -248,7 +248,7 @@ export function HandoffPackagePanel({
     try {
       await archiveHandoffPackage(pkg.id);
       setPackages((prev) => prev.filter((item) => item.id !== pkg.id));
-      setSummaryMessage("Átadási csomag archiválva. Az audit miatt megmarad, de az aktív listából eltűnt.");
+      setSummaryMessage("Leadás archiválva. Az audit miatt megmarad, de az aktív listából eltűnt.");
     } catch (err) {
       setSummaryError(getHandoffErrorMessage(err));
     } finally {
@@ -270,12 +270,12 @@ export function HandoffPackagePanel({
   return (
     <section
       className="adm-board-panel p-4"
-      aria-label="Ügyvédi leadási csomagok"
+      aria-label="Leadások"
     >
       <div className="mb-3 flex items-center justify-between gap-3 border-b border-[var(--adm-border)] pb-3">
         <span className="material-symbols-outlined text-lg text-[var(--adm-green-950)] hidden">folder_special</span>
         <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--adm-green-950)]">
-          Átadási csomagok
+          Leadások
         </h3>
         <span className="rounded-full border border-[#D8C58E] bg-[var(--adm-sand-100)] px-2.5 py-1 text-[10px] font-semibold text-[#6D5418]">
           {activePackages.length} aktív
@@ -287,13 +287,13 @@ export function HandoffPackagePanel({
         </p>
       ) : null}
       <p className="mb-3 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-ivory-100)] px-3 py-2 text-[11px] leading-4 text-[var(--adm-text-muted)]">
-        Ez a csomag előkészítő munkairat. Ügyvédi jóváhagyás nélkül nem minősül végleges jogi állásfoglalásnak.
+        Ez a Leadás előkészítő munkairat. Ügyvédi jóváhagyás nélkül nem minősül végleges jogi állásfoglalásnak.
       </p>
 
       <div className="mb-3 adm-board-panel-tight p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="text-[11px] font-bold text-[var(--adm-text)]">Új átadási csomag</p>
+            <p className="text-[11px] font-bold text-[var(--adm-text)]">Új Leadás</p>
             <p className="mt-1 text-[10px] leading-4 text-[var(--adm-text-muted)]">
               {hasDocumentContext
                 ? "A kiválasztott dokumentumból piszkozat készíthető."
@@ -314,7 +314,7 @@ export function HandoffPackagePanel({
       </div>
 
       {isLoading && (
-        <p className="text-[10px] text-[var(--adm-text-muted)] italic py-2">Átadási csomagok betöltése…</p>
+        <p className="text-[10px] text-[var(--adm-text-muted)] italic py-2">Leadások betöltése…</p>
       )}
 
       {error && (
@@ -324,7 +324,7 @@ export function HandoffPackagePanel({
       {!isLoading && !error && activePackages.length === 0 && (
         <div className="adm-board-empty px-4 py-4 text-center">
           <p className="text-[12px] font-semibold text-[var(--adm-text)]">
-            Nincs aktív átadási csomag ehhez az ügyhöz.
+            Nincs aktív Leadás ehhez az ügyhöz.
           </p>
           <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">
             {hasDocumentContext ? "Készíts piszkozatot a kiválasztott dokumentumból." : "Előbb válassz dokumentumot a Dokumentumtárban."}
@@ -348,7 +348,7 @@ export function HandoffPackagePanel({
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <p className="text-xs font-bold text-[var(--adm-green-950)]">
-                    Ügyvédi leadási csomag
+                    Leadás
                   </p>
                   <span
                     className={`text-[8px] px-1.5 py-0.5 font-bold uppercase tracking-widest shrink-0 ${getStatusColor(pkg.status)}`}
@@ -363,9 +363,9 @@ export function HandoffPackagePanel({
                   <span>Frissítve: {pkg.updatedAt ? new Date(pkg.updatedAt).toLocaleDateString("hu-HU") : "—"}</span>
                 </div>
 
-                {/* Csomag tartalma */}
+                {/* Leadás tartalma */}
                 <div className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-[#FAFAF8] p-3 mb-2">
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-[var(--adm-text-muted)] mb-1">Csomag tartalma</p>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-[var(--adm-text-muted)] mb-1">Leadás tartalma</p>
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="text-[9px] text-[var(--adm-text-muted)]">Forrásdokumentum</span>
@@ -426,7 +426,7 @@ export function HandoffPackagePanel({
                 )}
                 {canPkgSubmit && !hasMissingMandatory && (
                   <p className="text-[9px] text-[var(--adm-green-800)] font-bold mb-1">
-                    A csomag alapadatai beküldésre előkészítve.
+                    A Leadás alapadatai beküldésre előkészítve.
                   </p>
                 )}
 
@@ -443,7 +443,7 @@ export function HandoffPackagePanel({
                       value={summaryDraft}
                       onChange={(e) => setSummaryDraft(e.target.value)}
                       rows={3}
-                      placeholder="Írd le röviden, mit tartalmaz a leadási csomag, milyen módosítások történtek, és mire figyeljen az ügyvéd."
+                      placeholder="Írd le röviden, mit tartalmaz a Leadás, milyen módosítások történtek, és mire figyeljen az ügyvéd."
                       className="adm-board-field w-full px-2 py-1.5 text-[10px] placeholder:text-[var(--adm-text-muted)] resize-none"
                     />
                     <div className="flex items-center gap-2 mt-2">
@@ -515,7 +515,7 @@ export function HandoffPackagePanel({
                     <details className="mt-1">
                       <summary className="text-[9px] text-[var(--adm-text-muted)] cursor-pointer">Technikai részletek</summary>
                       <div className="mt-1 space-y-1 text-[9px] text-[var(--adm-text-muted)]">
-                        <p>Csomag azonosító: {pkg.id}</p>
+                        <p>Leadás azonosító: {pkg.id}</p>
                         <p>Státusz: {getStatusLabel(pkg.status)}</p>
                         <p>Létrehozva: {pkg.createdAt || "—"}</p>
                         <p>Frissítve: {pkg.updatedAt || "—"}</p>

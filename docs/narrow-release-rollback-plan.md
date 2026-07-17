@@ -271,3 +271,14 @@ Release artifacts:
 Rollback was not required because backend smoke, frontend Oryx activation, route smoke, authenticated API smoke, and authenticated visual acceptance all passed. The prior known-good component artifacts remain available and were not overwritten.
 
 Any future rollback remains a separately approved ZIP deployment. No rollback, settings change, database operation, SKU/scale change, or resource creation was performed in this release.
+
+## Task Lifecycle Feature Branch
+
+No task-lifecycle artifact was built or deployed, so no runtime rollback is required.
+
+- Official release branch was not mutated by this feature task.
+- Existing production backend/frontend deployments remain unchanged.
+- If the feature branch is abandoned, delete only the feature branch/worktree after preserving the audit documents as needed.
+- Do not apply a schema migration or deploy the partial non-schema hardening as a complete lifecycle.
+
+Current feature classification: `TASK_LIFECYCLE_SCHEMA_APPROVAL_REQUIRED`.

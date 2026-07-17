@@ -11,6 +11,7 @@ const ACTIVE_TASK_STATUSES = new Set(['PENDING', 'TODO', 'IN_PROGRESS', 'SUBMITT
 const REVIEW_TASK_STATUSES = new Set(['SUBMITTED', 'UNDER_REVIEW', 'IN_REVIEW']);
 const DONE_TASK_STATUSES = new Set(['COMPLETED', 'DONE', 'CANCELLED']);
 const PRIVILEGED_ROLES = new Set(['ADMIN', 'PARTNER']);
+const REVIEWER_ROLES = new Set(['ADMIN', 'PARTNER', 'LAWYER', 'COLLAB_LAWYER']);
 
 export interface WorkItemCapabilities {
   canStart: boolean;
@@ -154,10 +155,6 @@ function isManagerRole(role?: string | null): boolean {
   return PRIVILEGED_ROLES.has(String(role || '').toUpperCase());
 }
 
-function isTaskActor(task: { assignedToId?: string | null; assignedById?: string | null }, userId: string, userRole?: string | null): boolean {
-  return isManagerRole(userRole) || task.assignedToId === userId || task.assignedById === userId;
-}
-
 export function deriveTaskCapabilities(
   task: { status?: string | null; assignedToId?: string | null; assignedById?: string | null; stuckReason?: string | null },
   currentUserId: string,
@@ -165,16 +162,18 @@ export function deriveTaskCapabilities(
 ): WorkItemCapabilities {
   const capabilities = blankCapabilities();
   const status = String(task.status || '').toUpperCase();
-  const actor = isTaskActor(task, currentUserId, currentUserRole);
-  if (!actor) return capabilities;
+  const role = String(currentUserRole || '').toUpperCase();
+  const assignedWorker = Boolean(task.assignedToId) && task.assignedToId === currentUserId;
+  const taskSupervisor = Boolean(task.assignedById) && task.assignedById === currentUserId;
+  const reviewer = task.assignedToId !== currentUserId && (taskSupervisor || REVIEWER_ROLES.has(role));
 
-  capabilities.canStart = OPEN_TASK_STATUSES.has(status);
-  capabilities.canSubmitForReview = status === 'IN_PROGRESS';
-  capabilities.canApprove = REVIEW_TASK_STATUSES.has(status);
-  capabilities.canReturnForCorrection = REVIEW_TASK_STATUSES.has(status);
+  capabilities.canStart = assignedWorker && OPEN_TASK_STATUSES.has(status);
+  capabilities.canSubmitForReview = assignedWorker && status === 'IN_PROGRESS';
+  capabilities.canApprove = reviewer && REVIEW_TASK_STATUSES.has(status);
+  capabilities.canReturnForCorrection = reviewer && REVIEW_TASK_STATUSES.has(status);
   capabilities.canComplete = capabilities.canApprove;
-  capabilities.canBlock = ['PENDING', 'TODO', 'IN_PROGRESS'].includes(status);
-  capabilities.canUnblock = status === 'BLOCKED';
+  capabilities.canBlock = assignedWorker && ['PENDING', 'TODO', 'IN_PROGRESS'].includes(status);
+  capabilities.canUnblock = assignedWorker && status === 'BLOCKED';
   capabilities.canCreateHandoff = false;
   return capabilities;
 }
@@ -186,6 +185,7 @@ export function validateTaskTransition(
   currentUserRole?: string | null
 ): { status: string; data: Record<string, unknown>; timelineType: string } {
   const capabilities = deriveTaskCapabilities(task, currentUserId, currentUserRole);
+  const status = String(task.status || '').toUpperCase();
   const now = new Date();
 
   const denied = () => {
@@ -196,32 +196,32 @@ export function validateTaskTransition(
   };
 
   if (action === 'START') {
-    if (!capabilities.canStart && isTaskActor(task, currentUserId, currentUserRole)) conflict();
+    if (!OPEN_TASK_STATUSES.has(status)) conflict();
     if (!capabilities.canStart) denied();
     return { status: 'IN_PROGRESS', data: { status: 'IN_PROGRESS', startedAt: now }, timelineType: 'TASK_STARTED' };
   }
   if (action === 'SUBMIT_FOR_REVIEW') {
-    if (!capabilities.canSubmitForReview && isTaskActor(task, currentUserId, currentUserRole)) conflict();
+    if (status !== 'IN_PROGRESS') conflict();
     if (!capabilities.canSubmitForReview) denied();
     return { status: 'IN_REVIEW', data: { status: 'IN_REVIEW', submittedAt: now }, timelineType: 'TASK_SUBMITTED' };
   }
   if (action === 'APPROVE') {
-    if (!capabilities.canApprove && isTaskActor(task, currentUserId, currentUserRole)) conflict();
+    if (!REVIEW_TASK_STATUSES.has(status)) conflict();
     if (!capabilities.canApprove) denied();
     return { status: 'DONE', data: { status: 'DONE', completedAt: now }, timelineType: 'TASK_COMPLETED' };
   }
   if (action === 'RETURN_FOR_CORRECTION') {
-    if (!capabilities.canReturnForCorrection && isTaskActor(task, currentUserId, currentUserRole)) conflict();
+    if (!REVIEW_TASK_STATUSES.has(status)) conflict();
     if (!capabilities.canReturnForCorrection) denied();
     return { status: 'IN_PROGRESS', data: { status: 'IN_PROGRESS', completedAt: null }, timelineType: 'TASK_REJECTED' };
   }
   if (action === 'BLOCK') {
-    if (!capabilities.canBlock && isTaskActor(task, currentUserId, currentUserRole)) conflict();
+    if (!['PENDING', 'TODO', 'IN_PROGRESS'].includes(status)) conflict();
     if (!capabilities.canBlock) denied();
     return { status: 'BLOCKED', data: { status: 'BLOCKED', stuckSince: now }, timelineType: 'TASK_BLOCKED' };
   }
   if (action === 'UNBLOCK') {
-    if (!capabilities.canUnblock && isTaskActor(task, currentUserId, currentUserRole)) conflict();
+    if (status !== 'BLOCKED') conflict();
     if (!capabilities.canUnblock) denied();
     return { status: 'IN_PROGRESS', data: { status: 'IN_PROGRESS', stuckReason: null, stuckSince: null }, timelineType: 'TASK_STARTED' };
   }

@@ -99,6 +99,24 @@ function assertDecision(value: string | undefined): LawyerHandoffDecision {
   return value as LawyerHandoffDecision;
 }
 
+function assertEditableStatusTransition(currentValue: string, nextValue: LawyerHandoffStatus): void {
+  const current = currentValue as LawyerHandoffStatus;
+  if (current === nextValue) return;
+
+  const allowed: Partial<Record<LawyerHandoffStatus, LawyerHandoffStatus[]>> = {
+    DRAFT: ['PREPARED', 'SUBMITTED'],
+    PREPARED: ['DRAFT', 'SUBMITTED'],
+    REJECTED: ['DRAFT', 'PREPARED'],
+  };
+  if (!(allowed[current] || []).includes(nextValue)) {
+    throw new HandoffPackageServiceError(
+      409,
+      'HANDOFF_TRANSITION_REQUIRES_EXPLICIT_ROUTE',
+      'The requested handoff status transition is not available through the generic update route.'
+    );
+  }
+}
+
 function assertAdjacentFoundationAvailable(
   value: string | null | undefined,
   environmentVariable: string,
@@ -371,6 +389,7 @@ class HandoffPackagesService {
 
     if (params.status !== undefined) {
       const newStatus = assertStatus(params.status);
+      assertEditableStatusTransition(existing.status, newStatus);
       updateData.status = newStatus;
 
       if (newStatus === 'SUBMITTED' && !existing.submittedAt) {
@@ -388,6 +407,19 @@ class HandoffPackagesService {
     });
 
     const result = toResult(record);
+    if (params.status === 'SUBMITTED' && existing.status !== 'SUBMITTED') {
+      await createTimelineEvent({
+        action: 'SUBMITTED',
+        packageId: result.id,
+        caseId: result.caseId,
+        userId: params.userId,
+        status: result.status,
+        sourceDocumentId: result.sourceDocumentId,
+        anonymizedDocumentId: result.anonymizedDocumentId,
+        generatedContractId: result.generatedContractId,
+        legalAnalysisId: result.legalAnalysisId,
+      });
+    }
     return result;
   }
 
@@ -418,6 +450,16 @@ class HandoffPackagesService {
     }
 
     const decision = assertDecision(params.decision);
+    if (existing.status === 'APPROVED' || existing.status === 'REJECTED') {
+      throw new HandoffPackageServiceError(409, 'REVIEW_ALREADY_DECIDED', 'The handoff review has already been decided.');
+    }
+    if (existing.status !== 'SUBMITTED' && existing.status !== 'IN_REVIEW') {
+      throw new HandoffPackageServiceError(409, 'HANDOFF_NOT_READY', 'The handoff must be submitted before review.');
+    }
+    const reviewComment = String(params.reviewComment || '').trim();
+    if (decision !== 'APPROVED' && !reviewComment) {
+      throw new HandoffPackageServiceError(400, 'REVIEW_COMMENT_REQUIRED', 'A reviewer note is required when returning a handoff.');
+    }
     const newStatus: LawyerHandoffStatus = decision === 'APPROVED' ? 'APPROVED' : 'REJECTED';
 
     const record = await repo.update({
@@ -427,7 +469,7 @@ class HandoffPackagesService {
         reviewedById: params.userId || null,
         reviewedAt: new Date(),
         reviewDecision: decision,
-        reviewComment: params.reviewComment || null,
+        reviewComment: reviewComment || null,
       },
     });
 

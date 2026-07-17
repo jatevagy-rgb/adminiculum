@@ -337,4 +337,21 @@ A new explicit provenance resolution and approval is required before deployment.
 
 Decision: `GO_COMPLETE`.
 
+## Task Lifecycle Leadás/Review Follow-up
+
+`TASK-LIFECYCLE-LEADÁS-REVIEW-WORKFLOW-1` completed its contract audit and maximum safe non-schema hardening on a separate feature branch.
+
+- Full task-owned Leadás implementation: `NO-GO` pending explicit schema approval.
+- Release integration: not performed.
+- Artifacts: not created.
+- Deployment: not attempted.
+- Safe changes on the feature branch: self-review denial, reviewer/preparer authorization separation, terminal handoff transition guards, reviewer-note requirement, and truthful task-list state/action separation.
+- Blocking persistence gaps: task-to-Leadás link, immutable revisions, submitter/reviewer assignment, requested attention, task-linked time/idempotency, atomic transitions, and external-completion state.
+- Validation note: targeted lifecycle tests, both TypeScript checks, both builds, Prisma validation and the frontend production-env guard passed. The full backend suite passed 441/442 tests; the only failure is a stale dashboard static assertion inherited unchanged from accepted dashboard commit `a607f6e`.
+- Accepted dashboard ancestry `a607f6e` remains preserved.
+
+This follow-up does not alter the completed SOL56 production deployment record. It blocks only the new task-lifecycle feature from release.
+
+Classification: `TASK_LIFECYCLE_SCHEMA_APPROVAL_REQUIRED`.
+
 Final classification: `SOL56_UX_PRODUCTION_DEPLOYMENT_SUCCESS`.

@@ -881,9 +881,9 @@ export async function getReviewTasksForUser(userId: string) {
   return prisma.task.findMany({
     where: {
       status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'IN_REVIEW'] as any },
+      NOT: { assignedToId: userId },
       ...(!privileged ? {
         OR: [
-          { assignedToId: userId },
           { assignedById: userId },
           { case: { assignedLawyerId: userId } },
           { case: { createdById: userId } },
