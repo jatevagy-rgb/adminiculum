@@ -39,14 +39,6 @@ type FocusItem = {
   tone: "green" | "amber" | "blue";
 };
 
-type SummaryCardProps = {
-  label: string;
-  value: number | null;
-  emptyLabel: string;
-  href: string;
-  tone: "petrol" | "amber" | "gold" | "navy" | "terracotta" | "green";
-};
-
 type DashboardAvailability = {
   tasks: boolean;
   cases: boolean;
@@ -163,34 +155,6 @@ function FocusRow({ item, dominant = false }: { item: FocusItem; dominant?: bool
           {item.action} →
         </span>
       </div>
-    </Link>
-  );
-}
-
-function SummaryCard({ label, value, emptyLabel, href, tone }: SummaryCardProps) {
-  const toneClass =
-    tone === "amber"
-      ? "bg-[#FD9E02] text-[#3E2400]"
-      : tone === "gold"
-        ? "bg-[#FFB703] text-[#4A3300]"
-        : tone === "terracotta"
-          ? "bg-[var(--adm-terracotta-700)] text-white"
-          : tone === "green"
-            ? "bg-[var(--adm-green-800)] text-white"
-        : tone === "navy"
-          ? "bg-[#023047] text-white"
-          : "bg-[#126782] text-white";
-  const panelClass = tone === "amber" || tone === "gold" ? "bg-black/[0.07] border-black/[0.12]" : "bg-white/[0.14] border-white/[0.24]";
-
-  return (
-    <Link href={href} className={`${toneClass} min-h-[92px] p-3 transition-transform hover:-translate-y-0.5`}>
-      <span className="block text-[10px] font-bold uppercase tracking-[0.14em] opacity-85">{label}</span>
-      <span className={`mt-2 flex items-end justify-between gap-3 border px-3 py-2 ${panelClass}`}>
-        <span className="font-serif text-[27px] font-medium leading-none">{value ?? "—"}</span>
-        <span className="text-right text-[10px] font-semibold opacity-85">
-          {value === null ? "Most nem elérhető" : value === 0 ? emptyLabel : "Aktív tétel"}
-        </span>
-      </span>
     </Link>
   );
 }
@@ -342,12 +306,6 @@ export function DashboardFocused() {
   const caseCount = availability.cases
     ? cases.filter((item) => !closedCaseStatuses.has(String(item.status || "").toUpperCase())).length
     : null;
-  const reviewCount = availability.stats
-    ? stats?.stats.inReview ?? 0
-    : availability.tasks
-      ? reviewTasks.length
-      : null;
-  const todayTaskCount = availability.agenda ? agenda?.summary.today ?? 0 : null;
   const externalCommunicationCount = availability.communications
     ? communications.filter((item) => classifyAudience(item) === "external").length
     : null;
@@ -443,10 +401,14 @@ export function DashboardFocused() {
           )}
         </section>
 
-        <section className="grid grid-cols-1 gap-2.5 sm:grid-cols-3" aria-label="Napi munka összefoglaló">
-          <SummaryCard label="Nyitott ügyek" value={caseCount} emptyLabel="Nincs ügy" href="/cases" tone="petrol" />
-          <SummaryCard label="Mai teendők" value={todayTaskCount} emptyLabel="Nincs mai teendő" href="/deadlines?view=day" tone="amber" />
-          <SummaryCard label="Review tételek" value={reviewCount} emptyLabel="Nincs review tétel" href="/reviews" tone="navy" />
+        <section aria-label="Nyitott ügyek összefoglaló">
+          <Link href="/cases" className="inline-flex items-center gap-3 border border-[var(--adm-border)] border-l-4 border-l-[var(--adm-blue-700)] bg-white px-3 py-2 transition-colors hover:bg-[var(--adm-surface)]">
+            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Nyitott ügyek</span>
+            <span className="font-serif text-[21px] font-medium leading-none text-[var(--adm-text)]">{caseCount ?? "—"}</span>
+            <span className="text-[10px] font-semibold text-[var(--adm-text-muted)]">
+              {caseCount === null ? "Most nem elérhető" : caseCount === 0 ? "Nincs nyitott ügy" : "Ügylista"} →
+            </span>
+          </Link>
         </section>
 
         <section className="border border-[var(--adm-border)] bg-white" aria-labelledby="dashboard-calendar-heading">
