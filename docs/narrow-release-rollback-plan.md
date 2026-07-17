@@ -251,3 +251,23 @@ The 2026-07-17 production execution stopped before backend deployment because th
 - Both rollback artifacts remained readable and hash-valid.
 
 Classification: `operational_ux_production_deployment_1_blocked_artifact_provenance`.
+
+## SOL56 UX Deployment Rollback Status
+
+The SOL56 UX release deployed successfully on 2026-07-17.
+
+Current active deployments:
+
+- Backend: `b8e64588-2ca0-4f97-835c-0d894d831588`.
+- Frontend: `3785eb06-955b-4d7e-8e43-346e2ed306b3`.
+
+Release artifacts:
+
+| Component | Artifact | SHA-256 |
+| --- | --- | --- |
+| Backend | `C:\Users\hubay\AppData\Local\Temp\adminiculum-sol56-ux-release\adminiculum-backend-sol56-ux-1033a4d.zip` | `87ab53eee0004190788068bc00b289cb24208f39859121f08ca89135d690d794` |
+| Frontend | `C:\Users\hubay\AppData\Local\Temp\adminiculum-sol56-ux-release\adminiculum-frontend-sol56-ux-1033a4d.zip` | `68ec4754616a1b61dfa8aefdb28790605afc7333f2a2d5d3f7cfdb45ee746ae5` |
+
+Rollback was not required because backend smoke, frontend Oryx activation, route smoke, authenticated API smoke, and authenticated visual acceptance all passed. The prior known-good component artifacts remain available and were not overwritten.
+
+Any future rollback remains a separately approved ZIP deployment. No rollback, settings change, database operation, SKU/scale change, or resource creation was performed in this release.
