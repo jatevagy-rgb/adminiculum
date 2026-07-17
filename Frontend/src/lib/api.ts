@@ -3134,6 +3134,21 @@ export async function linkCommunicationToCase(
   );
 }
 
+export async function linkCommunicationToTask(
+  communicationId: string,
+  taskId: string
+): Promise<{
+  success: boolean;
+  linked: boolean;
+  task: { id: string; title: string; caseId: string; status: string; sourceCommunicationId: string | null };
+  message: string;
+}> {
+  return fetchApi(`/communications/${communicationId}/link-task`, {
+    method: 'POST',
+    body: JSON.stringify({ taskId }),
+  });
+}
+
 export async function createCaseFromCommunication(
   communicationId: string,
   data: {

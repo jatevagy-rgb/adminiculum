@@ -78,7 +78,7 @@ function CaseHandoffPageContent({ params }: CaseHandoffPageProps) {
 
       <section className="mx-auto w-full max-w-[980px] space-y-4 p-4 lg:p-5">
         <OperationalPageHeader
-          title="Leadási csomag"
+          title="Leadás"
           subtitle="A kiválasztott ügyirat előkészítése ügyvédi review-ra."
           secondaryActions={
             <Link href={`/cases/${encodeURIComponent(caseId)}/documents`} className="adm-link-button px-3 py-2 text-xs">

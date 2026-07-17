@@ -2340,7 +2340,7 @@ return (
                     href={`/cases/${encodeURIComponent(activeCaseId)}/handoff`}
                     className="inline-flex items-center justify-center rounded-[5px] border border-[var(--adm-border)] bg-white px-4 py-2 text-[13px] font-semibold leading-none text-[var(--adm-text)] transition-colors hover:border-[var(--adm-text)] hover:bg-[var(--adm-surface)]"
                   >
-                    Leadási csomag
+                    Leadás
                   </Link>
                 ) : null}
               </div>

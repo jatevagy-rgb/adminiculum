@@ -46,10 +46,15 @@ describe('ops pages UX cleanup static guards', () => {
 
   it('keeps the dashboard card grid truthful when a source is unavailable', () => {
     expect(dashboard).toContain('value: number | null');
-    expect(dashboard).toContain('caseResult?.pagination.total ?? null');
+    expect(dashboard).toContain('closedCaseStatuses.has');
+    expect(dashboard).toContain('availability.cases');
     expect(dashboard).toContain('value === null ? "Most nem elérhető"');
-    expect(dashboard).toContain('<SummaryCard label="Ügyek"');
+    expect(dashboard).toContain('<SummaryCard label="Nyitott ügyek"');
+    expect(dashboard).toContain('Gyors műveletek');
+    expect(dashboard).toContain('Mai naptár');
+    expect(dashboard).toContain('Ügyfélhez sorolt kommunikáció');
     expect(dashboard).not.toContain('<SummaryCard label="Aktív ügyek"');
+    expect(dashboard).not.toMatch(/Napi munkapad|Mai működési kép|Kapacitás: 8/);
   });
 
   it('maps case and profile enum values to user-facing labels', () => {

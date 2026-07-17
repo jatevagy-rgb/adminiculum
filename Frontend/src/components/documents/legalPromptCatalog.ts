@@ -367,7 +367,7 @@ Adj 4–8 legfontosabb blokkot.`,
   {
     id: "lawyerHandoffSummary",
     label: "Ügyvédi leadási csomag összefoglaló",
-    shortLabel: "Leadási csomag",
+    shortLabel: "Leadás",
     category: "handoff",
     description: "Rövid csomagösszefoglaló ügyvédi review-hoz.",
     requiresDocumentText: false,

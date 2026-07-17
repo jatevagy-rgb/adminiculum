@@ -264,7 +264,7 @@ export const navItems = [
   { id: 'dashboard', label: 'Műszerfal', icon: 'grid' },
   { id: 'cases', label: 'Ügyek', icon: 'folder' },
   { id: 'clause-library', label: 'Clause Library', icon: 'file' },
-  { id: 'tasks', label: 'Feladatok', icon: 'briefcase' },
+  { id: 'tasks', label: 'Feladatok', icon: 'cat' },
   { id: 'reviews', label: 'Review sor', icon: 'file' },
   { id: 'documents-compare', label: 'Verzió-összevetés', icon: 'file' },
   { id: 'notifications', label: 'Kommunikáció', icon: 'bell' },

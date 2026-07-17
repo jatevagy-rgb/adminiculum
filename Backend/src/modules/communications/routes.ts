@@ -453,6 +453,67 @@ router.post('/:id/link-case', authenticate, requireCommunicationsFoundation, asy
   }
 });
 
+router.post('/:id/link-task', authenticate, requireCommunicationsFoundation, async (req: Request, res: Response) => {
+  const communicationId = String(req.params.id);
+  const taskId = typeof req.body?.taskId === 'string' ? req.body.taskId.trim() : '';
+
+  if (!taskId) {
+    res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'taskId is required.' });
+    return;
+  }
+
+  try {
+    const communication = await prisma.communication.findUnique({
+      where: { id: communicationId },
+      select: { id: true, caseId: true },
+    });
+    if (!communication) {
+      res.status(404).json({ status: 404, code: 'COMMUNICATION_NOT_FOUND', message: 'Communication not found.' });
+      return;
+    }
+    if (!communication.caseId) {
+      res.status(409).json({ status: 409, code: 'COMMUNICATION_CASE_REQUIRED', message: 'Communication must be linked to a case first.' });
+      return;
+    }
+
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      select: { id: true, title: true, caseId: true, status: true, sourceCommunicationId: true },
+    });
+    if (!task) {
+      res.status(404).json({ status: 404, code: 'TASK_NOT_FOUND', message: 'Task not found.' });
+      return;
+    }
+    if (task.caseId !== communication.caseId) {
+      res.status(409).json({ status: 409, code: 'TASK_CASE_MISMATCH', message: 'Task and communication must belong to the same case.' });
+      return;
+    }
+    if (task.sourceCommunicationId && task.sourceCommunicationId !== communication.id) {
+      res.status(409).json({ status: 409, code: 'TASK_ALREADY_LINKED', message: 'Task is already linked to another communication.' });
+      return;
+    }
+    if (task.sourceCommunicationId === communication.id) {
+      res.json({ success: true, linked: false, task, message: 'Task is already linked to this communication.' });
+      return;
+    }
+
+    const updatedTask = await prisma.task.update({
+      where: { id: task.id },
+      data: { sourceCommunicationId: communication.id },
+      select: { id: true, title: true, caseId: true, status: true, sourceCommunicationId: true },
+    });
+    res.json({ success: true, linked: true, task: updatedTask, message: 'Task linked to communication.' });
+  } catch (error) {
+    logPrismaRouteError('POST /communications/:id/link-task', error);
+    const prismaErr = buildPrismaErrorResponse(error);
+    if (prismaErr) {
+      res.status(prismaErr.status).json(prismaErr.body);
+      return;
+    }
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Task linking failed.' });
+  }
+});
+
 // ============================================================================
 // POST /api/v1/communications/:id/create-case
 // ----------------------------------------------------------------------------

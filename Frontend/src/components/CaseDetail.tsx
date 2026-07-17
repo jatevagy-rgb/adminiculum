@@ -1326,7 +1326,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
       tone: 'paper',
     },
     {
-      title: 'Leadási csomag',
+      title: 'Leadás',
       helper: 'Ügyvédi review-ra előkészített belső munkacsomag.',
       action: () => router.push(`/cases/${canonicalCaseId}/handoff`),
       tone: 'paper',
@@ -1854,7 +1854,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
                           </p>
                           {item.blocker && (
                             <p className="mt-1 text-[10px] font-semibold text-[#8b3a3a]">
-                              Blokkolás: {item.blocker.safeLabel || 'Strukturált blokkoló'} {item.blocker.since ? `· ${new Date(item.blocker.since).toLocaleDateString('hu-HU')}` : ''}
+                              Elakadás: {item.blocker.safeLabel || 'Strukturált ok'} {item.blocker.since ? `· ${new Date(item.blocker.since).toLocaleDateString('hu-HU')}` : ''}
                             </p>
                           )}
                         </div>
@@ -1892,10 +1892,10 @@ export function CaseDetail({ params }: CaseDetailProps) {
                             <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'return')} disabled={Boolean(actionTaskId)} className="border border-[#8B2A2A] bg-white px-2 py-1 text-[9px] font-semibold text-[#8B2A2A] disabled:opacity-50">Visszaküldöm</button>
                           )}
                           {item.type === 'TASK' && item.capabilities.canBlock && (
-                            <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'block')} disabled={Boolean(actionTaskId)} className="border border-[#8B2A2A] bg-white px-2 py-1 text-[9px] font-semibold text-[#8B2A2A] disabled:opacity-50">Blokkolom</button>
+                            <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'block')} disabled={Boolean(actionTaskId)} className="border border-[#8B2A2A] bg-white px-2 py-1 text-[9px] font-semibold text-[#8B2A2A] disabled:opacity-50">Elakadtként jelölés</button>
                           )}
                           {item.type === 'TASK' && item.capabilities.canUnblock && (
-                            <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'unblock')} disabled={Boolean(actionTaskId)} className="bg-[var(--adm-green-800)] px-2 py-1 text-[9px] font-semibold text-white disabled:opacity-50">Blokkolás feloldása</button>
+                            <button type="button" onClick={() => runWorkbenchTaskAction(item.id, 'unblock')} disabled={Boolean(actionTaskId)} className="bg-[var(--adm-green-800)] px-2 py-1 text-[9px] font-semibold text-white disabled:opacity-50">Elakadás feloldása</button>
                           )}
                         </div>
                       </div>

@@ -176,7 +176,7 @@ function mapRecentDocLabel(input?: string | null): string {
   if (value.includes("DOCUMENT_DOWNLOADED")) return "Letöltött dokumentum";
   if (value.includes("DOCUMENT_UPDATED")) return "Frissített dokumentum";
   if (value.includes("WORKSPACE")) return "Munkapéldány esemény";
-  if (value.includes("HANDOFF")) return "Leadási csomag esemény";
+  if (value.includes("HANDOFF")) return "Leadási esemény";
   if (value.includes("REVIEW")) return "Review dokumentum";
   return "Feltöltött dokumentum";
 }
@@ -794,13 +794,13 @@ export function Dashboard() {
           </aside>
         </section>
 
-        {/* 6 — Kommunikációs figyelő: dominant full-width workbench (8 external + 8 internal capacity) */}
+        {/* 6 — Kommunikáció */}
         <section>
           <article className="adm-panel adm-panel-primary overflow-hidden">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b-[3px] border-[var(--adm-blue-500)] bg-[var(--adm-blue-100)]/20 px-4 py-3 lg:px-5">
               <div>
                 <p className="adm-kicker text-[var(--adm-blue-700)]">Kommunikáció</p>
-                <h3 className="adm-heading mt-0.5 text-[24px] leading-tight">Kommunikációs figyelő</h3>
+                <h3 className="adm-heading mt-0.5 text-[24px] leading-tight">Kommunikáció</h3>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-500)]/30 bg-[var(--adm-blue-100)]/35 px-3 py-1 text-[10.5px] font-semibold text-[var(--adm-blue-700)]">
@@ -826,7 +826,6 @@ export function Dashboard() {
                 <div className={externalComms.length > 0 ? "mt-2 space-y-1.5" : "hidden"}>
                   {externalComms.slice(0, 8).map((sig) => <CommRow key={sig.id} sig={sig} family="external" />)}
                 </div>
-                <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Kapacitás: 8 levélelőnézet</p>
               </div>
               <div className="adm-signal-card rounded-[var(--adm-radius-sm)] border-l-[3px] border-l-[var(--adm-blue-700)] p-3">
                 <div className="flex items-center justify-between gap-2">
@@ -841,7 +840,6 @@ export function Dashboard() {
                 <div className={internalComms.length > 0 ? "mt-2 space-y-1.5" : "hidden"}>
                   {internalComms.slice(0, 8).map((sig) => <CommRow key={sig.id} sig={sig} family="internal" />)}
                 </div>
-                <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Kapacitás: 8 belső jelzés</p>
               </div>
             </div>
           </article>
@@ -870,7 +868,6 @@ export function Dashboard() {
               <div className="grid gap-1.5 md:grid-cols-2">
                 {legalSignals.slice(0, 8).map((article, index) => <NewsRow key={`${article.title}-${index}`} article={article} />)}
               </div>
-              <p className="mt-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">Kapacitás: 8 jogi jelzés · valós forrásokból</p>
             </div>
           </article>
 

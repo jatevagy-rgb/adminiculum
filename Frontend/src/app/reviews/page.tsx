@@ -42,6 +42,26 @@ type QueueItem = {
   taskId?: string; // raw task.id for task-source items only
 };
 
+type AttentionLevel = "scan" | "approve" | "sign" | "edit" | "deep";
+
+const ATTENTION_CONFIG: Record<AttentionLevel, { label: string; className: string }> = {
+  scan: { label: "Átfutás", className: "border-[var(--adm-border)] bg-[var(--adm-ivory-100)] text-[var(--adm-text-muted)]" },
+  approve: { label: "Jóváhagyás", className: "border-[#f5d89a] bg-[#fef3e2] text-[#8B6B3A]" },
+  sign: { label: "Aláírás", className: "border-emerald-200 bg-emerald-50 text-emerald-800" },
+  edit: { label: "Szerkesztés", className: "border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] text-[var(--adm-terracotta-700)]" },
+  deep: { label: "Részletes ellenőrzés", className: "border-[var(--adm-blue-700)]/25 bg-[var(--adm-blue-100)]/35 text-[var(--adm-blue-700)]" },
+};
+
+function getAttentionLevel(item: QueueItem): AttentionLevel {
+  const status = item.status.toUpperCase();
+  const priority = item.priority.toUpperCase();
+  if (status === "REJECTED") return "edit";
+  if (item.source === "document" && ["APPROVED", "FINALIZED", "FINAL"].includes(status)) return "sign";
+  if (["URGENT", "HIGH"].includes(priority)) return "deep";
+  if (["SUBMITTED", "IN_REVIEW", "REVIEW_NEEDED", "REVIEW_SUBMITTED"].includes(status)) return "approve";
+  return "scan";
+}
+
 // Status label and styling mapping
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; border: string; badge?: string }> = {
   IN_REVIEW: { label: "Review alatt", color: "text-[#8B6B3A]", bg: "bg-[#fef3e2]", border: "border-[#f5d89a]", badge: "Folyamatban" },
@@ -58,7 +78,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   TODO: { label: "Teendő", color: "text-[var(--adm-text-muted)]", bg: "bg-[var(--adm-ivory-200)]", border: "border-[var(--adm-border)]", badge: "Teendő" },
   DONE: { label: "Kész", color: "text-[#059669]", bg: "bg-[#ECFDF5]", border: "border-[#a7f3d0]", badge: "Kész" },
   COMPLETED: { label: "Befejezve", color: "text-[#059669]", bg: "bg-[#ECFDF5]", border: "border-[#a7f3d0]", badge: "Kész" },
-  BLOCKED: { label: "Blokkolva", color: "text-[var(--adm-terracotta-700)]", bg: "bg-[var(--adm-terracotta-100)]", border: "border-[#fca5a5]", badge: "Blokkolva" },
+  BLOCKED: { label: "Elakadt", color: "text-[var(--adm-terracotta-700)]", bg: "bg-[var(--adm-terracotta-100)]", border: "border-[#fca5a5]", badge: "Elakadt" },
   CANCELLED: { label: "Törölve", color: "text-[var(--adm-text-muted)]", bg: "bg-[var(--adm-ivory-100)]", border: "border-[var(--adm-border)]", badge: "Törölve" },
 };
 
@@ -93,7 +113,7 @@ const getActionUrgency = (status: string): ActionUrgency => {
   // Done states — no action needed
   if (["APPROVED", "DONE", "COMPLETED", "FINAL"].includes(upper)) return "done";
   // Blocked — external dependency (cancelled)
-  if (["CANCELLED"].includes(upper)) return "blocked";
+  if (["BLOCKED", "CANCELLED"].includes(upper)) return "blocked";
   // Needs action — rejected (returned with changes needed), in-review, submitted, generated, pending, in-progress, todo
   if (["REJECTED", "IN_REVIEW", "SUBMITTED", "IN_PROGRESS", "REVIEW_NEEDED", "REVIEW_SUBMITTED", "GENERATED", "PENDING", "TODO"].includes(upper)) return "needs_action";
   return "waiting";
@@ -198,6 +218,7 @@ function ReviewsPageContent() {
   const [assigneeFilter, setAssigneeFilter] = useState("all");
   const [caseFilter, setCaseFilter] = useState("all");
   const [urgentOnly, setUrgentOnly] = useState(false);
+  const [attentionFilter, setAttentionFilter] = useState<AttentionLevel | "all">("all");
   const [search, setSearch] = useState("");
 
   const [caseSummaries, setCaseSummaries] = useState<Record<string, CaseSummaryResponse>>({});
@@ -227,7 +248,7 @@ function ReviewsPageContent() {
     try {
       await reassignTask(taskId, newAssigneeId);
       setQueue(prev => prev.map(item =>
-        item.id === taskId
+        item.taskId === taskId
           ? { ...item, assigneeName: newAssigneeName }
           : item
       ));
@@ -268,7 +289,7 @@ function ReviewsPageContent() {
 
         const reviewTasks: QueueItem[] = myTasks
           .filter((task: TaskItem) =>
-            ["IN_REVIEW", "SUBMITTED", "REVIEW_NEEDED", "REVIEW_SUBMITTED", "TODO", "PENDING", "IN_PROGRESS", "REJECTED"].includes(task.status.toUpperCase())
+            ["IN_REVIEW", "SUBMITTED", "REVIEW_NEEDED", "REVIEW_SUBMITTED", "TODO", "PENDING", "IN_PROGRESS", "REJECTED", "BLOCKED"].includes(task.status.toUpperCase())
           )
           .map((task: TaskItem) => ({
             id: `task-${task.id}`,
@@ -348,14 +369,15 @@ function ReviewsPageContent() {
         item.priority === "URGENT" ||
         item.priority === "HIGH" ||
         (item.dueDate ? (daysUntil(item.dueDate) ?? 99) <= 1 : false);
+      const attentionMatch = attentionFilter === "all" || getAttentionLevel(item) === attentionFilter;
       const searchMatch =
         !s ||
         item.title.toLowerCase().includes(s) ||
         item.caseNumber.toLowerCase().includes(s) ||
         item.caseTitle.toLowerCase().includes(s);
-      return statusMatch && assigneeMatch && caseMatch && urgentMatch && searchMatch;
+      return statusMatch && assigneeMatch && caseMatch && urgentMatch && attentionMatch && searchMatch;
     });
-  }, [queue, statusFilter, assigneeFilter, caseFilter, urgentOnly, search]);
+  }, [attentionFilter, queue, statusFilter, assigneeFilter, caseFilter, urgentOnly, search]);
 
   // Group queue by action urgency for better clarity
   const groupedByUrgency = useMemo(() => {
@@ -409,6 +431,7 @@ function ReviewsPageContent() {
     assigneeFilter !== "all" ||
     caseFilter !== "all" ||
     urgentOnly ||
+    attentionFilter !== "all" ||
     search.trim().length > 0;
   const assignees = useMemo(() => Array.from(new Set(queue.map((item) => item.assigneeName))).sort(), [queue]);
   const statuses = useMemo(() => Array.from(new Set(queue.map((item) => item.status))).sort(), [queue]);
@@ -426,7 +449,6 @@ function ReviewsPageContent() {
             <p className="adm-kicker">Jóváhagyási munkasor</p>
             <h1 className={`mt-1 text-[32px] leading-tight font-serif ${p.textDark}`}>Review sor</h1>
             <p className={`mt-1 text-xs ${p.textMuted}`}>Jóváhagyásra vagy visszaküldésre váró munkapéldányok és feladatok.</p>
-            <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">Dokumentumtár → Szerződés-workspace → Leadási csomag → Review sor. Batch jóváhagyás későbbi patchben.</p>
           </div>
 
           {/* Queue statistics bar */}
@@ -462,6 +484,13 @@ function ReviewsPageContent() {
               )}
             </div>
           )}
+
+          <div className="adm-board-panel-tight mb-2 flex flex-wrap gap-1 p-2" aria-label="Ellenőrzési igény">
+            <button type="button" onClick={() => setAttentionFilter("all")} className={`border px-2.5 py-1.5 text-[10px] font-semibold ${attentionFilter === "all" ? "border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-white" : "border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>Minden igény</button>
+            {(Object.entries(ATTENTION_CONFIG) as Array<[AttentionLevel, (typeof ATTENTION_CONFIG)[AttentionLevel]]>).map(([level, config]) => (
+              <button key={level} type="button" onClick={() => setAttentionFilter(level)} className={`border px-2.5 py-1.5 text-[10px] font-semibold ${attentionFilter === level ? config.className : "border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>{config.label}</button>
+            ))}
+          </div>
 
           <div className="adm-board-panel-tight mb-4 grid gap-2 p-3 md:grid-cols-5">
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Keresés" className={`adm-board-field w-full px-2 py-2 text-xs ${p.textDark}`} />
@@ -525,6 +554,7 @@ function ReviewsPageContent() {
                       const statusCfg = getStatusConfig(item.status);
                       const priorityCfg = getPriorityConfig(item.priority);
                       const urgency = getActionUrgency(item.status);
+                      const attention = ATTENTION_CONFIG[getAttentionLevel(item)];
                       return (
                         <button
                           key={item.id}
@@ -550,6 +580,9 @@ function ReviewsPageContent() {
                                 )}
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${priorityCfg.bg} ${priorityCfg.color}`}>
                                   {priorityCfg.label}
+                                </span>
+                                <span title="A meglévő státusz és prioritás alapján" className={`border px-1.5 py-0.5 text-[10px] ${attention.className}`}>
+                                  {attention.label}
                                 </span>
                               </div>
                               <p className="text-xs text-[var(--adm-text-muted)] mt-1">{item.caseNumber} · {item.caseTitle}</p>
@@ -665,7 +698,7 @@ function ReviewsPageContent() {
                 <div>
                   <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-terracotta-700)] mb-2 flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-[#DC2626]"></span>
-                    Blokkolva ({groupedByUrgency.blocked.length})
+                    Elakadt ({groupedByUrgency.blocked.length})
                   </h2>
                   <div className="space-y-2">
                     {groupedByUrgency.blocked.map((item) => {
@@ -761,6 +794,7 @@ function ReviewsPageContent() {
                   const statusCfg = getStatusConfig(selected.status);
                   const priorityCfg = getPriorityConfig(selected.priority);
                   const urgency = getActionUrgency(selected.status);
+                  const attention = ATTENTION_CONFIG[getAttentionLevel(selected)];
                   return (
                     <>
                       <span className={`text-xs px-2 py-1 rounded border ${statusCfg.bg} ${statusCfg.color} ${statusCfg.border}`}>
@@ -769,6 +803,9 @@ function ReviewsPageContent() {
                       <span className={`text-xs px-2 py-1 rounded ${priorityCfg.bg} ${priorityCfg.color}`}>
                         {priorityCfg.label} prioritás
                       </span>
+                      <span title="A meglévő státusz és prioritás alapján" className={`border px-2 py-1 text-xs ${attention.className}`}>
+                        {attention.label}
+                      </span>
                       <span className={`text-xs px-2 py-1 rounded ${
                         urgency === "needs_action" ? "bg-[#fef3e2] text-[#8B6B3A]" :
                         urgency === "blocked" ? "bg-[var(--adm-terracotta-100)] text-[var(--adm-terracotta-700)]" :
@@ -776,7 +813,7 @@ function ReviewsPageContent() {
                         "bg-[var(--adm-ivory-200)] text-[var(--adm-text-muted)]"
                       }`}>
                         {urgency === "needs_action" ? "Cselekvés szükséges" :
-                         urgency === "blocked" ? "Blokkolva" :
+                         urgency === "blocked" ? "Elakadt" :
                          urgency === "done" ? "Kész" : "Várakozó"}
                       </span>
                     </>
@@ -905,7 +942,7 @@ function ReviewsPageContent() {
                   Dokumentumtár
                 </Link>
                 <Link href={`/cases/${selected.caseId}/handoff`} className="block px-3 py-2 text-xs border border-[var(--adm-ochre-500)] bg-[var(--adm-sand-100)] text-[#7B5E2E] hover:bg-[#f5ecd8] text-center">
-                  Leadási csomag
+                  Leadás
                 </Link>
                 <Link
                   href={

@@ -130,11 +130,13 @@ function DeadlinesAgendaContent() {
       ? "MY_CASES"
       : "MY_WORK";
   const initialCaseId = searchParams?.get("caseId") || "";
+  const initialView = searchParams?.get("view") === "day" ? "day" : searchParams?.get("view") === "week" ? "week" : "agenda";
   const [agenda, setAgenda] = useState<WorkflowAgendaResponse | null>(null);
   const [scope, setScope] = useState<"MY_WORK" | "MY_CASES" | "CASE">(initialScope);
   const [caseId] = useState(initialCaseId);
   const [status, setStatus] = useState<"OPEN" | "COMPLETED" | "ALL">("OPEN");
   const [urgencyFilter, setUrgencyFilter] = useState<WorkflowDeadlineUrgency | "ALL">("ALL");
+  const [calendarView, setCalendarView] = useState<"agenda" | "day" | "week">(initialView);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -158,10 +160,19 @@ function DeadlinesAgendaContent() {
   }, [loadAgenda]);
 
   const flatItems = useMemo(() => agenda?.days.flatMap((day) => day.items) || [], [agenda]);
-  const visibleItems = useMemo(
-    () => urgencyFilter === "ALL" ? flatItems : flatItems.filter((item) => item.urgency === urgencyFilter),
-    [flatItems, urgencyFilter]
-  );
+  const visibleItems = useMemo(() => {
+    const today = new Date();
+    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    const viewItems = flatItems.filter((item) => {
+      if (calendarView === "agenda") return true;
+      const due = new Date(item.dueAt);
+      if (Number.isNaN(due.getTime())) return false;
+      const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
+      if (calendarView === "day") return dueDay === start;
+      return dueDay >= start && dueDay < start + 7 * 24 * 60 * 60 * 1000;
+    });
+    return urgencyFilter === "ALL" ? viewItems : viewItems.filter((item) => item.urgency === urgencyFilter);
+  }, [calendarView, flatItems, urgencyFilter]);
   const groupedItems = useMemo(() => {
     const order: WorkflowDeadlineUrgency[] = ["OVERDUE", "TODAY", "TOMORROW", "THIS_WEEK", "LATER"];
     return order
@@ -200,6 +211,13 @@ function DeadlinesAgendaContent() {
     }
   };
 
+  const selectCalendarView = (view: "agenda" | "day" | "week") => {
+    setCalendarView(view);
+    const params = new URLSearchParams(window.location.search);
+    if (view === "agenda") params.delete("view"); else params.set("view", view);
+    window.history.replaceState(null, "", params.toString() ? `/deadlines?${params.toString()}` : "/deadlines");
+  };
+
   return (
     <div className="deadlines-surface min-h-screen bg-[var(--adm-surface)]">
       <div className="mx-auto max-w-[1480px] p-4">
@@ -211,7 +229,7 @@ function DeadlinesAgendaContent() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link href="/tasks" className="border border-[var(--adm-green-800)] bg-[var(--adm-green-800)] px-3 py-2 text-[10px] font-semibold text-white">Feladat létrehozása</Link>
+            <Link href="/tasks?newTask=1" className="border border-[var(--adm-green-800)] bg-[var(--adm-green-800)] px-3 py-2 text-[10px] font-semibold text-white">Új határidős feladat</Link>
             <button type="button" onClick={() => setScope("MY_WORK")} className={`border px-3 py-2 text-[10px] font-semibold ${scope === "MY_WORK" ? "border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-white" : "border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>Saját munkám</button>
             <button type="button" onClick={() => setScope("MY_CASES")} className={`border px-3 py-2 text-[10px] font-semibold ${scope === "MY_CASES" ? "border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-white" : "border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>Saját ügyeim</button>
             {scope === "CASE" && (
@@ -225,6 +243,15 @@ function DeadlinesAgendaContent() {
               <option value="ALL">Összes</option>
             </select>
           </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-1 border border-[var(--adm-border)] bg-white p-2" aria-label="Naptárnézet">
+          {([[
+            "agenda",
+            "Munkasor",
+          ], ["day", "Napi nézet"], ["week", "Heti nézet"]] as Array<["agenda" | "day" | "week", string]>).map(([view, label]) => (
+            <button key={view} type="button" onClick={() => selectCalendarView(view)} className={`px-3 py-1.5 text-[10px] font-semibold ${calendarView === view ? "bg-[var(--adm-blue-950)] text-white" : "bg-[var(--adm-surface)] text-[var(--adm-text)]"}`}>{label}</button>
+          ))}
         </div>
 
         <div className="mt-3 grid gap-2 sm:grid-cols-5">

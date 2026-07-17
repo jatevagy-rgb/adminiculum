@@ -1,22 +1,39 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import {
-  getCommunications,
-  getCases,
-  getClients,
-  linkCommunicationToCase,
-  extractTaskFromCommunication,
-  createCaseFromCommunication,
   ApiError,
-  type CommunicationItem,
+  createCaseFromCommunication,
+  extractTaskFromCommunication,
+  getCases,
+  getCaseTasks,
+  getClients,
+  getCommunications,
+  linkCommunicationToCase,
+  linkCommunicationToTask,
   type CaseListItem,
   type Client,
+  type CommunicationItem,
+  type TaskItem,
 } from "@/lib/api";
+import { classifyAudience, toCommunicationSignal } from "@/lib/communicationIntake";
 
-const CASE_MATTER_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
+const LIST_LIMIT = 50;
+const closedTaskStatuses = new Set(["DONE", "COMPLETED", "APPROVED", "FINALIZED", "CANCELLED", "ARCHIVED"]);
+
+const viewOptions = [
+  { label: "Összes", value: "all" },
+  { label: "Külső", value: "external" },
+  { label: "Belső", value: "internal" },
+  { label: "Válaszra vár", value: "replies" },
+  { label: "Ügyfélhez sorolt", value: "clients" },
+  { label: "Ügyhöz sorolt", value: "cases" },
+  { label: "Feladathoz kapcsolt", value: "tasks" },
+] as const;
+
+const caseMatterTypeOptions = [
   { value: "REAL_ESTATE_SALE", label: "Ingatlan adásvétel" },
   { value: "LEASE", label: "Bérlet" },
   { value: "EMPLOYMENT", label: "Munkaviszony" },
@@ -24,44 +41,8 @@ const CASE_MATTER_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "LITIGATION", label: "Peres" },
   { value: "OTHER", label: "Egyéb" },
 ];
-import { classifyAudience, toCommunicationSignal } from "@/lib/communicationIntake";
 
-const filters = [
-  "Összes",
-  "Külső",
-  "Belső",
-  "Válaszra vár",
-  "Ügyfélhez sorolt",
-  "Ügyhöz sorolt",
-  "Feladathoz kapcsolt",
-];
-
-const filterViews: Record<string, string> = {
-  Összes: "all",
-  Külső: "external",
-  Belső: "internal",
-  "Válaszra vár": "replies",
-  "Ügyfélhez sorolt": "clients",
-  "Ügyhöz sorolt": "cases",
-  "Feladathoz kapcsolt": "tasks",
-};
-
-const viewFilters = Object.fromEntries(Object.entries(filterViews).map(([label, view]) => [view, label]));
-
-const filterTone: Record<string, string> = {
-  Összes: "var(--adm-blue-950)",
-  Külső: "var(--adm-blue-500)",
-  Belső: "var(--adm-blue-700)",
-  "Válaszra vár": "var(--adm-warm-500)",
-  "Ügyfélhez sorolt": "var(--adm-blue-500)",
-  "Ügyhöz sorolt": "var(--adm-blue-700)",
-  "Feladathoz kapcsolt": "var(--adm-blue-950)",
-};
-
-const communicationColumns = ["Feladó / forrás", "Tárgy / jelzés", "Ügyfél / ügy", "Státusz", "Idő"];
-
-const COMMUNICATION_LIST_LIMIT = 50;
-type CommunicationAudience = "external" | "internal";
+type Feedback = { tone: "success" | "error" | "info"; message: string };
 
 export default function NotificationsPage() {
   return (
@@ -71,106 +52,205 @@ export default function NotificationsPage() {
   );
 }
 
-type AssignFeedback = { tone: "success" | "error" | "info"; message: string };
-
 function CommunicationWorkspace() {
-  const [activeFilter, setActiveFilter] = useState(filters[0]);
+  const [activeView, setActiveView] = useState("all");
   const [communications, setCommunications] = useState<CommunicationItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [cases, setCases] = useState<CaseListItem[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [total, setTotal] = useState(0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Manual lawyer intake: assign an already-listed communication to an EXISTING case.
-  // Not email ingestion, not provider sync, not AI triage — a human-confirmed link only.
+  const [search, setSearch] = useState("");
+  const [contactFilter, setContactFilter] = useState("");
+  const [subjectFilter, setSubjectFilter] = useState("");
+  const [clientFilter, setClientFilter] = useState("all");
+  const [caseFilter, setCaseFilter] = useState("all");
+  const [directionFilter, setDirectionFilter] = useState("all");
+  const [audienceFilter, setAudienceFilter] = useState("all");
+  const [relationFilter, setRelationFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
+
   const [assignTarget, setAssignTarget] = useState<CommunicationItem | null>(null);
-  const [cases, setCases] = useState<CaseListItem[]>([]);
-  const [casesLoading, setCasesLoading] = useState(false);
-  const [casesLoaded, setCasesLoaded] = useState(false);
   const [selectedCaseId, setSelectedCaseId] = useState("");
-  const [isLinking, setIsLinking] = useState(false);
-  const [assignFeedback, setAssignFeedback] = useState<AssignFeedback | null>(null);
+  const [assignBusy, setAssignBusy] = useState(false);
+  const [assignFeedback, setAssignFeedback] = useState<Feedback | null>(null);
+
+  const [taskTarget, setTaskTarget] = useState<CommunicationItem | null>(null);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [taskDueDate, setTaskDueDate] = useState("");
+  const [taskPriority, setTaskPriority] = useState("MEDIUM");
+  const [taskBusy, setTaskBusy] = useState(false);
+  const [taskFeedback, setTaskFeedback] = useState<Feedback | null>(null);
+  const [createdTaskId, setCreatedTaskId] = useState<string | null>(null);
+
+  const [linkTaskTarget, setLinkTaskTarget] = useState<CommunicationItem | null>(null);
+  const [caseTasks, setCaseTasks] = useState<TaskItem[]>([]);
+  const [selectedTaskId, setSelectedTaskId] = useState("");
+  const [caseTasksLoading, setCaseTasksLoading] = useState(false);
+  const [linkTaskBusy, setLinkTaskBusy] = useState(false);
+  const [linkTaskFeedback, setLinkTaskFeedback] = useState<Feedback | null>(null);
+
+  const [createCaseTarget, setCreateCaseTarget] = useState<CommunicationItem | null>(null);
+  const [caseTitle, setCaseTitle] = useState("");
+  const [matterType, setMatterType] = useState("OTHER");
+  const [casePriority, setCasePriority] = useState("MEDIUM");
+  const [caseDeadline, setCaseDeadline] = useState("");
+  const [caseDescription, setCaseDescription] = useState("");
+  const [newCaseClientId, setNewCaseClientId] = useState("");
+  const [caseBusy, setCaseBusy] = useState(false);
+  const [caseFeedback, setCaseFeedback] = useState<Feedback | null>(null);
+  const [createdCaseId, setCreatedCaseId] = useState<string | null>(null);
 
   useEffect(() => {
     const view = new URLSearchParams(window.location.search).get("view") || "all";
-    const nextFilter = viewFilters[view] || filters[0];
-    setActiveFilter(nextFilter);
+    if (viewOptions.some((option) => option.value === view)) setActiveView(view);
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    setLoadError(null);
+    Promise.all([
+      getCommunications({ limit: LIST_LIMIT }),
+      getCases(1, 200).catch(() => null),
+      getClients().catch(() => null),
+    ])
+      .then(([communicationResult, caseResult, clientResult]) => {
+        if (!mounted) return;
+        const items = Array.isArray(communicationResult.communications) ? communicationResult.communications : [];
+        setCommunications(items);
+        setTotal(communicationResult.pagination?.total ?? items.length);
+        setCases(caseResult?.data || []);
+        setClients(clientResult?.data || []);
+        setSelectedId(items[0]?.id || null);
+      })
+      .catch((error) => {
+        console.error("Communications load failed:", error);
+        if (!mounted) return;
+        setCommunications([]);
+        setLoadError("A kommunikációs lista most nem érhető el.");
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const caseById = useMemo(() => new Map(cases.map((item) => [item.id, item])), [cases]);
+  const clientById = useMemo(() => new Map(clients.map((item) => [item.id, item])), [clients]);
+
+  const filtered = useMemo(() => {
+    const globalQuery = search.trim().toLocaleLowerCase("hu-HU");
+    const contactQuery = contactFilter.trim().toLocaleLowerCase("hu-HU");
+    const subjectQuery = subjectFilter.trim().toLocaleLowerCase("hu-HU");
+    const now = Date.now();
+
+    return communications.filter((item) => {
+      const audience = classifyAudience(item);
+      const signal = toCommunicationSignal(item);
+      const relatedCase = item.caseId ? caseById.get(item.caseId) : null;
+      const relatedClient = item.clientId ? clientById.get(item.clientId) : null;
+
+      if (activeView === "external" && audience !== "external") return false;
+      if (activeView === "internal" && audience !== "internal") return false;
+      if (activeView === "clients" && !item.clientId) return false;
+      if (activeView === "cases" && !item.caseId) return false;
+      if (activeView === "tasks" && item.sourceTaskCount <= 0) return false;
+      if (activeView === "replies") return false;
+      if (clientFilter !== "all" && item.clientId !== clientFilter) return false;
+      if (caseFilter !== "all" && item.caseId !== caseFilter) return false;
+      if (directionFilter !== "all" && signal.direction !== directionFilter) return false;
+      if (audienceFilter !== "all" && audience !== audienceFilter) return false;
+      if (relationFilter === "linked" && !item.caseId && !item.clientId && !item.documentId) return false;
+      if (relationFilter === "unlinked" && (item.caseId || item.clientId || item.documentId)) return false;
+      if (relationFilter === "tasks" && item.sourceTaskCount <= 0) return false;
+      if (dateFilter !== "all") {
+        const timestamp = new Date(item.createdAt).getTime();
+        if (Number.isNaN(timestamp)) return false;
+        const age = now - timestamp;
+        if (dateFilter === "today" && age > 24 * 60 * 60 * 1000) return false;
+        if (dateFilter === "week" && age > 7 * 24 * 60 * 60 * 1000) return false;
+        if (dateFilter === "month" && age > 31 * 24 * 60 * 60 * 1000) return false;
+      }
+
+      const contact = `${item.senderName || ""} ${item.senderEmail || ""} ${item.recipientName || ""} ${item.recipientEmail || ""}`.toLocaleLowerCase("hu-HU");
+      const subject = `${item.subject || ""} ${item.summary || ""} ${item.contentPreview || ""}`.toLocaleLowerCase("hu-HU");
+      const global = `${contact} ${subject} ${relatedClient?.name || ""} ${relatedCase?.caseNumber || ""} ${relatedCase?.title || ""}`.toLocaleLowerCase("hu-HU");
+      return (!globalQuery || global.includes(globalQuery))
+        && (!contactQuery || contact.includes(contactQuery))
+        && (!subjectQuery || subject.includes(subjectQuery));
+    });
+  }, [activeView, audienceFilter, caseById, caseFilter, clientById, clientFilter, communications, contactFilter, dateFilter, directionFilter, relationFilter, search, subjectFilter]);
+
+  const selected = filtered.find((item) => item.id === selectedId) || filtered[0] || null;
+  const hasMore = communications.length < total;
+
+  const selectView = (view: string) => {
+    setActiveView(view);
+    const url = view === "all" ? "/notifications" : `/notifications?view=${view}`;
+    window.history.replaceState(null, "", url);
+  };
+
+  const clearFilters = () => {
+    setSearch("");
+    setContactFilter("");
+    setSubjectFilter("");
+    setClientFilter("all");
+    setCaseFilter("all");
+    setDirectionFilter("all");
+    setAudienceFilter("all");
+    setRelationFilter("all");
+    setDateFilter("all");
+  };
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const result = await getCommunications({ limit: LIST_LIMIT, offset: communications.length });
+      setCommunications((current) => {
+        const merged = new Map(current.map((item) => [item.id, item]));
+        result.communications.forEach((item) => merged.set(item.id, item));
+        return Array.from(merged.values());
+      });
+      setTotal(result.pagination?.total ?? total);
+    } catch (error) {
+      console.error("Additional communications load failed:", error);
+      setLoadError("A további kommunikációk most nem tölthetők be.");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const updateCommunication = (id: string, patch: Partial<CommunicationItem>) => {
+    setCommunications((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
+  };
 
   const openAssign = (item: CommunicationItem) => {
     setAssignTarget(item);
-    setSelectedCaseId("");
-    setAssignFeedback(null);
-    if (casesLoaded || casesLoading) return;
-    setCasesLoading(true);
-    getCases(1, 200)
-      .then((response) => {
-        setCases(Array.isArray(response.data) ? response.data : []);
-        setCasesLoaded(true);
-      })
-      .catch((error) => {
-        console.error("Cases load for assignment failed:", error);
-        setAssignFeedback({
-          tone: "error",
-          message: "Az ügylista most nem érhető el. Próbáld újra később.",
-        });
-      })
-      .finally(() => setCasesLoading(false));
-  };
-
-  const closeAssign = () => {
-    if (isLinking) return;
-    setAssignTarget(null);
     setSelectedCaseId("");
     setAssignFeedback(null);
   };
 
   const submitAssign = async () => {
     if (!assignTarget || !selectedCaseId) return;
-    setIsLinking(true);
+    setAssignBusy(true);
     setAssignFeedback(null);
     try {
       const result = await linkCommunicationToCase(assignTarget.id, selectedCaseId);
-      if (result?.success) {
-        // Honest local update: the backend confirmed the link, so reflect the new caseId.
-        setCommunications((prev) =>
-          prev.map((item) => (item.id === assignTarget.id ? { ...item, caseId: selectedCaseId } : item)),
-        );
-        setAssignFeedback({ tone: "success", message: result.message || "A kommunikáció ügyhöz rendelve." });
-      } else {
-        setAssignFeedback({ tone: "error", message: "Nem sikerült ügyhöz rendelni." });
-      }
+      updateCommunication(assignTarget.id, { caseId: selectedCaseId });
+      setAssignFeedback({ tone: "success", message: result.message || "A kommunikáció ügyhöz rendelve." });
     } catch (error) {
-      if (error instanceof ApiError && error.status === 501) {
-        setAssignFeedback({
-          tone: "info",
-          message: "Az ügyhöz rendelés még nincs bekapcsolva ezen a környezeten.",
-        });
-      } else if (error instanceof ApiError && error.status === 401) {
-        setAssignFeedback({
-          tone: "error",
-          message: "A művelet nem érhető el. Jelentkezz be újra, majd próbáld újra.",
-        });
-      } else {
-        setAssignFeedback({
-          tone: "error",
-          message: "Nem sikerült ügyhöz rendelni. Ellenőrizd a kapcsolatot vagy próbáld újra.",
-        });
-      }
+      setAssignFeedback(apiFeedback(error, "Nem sikerült ügyhöz rendelni."));
     } finally {
-      setIsLinking(false);
+      setAssignBusy(false);
     }
   };
-
-  // Manual lawyer task extraction from a communication that already has a case.
-  // Not AI, not automatic email processing — a human-entered task that the backend
-  // tags with sourceCommunicationId for later context.
-  const [taskTarget, setTaskTarget] = useState<CommunicationItem | null>(null);
-  const [taskTitle, setTaskTitle] = useState("");
-  const [taskDescription, setTaskDescription] = useState("");
-  const [taskDueDate, setTaskDueDate] = useState("");
-  const [taskPriority, setTaskPriority] = useState("MEDIUM");
-  const [isCreatingTask, setIsCreatingTask] = useState(false);
-  const [taskFeedback, setTaskFeedback] = useState<AssignFeedback | null>(null);
-  const [createdTaskId, setCreatedTaskId] = useState<string | null>(null);
 
   const openTask = (item: CommunicationItem) => {
     setTaskTarget(item);
@@ -182,16 +262,9 @@ function CommunicationWorkspace() {
     setCreatedTaskId(null);
   };
 
-  const closeTask = () => {
-    if (isCreatingTask) return;
-    setTaskTarget(null);
-    setTaskFeedback(null);
-    setCreatedTaskId(null);
-  };
-
   const submitTask = async () => {
-    if (!taskTarget || !taskTarget.caseId || !taskTitle.trim()) return;
-    setIsCreatingTask(true);
+    if (!taskTarget?.caseId || !taskTitle.trim()) return;
+    setTaskBusy(true);
     setTaskFeedback(null);
     try {
       const result = await extractTaskFromCommunication(taskTarget.id, {
@@ -201,1236 +274,233 @@ function CommunicationWorkspace() {
         priority: taskPriority,
         caseId: taskTarget.caseId,
       });
-      if (result?.success) {
-        // Honest local update: backend confirmed creation, so bump the count.
-        setCommunications((prev) =>
-          prev.map((item) =>
-            item.id === taskTarget.id ? { ...item, sourceTaskCount: item.sourceTaskCount + 1 } : item,
-          ),
-        );
-        // Only surface a task link when the response carries a real task id.
-        setCreatedTaskId(result.task?.id ?? null);
-        setTaskFeedback({
-          tone: "success",
-          message: result.task?.title ? `Feladat létrehozva: ${result.task.title}` : "Feladat létrehozva.",
-        });
-      } else {
-        setTaskFeedback({ tone: "error", message: "Nem sikerült feladatot létrehozni." });
-      }
+      updateCommunication(taskTarget.id, { sourceTaskCount: taskTarget.sourceTaskCount + 1 });
+      setCreatedTaskId(result.task?.id || null);
+      setTaskFeedback({ tone: "success", message: result.task?.title ? `Feladat létrehozva: ${result.task.title}` : "Feladat létrehozva." });
     } catch (error) {
-      if (error instanceof ApiError && error.status === 501) {
-        setTaskFeedback({
-          tone: "info",
-          message: "A feladat létrehozása kommunikációból még nincs bekapcsolva ezen a környezeten.",
-        });
-      } else if (error instanceof ApiError && error.status === 401) {
-        setTaskFeedback({
-          tone: "error",
-          message: "A művelet nem érhető el. Jelentkezz be újra, majd próbáld újra.",
-        });
-      } else {
-        setTaskFeedback({
-          tone: "error",
-          message: "Nem sikerült feladatot létrehozni. Ellenőrizd a kapcsolatot vagy próbáld újra.",
-        });
-      }
+      setTaskFeedback(apiFeedback(error, "Nem sikerült feladatot létrehozni."));
     } finally {
-      setIsCreatingTask(false);
+      setTaskBusy(false);
     }
   };
 
-  // Manual lawyer intake: create a NEW case from an unlinked communication.
-  // Wired ONLY to the atomic createCaseFromCommunication endpoint — the case
-  // create + communication link happen in one server-side transaction, so the
-  // old unsafe createCase()+linkCommunicationToCase() two-step is never used and
-  // an orphan case cannot be produced from the client.
-  const [createCaseTarget, setCreateCaseTarget] = useState<CommunicationItem | null>(null);
-  const [ccTitle, setCcTitle] = useState("");
-  const [ccMatterType, setCcMatterType] = useState("OTHER");
-  const [ccPriority, setCcPriority] = useState("MEDIUM");
-  const [ccDeadline, setCcDeadline] = useState("");
-  const [ccDescription, setCcDescription] = useState("");
-  const [ccClientId, setCcClientId] = useState("");
-  const [clients, setClients] = useState<Client[]>([]);
-  const [clientsLoading, setClientsLoading] = useState(false);
-  const [clientsLoaded, setClientsLoaded] = useState(false);
-  const [isCreatingCase, setIsCreatingCase] = useState(false);
-  const [ccFeedback, setCcFeedback] = useState<AssignFeedback | null>(null);
-  const [createdCaseId, setCreatedCaseId] = useState<string | null>(null);
+  const openLinkTask = async (item: CommunicationItem) => {
+    if (!item.caseId) return;
+    setLinkTaskTarget(item);
+    setSelectedTaskId("");
+    setCaseTasks([]);
+    setLinkTaskFeedback(null);
+    setCaseTasksLoading(true);
+    try {
+      const result = await getCaseTasks(item.caseId);
+      setCaseTasks(result.filter((task) => !closedTaskStatuses.has(String(task.status).toUpperCase())));
+    } catch (error) {
+      console.error("Case tasks load failed:", error);
+      setLinkTaskFeedback({ tone: "error", message: "Az ügy nyitott feladatai most nem érhetők el." });
+    } finally {
+      setCaseTasksLoading(false);
+    }
+  };
+
+  const submitLinkTask = async () => {
+    if (!linkTaskTarget || !selectedTaskId) return;
+    setLinkTaskBusy(true);
+    setLinkTaskFeedback(null);
+    try {
+      const result = await linkCommunicationToTask(linkTaskTarget.id, selectedTaskId);
+      if (result.linked) updateCommunication(linkTaskTarget.id, { sourceTaskCount: linkTaskTarget.sourceTaskCount + 1 });
+      setLinkTaskFeedback({ tone: "success", message: result.linked ? "A kommunikáció a feladathoz kapcsolva." : "Ez a feladat már ehhez a kommunikációhoz tartozik." });
+    } catch (error) {
+      setLinkTaskFeedback(apiFeedback(error, "Nem sikerült a feladathoz kapcsolni."));
+    } finally {
+      setLinkTaskBusy(false);
+    }
+  };
 
   const openCreateCase = (item: CommunicationItem) => {
     setCreateCaseTarget(item);
-    setCcTitle(item.subject ? item.subject : "");
-    setCcMatterType("OTHER");
-    setCcPriority("MEDIUM");
-    setCcDeadline("");
-    setCcClientId("");
-    setCcDescription(
-      item.subject
-        ? `Kommunikációból indított ügy. Tárgy: ${item.subject}.`
-        : "Kommunikációból indított ügy.",
-    );
-    setCcFeedback(null);
-    setCreatedCaseId(null);
-    // A client FK is required server-side. If the communication has no clientId,
-    // load the client list so the lawyer can pick one (no fabricated linkage).
-    if (!item.clientId && !clientsLoaded && !clientsLoading) {
-      setClientsLoading(true);
-      getClients()
-        .then((response) => {
-          setClients(Array.isArray(response.data) ? response.data : []);
-          setClientsLoaded(true);
-        })
-        .catch((error) => {
-          console.error("Clients load for case creation failed:", error);
-          setCcFeedback({ tone: "error", message: "Az ügyféllista most nem érhető el. Próbáld újra később." });
-        })
-        .finally(() => setClientsLoading(false));
-    }
-  };
-
-  const closeCreateCase = () => {
-    if (isCreatingCase) return;
-    setCreateCaseTarget(null);
-    setCcFeedback(null);
+    setCaseTitle(item.subject || "");
+    setMatterType("OTHER");
+    setCasePriority("MEDIUM");
+    setCaseDeadline("");
+    setCaseDescription(item.subject ? `Kommunikációból indított ügy. Tárgy: ${item.subject}.` : "Kommunikációból indított ügy.");
+    setNewCaseClientId("");
+    setCaseFeedback(null);
     setCreatedCaseId(null);
   };
 
   const submitCreateCase = async () => {
-    if (!createCaseTarget || !ccTitle.trim()) return;
-    const resolvedClientId = createCaseTarget.clientId || ccClientId;
-    if (!resolvedClientId) return;
-    setIsCreatingCase(true);
-    setCcFeedback(null);
+    if (!createCaseTarget || !caseTitle.trim()) return;
+    const clientId = createCaseTarget.clientId || newCaseClientId;
+    if (!clientId) return;
+    setCaseBusy(true);
+    setCaseFeedback(null);
     try {
       const result = await createCaseFromCommunication(createCaseTarget.id, {
-        title: ccTitle.trim(),
-        matterType: ccMatterType,
-        clientId: resolvedClientId,
-        priority: ccPriority,
-        deadline: ccDeadline || undefined,
-        description: ccDescription.trim() || undefined,
+        title: caseTitle.trim(),
+        matterType,
+        clientId,
+        priority: casePriority,
+        deadline: caseDeadline || undefined,
+        description: caseDescription.trim() || undefined,
       });
-      if (result?.success && result.case?.id) {
-        // Honest local update: backend committed case + link in one transaction.
-        const newCaseId = result.case.id;
-        setCommunications((prev) =>
-          prev.map((item) => (item.id === createCaseTarget.id ? { ...item, caseId: newCaseId } : item)),
-        );
-        setCreatedCaseId(newCaseId);
-        setCcFeedback({
-          tone: "success",
-          message: result.case.caseNumber
-            ? `Ügy létrehozva: ${result.case.caseNumber}`
-            : "Ügy létrehozva, a kommunikáció hozzárendelve.",
-        });
-      } else {
-        setCcFeedback({ tone: "error", message: "Nem sikerült új ügyet indítani." });
-      }
+      updateCommunication(createCaseTarget.id, { caseId: result.case.id });
+      setCreatedCaseId(result.case.id);
+      setCaseFeedback({ tone: "success", message: `Ügy létrehozva: ${result.case.caseNumber}` });
     } catch (error) {
-      if (error instanceof ApiError) {
-        if (error.status === 501) {
-          setCcFeedback({
-            tone: "info",
-            message: "Az új ügy indítása kommunikációból még nincs bekapcsolva ezen a környezeten.",
-          });
-        } else if (error.status === 404) {
-          setCcFeedback({
-            tone: "info",
-            message: "Az új ügy indítása még nem érhető el ezen a backend verzión, vagy a kommunikáció már nem található.",
-          });
-        } else if (error.status === 409) {
-          setCcFeedback({
-            tone: "error",
-            message: "Ez a kommunikáció már ügyhöz van rendelve. Frissítse a listát.",
-          });
-        } else if (error.status === 400) {
-          setCcFeedback({ tone: "error", message: error.message || "Hiányzó vagy hibás ügyadatok." });
-        } else if (error.status === 401) {
-          setCcFeedback({
-            tone: "error",
-            message: "A művelet nem érhető el. Jelentkezz be újra, majd próbáld újra.",
-          });
-        } else {
-          setCcFeedback({
-            tone: "error",
-            message: "Nem sikerült új ügyet indítani. Ellenőrizd a kapcsolatot vagy próbáld újra.",
-          });
-        }
-      } else {
-        setCcFeedback({
-          tone: "error",
-          message: "Nem sikerült új ügyet indítani. Ellenőrizd a kapcsolatot vagy próbáld újra.",
-        });
-      }
+      setCaseFeedback(apiFeedback(error, "Nem sikerült új ügyet indítani."));
     } finally {
-      setIsCreatingCase(false);
+      setCaseBusy(false);
     }
   };
 
-  useEffect(() => {
-    let mounted = true;
-
-    async function loadReadOnlyCommunications() {
-      setIsLoading(true);
-      setLoadError(null);
-      try {
-        const result = await getCommunications({ limit: COMMUNICATION_LIST_LIMIT });
-        if (!mounted) return;
-        setCommunications(Array.isArray(result.communications) ? result.communications : []);
-      } catch (error) {
-        console.error("Read-only communications load failed:", error);
-        if (!mounted) return;
-        setCommunications([]);
-        setLoadError("A kommunikációs lista most nem érhető el. A munkatér üres állapotban marad.");
-      } finally {
-        if (mounted) setIsLoading(false);
-      }
-    }
-
-    loadReadOnlyCommunications();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const filteredCommunications = useMemo(
-    () => applyWorkspaceFilter(communications, activeFilter),
-    [activeFilter, communications],
-  );
-  const externalCommunications = useMemo(
-    () => filteredCommunications.filter((item) => classifyCommunicationAudience(item) === "external"),
-    [filteredCommunications],
-  );
-  const internalCommunications = useMemo(
-    () => filteredCommunications.filter((item) => classifyCommunicationAudience(item) === "internal"),
-    [filteredCommunications],
-  );
-  const externalEmpty = getPanelEmptyCopy("external", activeFilter);
-  const internalEmpty = getPanelEmptyCopy("internal", activeFilter);
-
   return (
     <main className="adm-dash-stage min-h-screen px-3 pb-4 pt-3 sm:px-5 xl:px-6">
-      <section className="mx-auto w-full max-w-[1440px] space-y-3">
-        <header className="adm-panel adm-panel-primary overflow-hidden">
-          <div className="flex flex-wrap items-start justify-between gap-3 border-b-[3px] border-[var(--adm-blue-500)] bg-white px-4 py-3 lg:px-5">
-            <div>
-              <p className="adm-kicker text-[var(--adm-blue-700)]">Kommunikáció</p>
-              <h1 className="adm-heading mt-1 text-[28px] leading-tight">Kommunikációs munkatér</h1>
-              <p className="mt-1 max-w-3xl text-[12px] leading-5 text-[var(--adm-text-muted)]">
-                Levelek, belső jelzések és ügyhöz kapcsolható kommunikáció read-only listában.
-              </p>
-            </div>
-            <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-500)]/30 bg-[var(--adm-blue-100)]/35 px-3 py-1 text-[10.5px] font-semibold text-[var(--adm-blue-700)]">
-              Read-only lista
-            </span>
+      <div className="mx-auto w-full max-w-[1480px] space-y-3">
+        <header className="adm-panel overflow-hidden bg-white">
+          <div className="border-b-[3px] border-[var(--adm-blue-500)] px-4 py-3 lg:px-5">
+            <p className="adm-kicker text-[var(--adm-blue-700)]">Kommunikáció</p>
+            <h1 className="adm-heading mt-1 text-[28px] leading-tight">Kommunikációs munkatér</h1>
           </div>
-
-          <nav className="flex gap-1 overflow-x-auto bg-[var(--adm-surface)] px-4 py-2.5 lg:px-5" aria-label="Kommunikációs szűrők">
-            {filters.map((filter) => {
-              const isActive = activeFilter === filter;
-              const tone = filterTone[filter] || "var(--adm-blue-500)";
-              return (
-                <button
-                  key={filter}
-                  type="button"
-                  onClick={() => {
-                    setActiveFilter(filter);
-                    const view = filterViews[filter];
-                    const url = view === "all" ? "/notifications" : `/notifications?view=${view}`;
-                    window.history.replaceState(null, "", url);
-                  }}
-                  className="shrink-0 rounded-[var(--adm-radius-sm)] border px-3 py-1.5 text-[11px] font-bold transition-colors"
-                  style={{
-                    borderColor: isActive ? tone : "var(--adm-border)",
-                    background: isActive ? tone : "#FFFFFF",
-                    color: isActive ? "#FFFFFF" : "var(--adm-text-muted)",
-                  }}
-                >
-                  {filter}
-                </button>
-              );
-            })}
+          <nav className="flex gap-1 overflow-x-auto bg-[var(--adm-surface)] px-4 py-2 lg:px-5" aria-label="Kommunikációs nézetek">
+            {viewOptions.map((option) => (
+              <button key={option.value} type="button" onClick={() => selectView(option.value)} className={`shrink-0 border px-3 py-1.5 text-[11px] font-bold ${activeView === option.value ? "border-[var(--adm-blue-950)] bg-[var(--adm-blue-950)] text-white" : "border-[var(--adm-border)] bg-white text-[var(--adm-text-muted)]"}`}>
+                {option.label}
+              </button>
+            ))}
           </nav>
         </header>
 
-        {loadError ? (
-          <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-2 text-[11px] font-semibold text-[var(--adm-text-muted)]">
-            {loadError}
-          </div>
-        ) : null}
-
-        <section className="grid gap-3 xl:grid-cols-2">
-          <CommunicationPanel
-            title="Külső kommunikáció"
-            accent="var(--adm-blue-500)"
-            countLabel={`${Math.min(externalCommunications.length, 8)}/8`}
-            capacityLabel="Kapacitás: 8 levélelőnézet"
-            items={externalCommunications.slice(0, 8)}
-            isLoading={isLoading}
-            emptyTitle={externalEmpty.title}
-            emptyText={externalEmpty.text}
-            onAssign={openAssign}
-            onCreateTask={openTask}
-            onCreateCase={openCreateCase}
-          />
-          <CommunicationPanel
-            title="Belső kommunikáció"
-            accent="var(--adm-blue-700)"
-            countLabel={`${Math.min(internalCommunications.length, 8)}/8`}
-            capacityLabel="Kapacitás: 8 belső jelzés"
-            items={internalCommunications.slice(0, 8)}
-            isLoading={isLoading}
-            emptyTitle={internalEmpty.title}
-            emptyText={internalEmpty.text}
-            onAssign={openAssign}
-            onCreateTask={openTask}
-            onCreateCase={openCreateCase}
-          />
+        <section className="adm-panel grid gap-2 bg-white p-3 md:grid-cols-2 xl:grid-cols-5" aria-label="Kommunikáció szűrése">
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="E-mail, ügyfél, tárgy, ügyszám" className="adm-board-field px-3 py-2 text-[11px] xl:col-span-2" />
+          <input value={contactFilter} onChange={(event) => setContactFilter(event.target.value)} placeholder="Feladó / címzett" className="adm-board-field px-3 py-2 text-[11px]" />
+          <input value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)} placeholder="Tárgy" className="adm-board-field px-3 py-2 text-[11px]" />
+          <select value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden dátum</option><option value="today">Elmúlt 24 óra</option><option value="week">Elmúlt 7 nap</option><option value="month">Elmúlt 31 nap</option></select>
+          <select value={clientFilter} onChange={(event) => setClientFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden ügyfél</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select>
+          <select value={caseFilter} onChange={(event) => setCaseFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden ügy</option>{cases.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber} · {caseItem.title}</option>)}</select>
+          <select value={directionFilter} onChange={(event) => setDirectionFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden irány</option><option value="incoming">Bejövő</option><option value="outgoing">Kimenő</option></select>
+          <select value={audienceFilter} onChange={(event) => setAudienceFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Belső és külső</option><option value="external">Külső</option><option value="internal">Belső</option></select>
+          <div className="flex gap-2"><select value={relationFilter} onChange={(event) => setRelationFilter(event.target.value)} className="adm-board-field min-w-0 flex-1 px-3 py-2 text-[11px]"><option value="all">Minden kapcsolat</option><option value="linked">Kapcsolt</option><option value="unlinked">Nincs besorolva</option><option value="tasks">Feladathoz kapcsolt</option></select><button type="button" onClick={clearFilters} className="border border-[var(--adm-border)] bg-white px-3 py-2 text-[10px] font-semibold text-[var(--adm-text-muted)]">Törlés</button></div>
         </section>
 
-        <section className="adm-panel overflow-hidden">
-          <div className="border-b border-[var(--adm-border)] bg-white px-4 py-3 lg:px-5">
-            <p className="adm-kicker text-[var(--adm-blue-950)]">Munkába rendezés</p>
-            <h2 className="adm-heading mt-0.5 text-[22px]">Kommunikáció feldolgozása</h2>
-          </div>
-          <div className="grid gap-3 p-3 lg:grid-cols-[1.15fr_0.9fr_0.95fr] lg:p-4">
-            <WorkflowTool accent="var(--adm-blue-950)" kicker="Besorolás" title="Ügyhöz rendezés">
-              <div className="flex flex-wrap items-center gap-2">
-                {["Levél/jelzés", "Ügyfél", "Ügy", "Feladat"].map((step, index) => (
-                  <span key={step} className="inline-flex items-center gap-2">
-                    <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-950)]/20 bg-white px-2.5 py-1 text-[10.5px] font-bold text-[var(--adm-blue-950)]">
-                      {step}
-                    </span>
-                    {index < 3 ? <span className="text-[var(--adm-text-soft)]">→</span> : null}
-                  </span>
-                ))}
+        {loadError ? <div className="border border-[var(--adm-border)] bg-white px-3 py-2 text-[11px] font-semibold text-[var(--adm-text-muted)]">{loadError}</div> : null}
+
+        <div className="grid min-h-[520px] gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <section className="adm-panel min-w-0 overflow-hidden bg-white">
+            <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-4 py-3">
+              <h2 className="adm-heading text-[20px]">Kommunikáció</h2>
+              <span className="text-[10px] font-semibold text-[var(--adm-text-muted)]">{filtered.length} találat · {communications.length}/{total || communications.length} betöltve</span>
+            </div>
+            <div className="hidden grid-cols-[1.05fr_1.45fr_0.9fr_0.75fr_0.6fr] border-b border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)] md:grid">
+              <span>Feladó / forrás</span><span>Tárgy / jelzés</span><span>Ügyfél / ügy</span><span>Státusz</span><span>Idő</span>
+            </div>
+            {loading ? <EmptyState title="Kommunikáció betöltése…" /> : filtered.length === 0 ? <EmptyState title={activeView === "replies" ? "Nincs megbízható válaszállapot-adat." : "Nincs találat."} detail={activeView === "replies" ? "A válaszállapot csak későbbi, perzisztált modellből jeleníthető meg." : "Módosítsd a szűrőket."} /> : (
+              <div className="divide-y divide-[var(--adm-border)]">
+                {filtered.map((item) => {
+                  const signal = toCommunicationSignal(item);
+                  const relatedCase = item.caseId ? caseById.get(item.caseId) : null;
+                  const relatedClient = item.clientId ? clientById.get(item.clientId) : null;
+                  return (
+                    <button key={item.id} type="button" onClick={() => setSelectedId(item.id)} className={`grid w-full gap-2 px-3 py-3 text-left md:grid-cols-[1.05fr_1.45fr_0.9fr_0.75fr_0.6fr] ${selected?.id === item.id ? "bg-[var(--adm-sand-100)]/55" : "hover:bg-[var(--adm-surface)]"}`}>
+                      <span className="min-w-0"><span className="block truncate text-[12px] font-semibold text-[var(--adm-text)]">{item.senderName || item.senderEmail || item.recipientName || "Nincs forrásadat"}</span><span className="mt-1 block truncate text-[10px] text-[var(--adm-text-muted)]">{formatContact(item)}</span></span>
+                      <span className="min-w-0"><span className="block truncate text-[12px] font-semibold text-[var(--adm-blue-950)]">{item.subject || "Nincs tárgy"}</span><span className="mt-1 block truncate text-[10px] text-[var(--adm-text-muted)]">{item.summary || item.contentPreview || formatCommunicationType(item.type)}</span></span>
+                      <span className="min-w-0 text-[10px] text-[var(--adm-text-muted)]"><span className="block truncate font-semibold text-[var(--adm-text)]">{relatedClient?.name || (item.clientId ? "Ügyfélhez sorolt" : "Nincs ügyfél")}</span><span className="mt-1 block truncate">{relatedCase ? `${relatedCase.caseNumber} · ${relatedCase.title}` : item.caseId ? "Ügyhöz sorolt" : "Nincs ügy"}</span></span>
+                      <span className="flex flex-wrap items-start gap-1"><StatusChip>{signal.direction === "incoming" ? "Bejövő" : "Kimenő"}</StatusChip><StatusChip>{classifyAudience(item) === "external" ? "Külső" : "Belső"}</StatusChip>{item.sourceTaskCount > 0 ? <StatusChip>{item.sourceTaskCount} feladat</StatusChip> : null}</span>
+                      <time className="text-[10px] font-semibold text-[var(--adm-text-muted)]">{formatDate(item.createdAt)}</time>
+                    </button>
+                  );
+                })}
               </div>
-              <p className="mt-3 text-[11.5px] font-semibold text-[var(--adm-text-muted)]">
-                A besorolás később megjegyezhető lesz.
-              </p>
-            </WorkflowTool>
+            )}
+            {hasMore ? <div className="border-t border-[var(--adm-border)] p-3 text-center"><button type="button" disabled={loadingMore} onClick={() => void loadMore()} className="border border-[var(--adm-blue-700)] bg-white px-4 py-2 text-[11px] font-semibold text-[var(--adm-blue-700)] disabled:opacity-50">{loadingMore ? "Betöltés…" : "További kommunikációk"}</button></div> : null}
+          </section>
 
-            <WorkflowTool accent="var(--adm-warm-500)" kicker="Válaszállapot" title="Válasz követése">
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-                <ReplyLane label="Tőlünk várnak választ" />
-                <ReplyLane label="Mi várunk válaszra" />
-              </div>
-              <p className="mt-3 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-warm-400)]/45 bg-[#FFF8E2] px-3 py-2 text-[11px] font-semibold text-[var(--adm-text-muted)]">
-                A read-only lista nem tartalmaz válaszállapot-mezőt. Követéshez későbbi perzisztált kommunikációs modell kell.
-              </p>
-            </WorkflowTool>
+          <aside className="adm-panel self-start bg-white">
+            {!selected ? <EmptyState title="Válassz kommunikációt." /> : <CommunicationDetail item={selected} relatedCase={selected.caseId ? caseById.get(selected.caseId) : undefined} relatedClient={selected.clientId ? clientById.get(selected.clientId) : undefined} onAssign={openAssign} onCreateCase={openCreateCase} onCreateTask={openTask} onLinkTask={(item) => void openLinkTask(item)} />}
+          </aside>
+        </div>
+      </div>
 
-            <WorkflowTool accent="var(--adm-blue-700)" kicker="Feladathoz kapcsolás" title="Munka kiadása">
-              <div className="grid grid-cols-2 gap-2">
-                {["Levél / szál", "Feladat", "Ügy", "Felelős"].map((item) => (
-                  <span key={item} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-2.5 py-2 text-[11px] font-bold text-[var(--adm-text)]">
-                    {item}
-                  </span>
-                ))}
-              </div>
-              <p className="mt-3 text-[11.5px] font-semibold text-[var(--adm-text-muted)]">
-                Feladatkiadáskor a releváns levél vagy szál kapcsolható lesz.
-              </p>
-            </WorkflowTool>
-          </div>
-        </section>
-      </section>
+      {assignTarget ? <SimpleModal title="Meglévő ügyhöz rendelés" subtitle={assignTarget.subject || "Nincs tárgy"} busy={assignBusy} feedback={assignFeedback} onClose={() => setAssignTarget(null)} onSubmit={submitAssign} submitLabel="Ügyhöz rendelés" submitDisabled={!selectedCaseId}>
+        <select value={selectedCaseId} onChange={(event) => setSelectedCaseId(event.target.value)} className="adm-modal-field w-full px-3 py-2 text-sm"><option value="">Válassz ügyet…</option>{cases.map((item) => <option key={item.id} value={item.id}>{item.caseNumber} · {item.title}</option>)}</select>
+      </SimpleModal> : null}
 
-      {assignTarget ? (
-        <AssignToCaseModal
-          target={assignTarget}
-          cases={cases}
-          casesLoading={casesLoading}
-          selectedCaseId={selectedCaseId}
-          onSelectCase={setSelectedCaseId}
-          isLinking={isLinking}
-          feedback={assignFeedback}
-          onClose={closeAssign}
-          onSubmit={submitAssign}
-        />
-      ) : null}
+      {taskTarget ? <SimpleModal title="Új feladat" subtitle={taskTarget.subject || "Nincs tárgy"} busy={taskBusy} feedback={taskFeedback} onClose={() => setTaskTarget(null)} onSubmit={submitTask} submitLabel="Feladat létrehozása" submitDisabled={!taskTitle.trim()} successLink={createdTaskId ? { href: `/tasks?taskId=${encodeURIComponent(createdTaskId)}`, label: "Feladat megnyitása" } : undefined}>
+        <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Cím<input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label>
+        <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Leírás<textarea value={taskDescription} onChange={(event) => setTaskDescription(event.target.value)} rows={3} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label>
+        <div className="grid grid-cols-2 gap-2"><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Határidő<input type="date" value={taskDueDate} onChange={(event) => setTaskDueDate(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Prioritás<select value={taskPriority} onChange={(event) => setTaskPriority(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm"><option value="LOW">Alacsony</option><option value="MEDIUM">Közepes</option><option value="HIGH">Magas</option><option value="URGENT">Sürgős</option></select></label></div>
+      </SimpleModal> : null}
 
-      {taskTarget ? (
-        <TaskFromCommunicationModal
-          target={taskTarget}
-          title={taskTitle}
-          description={taskDescription}
-          dueDate={taskDueDate}
-          priority={taskPriority}
-          onChangeTitle={setTaskTitle}
-          onChangeDescription={setTaskDescription}
-          onChangeDueDate={setTaskDueDate}
-          onChangePriority={setTaskPriority}
-          isCreating={isCreatingTask}
-          feedback={taskFeedback}
-          createdTaskId={createdTaskId}
-          onClose={closeTask}
-          onSubmit={submitTask}
-        />
-      ) : null}
+      {linkTaskTarget ? <SimpleModal title="Meglévő feladathoz" subtitle={linkTaskTarget.subject || "Nincs tárgy"} busy={linkTaskBusy || caseTasksLoading} feedback={linkTaskFeedback} onClose={() => setLinkTaskTarget(null)} onSubmit={submitLinkTask} submitLabel="Feladathoz kapcsolás" submitDisabled={!selectedTaskId || caseTasksLoading}>
+        <select value={selectedTaskId} onChange={(event) => setSelectedTaskId(event.target.value)} disabled={caseTasksLoading} className="adm-modal-field w-full px-3 py-2 text-sm"><option value="">{caseTasksLoading ? "Feladatok betöltése…" : caseTasks.length ? "Válassz nyitott feladatot…" : "Nincs nyitott feladat az ügyön"}</option>{caseTasks.map((task) => <option key={task.id} value={task.id}>{task.title} · {task.status}</option>)}</select>
+      </SimpleModal> : null}
 
-      {createCaseTarget ? (
-        <CreateCaseFromCommunicationModal
-          target={createCaseTarget}
-          title={ccTitle}
-          matterType={ccMatterType}
-          priority={ccPriority}
-          deadline={ccDeadline}
-          description={ccDescription}
-          clientId={ccClientId}
-          clients={clients}
-          clientsLoading={clientsLoading}
-          onChangeTitle={setCcTitle}
-          onChangeMatterType={setCcMatterType}
-          onChangePriority={setCcPriority}
-          onChangeDeadline={setCcDeadline}
-          onChangeDescription={setCcDescription}
-          onChangeClientId={setCcClientId}
-          isCreating={isCreatingCase}
-          feedback={ccFeedback}
-          createdCaseId={createdCaseId}
-          onClose={closeCreateCase}
-          onSubmit={submitCreateCase}
-        />
-      ) : null}
+      {createCaseTarget ? <SimpleModal title="Új ügy indítása" subtitle={createCaseTarget.subject || "Nincs tárgy"} busy={caseBusy} feedback={caseFeedback} onClose={() => setCreateCaseTarget(null)} onSubmit={submitCreateCase} submitLabel="Ügy létrehozása" submitDisabled={!caseTitle.trim() || (!createCaseTarget.clientId && !newCaseClientId)} successLink={createdCaseId ? { href: `/cases/${encodeURIComponent(createdCaseId)}`, label: "Ügy megnyitása" } : undefined}>
+        <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Ügy címe<input value={caseTitle} onChange={(event) => setCaseTitle(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label>
+        {!createCaseTarget.clientId ? <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Ügyfél<select value={newCaseClientId} onChange={(event) => setNewCaseClientId(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm"><option value="">Válassz ügyfelet…</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label> : null}
+        <div className="grid grid-cols-2 gap-2"><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Ügytípus<select value={matterType} onChange={(event) => setMatterType(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm">{caseMatterTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Prioritás<select value={casePriority} onChange={(event) => setCasePriority(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm"><option value="LOW">Alacsony</option><option value="MEDIUM">Közepes</option><option value="HIGH">Magas</option><option value="URGENT">Sürgős</option></select></label></div>
+        <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Határidő<input type="date" value={caseDeadline} onChange={(event) => setCaseDeadline(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label>
+        <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Leírás<textarea value={caseDescription} onChange={(event) => setCaseDescription(event.target.value)} rows={3} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label>
+      </SimpleModal> : null}
     </main>
   );
 }
 
-function CreateCaseFromCommunicationModal({
-  target,
-  title,
-  matterType,
-  priority,
-  deadline,
-  description,
-  clientId,
-  clients,
-  clientsLoading,
-  onChangeTitle,
-  onChangeMatterType,
-  onChangePriority,
-  onChangeDeadline,
-  onChangeDescription,
-  onChangeClientId,
-  isCreating,
-  feedback,
-  createdCaseId,
-  onClose,
-  onSubmit,
-}: {
-  target: CommunicationItem;
-  title: string;
-  matterType: string;
-  priority: string;
-  deadline: string;
-  description: string;
-  clientId: string;
-  clients: Client[];
-  clientsLoading: boolean;
-  onChangeTitle: (value: string) => void;
-  onChangeMatterType: (value: string) => void;
-  onChangePriority: (value: string) => void;
-  onChangeDeadline: (value: string) => void;
-  onChangeDescription: (value: string) => void;
-  onChangeClientId: (value: string) => void;
-  isCreating: boolean;
-  feedback: AssignFeedback | null;
-  createdCaseId: string | null;
-  onClose: () => void;
-  onSubmit: () => void;
-}) {
-  const subject = target.subject || target.summary || target.contentPreview || "Nincs tárgy";
+function CommunicationDetail({ item, relatedCase, relatedClient, onAssign, onCreateCase, onCreateTask, onLinkTask }: { item: CommunicationItem; relatedCase?: CaseListItem; relatedClient?: Client; onAssign: (item: CommunicationItem) => void; onCreateCase: (item: CommunicationItem) => void; onCreateTask: (item: CommunicationItem) => void; onLinkTask: (item: CommunicationItem) => void }) {
+  const signal = toCommunicationSignal(item);
+  return (
+    <div>
+      <div className="border-b border-[var(--adm-border)] px-4 py-3"><p className="adm-kicker text-[var(--adm-blue-700)]">Kiválasztott kommunikáció</p><h2 className="adm-heading mt-1 text-[19px]">{item.subject || "Nincs tárgy"}</h2></div>
+      <div className="space-y-4 p-4">
+        <div><p className="text-[12px] font-semibold text-[var(--adm-text)]">{item.senderName || item.senderEmail || "Nincs feladóadat"}</p><p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{formatContact(item)}</p></div>
+        {item.summary || item.contentPreview ? <p className="border-l-2 border-[var(--adm-blue-500)] pl-3 text-[11px] leading-5 text-[var(--adm-text-muted)]">{item.summary || item.contentPreview}</p> : null}
+        <div className="flex flex-wrap gap-1"><StatusChip>{signal.direction === "incoming" ? "Bejövő" : "Kimenő"}</StatusChip><StatusChip>{signal.audience === "external" ? "Külső" : "Belső"}</StatusChip><StatusChip>{formatCommunicationType(item.type)}</StatusChip>{item.attachmentCount > 0 ? <StatusChip>{item.attachmentCount} melléklet</StatusChip> : null}{item.sourceTaskCount > 0 ? <StatusChip>{item.sourceTaskCount} feladat</StatusChip> : null}</div>
+        <dl className="grid grid-cols-[92px_1fr] gap-2 text-[11px]"><dt className="text-[var(--adm-text-muted)]">Ügyfél</dt><dd className="font-semibold text-[var(--adm-text)]">{relatedClient?.name || (item.clientId ? "Ügyfélhez sorolt" : "Nincs ügyfél")}</dd><dt className="text-[var(--adm-text-muted)]">Ügy</dt><dd className="font-semibold text-[var(--adm-text)]">{relatedCase ? `${relatedCase.caseNumber} · ${relatedCase.title}` : item.caseId ? "Ügyhöz sorolt" : "Nincs ügy"}</dd><dt className="text-[var(--adm-text-muted)]">Idő</dt><dd className="font-semibold text-[var(--adm-text)]">{formatDate(item.createdAt)}</dd></dl>
+        <div className="flex flex-wrap gap-2">{item.caseId ? <Link href={`/cases/${encodeURIComponent(item.caseId)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügy megnyitása</Link> : null}{item.clientId ? <Link href={`/clients/${encodeURIComponent(item.clientId)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügyfél megnyitása</Link> : null}{item.caseId && item.documentId ? <Link href={`/documents/compare?caseId=${encodeURIComponent(item.caseId)}&documentId=${encodeURIComponent(item.documentId)}`} className="adm-link-button px-3 py-2 text-[10px]">Dokumentum megnyitása</Link> : null}</div>
+        <div className="border-t border-[var(--adm-border)] pt-4"><p className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Következő lépés</p><div className="grid gap-2">{item.caseId ? <><button type="button" onClick={() => onCreateTask(item)} className="bg-[var(--adm-green-800)] px-3 py-2 text-[11px] font-semibold text-white">Új feladat létrehozása</button><button type="button" onClick={() => onLinkTask(item)} className="border border-[var(--adm-blue-700)] bg-white px-3 py-2 text-[11px] font-semibold text-[var(--adm-blue-700)]">Meglévő feladathoz</button></> : <><button type="button" onClick={() => onAssign(item)} className="bg-[var(--adm-blue-700)] px-3 py-2 text-[11px] font-semibold text-white">Meglévő ügyhöz rendelés</button><button type="button" onClick={() => onCreateCase(item)} className="border border-[var(--adm-blue-700)] bg-white px-3 py-2 text-[11px] font-semibold text-[var(--adm-blue-700)]">Új ügy indítása</button></>}</div></div>
+      </div>
+    </div>
+  );
+}
+
+function SimpleModal({ title, subtitle, children, busy, feedback, onClose, onSubmit, submitLabel, submitDisabled, successLink }: { title: string; subtitle: string; children: ReactNode; busy: boolean; feedback: Feedback | null; onClose: () => void; onSubmit: () => void; submitLabel: string; submitDisabled?: boolean; successLink?: { href: string; label: string } }) {
   const succeeded = feedback?.tone === "success";
-  const hasOwnClient = Boolean(target.clientId);
-  const needsClientPick = !hasOwnClient;
-  const clientReady = hasOwnClient || Boolean(clientId);
-  const feedbackStyle =
-    feedback?.tone === "success"
-      ? "border-[var(--adm-blue-500)]/40 bg-[var(--adm-blue-100)]/35 text-[var(--adm-blue-700)]"
-      : feedback?.tone === "info"
-        ? "border-[var(--adm-warm-400)]/55 bg-[#FFF8E2] text-[var(--adm-warm-600)]"
-        : "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]";
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-md rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-[0_18px_40px_rgba(2,48,71,0.18)]">
-        <div className="border-b border-[var(--adm-border)] px-4 py-3">
-          <p className="adm-kicker text-[var(--adm-blue-700)]">Kézi besorolás</p>
-          <h2 className="adm-heading mt-0.5 text-[18px]">Új ügy indítása</h2>
-          <p className="mt-1 truncate text-[11px] text-[var(--adm-text-muted)]">{subject}</p>
-          <p className="mt-1 text-[10.5px] font-semibold text-[var(--adm-text-soft)]">
-            Az ügy létrehozása és a kommunikáció hozzárendelése egy szerveroldali tranzakcióban történik.
-          </p>
-        </div>
-
-        <div className="space-y-3 px-4 py-3">
-          <div>
-            <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="cc-title">
-              Ügy címe
-            </label>
-            <input
-              id="cc-title"
-              value={title}
-              onChange={(event) => onChangeTitle(event.target.value)}
-              disabled={isCreating || succeeded}
-              className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
-            />
-          </div>
-
-          {needsClientPick ? (
-            <div>
-              <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="cc-client">
-                Ügyfél
-              </label>
-              <select
-                id="cc-client"
-                value={clientId}
-                onChange={(event) => onChangeClientId(event.target.value)}
-                disabled={clientsLoading || isCreating || succeeded}
-                className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
-              >
-                <option value="">{clientsLoading ? "Ügyfelek betöltése…" : "Válassz ügyfelet…"}</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-[10.5px] text-[var(--adm-text-soft)]">
-                A kommunikációhoz nincs ügyfél rendelve, ezért az ügyfelet ki kell választani.
-              </p>
-            </div>
-          ) : (
-            <p className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[10.5px] font-semibold text-[var(--adm-text-muted)]">
-              Ügyfél a kommunikációból átvéve.
-            </p>
-          )}
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="cc-matter">
-                Ügytípus
-              </label>
-              <select
-                id="cc-matter"
-                value={matterType}
-                onChange={(event) => onChangeMatterType(event.target.value)}
-                disabled={isCreating || succeeded}
-                className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
-              >
-                {CASE_MATTER_TYPE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="cc-priority">
-                Prioritás
-              </label>
-              <select
-                id="cc-priority"
-                value={priority}
-                onChange={(event) => onChangePriority(event.target.value)}
-                disabled={isCreating || succeeded}
-                className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
-              >
-                <option value="LOW">Alacsony</option>
-                <option value="MEDIUM">Közepes</option>
-                <option value="HIGH">Magas</option>
-                <option value="URGENT">Sürgős</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="cc-deadline">
-              Határidő (opcionális)
-            </label>
-            <input
-              id="cc-deadline"
-              type="date"
-              value={deadline}
-              onChange={(event) => onChangeDeadline(event.target.value)}
-              disabled={isCreating || succeeded}
-              className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="cc-description">
-              Leírás (opcionális)
-            </label>
-            <textarea
-              id="cc-description"
-              value={description}
-              onChange={(event) => onChangeDescription(event.target.value)}
-              disabled={isCreating || succeeded}
-              rows={3}
-              className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
-            />
-          </div>
-
-          {feedback ? (
-            <p className={`rounded-[var(--adm-radius-sm)] border px-3 py-2 text-[11px] font-semibold ${feedbackStyle}`}>
-              {feedback.message}
-            </p>
-          ) : null}
-          {succeeded && createdCaseId ? (
-            <div className="flex flex-wrap gap-1.5">
-              <Link
-                href={`/cases/${encodeURIComponent(createdCaseId)}`}
-                className="inline-flex rounded-full border border-[var(--adm-blue-500)]/45 bg-white px-2.5 py-1 text-[10.5px] font-bold text-[var(--adm-blue-700)] transition-colors hover:border-[var(--adm-blue-500)] hover:bg-[var(--adm-blue-100)]/35"
-              >
-                Ügy megnyitása
-              </Link>
-              <Link
-                href={`/cases/${encodeURIComponent(createdCaseId)}/communications`}
-                className="inline-flex rounded-full border border-[var(--adm-blue-500)]/45 bg-white px-2.5 py-1 text-[10.5px] font-bold text-[var(--adm-blue-700)] transition-colors hover:border-[var(--adm-blue-500)] hover:bg-[var(--adm-blue-100)]/35"
-              >
-                Ügy kommunikációi
-              </Link>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="flex justify-end gap-2 border-t border-[var(--adm-border)] px-4 py-3">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isCreating}
-            className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-bold text-[var(--adm-text-muted)] disabled:opacity-50"
-          >
-            {succeeded ? "Bezárás" : "Mégsem"}
-          </button>
-          {succeeded ? null : (
-            <button
-              type="button"
-              onClick={onSubmit}
-              disabled={!title.trim() || !clientReady || isCreating || clientsLoading}
-              className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-700)] bg-[var(--adm-blue-700)] px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-50"
-            >
-              {isCreating ? "Indítás…" : "Új ügy indítása"}
-            </button>
-          )}
-        </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+      <div className="w-full max-w-md border border-[var(--adm-border)] bg-white shadow-2xl">
+        <div className="border-b border-[var(--adm-border)] px-4 py-3"><h2 className="adm-heading text-[19px]">{title}</h2><p className="mt-1 truncate text-[10px] text-[var(--adm-text-muted)]">{subtitle}</p></div>
+        <div className="space-y-3 p-4">{children}{feedback ? <p className={`border px-3 py-2 text-[11px] font-semibold ${feedback.tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : feedback.tone === "info" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-red-200 bg-red-50 text-red-800"}`}>{feedback.message}</p> : null}{succeeded && successLink ? <Link href={successLink.href} className="adm-link-button inline-flex px-3 py-2 text-[10px]">{successLink.label}</Link> : null}</div>
+        <div className="flex justify-end gap-2 border-t border-[var(--adm-border)] px-4 py-3"><button type="button" disabled={busy} onClick={onClose} className="border border-[var(--adm-border)] bg-white px-3 py-2 text-[11px] font-semibold text-[var(--adm-text-muted)]">{succeeded ? "Bezárás" : "Mégse"}</button>{!succeeded ? <button type="button" disabled={busy || submitDisabled} onClick={onSubmit} className="bg-[var(--adm-blue-700)] px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-50">{busy ? "Mentés…" : submitLabel}</button> : null}</div>
       </div>
     </div>
   );
 }
 
-function TaskFromCommunicationModal({
-  target,
-  title,
-  description,
-  dueDate,
-  priority,
-  onChangeTitle,
-  onChangeDescription,
-  onChangeDueDate,
-  onChangePriority,
-  isCreating,
-  feedback,
-  createdTaskId,
-  onClose,
-  onSubmit,
-}: {
-  target: CommunicationItem;
-  title: string;
-  description: string;
-  dueDate: string;
-  priority: string;
-  onChangeTitle: (value: string) => void;
-  onChangeDescription: (value: string) => void;
-  onChangeDueDate: (value: string) => void;
-  onChangePriority: (value: string) => void;
-  isCreating: boolean;
-  feedback: AssignFeedback | null;
-  createdTaskId: string | null;
-  onClose: () => void;
-  onSubmit: () => void;
-}) {
-  const subject = target.subject || target.summary || target.contentPreview || "Nincs tárgy";
-  const succeeded = feedback?.tone === "success";
-  const feedbackStyle =
-    feedback?.tone === "success"
-      ? "border-[var(--adm-blue-500)]/40 bg-[var(--adm-blue-100)]/35 text-[var(--adm-blue-700)]"
-      : feedback?.tone === "info"
-        ? "border-[var(--adm-warm-400)]/55 bg-[#FFF8E2] text-[var(--adm-warm-600)]"
-        : "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]";
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-md rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-[0_18px_40px_rgba(2,48,71,0.18)]">
-        <div className="border-b border-[var(--adm-border)] px-4 py-3">
-          <p className="adm-kicker text-[var(--adm-blue-700)]">Kézi feladatkiadás</p>
-          <h2 className="adm-heading mt-0.5 text-[18px]">Feladat kinyerése</h2>
-          <p className="mt-1 truncate text-[11px] text-[var(--adm-text-muted)]">{subject}</p>
-          {target.caseId ? (
-            <p className="mt-0.5 text-[10.5px] font-semibold text-[var(--adm-text-soft)]">
-              Ügyhöz kötött kommunikációból — a feladat ugyanahhoz az ügyhöz jön létre.
-            </p>
-          ) : null}
-        </div>
-
-        <div className="space-y-3 px-4 py-3">
-          <div>
-            <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="task-title">
-              Feladat címe
-            </label>
-            <input
-              id="task-title"
-              value={title}
-              onChange={(event) => onChangeTitle(event.target.value)}
-              disabled={isCreating || succeeded}
-              placeholder="Feladat címe"
-              className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="task-description">
-              Leírás (opcionális)
-            </label>
-            <textarea
-              id="task-description"
-              value={description}
-              onChange={(event) => onChangeDescription(event.target.value)}
-              disabled={isCreating || succeeded}
-              rows={3}
-              className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="task-due">
-                Határidő (opcionális)
-              </label>
-              <input
-                id="task-due"
-                type="date"
-                value={dueDate}
-                onChange={(event) => onChangeDueDate(event.target.value)}
-                disabled={isCreating || succeeded}
-                className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="task-priority">
-                Prioritás
-              </label>
-              <select
-                id="task-priority"
-                value={priority}
-                onChange={(event) => onChangePriority(event.target.value)}
-                disabled={isCreating || succeeded}
-                className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
-              >
-                <option value="LOW">Alacsony</option>
-                <option value="MEDIUM">Közepes</option>
-                <option value="HIGH">Magas</option>
-                <option value="URGENT">Sürgős</option>
-              </select>
-            </div>
-          </div>
-
-          {feedback ? (
-            <p className={`rounded-[var(--adm-radius-sm)] border px-3 py-2 text-[11px] font-semibold ${feedbackStyle}`}>
-              {feedback.message}
-            </p>
-          ) : null}
-          {succeeded && createdTaskId ? (
-            <Link
-              href={`/tasks?taskId=${encodeURIComponent(createdTaskId)}`}
-              className="inline-flex rounded-full border border-[var(--adm-blue-500)]/45 bg-white px-2.5 py-1 text-[10.5px] font-bold text-[var(--adm-blue-700)] transition-colors hover:border-[var(--adm-blue-500)] hover:bg-[var(--adm-blue-100)]/35"
-            >
-              Feladat megnyitása
-            </Link>
-          ) : null}
-        </div>
-
-        <div className="flex justify-end gap-2 border-t border-[var(--adm-border)] px-4 py-3">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isCreating}
-            className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-bold text-[var(--adm-text-muted)] disabled:opacity-50"
-          >
-            {succeeded ? "Bezárás" : "Mégsem"}
-          </button>
-          {succeeded ? null : (
-            <button
-              type="button"
-              onClick={onSubmit}
-              disabled={!title.trim() || isCreating}
-              className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-700)] bg-[var(--adm-blue-700)] px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-50"
-            >
-              {isCreating ? "Létrehozás…" : "Feladat kinyerése"}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+function StatusChip({ children }: { children: ReactNode }) {
+  return <span className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-1 text-[9px] font-bold text-[var(--adm-blue-700)]">{children}</span>;
 }
 
-function AssignToCaseModal({
-  target,
-  cases,
-  casesLoading,
-  selectedCaseId,
-  onSelectCase,
-  isLinking,
-  feedback,
-  onClose,
-  onSubmit,
-}: {
-  target: CommunicationItem;
-  cases: CaseListItem[];
-  casesLoading: boolean;
-  selectedCaseId: string;
-  onSelectCase: (caseId: string) => void;
-  isLinking: boolean;
-  feedback: AssignFeedback | null;
-  onClose: () => void;
-  onSubmit: () => void;
-}) {
-  const subject = target.subject || target.summary || target.contentPreview || "Nincs tárgy";
-  const succeeded = feedback?.tone === "success";
-  const feedbackStyle =
-    feedback?.tone === "success"
-      ? "border-[var(--adm-blue-500)]/40 bg-[var(--adm-blue-100)]/35 text-[var(--adm-blue-700)]"
-      : feedback?.tone === "info"
-        ? "border-[var(--adm-warm-400)]/55 bg-[#FFF8E2] text-[var(--adm-warm-600)]"
-        : "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]";
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-md rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-[0_18px_40px_rgba(2,48,71,0.18)]">
-        <div className="border-b border-[var(--adm-border)] px-4 py-3">
-          <p className="adm-kicker text-[var(--adm-blue-700)]">Kézi besorolás</p>
-          <h2 className="adm-heading mt-0.5 text-[18px]">Meglévő ügyhöz rendelés</h2>
-          <p className="mt-1 truncate text-[11px] text-[var(--adm-text-muted)]">{subject}</p>
-        </div>
-
-        <div className="space-y-3 px-4 py-3">
-          <div>
-            <label className="block text-[11px] font-bold text-[var(--adm-text-muted)]" htmlFor="assign-case-select">
-              Ügy kiválasztása
-            </label>
-            <select
-              id="assign-case-select"
-              value={selectedCaseId}
-              onChange={(event) => onSelectCase(event.target.value)}
-              disabled={casesLoading || isLinking || succeeded}
-              className="adm-modal-field mt-1 w-full px-3 py-2 text-sm disabled:opacity-50"
-            >
-              <option value="">{casesLoading ? "Ügyek betöltése…" : "Válassz ügyet…"}</option>
-              {cases.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.caseNumber} — {item.title}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-[10.5px] text-[var(--adm-text-soft)]">
-              Csak meglévő ügyhöz rendelés. A besorolást a felelős jogász erősíti meg.
-            </p>
-          </div>
-
-          {feedback ? (
-            <p className={`rounded-[var(--adm-radius-sm)] border px-3 py-2 text-[11px] font-semibold ${feedbackStyle}`}>
-              {feedback.message}
-            </p>
-          ) : null}
-        </div>
-
-        <div className="flex justify-end gap-2 border-t border-[var(--adm-border)] px-4 py-3">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isLinking}
-            className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[11px] font-bold text-[var(--adm-text-muted)] disabled:opacity-50"
-          >
-            {succeeded ? "Bezárás" : "Mégsem"}
-          </button>
-          {succeeded ? null : (
-            <button
-              type="button"
-              onClick={onSubmit}
-              disabled={!selectedCaseId || isLinking || casesLoading}
-              className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-700)] bg-[var(--adm-blue-700)] px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-50"
-            >
-              {isLinking ? "Rendezés…" : "Ügyhöz rendelés"}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+function EmptyState({ title, detail }: { title: string; detail?: string }) {
+  return <div className="p-5 text-center"><p className="text-[12px] font-semibold text-[var(--adm-text)]">{title}</p>{detail ? <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{detail}</p> : null}</div>;
 }
 
-function CommunicationPanel({
-  title,
-  accent,
-  countLabel,
-  capacityLabel,
-  items,
-  isLoading,
-  emptyTitle,
-  emptyText,
-  onAssign,
-  onCreateTask,
-  onCreateCase,
-}: {
-  title: string;
-  accent: string;
-  countLabel: string;
-  capacityLabel: string;
-  items: CommunicationItem[];
-  isLoading: boolean;
-  emptyTitle: string;
-  emptyText: string;
-  onAssign: (item: CommunicationItem) => void;
-  onCreateTask: (item: CommunicationItem) => void;
-  onCreateCase: (item: CommunicationItem) => void;
-}) {
-  return (
-    <article className="adm-panel flex min-h-[340px] flex-col overflow-hidden">
-      <div className="flex items-center justify-between gap-2 px-4 py-4 text-white" style={{ background: accent }}>
-        <h2 className="adm-heading text-[24px] text-white">{title}</h2>
-        <span className="rounded-[var(--adm-radius-sm)] border border-white/25 bg-white/15 px-2.5 py-1 text-[10px] font-bold text-white">
-          {countLabel}
-        </span>
-      </div>
-      <div className="flex flex-1 flex-col p-4">
-        <div className="grid grid-cols-[1.05fr_1.2fr_1fr_0.75fr_0.55fr] overflow-hidden rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white">
-          {communicationColumns.map((column) => (
-            <div key={column} className="border-r border-[var(--adm-border)] px-2.5 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--adm-text-soft)] last:border-r-0">
-              {column}
-            </div>
-          ))}
-        </div>
-        {isLoading ? (
-          <div className="mt-3 flex min-h-[155px] flex-1 items-center rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
-            <p className="text-xs font-semibold text-[var(--adm-text-muted)]">Kommunikációs lista betöltése…</p>
-          </div>
-        ) : items.length === 0 ? (
-          <div className="mt-3 flex min-h-[155px] flex-1 items-center rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
-            <div>
-              <p className="text-xs font-semibold text-[var(--adm-text)]">{emptyTitle}</p>
-              <p className="mt-1 max-w-xl text-[11px] leading-4 text-[var(--adm-text-muted)]">{emptyText}</p>
-            </div>
-          </div>
-        ) : (
-          <ul className="mt-3 grid gap-2">
-            {items.map((item) => (
-              <CommunicationRow
-                key={item.id}
-                item={item}
-                onAssign={onAssign}
-                onCreateTask={onCreateTask}
-                onCreateCase={onCreateCase}
-              />
-            ))}
-          </ul>
-        )}
-        <p className="mt-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">{capacityLabel}</p>
-      </div>
-    </article>
-  );
+function apiFeedback(error: unknown, fallback: string): Feedback {
+  if (error instanceof ApiError && error.status === 501) return { tone: "info", message: "A művelet nincs bekapcsolva ezen a környezeten." };
+  if (error instanceof ApiError && error.status === 401) return { tone: "error", message: "Jelentkezz be újra, majd próbáld újra." };
+  if (error instanceof ApiError && error.status === 409) return { tone: "error", message: error.message || fallback };
+  return { tone: "error", message: fallback };
 }
 
-function CommunicationRow({
-  item,
-  onAssign,
-  onCreateTask,
-  onCreateCase,
-}: {
-  item: CommunicationItem;
-  onAssign: (item: CommunicationItem) => void;
-  onCreateTask: (item: CommunicationItem) => void;
-  onCreateCase: (item: CommunicationItem) => void;
-}) {
-  const source = item.senderName || item.senderEmail || item.recipientName || item.recipientEmail || "Nincs megadott forrás";
-  const contactLine = formatContactLine(item);
-  const subject = item.subject || item.summary || item.contentPreview || "Nincs tárgy";
-  const linkedContext = formatLinkedContext(item);
-  const statusBadges = formatStatusBadges(item);
-  const preview = item.summary || item.contentPreview;
-  const timestamp = formatDateShort(item.createdAt);
-
-  return (
-    <li className="grid gap-2 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white p-3 text-[11px] text-[var(--adm-text)] shadow-[0_1px_0_rgba(2,48,71,0.04)] md:grid-cols-[1.05fr_1.35fr_0.9fr_0.8fr_0.55fr] md:items-start">
-      <div className="min-w-0 space-y-1">
-        <p className="truncate text-[12px] font-bold text-[var(--adm-text)]">{source}</p>
-        <p className="truncate text-[10.5px] text-[var(--adm-text-muted)]">{contactLine}</p>
-        <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">{formatCommunicationType(item.type)}</p>
-      </div>
-      <div className="min-w-0 space-y-1">
-        <p className="truncate text-[12px] font-bold text-[var(--adm-blue-950)]">{subject}</p>
-        {preview ? <p className="line-clamp-2 text-[10.5px] leading-4 text-[var(--adm-text-muted)]">{preview}</p> : null}
-        <p className="truncate text-[9.5px] font-semibold uppercase tracking-[0.08em] text-[var(--adm-text-soft)]">
-          Létrehozó: {item.createdById ? "rögzített" : "nincs adat"}
-        </p>
-      </div>
-      <p className="min-w-0 truncate rounded-[var(--adm-radius-sm)] bg-[var(--adm-surface)] px-2 py-1.5 font-semibold text-[var(--adm-text-muted)]">
-        {linkedContext}
-      </p>
-      <div className="flex min-w-0 flex-wrap gap-1">
-        {statusBadges.map((badge) => (
-          <span
-            key={badge}
-            className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-1 text-[9.5px] font-bold text-[var(--adm-blue-700)]"
-          >
-            {badge}
-          </span>
-        ))}
-      </div>
-      <time className="whitespace-nowrap text-[10.5px] font-semibold text-[var(--adm-text-soft)]" dateTime={item.createdAt}>
-        {timestamp}
-      </time>
-      <CommunicationContextLinks
-        item={item}
-        onAssign={onAssign}
-        onCreateTask={onCreateTask}
-        onCreateCase={onCreateCase}
-      />
-    </li>
-  );
-}
-
-function CommunicationContextLinks({
-  item,
-  onAssign,
-  onCreateTask,
-  onCreateCase,
-}: {
-  item: CommunicationItem;
-  onAssign: (item: CommunicationItem) => void;
-  onCreateTask: (item: CommunicationItem) => void;
-  onCreateCase: (item: CommunicationItem) => void;
-}) {
-  const links: Array<{ href: string; label: string }> = [];
-
-  if (item.caseId) {
-    links.push({ href: `/cases/${encodeURIComponent(item.caseId)}`, label: "Ügy megnyitása" });
-    links.push({ href: `/cases/${encodeURIComponent(item.caseId)}/communications`, label: "Ügy kommunikációi" });
-  }
-
-  if (item.clientId) {
-    links.push({ href: `/clients/${encodeURIComponent(item.clientId)}`, label: "Ügyfél megnyitása" });
-  }
-
-  if (item.caseId && item.documentId) {
-    const query = new URLSearchParams({ caseId: item.caseId, documentId: item.documentId });
-    links.push({ href: `/documents/compare?${query.toString()}`, label: "Dokumentum kontextus" });
-  }
-
-  // Read-only triage signals derived purely from the record we already loaded.
-  // These are honest "jelzés" hints (suggestions), not provider sync, AI, or a persisted thread.
-  const signal = toCommunicationSignal({
-    id: item.id,
-    type: item.type,
-    subject: item.subject,
-    senderName: item.senderName,
-    senderEmail: item.senderEmail,
-    recipientEmail: item.recipientEmail,
-    summary: item.summary,
-    caseId: item.caseId,
-    clientId: item.clientId,
-    createdAt: item.createdAt,
-    attachmentCount: item.attachmentCount,
-  });
-  const directionLabel = signal.direction === "outgoing" ? "Kimenő" : "Bejövő";
-  const needsCase = !item.caseId;
-
-  return (
-    <div className="flex flex-wrap items-center gap-1.5 md:col-span-5">
-      <span className="rounded-full border border-[var(--adm-border)] bg-white px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.08em] text-[var(--adm-text-soft)]">
-        Jelzés: {directionLabel}
-      </span>
-      {needsCase ? (
-        <span className="rounded-full border border-dashed border-[var(--adm-warm-400)]/55 bg-[#FFF8E2] px-2.5 py-1 text-[9.5px] font-bold text-[var(--adm-warm-600)]">
-          Még nincs ügyhöz rendelve
-        </span>
-      ) : null}
-      {needsCase ? (
-        <button
-          type="button"
-          onClick={() => onAssign(item)}
-          className="rounded-full border border-[var(--adm-blue-500)]/45 bg-white px-2.5 py-1 text-[9.5px] font-bold text-[var(--adm-blue-700)] transition-colors hover:border-[var(--adm-blue-500)] hover:bg-[var(--adm-blue-100)]/35"
-        >
-          Meglévő ügyhöz rendelés
-        </button>
-      ) : null}
-      {needsCase ? (
-        <button
-          type="button"
-          onClick={() => onCreateCase(item)}
-          className="rounded-full border border-[var(--adm-blue-700)]/45 bg-white px-2.5 py-1 text-[9.5px] font-bold text-[var(--adm-blue-700)] transition-colors hover:border-[var(--adm-blue-700)] hover:bg-[var(--adm-blue-100)]/35"
-        >
-          Új ügy indítása
-        </button>
-      ) : null}
-      {links.map((link) => (
-        <Link
-          key={link.href}
-          href={link.href}
-          className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2.5 py-1 text-[9.5px] font-bold text-[var(--adm-blue-700)] transition-colors hover:border-[var(--adm-blue-500)] hover:bg-[var(--adm-blue-100)]/35"
-        >
-          {link.label}
-        </Link>
-      ))}
-      {item.caseId ? (
-        <button
-          type="button"
-          onClick={() => onCreateTask(item)}
-          className="rounded-full border border-[var(--adm-blue-700)]/45 bg-white px-2.5 py-1 text-[9.5px] font-bold text-[var(--adm-blue-700)] transition-colors hover:border-[var(--adm-blue-700)] hover:bg-[var(--adm-blue-100)]/35"
-        >
-          Feladat kinyerése
-        </button>
-      ) : null}
-      {item.sourceTaskCount > 0 ? (
-        <span className="rounded-full border border-dashed border-[var(--adm-border)] bg-white px-2.5 py-1 text-[9.5px] font-bold text-[var(--adm-text-muted)]">
-          Feladatkapcsolat: csak darabszám
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-function WorkflowTool({
-  accent,
-  kicker,
-  title,
-  children,
-}: {
-  accent: string;
-  kicker: string;
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <article className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3" style={{ borderTop: `3px solid ${accent}` }}>
-      <p className="adm-kicker" style={{ color: accent }}>{kicker}</p>
-      <h3 className="adm-heading mt-1 text-[18px]">{title}</h3>
-      <div className="mt-3">{children}</div>
-    </article>
-  );
-}
-
-function ReplyLane({ label }: { label: string }) {
-  return (
-    <div className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-warm-400)]/35 bg-white px-3 py-2">
-      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-warm-600)]">{label}</p>
-      <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Későbbi állapotmodell</p>
-    </div>
-  );
-}
-
-function applyWorkspaceFilter(items: CommunicationItem[], activeFilter: string): CommunicationItem[] {
-  const view = filterViews[activeFilter] || "all";
-  if (view === "external") return items.filter((item) => classifyCommunicationAudience(item) === "external");
-  if (view === "internal") return items.filter((item) => classifyCommunicationAudience(item) === "internal");
-  if (view === "clients") return items.filter((item) => Boolean(item.clientId));
-  if (view === "cases") return items.filter((item) => Boolean(item.caseId));
-  if (view === "tasks") return items.filter((item) => item.sourceTaskCount > 0);
-  if (view === "replies") return [];
-  return items;
-}
-
-function classifyCommunicationAudience(item: CommunicationItem): CommunicationAudience {
-  return classifyAudience({
-    id: item.id,
-    type: item.type,
-    senderEmail: item.senderEmail,
-    recipientEmail: item.recipientEmail,
-    clientId: item.clientId,
-  });
-}
-
-function getPanelEmptyCopy(audience: CommunicationAudience, activeFilter: string): { title: string; text: string } {
-  const isExternal = audience === "external";
-  const channel = isExternal ? "külső" : "belső";
-  const view = filterViews[activeFilter] || "all";
-
-  if (view === "replies") {
-    return {
-      title: `Nincs megjeleníthető ${channel} válaszállapot.`,
-      text: "A jelenlegi read-only lista nem tartalmaz megbízható válaszállapot-mezőt. Ha erre munkafolyamat épül, későbbi perzisztált kommunikációs modell szükséges.",
-    };
-  }
-
-  if (view === "clients") {
-    return {
-      title: `Nincs ügyfélhez sorolt ${channel} kommunikáció.`,
-      text: "Csak olyan read-only tételek jelennek meg itt, amelyek valós clientId mezővel érkeznek.",
-    };
-  }
-
-  if (view === "cases") {
-    return {
-      title: `Nincs ügyhöz sorolt ${channel} kommunikáció.`,
-      text: "Csak olyan tételek jelennek meg itt, amelyek valós caseId mezővel érkeznek.",
-    };
-  }
-
-  if (view === "tasks") {
-    return {
-      title: `Nincs feladathoz kapcsolt ${channel} kommunikáció.`,
-      text: "A lista csak a read-only szerződésben kapott sourceTaskCount alapján jelez feladatkapcsolatot.",
-    };
-  }
-
-  return {
-    title: `Nincs új ${channel} kommunikáció.`,
-    text: isExternal
-      ? "A bejövő és kimenő külső tételek itt jelennek meg, ha a read-only lista valós rekordot ad vissza."
-      : "A belső jelzések és review-visszajelzések itt jelennek meg, ha a read-only lista valós rekordot ad vissza.",
-  };
-}
-
-function formatContactLine(item: CommunicationItem): string {
+function formatContact(item: CommunicationItem) {
   if (item.senderEmail && item.recipientEmail) return `${item.senderEmail} → ${item.recipientEmail}`;
-  if (item.senderEmail) return item.senderEmail;
-  if (item.recipientEmail) return `Címzett: ${item.recipientEmail}`;
-  if (item.recipientName) return `Címzett: ${item.recipientName}`;
-  return "Kapcsolati adat nélkül";
+  return item.senderEmail || item.recipientEmail || item.recipientName || "Nincs kapcsolati adat";
 }
 
-function formatLinkedContext(item: CommunicationItem): string {
-  if (item.clientId && item.caseId) return "Ügyfél + ügy";
-  if (item.clientId) return "Ügyfélhez sorolt";
-  if (item.caseId) return "Ügyhöz sorolt";
-  if (item.documentId) return "Dokumentumhoz kapcsolt";
-  return "Nincs besorolva";
+function formatCommunicationType(type: CommunicationItem["type"]) {
+  return ({ EMAIL: "E-mail", PHONE: "Telefon", MEETING: "Megbeszélés", LETTER: "Levél", NOTE: "Jegyzet" } as const)[type] || type;
 }
 
-function formatStatusBadges(item: CommunicationItem): string[] {
-  const badges: string[] = [];
-  if (item.sourceTaskCount > 0) badges.push(`${item.sourceTaskCount} feladat`);
-  if (item.attachmentCount > 0) badges.push(`${item.attachmentCount} melléklet`);
-  if (item.clientId || item.caseId || item.documentId) badges.push("Kapcsolt");
-  if (badges.length === 0) badges.push("Read-only");
-  return badges;
-}
-
-function formatCommunicationType(type: CommunicationItem["type"]): string {
-  const labels: Record<CommunicationItem["type"], string> = {
-    EMAIL: "E-mail",
-    PHONE: "Telefon",
-    MEETING: "Megbeszélés",
-    LETTER: "Levél",
-    NOTE: "Jegyzet",
-  };
-  return labels[type] || type;
-}
-
-function formatDateShort(value: string): string {
+function formatDate(value: string) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString("hu-HU", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("hu-HU", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }

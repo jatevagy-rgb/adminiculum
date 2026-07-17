@@ -40,6 +40,12 @@ type LedgerTask = {
   workflowCategory?: string;
   urgency?: string;
   capabilities?: CaseWorkItemCapabilities;
+  source?: {
+    type?: "DOCUMENT" | "COMMUNICATION" | "DEADLINE" | "CASE" | null;
+    id?: string | null;
+    displayName?: string | null;
+    href?: string | null;
+  } | null;
   case: {
     id: string;
     caseNumber: string;
@@ -49,7 +55,7 @@ type LedgerTask = {
   };
 };
 
-type QuickFilter = "open" | "mine" | "overdue" | "review";
+type QuickFilter = "all" | "mine" | "overdue" | "review";
 
 const TASK_TYPES = [
   { value: "CONTRACT_REVIEW", label: "Szerződés ellenőrzése" },
@@ -66,6 +72,7 @@ const statusLabel: Record<string, string> = {
   PENDING: "Teendő",
   IN_PROGRESS: "Folyamatban",
   IN_REVIEW: "Review alatt",
+  UNDER_REVIEW: "Review alatt",
   SUBMITTED: "Beküldve",
   REVIEW_NEEDED: "Review alatt",
   REVIEW_SUBMITTED: "Beküldve",
@@ -75,7 +82,7 @@ const statusLabel: Record<string, string> = {
   FINALIZED: "Kész",
   REJECTED: "Visszaküldve",
   DECLINED: "Visszaküldve",
-  BLOCKED: "Blokkolva",
+  BLOCKED: "Elakadt",
   CANCELLED: "Törölve",
   ARCHIVED: "Archivált",
 };
@@ -101,7 +108,48 @@ function isOverdue(task: LedgerTask) {
 
 function isReview(task: LedgerTask) {
   const status = String(task.status || "").toUpperCase();
-  return ["IN_REVIEW", "SUBMITTED", "REVIEW_NEEDED", "REVIEW_SUBMITTED"].includes(status) || task.workflowCategory === "REVIEW";
+  return ["IN_REVIEW", "UNDER_REVIEW", "SUBMITTED", "REVIEW_NEEDED", "REVIEW_SUBMITTED"].includes(status) || task.workflowCategory === "REVIEW";
+}
+
+function matchesStatusGroup(task: LedgerTask, filter: string) {
+  const status = String(task.status || "").toUpperCase();
+  if (filter === "open") return isOpen(status);
+  if (filter === "in_progress") return status === "IN_PROGRESS";
+  if (filter === "submitted") return ["SUBMITTED", "IN_REVIEW", "UNDER_REVIEW", "REVIEW_NEEDED", "REVIEW_SUBMITTED"].includes(status);
+  if (filter === "closed") return closedStatuses.has(status);
+  if (filter === "blocked") return status === "BLOCKED";
+  return true;
+}
+
+function matchesDueWindow(task: LedgerTask, filter: string) {
+  if (filter === "all") return true;
+  if (filter === "none") return !task.dueDate;
+  if (!task.dueDate) return false;
+  const due = new Date(task.dueDate);
+  if (Number.isNaN(due.getTime())) return false;
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
+  if (filter === "overdue") return dueDay < start && isOpen(task.status);
+  if (filter === "today") return dueDay === start;
+  if (filter === "week") return dueDay >= start && dueDay < start + 7 * 24 * 60 * 60 * 1000;
+  return true;
+}
+
+function taskAttentionLabel(task: LedgerTask) {
+  if (isOverdue(task)) return "Lejárt";
+  if (isReview(task)) return "Review szükséges";
+  if (["URGENT", "HIGH"].includes(String(task.priority).toUpperCase())) return "Kiemelt";
+  return "Normál";
+}
+
+function taskSubmissionLabel(task: LedgerTask) {
+  const status = String(task.status || "").toUpperCase();
+  if (["SUBMITTED", "IN_REVIEW", "UNDER_REVIEW", "REVIEW_NEEDED", "REVIEW_SUBMITTED"].includes(status)) return "Leadva, review-ra vár";
+  if (closedStatuses.has(status)) return "Lezárt";
+  if (status === "IN_PROGRESS") return "Folyamatban";
+  if (status === "BLOCKED") return "Elakadt";
+  return "Még nincs leadás";
 }
 
 function formatDate(value?: string | null) {
@@ -131,6 +179,7 @@ function TasksPageContent() {
   const searchParams = useSearchParams();
   const deepLinkedTaskId = searchParams?.get("taskId") || null;
   const deepLinkedCaseId = searchParams?.get("caseId") || null;
+  const openCreateFromQuery = searchParams?.get("newTask") === "1";
 
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [cases, setCases] = useState<CaseListItem[]>([]);
@@ -139,10 +188,15 @@ function TasksPageContent() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(deepLinkedTaskId);
   const [selectedCaseSummary, setSelectedCaseSummary] = useState<CaseSummaryResponse | null>(null);
   const [caseCollaborators, setCaseCollaborators] = useState<CaseCollaborator[]>([]);
-  const [quickFilter, setQuickFilter] = useState<QuickFilter>("open");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [search, setSearch] = useState("");
+  const [clientFilter, setClientFilter] = useState("all");
   const [caseFilter, setCaseFilter] = useState(deepLinkedCaseId || "all");
+  const [assigneeFilter, setAssigneeFilter] = useState("all");
+  const [statusGroupFilter, setStatusGroupFilter] = useState("open");
   const [priorityFilter, setPriorityFilter] = useState("all");
+  const [dueFilter, setDueFilter] = useState("all");
+  const [reviewFilter, setReviewFilter] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -180,6 +234,7 @@ function TasksPageContent() {
               workflowCategory: task.workflowCategory,
               urgency: task.urgency,
               capabilities: task.capabilities,
+              source: task.source,
               assignedTo: task.assignee ? { id: task.assignee.id, name: task.assignee.displayName } : null,
               case: {
                 id: caseItem.id,
@@ -210,6 +265,10 @@ function TasksPageContent() {
     void loadTasks();
   }, [loadTasks]);
 
+  useEffect(() => {
+    if (openCreateFromQuery) setShowCreateModal(true);
+  }, [openCreateFromQuery]);
+
   const selectedTask = useMemo(() => tasks.find((task) => task.id === selectedTaskId) || null, [selectedTaskId, tasks]);
 
   useEffect(() => {
@@ -237,12 +296,17 @@ function TasksPageContent() {
     const query = search.trim().toLocaleLowerCase("hu-HU");
     return tasks
       .filter((task) => {
-        if (quickFilter === "open" && !isOpen(task.status)) return false;
         if (quickFilter === "mine" && task.assignedTo?.id !== currentUser?.id) return false;
         if (quickFilter === "overdue" && !isOverdue(task)) return false;
         if (quickFilter === "review" && !isReview(task)) return false;
+        if (clientFilter !== "all" && task.case.clientName !== clientFilter) return false;
         if (caseFilter !== "all" && task.case.id !== caseFilter) return false;
+        if (assigneeFilter !== "all" && (task.assignedTo?.id || "unassigned") !== assigneeFilter) return false;
+        if (!matchesStatusGroup(task, statusGroupFilter)) return false;
         if (priorityFilter !== "all" && task.priority !== priorityFilter) return false;
+        if (!matchesDueWindow(task, dueFilter)) return false;
+        if (reviewFilter === "required" && !isReview(task)) return false;
+        if (reviewFilter === "none" && isReview(task)) return false;
         if (!query) return true;
         return `${task.title} ${task.description || ""} ${task.case.caseNumber} ${task.case.clientName}`
           .toLocaleLowerCase("hu-HU")
@@ -253,11 +317,11 @@ function TasksPageContent() {
         if (left.dueDate && right.dueDate) return new Date(left.dueDate).getTime() - new Date(right.dueDate).getTime();
         return left.title.localeCompare(right.title, "hu-HU");
       });
-  }, [caseFilter, currentUser?.id, priorityFilter, quickFilter, search, tasks]);
+  }, [assigneeFilter, caseFilter, clientFilter, currentUser?.id, dueFilter, priorityFilter, quickFilter, reviewFilter, search, statusGroupFilter, tasks]);
 
   const counts = useMemo(
     () => ({
-      open: tasks.filter((task) => isOpen(task.status)).length,
+      all: tasks.length,
       mine: tasks.filter((task) => task.assignedTo?.id === currentUser?.id && isOpen(task.status)).length,
       overdue: tasks.filter(isOverdue).length,
       review: tasks.filter(isReview).length,
@@ -338,19 +402,19 @@ function TasksPageContent() {
   };
 
   const quickFilters: Array<{ id: QuickFilter; label: string; count: number }> = [
-    { id: "open", label: "Nyitott", count: counts.open },
+    { id: "all", label: "Összes", count: counts.all },
     { id: "mine", label: "Saját", count: counts.mine },
     { id: "overdue", label: "Lejárt", count: counts.overdue },
     { id: "review", label: "Review", count: counts.review },
   ];
+  const clientNames = useMemo(() => Array.from(new Set(tasks.map((task) => task.case.clientName).filter(Boolean))).sort((left, right) => left.localeCompare(right, "hu-HU")), [tasks]);
+  const assigneeOptions = useMemo(() => Array.from(new Map(tasks.filter((task) => task.assignedTo).map((task) => [task.assignedTo!.id, task.assignedTo!])).values()).sort((left, right) => left.name.localeCompare(right.name, "hu-HU")), [tasks]);
 
   return (
     <div className="min-h-full bg-[var(--adm-ivory-50)] p-4 lg:p-5">
       <div className="mx-auto max-w-[1440px] space-y-3">
         <OperationalPageHeader
-          title="Feladatok"
-          count={`${filteredTasks.length} tétel`}
-          subtitle="Nyisd meg a következő ügyhöz kötött feladatot, vagy adj át munkát."
+          title="Feladatok és határidők"
           primaryAction={<AdminButton variant="primary" onClick={() => setShowCreateModal(true)}>Új feladat</AdminButton>}
         />
 
@@ -367,11 +431,28 @@ function TasksPageContent() {
               </button>
             ))}
           </div>
-          <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-[minmax(180px,1fr)_190px_150px] lg:ml-3">
+          <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2 xl:ml-3 xl:grid-cols-4">
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Feladat, ügy vagy ügyfél keresése" className="adm-board-field min-w-0 px-3 py-2 text-[11px]" />
+            <select value={clientFilter} onChange={(event) => setClientFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]">
+              <option value="all">Minden ügyfél</option>
+              {clientNames.map((clientName) => <option key={clientName} value={clientName}>{clientName}</option>)}
+            </select>
             <select value={caseFilter} onChange={(event) => setCaseFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]">
               <option value="all">Minden ügy</option>
               {cases.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber}</option>)}
+            </select>
+            <select value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]">
+              <option value="all">Minden felelős</option>
+              <option value="unassigned">Nincs felelős</option>
+              {assigneeOptions.map((assignee) => <option key={assignee.id} value={assignee.id}>{assignee.name}</option>)}
+            </select>
+            <select value={statusGroupFilter} onChange={(event) => setStatusGroupFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]">
+              <option value="all">Minden státusz</option>
+              <option value="open">Nyitott</option>
+              <option value="in_progress">Folyamatban</option>
+              <option value="submitted">Leadott / review</option>
+              <option value="blocked">Elakadt</option>
+              <option value="closed">Lezárt</option>
             </select>
             <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]">
               <option value="all">Minden prioritás</option>
@@ -379,6 +460,18 @@ function TasksPageContent() {
               <option value="HIGH">Magas</option>
               <option value="MEDIUM">Közepes</option>
               <option value="LOW">Alacsony</option>
+            </select>
+            <select value={dueFilter} onChange={(event) => setDueFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]">
+              <option value="all">Minden határidő</option>
+              <option value="overdue">Lejárt</option>
+              <option value="today">Ma</option>
+              <option value="week">Következő 7 nap</option>
+              <option value="none">Nincs határidő</option>
+            </select>
+            <select value={reviewFilter} onChange={(event) => setReviewFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]">
+              <option value="all">Minden review állapot</option>
+              <option value="required">Review szükséges</option>
+              <option value="none">Nem vár review-ra</option>
             </select>
           </div>
         </section>
@@ -399,7 +492,7 @@ function TasksPageContent() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[980px] text-left">
+                <table className="w-full min-w-[1120px] text-left">
                   <thead className="border-b border-[var(--adm-border)] bg-[var(--adm-surface)]">
                     <tr className="text-[10px] uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">
                       <th className="px-3 py-2.5">Feladat</th>
@@ -408,6 +501,7 @@ function TasksPageContent() {
                       <th className="px-3 py-2.5">Határidő</th>
                       <th className="px-3 py-2.5">Felelős</th>
                       <th className="px-3 py-2.5">Státusz</th>
+                      <th className="px-3 py-2.5">Review / leadás</th>
                       <th className="px-3 py-2.5 text-right">Következő lépés</th>
                     </tr>
                   </thead>
@@ -435,6 +529,10 @@ function TasksPageContent() {
                           <td className={`px-3 py-2.5 text-[11px] ${isOverdue(task) ? "font-semibold text-[var(--adm-terracotta-700)]" : "text-[var(--adm-text-muted)]"}`}>{formatDate(task.dueDate)}</td>
                           <td className="px-3 py-2.5 text-[11px] text-[var(--adm-text-muted)]">{task.assignedTo?.name || "Nincs felelős"}</td>
                           <td className="px-3 py-2.5"><AdminStatusPill tone={taskStatusTone(task.status)}>{statusLabel[String(task.status).toUpperCase()] || "Nincs állapotadat"}</AdminStatusPill></td>
+                          <td className="px-3 py-2.5 text-[10px] text-[var(--adm-text-muted)]">
+                            <span className="block font-semibold text-[var(--adm-text)]">{taskAttentionLabel(task)}</span>
+                            <span className="mt-0.5 block">{taskSubmissionLabel(task)}</span>
+                          </td>
                           <td className="px-3 py-2.5 text-right">
                             {primaryAction ? (
                               <AdminButton size="sm" variant="primary" disabled={busyKey === `${task.id}:${primaryAction.action}`} onClick={() => void runAction(task, primaryAction.action)}>
@@ -467,11 +565,25 @@ function TasksPageContent() {
                 <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
                   <dt className="text-[var(--adm-text-muted)]">Ügy</dt>
                   <dd className="text-right font-semibold"><Link href={`/cases/${selectedTask.case.id}`} className="hover:underline">{selectedTask.case.caseNumber}</Link></dd>
+                  <dt className="text-[var(--adm-text-muted)]">Ügyfél</dt>
+                  <dd className="text-right font-semibold">{selectedTask.case.clientName}</dd>
                   <dt className="text-[var(--adm-text-muted)]">Határidő</dt>
                   <dd className="text-right font-semibold">{formatDate(selectedTask.dueDate)}</dd>
                   <dt className="text-[var(--adm-text-muted)]">Felelős</dt>
                   <dd className="text-right font-semibold">{selectedTask.assignedTo?.name || "Nincs felelős"}</dd>
+                  <dt className="text-[var(--adm-text-muted)]">Státusz</dt>
+                  <dd className="text-right font-semibold">{statusLabel[String(selectedTask.status).toUpperCase()] || "Nincs állapotadat"}</dd>
+                  <dt className="text-[var(--adm-text-muted)]">Prioritás</dt>
+                  <dd className="text-right font-semibold">{priorityLabel[selectedTask.priority] || "Közepes"}</dd>
                 </dl>
+
+                {selectedTask.source?.type === "COMMUNICATION" ? (
+                  <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Kapcsolt kommunikáció</p>
+                    <p className="mt-1 truncate text-[11px] font-semibold text-[var(--adm-text)]">{selectedTask.source.displayName || "Kommunikációs forrás"}</p>
+                    <div className="mt-2"><QuietLink href={selectedTask.source.href || `/cases/${selectedTask.case.id}/communications`}>Kommunikáció megnyitása</QuietLink></div>
+                  </div>
+                ) : null}
 
                 <label className="block text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">
                   Átadás
@@ -488,12 +600,20 @@ function TasksPageContent() {
 
                 <div className="flex flex-wrap gap-2">
                   {selectedTask.capabilities?.canBlock ? (
-                    <AdminButton size="sm" variant="danger" onClick={() => void runAction(selectedTask, "block")}>Blokkolás</AdminButton>
+                    <AdminButton size="sm" variant="danger" onClick={() => void runAction(selectedTask, "block")}>Elakadtként jelölés</AdminButton>
                   ) : null}
                   {selectedTask.capabilities?.canUnblock ? (
-                    <AdminButton size="sm" variant="neutral" onClick={() => void runAction(selectedTask, "unblock")}>Feloldás</AdminButton>
+                    <AdminButton size="sm" variant="neutral" onClick={() => void runAction(selectedTask, "unblock")}>Elakadás feloldása</AdminButton>
                   ) : null}
                 </div>
+
+                {["SUBMITTED", "IN_REVIEW", "UNDER_REVIEW", "REVIEW_NEEDED", "REVIEW_SUBMITTED", "DONE", "COMPLETED", "APPROVED", "FINALIZED"].includes(String(selectedTask.status).toUpperCase()) ? (
+                  <div className="border-t border-[var(--adm-border)] pt-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Leadás</p>
+                    <p className="mt-2 text-[11px] text-[var(--adm-text-muted)]">{taskSubmissionLabel(selectedTask)}</p>
+                    <div className="mt-3"><QuietLink href={`/cases/${selectedTask.case.id}/handoff`}>Leadás megnyitása</QuietLink></div>
+                  </div>
+                ) : null}
 
                 <div className="border-t border-[var(--adm-border)] pt-3">
                   <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Ügykörnyezet</p>

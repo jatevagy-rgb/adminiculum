@@ -228,7 +228,7 @@ export function HandoffPackagePanel({
     try {
       const updated = await updateHandoffPackage(pkgId, { status: "SUBMITTED" });
       setPackages((prev) => prev.map((p) => (p.id === pkgId ? updated : p)).filter((p) => p.status !== "ARCHIVED"));
-      setSummaryMessage("Leadási csomag beküldve ügyvédi review-ra.");
+      setSummaryMessage("Leadás beküldve ügyvédi review-ra.");
     } catch (err) {
       setSummaryError(getHandoffErrorMessage(err));
     } finally {

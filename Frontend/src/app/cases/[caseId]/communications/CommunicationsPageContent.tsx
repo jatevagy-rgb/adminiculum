@@ -988,7 +988,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                 onClick={() => router.push(`/cases/${caseContextId}/handoff`)}
                 className="w-full py-2 text-xs uppercase tracking-[0.2em] border border-[#DDD7CA] text-[#1F2821] bg-white hover:bg-[#ECE6DA]"
               >
-                Leadási csomag
+                Leadás
               </button>
             </div>
             <button

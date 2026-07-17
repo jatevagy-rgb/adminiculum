@@ -59,6 +59,13 @@ const iconFor = (name: string | undefined) => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 13.255A5 5 0 0112 19v3H5a2 2 0 01-2-2V8a2 2 0 012-2h4l2-2h4a2 2 0 012 2v1.5M16 5h2a2 2 0 012 2v1.5M7 14h.01M17 14h.01M12 14v4" />
         </svg>
       );
+    case 'cat':
+      return (
+        <svg className="h-5 w-5" viewBox="0 0 24 24" stroke="currentColor" fill="none" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 9.5 4 4l5 3a9 9 0 0 1 6 0l5-3-1 5.5V15a7 7 0 0 1-14 0z" />
+          <path strokeLinecap="round" strokeWidth={1.5} d="M8.5 13h.01M15.5 13h.01M10 16c1.2.9 2.8.9 4 0M3 14H1m2 3H1m20-3h2m-2 3h2" />
+        </svg>
+      );
     case 'bell':
       return (
         <svg className="w-5 h-5" viewBox="0 0 24 24" stroke="currentColor" fill="none">

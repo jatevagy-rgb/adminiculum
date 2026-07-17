@@ -624,7 +624,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
             }),
       };
       await createCaseHandoffPackage(caseRecord.id, payload);
-      setHandoffPackageMessage('Leadási csomag piszkozat létrehozva. A meglévő anonimizált szöveg és jogi elemzés automatikusan csatolva lett, ha elérhető volt.');
+      setHandoffPackageMessage('Leadási piszkozat létrehozva. A meglévő anonimizált szöveg és jogi elemzés automatikusan csatolva lett, ha elérhető volt.');
       setHandoffPanelRefreshKey((k) => k + 1);
     } catch {
       setHandoffPackageError('Nem sikerült létrehozni a leadási csomagot.');
@@ -846,9 +846,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       CONTRACT_GENERATED: 'Szerződés generálva sablonból',
       REVIEW_REQUESTED: 'Review kérve',
       REVIEW_COMPLETED: 'Review lezárva',
-      HANDOFF_PACKAGE_CREATED: 'Leadási csomag létrehozva',
-      HANDOFF_PACKAGE_SUBMITTED: 'Leadási csomag beküldve',
-      HANDOFF_PACKAGE_REVIEWED: 'Leadási csomag review lezárva',
+      HANDOFF_PACKAGE_CREATED: 'Leadás létrehozva',
+      HANDOFF_PACKAGE_SUBMITTED: 'Leadás beküldve',
+      HANDOFF_PACKAGE_REVIEWED: 'Leadás review lezárva',
     };
     return map[raw] || event.typeLabel || 'Ügyesemény';
   };
@@ -1153,7 +1153,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             </p>
                           ) : null}
                           <AdminButton className="w-full justify-start" variant="gold" onClick={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/handoff`)}>
-                            Leadási csomag
+                            Leadás
                           </AdminButton>
                           <div className="grid gap-2 border-t border-[#E7DECB] pt-2">
                             {selectedUploadedDocument ? (
