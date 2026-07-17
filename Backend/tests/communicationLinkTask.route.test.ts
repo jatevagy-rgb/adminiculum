@@ -19,8 +19,29 @@ jest.mock('../src/prisma/prisma.service', () => ({
   },
 }));
 
+jest.mock('../src/modules/tasks/services', () => {
+  class MockSourceLinkedTaskError extends Error {
+    constructor(
+      public readonly statusCode: number,
+      public readonly code: string,
+      message: string,
+    ) {
+      super(message);
+    }
+  }
+
+  return {
+    __esModule: true,
+    default: {},
+    canUserActOnTask: jest.fn(),
+    createTaskFromCommunicationSource: jest.fn(),
+    SourceLinkedTaskError: MockSourceLinkedTaskError,
+  };
+});
+
 import { prisma } from '../src/prisma/prisma.service';
 import communicationsRoutes from '../src/modules/communications/routes';
+import { canUserActOnTask } from '../src/modules/tasks/services';
 
 type TestResponse = { status: number; body: any };
 
@@ -73,6 +94,7 @@ function createApp() {
 describe('POST /communications/:id/link-task', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (canUserActOnTask as jest.Mock).mockResolvedValue({ allowed: true, role: 'LAWYER' });
     delete process.env.ENABLE_COMMUNICATIONS_PERSISTENCE;
   });
 
@@ -125,6 +147,27 @@ describe('POST /communications/:id/link-task', () => {
     const idempotent = await requestJson(createApp(), '/communications/comm-1/link-task', { body: { taskId: 'task-1' } });
     expect(idempotent.status).toBe(200);
     expect(idempotent.body).toMatchObject({ success: true, linked: false });
+    expect((prisma as any).task.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects task linkage when the authenticated user cannot act on the task', async () => {
+    process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
+    (prisma as any).communication.findUnique.mockResolvedValue({ id: 'comm-1', caseId: 'case-1' });
+    (prisma as any).task.findUnique.mockResolvedValue({
+      id: 'task-1',
+      title: 'Task',
+      caseId: 'case-1',
+      status: 'TODO',
+      sourceCommunicationId: null,
+      assignedToId: 'user-2',
+      assignedById: 'user-3',
+    });
+    (canUserActOnTask as jest.Mock).mockResolvedValueOnce({ allowed: false, role: 'LAWYER' });
+
+    const response = await requestJson(createApp(), '/communications/comm-1/link-task', { body: { taskId: 'task-1' } });
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('TASK_LINK_FORBIDDEN');
     expect((prisma as any).task.update).not.toHaveBeenCalled();
   });
 

@@ -51,7 +51,9 @@ describe('ops pages UX cleanup static guards', () => {
     expect(dashboard).toContain('value === null ? "Most nem elérhető"');
     expect(dashboard).toContain('<SummaryCard label="Nyitott ügyek"');
     expect(dashboard).toContain('Gyors műveletek');
-    expect(dashboard).toContain('Mai naptár');
+    expect(dashboard).toContain('Napi események és határidők');
+    expect(dashboard).toContain('Új határidős feladat');
+    expect(dashboard).toContain('&& !/deleted|töröl/i.test');
     expect(dashboard).toContain('Ügyfélhez sorolt kommunikáció');
     expect(dashboard).not.toContain('<SummaryCard label="Aktív ügyek"');
     expect(dashboard).not.toMatch(/Napi munkapad|Mai működési kép|Kapacitás: 8/);

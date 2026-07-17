@@ -102,6 +102,7 @@ const taskReadSelect = {
   assignedToId: true,
   assignedById: true,
   documentId: true,
+  sourceCommunicationId: true,
   caseId: true,
   workflowEvent: true,
   matterId: true,
@@ -130,7 +131,7 @@ async function getTaskForTransition(taskId: string) {
   });
 }
 
-async function userCanActOnTask(task: { caseId: string; assignedToId?: string | null; assignedById?: string | null }, userId: string): Promise<{ allowed: boolean; role: string | null }> {
+export async function canUserActOnTask(task: { caseId: string; assignedToId?: string | null; assignedById?: string | null }, userId: string): Promise<{ allowed: boolean; role: string | null }> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, role: true },
@@ -170,7 +171,7 @@ async function transitionTask(taskId: string, userId: string, action: SupportedT
     throw new WorkflowTransitionError(404, 'TASK_NOT_FOUND', 'Task not found.');
   }
 
-  const actor = await userCanActOnTask(existing, userId);
+  const actor = await canUserActOnTask(existing, userId);
   if (!actor.allowed) {
     throw new WorkflowTransitionError(403, 'TASK_ACTION_FORBIDDEN', 'You are not allowed to perform this task action.');
   }
@@ -616,7 +617,7 @@ export async function rescheduleTaskDueDate(taskId: string, userId: string, body
   if (['COMPLETED', 'DONE', 'CANCELLED', 'ARCHIVED'].includes(status)) {
     throw new WorkflowTransitionError(409, 'TASK_DEADLINE_NOT_OPEN', 'Closed task deadlines cannot be rescheduled.');
   }
-  const actor = await userCanActOnTask(existing, userId);
+  const actor = await canUserActOnTask(existing, userId);
   if (!actor.allowed) {
     throw new WorkflowTransitionError(403, 'TASK_ACTION_FORBIDDEN', 'You are not allowed to reschedule this task.');
   }
@@ -662,7 +663,7 @@ export async function reassignTask(taskId: string, newAssigneeId: string, reassi
     throw new WorkflowTransitionError(404, 'TASK_NOT_FOUND', 'Task not found.');
   }
 
-  const actorAccess = await userCanActOnTask(existingTask, reassignedBy);
+  const actorAccess = await canUserActOnTask(existingTask, reassignedBy);
   if (!actorAccess.allowed) {
     throw new WorkflowTransitionError(403, 'TASK_ACCESS_FORBIDDEN', 'You do not have access to reassign this task.');
   }
@@ -869,6 +870,50 @@ export async function getUserTasks(userId: string, filters?: { status?: string; 
   });
 }
 
+export async function getReviewTasksForUser(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true },
+  });
+  if (!user) return [];
+
+  const privileged = ['ADMIN', 'PARTNER'].includes(String(user.role));
+  return prisma.task.findMany({
+    where: {
+      status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'IN_REVIEW'] as any },
+      ...(!privileged ? {
+        OR: [
+          { assignedToId: userId },
+          { assignedById: userId },
+          { case: { assignedLawyerId: userId } },
+          { case: { createdById: userId } },
+          { case: { collaborators: { some: { userId } } } },
+        ],
+      } : {}),
+    },
+    select: {
+      ...taskReadSelect,
+      assignedTo: { select: { id: true, name: true, role: true } },
+      assignedBy: { select: { id: true, name: true, role: true } },
+      case: {
+        select: {
+          id: true,
+          caseNumber: true,
+          title: true,
+          clientId: true,
+          clientName: true,
+          matterType: true,
+        },
+      },
+    },
+    orderBy: [
+      { submittedAt: 'desc' },
+      { priority: 'desc' },
+      { dueDate: 'asc' },
+    ],
+  });
+}
+
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
@@ -940,5 +985,6 @@ export default {
   autoGenerateTask,
   canAssign,
   getUserTasks,
+  getReviewTasksForUser,
   TaskValidationError
 };

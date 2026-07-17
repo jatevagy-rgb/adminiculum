@@ -111,9 +111,17 @@ function taskUrgency(task: TaskItem) {
 
 function formatActivityText(type?: string | null, text?: string | null) {
   const normalized = String(type || text || "").toUpperCase();
+  if (normalized.includes("CASE_ASSIGNED")) return "Ügy kiosztva";
+  if (normalized.includes("CASE_CREATED")) return "Ügy létrehozva";
+  if (normalized.includes("CASE_STATUS_CHANGED")) return "Ügyállapot frissítve";
+  if (normalized.includes("TASK_ASSIGNED")) return "Feladat kiosztva";
+  if (normalized.includes("TASK_STARTED")) return "Feladat elindítva";
+  if (normalized.includes("TASK_SUBMITTED")) return "Feladat leadva";
+  if (normalized.includes("TASK_COMPLETED")) return "Feladat lezárva";
   if (normalized.includes("DOCUMENT_UPLOADED")) return "Dokumentum feltöltve";
   if (normalized.includes("DOCUMENT_UPDATED")) return "Dokumentum frissítve";
   if (normalized.includes("DOCUMENT_REVIEW")) return "Dokumentum review frissült";
+  if (/^[A-Z0-9_ -]+$/.test(String(text || type || ""))) return "Legutóbbi ügyaktivitás";
   return text || "Legutóbbi aktivitás";
 }
 
@@ -254,7 +262,11 @@ export function DashboardFocused() {
   );
 
   const latestActivity = useMemo(
-    () => (stats?.recentActivity || []).find((activity) => activity.caseId && cases.some((item) => item.id === activity.caseId)) || null,
+    () => (stats?.recentActivity || []).find((activity) =>
+      activity.caseId
+      && cases.some((item) => item.id === activity.caseId)
+      && !/deleted|töröl/i.test(`${activity.type} ${activity.text}`)
+    ) || null,
     [cases, stats],
   );
   const latestActivityCase = useMemo(
@@ -310,7 +322,7 @@ export function DashboardFocused() {
         label: getCaseDisplayTitle(latestActivityCase),
         title: formatActivityText(latestActivity.type, latestActivity.text),
         meta: `${latestActivityCase.caseNumber} · ${formatDateTime(latestActivity.timestamp)}`,
-        href: `/cases/${encodeURIComponent(latestActivityCase.id)}`,
+        href: latestActivity.href || `/cases/${encodeURIComponent(latestActivityCase.id)}`,
         action: "Munka folytatása",
         tone: "green" as const,
       }
@@ -422,14 +434,19 @@ export function DashboardFocused() {
 
         <section className="border border-[var(--adm-border)] bg-white" aria-labelledby="dashboard-calendar-heading">
           <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-4 py-3">
-            <h2 id="dashboard-calendar-heading" className="font-serif text-[19px] font-medium text-[var(--adm-text)]">Mai naptár</h2>
+            <h2 id="dashboard-calendar-heading" className="font-serif text-[19px] font-medium text-[var(--adm-text)]">Napi események és határidők</h2>
             <div className="flex gap-2"><QuietLink href="/deadlines?view=day">Napi nézet</QuietLink><QuietLink href="/deadlines?view=week">Heti nézet</QuietLink></div>
           </div>
           {nextCalendarItem ? (
-            <Link href={nextCalendarItem.href || nextCalendarItem.source.href || "/deadlines?view=day"} className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-[var(--adm-surface)]">
-              <span className="min-w-0"><span className="block truncate text-[13px] font-semibold text-[var(--adm-text)]">{nextCalendarItem.title}</span><span className="mt-1 block text-[10px] text-[var(--adm-text-muted)]">Következő esemény · {nextCalendarItem.source.displayName || nextCalendarItem.sourceType}</span></span>
-              <time className="shrink-0 text-[12px] font-semibold text-[var(--adm-warm-600)]">{new Date(nextCalendarItem.dueAt).toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" })}</time>
-            </Link>
+            <div className="divide-y divide-[var(--adm-border)]">
+              {todayCalendarItems.slice(0, 3).map((item, index) => (
+                <Link key={item.id} href={item.href || item.source.href || "/deadlines?view=day"} className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-[var(--adm-surface)]">
+                  <span className="min-w-0"><span className="block truncate text-[13px] font-semibold text-[var(--adm-text)]">{item.title}</span><span className="mt-1 block text-[10px] text-[var(--adm-text-muted)]">{index === 0 ? "Következő" : "Mai tétel"} · {item.source.displayName || item.sourceType}</span></span>
+                  <time className="shrink-0 text-[12px] font-semibold text-[var(--adm-warm-600)]">{new Date(item.dueAt).toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" })}</time>
+                </Link>
+              ))}
+              <div className="flex justify-end px-4 py-2"><QuietLink href="/tasks?newTask=1">Új határidős feladat</QuietLink></div>
+            </div>
           ) : (
             <div className="p-4"><CompactState title="Mára nincs naptári tétel." action={<QuietLink href="/tasks?newTask=1">Új határidős feladat</QuietLink>} /></div>
           )}

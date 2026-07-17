@@ -115,7 +115,8 @@ function matchesStatusGroup(task: LedgerTask, filter: string) {
   const status = String(task.status || "").toUpperCase();
   if (filter === "open") return isOpen(status);
   if (filter === "in_progress") return status === "IN_PROGRESS";
-  if (filter === "submitted") return ["SUBMITTED", "IN_REVIEW", "UNDER_REVIEW", "REVIEW_NEEDED", "REVIEW_SUBMITTED"].includes(status);
+  if (filter === "submitted") return status === "SUBMITTED" || status === "REVIEW_SUBMITTED";
+  if (filter === "review") return ["IN_REVIEW", "UNDER_REVIEW", "REVIEW_NEEDED"].includes(status);
   if (filter === "closed") return closedStatuses.has(status);
   if (filter === "blocked") return status === "BLOCKED";
   return true;
@@ -450,7 +451,8 @@ function TasksPageContent() {
               <option value="all">Minden státusz</option>
               <option value="open">Nyitott</option>
               <option value="in_progress">Folyamatban</option>
-              <option value="submitted">Leadott / review</option>
+              <option value="submitted">Leadott</option>
+              <option value="review">Jóváhagyásra vár</option>
               <option value="blocked">Elakadt</option>
               <option value="closed">Lezárt</option>
             </select>
@@ -492,11 +494,12 @@ function TasksPageContent() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1120px] text-left">
+                <table className="w-full min-w-[1210px] text-left">
                   <thead className="border-b border-[var(--adm-border)] bg-[var(--adm-surface)]">
                     <tr className="text-[10px] uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">
                       <th className="px-3 py-2.5">Feladat</th>
                       <th className="px-3 py-2.5">Ügy</th>
+                      <th className="px-3 py-2.5">Ügyfél</th>
                       <th className="px-3 py-2.5">Prioritás</th>
                       <th className="px-3 py-2.5">Határidő</th>
                       <th className="px-3 py-2.5">Felelős</th>
@@ -523,14 +526,15 @@ function TasksPageContent() {
                           </td>
                           <td className="px-3 py-2.5 text-[11px] text-[var(--adm-text-muted)]">
                             <Link href={`/cases/${task.case.id}`} className="font-semibold text-[var(--adm-text)] hover:underline">{task.case.caseNumber}</Link>
-                            <span className="mt-0.5 block max-w-[180px] truncate">{task.case.clientName}</span>
+                            {task.case.title ? <span className="mt-0.5 block max-w-[180px] truncate">{task.case.title}</span> : null}
                           </td>
+                          <td className="px-3 py-2.5 text-[11px] text-[var(--adm-text-muted)]">{task.case.clientName || "Nincs ügyféladat"}</td>
                           <td className="px-3 py-2.5 text-[11px] font-semibold text-[var(--adm-text)]">{priorityLabel[task.priority] || "Közepes"}</td>
                           <td className={`px-3 py-2.5 text-[11px] ${isOverdue(task) ? "font-semibold text-[var(--adm-terracotta-700)]" : "text-[var(--adm-text-muted)]"}`}>{formatDate(task.dueDate)}</td>
                           <td className="px-3 py-2.5 text-[11px] text-[var(--adm-text-muted)]">{task.assignedTo?.name || "Nincs felelős"}</td>
                           <td className="px-3 py-2.5"><AdminStatusPill tone={taskStatusTone(task.status)}>{statusLabel[String(task.status).toUpperCase()] || "Nincs állapotadat"}</AdminStatusPill></td>
                           <td className="px-3 py-2.5 text-[10px] text-[var(--adm-text-muted)]">
-                            <span className="block font-semibold text-[var(--adm-text)]">{taskAttentionLabel(task)}</span>
+                            <span className="block font-semibold text-[var(--adm-text)]">Javasolt: {taskAttentionLabel(task)}</span>
                             <span className="mt-0.5 block">{taskSubmissionLabel(task)}</span>
                           </td>
                           <td className="px-3 py-2.5 text-right">
@@ -575,6 +579,8 @@ function TasksPageContent() {
                   <dd className="text-right font-semibold">{statusLabel[String(selectedTask.status).toUpperCase()] || "Nincs állapotadat"}</dd>
                   <dt className="text-[var(--adm-text-muted)]">Prioritás</dt>
                   <dd className="text-right font-semibold">{priorityLabel[selectedTask.priority] || "Közepes"}</dd>
+                  <dt className="text-[var(--adm-text-muted)]">Javasolt figyelem</dt>
+                  <dd className="text-right font-semibold">{taskAttentionLabel(selectedTask)}</dd>
                 </dl>
 
                 {selectedTask.source?.type === "COMMUNICATION" ? (

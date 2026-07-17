@@ -698,9 +698,9 @@ return {
   /**
    * Get dashboard stats
    */
-  async getDashboardStats(): Promise<{
+  async getDashboardStats(userId?: string): Promise<{
     stats: { totalCases: number; inReview: number; pendingClient: number; completedThisMonth: number };
-    recentActivity: Array<{ id: string; type: string; text: string; timestamp: Date; caseId?: string }>;
+    recentActivity: Array<{ id: string; type: string; text: string; timestamp: Date; caseId?: string; taskId?: string; documentId?: string; href?: string }>;
   }> {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -719,16 +719,36 @@ return {
 
     // Get recent activity
     const recentEvents = await prisma.timelineEvent.findMany({
+      where: userId ? { userId } : undefined,
       orderBy: { createdAt: 'desc' },
-      take: 10
+      take: 10,
+      select: {
+        id: true,
+        eventType: true,
+        type: true,
+        description: true,
+        createdAt: true,
+        caseId: true,
+        taskId: true,
+        documentId: true,
+      },
     });
 
     const recentActivity = recentEvents.map((e: any) => ({
       id: e.id,
-      type: e.type,
-      text: e.type,
+      type: e.type || e.eventType,
+      text: e.description || e.type || e.eventType,
       timestamp: e.createdAt,
-      caseId: e.caseId
+      caseId: e.caseId,
+      taskId: e.taskId || undefined,
+      documentId: e.documentId || undefined,
+      href: e.taskId
+        ? `/tasks?taskId=${encodeURIComponent(e.taskId)}`
+        : e.documentId && e.caseId
+          ? `/documents/compare?caseId=${encodeURIComponent(e.caseId)}&documentId=${encodeURIComponent(e.documentId)}`
+          : e.caseId
+            ? `/cases/${encodeURIComponent(e.caseId)}`
+            : undefined,
     }));
 
     return {

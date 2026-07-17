@@ -23,7 +23,7 @@ import {
   OutlookImportServiceError,
   runOutlookImportDryRun,
 } from './outlookImport.service';
-import { createTaskFromCommunicationSource, SourceLinkedTaskError } from '../tasks/services';
+import { canUserActOnTask, createTaskFromCommunicationSource, SourceLinkedTaskError } from '../tasks/services';
 
 const router = Router();
 const requireCommunicationsFoundation = requireDatabaseFoundation({
@@ -456,7 +456,12 @@ router.post('/:id/link-case', authenticate, requireCommunicationsFoundation, asy
 router.post('/:id/link-task', authenticate, requireCommunicationsFoundation, async (req: Request, res: Response) => {
   const communicationId = String(req.params.id);
   const taskId = typeof req.body?.taskId === 'string' ? req.body.taskId.trim() : '';
+  const userId = req.user?.userId;
 
+  if (!userId) {
+    res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required.' });
+    return;
+  }
   if (!taskId) {
     res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'taskId is required.' });
     return;
@@ -478,7 +483,7 @@ router.post('/:id/link-task', authenticate, requireCommunicationsFoundation, asy
 
     const task = await prisma.task.findUnique({
       where: { id: taskId },
-      select: { id: true, title: true, caseId: true, status: true, sourceCommunicationId: true },
+      select: { id: true, title: true, caseId: true, status: true, assignedToId: true, assignedById: true, sourceCommunicationId: true },
     });
     if (!task) {
       res.status(404).json({ status: 404, code: 'TASK_NOT_FOUND', message: 'Task not found.' });
@@ -486,6 +491,11 @@ router.post('/:id/link-task', authenticate, requireCommunicationsFoundation, asy
     }
     if (task.caseId !== communication.caseId) {
       res.status(409).json({ status: 409, code: 'TASK_CASE_MISMATCH', message: 'Task and communication must belong to the same case.' });
+      return;
+    }
+    const access = await canUserActOnTask(task, userId);
+    if (!access.allowed) {
+      res.status(403).json({ status: 403, code: 'TASK_LINK_FORBIDDEN', message: 'You are not allowed to link this task.' });
       return;
     }
     if (task.sourceCommunicationId && task.sourceCommunicationId !== communication.id) {

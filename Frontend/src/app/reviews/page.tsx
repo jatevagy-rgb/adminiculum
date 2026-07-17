@@ -7,7 +7,7 @@ import {
   getCaseSummary,
   getCases,
   getCurrentUser,
-  getMyTasks,
+  getReviewTasks,
   getCaseCollaborators,
   getUsers,
   reassignTask,
@@ -26,9 +26,12 @@ type QueueItem = {
   caseId: string;
   caseNumber: string;
   caseTitle: string;
+  clientId?: string;
+  clientName: string;
   status: string;
   priority: string;
   assigneeName: string;
+  submitterName: string;
   timestamp: string;
   dueDate?: string;
   documentId?: string;
@@ -40,16 +43,25 @@ type QueueItem = {
   openHref: string;
   fallbackHref: string;
   taskId?: string; // raw task.id for task-source items only
+  sourceCommunicationId?: string | null;
 };
 
 type AttentionLevel = "scan" | "approve" | "sign" | "edit" | "deep";
 
 const ATTENTION_CONFIG: Record<AttentionLevel, { label: string; className: string }> = {
-  scan: { label: "Átfutás", className: "border-[var(--adm-border)] bg-[var(--adm-ivory-100)] text-[var(--adm-text-muted)]" },
+  scan: { label: "Gyors átfutás", className: "border-[var(--adm-border)] bg-[var(--adm-ivory-100)] text-[var(--adm-text-muted)]" },
   approve: { label: "Jóváhagyás", className: "border-[#f5d89a] bg-[#fef3e2] text-[#8B6B3A]" },
   sign: { label: "Aláírás", className: "border-emerald-200 bg-emerald-50 text-emerald-800" },
   edit: { label: "Szerkesztés", className: "border-[var(--adm-terracotta-100)] bg-[var(--adm-terracotta-100)] text-[var(--adm-terracotta-700)]" },
   deep: { label: "Részletes ellenőrzés", className: "border-[var(--adm-blue-700)]/25 bg-[var(--adm-blue-100)]/35 text-[var(--adm-blue-700)]" },
+};
+
+const REVIEW_EFFORT: Record<AttentionLevel, string> = {
+  scan: "kb. 5 perc",
+  approve: "kb. 10–15 perc",
+  sign: "kb. 5–10 perc",
+  edit: "kb. 20–30 perc",
+  deep: "30+ perc",
 };
 
 function getAttentionLevel(item: QueueItem): AttentionLevel {
@@ -174,6 +186,12 @@ const daysUntil = (iso?: string) => {
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 };
 
+const daysSince = (iso?: string) => {
+  if (!iso) return null;
+  const diff = Date.now() - new Date(iso).getTime();
+  return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
+};
+
 export default function ReviewsPage() {
   return (
     <AuthenticatedApp section="reviews">
@@ -215,8 +233,11 @@ function ReviewsPageContent() {
   const [reviewCollaboratorIds, setReviewCollaboratorIds] = useState<string[]>([]);
 
   const [statusFilter, setStatusFilter] = useState("all");
+  const [submitterFilter, setSubmitterFilter] = useState("all");
   const [assigneeFilter, setAssigneeFilter] = useState("all");
   const [caseFilter, setCaseFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
   const [urgentOnly, setUrgentOnly] = useState(false);
   const [attentionFilter, setAttentionFilter] = useState<AttentionLevel | "all">("all");
   const [search, setSearch] = useState("");
@@ -264,7 +285,10 @@ function ReviewsPageContent() {
     setError(null);
     try {
         const me = await getCurrentUser();
-        const [assignedCases, myTasks] = await Promise.all([getCases(1, 100, me.id), getMyTasks()]);
+        const [assignedCases, reviewTaskRows] = await Promise.all([
+          getCases(1, 200, ["ADMIN", "PARTNER"].includes(String(me.role).toUpperCase()) ? undefined : me.id),
+          getReviewTasks(),
+        ]);
 
         const summaries = await Promise.all(
           assignedCases.data.map(async (caseItem: CaseListItem) => ({
@@ -287,27 +311,28 @@ function ReviewsPageContent() {
           caseCollaboratorMap[caseItem.id] = caseItem.collaboratorCount ?? 0;
         }
 
-        const reviewTasks: QueueItem[] = myTasks
-          .filter((task: TaskItem) =>
-            ["IN_REVIEW", "SUBMITTED", "REVIEW_NEEDED", "REVIEW_SUBMITTED", "TODO", "PENDING", "IN_PROGRESS", "REJECTED", "BLOCKED"].includes(task.status.toUpperCase())
-          )
+        const reviewTasks: QueueItem[] = reviewTaskRows
           .map((task: TaskItem) => ({
             id: `task-${task.id}`,
             source: "task",
             title: task.title,
             caseId: task.case.id,
             caseNumber: task.case.caseNumber,
-            caseTitle: task.case.clientName,
+            caseTitle: task.case.title || task.case.caseNumber,
+            clientId: task.case.clientId,
+            clientName: task.case.clientName || "Nincs ügyféladat",
             status: task.status,
             priority: task.priority,
             assigneeName: task.assignedTo?.name || "Nincs kijelölve",
-            timestamp: task.dueDate || new Date().toISOString(),
+            submitterName: task.assignedBy?.name || "Nincs beküldőadat",
+            timestamp: task.submittedAt || task.updatedAt || task.createdAt || "",
             dueDate: task.dueDate,
             nextActionLabel: getNextActionLabel(task.status, "task"),
             collaboratorCount: caseCollaboratorMap[task.case.id] ?? 0,
             openHref: `/tasks?taskId=${task.id}`,
             fallbackHref: `/cases/${task.case.id}`,
             taskId: task.id,
+            sourceCommunicationId: task.sourceCommunicationId,
           }));
 
         const reviewDocuments: QueueItem[] = [];
@@ -325,15 +350,18 @@ function ReviewsPageContent() {
               caseId: row.caseItem.id,
               caseNumber: row.caseItem.caseNumber,
               caseTitle: row.caseItem.title,
+              clientId: row.caseItem.clientId,
+              clientName: row.caseItem.clientName || "Nincs ügyféladat",
               status: doc.status,
               priority: row.caseItem.priority,
               assigneeName: row.caseItem.assignedLawyer?.name || "Nincs kijelölve",
+              submitterName: "Nincs beküldőadat",
               timestamp: doc.createdAt,
               documentId: doc.id,
               documentType: doc.documentType,
               version: doc.version,
               nextActionLabel: getNextActionLabel(doc.status, "document"),
-              daysWaiting: daysUntil(doc.createdAt),
+              daysWaiting: daysSince(doc.createdAt),
               collaboratorCount: caseCollaboratorMap[row.caseItem.id] ?? 0,
               openHref: `/cases/${row.caseItem.id}/review/${doc.id}`,
               fallbackHref: `/cases/${row.caseItem.id}/documents`,
@@ -362,8 +390,19 @@ function ReviewsPageContent() {
     const s = search.trim().toLowerCase();
     return queue.filter((item) => {
       const statusMatch = statusFilter === "all" || item.status === statusFilter;
+      const submitterMatch = submitterFilter === "all" || item.submitterName === submitterFilter;
       const assigneeMatch = assigneeFilter === "all" || item.assigneeName === assigneeFilter;
       const caseMatch = caseFilter === "all" || item.caseId === caseFilter;
+      const clientMatch = clientFilter === "all" || item.clientName === clientFilter;
+      const dateMatch = (() => {
+        if (dateFilter === "all") return true;
+        const timestamp = new Date(item.timestamp).getTime();
+        if (Number.isNaN(timestamp)) return false;
+        const age = Date.now() - timestamp;
+        if (dateFilter === "today") return age >= 0 && age <= 24 * 60 * 60 * 1000;
+        if (dateFilter === "week") return age >= 0 && age <= 7 * 24 * 60 * 60 * 1000;
+        return age >= 0 && age <= 31 * 24 * 60 * 60 * 1000;
+      })();
       const urgentMatch =
         !urgentOnly ||
         item.priority === "URGENT" ||
@@ -374,10 +413,11 @@ function ReviewsPageContent() {
         !s ||
         item.title.toLowerCase().includes(s) ||
         item.caseNumber.toLowerCase().includes(s) ||
-        item.caseTitle.toLowerCase().includes(s);
-      return statusMatch && assigneeMatch && caseMatch && urgentMatch && attentionMatch && searchMatch;
+        item.caseTitle.toLowerCase().includes(s) ||
+        item.clientName.toLowerCase().includes(s);
+      return statusMatch && submitterMatch && assigneeMatch && caseMatch && clientMatch && dateMatch && urgentMatch && attentionMatch && searchMatch;
     });
-  }, [attentionFilter, queue, statusFilter, assigneeFilter, caseFilter, urgentOnly, search]);
+  }, [attentionFilter, queue, statusFilter, submitterFilter, assigneeFilter, caseFilter, clientFilter, dateFilter, urgentOnly, search]);
 
   // Group queue by action urgency for better clarity
   const groupedByUrgency = useMemo(() => {
@@ -428,8 +468,11 @@ function ReviewsPageContent() {
   const selected = useMemo(() => filtered.find((item) => item.id === selectedId) || filtered[0] || null, [filtered, selectedId]);
   const hasActiveFilters =
     statusFilter !== "all" ||
+    submitterFilter !== "all" ||
     assigneeFilter !== "all" ||
     caseFilter !== "all" ||
+    clientFilter !== "all" ||
+    dateFilter !== "all" ||
     urgentOnly ||
     attentionFilter !== "all" ||
     search.trim().length > 0;
@@ -440,6 +483,8 @@ function ReviewsPageContent() {
     queue.forEach((item) => map.set(item.caseId, { id: item.caseId, label: item.caseNumber }));
     return Array.from(map.values());
   }, [queue]);
+  const clients = useMemo(() => Array.from(new Set(queue.map((item) => item.clientName))).sort(), [queue]);
+  const submitters = useMemo(() => Array.from(new Set(queue.map((item) => item.submitterName))).sort(), [queue]);
 
   return (
     <div className={`flex-1 flex min-h-0 reviews-surface ${p.bg}`}>
@@ -492,7 +537,7 @@ function ReviewsPageContent() {
             ))}
           </div>
 
-          <div className="adm-board-panel-tight mb-4 grid gap-2 p-3 md:grid-cols-5">
+          <div className="adm-board-panel-tight mb-4 grid gap-2 p-3 md:grid-cols-2 xl:grid-cols-4">
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Keresés" className={`adm-board-field w-full px-2 py-2 text-xs ${p.textDark}`} />
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={`adm-board-field w-full px-2 py-2 text-xs ${p.textDark}`}>
               <option value="all">Minden státusz</option>
@@ -500,6 +545,10 @@ function ReviewsPageContent() {
                 const cfg = getStatusConfig(status);
                 return <option key={status} value={status}>{cfg.label}</option>;
               })}
+            </select>
+            <select value={submitterFilter} onChange={(e) => setSubmitterFilter(e.target.value)} className={`adm-board-field w-full px-2 py-2 text-xs ${p.textDark}`}>
+              <option value="all">Minden beküldő</option>
+              {submitters.map((submitter) => <option key={submitter} value={submitter}>{submitter}</option>)}
             </select>
             <select value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)} className={`adm-board-field w-full px-2 py-2 text-xs ${p.textDark}`}>
               <option value="all">Minden felelős</option>
@@ -512,6 +561,16 @@ function ReviewsPageContent() {
               {cases.map((c) => (
                 <option key={c.id} value={c.id}>{c.label}</option>
               ))}
+            </select>
+            <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} className={`adm-board-field w-full px-2 py-2 text-xs ${p.textDark}`}>
+              <option value="all">Minden ügyfél</option>
+              {clients.map((client) => <option key={client} value={client}>{client}</option>)}
+            </select>
+            <select value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className={`adm-board-field w-full px-2 py-2 text-xs ${p.textDark}`}>
+              <option value="all">Minden beküldési idő</option>
+              <option value="today">Elmúlt 24 óra</option>
+              <option value="week">Elmúlt 7 nap</option>
+              <option value="month">Elmúlt 31 nap</option>
             </select>
             <label className={`adm-board-field flex items-center gap-2 px-2 text-xs ${p.textDark}`}>
               <input type="checkbox" checked={urgentOnly} onChange={(e) => setUrgentOnly(e.target.checked)} />
@@ -581,15 +640,17 @@ function ReviewsPageContent() {
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${priorityCfg.bg} ${priorityCfg.color}`}>
                                   {priorityCfg.label}
                                 </span>
-                                <span title="A meglévő státusz és prioritás alapján" className={`border px-1.5 py-0.5 text-[10px] ${attention.className}`}>
-                                  {attention.label}
+                                <span title="Nem beküldő által választott adat; a meglévő státusz és prioritás alapján számított javaslat" className={`border px-1.5 py-0.5 text-[10px] ${attention.className}`}>
+                                  Javasolt: {attention.label}
                                 </span>
                               </div>
-                              <p className="text-xs text-[var(--adm-text-muted)] mt-1">{item.caseNumber} · {item.caseTitle}</p>
+                              <p className="text-xs text-[var(--adm-text-muted)] mt-1">{item.caseNumber} · {item.caseTitle} · {item.clientName}</p>
                               <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                                 <span className="text-[10px] text-[var(--adm-text-muted)]">
-                                  <span className="font-medium">Felelős:</span> {item.assigneeName}
+                                  <span className="font-medium">Munkavégző:</span> {item.assigneeName}
                                 </span>
+                                <span className="text-[10px] text-[var(--adm-text-muted)]"><span className="font-medium">Beküldő:</span> {item.submitterName}</span>
+                                <span className="text-[10px] text-[var(--adm-text-muted)]">Becsült review: {REVIEW_EFFORT[getAttentionLevel(item)]}</span>
                                 {(item.collaboratorCount ?? 0) > 0 && (
                                   <span className="inline-flex items-center justify-center w-4 h-4 text-[9px] font-medium bg-[#8B5CF6] text-white rounded-full" title={`${item.collaboratorCount} résztvevő`}>
                                     +{item.collaboratorCount}
@@ -803,8 +864,8 @@ function ReviewsPageContent() {
                       <span className={`text-xs px-2 py-1 rounded ${priorityCfg.bg} ${priorityCfg.color}`}>
                         {priorityCfg.label} prioritás
                       </span>
-                      <span title="A meglévő státusz és prioritás alapján" className={`border px-2 py-1 text-xs ${attention.className}`}>
-                        {attention.label}
+                      <span title="Nem beküldő által választott adat; a meglévő státusz és prioritás alapján számított javaslat" className={`border px-2 py-1 text-xs ${attention.className}`}>
+                        Javasolt: {attention.label}
                       </span>
                       <span className={`text-xs px-2 py-1 rounded ${
                         urgency === "needs_action" ? "bg-[#fef3e2] text-[#8B6B3A]" :
@@ -823,7 +884,7 @@ function ReviewsPageContent() {
 
               <div className="border border-[var(--adm-border)] p-3 space-y-2">
                 <p className="text-sm font-semibold text-[var(--adm-text)]">{selected.title}</p>
-                <p className="text-xs text-[var(--adm-text-muted)]">{selected.caseNumber} · {selected.caseTitle}</p>
+                <p className="text-xs text-[var(--adm-text-muted)]">{selected.caseNumber} · {selected.caseTitle} · {selected.clientName}</p>
                 {selected.documentType && (
                   <p className="text-[11px] text-[var(--adm-text-muted)]">
                     Típus: <span className="font-medium text-[var(--adm-text-muted)]">{getDocumentTypeLabel(selected.documentType)}</span>
@@ -843,7 +904,9 @@ function ReviewsPageContent() {
                     {(daysUntil(selected.dueDate) ?? 99) === 0 && " (ma esedékes)"}
                   </p>
                 )}
-                <p className="text-[11px] text-[var(--adm-text-muted)]">Létrehozva: {formatDate(selected.timestamp)}</p>
+                <p className="text-[11px] text-[var(--adm-text-muted)]">Beküldve / sorba került: {formatDate(selected.timestamp)}</p>
+                <p className="text-[11px] text-[var(--adm-text-muted)]">Beküldő: {selected.submitterName}</p>
+                <p className="text-[11px] text-[var(--adm-text-muted)]">Becsült review idő: {REVIEW_EFFORT[getAttentionLevel(selected)]}</p>
                 {selected.daysWaiting !== null && selected.daysWaiting !== undefined && (
                   <p className={`text-[11px] font-medium ${(selected.daysWaiting ?? 0) >= 3 ? "text-[var(--adm-terracotta-700)]" : "text-[var(--adm-text-muted)]"}`}>
                     {selected.daysWaiting === 0 ? "Ma került a sorba" : `${selected.daysWaiting} napja a sorban`}
@@ -852,6 +915,11 @@ function ReviewsPageContent() {
                 <p className="text-[11px] text-[#8B6B3A] font-medium mt-1">
                   Következő: {selected.nextActionLabel}
                 </p>
+                {selected.sourceCommunicationId ? (
+                  <p className="text-[11px]"><Link href={`/notifications?communicationId=${encodeURIComponent(selected.sourceCommunicationId)}`} className="font-semibold text-[var(--adm-blue-700)] hover:underline">Kapcsolt kommunikáció megnyitása</Link></p>
+                ) : (
+                  <p className="text-[11px] text-[var(--adm-text-muted)]">Nincs kapcsolt kommunikáció.</p>
+                )}
               </div>
 
               {/* Reviewer/Assignee Info */}
@@ -936,7 +1004,7 @@ function ReviewsPageContent() {
               {/* Action next hint */}
               <div className="space-y-1">
                 <Link href={selected.openHref} className="block px-3 py-2 text-xs border border-[#1F4A33] bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] text-center font-semibold hover:bg-[#173824]">
-                  Review megnyitása
+                  Megnyitás
                 </Link>
                 <Link href={`/cases/${selected.caseId}/documents`} className="adm-link-button block px-3 py-2 text-xs text-center">
                   Dokumentumtár

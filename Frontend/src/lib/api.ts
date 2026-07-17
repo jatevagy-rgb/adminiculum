@@ -201,6 +201,9 @@ export interface DashboardStats {
     text: string;
     timestamp: string;
     caseId?: string;
+    taskId?: string;
+    documentId?: string;
+    href?: string;
   }>;
 }
 
@@ -1098,7 +1101,17 @@ export interface TaskItem {
   status: string;
   priority: string;
   dueDate?: string;
+  submittedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  documentId?: string | null;
+  sourceCommunicationId?: string | null;
   assignedTo?: {
+    id: string;
+    name: string;
+    role?: string;
+  };
+  assignedBy?: {
     id: string;
     name: string;
     role?: string;
@@ -1108,6 +1121,8 @@ export interface TaskItem {
     caseNumber: string;
     clientName: string;
     matterType: string;
+    title?: string;
+    clientId?: string;
   };
 }
 
@@ -3132,6 +3147,10 @@ export async function linkCommunicationToCase(
       body: JSON.stringify({ caseId }),
     }
   );
+}
+
+export async function getReviewTasks(): Promise<TaskItem[]> {
+  return fetchApi<TaskItem[]>('/tasks/review-queue');
 }
 
 export async function linkCommunicationToTask(

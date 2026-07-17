@@ -85,6 +85,22 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
   }
 });
 
+router.get('/review-queue', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+    }
+    const tasks = await taskService.getReviewTasksForUser(userId);
+    return res.json(tasks);
+  } catch (error) {
+    console.error('Error fetching review queue:', error instanceof Error ? error.message : 'Unknown error');
+    const prismaErr = buildPrismaErrorResponse(error);
+    if (prismaErr) return res.status(prismaErr.status).json(prismaErr.body);
+    return res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Review queue could not be loaded.' });
+  }
+});
+
 // ============================================================================
 // POST /api/v1/tasks - Új feladat létrehozása
 // ============================================================================

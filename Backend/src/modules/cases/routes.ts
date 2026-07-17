@@ -684,7 +684,7 @@ router.post('/:caseId/assign', authenticate, requireCaseManageAccess, async (req
 // ============================================================================
 router.get('/dashboard/stats', authenticate, async (req: Request, res: Response): Promise<void> => {
   try {
-    const stats = await casesService.getDashboardStats();
+    const stats = await casesService.getDashboardStats(req.user?.userId);
     res.json(stats);
   } catch (error) {
     console.error('Get dashboard stats error:', error);
