@@ -7,7 +7,6 @@ import {
   getClients,
   getCommunications,
   getDashboardStats,
-  getIntakeQueue,
   getMyTasks,
   getNewsFeed,
   getWorkflowAgenda,
@@ -15,7 +14,6 @@ import {
   type Client,
   type CommunicationItem,
   type DashboardStats,
-  type IntakeQueueResponse,
   type TaskItem,
   type WorkflowAgendaResponse,
   type WorkflowDeadlineItem,
@@ -82,12 +80,27 @@ function formatDateTime(value?: string | null) {
     : date.toLocaleString("hu-HU", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
-function isSameLocalDay(value: string, reference = new Date()) {
-  const date = new Date(value);
-  return !Number.isNaN(date.getTime())
-    && date.getFullYear() === reference.getFullYear()
-    && date.getMonth() === reference.getMonth()
-    && date.getDate() === reference.getDate();
+function toLocalDateKey(value: Date | string) {
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function formatCalendarDay(date: Date) {
+  return {
+    weekday: date.toLocaleDateString("hu-HU", { weekday: "short" }).replace(".", ""),
+    day: date.toLocaleDateString("hu-HU", { day: "2-digit" }),
+  };
+}
+
+function formatCalendarSelection(date: Date) {
+  return date.toLocaleDateString("hu-HU", { month: "long", day: "numeric", weekday: "long" });
+}
+
+function formatDeadlineTime(item: WorkflowDeadlineItem) {
+  if (item.allDay) return "Egész nap";
+  const date = new Date(item.dueAt);
+  return Number.isNaN(date.getTime()) ? "Nincs időadat" : date.toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" });
 }
 
 function isReviewTask(task: TaskItem) {
@@ -189,26 +202,25 @@ export function DashboardFocused() {
   const [communications, setCommunications] = useState<CommunicationItem[]>([]);
   const [agenda, setAgenda] = useState<WorkflowAgendaResponse | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [intake, setIntake] = useState<IntakeQueueResponse | null>(null);
   const [news, setNews] = useState<NewsArticle[]>([]);
   const [availability, setAvailability] = useState<DashboardAvailability>(unavailableDashboardData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState("");
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toLocalDateKey(new Date()));
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
     setAvailability(unavailableDashboardData);
     try {
-      const [taskResult, caseResult, clientResult, communicationResult, agendaResult, statsResult, intakeResult] = await Promise.all([
+      const [taskResult, caseResult, clientResult, communicationResult, agendaResult, statsResult] = await Promise.all([
         getMyTasks().catch(() => null),
         getCases(1, 200).catch(() => null),
         getClients().catch(() => null),
         getCommunications({ limit: 50 }).catch(() => null),
-        getWorkflowAgenda({ scope: "MY_WORK", status: "OPEN", limit: 12 }).catch(() => null),
+        getWorkflowAgenda({ scope: "MY_WORK", status: "OPEN", limit: 50 }).catch(() => null),
         getDashboardStats().catch(() => null),
-        getIntakeQueue({ scope: "MY_INTAKES", limit: 4 }).catch(() => null),
       ]);
 
       setTasks(taskResult || []);
@@ -217,7 +229,6 @@ export function DashboardFocused() {
       setCommunications(communicationResult?.communications || []);
       setAgenda(agendaResult);
       setStats(statsResult);
-      setIntake(intakeResult);
       setAvailability({
         tasks: taskResult !== null,
         cases: caseResult !== null,
@@ -327,12 +338,10 @@ export function DashboardFocused() {
         tone: "green" as const,
       }
     : focusItems[0] || null;
-  const queue = focusItems.filter((item) => item.id !== primary?.id).slice(0, 4);
   const activeCase = cases[0] || null;
   const caseCount = availability.cases
     ? cases.filter((item) => !closedCaseStatuses.has(String(item.status || "").toUpperCase())).length
     : null;
-  const deadlineCount = availability.agenda ? deadlines.length : null;
   const reviewCount = availability.stats
     ? stats?.stats.inReview ?? 0
     : availability.tasks
@@ -345,27 +354,38 @@ export function DashboardFocused() {
   const internalCommunicationCount = availability.communications
     ? communications.filter((item) => classifyAudience(item) === "internal").length
     : null;
-  const todayCalendarItems = deadlines
-    .filter((item) => isSameLocalDay(item.dueAt))
-    .sort((left, right) => new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime());
-  const nextCalendarItem = todayCalendarItems[0] || null;
+  const calendarDays = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + index);
+      const key = toLocalDateKey(date);
+      const items = deadlines
+        .filter((item) => toLocalDateKey(item.dueAt) === key)
+        .sort((left, right) => new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime());
+      return { date, key, items };
+    });
+  }, [deadlines]);
+  const selectedCalendarDay = calendarDays.find((day) => day.key === selectedCalendarDate) || calendarDays[0];
+  const selectedCalendarItems = selectedCalendarDay?.items || [];
+  const calendarRangeLabel = calendarDays.length
+    ? `${calendarDays[0].date.toLocaleDateString("hu-HU", { month: "short", day: "numeric" })} – ${calendarDays[calendarDays.length - 1].date.toLocaleDateString("hu-HU", { month: "short", day: "numeric" })}`
+    : "Következő 7 nap";
   const clientCommunicationOptions = useMemo(() => {
     const referencedClientIds = new Set(communications.map((item) => item.clientId).filter(Boolean));
     return clients.filter((client) => referencedClientIds.has(client.id));
   }, [clients, communications]);
-  const clientCommunications = communications
-    .filter((item) => item.clientId === selectedClientId)
+  const dashboardCommunications = communications
+    .filter((item) => !selectedClientId || item.clientId === selectedClientId)
     .slice(0, 6);
   const caseById = useMemo(() => new Map(cases.map((item) => [item.id, item])), [cases]);
+  const clientById = useMemo(() => new Map(clients.map((item) => [item.id, item])), [clients]);
   const focusDataComplete = availability.tasks && availability.cases && availability.agenda && availability.stats;
 
   useEffect(() => {
-    if (!selectedClientId && clientCommunicationOptions[0]) {
-      setSelectedClientId(clientCommunicationOptions[0].id);
-      return;
-    }
     if (selectedClientId && !clientCommunicationOptions.some((client) => client.id === selectedClientId)) {
-      setSelectedClientId(clientCommunicationOptions[0]?.id || "");
+      setSelectedClientId("");
     }
   }, [clientCommunicationOptions, selectedClientId]);
 
@@ -423,139 +443,158 @@ export function DashboardFocused() {
           )}
         </section>
 
-        <section className="grid grid-cols-2 gap-2.5 lg:grid-cols-3 xl:grid-cols-6" aria-label="Napi munka összefoglaló">
+        <section className="grid grid-cols-1 gap-2.5 sm:grid-cols-3" aria-label="Napi munka összefoglaló">
           <SummaryCard label="Nyitott ügyek" value={caseCount} emptyLabel="Nincs ügy" href="/cases" tone="petrol" />
           <SummaryCard label="Mai teendők" value={todayTaskCount} emptyLabel="Nincs mai teendő" href="/deadlines?view=day" tone="amber" />
-          <SummaryCard label="Közeli határidők" value={deadlineCount} emptyLabel="Nincs közeli határidő" href="/deadlines" tone="gold" />
           <SummaryCard label="Review tételek" value={reviewCount} emptyLabel="Nincs review tétel" href="/reviews" tone="navy" />
-          <SummaryCard label="Külső kommunikáció" value={externalCommunicationCount} emptyLabel="Nincs külső tétel" href="/notifications?view=external" tone="terracotta" />
-          <SummaryCard label="Belső kommunikáció" value={internalCommunicationCount} emptyLabel="Nincs belső tétel" href="/notifications?view=internal" tone="green" />
         </section>
 
         <section className="border border-[var(--adm-border)] bg-white" aria-labelledby="dashboard-calendar-heading">
-          <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-4 py-3">
-            <h2 id="dashboard-calendar-heading" className="font-serif text-[19px] font-medium text-[var(--adm-text)]">Napi események és határidők</h2>
-            <div className="flex gap-2"><QuietLink href="/deadlines?view=day">Napi nézet</QuietLink><QuietLink href="/deadlines?view=week">Heti nézet</QuietLink></div>
-          </div>
-          {nextCalendarItem ? (
-            <div className="divide-y divide-[var(--adm-border)]">
-              {todayCalendarItems.slice(0, 3).map((item, index) => (
-                <Link key={item.id} href={item.href || item.source.href || "/deadlines?view=day"} className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-[var(--adm-surface)]">
-                  <span className="min-w-0"><span className="block truncate text-[13px] font-semibold text-[var(--adm-text)]">{item.title}</span><span className="mt-1 block text-[10px] text-[var(--adm-text-muted)]">{index === 0 ? "Következő" : "Mai tétel"} · {item.source.displayName || item.sourceType}</span></span>
-                  <time className="shrink-0 text-[12px] font-semibold text-[var(--adm-warm-600)]">{new Date(item.dueAt).toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" })}</time>
-                </Link>
-              ))}
-              <div className="flex justify-end px-4 py-2"><QuietLink href="/tasks?newTask=1">Új határidős feladat</QuietLink></div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--adm-border)] px-4 py-3">
+            <div>
+              <h2 id="dashboard-calendar-heading" className="font-serif text-[20px] font-medium text-[var(--adm-text)]">Napi események és határidők</h2>
+              <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{calendarRangeLabel} · rögzített ügy- és feladathatáridők</p>
             </div>
-          ) : (
-            <div className="p-4"><CompactState title="Mára nincs naptári tétel." action={<QuietLink href="/tasks?newTask=1">Új határidős feladat</QuietLink>} /></div>
-          )}
+            <div className="flex flex-wrap items-center gap-2">
+              {(agenda?.summary.overdue || 0) > 0 ? <QuietLink href="/deadlines">{agenda?.summary.overdue} lejárt</QuietLink> : null}
+              <QuietLink href="/deadlines?view=day">Napi nézet</QuietLink>
+              <QuietLink href="/deadlines?view=week">Heti nézet</QuietLink>
+            </div>
+          </div>
+          <div className="grid lg:grid-cols-[minmax(0,1.3fr)_minmax(300px,0.7fr)]">
+            <div className="border-b border-[var(--adm-border)] p-3 lg:border-b-0 lg:border-r">
+              <div className="grid grid-cols-7 gap-1.5" role="tablist" aria-label="Következő hét nap">
+                {calendarDays.map((day, index) => {
+                  const label = formatCalendarDay(day.date);
+                  const selected = day.key === selectedCalendarDay?.key;
+                  return (
+                    <button key={day.key} type="button" role="tab" aria-selected={selected} onClick={() => setSelectedCalendarDate(day.key)} className={`min-w-0 border px-1 py-2 text-center transition-colors ${selected ? "border-[var(--adm-blue-950)] bg-[var(--adm-blue-950)] text-white" : "border-[var(--adm-border)] bg-white text-[var(--adm-text)] hover:bg-[var(--adm-surface)]"}`}>
+                      <span className="block truncate text-[9px] font-bold uppercase tracking-[0.08em] opacity-75">{index === 0 ? "Ma" : label.weekday}</span>
+                      <span className="mt-1 block font-serif text-[19px] leading-none">{label.day}</span>
+                      <span className={`mx-auto mt-2 flex h-5 min-w-5 items-center justify-center px-1 text-[9px] font-bold ${selected ? "bg-white/15 text-white" : day.items.length ? "bg-[var(--adm-sand-100)] text-[var(--adm-warm-600)]" : "bg-[var(--adm-surface)] text-[var(--adm-text-muted)]"}`}>{day.items.length}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--adm-border)] pt-3 text-[10px] text-[var(--adm-text-muted)]">
+                <span>Külső naptárszinkron nincs; csak Adminiculum-határidők látszanak.</span>
+                <QuietLink href="/tasks?newTask=1">Új határidős feladat</QuietLink>
+              </div>
+            </div>
+            <div className="min-w-0">
+              <div className="border-b border-[var(--adm-border)] px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">{selectedCalendarDay ? formatCalendarSelection(selectedCalendarDay.date) : "Kiválasztott nap"}</p>
+              </div>
+              {loading ? (
+                <div className="p-4"><CompactState title="Naptár betöltése…" /></div>
+              ) : selectedCalendarItems.length ? (
+                <div className="divide-y divide-[var(--adm-border)]">
+                  {selectedCalendarItems.slice(0, 4).map((item) => (
+                    <Link key={item.id} href={item.href || item.source.href || "/deadlines"} className="flex items-start justify-between gap-3 px-4 py-3 hover:bg-[var(--adm-surface)]">
+                      <span className="min-w-0">
+                        <span className="block truncate text-[12px] font-semibold text-[var(--adm-text)]">{item.title}</span>
+                        <span className="mt-1 block truncate text-[10px] text-[var(--adm-text-muted)]">{item.source.displayName || item.sourceType}</span>
+                      </span>
+                      <time className="shrink-0 text-[11px] font-semibold text-[var(--adm-warm-600)]">{formatDeadlineTime(item)}</time>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4"><CompactState title="Erre a napra nincs rögzített határidő." detail="Másik napot választhatsz a heti sávban." /></div>
+              )}
+            </div>
+          </div>
         </section>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.7fr)]">
+        <div className="grid gap-3 lg:grid-cols-3">
           <section className="border border-[var(--adm-border)] bg-white" aria-labelledby="dashboard-work-heading">
             <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-4 py-3">
               <h2 id="dashboard-work-heading" className="font-serif text-[20px] font-medium text-[var(--adm-text)]">Mai teendők</h2>
               <QuietLink href="/tasks">Minden feladat</QuietLink>
             </div>
-            {queue.length > 0 ? (
+            {openTasks.length > 0 ? (
               <div className="divide-y divide-[var(--adm-border)]">
-                {queue.map((item) => <FocusRow key={item.id} item={item} />)}
+                {openTasks.slice(0, 3).map((task) => (
+                  <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="block px-4 py-3 hover:bg-[var(--adm-surface)]">
+                    <p className="truncate text-[12px] font-semibold text-[var(--adm-text)]">{task.title}</p>
+                    <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{task.case?.caseNumber || "Feladat"} · {formatDate(task.dueDate)}</p>
+                  </Link>
+                ))}
               </div>
             ) : (
-              <div className="p-4"><CompactState title="Nincs további kiemelt tétel." detail="A nyitott feladatok a Feladatok oldalon érhetők el." /></div>
+              <div className="p-4"><CompactState title="Nincs nyitott teendő." /></div>
             )}
           </section>
 
-          <div className="space-y-4">
-            <section className="border border-[var(--adm-border)] bg-white">
-              <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-4 py-3">
-                <h2 className="font-serif text-[19px] font-medium text-[var(--adm-text)]">Közelgő határidők</h2>
-                <QuietLink href="/deadlines">Határidők</QuietLink>
-              </div>
-              <div className="divide-y divide-[var(--adm-border)]">
-                {deadlines.slice(0, 4).map((item) => (
-                  <Link key={item.id} href={item.href || item.source.href || "/deadlines"} className="block px-4 py-3 hover:bg-[var(--adm-surface)]">
-                    <p className="truncate text-[12px] font-semibold text-[var(--adm-text)]">{item.title}</p>
-                    <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{formatDate(item.dueAt)} · {item.source.displayName || item.sourceType}</p>
-                  </Link>
-                ))}
-                {!loading && deadlines.length === 0 ? <div className="p-4"><CompactState title="Nincs közeli határidő." /></div> : null}
-              </div>
-            </section>
-
-            <section className="border border-[var(--adm-border)] bg-white">
-              <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-4 py-3">
-                <h2 className="font-serif text-[19px] font-medium text-[var(--adm-text)]">Review-ra vár</h2>
-                <QuietLink href="/reviews">Review sor</QuietLink>
-              </div>
-              {reviewTasks.length > 0 ? (
-                <div className="divide-y divide-[var(--adm-border)]">
-                  {reviewTasks.slice(0, 3).map((task) => (
-                    <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="block px-4 py-3 hover:bg-[var(--adm-surface)]">
-                      <p className="truncate text-[12px] font-semibold text-[var(--adm-text)]">{task.title}</p>
-                      <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{task.case?.caseNumber || "Review tétel"} · {formatDate(task.dueDate)}</p>
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-4"><CompactState title="Nincs review-ra váró tétel." /></div>
-              )}
-            </section>
-          </div>
-        </div>
-
-        {intake?.summary.total ? (
           <section className="border border-[var(--adm-border)] bg-white">
             <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-4 py-3">
-              <h2 className="font-serif text-[19px] font-medium text-[var(--adm-text)]">Beérkezési sor</h2>
-              <QuietLink href="/intake">Ügyfelvétel</QuietLink>
+              <h2 className="font-serif text-[19px] font-medium text-[var(--adm-text)]">Review-ra vár</h2>
+              <QuietLink href="/reviews">Review sor</QuietLink>
+            </div>
+            {reviewTasks.length > 0 ? (
+              <div className="divide-y divide-[var(--adm-border)]">
+                {reviewTasks.slice(0, 3).map((task) => (
+                  <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="block px-4 py-3 hover:bg-[var(--adm-surface)]">
+                    <p className="truncate text-[12px] font-semibold text-[var(--adm-text)]">{task.title}</p>
+                    <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{task.case?.caseNumber || "Review tétel"} · {formatDate(task.dueDate)}</p>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="p-4"><CompactState title="Nincs review-ra váró munka." detail="A leadott dokumentumok itt jelennek meg." /></div>
+            )}
+          </section>
+
+          <section className="border border-[var(--adm-border)] bg-white">
+            <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-4 py-3">
+              <h2 className="font-serif text-[19px] font-medium text-[var(--adm-text)]">Közelgő határidők</h2>
+              <QuietLink href="/deadlines">Határidők</QuietLink>
             </div>
             <div className="divide-y divide-[var(--adm-border)]">
-              {intake.items.slice(0, 4).map((item) => (
-                <Link key={item.caseId} href={item.href} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[var(--adm-surface)]">
-                  <span className="min-w-0">
-                    <span className="block truncate text-[12px] font-semibold text-[var(--adm-text)]">{item.displayName}</span>
-                    <span className="mt-1 block text-[10px] text-[var(--adm-text-muted)]">{item.nextStep?.label || "Aktiválásra kész"}</span>
-                  </span>
-                  <span className="shrink-0 text-[10px] text-[var(--adm-text-muted)]">{item.readiness.completedRequiredItems}/{item.readiness.totalRequiredItems}</span>
+              {deadlines.slice(0, 3).map((item) => (
+                <Link key={item.id} href={item.href || item.source.href || "/deadlines"} className="block px-4 py-3 hover:bg-[var(--adm-surface)]">
+                  <p className="truncate text-[12px] font-semibold text-[var(--adm-text)]">{item.title}</p>
+                  <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{formatDate(item.dueAt)} · {item.source.displayName || item.sourceType}</p>
                 </Link>
               ))}
+              {!loading && deadlines.length === 0 ? <div className="p-4"><CompactState title="Nincs közeli határidő." /></div> : null}
             </div>
           </section>
-        ) : null}
+        </div>
 
-        <section className="border border-[var(--adm-border)] bg-white">
-            <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-4 py-3">
-              <h2 className="font-serif text-[19px] font-medium text-[var(--adm-text)]">Kommunikáció</h2>
-              <QuietLink href="/notifications">Kommunikációs munkatér</QuietLink>
-            </div>
-            <div className="grid md:grid-cols-2 md:divide-x md:divide-[var(--adm-border)]">
-              {(["external", "internal"] as const).map((audience) => {
-                const items = communications.filter((item) => classifyAudience(item) === audience).slice(0, 3);
-                return <div key={audience} className="min-w-0"><div className="border-b border-[var(--adm-border)] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">{audience === "external" ? "Külső" : "Belső"}</div>{items.length ? <div className="divide-y divide-[var(--adm-border)]">{items.map((item) => <Link key={item.id} href={`/notifications?view=${audience}`} className="block min-w-0 px-4 py-3 hover:bg-[var(--adm-surface)]"><p className="truncate text-[11px] font-semibold text-[var(--adm-text)]">{item.senderName || item.senderEmail || "Kommunikáció"}</p><p className="mt-1 truncate text-[12px] text-[var(--adm-text)]">{item.subject || "Nincs tárgy"}</p></Link>)}</div> : <div className="p-4"><CompactState title={`Nincs ${audience === "external" ? "külső" : "belső"} kommunikáció.`} /></div>}</div>;
-              })}
-            </div>
-        </section>
-
-        <section className="border border-[var(--adm-border)] bg-white" aria-labelledby="dashboard-client-communications-heading">
+        <section className="border border-[var(--adm-border)] bg-white" aria-labelledby="dashboard-communications-heading">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--adm-border)] px-4 py-3">
-            <h2 id="dashboard-client-communications-heading" className="font-serif text-[19px] font-medium text-[var(--adm-text)]">Ügyfélhez sorolt kommunikáció</h2>
-            <QuietLink href="/notifications?view=clients">Minden ügyfélkommunikáció</QuietLink>
+            <div>
+              <h2 id="dashboard-communications-heading" className="font-serif text-[20px] font-medium text-[var(--adm-text)]">Kommunikáció</h2>
+              <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">Legutóbbi tételek, opcionális ügyfélszűréssel.</p>
+            </div>
+            <div className="flex flex-wrap gap-2"><QuietLink href="/notifications">Összes</QuietLink><QuietLink href="/notifications?view=external">Külső ({externalCommunicationCount ?? "—"})</QuietLink><QuietLink href="/notifications?view=internal">Belső ({internalCommunicationCount ?? "—"})</QuietLink></div>
           </div>
           {clientCommunicationOptions.length ? (
-            <>
-              <div className="flex gap-1 overflow-x-auto border-b border-[var(--adm-border)] bg-[var(--adm-surface)] px-4 py-2">
-                {clientCommunicationOptions.map((client) => <button key={client.id} type="button" onClick={() => setSelectedClientId(client.id)} className={`shrink-0 px-3 py-1.5 text-[11px] font-semibold ${selectedClientId === client.id ? "bg-[var(--adm-green-800)] text-white" : "border border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>{client.name}</button>)}
-              </div>
-              <div className="divide-y divide-[var(--adm-border)]">
-                {clientCommunications.map((item) => {
-                  const relatedCase = item.caseId ? caseById.get(item.caseId) : null;
-                  return <Link key={item.id} href="/notifications?view=clients" className="grid gap-1 px-4 py-3 hover:bg-[var(--adm-surface)] sm:grid-cols-[minmax(0,1fr)_220px_auto] sm:items-center"><span className="truncate text-[12px] font-semibold text-[var(--adm-text)]">{item.subject || "Nincs tárgy"}</span><span className="truncate text-[10px] text-[var(--adm-text-muted)]">{relatedCase ? `${relatedCase.caseNumber} · ${getCaseDisplayTitle(relatedCase)}` : "Nincs ügyhöz rendelve"}</span><time className="text-[10px] text-[var(--adm-text-muted)]">{formatDateTime(item.createdAt)}</time></Link>;
-                })}
-              </div>
-            </>
-          ) : <div className="p-4"><CompactState title="Nincs ügyfélhez sorolt kommunikáció." /></div>}
+            <div className="flex gap-1 overflow-x-auto border-b border-[var(--adm-border)] bg-[var(--adm-surface)] px-4 py-2" aria-label="Kommunikáció szűrése ügyfél szerint">
+              <button type="button" onClick={() => setSelectedClientId("")} className={`shrink-0 px-3 py-1.5 text-[11px] font-semibold ${!selectedClientId ? "bg-[var(--adm-green-800)] text-white" : "border border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>Minden ügyfél</button>
+              {clientCommunicationOptions.map((client) => <button key={client.id} type="button" onClick={() => setSelectedClientId(client.id)} className={`shrink-0 px-3 py-1.5 text-[11px] font-semibold ${selectedClientId === client.id ? "bg-[var(--adm-green-800)] text-white" : "border border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>{client.name}</button>)}
+            </div>
+          ) : null}
+          {dashboardCommunications.length ? (
+            <div className="divide-y divide-[var(--adm-border)]">
+              {dashboardCommunications.map((item) => {
+                const relatedCase = item.caseId ? caseById.get(item.caseId) : null;
+                const relatedClient = item.clientId ? clientById.get(item.clientId) : null;
+                const audience = classifyAudience(item);
+                return (
+                  <Link key={item.id} href={`/notifications?communicationId=${encodeURIComponent(item.id)}`} className="grid gap-1 px-4 py-3 hover:bg-[var(--adm-surface)] sm:grid-cols-[minmax(150px,0.7fr)_minmax(0,1.4fr)_minmax(180px,0.8fr)_auto] sm:items-center">
+                    <span className="truncate text-[11px] font-semibold text-[var(--adm-text)]">{item.senderName || item.senderEmail || item.recipientName || "Nincs forrásadat"}</span>
+                    <span className="truncate text-[12px] font-semibold text-[var(--adm-blue-950)]">{item.subject || "Nincs tárgy"}</span>
+                    <span className="truncate text-[10px] text-[var(--adm-text-muted)]">{relatedClient?.name || "Nincs ügyfél"}{relatedCase ? ` · ${relatedCase.caseNumber}` : ""}</span>
+                    <span className="flex items-center justify-between gap-3 sm:justify-end"><span className="border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-1 text-[9px] font-semibold text-[var(--adm-text-muted)]">{audience === "external" ? "Külső" : "Belső"}</span><time className="text-[10px] text-[var(--adm-text-muted)]">{formatDateTime(item.createdAt)}</time></span>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="p-4"><CompactState title={selectedClientId ? "Ehhez az ügyfélhez nincs kommunikáció." : "Nincs megjeleníthető kommunikáció."} /></div>
+          )}
         </section>
 
         {(recentDocuments.length > 0 || news.length > 0) ? (

@@ -400,8 +400,9 @@ function ReviewsPageContent() {
         if (Number.isNaN(timestamp)) return false;
         const age = Date.now() - timestamp;
         if (dateFilter === "today") return age >= 0 && age <= 24 * 60 * 60 * 1000;
+        if (dateFilter === "threeDays") return age >= 0 && age <= 3 * 24 * 60 * 60 * 1000;
         if (dateFilter === "week") return age >= 0 && age <= 7 * 24 * 60 * 60 * 1000;
-        return age >= 0 && age <= 31 * 24 * 60 * 60 * 1000;
+        return age > 7 * 24 * 60 * 60 * 1000;
       })();
       const urgentMatch =
         !urgentOnly ||
@@ -531,7 +532,7 @@ function ReviewsPageContent() {
           )}
 
           <div className="adm-board-panel-tight mb-2 flex flex-wrap gap-1 p-2" aria-label="Ellenőrzési igény">
-            <button type="button" onClick={() => setAttentionFilter("all")} className={`border px-2.5 py-1.5 text-[10px] font-semibold ${attentionFilter === "all" ? "border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-white" : "border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>Minden igény</button>
+            <button type="button" onClick={() => setAttentionFilter("all")} className={`border px-2.5 py-1.5 text-[10px] font-semibold ${attentionFilter === "all" ? "border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-white" : "border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>Összes</button>
             {(Object.entries(ATTENTION_CONFIG) as Array<[AttentionLevel, (typeof ATTENTION_CONFIG)[AttentionLevel]]>).map(([level, config]) => (
               <button key={level} type="button" onClick={() => setAttentionFilter(level)} className={`border px-2.5 py-1.5 text-[10px] font-semibold ${attentionFilter === level ? config.className : "border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>{config.label}</button>
             ))}
@@ -567,10 +568,11 @@ function ReviewsPageContent() {
               {clients.map((client) => <option key={client} value={client}>{client}</option>)}
             </select>
             <select value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className={`adm-board-field w-full px-2 py-2 text-xs ${p.textDark}`}>
-              <option value="all">Minden beküldési idő</option>
-              <option value="today">Elmúlt 24 óra</option>
-              <option value="week">Elmúlt 7 nap</option>
-              <option value="month">Elmúlt 31 nap</option>
+              <option value="all">Minden időszak</option>
+              <option value="today">Ma</option>
+              <option value="threeDays">3 nap</option>
+              <option value="week">7 nap</option>
+              <option value="older">Régebbi</option>
             </select>
             <label className={`adm-board-field flex items-center gap-2 px-2 text-xs ${p.textDark}`}>
               <input type="checkbox" checked={urgentOnly} onChange={(e) => setUrgentOnly(e.target.checked)} />
@@ -589,9 +591,9 @@ function ReviewsPageContent() {
               </div>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="adm-board-empty text-xs text-[var(--adm-text-muted)]">
-              <p className="font-serif text-lg text-[var(--adm-text)]">{queue.length === 0 ? "Nincs review-ra váró dokumentum." : "Nincs találat a kiválasztott szűrőkkel."}</p>
-              <p className="mt-2 text-[11px] text-[var(--adm-text-muted)]">
+            <div className="mx-auto max-w-xl border border-[var(--adm-border)] bg-white px-4 py-3 text-xs text-[var(--adm-text-muted)]">
+              <p className="font-serif text-[17px] text-[var(--adm-text)]">{queue.length === 0 ? "Nincs review-ra váró munka." : "Nincs találat a kiválasztott szűrőkkel."}</p>
+              <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">
                 {queue.length === 0
                   ? "A review-ra küldött munkapéldányok és feladatok itt jelennek meg."
                   : hasActiveFilters
@@ -842,7 +844,7 @@ function ReviewsPageContent() {
         </div>
       </main>
 
-      <aside className="w-80 bg-white overflow-y-auto">
+      <aside className={`${selected ? "w-80" : "hidden"} bg-white overflow-y-auto`}>
         <div className="p-4 space-y-4">
           <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)]">Kiválasztott review elem</h2>
           {!selected ? (

@@ -77,6 +77,7 @@ function CommunicationWorkspace() {
   const [audienceFilter, setAudienceFilter] = useState("all");
   const [relationFilter, setRelationFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const [assignTarget, setAssignTarget] = useState<CommunicationItem | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState("");
@@ -247,6 +248,7 @@ function CommunicationWorkspace() {
     setAudienceFilter("all");
     setRelationFilter("all");
     setDateFilter("all");
+    setShowAdvancedFilters(false);
   };
 
   const updateCommunication = (id: string, patch: Partial<CommunicationItem>) => {
@@ -388,7 +390,8 @@ function CommunicationWorkspace() {
             <p className="adm-kicker text-[var(--adm-blue-700)]">Kommunikáció</p>
             <h1 className="adm-heading mt-1 text-[28px] leading-tight">Kommunikációs munkatér</h1>
           </div>
-          <nav className="flex gap-1 overflow-x-auto bg-[var(--adm-surface)] px-4 py-2 lg:px-5" aria-label="Kommunikációs nézetek">
+          <nav className="flex items-center gap-1 overflow-x-auto bg-[var(--adm-surface)] px-4 py-2 lg:px-5" aria-label="Kommunikációs gyorsnézetek">
+            <span className="mr-1 shrink-0 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Gyorsnézetek</span>
             {viewOptions.map((option) => (
               <button key={option.value} type="button" onClick={() => selectView(option.value)} className={`shrink-0 border px-3 py-1.5 text-[11px] font-bold ${activeView === option.value ? "border-[var(--adm-blue-950)] bg-[var(--adm-blue-950)] text-white" : "border-[var(--adm-border)] bg-white text-[var(--adm-text-muted)]"}`}>
                 {option.label}
@@ -397,18 +400,28 @@ function CommunicationWorkspace() {
           </nav>
         </header>
 
-        <section className="adm-panel grid gap-2 bg-white p-3 md:grid-cols-2 xl:grid-cols-5" aria-label="Kommunikáció szűrése">
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="E-mail, ügyfél, tárgy, ügyszám" className="adm-board-field px-3 py-2 text-[11px] xl:col-span-2" />
-          <input value={contactFilter} onChange={(event) => setContactFilter(event.target.value)} placeholder="Feladó / címzett neve" className="adm-board-field px-3 py-2 text-[11px]" />
-          <input value={emailFilter} onChange={(event) => setEmailFilter(event.target.value)} placeholder="Email cím" className="adm-board-field px-3 py-2 text-[11px]" />
-          <input value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)} placeholder="Tárgy" className="adm-board-field px-3 py-2 text-[11px]" />
-          <select value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden dátum</option><option value="today">Elmúlt 24 óra</option><option value="week">Elmúlt 7 nap</option><option value="month">Elmúlt 31 nap</option></select>
-          <select value={clientFilter} onChange={(event) => setClientFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden ügyfél</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select>
-          <select value={caseFilter} onChange={(event) => setCaseFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden ügy</option>{cases.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber} · {caseItem.title}</option>)}</select>
-          <select value={directionFilter} onChange={(event) => setDirectionFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden irány</option><option value="incoming">Bejövő</option><option value="outgoing">Kimenő</option></select>
-          <select value={audienceFilter} onChange={(event) => setAudienceFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Belső és külső</option><option value="external">Külső</option><option value="internal">Belső</option></select>
-          <select disabled className="adm-board-field px-3 py-2 text-[11px] opacity-70" aria-label="Kommunikációs státusz"><option>Státusz: nincs perzisztált adat</option></select>
-          <div className="flex gap-2"><select value={relationFilter} onChange={(event) => setRelationFilter(event.target.value)} className="adm-board-field min-w-0 flex-1 px-3 py-2 text-[11px]"><option value="all">Minden kapcsolat</option><option value="linked">Kapcsolt</option><option value="unlinked">Nincs besorolva</option><option value="tasks">Feladathoz kapcsolt</option><option value="withoutTasks">Feladat nélkül</option></select><button type="button" onClick={clearFilters} className="border border-[var(--adm-border)] bg-white px-3 py-2 text-[10px] font-semibold text-[var(--adm-text-muted)]">Törlés</button></div>
+        <section className="adm-panel bg-white p-3" aria-label="Kommunikáció szűrése">
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Keresés e-mailben, tárgyban, ügyben" className="adm-board-field px-3 py-2 text-[11px] xl:col-span-2" />
+            <select value={clientFilter} onChange={(event) => setClientFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden ügyfél</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select>
+            <select value={caseFilter} onChange={(event) => setCaseFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden ügy</option>{cases.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber} · {caseItem.title}</option>)}</select>
+            <select value={directionFilter} onChange={(event) => setDirectionFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden irány</option><option value="incoming">Bejövő</option><option value="outgoing">Kimenő</option></select>
+            <select value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden dátum</option><option value="today">Elmúlt 24 óra</option><option value="week">Elmúlt 7 nap</option><option value="month">Elmúlt 31 nap</option></select>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--adm-border)] pt-2">
+            <button type="button" onClick={() => setShowAdvancedFilters((current) => !current)} aria-expanded={showAdvancedFilters} className="border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text-muted)]">{showAdvancedFilters ? "További szűrők elrejtése" : "További szűrők"}</button>
+            <button type="button" onClick={clearFilters} className="px-2 py-1.5 text-[10px] font-semibold text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]">Szűrők törlése</button>
+          </div>
+          {showAdvancedFilters ? (
+            <div className="mt-2 grid gap-2 border-t border-[var(--adm-border)] pt-2 md:grid-cols-2 xl:grid-cols-3">
+              <input value={contactFilter} onChange={(event) => setContactFilter(event.target.value)} placeholder="Feladó / címzett neve" className="adm-board-field px-3 py-2 text-[11px]" />
+              <input value={emailFilter} onChange={(event) => setEmailFilter(event.target.value)} placeholder="Email cím" className="adm-board-field px-3 py-2 text-[11px]" />
+              <input value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)} placeholder="Tárgy" className="adm-board-field px-3 py-2 text-[11px]" />
+              <select value={audienceFilter} onChange={(event) => setAudienceFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Belső és külső</option><option value="external">Külső</option><option value="internal">Belső</option></select>
+              <select value={relationFilter} onChange={(event) => setRelationFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden kapcsolat</option><option value="linked">Kapcsolt</option><option value="unlinked">Nincs besorolva</option><option value="tasks">Feladathoz kapcsolt</option><option value="withoutTasks">Feladat nélkül</option></select>
+              <select disabled className="adm-board-field px-3 py-2 text-[11px] opacity-70" aria-label="Kommunikációs státusz"><option>Státusz: nincs perzisztált adat</option></select>
+            </div>
+          ) : null}
         </section>
 
         {loadError ? <div className="border border-[var(--adm-border)] bg-white px-3 py-2 text-[11px] font-semibold text-[var(--adm-text-muted)]">{loadError}</div> : null}
