@@ -107,4 +107,12 @@ Protected-area diffs against `e447168` remain zero for schema, migrations, OpenA
 
 ## Status
 
-Artifacts prepared and validated. No deployment was performed.
+Artifact byte integrity remains validated, but the production deployment preflight on 2026-07-17 found a provenance mismatch:
+
+- required official release commit: `94e4c44915af2e3bfe3005cad9b3f5c1c2004aa8`;
+- embedded `officialReleaseCommit` in both ZIPs: `d6070fa1886a3c584c8e029d0838412cda532400`;
+- embedded approved runtime source: correctly `01949dc83e1267e8ded33282ff86326f027e94ec`.
+
+Decision: `DEPLOYMENT_BLOCKED_ARTIFACT_PROVENANCE`.
+
+No deployment was performed. The existing ZIPs and hashes were not modified.

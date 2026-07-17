@@ -238,3 +238,16 @@ az webapp deploy --resource-group Adminiculum --name adminiculumfrontend-austria
 ```
 
 Rollback remains a separately approved operational action. No rollback or deployment occurred during final artifact preparation.
+
+## Operational UX Production Deployment Provenance Block
+
+The 2026-07-17 production execution stopped before backend deployment because the embedded official release commit did not match the execution authorization.
+
+- Backend deployment: not started.
+- Frontend deployment: not started.
+- Rollback: not required.
+- Current backend deployment remains `1a976a8f-ecbb-4d15-a899-339b9d7444bf`.
+- Current frontend deployment remains `9650525c-d465-468d-8171-f830128b9e7b`.
+- Both rollback artifacts remained readable and hash-valid.
+
+Classification: `operational_ux_production_deployment_1_blocked_artifact_provenance`.

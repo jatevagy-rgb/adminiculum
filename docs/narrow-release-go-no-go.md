@@ -292,3 +292,26 @@ Decision:
 `GO_FOR_OPERATIONAL_UX_PRODUCTION_DEPLOYMENT_APPROVAL`
 
 This decision permits a separate human deployment approval only. It does not deploy or authorize automatic deployment.
+
+## Operational UX Production Deployment Provenance Block
+
+The explicitly approved production execution on 2026-07-17 stopped during preflight before any Azure deployment command.
+
+- Release branch and remote: `94e4c44915af2e3bfe3005cad9b3f5c1c2004aa8`.
+- Backend and frontend artifact SHA-256 values: matched the approved values.
+- Embedded approved runtime source: correctly `01949dc`.
+- Embedded `officialReleaseCommit`: `d6070fa` in both artifacts.
+- Required `officialReleaseCommit`: `94e4c44`.
+- Backend deployed: no.
+- Frontend deployed: no.
+- Production/Azure/DB/configuration changed: no.
+
+Decision:
+
+`DEPLOYMENT_BLOCKED_ARTIFACT_PROVENANCE`
+
+Final classification:
+
+`operational_ux_production_deployment_1_blocked_artifact_provenance`
+
+A new explicit provenance resolution and approval is required before deployment.

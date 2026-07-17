@@ -4,7 +4,15 @@
 
 Commands only. No command in this document was executed during release integration.
 
-Decision:
+The approved production execution on 2026-07-17 stopped before the backend command because both embedded manifests identified `d6070fa` as `officialReleaseCommit`, while the execution authorization required `94e4c44`.
+
+Current decision:
+
+`DEPLOYMENT_BLOCKED_ARTIFACT_PROVENANCE`
+
+The deployment commands below remain previews only and must not be run until a separate explicit provenance resolution and approval is recorded.
+
+Prior release-candidate decision:
 
 `GO_FOR_OPERATIONAL_UX_PRODUCTION_DEPLOYMENT_APPROVAL`
 

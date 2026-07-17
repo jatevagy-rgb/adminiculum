@@ -2,7 +2,13 @@
 
 ## Summary
 
-No release-introduced blocking risk was found. The following inherited risks remain visible for human approval and follow-up.
+No release-introduced runtime blocking risk was found. Production deployment is nevertheless blocked by the current artifact provenance mismatch. The following inherited risks remain visible for human approval and follow-up.
+
+## Current Deployment Blocker
+
+Both approved ZIPs are byte-integrity valid, but their embedded `officialReleaseCommit` is `d6070fa`, while the production execution authorization requires `94e4c44`. This is a blocking operational provenance issue, not a runtime defect. No deployment was attempted.
+
+Resolution requires either newly approved artifacts with matching provenance or explicit human acceptance of `d6070fa` as the artifact checkpoint. The existing approval must not be stretched implicitly.
 
 | Risk | Origin | Blocking | Owner / action |
 | --- | --- | --- | --- |
