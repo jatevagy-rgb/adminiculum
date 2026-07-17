@@ -210,3 +210,31 @@ Assessment:
 Final classification:
 
 `frontend_only_editor_ops_deployment_1_blocked_azure_operation`
+
+## Operational UX 1 Rollback Readiness
+
+The operational UX final release candidate was prepared on 2026-07-17 but not deployed.
+
+Current active deployment references remain:
+
+- backend: `1a976a8f-ecbb-4d15-a899-339b9d7444bf`;
+- frontend: `9650525c-d465-468d-8171-f830128b9e7b`.
+
+Current active-component rollback artifacts were verified in place and were not overwritten:
+
+| Component | Artifact | SHA-256 | Verified |
+| --- | --- | --- | --- |
+| Backend | `C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-backend-editor-ops-intake-fix-e4e0c00.zip` | `76eacc73a19fa35d0bd092590d45b14d891288ccd37776a58bf44d7a84bea359` | yes |
+| Frontend | `C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-frontend-editor-ops-7392a6c-repack1.zip` | `29c840461c302befddefb2a4f585134c9fbd0c5ddf66c702c4dada9d67ab15f0` | yes |
+
+Rollback command previews:
+
+```powershell
+az webapp deploy --resource-group Adminiculum --name adminiculumbackend-b1-01 --type zip --src-path "C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-backend-editor-ops-intake-fix-e4e0c00.zip"
+```
+
+```powershell
+az webapp deploy --resource-group Adminiculum --name adminiculumfrontend-austriaeast-01 --type zip --src-path "C:\Users\hubay\AppData\Local\Temp\adminiculum-narrow-release-artifacts\adminiculum-frontend-editor-ops-7392a6c-repack1.zip"
+```
+
+Rollback remains a separately approved operational action. No rollback or deployment occurred during final artifact preparation.

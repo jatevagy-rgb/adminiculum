@@ -268,3 +268,27 @@ Final classification:
 `frontend_only_editor_ops_deployment_1_blocked_azure_operation`
 
 Current frontend deployment posture: `FRONTEND_DEPLOYMENT_BLOCKED_AZURE_OPERATION`. Backend remains successfully redeployed; frontend remains on prior active deployment.
+
+## Operational UX Final Release Candidate
+
+`OPERATIONAL-UX-RELEASE-INTEGRATION-AND-FINAL-ARTIFACTS-1` completed on 2026-07-17 without deployment.
+
+- Official release branch fast-forwarded from `e447168` to review checkpoint `d6070fa`.
+- Approved runtime source: `01949dc`.
+- Runtime equivalence: `RUNTIME_TREE_EQUIVALENT_WITH_DOC_ONLY_DIFFERENCE`.
+- Conflicts: none.
+- Parked Claude commit `24bc6c5`: not integrated.
+- Backend: Prisma validate, TypeScript, 42/42 suites, 422/422 tests, and build passed.
+- Frontend: TypeScript, production build, and `verify:prod-env` passed.
+- Authenticated local QA: 45/45 matrix, no harness failures.
+- Final frontend artifact: `adminiculum-frontend-operational-ux-final-d6070fa.zip`, SHA-256 `4202d9c41b6ed13517cc57714bd47ac6ac19178411ef483bc03c336d7f8d1060`.
+- Final backend artifact: `adminiculum-backend-operational-ux-final-d6070fa.zip`, SHA-256 `b62028f4bd8b64089a82ce891b343af4ab4b9d4f7cd4b4b6347d7e7775f4bbba`.
+- Production/Azure/DB/app settings/feature flags: untouched.
+
+Known inherited risks remain documented in `docs/operational-ux-release-known-risks.md`, including the document text route's missing document-scope authorization.
+
+Decision:
+
+`GO_FOR_OPERATIONAL_UX_PRODUCTION_DEPLOYMENT_APPROVAL`
+
+This decision permits a separate human deployment approval only. It does not deploy or authorize automatic deployment.
