@@ -1,127 +1,86 @@
-# Task Lifecycle Schema Approval Sheet
+# Task Lifecycle Schema Approval
 
 Date: 2026-07-18
-Status: human decision required; this document does not authorize schema editing, migration creation/apply, runtime work, or deployment
+Status: product decisions approved; schema candidate implemented and locally proven
 
-## Proposed Decision
+## Approved Direction
 
-Approve Option A: a new task-owned `TaskSubmission` aggregate with sequential immutable revisions. Keep `LawyerHandoffPackage` as a separate legacy case-level model.
+Option A is approved and implemented as a schema candidate: a dedicated task-owned `TaskSubmission` aggregate with typed document links, immutable review decisions, frozen time-entry links, and sequential revision history.
 
-## Approval Summary Table
+`LawyerHandoffPackage` remains permanently separate. No historical handoff row is inferred, converted, or backfilled.
 
-| Area | Proposal | Data impact | Rollback posture | Security impact | Human approval |
-| --- | --- | --- | --- | --- | --- |
-| Models | Add `TaskSubmission`, `TaskSubmissionDocument`, `TaskReviewDecision`, `TaskSubmissionTimeEntry` | New empty tables; no existing rows changed | Old runtime ignores them | Explicit task/case scoping and immutable history | APPROVE / REJECT / REVISE |
-| Task fields | Add nullable `startedById`; relations to submissions/time | Existing tasks remain null/unchanged | Old runtime ignores nullable column | Durable start actor; user deletion restricted/set-null policy | APPROVE / REJECT / REVISE |
-| Time fields | Add nullable `taskId`, nullable idempotency key | Existing time remains matter-only | Old runtime remains compatible | Task/matter checks; linked submitted time protected | APPROVE / REJECT / REVISE |
-| Audit link | Add nullable `TimelineEvent.taskSubmissionId` | Existing timeline rows unchanged | Old runtime ignores it | Content-minimal submission history | APPROVE / REJECT / REVISE |
-| Enums | Add five new submission/review/document/external enums | No existing enum values changed | Unused enums can remain inert | Removes ambiguous strings | APPROVE / REJECT / REVISE |
-| TaskStatus | Optional `AWAITING_EXTERNAL_ACTION` in separate migration | Existing rows unchanged | Enum value practically irreversible | Truthful external pending state | APPROVE / REJECT / DEFER |
-| Constraints | Unique revisions, decision, links, idempotency; partial active-draft index | Applies only to new/link rows | Preserve constraints after write start | Prevents duplicate/race corruption | APPROVE / REJECT / REVISE |
-| Delete behavior | Restrict deletion of task/submission/document/version/time/user history | May block future deletes after links exist | Application rollback only | Preserves legally relevant history | APPROVE / REJECT / REVISE |
-| Legacy data | No handoff/task backfill; legacy remains separate | Zero inferred ownership | No conversion to reverse | Avoids cross-matter misclassification | APPROVE / REJECT / REVISE |
-| Migration | Additive split, no apply until clone proof | No data mutation/backfill | No destructive down migration | Requires exact clone verification | APPROVE DESIGN / NOT YET |
+## Approved Product Decisions
 
-## Proposed Models
+| # | Decision | Approved result | Status |
+| ---: | --- | --- | --- |
+| 1 | Submitter self-review | Forbidden | APPROVED |
+| 2 | Admin review scope | Admin may access internal tasks but may not self-review | APPROVED |
+| 3 | Reviewer assignment | Mandatory and explicitly persisted before submission | APPROVED |
+| 4 | Reviewer suggestion | Responsible matter lawyer may be suggested; persistence is explicit | APPROVED |
+| 5 | Zero-time submission | Allowed only with persisted confirmation, actor, and timestamp | APPROVED |
+| 6 | Documents per Leadás | Multiple typed document links allowed | APPROVED |
+| 7 | Revision concurrency | Sequential revisions only | APPROVED |
+| 8 | Active draft count | At most one `DRAFT` per task | APPROVED |
+| 9 | Submitted revision mutability | Submitted, returned, approved, and superseded history is immutable in normal runtime | APPROVED |
+| 10 | Correction model | New revision; prior revision never overwritten | APPROVED |
+| 11 | Requested attention | Mandatory before submission | APPROVED |
+| 12 | Approval outcome | Closes task by default | APPROVED |
+| 13 | External completion | Stored as explicit submission data only | APPROVED |
+| 14 | External action values | Client send, signature, court filing, authority submission, other | APPROVED |
+| 15 | Legacy handoff boundary | Permanently separate | APPROVED |
+| 16 | Legacy backfill | Forbidden | APPROVED |
+| 17 | Retention expiry | No automatic deletion/expiry in this slice | APPROVED |
+| 18 | Time attribution | Nullable `TimeEntry.taskId` | APPROVED |
+| 19 | Frozen submitted time | Explicit `TaskSubmissionTimeEntry` relation | APPROVED |
+| 20 | Existing task states | Reuse current `TaskStatus` values | APPROVED |
+| 21 | New external TaskStatus | `AWAITING_EXTERNAL_ACTION` not added | APPROVED |
+| 22 | Review state authority | New submission aggregate, not overloaded `TaskStatus` | APPROVED |
 
-### `TaskSubmission`
+## Implemented Schema Decisions
 
-Core fields for approval:
-
-- task/revision/status;
-- preparer, submitter, assigned reviewer;
-- work summary, remaining issues, note to reviewer, bounded text outcome;
-- requested attention;
-- submission/return/approval/cancel/supersede timestamps;
-- sequential self-relation;
-- external action type/completion actor/time/reference;
-- zero-time confirmation actor/time;
-- submit idempotency key.
-
-### `TaskSubmissionDocument`
-
-- submission, document, optional document version, role, timestamp;
-- references only; no body/path/storage duplication.
-
-### `TaskReviewDecision`
-
-- unique submission, reviewer, approved/returned decision, note, requested corrections, full-review flag, correction deadline, timestamp;
-- immutable; no update timestamp or PATCH route.
-
-### `TaskSubmissionTimeEntry`
-
-- unique time entry linked to one immutable submission revision;
-- time entry itself remains a normal matter/task record created before submit.
-
-## Proposed Enums
-
-| Enum | Values | Decision note |
+| Area | Candidate implementation | Status |
 | --- | --- | --- |
-| `TaskSubmissionStatus` | `DRAFT`, `SUBMITTED`, `RETURNED`, `APPROVED`, `CANCELLED` | `SUPERSEDED` rejected as status; preserve returned/approved fact. |
-| `ReviewAttentionLevel` | `QUICK_SCAN`, `APPROVAL`, `SIGNATURE`, `EDITING`, `DETAILED_REVIEW` | Decide whether mandatory. |
-| `TaskReviewDecisionType` | `APPROVED`, `RETURNED` | One final decision per revision. |
-| `TaskSubmissionDocumentRole` | `PRIMARY_RESULT`, `SUPPORTING` | Supports multiple documents if approved. |
-| `ExternalActionType` | `NONE`, `CLIENT_SEND`, `SIGNATURE`, `COURT_FILING`, `AUTHORITY_SUBMISSION`, `OTHER` | Records required real-world action; performs no integration. |
+| Models | Four dedicated task-submission models | IMPLEMENTED |
+| Enums | Five bounded enums; no `TaskStatus` change | IMPLEMENTED |
+| Reviewer | Required `assignedReviewerId`; actor relations restricted | IMPLEMENTED |
+| Revisions | Unique task/revision plus self-relation | IMPLEMENTED |
+| Active draft | PostgreSQL partial unique index | IMPLEMENTED |
+| Idempotency | Nullable globally unique submission key | IMPLEMENTED |
+| Documents | Typed document and optional version relations | IMPLEMENTED |
+| Review | Unique immutable decision per revision | IMPLEMENTED |
+| Time | Nullable task attribution and unique frozen submission link | IMPLEMENTED |
+| Delete behavior | Explicit `Restrict`; no legal-history cascade | IMPLEMENTED |
+| Legacy records | No data migration or inferred ownership | IMPLEMENTED |
 
-## Required Human Decisions
+`SUPERSEDED` exists because the implementation prompt requires the enum value. Runtime must not rewrite returned or approved content merely to use that status; the self-relation remains the authoritative revision chain.
 
-Record one decision for every row before schema implementation.
+## Runtime Decisions Deferred
 
-| # | Question | Recommended conservative default | Human decision / notes |
-| --- | --- | --- | --- |
-| 1 | Can task creator/supervisor review their own task? | No when also assignee, preparer, or submitter; otherwise only if explicitly assigned reviewer. | PENDING |
-| 2 | Can Admin review any task? | Yes for accessible internal matters, but never their own submitted revision; audit override. | PENDING |
-| 3 | Is reviewer assignment mandatory before submission? | Yes for v1; assigned reviewer must have case access. | PENDING |
-| 4 | Is zero recorded time allowed? | Yes only with persisted actor/time confirmation and a non-billable explanation policy outside audit. | PENDING |
-| 5 | Can one Leadás contain multiple documents? | Yes; one or more typed links, each optionally pinned to `DocumentVersion`. | PENDING |
-| 6 | Parallel Leadások or sequential revisions only? | Sequential only; one active draft per task. | PENDING |
-| 7 | Does approval normally close the task? | Yes when `externalActionType=NONE`. | PENDING |
-| 8 | Which external actions need separate status? | Use the proposed five categories; disable any unapproved category. | PENDING |
-| 9 | Can approved submissions ever be edited? | No. Correction requires a new task or explicit exceptional workflow, never mutation. | PENDING |
-| 10 | Retention/deletion period for submissions and reviewer notes? | Preserve indefinitely until formal legal/GDPR retention policy approves disposal. | PENDING |
-| 11 | Does legacy case-level Leadás remain separate permanently? | Yes by default; no inferred backfill. | PENDING |
-| 12 | Is requested attention mandatory? | Yes at submit; no system-derived value stored as user selection. | PENDING |
+The following are not schema blockers but require separate implementation review:
 
-## Additional Architecture Decisions
+- exact draft creation/reviewer-selection UX;
+- admin takeover policy;
+- reviewer reassignment after draft creation;
+- document/version same-document validation transaction;
+- task/matter/time ownership validation transaction;
+- external completion mutation and capability rules;
+- privacy-safe DTO field selection;
+- notification and content-minimal audit payloads;
+- feature activation and rollout sequencing.
 
-| Decision | Recommendation | Human status |
-| --- | --- | --- |
-| External pending TaskStatus | Add `AWAITING_EXTERNAL_ACTION` only in isolated Migration 1B after approval. | PENDING |
-| Draft emergency takeover | Admin/partner only with explicit audit, or defer from v1. | PENDING |
-| Assigned reviewer changes after submit | Disallow in v1; return/cancel and create a new revision if assignment is invalid. | PENDING |
-| Document version requirement | Require version ID for file outputs where a version exists; otherwise block submit or use bounded text outcome. | PENDING |
-| Time correction after submit | New correcting time entry; never mutate or delete linked submitted time. | PENDING |
-| Partial unique scope | One active draft per task, not per user. | PENDING |
+These items are deliberately `DEFERRED`, not unresolved product decisions and not authorization for runtime implementation beyond the next approved slice.
 
-## Migration Approval Stages
+## Proof Gate
 
-1. Approve domain decisions in this sheet.
-2. Approve a Prisma schema candidate without migration.
-3. Approve no-apply Prisma/SQL migration draft.
-4. Approve transactional proof on disposable clone.
-5. Approve persistent fresh-clone apply and old-runtime compatibility proof.
-6. Only then consider production migration planning.
+- additive schema validates and generates;
+- destructive SQL count is zero;
+- disposable localhost migration succeeds;
+- 18/18 constraint tests pass;
+- full backend suite passes 46/46 suites and 460/460 tests;
+- no production/Azure action occurred.
 
-Approval at one stage does not authorize the next stage.
+## Current Authorization
 
-## Security Approval Checklist
+The schema candidate is approved for a later internal runtime implementation prompt. Production migration, deployment, feature activation, public API exposure, and Client Portal use remain unauthorized.
 
-- [ ] auth-first scoped lookup order accepted;
-- [ ] self-review policy accepted;
-- [ ] admin override policy accepted;
-- [ ] draft visibility accepted;
-- [ ] same-case document and same-matter time invariants accepted;
-- [ ] no Client Portal/public API exposure accepted;
-- [ ] audit/notification content-minimal rules accepted;
-- [ ] immutable submitted/decision/time-link policy accepted;
-- [ ] retention policy owner identified.
-
-## Current Gate
-
-Schema implementation is not yet authorized because the human decision cells remain pending. The design is precise enough for product/security review and a later explicit approval response.
-
-Recommended next prompt after decisions are filled:
-
-`Adminiculum — TASK-LIFECYCLE-PRISMA-SCHEMA-CANDIDATE-1 no migration no DB`
-
-Classification: `TASK_LIFECYCLE_SCHEMA_DESIGN_READY_FOR_HUMAN_APPROVAL`
+Classification: `TASK_LIFECYCLE_SCHEMA_CANDIDATE_READY_FOR_RUNTIME_IMPLEMENTATION`

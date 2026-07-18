@@ -1,10 +1,19 @@
 # Task Lifecycle Implementation Slices
 
 Date: 2026-07-18
-Status: future delivery plan; no implementation authorized
+Status: Slice 1 schema candidate complete; runtime slices remain separately gated
+
+## Current Completion State
+
+- Slice 1 schema candidate and one additive migration are implemented.
+- Disposable localhost migration proof and 18 schema-constraint tests passed.
+- No runtime route, service, DTO, frontend, feature flag, production database, or Azure change occurred.
+- The historical checked-in migration chain still cannot replay from empty; future production-like clone proof remains mandatory before any non-local apply.
+- Slice 2 is the earliest possible next runtime slice and requires a new explicit prompt.
 
 ## Slice 1 — Schema Candidate And Migration Draft
 
+- Status: **COMPLETE FOR CANDIDATE REVIEW**.
 - Files: `Backend/prisma/schema.prisma`, one new migration folder only after approval, migration review docs.
 - Scope: new enums/models/nullable relations/indexes; no runtime.
 - Tests: Prisma validate, schema diff review, transactional clone proof, fresh-clone apply proof, old-runtime compatibility.
@@ -101,4 +110,4 @@ Status: future delivery plan; no implementation authorized
 - Existing case-level handoff remains readable throughout.
 - Client Portal, AI/n8n, Outlook/Graph, SharePoint behavior, public OpenAPI, CORS, auth provider config, Azure settings, packages, and infrastructure remain outside scope.
 
-Classification: `TASK_LIFECYCLE_SCHEMA_DESIGN_READY_FOR_HUMAN_APPROVAL`
+Classification: `TASK_LIFECYCLE_SCHEMA_CANDIDATE_READY_FOR_RUNTIME_IMPLEMENTATION`
