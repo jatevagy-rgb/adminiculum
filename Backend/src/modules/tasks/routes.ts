@@ -10,6 +10,7 @@ import {
   ensureNoArbitraryTaskStatusPayload,
   WorkflowTransitionError,
 } from '../cases/workItems';
+import taskSubmissionRoutes from './taskSubmission.routes';
 
 const router = Router();
 
@@ -100,6 +101,8 @@ router.get('/review-queue', authenticate, async (req: Request, res: Response) =>
     return res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Review queue could not be loaded.' });
   }
 });
+
+router.use('/', taskSubmissionRoutes);
 
 // ============================================================================
 // POST /api/v1/tasks - Új feladat létrehozása
