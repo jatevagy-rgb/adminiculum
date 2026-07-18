@@ -1,7 +1,7 @@
 # Task Lifecycle Schema Approval
 
 Date: 2026-07-18
-Status: product decisions approved; schema candidate implemented and locally proven
+Status: product decisions approved; schema candidate and first backend runtime slice locally proven
 
 ## Approved Direction
 
@@ -54,18 +54,26 @@ Option A is approved and implemented as a schema candidate: a dedicated task-own
 
 `SUPERSEDED` exists because the implementation prompt requires the enum value. Runtime must not rewrite returned or approved content merely to use that status; the self-relation remains the authoritative revision chain.
 
-## Runtime Decisions Deferred
+## Runtime Decisions Resolved In Backend Slice 1
+
+- draft creation returns the active draft under retry and allocates revisions in a serializable task lock;
+- reviewer selection is explicit, persisted, case/task scoped, and never permits self-review;
+- document links require the task case and contain metadata only;
+- time links require the task matter/context and existing time-entry ownership or privileged access;
+- zero-time confirmation persists actor and timestamp;
+- workflow/readiness DTOs are explicit and privacy-bounded;
+- submit updates submission/task/audit/notification atomically and is idempotent;
+- submission-backed queue rows supersede duplicate legacy task derivation.
+
+## Runtime Decisions Still Deferred
 
 The following are not schema blockers but require separate implementation review:
 
-- exact draft creation/reviewer-selection UX;
-- admin takeover policy;
-- reviewer reassignment after draft creation;
-- document/version same-document validation transaction;
-- task/matter/time ownership validation transaction;
+- frontend draft/reviewer-selection UX;
+- admin takeover UX/policy beyond existing internal task access;
+- document-version pinning UX and explicit version selection;
 - external completion mutation and capability rules;
-- privacy-safe DTO field selection;
-- notification and content-minimal audit payloads;
+- review return/approve decision mutations;
 - feature activation and rollout sequencing.
 
 These items are deliberately `DEFERRED`, not unresolved product decisions and not authorization for runtime implementation beyond the next approved slice.
@@ -81,6 +89,6 @@ These items are deliberately `DEFERRED`, not unresolved product decisions and no
 
 ## Current Authorization
 
-The schema candidate is approved for a later internal runtime implementation prompt. Production migration, deployment, feature activation, public API exposure, and Client Portal use remain unauthorized.
+The schema candidate and backend draft/submit slice are ready for review-decision implementation review. Production migration, deployment, feature activation, public API exposure, frontend use, and Client Portal use remain unauthorized.
 
-Classification: `TASK_LIFECYCLE_SCHEMA_CANDIDATE_READY_FOR_RUNTIME_IMPLEMENTATION`
+Classification: `TASK_SUBMISSION_BACKEND_READY_FOR_REVIEW_DECISION_SLICE`

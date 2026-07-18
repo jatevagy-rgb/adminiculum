@@ -1,15 +1,17 @@
 # Task Lifecycle Implementation Slices
 
 Date: 2026-07-18
-Status: Slice 1 schema candidate complete; runtime slices remain separately gated
+Status: Slice 1 schema candidate and backend draft/submit slice complete; review decisions remain separately gated
 
 ## Current Completion State
 
 - Slice 1 schema candidate and one additive migration are implemented.
+- Backend workflow read, draft editing, document/time links, reviewer eligibility, readiness, and idempotent submit are implemented on `codex/task-submission-backend-1`.
+- Submission-backed review queue reads and optional task-list projection metadata are implemented; approve/return mutations remain absent.
 - Disposable localhost migration proof and 18 schema-constraint tests passed.
-- No runtime route, service, DTO, frontend, feature flag, production database, or Azure change occurred.
+- No frontend, feature flag, production database, deployment, or Azure change occurred.
 - The historical checked-in migration chain still cannot replay from empty; future production-like clone proof remains mandatory before any non-local apply.
-- Slice 2 is the earliest possible next runtime slice and requires a new explicit prompt.
+- Slice 5 review decision mutations are the earliest possible next backend lifecycle slice and require a new explicit prompt.
 
 ## Slice 1 — Schema Candidate And Migration Draft
 
@@ -23,6 +25,8 @@ Status: Slice 1 schema candidate complete; runtime slices remain separately gate
 
 ## Slice 2 — Backend Read Models And Authorization
 
+- Status: **COMPLETE IN BACKEND SLICE 1**.
+
 - Files: new `Backend/src/modules/task-submissions/` read DTO/service/authorization files; narrow task route registration; tests.
 - Scope: workflow/submission reads and capabilities only; no writes.
 - Tests: auth-first 401/404/403, DTO privacy, pagination, legacy-empty behavior.
@@ -31,6 +35,8 @@ Status: Slice 1 schema candidate complete; runtime slices remain separately gate
 - No-go: Prisma rows serialized directly, Client Portal/OpenAPI exposure, broad role grants.
 
 ## Slice 3 — Draft Leadás Creation And Editing
+
+- Status: **COMPLETE IN BACKEND SLICE 1**.
 
 - Files: task-submission draft service/routes/validators; tests.
 - Scope: create active draft, update allowed fields, document/version link/unlink.
@@ -41,6 +47,8 @@ Status: Slice 1 schema candidate complete; runtime slices remain separately gate
 
 ## Slice 4 — Task Time And Submit Idempotency
 
+- Status: **COMPLETE IN BACKEND SLICE 1** for linking existing time, zero-time confirmation, and atomic submit. New time-entry creation remains unchanged/out of scope.
+
 - Files: narrow `timeEntries` service extraction/update, submission transaction service, tests.
 - Scope: nullable task-linked time creation, time idempotency, zero-time declaration, atomic submit.
 - Tests: duplicate create/submit, matter mismatch, time ownership, transaction rollback, notification/audit dedupe.
@@ -49,6 +57,8 @@ Status: Slice 1 schema candidate complete; runtime slices remain separately gate
 - No-go: duplicate time on retry, delete of submitted-linked time, non-atomic matter totals.
 
 ## Slice 5 — Reviewer Queue, Return, And Approve
+
+- Status: **READ INTEGRATION COMPLETE; MUTATIONS BLOCKED FOR NEXT SLICE**.
 
 - Files: task-submission review service/routes/DTOs; review queue query; tests.
 - Scope: indexed submitted queue, immutable decision, return/resubmit eligibility, approval/closure.
@@ -110,4 +120,4 @@ Status: Slice 1 schema candidate complete; runtime slices remain separately gate
 - Existing case-level handoff remains readable throughout.
 - Client Portal, AI/n8n, Outlook/Graph, SharePoint behavior, public OpenAPI, CORS, auth provider config, Azure settings, packages, and infrastructure remain outside scope.
 
-Classification: `TASK_LIFECYCLE_SCHEMA_CANDIDATE_READY_FOR_RUNTIME_IMPLEMENTATION`
+Classification: `TASK_SUBMISSION_BACKEND_READY_FOR_REVIEW_DECISION_SLICE`
