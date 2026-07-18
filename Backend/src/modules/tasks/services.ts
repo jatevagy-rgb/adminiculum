@@ -4,6 +4,9 @@
 
 import { PrismaClient } from '@prisma/client';
 import prisma from '../../config/database';
+import taskSubmissionService from './taskSubmission.service';
+import { canUserActOnTask } from './taskAuthorization';
+export { canUserActOnTask } from './taskAuthorization';
 import {
   SupportedTaskAction,
   validateTaskTransition,
@@ -129,36 +132,6 @@ async function getTaskForTransition(taskId: string) {
       stuckSince: true,
     },
   });
-}
-
-export async function canUserActOnTask(task: { caseId: string; assignedToId?: string | null; assignedById?: string | null }, userId: string): Promise<{ allowed: boolean; role: string | null }> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true, role: true },
-  });
-  if (!user) return { allowed: false, role: null };
-
-  if (['ADMIN', 'PARTNER'].includes(String(user.role))) {
-    return { allowed: true, role: String(user.role) };
-  }
-
-  if (task.assignedToId === userId || task.assignedById === userId) {
-    return { allowed: true, role: String(user.role) };
-  }
-
-  const caseRecord = await prisma.case.findUnique({
-    where: { id: task.caseId },
-    select: { assignedLawyerId: true, createdById: true },
-  });
-  if (caseRecord?.assignedLawyerId === userId || caseRecord?.createdById === userId) {
-    return { allowed: true, role: String(user.role) };
-  }
-
-  const collaborator = await prisma.caseCollaborator.findFirst({
-    where: { caseId: task.caseId, userId },
-    select: { id: true },
-  });
-  return { allowed: Boolean(collaborator), role: String(user.role) };
 }
 
 async function transitionTask(taskId: string, userId: string, action: SupportedTaskAction, extraData: Record<string, unknown> = {}) {
@@ -357,7 +330,7 @@ export async function createTask(data: {
  * Get all tasks for a case
  */
 export async function getCaseTasks(caseId: string, filters?: { status?: string; assignedTo?: string }) {
-  return prisma.task.findMany({
+  const tasks = await prisma.task.findMany({
     where: {
       caseId,
       ...(filters?.status && { status: filters.status as any }),
@@ -367,7 +340,12 @@ export async function getCaseTasks(caseId: string, filters?: { status?: string; 
       ...taskReadSelect,
       assignedTo: {
         select: { id: true, name: true, role: true }
-      }
+      },
+      submissions: {
+        orderBy: { revisionNumber: 'desc' },
+        take: 1,
+        select: taskSubmissionProjectionSelect,
+      },
     },
     orderBy: [
       { priority: 'desc' },
@@ -375,20 +353,27 @@ export async function getCaseTasks(caseId: string, filters?: { status?: string; 
       { createdAt: 'desc' }
     ]
   });
+  return tasks.map(withTaskSubmissionProjection);
 }
 
 /**
  * Get a single task by ID
  */
 export async function getTask(taskId: string) {
-  return prisma.task.findUnique({
+  const task = await prisma.task.findUnique({
     where: { id: taskId },
     select: {
       ...taskReadSelect,
       case: true,
-      assignedTo: true
+      assignedTo: true,
+      submissions: {
+        orderBy: { revisionNumber: 'desc' },
+        take: 1,
+        select: taskSubmissionProjectionSelect,
+      },
     }
   });
+  return task ? withTaskSubmissionProjection(task) : null;
 }
 
 /**
@@ -851,7 +836,7 @@ export async function canAssign(assignerId: string, assigneeId: string): Promise
  * Get user's tasks
  */
 export async function getUserTasks(userId: string, filters?: { status?: string; caseId?: string }) {
-  return prisma.task.findMany({
+  const tasks = await prisma.task.findMany({
     where: {
       assignedToId: userId,
       ...(filters?.status && { status: filters.status as any }),
@@ -861,13 +846,19 @@ export async function getUserTasks(userId: string, filters?: { status?: string; 
       ...taskReadSelect,
       case: {
         select: { id: true, caseNumber: true, clientName: true, matterType: true }
-      }
+      },
+      submissions: {
+        orderBy: { revisionNumber: 'desc' },
+        take: 1,
+        select: taskSubmissionProjectionSelect,
+      },
     },
     orderBy: [
       { priority: 'desc' },
       { dueDate: 'asc' }
     ]
   });
+  return tasks.map(withTaskSubmissionProjection);
 }
 
 export async function getReviewTasksForUser(userId: string) {
@@ -878,10 +869,12 @@ export async function getReviewTasksForUser(userId: string) {
   if (!user) return [];
 
   const privileged = ['ADMIN', 'PARTNER'].includes(String(user.role));
-  return prisma.task.findMany({
+  const submissionItems = await taskSubmissionService.getSubmissionReviewQueue(userId);
+  const legacyTasks = await prisma.task.findMany({
     where: {
       status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'IN_REVIEW'] as any },
       NOT: { assignedToId: userId },
+      submissions: { none: { status: 'SUBMITTED' } },
       ...(!privileged ? {
         OR: [
           { assignedById: userId },
@@ -912,6 +905,51 @@ export async function getReviewTasksForUser(userId: string) {
       { dueDate: 'asc' },
     ],
   });
+  return [
+    ...submissionItems,
+    ...legacyTasks.map((task) => ({ ...task, source: 'LEGACY_TASK', taskId: task.id, nextActionCode: 'OPEN_REVIEW' })),
+  ].sort((left, right) => {
+    const leftDate = left.submittedAt ? new Date(left.submittedAt).getTime() : 0;
+    const rightDate = right.submittedAt ? new Date(right.submittedAt).getTime() : 0;
+    return rightDate - leftDate;
+  });
+}
+
+const taskSubmissionProjectionSelect = {
+  id: true,
+  status: true,
+  revisionNumber: true,
+  submittedAt: true,
+  requestedAttention: true,
+  assignedReviewer: { select: { id: true, name: true, role: true } },
+  _count: { select: { documents: true } },
+  timeEntries: { select: { timeEntry: { select: { minutes: true } } } },
+} as const;
+
+function taskNextActionCode(taskStatus: unknown, submissionStatus?: unknown): string {
+  const submission = String(submissionStatus || '').toUpperCase();
+  if (submission === 'DRAFT') return 'CONTINUE_SUBMISSION';
+  if (submission === 'SUBMITTED') return 'VIEW_SUBMISSION';
+  if (submission === 'RETURNED') return 'CONTINUE_RETURNED_WORK';
+  if (submission === 'APPROVED' || submission === 'SUPERSEDED') return 'VIEW_COMPLETED';
+  return ['PENDING', 'TODO'].includes(String(taskStatus || '').toUpperCase()) ? 'START_TASK' : 'OPEN_TASK';
+}
+
+function withTaskSubmissionProjection<T extends { status: unknown; submissions: any[] }>(task: T) {
+  const { submissions, ...safeTask } = task;
+  const submission = submissions[0] || null;
+  return {
+    ...safeTask,
+    activeSubmissionId: submission?.status === 'DRAFT' ? submission.id : null,
+    submissionStatus: submission?.status || null,
+    submissionRevision: submission?.revisionNumber || null,
+    submittedAt: submission?.submittedAt || (safeTask as any).submittedAt || null,
+    assignedReviewer: submission?.assignedReviewer || null,
+    requestedAttention: submission?.requestedAttention || null,
+    submissionDocumentCount: submission?._count?.documents || 0,
+    linkedTimeMinutes: submission?.timeEntries?.reduce((sum: number, link: any) => sum + Number(link.timeEntry?.minutes || 0), 0) || 0,
+    nextActionCode: taskNextActionCode(safeTask.status, submission?.status),
+  };
 }
 
 // ============================================================================
