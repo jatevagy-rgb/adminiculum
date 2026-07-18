@@ -53,6 +53,13 @@ model User {
   taskAssignments       TaskAssignmentHistory[]
   notifications         Notification[]
   timeEntries           TimeEntry[]         // Time entries created by user
+  createdTaskSubmissions TaskSubmission[]    @relation("TaskSubmissionCreatedBy")
+  submittedTaskSubmissions TaskSubmission[]  @relation("TaskSubmissionSubmittedBy")
+  assignedTaskSubmissions TaskSubmission[]   @relation("TaskSubmissionAssignedReviewer")
+  zeroTimeConfirmedTaskSubmissions TaskSubmission[] @relation("TaskSubmissionZeroTimeConfirmedBy")
+  externalCompletedTaskSubmissions TaskSubmission[] @relation("TaskSubmissionExternalCompletedBy")
+  createdTaskSubmissionDocuments TaskSubmissionDocument[] @relation("TaskSubmissionDocumentCreatedBy")
+  taskReviewDecisions   TaskReviewDecision[] @relation("TaskReviewDecisionReviewer")
   automationExecutionLogs AutomationExecutionLog[]
   automationExecutionStepLogs AutomationExecutionStepLog[]
   automationSuggestions AutomationSuggestion[]
@@ -327,9 +334,13 @@ model TimeEntry {
   
   departmentId    String?
   department      Department? @relation(fields: [departmentId], references: [id])
+  taskId          String?
+  task            Task?       @relation(fields: [taskId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   timelineEvents  TimelineEvent[]
+  taskSubmissionLinks TaskSubmissionTimeEntry[]
 
   @@index([matterId, workDate])
+  @@index([taskId])
   @@map("time_entries")
 }
 
@@ -794,6 +805,7 @@ model Document {
   anonymizedDocuments AnonymousDocument[]
   comments        Comment[]
   timelineEvents  TimelineEvent[]
+  taskSubmissionDocuments TaskSubmissionDocument[]
 
   @@map("documents")
 }
@@ -835,6 +847,7 @@ model DocumentVersion {
   documentId      String
   document        Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
   reviewSuggestions DocumentReviewSuggestion[]
+  taskSubmissionDocuments TaskSubmissionDocument[]
 
   @@unique([documentId, version])
   @@map("document_versions")
@@ -944,6 +957,8 @@ model Task {
   assignmentHistory TaskAssignmentHistory[]
   sourceCommunication Communication? @relation("CommunicationTasks", fields: [sourceCommunicationId], references: [id])
   sourceCommunicationId String?
+  submissions      TaskSubmission[]
+  timeEntries      TimeEntry[]
 
   @@index([complexityScore], map: "tasks_complexityScore_idx")
   @@index([maturityStage], map: "tasks_maturityStage_idx")
@@ -976,6 +991,143 @@ enum TaskStatus {
   TODO
   IN_REVIEW
   DONE
+}
+
+enum TaskSubmissionStatus {
+  DRAFT
+  SUBMITTED
+  RETURNED
+  APPROVED
+  SUPERSEDED
+  CANCELLED
+}
+
+enum ReviewAttentionLevel {
+  QUICK_SCAN
+  APPROVAL
+  SIGNATURE
+  EDITING
+  DETAILED_REVIEW
+}
+
+enum TaskReviewDecisionType {
+  APPROVED
+  RETURNED
+}
+
+enum TaskSubmissionDocumentRole {
+  PRIMARY_OUTPUT
+  SUPPORTING_DOCUMENT
+  REVIEW_REFERENCE
+  FINAL_OUTPUT
+}
+
+enum ExternalActionType {
+  CLIENT_SEND
+  SIGNATURE
+  COURT_FILING
+  AUTHORITY_SUBMISSION
+  OTHER
+}
+
+model TaskSubmission {
+  id                     String               @id @default(uuid())
+  taskId                 String
+  revisionNumber         Int
+  status                 TaskSubmissionStatus @default(DRAFT)
+  createdById            String
+  submittedById          String?
+  assignedReviewerId     String
+  workSummary            String?
+  remainingIssues        String?
+  reviewerNote           String?
+  requestedAttention     ReviewAttentionLevel?
+  externalActionRequired Boolean              @default(false)
+  externalActionType     ExternalActionType?
+  zeroTimeConfirmed      Boolean              @default(false)
+  zeroTimeConfirmedById  String?
+  zeroTimeConfirmedAt    DateTime?
+  externalCompletedById  String?
+  idempotencyKey         String?              @unique
+  supersedesSubmissionId String?              @unique
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  submittedAt            DateTime?
+  returnedAt             DateTime?
+  approvedAt             DateTime?
+  supersededAt           DateTime?
+  externalCompletedAt    DateTime?
+
+  task                 Task            @relation(fields: [taskId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdBy            User            @relation("TaskSubmissionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  submittedBy          User?           @relation("TaskSubmissionSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  assignedReviewer     User            @relation("TaskSubmissionAssignedReviewer", fields: [assignedReviewerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  zeroTimeConfirmedBy  User?           @relation("TaskSubmissionZeroTimeConfirmedBy", fields: [zeroTimeConfirmedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  externalCompletedBy  User?           @relation("TaskSubmissionExternalCompletedBy", fields: [externalCompletedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  supersedesSubmission TaskSubmission? @relation("TaskSubmissionRevisionChain", fields: [supersedesSubmissionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  supersededBy         TaskSubmission? @relation("TaskSubmissionRevisionChain")
+  documents            TaskSubmissionDocument[]
+  reviewDecision       TaskReviewDecision?
+  timeEntries          TaskSubmissionTimeEntry[]
+
+  @@unique([taskId, revisionNumber])
+  @@index([taskId, status])
+  @@index([assignedReviewerId, status, submittedAt])
+  @@index([submittedById, status, submittedAt])
+  @@index([taskId, createdAt])
+  @@map("task_submissions")
+}
+
+model TaskSubmissionDocument {
+  id                String                     @id @default(uuid())
+  submissionId      String
+  documentId        String
+  documentVersionId String?
+  role              TaskSubmissionDocumentRole
+  createdAt         DateTime                   @default(now())
+  createdById       String
+
+  submission      TaskSubmission   @relation(fields: [submissionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  document        Document         @relation(fields: [documentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  documentVersion DocumentVersion? @relation(fields: [documentVersionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdBy       User             @relation("TaskSubmissionDocumentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([submissionId, documentId, role])
+  @@index([documentId])
+  @@index([documentVersionId])
+  @@map("task_submission_documents")
+}
+
+model TaskReviewDecision {
+  id                   String                 @id @default(uuid())
+  submissionId         String                 @unique
+  reviewerId           String
+  decision             TaskReviewDecisionType
+  note                 String?
+  requestedCorrections String?
+  requiresFullReview   Boolean                @default(false)
+  correctionDeadline   DateTime?
+  createdAt            DateTime               @default(now())
+
+  submission TaskSubmission @relation(fields: [submissionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  reviewer   User           @relation("TaskReviewDecisionReviewer", fields: [reviewerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([reviewerId, createdAt])
+  @@map("task_review_decisions")
+}
+
+model TaskSubmissionTimeEntry {
+  id           String   @id @default(uuid())
+  submissionId String
+  timeEntryId  String   @unique
+  createdAt    DateTime @default(now())
+
+  submission TaskSubmission @relation(fields: [submissionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  timeEntry  TimeEntry      @relation(fields: [timeEntryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([submissionId, timeEntryId])
+  @@index([submissionId])
+  @@map("task_submission_time_entries")
 }
 
 enum TaskMaturityStage {
