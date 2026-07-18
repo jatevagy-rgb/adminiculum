@@ -44,18 +44,20 @@ describe('ops pages UX cleanup static guards', () => {
     expect(combinedPages).not.toMatch(/localStorage|sessionStorage|mockData|fake|mesterséges intelligencia|n8n|workspaceText/);
   });
 
-  it('keeps the dashboard card grid truthful when a source is unavailable', () => {
-    expect(dashboard).toContain('value: number | null');
+  it('keeps the compact dashboard summary truthful when a source is unavailable', () => {
+    expect(dashboard).toContain('const caseCount = availability.cases');
     expect(dashboard).toContain('closedCaseStatuses.has');
     expect(dashboard).toContain('availability.cases');
-    expect(dashboard).toContain('value === null ? "Most nem elérhető"');
-    expect(dashboard).toContain('<SummaryCard label="Nyitott ügyek"');
+    expect(dashboard).toContain('caseCount === null ? "Most nem elérhető"');
+    expect(dashboard).toContain('<section aria-label="Nyitott ügyek összefoglaló">');
     expect(dashboard).toContain('Gyors műveletek');
     expect(dashboard).toContain('Napi események és határidők');
     expect(dashboard).toContain('Új határidős feladat');
     expect(dashboard).toContain('&& !/deleted|töröl/i.test');
-    expect(dashboard).toContain('Ügyfélhez sorolt kommunikáció');
-    expect(dashboard).not.toContain('<SummaryCard label="Aktív ügyek"');
+    expect(dashboard).toContain('Legutóbbi tételek, opcionális ügyfélszűréssel.');
+    expect(dashboard).not.toContain('<SummaryCard label="Nyitott ügyek"');
+    expect(dashboard).not.toContain('<SummaryCard label="Mai teendők"');
+    expect(dashboard).not.toContain('<SummaryCard label="Review tételek"');
     expect(dashboard).not.toMatch(/Napi munkapad|Mai működési kép|Kapacitás: 8/);
   });
 
