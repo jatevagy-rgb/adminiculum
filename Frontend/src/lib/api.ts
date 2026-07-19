@@ -14,18 +14,19 @@ const API_BASE = normalizedBackendBaseUrl
   ? `${normalizedBackendBaseUrl}/api/v1`
   : '/api/v1';
 
-interface FetchOptions extends RequestInit {
+export interface FetchOptions extends RequestInit {
   skipAuth?: boolean;
   suppressErrorStatuses?: number[];
   suppressErrorLogging?: boolean;
   waitForAuthMs?: number;
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
-    public status: number, 
+    public status: number,
     message: string,
-    public endpoint?: string
+    public endpoint?: string,
+    public code?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -84,7 +85,17 @@ export function clearAuthToken(): void {
   window.dispatchEvent(new Event(AUTH_TOKEN_EVENT));
 }
 
-async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
+function asErrorPayload(value: unknown): { code?: string; message?: string; error?: string } {
+  if (!value || typeof value !== 'object') return {};
+  const record = value as Record<string, unknown>;
+  return {
+    code: typeof record.code === 'string' ? record.code : undefined,
+    message: typeof record.message === 'string' ? record.message : undefined,
+    error: typeof record.error === 'string' ? record.error : undefined,
+  };
+}
+
+export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
   const { skipAuth, suppressErrorStatuses, suppressErrorLogging, waitForAuthMs, ...fetchOptions } = options;
   
   const token = skipAuth ? null : await waitForAuthToken(waitForAuthMs ?? DEFAULT_AUTH_WAIT_MS);
@@ -122,11 +133,14 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
 
   if (!response.ok) {
     let errorMessage = `HTTP error ${response.status}`;
-    let errorDetails: any = null;
+    let errorDetails: unknown = null;
+    let errorCode: string | undefined;
     
     try {
       errorDetails = await response.json();
-      errorMessage = errorDetails.message || errorDetails.error || errorMessage;
+      const payload = asErrorPayload(errorDetails);
+      errorCode = payload.code;
+      errorMessage = payload.message || payload.error || errorMessage;
     } catch {
       // Not JSON - try to get raw text
       try {
@@ -150,7 +164,7 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
       });
     }
     
-    throw new ApiError(response.status, errorMessage, endpoint);
+    throw new ApiError(response.status, errorMessage, endpoint, errorCode);
   }
 
   // Log successful response in development
@@ -3332,6 +3346,7 @@ export async function deleteGenerationDraft(caseId: string, templateId?: string)
 export interface TimeEntry {
   id: string;
   matterId: string;
+  taskId?: string | null;
   userId: string | null;
   departmentId: string | null;
   workType: string;
@@ -4659,5 +4674,3 @@ export async function markAllNotificationsRead(): Promise<{ updatedCount: number
     body: JSON.stringify({}),
   });
 }
-
-export { fetchApi, ApiError };
