@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response, Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import taskSubmissionService, { TaskSubmissionServiceError } from './taskSubmission.service';
+import taskReviewDecisionRoutes from './taskReviewDecision.routes';
 
 const router = Router();
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -160,5 +161,7 @@ router.post('/:taskId/submissions/:submissionId/submit', authenticate, requireUu
     sendError(res, error);
   }
 });
+
+router.use('/', taskReviewDecisionRoutes);
 
 export default router;

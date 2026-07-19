@@ -868,21 +868,18 @@ export async function getReviewTasksForUser(userId: string) {
   });
   if (!user) return [];
 
-  const privileged = ['ADMIN', 'PARTNER'].includes(String(user.role));
   const submissionItems = await taskSubmissionService.getSubmissionReviewQueue(userId);
   const legacyTasks = await prisma.task.findMany({
     where: {
       status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'IN_REVIEW'] as any },
       NOT: { assignedToId: userId },
       submissions: { none: { status: 'SUBMITTED' } },
-      ...(!privileged ? {
-        OR: [
-          { assignedById: userId },
-          { case: { assignedLawyerId: userId } },
-          { case: { createdById: userId } },
-          { case: { collaborators: { some: { userId } } } },
-        ],
-      } : {}),
+      OR: [
+        { assignedById: userId },
+        { case: { assignedLawyerId: userId } },
+        { case: { createdById: userId } },
+        { case: { collaborators: { some: { userId } } } },
+      ],
     },
     select: {
       ...taskReadSelect,
@@ -920,18 +917,27 @@ const taskSubmissionProjectionSelect = {
   status: true,
   revisionNumber: true,
   submittedAt: true,
+  returnedAt: true,
+  approvedAt: true,
   requestedAttention: true,
+  externalActionRequired: true,
+  externalActionType: true,
+  externalCompletedAt: true,
   assignedReviewer: { select: { id: true, name: true, role: true } },
+  reviewDecision: {
+    select: { decision: true, createdAt: true, correctionDeadline: true },
+  },
   _count: { select: { documents: true } },
   timeEntries: { select: { timeEntry: { select: { minutes: true } } } },
 } as const;
 
-function taskNextActionCode(taskStatus: unknown, submissionStatus?: unknown): string {
-  const submission = String(submissionStatus || '').toUpperCase();
-  if (submission === 'DRAFT') return 'CONTINUE_SUBMISSION';
-  if (submission === 'SUBMITTED') return 'VIEW_SUBMISSION';
-  if (submission === 'RETURNED') return 'CONTINUE_RETURNED_WORK';
-  if (submission === 'APPROVED' || submission === 'SUPERSEDED') return 'VIEW_COMPLETED';
+function taskNextActionCode(taskStatus: unknown, submission?: any): string {
+  const status = String(submission?.status || '').toUpperCase();
+  if (status === 'DRAFT') return 'CONTINUE_SUBMISSION';
+  if (status === 'SUBMITTED') return 'VIEW_SUBMISSION';
+  if (status === 'RETURNED') return 'CONTINUE_RETURNED_WORK';
+  if (status === 'APPROVED' && submission?.externalActionRequired && !submission?.externalCompletedAt) return 'RECORD_EXTERNAL_COMPLETION';
+  if (status === 'APPROVED' || status === 'SUPERSEDED') return 'VIEW_COMPLETED';
   return ['PENDING', 'TODO'].includes(String(taskStatus || '').toUpperCase()) ? 'START_TASK' : 'OPEN_TASK';
 }
 
@@ -941,14 +947,22 @@ function withTaskSubmissionProjection<T extends { status: unknown; submissions: 
   return {
     ...safeTask,
     activeSubmissionId: submission?.status === 'DRAFT' ? submission.id : null,
+    currentSubmittedRevisionId: submission?.status === 'SUBMITTED' ? submission.id : null,
+    approvedRevisionId: submission?.status === 'APPROVED' ? submission.id : null,
     submissionStatus: submission?.status || null,
     submissionRevision: submission?.revisionNumber || null,
     submittedAt: submission?.submittedAt || (safeTask as any).submittedAt || null,
     assignedReviewer: submission?.assignedReviewer || null,
     requestedAttention: submission?.requestedAttention || null,
+    latestDecisionType: submission?.reviewDecision?.decision || null,
+    latestDecisionAt: submission?.reviewDecision?.createdAt || null,
+    returnedCorrectionDeadline: submission?.reviewDecision?.correctionDeadline || null,
+    externalActionRequired: submission?.externalActionRequired || false,
+    externalActionType: submission?.externalActionType || null,
+    externalCompletedAt: submission?.externalCompletedAt || null,
     submissionDocumentCount: submission?._count?.documents || 0,
     linkedTimeMinutes: submission?.timeEntries?.reduce((sum: number, link: any) => sum + Number(link.timeEntry?.minutes || 0), 0) || 0,
-    nextActionCode: taskNextActionCode(safeTask.status, submission?.status),
+    nextActionCode: taskNextActionCode(safeTask.status, submission),
   };
 }
 

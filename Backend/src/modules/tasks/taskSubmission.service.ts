@@ -61,6 +61,9 @@ const submissionInclude = {
   createdBy: { select: { id: true, name: true, email: true, role: true } },
   submittedBy: { select: { id: true, name: true, email: true, role: true } },
   assignedReviewer: { select: { id: true, name: true, email: true, role: true } },
+  reviewDecision: {
+    include: { reviewer: { select: { id: true, name: true, email: true, role: true } } },
+  },
   documents: {
     include: {
       document: { select: { id: true, name: true, fileName: true, category: true, currentVersion: true, caseId: true } },
@@ -184,6 +187,17 @@ function toSubmissionDto(submission: SubmissionRecord): TaskSubmissionDto {
     returnedAt: submission.returnedAt?.toISOString() || null,
     approvedAt: submission.approvedAt?.toISOString() || null,
     supersededAt: submission.supersededAt?.toISOString() || null,
+    externalCompletedAt: submission.externalCompletedAt?.toISOString() || null,
+    reviewDecision: submission.reviewDecision ? {
+      id: submission.reviewDecision.id,
+      decision: String(submission.reviewDecision.decision),
+      reviewer: safeUser(submission.reviewDecision.reviewer)!,
+      note: submission.reviewDecision.note,
+      requestedCorrections: submission.reviewDecision.requestedCorrections,
+      requiresFullReview: submission.reviewDecision.requiresFullReview,
+      correctionDeadline: submission.reviewDecision.correctionDeadline?.toISOString() || null,
+      createdAt: submission.reviewDecision.createdAt.toISOString(),
+    } : null,
     documents,
     timeEntries,
     documentCount: documents.length,
@@ -411,6 +425,9 @@ export class TaskSubmissionService {
         });
         if (latest && ['SUBMITTED', 'APPROVED'].includes(String(latest.status))) {
           throw new TaskSubmissionServiceError(409, 'TASK_SUBMISSION_STATE_CONFLICT', 'The latest submission revision is not open for replacement.');
+        }
+        if (latest?.status === 'RETURNED') {
+          throw new TaskSubmissionServiceError(409, 'TASK_SUBMISSION_REVISE_REQUIRED', 'A returned revision must be continued through the explicit revise action.');
         }
         const reviewerId = await this.resolveInitialReviewer(task, actorId, input.assignedReviewerId, tx);
 
@@ -717,6 +734,28 @@ export class TaskSubmissionService {
       ? await this.computeReadiness(task, activeDraft, actorId, access.role, this.db)
       : null;
     const canEditDraft = Boolean(activeDraft) && access.canPrepare && activeDraft?.assignedReviewerId !== actorId;
+    const returnedRevision = submissions.find((submission) => submission.status === 'RETURNED') || null;
+    const approvedRevision = submissions.find((submission) => submission.status === 'APPROVED') || null;
+    const canReviseReturned = Boolean(returnedRevision && !activeDraft && returnedRevision.submittedById === actorId && access.isTaskAssignee);
+    const scopedExternalCompletionActor = task.assignedById === actorId
+      || task.case.assignedLawyerId === actorId
+      || task.case.createdById === actorId
+      || Boolean(await this.db.caseCollaborator.findFirst({ where: { caseId: task.caseId, userId: actorId }, select: { id: true } }));
+    const canRecordExternalCompletion = Boolean(
+      approvedRevision
+      && approvedRevision.externalActionRequired
+      && !approvedRevision.externalCompletedAt
+      && approvedRevision.submittedById !== actorId
+      && REVIEWER_ROLES.has(access.role)
+      && scopedExternalCompletionActor
+    );
+
+    let nextActionCode = ['PENDING', 'TODO'].includes(String(task.status)) ? 'START_TASK' : 'OPEN_TASK';
+    if (activeDraft) nextActionCode = 'CONTINUE_SUBMISSION';
+    else if (latestSubmitted?.status === 'SUBMITTED') nextActionCode = latestSubmitted.assignedReviewerId === actorId ? 'OPEN_REVIEW' : 'VIEW_SUBMISSION';
+    else if (canReviseReturned) nextActionCode = 'CONTINUE_RETURNED_WORK';
+    else if (canRecordExternalCompletion) nextActionCode = 'RECORD_EXTERNAL_COMPLETION';
+    else if (approvedRevision && approvedRevision.externalCompletedAt) nextActionCode = 'VIEW_COMPLETED';
 
     return {
       task: {
@@ -739,6 +778,7 @@ export class TaskSubmissionService {
       activeDraft: activeDraft ? toSubmissionDto(activeDraft) : null,
       submissions: submissions.map(toSubmissionDto),
       latestSubmittedRevision: latestSubmitted ? toSubmissionDto(latestSubmitted) : null,
+      latestDecision: latestSubmitted?.reviewDecision ? toSubmissionDto(latestSubmitted).reviewDecision : null,
       currentReviewer: safeUser(activeDraft?.assignedReviewer || latestSubmitted?.assignedReviewer || null),
       readiness,
       permittedActions: {
@@ -750,7 +790,10 @@ export class TaskSubmissionService {
         assignReviewer: canEditDraft,
         submit: Boolean(activeDraft && readiness?.ready && access.isTaskAssignee),
         reviewSubmitted: Boolean(latestSubmitted && readableSubmitted && latestSubmitted.assignedReviewerId === actorId && latestSubmitted.submittedById !== actorId),
+        reviseReturned: canReviseReturned,
+        recordExternalCompletion: canRecordExternalCompletion,
       },
+      nextActionCode,
     };
   }
 
@@ -813,12 +856,15 @@ export class TaskSubmissionService {
         data: transition.data as Prisma.TaskUpdateInput,
       });
 
+      const isResubmission = Boolean(submission.supersedesSubmissionId);
+      const auditType = isResubmission ? 'TASK_SUBMISSION_RESUBMITTED' : 'TASK_SUBMISSION_SUBMITTED';
       const auditMetadata = {
         submissionId,
+        priorSubmissionId: submission.supersedesSubmissionId,
         revisionNumber: submission.revisionNumber,
         actorId,
         reviewerId: submission.assignedReviewerId,
-        eventType: 'TASK_SUBMISSION_SUBMITTED',
+        eventType: auditType,
         attention: submission.requestedAttention,
         documentCount: submission.documents.length,
         timeEntryCount: submission.timeEntries.length,
@@ -828,8 +874,8 @@ export class TaskSubmissionService {
       await tx.timelineEvent.create({
         data: {
           eventType: 'REVIEW_REQUESTED',
-          type: 'TASK_SUBMISSION_SUBMITTED',
-          description: 'A task submission was sent for review.',
+          type: auditType,
+          description: isResubmission ? 'A corrected task submission was resubmitted for review.' : 'A task submission was sent for review.',
           caseId: task.caseId,
           userId: actorId,
           taskId,
@@ -860,12 +906,17 @@ export class TaskSubmissionService {
   async getSubmissionReviewQueue(userId: string): Promise<any[]> {
     const user = await this.db.user.findUnique({ where: { id: userId }, select: { id: true, role: true } });
     if (!user) return [];
-    const privileged = PRIVILEGED_ROLES.has(String(user.role));
     const submissions = await this.db.taskSubmission.findMany({
       where: {
         status: 'SUBMITTED',
         submittedById: { not: userId },
-        ...(privileged ? {} : { assignedReviewerId: userId }),
+        OR: [
+          { assignedReviewerId: userId },
+          { task: { assignedById: userId } },
+          { task: { case: { assignedLawyerId: userId } } },
+          { task: { case: { createdById: userId } } },
+          { task: { case: { collaborators: { some: { userId } } } } },
+        ],
       },
       select: {
         id: true,

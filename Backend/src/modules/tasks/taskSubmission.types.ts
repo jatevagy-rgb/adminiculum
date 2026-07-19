@@ -69,6 +69,17 @@ export interface TaskSubmissionDto {
   returnedAt: string | null;
   approvedAt: string | null;
   supersededAt: string | null;
+  externalCompletedAt: string | null;
+  reviewDecision: {
+    id: string;
+    decision: string;
+    reviewer: SafeUserDto;
+    note: string | null;
+    requestedCorrections: string | null;
+    requiresFullReview: boolean;
+    correctionDeadline: string | null;
+    createdAt: string;
+  } | null;
   documents: TaskSubmissionDocumentDto[];
   timeEntries: TaskSubmissionTimeEntryDto[];
   documentCount: number;
@@ -103,6 +114,7 @@ export interface TaskSubmissionWorkflowDto {
   activeDraft: TaskSubmissionDto | null;
   submissions: TaskSubmissionDto[];
   latestSubmittedRevision: TaskSubmissionDto | null;
+  latestDecision: TaskSubmissionDto['reviewDecision'];
   currentReviewer: SafeUserDto | null;
   readiness: SubmissionReadinessDto | null;
   permittedActions: {
@@ -114,7 +126,10 @@ export interface TaskSubmissionWorkflowDto {
     assignReviewer: boolean;
     submit: boolean;
     reviewSubmitted: boolean;
+    reviseReturned: boolean;
+    recordExternalCompletion: boolean;
   };
+  nextActionCode: string;
 }
 
 export interface EligibleReviewerDto extends SafeUserDto {
