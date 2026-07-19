@@ -845,7 +845,13 @@ export async function getUserTasks(userId: string, filters?: { status?: string; 
     select: {
       ...taskReadSelect,
       case: {
-        select: { id: true, caseNumber: true, clientName: true, matterType: true }
+        select: {
+          id: true,
+          caseNumber: true,
+          clientName: true,
+          matterType: true,
+          client: { select: { colorKey: true } },
+        }
       },
       submissions: {
         orderBy: { revisionNumber: 'desc' },
@@ -944,8 +950,16 @@ function taskNextActionCode(taskStatus: unknown, submission?: any): string {
 function withTaskSubmissionProjection<T extends { status: unknown; submissions: any[] }>(task: T) {
   const { submissions, ...safeTask } = task;
   const submission = submissions[0] || null;
+  const caseRecord = (safeTask as any).case;
+  const safeCase = caseRecord
+    ? (() => {
+        const { client, ...caseFields } = caseRecord;
+        return { ...caseFields, clientColorKey: client?.colorKey || null };
+      })()
+    : undefined;
   return {
     ...safeTask,
+    ...(safeCase ? { case: safeCase } : {}),
     activeSubmissionId: submission?.status === 'DRAFT' ? submission.id : null,
     currentSubmittedRevisionId: submission?.status === 'SUBMITTED' ? submission.id : null,
     approvedRevisionId: submission?.status === 'APPROVED' ? submission.id : null,

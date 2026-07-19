@@ -12,9 +12,27 @@ import {
   isDatabaseFoundationEnabled,
   requireDatabaseFoundation,
 } from '../../middleware/featureAvailability';
+import { ClientColorInputError, parseClientColorKey } from './clientColor';
 
 const router = Router();
 const CLIENT_IDENTITY_MANAGER_ROLES = new Set(['ADMIN', 'PARTNER']);
+const CLIENT_DETAIL_SELECT = {
+  id: true,
+  name: true,
+  email: true,
+  phone: true,
+  address: true,
+  taxNumber: true,
+  companyRegistrationNumber: true,
+  authorizedRepresentative: true,
+  company: true,
+  vatNumber: true,
+  contactPerson: true,
+  notes: true,
+  colorKey: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.ClientSelect;
 const isHouseStyleFoundationEnabled = () =>
   isDatabaseFoundationEnabled('ENABLE_CLIENT_HOUSE_STYLE');
 const requireHouseStyleFoundation = requireDatabaseFoundation({
@@ -34,6 +52,14 @@ function logPrismaRouteError(route: string, error: unknown): void {
     return;
   }
   console.error(`[clients] ${route} error`, error instanceof Error ? error.message : error);
+}
+
+function sendClientColorInvalid(res: Response): void {
+  res.status(400).json({
+    status: 400,
+    code: 'CLIENT_COLOR_INVALID',
+    message: 'Client color must be null or an allowed palette key.',
+  });
 }
 
 const HOUSE_STYLE_FIELDS = [
@@ -275,6 +301,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
           email: true,
           phone: true,
           address: true,
+          colorKey: true,
         },
       });
     } catch (error) {
@@ -431,7 +458,8 @@ router.get('/:clientId', authenticate, requireClientIdentityReadAccess, async (r
     }
     
     const client = await prisma.client.findUnique({
-      where: { id: clientId }
+      where: { id: clientId },
+      select: CLIENT_DETAIL_SELECT,
     });
     
     if (!client) {
@@ -465,6 +493,8 @@ router.post('/', authenticate, requireClientIdentityManageAccess, async (req: Re
       return;
     }
 
+    const colorKey = parseClientColorKey(req.body.colorKey);
+
     const client = await prisma.client.create({
       data: {
         name,
@@ -474,11 +504,17 @@ router.post('/', authenticate, requireClientIdentityManageAccess, async (req: Re
         taxNumber: taxNumber || null,
         companyRegistrationNumber: companyRegistrationNumber || null,
         authorizedRepresentative: authorizedRepresentative || null,
-        contactPerson: contactPerson || null
-      }
+        contactPerson: contactPerson || null,
+        ...(colorKey !== undefined ? { colorKey } : {}),
+      },
+      select: CLIENT_DETAIL_SELECT,
     });
     res.status(201).json(client);
   } catch (error: any) {
+    if (error instanceof ClientColorInputError) {
+      sendClientColorInvalid(res);
+      return;
+    }
     console.error('Create client error:', error);
     
     // Handle Prisma P2002 unique constraint violation
@@ -523,9 +559,11 @@ router.patch('/:clientId', authenticate, requireClientIdentityManageAccess, asyn
       companyRegistrationNumber,
       authorizedRepresentative,
       contactPerson,
+      colorKey,
     } = req.body;
 
     const resolvedTaxNumber = taxNumber !== undefined ? taxNumber : vatNumber;
+    const validatedColorKey = parseClientColorKey(colorKey);
 
     const client = await prisma.client.update({
       where: { id: clientId },
@@ -537,11 +575,17 @@ router.patch('/:clientId', authenticate, requireClientIdentityManageAccess, asyn
         ...(resolvedTaxNumber !== undefined && { taxNumber: resolvedTaxNumber }),
         ...(companyRegistrationNumber !== undefined && { companyRegistrationNumber }),
         ...(authorizedRepresentative !== undefined && { authorizedRepresentative }),
-        ...(contactPerson !== undefined && { contactPerson })
-      }
+        ...(contactPerson !== undefined && { contactPerson }),
+        ...(validatedColorKey !== undefined ? { colorKey: validatedColorKey } : {}),
+      },
+      select: CLIENT_DETAIL_SELECT,
     });
     res.json(client);
   } catch (error: any) {
+    if (error instanceof ClientColorInputError) {
+      sendClientColorInvalid(res);
+      return;
+    }
     console.error('Update client error:', error);
     
     if (error.code === 'P2025') {

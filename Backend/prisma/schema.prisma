@@ -91,6 +91,19 @@ enum UserRole {
 // CLIENT MANAGEMENT
 // ============================================================================
 
+enum ClientColorKey {
+  RED
+  ORANGE
+  AMBER
+  GREEN
+  TEAL
+  BLUE
+  INDIGO
+  PURPLE
+  ROSE
+  SLATE
+}
+
 model Client {
   id              String    @id @default(uuid())
   name            String
@@ -104,7 +117,8 @@ model Client {
   vatNumber       String?
   contactPerson   String?
   notes           String?
-  color           String?   @db.VarChar(16) // Hex color for client identity visualization (e.g. #2D6A4F)
+  color           String?   @db.VarChar(16) // Legacy hexadecimal field; not a rendering source
+  colorKey        ClientColorKey?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

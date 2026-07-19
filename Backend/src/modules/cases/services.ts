@@ -23,7 +23,7 @@ interface CaseListItem {
   priority: string;
   deadline?: Date | null;
   clientRole?: string | null;
-  clientColor?: string | null;
+  clientColorKey?: string | null;
   createdAt: Date;
   updatedAt: Date;
   assignedLawyer: { id: string; name: string; email: string; role: string } | null;
@@ -124,7 +124,14 @@ class CasesService {
               email: true,
               role: true
             }
-          }
+          },
+          client: {
+            select: {
+              id: true,
+              name: true,
+              colorKey: true,
+            },
+          },
         },
         ...(Object.keys(where).length ? { where } : {})
       }),
@@ -135,14 +142,14 @@ class CasesService {
       id: c.id,
       caseNumber: c.caseNumber,
       title: `${c.clientName || 'Unknown Client'} - ${c.matterType || 'Unknown Type'}`,
-      clientName: c.clientName || 'Unknown Client',
+      clientName: c.client?.name || c.clientName || 'Unknown Client',
       clientId: c.clientId,
       matterType: c.matterType || 'Unknown',
       status: c.status,
       priority: c.priority,
       deadline: c.deadline || null,
       clientRole: c.clientRole || null,
-      clientColor: null,
+      clientColorKey: c.client?.colorKey || null,
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
       assignedLawyer: c.assignedLawyer ? {
@@ -171,9 +178,16 @@ class CasesService {
             name: true,
             email: true,
             role: true
-          }
-        }
-      }
+          },
+        },
+        client: {
+          select: {
+            id: true,
+            name: true,
+            colorKey: true,
+          },
+        },
+      },
     });
 
     if (!caseData) return null;
@@ -182,7 +196,7 @@ class CasesService {
       id: caseData.id,
       caseNumber: caseData.caseNumber,
       title: `${caseData.clientName || 'Unknown Client'} - ${caseData.matterType || 'Unknown Type'}`,
-      clientName: caseData.clientName || 'Unknown Client',
+      clientName: caseData.client?.name || caseData.clientName || 'Unknown Client',
       clientId: caseData.clientId,
       matterType: caseData.matterType || 'Unknown',
       status: caseData.status,
@@ -190,6 +204,7 @@ class CasesService {
       priority: caseData.priority,
       deadline: caseData.deadline || null,
       clientRole: caseData.clientRole || null,
+      clientColorKey: caseData.client?.colorKey || null,
       sharePointFolderPath: caseData.sharepointRoot || undefined,
       assignedLawyer: caseData.assignedLawyer ? {
         id: caseData.assignedLawyer.id,
