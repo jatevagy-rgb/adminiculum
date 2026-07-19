@@ -1,17 +1,17 @@
 # Task Lifecycle Implementation Slices
 
 Date: 2026-07-18
-Status: Slice 1 schema candidate and backend draft/submit slice complete; review decisions remain separately gated
+Status: schema candidate, backend draft/submit, and backend review-decision slices complete; frontend remains separately gated
 
 ## Current Completion State
 
 - Slice 1 schema candidate and one additive migration are implemented.
 - Backend workflow read, draft editing, document/time links, reviewer eligibility, readiness, and idempotent submit are implemented on `codex/task-submission-backend-1`.
-- Submission-backed review queue reads and optional task-list projection metadata are implemented; approve/return mutations remain absent.
+- Submission-backed review queue reads, return/revise/resubmit/approve, ordinary closure, and external-completion metadata are implemented on `codex/task-review-decision-backend-1`.
 - Disposable localhost migration proof and 18 schema-constraint tests passed.
 - No frontend, feature flag, production database, deployment, or Azure change occurred.
 - The historical checked-in migration chain still cannot replay from empty; future production-like clone proof remains mandatory before any non-local apply.
-- Slice 5 review decision mutations are the earliest possible next backend lifecycle slice and require a new explicit prompt.
+- Slice 6/7 frontend implementation is the earliest next lifecycle slice and requires a separate explicit prompt.
 
 ## Slice 1 — Schema Candidate And Migration Draft
 
@@ -58,7 +58,7 @@ Status: Slice 1 schema candidate and backend draft/submit slice complete; review
 
 ## Slice 5 — Reviewer Queue, Return, And Approve
 
-- Status: **READ INTEGRATION COMPLETE; MUTATIONS BLOCKED FOR NEXT SLICE**.
+- Status: **COMPLETE IN BACKEND REVIEW-DECISION SLICE**.
 
 - Files: task-submission review service/routes/DTOs; review queue query; tests.
 - Scope: indexed submitted queue, immutable decision, return/resubmit eligibility, approval/closure.
@@ -120,4 +120,4 @@ Status: Slice 1 schema candidate and backend draft/submit slice complete; review
 - Existing case-level handoff remains readable throughout.
 - Client Portal, AI/n8n, Outlook/Graph, SharePoint behavior, public OpenAPI, CORS, auth provider config, Azure settings, packages, and infrastructure remain outside scope.
 
-Classification: `TASK_SUBMISSION_BACKEND_READY_FOR_REVIEW_DECISION_SLICE`
+Classification: `TASK_REVIEW_DECISION_BACKEND_READY_FOR_FRONTEND_SLICE`

@@ -11,7 +11,7 @@ This prevents the same task appearing once as a submission row and again through
 ## Visibility
 
 - Assigned internal reviewer sees their submitted, non-self work.
-- Admin/Partner may see the broader internal submission queue, but self-submitted rows remain excluded.
+- Admin/Partner role alone does not widen the queue; assignment or explicit task/case participation is required.
 - Legacy queue behavior retains its existing task/case participation rules.
 - Reviewer assignment does not expose or permit draft editing.
 
@@ -36,4 +36,4 @@ They omit full notes, remaining issues, document names/content, workspace text, 
 - Real PostgreSQL proof produced exactly one queue row for the successful submitted revision.
 - Existing legacy handoff and task-derived queue tests remain green.
 
-Review approve/return mutations are intentionally absent and require the next separately approved slice.
+The follow-on review-decision slice now removes returned/approved revisions from the active queue and makes a newer resubmission appear exactly once. Decisions remain available only from scoped review detail, never as blind list-row actions.

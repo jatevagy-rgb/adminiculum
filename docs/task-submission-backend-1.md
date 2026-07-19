@@ -3,13 +3,13 @@
 Date: 2026-07-18
 Branch: `codex/task-submission-backend-1`
 Base: `7ef3d18`
-Status: backend review-decision entry slice implemented; not deployed
+Status: backend draft/submit foundation complete; extended by the separate review-decision slice; not deployed
 
 ## Scope
 
 This slice adds authenticated task-owned Leadás workflow reads and draft/submit mutations over the approved `TaskSubmission` schema candidate. It implements draft creation/editing, reviewer selection, document/time linking, explicit zero-time confirmation, deterministic readiness, atomic idempotent submit, review-queue reads, and optional task-list projection metadata.
 
-It does not implement approve, return, task closure, external completion, frontend UI, public API/OpenAPI publication, production migration, or deployment.
+The follow-on `codex/task-review-decision-backend-1` slice now implements approve, return, corrected revisions, ordinary task closure, and external-completion metadata. Frontend UI, public API/OpenAPI publication, production migration, and deployment remain absent.
 
 ## Runtime Modules
 
@@ -46,3 +46,5 @@ It does not implement approve, return, task closure, external completion, fronte
 No deployment occurred. Before deployment, abandon or revert this branch. After a future deployment, reverting the runtime commits leaves the additive schema and any already-created draft/submitted records intact; no destructive rollback is proposed.
 
 Classification: `TASK_SUBMISSION_BACKEND_READY_FOR_REVIEW_DECISION_SLICE`
+
+Follow-on classification: `TASK_REVIEW_DECISION_BACKEND_READY_FOR_FRONTEND_SLICE`
