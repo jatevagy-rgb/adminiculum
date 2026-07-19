@@ -158,15 +158,11 @@ describeWithDatabase('TaskSubmissionService PostgreSQL lifecycle', () => {
     draftId = drafts[0].id;
   });
 
-  it('creates the next sequential revision only after a returned revision', async () => {
-    const created = await service.createTaskSubmissionDraft(ids.revisionTask, ids.worker, { assignedReviewerId: ids.reviewer });
-    expect(created.created).toBe(true);
-    expect(created.workflow.activeDraft).toEqual(expect.objectContaining({
-      revisionNumber: 2,
-      status: 'DRAFT',
-    }));
-    const row = await db.taskSubmission.findFirst({ where: { taskId: ids.revisionTask, status: 'DRAFT' } });
-    expect(row?.supersedesSubmissionId).toBe(ids.returnedSubmission);
+  it('requires the explicit revise action after a returned revision', async () => {
+    await expect(service.createTaskSubmissionDraft(ids.revisionTask, ids.worker, { assignedReviewerId: ids.reviewer })).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'TASK_SUBMISSION_REVISE_REQUIRED',
+    });
   });
 
   it('rejects self-review and lists only eligible task-scoped reviewers', async () => {

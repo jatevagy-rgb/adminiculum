@@ -23,6 +23,20 @@ describe('getReviewTasksForUser', () => {
 
     await getReviewTasksForUser('user-1');
 
+    expect(prismaMock.taskSubmission.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        status: 'SUBMITTED',
+        submittedById: { not: 'user-1' },
+        OR: [
+          { assignedReviewerId: 'user-1' },
+          { task: { assignedById: 'user-1' } },
+          { task: { case: { assignedLawyerId: 'user-1' } } },
+          { task: { case: { createdById: 'user-1' } } },
+          { task: { case: { collaborators: { some: { userId: 'user-1' } } } } },
+        ],
+      }),
+    }));
+
     expect(prismaMock.task.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'IN_REVIEW'] },
@@ -38,7 +52,7 @@ describe('getReviewTasksForUser', () => {
     }));
   });
 
-  it('allows an administrator to see the complete review-status queue', async () => {
+  it('keeps an administrator scoped to explicit task or case participation', async () => {
     prismaMock.user.findUnique.mockResolvedValue({ id: 'admin-1', role: 'ADMIN' });
 
     await getReviewTasksForUser('admin-1');
@@ -47,7 +61,12 @@ describe('getReviewTasksForUser', () => {
     expect(query.where.status).toEqual({ in: ['SUBMITTED', 'UNDER_REVIEW', 'IN_REVIEW'] });
     expect(query.where.NOT).toEqual({ assignedToId: 'admin-1' });
     expect(query.where.submissions).toEqual({ none: { status: 'SUBMITTED' } });
-    expect(query.where.OR).toBeUndefined();
+    expect(query.where.OR).toEqual([
+      { assignedById: 'admin-1' },
+      { case: { assignedLawyerId: 'admin-1' } },
+      { case: { createdById: 'admin-1' } },
+      { case: { collaborators: { some: { userId: 'admin-1' } } } },
+    ]);
   });
 
   it('returns submission-backed review rows before legacy fallback rows', async () => {
