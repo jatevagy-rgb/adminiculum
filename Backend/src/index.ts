@@ -11,6 +11,7 @@ import morgan from 'morgan';
 import path from 'path';
 import fs from 'fs';
 import yaml from 'js-yaml';
+import { createCorsOptions } from './config/cors';
 
 type StartupConfigHealthStatus = {
   checkedAt: string;
@@ -154,32 +155,7 @@ if (isProduction && productionAllowedOrigins.length === 0) {
 
 // Middleware
 app.use(helmet());
-app.use(cors({
-  origin: function(origin: string | undefined, callback: (err: Error | null, allow: boolean) => void) {
-    if (!origin) {
-      return callback(null, true);
-    }
-
-    if (!isProduction) {
-      if (origin.match(/^http:\/\/localhost:\d+$/) || origin.match(/^https:\/\/localhost:\d+$/)) {
-        return callback(null, true);
-      }
-      if (frontendUrl && origin === frontendUrl) {
-        return callback(null, true);
-      }
-      return callback(null, true);
-    }
-
-    if (productionAllowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    return callback(null, false);
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Authorization', 'Content-Type', 'X-Requested-With', 'Accept', 'Origin'],
-}));
+app.use(cors(createCorsOptions({ isProduction, productionAllowedOrigins, frontendUrl })));
 app.use(morgan('combined'));
 // Increase payload limits for normal DOC/DOCX base64 uploads from frontend
 // (base64 payloads are larger than binary source files)
