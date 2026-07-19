@@ -153,8 +153,9 @@ export function TaskReviewWorkspace({
       setApproveDialogOpen(false);
       setApprovalNote("");
       setReview(result.review);
+      if (result.review.submission.externalActionRequired) return;
       await onQueueChanged();
-      if (!result.review.submission.externalActionRequired) onClose();
+      onClose();
     } catch (actionError) {
       if (!(await handleStaleOrTimeout(actionError))) setError(taskWorkflowErrorMessage(actionError));
     } finally {

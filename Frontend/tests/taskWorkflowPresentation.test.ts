@@ -216,3 +216,9 @@ test("completed readiness labels describe fulfilled prerequisites", () => {
   assert.equal(READINESS_COMPLETED_LABELS.WORK_SUMMARY_REQUIRED, "Az elvégzett munka összefoglalása megadva.");
   assert.equal(READINESS_COMPLETED_LABELS.TASK_STATE_NOT_SUBMITTABLE, "A feladat jelenlegi állapotában leadható.");
 });
+
+test("external-action approval keeps the review workspace open for completion", () => {
+  const source = readFileSync(path.resolve(process.cwd(), "src/components/tasks/TaskReviewWorkspace.tsx"), "utf8");
+  assert.match(source, /if \(result\.review\.submission\.externalActionRequired\) return;/);
+  assert.match(source, /await onQueueChanged\(\);\s+onClose\(\);/);
+});
