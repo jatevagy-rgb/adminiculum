@@ -41,3 +41,13 @@ Classification: `TASK_REVIEW_DECISION_BACKEND_READY_FOR_FRONTEND_SLICE`
 ## Frontend Integration Finding — 2026-07-19
 
 The typed frontend uses the required ETag through `If-Match` and stable `Idempotency-Key` values. Authenticated browser QA found that the current backend CORS allow-header list omits both headers, so cross-origin review mutations cannot reach these routes. Backend route/service tests remain green and unchanged, but a separate CORS hardening slice is required before frontend lifecycle acceptance.
+
+## Browser Closeout — 2026-07-19
+
+The separate CORS hardening slice now explicitly permits `Idempotency-Key` and `If-Match` without broadening origins, credentials, methods, exposed headers, authentication, or authorization. Runtime-connected preflight tests and direct `OPTIONS` proof passed with no writes.
+
+Authenticated disposable-database browser QA completed return, revision 2, resubmit, ordinary approval/closure, zero-time approval, external-action pending state, and external completion. Persisted counts showed no duplicate decisions, revisions, notifications, timeline events, or external completion after deliberate double-clicks.
+
+One narrow frontend mismatch was corrected: approved external-action review detail now remains mounted until the reviewer records completion. Backend review behavior and contracts remain unchanged.
+
+Closeout classification: `TASK_LIFECYCLE_BROWSER_CLOSEOUT_READY_FOR_RELEASE_INTEGRATION`

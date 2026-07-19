@@ -1,33 +1,27 @@
 # Task Leadás And Review Browser Lifecycle Proof
 
 Date: 2026-07-19
-Result: partial authenticated proof; API contract blocker
+Result: complete authenticated local proof
 
 ## Safe Environment
 
-- Created one uniquely named localhost PostgreSQL database from the current Prisma datamodel.
-- Used only synthetic worker, reviewer, client, matter, case, task, document and time-entry records.
-- Used the existing local password/JWT login path; no auth bypass or production token was used.
-- No production, shared database, Azure resource or external service was contacted.
-- Stopped both local servers and dropped the disposable database after QA.
+- Disposable localhost PostgreSQL with synthetic worker/reviewer/client/case/task/document/time data only.
+- Existing local authentication flow; no bypass or production token.
+- No production, shared database, Azure resource, external service, schema migration, or deployment.
 
-## Browser-Proven Steps
+## Proven Lifecycle
 
-1. Worker authenticated and opened `/tasks`.
-2. Three synthetic tasks rendered with separate task and Leadás state columns.
-3. Ordinary task drawer opened.
-4. Revision 1 draft was created.
-5. Summary, open points and reviewer note were explicitly saved.
-6. Detailed review attention and the backend-returned eligible reviewer were selected.
-7. An existing same-case document and a 45-minute existing time entry were linked.
-8. Backend readiness changed from missing prerequisites to ready.
-9. Submission confirmation accurately summarized task, revision, reviewer, attention, one output, 45 minutes and no external action.
-10. Browser submit was blocked before route execution by CORS preflight.
+- Worker draft creation, readiness, document/time attachment, and submit.
+- Reviewer return with mandatory note/corrections and full-review metadata.
+- Worker immutable revision-1 history, revision-2 creation, revised output/time, and resubmit.
+- Reviewer approval and ordinary task closure.
+- Separate explicit-zero-time submit and approval.
+- Separate external-action approval, pending state, completion recording, and closure.
+- Refresh persistence after every authoritative transition.
+- Double-click/idempotency proof with no duplicate revisions, decisions, events, notifications, or external completion.
 
-## Blocked Steps
+The original CORS blocker is resolved by explicitly permitting `Idempotency-Key` and `If-Match`. Direct preflights return `204` and create no writes.
 
-Return, revise, resubmit, approve, zero-time submit, external-action approve and external completion were not executed. Continuing through direct API calls would not prove the requested browser workflow and was intentionally avoided.
+Full evidence: `docs/task-lifecycle-browser-closeout.md`, `docs/task-lifecycle-browser-idempotency-proof.md`, and `docs/task-lifecycle-final-visual-qa.md`.
 
-Preflight evidence: status `204`, correct local origin, but `Access-Control-Allow-Headers` omitted `Idempotency-Key` and `If-Match`.
-
-Classification: `TASK_LEADAS_REVIEW_FRONTEND_API_CONTRACT_BLOCKER`
+Classification: `TASK_LIFECYCLE_BROWSER_CLOSEOUT_READY_FOR_RELEASE_INTEGRATION`
