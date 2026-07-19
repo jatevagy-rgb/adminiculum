@@ -2,7 +2,13 @@
 
 Date: 2026-07-19
 Migration: `20260718120000_add_task_submission_workflow`
-Execution status: **NOT AUTHORIZED IN THIS TICKET**
+Execution status: **EXECUTED ONCE AND VERIFIED ON 2026-07-19**
+
+## Execution Closeout
+
+The separately approved production ticket executed this runbook once. The exact reviewed SQL committed in 236 ms, physical schema proof passed, and one truthful `_prisma_migrations` record was added. `prisma migrate deploy`, historical replay, reset, and destructive rollback were not used. See `docs/task-lifecycle-production-migration-execution.md` and `docs/task-lifecycle-production-post-migration-proof.md`.
+
+This historical runbook does not authorize another apply. The migration is already present in production and must not be rerun.
 
 ## Principle
 
@@ -33,11 +39,11 @@ This runbook defines a later operator procedure. It does not authorize a product
 
 ## Apply Method
 
-**NOT AUTHORIZED IN THIS TICKET.**
+**HISTORICAL METHOD ONLY; DO NOT RUN AGAIN.**
 
-A later approved operator ticket may execute only the reviewed contents of `Backend/prisma/migrations/20260718120000_add_task_submission_workflow/migration.sql` through the same controlled one-shot PostgreSQL mechanism proven on the production-head clone. It must not invoke `prisma migrate deploy`, `prisma migrate dev`, `prisma db push`, or any command that evaluates unrelated pending migrations.
+The approved operator ticket executed only the reviewed contents of `Backend/prisma/migrations/20260718120000_add_task_submission_workflow/migration.sql` through the controlled one-shot PostgreSQL mechanism proven on the production-head clone. It did not invoke `prisma migrate deploy`, `prisma migrate dev`, `prisma db push`, or any command that evaluates unrelated pending migrations.
 
-The executor must stop on the first SQL error. Record `20260718120000_add_task_submission_workflow` in `_prisma_migrations` only after all candidate SQL succeeds and post-apply object verification passes. The exact executable apply command is intentionally omitted until a separate approval ticket.
+The executor was configured to stop on the first SQL error. `20260718120000_add_task_submission_workflow` was recorded in `_prisma_migrations` only after the candidate SQL succeeded and post-apply object verification passed. The executable command remains omitted because it contained operational connection handling and must not be reused.
 
 ## Expected Apply Result
 

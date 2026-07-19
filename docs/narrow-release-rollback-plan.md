@@ -295,3 +295,15 @@ The task lifecycle chain is now integrated into `release/editor-ops-workflow-1`,
 - `prisma migrate deploy`, destructive down migration, Azure setting changes, and feature-flag workarounds remain prohibited.
 
 The detailed decision tree is in `docs/task-lifecycle-production-rollback-plan.md`.
+
+## Executed Task Lifecycle Frontend Rollback
+
+The 2026-07-19 task-lifecycle frontend candidate stalled before activation and served `503` during the failed operation. The authorized one-time frontend rollback used the verified SOL56 UX artifact with SHA-256 `68ec4754616a1b61dfa8aefdb28790605afc7333f2a2d5d3f7cfdb45ee746ae5`.
+
+- Candidate failed record: `a27dcd43-96a9-44de-bcde-8657a4bb4bb6`.
+- Rollback deployment: `f1ab9847-fb1a-4e7f-9c8a-e103904c2711`, Kudu status 4, active.
+- Active frontend runtime: `1033a4dcf1ceeeb70bb6ff22d2963a172d776986`.
+- Backend lifecycle deployment remains active; database schema remains additive and intact.
+- No destructive database rollback, backend rollback, app-setting change, or second frontend attempt occurred.
+
+This rollback authorization is consumed. Any new frontend deployment requires separate approval.

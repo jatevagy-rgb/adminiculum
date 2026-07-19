@@ -369,3 +369,16 @@ Final classification: `SOL56_UX_PRODUCTION_DEPLOYMENT_SUCCESS`.
 - Production migration, artifacts, deployment, restart, Azure settings, and feature flags were not executed or changed.
 
 Current task lifecycle posture: `GO_FOR_SEPARATE_PRODUCTION_MIGRATION_APPROVAL`, not apply or deployment approval. See `docs/task-lifecycle-release-go-no-go.md`.
+
+## Task Lifecycle Production Execution Result
+
+On 2026-07-19 the separately approved production operation applied and verified the additive lifecycle migration and deployed the backend from runtime source `4647c08`. The frontend candidate failed before activation, so the previous SOL56 UX frontend was restored once and returned `200` on all required routes.
+
+- Migration: applied and recorded once.
+- Backend: active on deployment `be17637b-5431-4de6-a96a-98fe8ada884a`.
+- Frontend candidate: inactive failed record `a27dcd43-96a9-44de-bcde-8657a4bb4bb6`.
+- Frontend rollback: active deployment `f1ab9847-fb1a-4e7f-9c8a-e103904c2711`.
+- Integrated frontend acceptance: not completed.
+- Current decision: `NO_GO` until a separately approved frontend-only follow-up succeeds.
+
+Classification: `TASK_LIFECYCLE_PRODUCTION_FRONTEND_ROLLED_BACK`.
