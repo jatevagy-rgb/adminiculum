@@ -48,3 +48,7 @@ No deployment occurred. Before deployment, abandon or revert this branch. After 
 Classification: `TASK_SUBMISSION_BACKEND_READY_FOR_REVIEW_DECISION_SLICE`
 
 Follow-on classification: `TASK_REVIEW_DECISION_BACKEND_READY_FOR_FRONTEND_SLICE`
+
+## Frontend Integration Finding — 2026-07-19
+
+Authenticated localhost frontend QA created and completed a valid draft readiness flow, then the browser blocked submit at CORS preflight because `Idempotency-Key` is not in the backend allow-header list. The required header must remain in the frontend contract; submit/browser lifecycle acceptance is blocked pending a separate backend CORS change and targeted proof.

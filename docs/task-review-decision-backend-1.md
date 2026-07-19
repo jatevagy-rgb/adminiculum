@@ -37,3 +37,7 @@ No frontend, Prisma schema, migration, package, auth, OpenAPI, Azure, feature fl
 - `npm audit --json`: 19 inherited findings (1 critical, 7 high, 9 moderate, 2 low); no dependency or lockfile change was made.
 
 Classification: `TASK_REVIEW_DECISION_BACKEND_READY_FOR_FRONTEND_SLICE`
+
+## Frontend Integration Finding — 2026-07-19
+
+The typed frontend uses the required ETag through `If-Match` and stable `Idempotency-Key` values. Authenticated browser QA found that the current backend CORS allow-header list omits both headers, so cross-origin review mutations cannot reach these routes. Backend route/service tests remain green and unchanged, but a separate CORS hardening slice is required before frontend lifecycle acceptance.

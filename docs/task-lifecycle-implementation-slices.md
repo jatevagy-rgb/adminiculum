@@ -121,3 +121,9 @@ Status: schema candidate, backend draft/submit, and backend review-decision slic
 - Client Portal, AI/n8n, Outlook/Graph, SharePoint behavior, public OpenAPI, CORS, auth provider config, Azure settings, packages, and infrastructure remain outside scope.
 
 Classification: `TASK_REVIEW_DECISION_BACKEND_READY_FOR_FRONTEND_SLICE`
+
+## Frontend Slice Execution Note — 2026-07-19
+
+Slices 6 and 7 are implemented on `codex/task-leadas-review-frontend-1` with 21/21 focused tests and green frontend/backend validation. Slice 8 authenticated QA reached a ready ordinary draft, but browser submit was blocked because backend CORS does not allow the authoritative `Idempotency-Key` and `If-Match` headers. Full lifecycle and release integration remain blocked; no frontend workaround is permitted.
+
+Current classification: `TASK_LEADAS_REVIEW_FRONTEND_API_CONTRACT_BLOCKER`
