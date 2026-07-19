@@ -27,6 +27,7 @@ jest.mock('../src/prisma/prisma.service', () => ({
 
 import { prisma } from '../src/prisma/prisma.service';
 import clientsRoutes from '../src/modules/clients/routes';
+import { parseClientColorKey } from '../src/modules/clients/clientColor';
 
 type TestResponse = { status: number; body: any };
 
@@ -205,5 +206,75 @@ describe('POST /clients creation boundary', () => {
     expect(data.nested).toBeUndefined();
     expect(data.cases).toBeUndefined();
     expect(data.name).toBe('Új Ügyfél');
+  });
+});
+
+describe('client color contract', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('accepts only exact palette keys, null, or omission', () => {
+    expect(parseClientColorKey(undefined)).toBeUndefined();
+    expect(parseClientColorKey(null)).toBeNull();
+    expect(parseClientColorKey('BLUE')).toBe('BLUE');
+    expect(() => parseClientColorKey('blue')).toThrow('allowed palette key');
+    expect(() => parseClientColorKey('#0000ff')).toThrow('allowed palette key');
+  });
+
+  it('creates a client without assigning a color', async () => {
+    (prisma.client.create as jest.Mock).mockResolvedValue({ id: 'client-new', name: 'Szintetikus ügyfél', colorKey: null });
+    const res = await requestJson(createApp(), 'POST', '/clients', AUTH, { name: 'Szintetikus ügyfél' });
+    expect(res.status).toBe(201);
+    expect((prisma.client.create as jest.Mock).mock.calls[0][0].data.colorKey).toBeUndefined();
+  });
+
+  it('creates a client with a valid color key', async () => {
+    (prisma.client.create as jest.Mock).mockResolvedValue({ id: 'client-new', name: 'Szintetikus ügyfél', colorKey: 'TEAL' });
+    const res = await requestJson(createApp(), 'POST', '/clients', AUTH, { name: 'Szintetikus ügyfél', colorKey: 'TEAL' });
+    expect(res.status).toBe(201);
+    expect((prisma.client.create as jest.Mock).mock.calls[0][0].data.colorKey).toBe('TEAL');
+  });
+
+  it('rejects an invalid color without writing', async () => {
+    const res = await requestJson(createApp(), 'POST', '/clients', AUTH, { name: 'Szintetikus ügyfél', colorKey: '#14b8a6' });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('CLIENT_COLOR_INVALID');
+    expect(prisma.client.create).not.toHaveBeenCalled();
+  });
+
+  it('updates and clears the color with explicit values', async () => {
+    (prisma.client.update as jest.Mock).mockResolvedValueOnce({ id: 'client-1', name: 'Teszt Kft.', colorKey: 'INDIGO' });
+    const update = await requestJson(createApp(), 'PATCH', '/clients/client-1', AUTH, { colorKey: 'INDIGO' });
+    expect(update.status).toBe(200);
+    expect((prisma.client.update as jest.Mock).mock.calls[0][0].data.colorKey).toBe('INDIGO');
+
+    (prisma.client.update as jest.Mock).mockResolvedValueOnce({ id: 'client-1', name: 'Teszt Kft.', colorKey: null });
+    const clear = await requestJson(createApp(), 'PATCH', '/clients/client-1', AUTH, { colorKey: null });
+    expect(clear.status).toBe(200);
+    expect((prisma.client.update as jest.Mock).mock.calls[1][0].data.colorKey).toBeNull();
+  });
+
+  it('rejects an invalid update without writing', async () => {
+    const res = await requestJson(createApp(), 'PATCH', '/clients/client-1', AUTH, { colorKey: 'ULTRAVIOLET' });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('CLIENT_COLOR_INVALID');
+    expect(prisma.client.update).not.toHaveBeenCalled();
+  });
+
+  it('projects colorKey through list and detail DTO selects', async () => {
+    (prisma.client.findMany as jest.Mock)
+      .mockResolvedValueOnce([{ id: 'client-1', name: 'Teszt Kft.', email: null, phone: null, address: null, colorKey: 'ROSE' }])
+      .mockResolvedValueOnce([{ id: 'client-1', taxNumber: null, companyRegistrationNumber: null, authorizedRepresentative: null, contactPerson: null }]);
+    (prisma.clientHouseStyleProfile.findMany as jest.Mock).mockResolvedValue([]);
+
+    const list = await requestJson(createApp(), 'GET', '/clients', AUTH);
+    expect(list.status).toBe(200);
+    expect(list.body.data[0].colorKey).toBe('ROSE');
+    expect((prisma.client.findMany as jest.Mock).mock.calls[0][0].select.colorKey).toBe(true);
+
+    (prisma.client.findUnique as jest.Mock).mockResolvedValue({ id: 'client-1', name: 'Teszt Kft.', colorKey: null });
+    const detail = await requestJson(createApp(), 'GET', '/clients/client-1', AUTH);
+    expect(detail.status).toBe(200);
+    expect(detail.body.colorKey).toBeNull();
+    expect((prisma.client.findUnique as jest.Mock).mock.calls[0][0].select.colorKey).toBe(true);
   });
 });
