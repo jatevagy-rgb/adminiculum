@@ -1,5 +1,7 @@
 // Simple API utility for Adminiculum frontend
 
+import type { ClientColorKey } from './clientColors';
+
 // Use canonical env var for backend base URL, keep legacy fallback for compatibility.
 // Values should be host roots (e.g. http://localhost:3001), API_BASE appends /api/v1.
 const backendBaseUrl =
@@ -254,7 +256,7 @@ export interface CaseListItem {
   priority: string;
   deadline: string | null;
   clientRole?: string | null;
-  clientColor?: string | null;
+  clientColorKey?: ClientColorKey | null;
   createdAt: string;
   updatedAt: string;
   clientId?: string;
@@ -1936,7 +1938,7 @@ export interface Client {
   companyRegistrationNumber?: string;
   authorizedRepresentative?: string;
   contactPerson?: string;
-  color?: string; // Hex color for client identity visualization
+  colorKey?: ClientColorKey | null;
   houseStyleProfile?: ClientHouseStyleProfile | null;
 }
 
@@ -2012,6 +2014,7 @@ export interface CreateClientData {
   companyRegistrationNumber?: string;
   authorizedRepresentative?: string;
   contactPerson?: string;
+  colorKey?: ClientColorKey | null;
 }
 
 export async function createClient(data: CreateClientData): Promise<Client> {
@@ -2030,7 +2033,7 @@ export interface UpdateClientData {
   companyRegistrationNumber?: string;
   authorizedRepresentative?: string;
   contactPerson?: string;
-  color?: string; // Hex color for client identity visualization
+  colorKey?: ClientColorKey | null;
 }
 
 export async function updateClient(clientId: string, data: UpdateClientData): Promise<Client> {

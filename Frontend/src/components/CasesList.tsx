@@ -20,26 +20,9 @@ import {
   type User,
 } from "@/lib/api";
 import { getCaseDisplayTitle, getCaseMatterTypeLabel } from "@/lib/caseLabels";
+import { getClientAccentBorderClass } from "@/lib/clientColors";
 import { AdminBadge, AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import { CompactState, OperationalPageHeader, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
-
-const CLIENT_COLOR_PALETTE = [
-  { bg: "#1F4A33", border: "#173824", label: "legal-green" },
-  { bg: "#2D4A7C", border: "#1D3557", label: "blue" },
-  { bg: "#8B2A2A", border: "#6D1618", label: "burgundy" },
-  { bg: "#B58A2A", border: "#8E6A1B", label: "gold" },
-  { bg: "#4A6B4A", border: "#3A4B33", label: "sage" },
-];
-
-const getClientColor = (clientName?: string | null): { bg: string; border: string; label: string } => {
-  if (!clientName) return CLIENT_COLOR_PALETTE[0];
-  let hash = 0;
-  for (let i = 0; i < clientName.length; i++) {
-    hash = clientName.charCodeAt(i) + ((hash << 5) - hash);
-    hash |= 0;
-  }
-  return CLIENT_COLOR_PALETTE[Math.abs(hash) % CLIENT_COLOR_PALETTE.length];
-};
 
 const statusLabel: Record<string, string> = {
   OPEN: "Nyitott",
@@ -725,10 +708,9 @@ export function CasesList() {
             <tbody className="divide-y divide-[var(--adm-border)]">
               {filteredCases.map((item) => (
                 <tr key={item.id} className="cursor-pointer hover:bg-[var(--adm-surface)]" onClick={() => router.push(`/cases/${item.id}`)}>
-                  <td className="px-3 py-2.5 text-xs font-semibold text-[var(--adm-text)]">{item.caseNumber}</td>
+                  <td className={`border-l-[5px] px-3 py-2.5 text-xs font-semibold text-[var(--adm-text)] ${getClientAccentBorderClass(item.clientColorKey)}`}>{item.caseNumber}</td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: item.clientColor || getClientColor(item.clientName).bg }} />
                       <span className="text-sm text-[var(--adm-text)]">{item.clientName || "Nincs megadva"}</span>
                     </div>
                   </td>

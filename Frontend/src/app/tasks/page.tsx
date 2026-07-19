@@ -20,6 +20,7 @@ import {
   type User,
 } from "@/lib/api";
 import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLifecycleApi";
+import { getClientAccentBorderClass } from "@/lib/clientColors";
 import {
   formatDate,
   nextActionLabel,
@@ -247,7 +248,36 @@ function TasksPageContent() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1180px] text-left">
                 <thead className="border-b border-[var(--adm-border)] bg-[var(--adm-surface)]"><tr className="text-[10px] uppercase tracking-[0.12em] text-[var(--adm-text-muted)]"><th scope="col" className="px-3 py-2.5">Feladat</th><th scope="col" className="px-3 py-2.5">Ügy / ügyfél</th><th scope="col" className="px-3 py-2.5">Felelős</th><th scope="col" className="px-3 py-2.5">Prioritás</th><th scope="col" className="px-3 py-2.5">Határidő</th><th scope="col" className="px-3 py-2.5">Állapot</th><th scope="col" className="px-3 py-2.5">Leadás</th><th scope="col" className="px-3 py-2.5 text-right">Következő lépés</th></tr></thead>
-                <tbody className="divide-y divide-[var(--adm-border)]">{filteredTasks.map((task) => { const action = primaryAction(task); return <tr key={task.id} ref={task.id === deepLinkedTaskId ? focusedRowRef : undefined} className={selectedTaskId === task.id ? "bg-[var(--adm-sand-100)]/45" : "hover:bg-[var(--adm-surface)]"}><td className="px-3 py-3"><button type="button" onClick={() => setSelectedTaskId(task.id)} className="max-w-[290px] text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"><span className="block truncate text-[13px] font-semibold text-[var(--adm-text)]">{task.title}</span>{task.description ? <span className="mt-1 block truncate text-[11px] text-[var(--adm-text-muted)]">{task.description}</span> : null}</button></td><td className="px-3 py-3 text-[11px]"><Link href={`/cases/${task.case.id}`} className="font-semibold text-[var(--adm-text)] hover:underline">{task.case.caseNumber}</Link><span className="mt-1 block max-w-[180px] truncate text-[var(--adm-text-muted)]">{task.case.clientName} · {task.case.matterType}</span></td><td className="px-3 py-3 text-[11px] text-[var(--adm-text-muted)]">{task.assignedToId === currentUser?.id ? currentUser.name || "Én" : task.assignedToId ? "Kijelölt felelős" : "Nincs felelős"}</td><td className="px-3 py-3 text-[11px] font-semibold">{PRIORITY_LABELS[task.priority] || "Közepes"}</td><td className={`px-3 py-3 text-[11px] ${isOverdue(task) ? "font-semibold text-[var(--adm-terracotta-700)]" : "text-[var(--adm-text-muted)]"}`}>{formatDate(task.dueDate)}</td><td className="px-3 py-3"><AdminStatusPill tone={statusTone(task.status)}>{taskStatusLabel(task.status)}</AdminStatusPill></td><td className="px-3 py-3"><AdminStatusPill tone={submissionTone(task.submissionStatus)}>{submissionLabelFromItem(task)}</AdminStatusPill>{task.assignedReviewer?.displayName ? <span className="mt-1 block text-[10px] text-[var(--adm-text-muted)]">Reviewer: {task.assignedReviewer.displayName}</span> : null}</td><td className="px-3 py-3 text-right">{action.kind === "start" ? <AdminButton size="sm" variant="primary" disabled={busyTaskId === task.id} onClick={() => void startSelectedTask(task)}>{action.label}</AdminButton> : action.kind === "review" ? <Link href={action.href} className="adm-link-button adm-link-button-primary px-3 py-2 text-[11px]">{action.label}</Link> : action.kind === "workspace" ? <AdminButton size="sm" variant={task.nextActionCode === "CONTINUE_RETURNED_WORK" ? "warning" : "neutral"} onClick={() => setSelectedTaskId(task.id)}>{action.label}</AdminButton> : <span className="text-[10px] text-[var(--adm-text-muted)]">{action.label}</span>}</td></tr>; })}</tbody>
+                <tbody className="divide-y divide-[var(--adm-border)]">
+                  {filteredTasks.map((task) => {
+                    const action = primaryAction(task);
+                    return (
+                      <tr key={task.id} ref={task.id === deepLinkedTaskId ? focusedRowRef : undefined} className={selectedTaskId === task.id ? "bg-[var(--adm-sand-100)]/45" : "hover:bg-[var(--adm-surface)]"}>
+                        <td className={`border-l-[5px] px-3 py-3 ${getClientAccentBorderClass(task.case.clientColorKey)}`}>
+                          <button type="button" onClick={() => setSelectedTaskId(task.id)} className="max-w-[290px] text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+                            <span className="block truncate text-[13px] font-semibold text-[var(--adm-text)]">{task.title}</span>
+                            {task.description ? <span className="mt-1 block truncate text-[11px] text-[var(--adm-text-muted)]">{task.description}</span> : null}
+                          </button>
+                        </td>
+                        <td className="px-3 py-3 text-[11px]">
+                          <Link href={`/cases/${task.case.id}`} className="font-semibold text-[var(--adm-text)] hover:underline">{task.case.caseNumber}</Link>
+                          <span className="mt-1 block max-w-[180px] truncate text-[var(--adm-text-muted)]">{task.case.clientName} · {task.case.matterType}</span>
+                        </td>
+                        <td className="px-3 py-3 text-[11px] text-[var(--adm-text-muted)]">{task.assignedToId === currentUser?.id ? currentUser.name || "Én" : task.assignedToId ? "Kijelölt felelős" : "Nincs felelős"}</td>
+                        <td className="px-3 py-3 text-[11px] font-semibold">{PRIORITY_LABELS[task.priority] || "Közepes"}</td>
+                        <td className={`px-3 py-3 text-[11px] ${isOverdue(task) ? "font-semibold text-[var(--adm-terracotta-700)]" : "text-[var(--adm-text-muted)]"}`}>{formatDate(task.dueDate)}</td>
+                        <td className="px-3 py-3"><AdminStatusPill tone={statusTone(task.status)}>{taskStatusLabel(task.status)}</AdminStatusPill></td>
+                        <td className="px-3 py-3">
+                          <AdminStatusPill tone={submissionTone(task.submissionStatus)}>{submissionLabelFromItem(task)}</AdminStatusPill>
+                          {task.assignedReviewer?.displayName ? <span className="mt-1 block text-[10px] text-[var(--adm-text-muted)]">Reviewer: {task.assignedReviewer.displayName}</span> : null}
+                        </td>
+                        <td className="px-3 py-3 text-right">
+                          {action.kind === "start" ? <AdminButton size="sm" variant="primary" disabled={busyTaskId === task.id} onClick={() => void startSelectedTask(task)}>{action.label}</AdminButton> : action.kind === "review" ? <Link href={action.href} className="adm-link-button adm-link-button-primary px-3 py-2 text-[11px]">{action.label}</Link> : action.kind === "workspace" ? <AdminButton size="sm" variant={task.nextActionCode === "CONTINUE_RETURNED_WORK" ? "warning" : "neutral"} onClick={() => setSelectedTaskId(task.id)}>{action.label}</AdminButton> : <span className="text-[10px] text-[var(--adm-text-muted)]">{action.label}</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
               </table>
             </div>
           )}

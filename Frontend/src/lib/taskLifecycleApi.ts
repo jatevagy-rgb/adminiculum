@@ -1,4 +1,5 @@
 import { ApiError, fetchApi } from "./api";
+import type { ClientColorKey } from "./clientColors";
 
 export type SubmissionReadinessCode =
   | "WORK_SUMMARY_REQUIRED"
@@ -162,6 +163,7 @@ export interface TaskLifecycleListItem {
     matterType: string;
     title?: string;
     clientId?: string;
+    clientColorKey?: ClientColorKey | null;
   };
   activeSubmissionId?: string | null;
   currentSubmittedRevisionId?: string | null;

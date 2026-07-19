@@ -20,6 +20,7 @@ import {
   type User,
 } from "@/lib/api";
 import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePanel";
+import { ClientColorSelector } from "@/components/clients/ClientColorSelector";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 
 type DossierDocument = DocumentItem & { caseNumber: string; caseId: string };
@@ -212,7 +213,7 @@ function ClientDetailContent() {
       companyRegistrationNumber: client.companyRegistrationNumber || "",
       authorizedRepresentative: client.authorizedRepresentative || "",
       contactPerson: client.contactPerson || "",
-      color: client.color || "",
+      colorKey: client.colorKey || null,
     });
     setShowEditModal(true);
   };
@@ -230,7 +231,7 @@ function ClientDetailContent() {
         companyRegistrationNumber: editFormData.companyRegistrationNumber || undefined,
         authorizedRepresentative: editFormData.authorizedRepresentative || undefined,
         contactPerson: editFormData.contactPerson || undefined,
-        color: editFormData.color || undefined,
+        colorKey: editFormData.colorKey ?? null,
       });
       setShowEditModal(false);
       await loadClientData();
@@ -545,26 +546,11 @@ function ClientDetailContent() {
                   />
                 </div>
               ))}
-              <div className="flex items-center gap-3">
-                <div className="flex-1">
-                  <label className="block text-xs text-[var(--adm-text-muted)] mb-1">Ügyfélszín</label>
-                  <input
-                    type="color"
-                    value={editFormData.color || "#C9A227"}
-                    onChange={(e) => setEditFormData({ ...editFormData, color: e.target.value })}
-                    className="w-full h-10 border border-[var(--adm-border)] rounded cursor-pointer"
-                  />
-                </div>
-                <div className="flex-1">
-                  <label className="block text-xs text-[var(--adm-text-muted)] mb-1">Előnézet</label>
-                  <div
-                    className="h-10 rounded border border-[var(--adm-border)] flex items-center justify-center text-xs"
-                    style={{ backgroundColor: editFormData.color || "#C9A227" }}
-                  >
-                    <span style={{ color: editFormData.color ? "#fff" : "#7B776D" }}>{editFormData.color || "—"}</span>
-                  </div>
-                </div>
-              </div>
+              <ClientColorSelector
+                value={editFormData.colorKey || null}
+                onChange={(colorKey) => setEditFormData((current) => ({ ...current, colorKey }))}
+                disabled={isSavingClient}
+              />
               <div>
                 <label className="block text-xs text-[var(--adm-text-muted)] mb-1">Cím</label>
                 <textarea value={editFormData.address || ""} onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })} rows={2} className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm" />
