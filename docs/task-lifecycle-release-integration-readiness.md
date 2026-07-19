@@ -1,42 +1,43 @@
 # Task Lifecycle Release Integration Readiness
 
 Date: 2026-07-19
-Branch: `codex/task-lifecycle-cors-browser-closeout-1`
+Official branch: `release/editor-ops-workflow-1`
+Runtime integration head: `a2553b56f29ffd2d841cc835611ba5a396f4661e`
 
-## Base And Ancestry
+## Integration Status
 
-- Exact base: `6dbc02002cfa2280ac1b5b13800f6ca90a4e50ca`.
-- Backend lifecycle ancestry `ace09d7a6bc39f34ea5028eac26e602b6e6134a0` is present.
-- Accepted dashboard ancestor `a607f6e` is present.
-- Parked commit `24bc6c5` is absent.
+- Release branch fast-forwarded cleanly from `aa5a263` to `a2553b5`.
+- Accepted dashboard `a607f6e`, schema proof `7ef3d18`, submission backend `3547403`, review backend `ace09d7`, frontend `6dbc020`, and browser closeout `a2553b5` are present.
+- Parked `24bc6c5` is absent.
+- All 93 changed files were classified; no unexplained protected-area diff remains.
 
-## Release Candidate Scope
-
-- Backend CORS extraction with two additive allowed headers.
-- Runtime-connected CORS preflight/authorization tests.
-- Narrow frontend correction retaining approved external-action review context until completion.
-- Static frontend regression guard for that correction.
-- Browser/security/visual closeout documentation.
-
-## Validation Gate
+## Validation Status
 
 - Backend Prisma validate/generate, TypeScript, build: passed.
-- Backend targeted CORS tests: 4/4 passed.
-- Backend full tests: 48 passed suites, 3 skipped; 467 passed, 47 skipped, 514 total.
-- Frontend focused tests: 22/22 passed.
-- Frontend TypeScript, production build, production-env bundle guard: passed.
-- Backend audit: 19 inherited findings; no package change.
-- Frontend audit: 4 inherited moderate findings; no package change.
-- Authenticated ordinary, zero-time, and external-action browser lifecycles: passed.
-- Final browser console at the clean QA port: no warnings or errors.
-- No lifecycle request failure, CORS error, auth loop, or raw `500` UI was observed in the clean run.
+- Backend full suite: 48 passed suites, 3 skipped; 467 passed, 47 skipped, 514 total.
+- Frontend focused lifecycle tests: 22/22 passed.
+- Frontend TypeScript, production build, and production-env guard: passed.
+- Authenticated local ordinary, return/revise, zero-time, external-action, completion, refresh, and double-click flows: passed.
+- Final browser console: no warnings or errors.
+- Disposable QA database and local servers were removed after proof.
 
-## Integration Posture
+## Migration Status
 
-Ready for review and integration into the official release branch. This document does not authorize deployment, Azure changes, database migration, feature-flag changes, or production restart.
+- Candidate SQL is additive; destructive statement count is zero.
+- Production metadata read-only audit found no candidate object collision.
+- Production-head clone apply completed in 147 ms and Prisma DB-to-schema diff was empty.
+- Old runtime is compatible with the migrated schema.
+- Historical full empty-chain replay fails before the candidate because the checked-in no-op baseline omits required baseline tables.
+- Therefore `prisma migrate deploy` remains prohibited.
 
-## Known Limitation
+## Readiness Decision
 
-Previously approved external-action submissions that had already fallen into the legacy queue before this patch still use the legacy task link. Newly approved external-action submissions retain the authorized completion workspace immediately after approval. A broader recovery route for historical legacy projections is outside this narrow closeout.
+The release is integrated and ready for a separately approved production migration ticket using only the reviewed one-shot SQL. This document does not authorize migration apply, migration metadata write, artifact generation, deployment, restart, Azure change, feature-flag change, or production content access.
 
-Classification: `TASK_LIFECYCLE_BROWSER_CLOSEOUT_READY_FOR_RELEASE_INTEGRATION`
+See:
+
+- `docs/task-lifecycle-release-go-no-go.md`
+- `docs/task-lifecycle-production-migration-runbook.md`
+- `docs/task-lifecycle-production-rollback-plan.md`
+
+Classification: `TASK_LIFECYCLE_RELEASE_INTEGRATED_READY_FOR_PRODUCTION_MIGRATION_APPROVAL`

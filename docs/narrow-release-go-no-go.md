@@ -355,3 +355,17 @@ This follow-up does not alter the completed SOL56 production deployment record. 
 Classification: `TASK_LIFECYCLE_SCHEMA_APPROVAL_REQUIRED`.
 
 Final classification: `SOL56_UX_PRODUCTION_DEPLOYMENT_SUCCESS`.
+
+## Task Lifecycle Official Release Integration
+
+`TASK-LIFECYCLE-RELEASE-INTEGRATION-AND-PRODUCTION-MIGRATION-AUDIT-1` completed on 2026-07-19.
+
+- The official release branch fast-forwarded from `aa5a263` to runtime integration head `a2553b5`.
+- Accepted dashboard `a607f6e` and the complete schema, backend, frontend, CORS, and browser-proof lineage are present.
+- Parked commit `24bc6c5` remains excluded.
+- The lifecycle migration is additive with destructive statement count zero.
+- Production-head clone proof, old-runtime compatibility, security, transaction, contract, CORS, full validation, and authenticated local browser QA passed.
+- The historical checked-in migration chain remains non-replayable from empty; `prisma migrate deploy` is prohibited for this release.
+- Production migration, artifacts, deployment, restart, Azure settings, and feature flags were not executed or changed.
+
+Current task lifecycle posture: `GO_FOR_SEPARATE_PRODUCTION_MIGRATION_APPROVAL`, not apply or deployment approval. See `docs/task-lifecycle-release-go-no-go.md`.

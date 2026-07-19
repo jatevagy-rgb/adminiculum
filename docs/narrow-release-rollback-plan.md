@@ -282,3 +282,16 @@ No task-lifecycle artifact was built or deployed, so no runtime rollback is requ
 - Do not apply a schema migration or deploy the partial non-schema hardening as a complete lifecycle.
 
 Current feature classification: `TASK_LIFECYCLE_SCHEMA_APPROVAL_REQUIRED`.
+
+## Task Lifecycle Integrated Release Rollback
+
+The task lifecycle chain is now integrated into `release/editor-ops-workflow-1`, but no migration or deployment occurred in the integration ticket.
+
+- Before migration: abandon or hold the release candidate; no runtime rollback is needed.
+- After successful additive migration but before deployment: keep the new schema; the old backend is clone-proven compatible.
+- If backend activation fails: retain schema and restore the prior backend artifact under separate approval.
+- If frontend activation fails: retain schema/backend and restore or retain the prior frontend artifact.
+- After lifecycle data exists: do not drop lifecycle tables/enums or delete workflow rows as a normal rollback.
+- `prisma migrate deploy`, destructive down migration, Azure setting changes, and feature-flag workarounds remain prohibited.
+
+The detailed decision tree is in `docs/task-lifecycle-production-rollback-plan.md`.

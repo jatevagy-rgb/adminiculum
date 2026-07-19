@@ -1,7 +1,7 @@
 # Task Lifecycle Implementation Slices
 
-Date: 2026-07-18
-Status: schema candidate, backend draft/submit, and backend review-decision slices complete; frontend remains separately gated
+Date: 2026-07-19
+Status: slices 1-9 integrated and validated; slice 10 requires separate production migration and deployment approvals
 
 ## Current Completion State
 
@@ -127,3 +127,14 @@ Classification: `TASK_REVIEW_DECISION_BACKEND_READY_FOR_FRONTEND_SLICE`
 Slices 6 and 7 are implemented on `codex/task-leadas-review-frontend-1` with 21/21 focused tests and green frontend/backend validation. Slice 8 authenticated QA reached a ready ordinary draft, but browser submit was blocked because backend CORS does not allow the authoritative `Idempotency-Key` and `If-Match` headers. Full lifecycle and release integration remain blocked; no frontend workaround is permitted.
 
 Current classification: `TASK_LEADAS_REVIEW_FRONTEND_API_CONTRACT_BLOCKER`
+
+## Release Integration Closeout — 2026-07-19
+
+- Slices 6 and 7 are complete; the CORS blocker was fixed by adding only `Idempotency-Key` and `If-Match` to the existing explicit header allowlist.
+- Slice 8 authenticated QA passed ordinary return/revise/approval, zero-time, external-action approval/completion, refresh persistence, and double-click/idempotency with synthetic local data.
+- Slice 9 is complete: the approved 22-commit chain was independently reviewed and fast-forwarded into `release/editor-ops-workflow-1` at runtime head `a2553b5`.
+- Production-head-to-candidate clone proof and old-runtime compatibility passed.
+- Full empty-chain replay remains historically broken before this candidate; blanket `prisma migrate deploy` is not permitted.
+- Slice 10 is not executed. It requires separate migration approval, post-migration proof, artifact generation, and deployment approval.
+
+Current classification: `TASK_LIFECYCLE_RELEASE_INTEGRATED_READY_FOR_PRODUCTION_MIGRATION_APPROVAL`
