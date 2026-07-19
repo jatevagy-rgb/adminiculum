@@ -13,6 +13,7 @@ Date: 2026-07-19
 - Frontend rollback Kudu deployment: `f1ab9847-fb1a-4e7f-9c8a-e103904c2711`.
 - Restored frontend route smoke: passed.
 - Full authenticated task-lifecycle production UI acceptance: not completed because the new frontend is not active.
+- Clean Prisma DB-to-datamodel diff: not produced; physical object proof passed, but the read-only Kudu CLI attempt was blocked by local CLI/Node compatibility before diff execution.
 
 ## Safety State
 

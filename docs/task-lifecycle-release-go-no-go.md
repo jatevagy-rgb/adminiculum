@@ -18,7 +18,7 @@ The migration and backend deployment succeeded, but the frontend candidate faile
 | Production identity/head | PASS |
 | Exact additive migration apply | PASS |
 | Migration metadata | PASS |
-| Post-migration proof | PASS |
+| Post-migration proof | PARTIAL: physical metadata PASS; Prisma DB-to-datamodel diff unproven |
 | Backend validation/artifact | PASS |
 | Backend deployment/smoke | PASS |
 | Frontend validation/artifact | PASS |

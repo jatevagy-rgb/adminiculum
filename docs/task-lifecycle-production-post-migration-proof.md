@@ -25,6 +25,10 @@ Read-only PostgreSQL metadata inspection immediately after commit proved:
 - No business content, document body, communication body, client name, matter description, reviewer note, or work summary was queried.
 - No seed or synthetic production row was created.
 
+## Schema Diff Limitation
+
+The physical metadata proof above passed. A later read-only `prisma migrate diff` attempt did not execute because the Kudu command environment could not resolve the deployed local Prisma CLI and `npx` rejected a transient Prisma 7 resolution under Node 18. The command exited before connecting through Prisma or producing a diff; no SQL or database mutation occurred. No package or lockfile in the deployed application was changed. A clean DB-to-datamodel diff therefore remains unproven in this ticket.
+
 ## Runtime Proof After Backend Deployment
 
 - `/health`: `200`.
