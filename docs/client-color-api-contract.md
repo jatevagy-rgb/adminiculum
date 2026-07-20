@@ -15,6 +15,10 @@ Explicit Prisma selects exclude the legacy arbitrary `color` field.
 
 - Case list/detail: `clientColorKey` is projected from the related `Client.colorKey` in the existing case query.
 - User task list: `case.clientColorKey` is projected from `Task.case.client.colorKey` in the existing task query.
+- Communication list/detail: `clientColorKey` comes only from persisted `Communication.clientId`; list resolution is batched.
+- Review queue: `case.clientColorKey` comes from `TaskSubmission.task.case.client.colorKey`, including legacy tasks only when their real case relation exists.
+- Review detail: `client.clientColorKey` comes from the already authorized task case client.
+- Notification list: `clientColorKey` is `null` because the current model has no explicit domain relation; links and text are not parsed.
 
 No second request per row and no relation payload leak is introduced. The task projection removes the raw nested client relation before returning the DTO.
 

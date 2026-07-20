@@ -19,4 +19,4 @@ Neutral option: `Nincs színjelölés`.
 
 Each definition provides an explicit accent, left-border, subtle background, border, and focus-ring class. Backend values are resolved through an explicit lookup; they are never interpolated into CSS class names.
 
-`null`, `undefined`, and unknown strings return the same neutral definition without throwing. The same key therefore renders identically on Clients, Cases, and Tasks.
+`null`, `undefined`, and unknown strings return the same neutral definition without throwing. The same key therefore renders identically on Clients, Cases, Tasks, Dashboard, Communications, and Review through the shared `ClientAccent` presentation component. No palette key or color value changed in rollout 1.

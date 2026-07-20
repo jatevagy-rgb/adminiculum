@@ -20,3 +20,7 @@ The foundation source is `Client.colorKey`; downstream modules must only project
 - narrow tests and authenticated visual QA.
 
 Document editor, clause library, Client Portal, Outlook/Graph, AI, and external integrations remain deferred until separate approved tickets.
+
+## Rollout 1 Audit Result
+
+Dashboard, communications, and review have proven relation paths and a narrow projection implementation. Notifications remain blocked: the persisted model has no domain-object/client relation, and link/text parsing is forbidden. A later notification relation ticket must precede any colored notification list.
