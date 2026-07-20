@@ -53,12 +53,14 @@ Specialist document and litigation workspaces remain contextual entry points ins
 
 ### Dashboard
 
-- Prioritizes one real task, deadline, or active matter.
-- Preserves a simplified four-card semantic summary grid for active matters, tasks, deadlines, and review.
+- Prioritizes one actor-authorized, non-terminal task or submission with a backend-derived action code.
+- Uses an honest compact empty state when no resumable work exists.
+- Replaces the bare open-case summary with a compact operational case overview based only on persisted relationships and state.
 - Uses a compact daily queue, deadline panel, review panel, and optional communication signal.
 - News and recent document activity are collapsed below operational work.
 - Deleted document events cannot become the primary action.
 - Technical activity identifiers are mapped to readable labels.
+- Keeps the page heading `Műszerfal` while the shell context is `Belső munkapad`.
 
 ### Tasks
 
@@ -138,7 +140,7 @@ Specialist document and litigation workspaces remain contextual entry points ins
 
 ## Removed Or Downgraded UI
 
-- Six-card dashboard KPI dock reduced to four compact operational cards; quick-open duplication and competing news prominence removed.
+- Dashboard KPI duplication and the bare open-case counter were replaced by one operational case list with a secondary count; quick-open duplication and competing news prominence remain removed.
 - Tasks and cases launcher essays and duplicate navigation.
 - Repeated case context and long permanent case side rail.
 - Multiple empty communication columns.
