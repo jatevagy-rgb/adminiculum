@@ -1,17 +1,21 @@
 # Client Color Release Readiness
 
-## Ready Components
+## Ready
 
-- Dashboard projection
-- Communication list and selected detail projection
-- Review queue and review detail projection
-- shared, decorative, neutral-safe frontend accent
-- batch/select performance shape
+- Dashboard relationship-backed accents and neutral fallback.
+- Communication list/detail accents from persisted `clientId`.
+- Communication reassignment updates both persisted case and client relations.
+- Review queue/detail accents from task/case/client relations.
+- One shared decorative `ClientAccent` and unchanged palette keys.
+- Status, urgency, attention, selection, and read state remain independent.
+- Notifications remain explicitly neutral without inference or client lookup.
 
-## Blocking Component
+## Release Decision
 
-Notifications cannot carry client color safely: the current model has no explicit domain-object relation and the frontend has no dedicated notification list. Parsing link/title/message would violate the identity and authorization contract.
+Neutral Notifications is not a release blocker. Notifications currently has no authorization-scoped domain relation, therefore client color is intentionally unavailable and rendered neutrally.
 
-## Decision
+The future notification relation is deferred. It requires a typed domain relation, authorization-scoped projection, migration review, and tests; text inference is prohibited.
 
-Do not integrate this rollout as complete. Either add an approved, additive notification relation in a separate schema ticket with authorization tests, or explicitly remove Notifications from this rollout's acceptance criteria.
+## Gates
+
+Browser, screenshot, console, network, accessibility, focused performance, backend, frontend, and protected-scope checks passed on disposable local data. Release integration is ready; production deployment remains a separate approved operation.

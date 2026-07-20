@@ -2,24 +2,26 @@
 
 ## Scope
 
-This slice projects the existing `Client.colorKey` into authorized operational DTOs and renders it with the shared frontend palette. It does not alter the client color model, lifecycle behavior, schema, migrations, authentication, CORS, Azure, or packages.
+This rollout projects the existing `Client.colorKey` through authorized, relationship-backed DTOs into Dashboard, Communications, and Review. It does not change the palette, client CRUD, schema, migrations, authentication, authorization, lifecycle transitions, or deferred modules.
 
 ## Relationship Matrix
 
-| Module | Record | Proven path | Safe color | DTO change | Neutral fallback |
-| --- | --- | --- | --- | --- | --- |
-| Dashboard tasks/review | `Task` | `Task.case.client.colorKey` | yes | already projected; frontend type aligned | missing client/color |
-| Dashboard deadlines | agenda item | `caseId` joined to the already authorized case list | yes | none | missing case/color |
-| Dashboard communications | `Communication` | persisted `clientId` batched to `Client.colorKey` | yes | `clientColorKey` | unassigned/missing client |
-| Communication list/detail | `Communication` | persisted `clientId` | yes | `clientColorKey` | unassigned/missing client |
-| Review queue | `TaskSubmission` or legacy `Task` | `task.case.client.colorKey` | yes | `case.clientColorKey` | missing color |
-| Review detail | `TaskSubmission` | `task.case.client.colorKey` | yes | `client.clientColorKey` | missing color |
-| Notifications | `Notification` | no persisted task/case/document/communication relation | no | explicit `clientColorKey: null` | always neutral |
+| Module | Proven relation | Result |
+| --- | --- | --- |
+| Dashboard | task/case and existing authorized case projections | colored when related; neutral otherwise |
+| Communications | persisted `Communication.clientId` | assigned color; unassigned neutral |
+| Review queue/detail | `TaskSubmission -> Task -> Case -> Client` | current client color in queue and detail |
+| Legacy review | existing `Task -> Case -> Client` only | color only when the relation exists |
+| Notifications | no persisted domain relation | explicit `clientColorKey: null` |
+
+## Acceptance Decision
+
+Dashboard, Communications, and Review are the mandatory colored modules. Notifications is the mandatory neutral module.
+
+Notifications currently has no authorization-scoped domain relation, therefore client color is intentionally unavailable and rendered neutrally.
+
+No notification identity is inferred from title, body, link, actor, payload, email, or template data. A future relation-backed notification design remains a separate schema and authorization ticket.
 
 ## Result
 
-Dashboard, communications, and review use one decorative `ClientAccent` component. Notification coloring remains blocked by the current relationless model; the link/title/message are not treated as identity-bearing relations.
-
-## Status
-
-The implemented projection is safe but the complete rollout cannot be release-ready until Notifications has an explicit, authorization-scoped domain relation or the product requirement is narrowed.
+The rollout is ready for release integration after authenticated disposable-data browser QA, focused query-count tests, full validation, and zero-diff review of protected areas. No deployment is authorized by this document.
