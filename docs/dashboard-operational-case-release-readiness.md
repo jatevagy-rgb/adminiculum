@@ -35,3 +35,7 @@ The correction is ready for release-branch integration after repository validati
 ## Classification
 
 `DASHBOARD_OPERATIONAL_OVERVIEW_READY_FOR_RELEASE_INTEGRATION`
+
+## Official Release Closeout
+
+The corrected Dashboard is integrated in `release/editor-ops-workflow-1` at runtime commit `7544fefa95a93ea478829b9a02f23481727ebb91`. Independent review reconfirmed one title, terminal-safe resume eligibility, persisted-only groups, bounded queries, shared client accents, preserved calendar/communications, and clean 1366×768 and 1440×900 browser QA. Deployment still requires separate approval after the additive client-color migration.

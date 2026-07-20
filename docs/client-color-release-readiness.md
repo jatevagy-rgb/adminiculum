@@ -16,6 +16,8 @@ Neutral Notifications is not a release blocker. Notifications currently has no a
 
 The future notification relation is deferred. It requires a typed domain relation, authorization-scoped projection, migration review, and tests; text inference is prohibited.
 
+The complete client-color and Dashboard correction chain is now integrated into the official release branch. The final release recommendation is recorded in `client-color-dashboard-release-go-no-go.md`; production execution remains a separate approval.
+
 ## Gates
 
 Browser, screenshot, console, network, accessibility, focused performance, backend, frontend, and protected-scope checks passed on disposable local data. Release integration is ready; production deployment remains a separate approved operation.

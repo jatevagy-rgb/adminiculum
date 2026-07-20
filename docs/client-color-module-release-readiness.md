@@ -23,3 +23,7 @@
 Ready for integration into the approved release branch. This status does not authorize deploy, database work, schema work, or deferred notification relation work.
 
 The Dashboard operational correction preserves the shared `ClientColorKey`/`ClientAccent` contract, proves that clearing a client color returns a neutral row, and does not use client color as status, urgency, or waiting-party state.
+
+## Official Release Integration
+
+The complete source chain through `7544fefa95a93ea478829b9a02f23481727ebb91` was independently reviewed and fast-forwarded into `release/editor-ops-workflow-1`. Production-head-compatible disposable DB proof, full validation, and authenticated two-viewport browser QA passed. Production migration and deployment remain unauthorized pending the separate runbook approval gate.
