@@ -45,15 +45,17 @@ describe('ops pages UX cleanup static guards', () => {
   });
 
   it('keeps the compact dashboard summary truthful when a source is unavailable', () => {
-    expect(dashboard).toContain('const caseCount = availability.cases');
-    expect(dashboard).toContain('closedCaseStatuses.has');
-    expect(dashboard).toContain('availability.cases');
-    expect(dashboard).toContain('caseCount === null ? "Most nem elérhető"');
-    expect(dashboard).toContain('<section aria-label="Nyitott ügyek összefoglaló">');
+    expect(dashboard).toContain('const caseCount = availability.operational');
+    expect(dashboard).toContain('operational?.summary.openCaseCount');
+    expect(dashboard).toContain('availability.operational');
+    expect(dashboard).toContain('Az operatív ügyáttekintés most nem érhető el.');
+    expect(dashboard).toContain('aria-labelledby="dashboard-operational-cases-heading"');
+    expect(dashboard).toContain('Ügyek, ahol lépés szükséges');
+    expect(dashboard).toContain('Nyitott ügyek:');
     expect(dashboard).toContain('Gyors műveletek');
     expect(dashboard).toContain('Napi események és határidők');
     expect(dashboard).toContain('Új határidős feladat');
-    expect(dashboard).toContain('&& !/deleted|töröl/i.test');
+    expect(dashboard).toContain('.filter((item) => !/deleted|töröl/i.test');
     expect(dashboard).toContain('Legutóbbi tételek, opcionális ügyfélszűréssel.');
     expect(dashboard).not.toContain('<SummaryCard label="Nyitott ügyek"');
     expect(dashboard).not.toContain('<SummaryCard label="Mai teendők"');
