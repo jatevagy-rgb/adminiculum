@@ -28,6 +28,10 @@ jest.mock('../src/prisma/prisma.service', () => ({
     document: {
       findUnique: jest.fn(),
     },
+    client: {
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+    },
     communication: {
       findMany: jest.fn(),
       count: jest.fn(),

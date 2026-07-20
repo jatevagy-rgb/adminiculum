@@ -20,6 +20,11 @@ describe('client color frontend contract', () => {
   const clientDetailPage = read('Frontend/src/app/clients/[clientId]/page.tsx');
   const tasksPage = read('Frontend/src/app/tasks/page.tsx');
   const casesList = read('Frontend/src/components/CasesList.tsx');
+  const dashboard = read('Frontend/src/components/DashboardFocused.tsx');
+  const communications = read('Frontend/src/app/notifications/page.tsx');
+  const reviewQueue = read('Frontend/src/app/reviews/page.tsx');
+  const reviewDetail = read('Frontend/src/components/tasks/TaskReviewWorkspace.tsx');
+  const accent = read('Frontend/src/components/clients/ClientAccent.tsx');
 
   it('keeps one explicit deterministic palette with a neutral fallback', () => {
     expect(CLIENT_COLOR_KEYS).toEqual(['RED', 'ORANGE', 'AMBER', 'GREEN', 'TEAL', 'BLUE', 'INDIGO', 'PURPLE', 'ROSE', 'SLATE']);
@@ -46,9 +51,17 @@ describe('client color frontend contract', () => {
   it('renders inherited bars without changing lifecycle status components', () => {
     expect(tasksPage).toContain('getClientAccentBorderClass(task.case.clientColorKey)');
     expect(casesList).toContain('getClientAccentBorderClass(item.clientColorKey)');
+    expect(dashboard).toContain('<ClientAccent colorKey={task.case?.clientColorKey}');
+    expect(dashboard).toContain('<ClientAccent colorKey={item.clientColorKey}');
+    expect(communications).toContain('<ClientAccent colorKey={item.clientColorKey}');
+    expect(reviewQueue).toContain('<ClientAccent colorKey={item.case.clientColorKey}');
+    expect(reviewDetail).toContain('review?.client.clientColorKey || item.case.clientColorKey');
+    expect(accent).toContain('getClientAccentClass(colorKey)');
+    expect(accent).toContain('aria-hidden="true"');
     expect(tasksPage).toContain('AdminStatusPill');
     expect(casesList).toContain('AdminStatusPill');
     expect(casesList).not.toContain('getClientColor(item.clientName)');
+    expect(`${dashboard}\n${communications}\n${reviewQueue}\n${reviewDetail}`).not.toMatch(/clientName.*(?:RED|BLUE|GREEN|PURPLE)/);
     expect(casesList).not.toContain('charCodeAt');
   });
 

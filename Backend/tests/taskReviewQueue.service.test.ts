@@ -88,7 +88,7 @@ describe('getReviewTasksForUser', () => {
         status: 'IN_REVIEW',
         priority: 'HIGH',
         dueDate: null,
-        case: { id: 'case-1', caseNumber: 'CASE-1', title: 'Case', clientId: 'client-1', clientName: 'Client', matterType: 'OTHER' },
+        case: { id: 'case-1', caseNumber: 'CASE-1', title: 'Case', clientId: 'client-1', clientName: 'Client', matterType: 'OTHER', client: { colorKey: 'INDIGO' } },
       },
       _count: { documents: 1 },
       timeEntries: [{ timeEntry: { minutes: 30 } }],
@@ -98,6 +98,15 @@ describe('getReviewTasksForUser', () => {
       title: 'Legacy task',
       status: 'IN_REVIEW',
       submittedAt: new Date('2026-07-17T12:00:00.000Z'),
+      case: {
+        id: 'case-legacy',
+        caseNumber: 'CASE-LEGACY',
+        title: 'Legacy case',
+        clientId: 'client-legacy',
+        clientName: 'Legacy client',
+        matterType: 'OTHER',
+        client: { colorKey: null },
+      },
     }]);
 
     const queue = await getReviewTasksForUser('reviewer-1');
@@ -110,6 +119,7 @@ describe('getReviewTasksForUser', () => {
       submissionDocumentCount: 1,
       linkedTimeMinutes: 30,
       nextActionCode: 'OPEN_REVIEW',
+      case: expect.objectContaining({ clientColorKey: 'INDIGO' }),
     }));
     expect(queue[1]).toEqual(expect.objectContaining({ source: 'LEGACY_TASK', taskId: 'legacy-task' }));
   });
