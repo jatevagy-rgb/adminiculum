@@ -2,13 +2,13 @@
 
 ## Recommendation
 
-**GO for a separately approved production migration and deployment ticket.** This is not authorization to apply or deploy.
+**COMPLETED under a separately approved production migration and deployment ticket on 2026-07-20.** This record does not authorize a future apply or deploy.
 
 ## Release identity
 
 - Integrated release branch: `release/editor-ops-workflow-1`.
-- Runtime release commit: `7544fefa95a93ea478829b9a02f23481727ebb91`.
-- Source chain: `79e94e9` → `7dec5d2` → `7544fef`.
+- Runtime release commit: `30fd4bb8f1f3e3e46edb944501a69f7f6c81779b`.
+- Approved integration lineage culminates in runtime commit `30fd4bb`.
 - Parked commit `24bc6c5`: excluded.
 - Migration: `20260719120000_add_client_color_key`.
 - Migration SHA-256: `F76F8BF8A1AA6A4289CE13F03F68F1423417741CEC9C4E421F7914D9C1C1978C`.
@@ -51,7 +51,15 @@
 - Notifications remain intentionally neutral with no client lookup.
 - TaskSubmission transitions and review decisions are unchanged.
 
-## Remaining production conditions
+## Production execution result
+
+- Migration applied and verified once; production head is `20260719120000_add_client_color_key`.
+- Backend deployment `2ab2eb62-cd3c-4dc9-9475-308d1e10d07b` is active.
+- Frontend deployment `fe10254d-397a-4cc8-b9d4-4eee9b59d4e0` is active.
+- Authenticated production acceptance, visual QA, route/API smoke, and cost/config comparison passed for the release scope.
+- No rollback was required.
+
+## Historical production conditions
 
 1. Separate explicit human approval for production execution.
 2. Reconfirm exact production target, backup/PITR, migration head, no failed migration, and absence of candidate objects.
@@ -63,10 +71,10 @@
 
 If any condition differs, stop and return NO-GO without attempting repair in the production ticket.
 
-## Next authorized operation
+## Historical next operation
 
 The next prompt should be a narrowly approved production ticket named `Adminiculum — CLIENT-COLOR-AND-DASHBOARD-PRODUCTION-MIGRATION-AND-DEPLOYMENT-1`, referencing this runbook, the exact migration checksum, and the exact final release branch commit.
 
 ## Classification
 
-`CLIENT_COLOR_DASHBOARD_RELEASE_INTEGRATED_READY_FOR_PRODUCTION_APPROVAL`
+`CLIENT_COLOR_DASHBOARD_PRODUCTION_SUCCESS`

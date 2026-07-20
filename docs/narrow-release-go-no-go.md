@@ -382,3 +382,16 @@ On 2026-07-19 the separately approved production operation applied and verified 
 - Current decision: `NO_GO` until a separately approved frontend-only follow-up succeeds.
 
 Classification: `TASK_LIFECYCLE_PRODUCTION_FRONTEND_ROLLED_BACK`.
+
+## Client Color and Dashboard Production Successor
+
+The separately approved client-color and corrected Dashboard release completed on 2026-07-20 from runtime source `30fd4bb8f1f3e3e46edb944501a69f7f6c81779b`.
+
+- Additive migration `20260719120000_add_client_color_key` was applied and recorded once.
+- Backend deployment `2ab2eb62-cd3c-4dc9-9475-308d1e10d07b` is active.
+- Frontend deployment `fe10254d-397a-4cc8-b9d4-4eee9b59d4e0` is active.
+- Authenticated production acceptance and two-viewport visual QA passed for the release scope.
+- No rollback, app-setting, feature-flag, package, slot, scale, or unrelated database change occurred.
+- Detailed closeout: `docs/client-color-dashboard-production-final-state.md`.
+
+Current classification: `CLIENT_COLOR_DASHBOARD_PRODUCTION_SUCCESS`.

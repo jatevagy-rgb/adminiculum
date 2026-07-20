@@ -1,10 +1,10 @@
 # Client Color and Dashboard Production Runbook
 
-> **NOT AUTHORIZED IN THIS TICKET.** Every apply, deploy, restart, or production-write command below requires a separate explicit production approval.
+> Historical execution runbook. A later explicit approval executed this runbook on 2026-07-20. It does not authorize any future apply, deploy, restart, or production write.
 
 ## Approved candidate identity
 
-- Release runtime commit: `7544fefa95a93ea478829b9a02f23481727ebb91` plus this release-audit documentation commit.
+- Release runtime commit: `30fd4bb8f1f3e3e46edb944501a69f7f6c81779b`.
 - Migration: `20260719120000_add_client_color_key`.
 - SQL SHA-256: `F76F8BF8A1AA6A4289CE13F03F68F1423417741CEC9C4E421F7914D9C1C1978C`.
 - Expected pre-apply migration head: `20260718120000_add_task_submission_workflow`.
@@ -87,3 +87,14 @@ Require production public environment injection and `verify:prod-env`. After dep
 ## Completion record
 
 Record migration timestamp, exact release commit, backend/frontend deployment IDs, schema proof, authenticated smoke results, rollback decision, and final classification. Client color deployment does not authorize any later removal of legacy `Client.color`.
+
+## Executed result
+
+- Migration applied once and recorded once; new head `20260719120000_add_client_color_key`.
+- Backend deployment `2ab2eb62-cd3c-4dc9-9475-308d1e10d07b`: active success.
+- Frontend deployment `fe10254d-397a-4cc8-b9d4-4eee9b59d4e0`: active success.
+- Authenticated production acceptance and two-viewport visual QA passed for the release scope.
+- No rollback, app-setting change, feature-flag change, package change, seed, or client color mutation occurred.
+- Detailed evidence: `docs/client-color-dashboard-production-final-state.md`.
+
+Classification: `CLIENT_COLOR_DASHBOARD_PRODUCTION_SUCCESS`.

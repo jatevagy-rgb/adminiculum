@@ -32,3 +32,15 @@ Date: 2026-07-19
 - Clean Prisma DB-to-datamodel diff remains unproven. Physical object proof passed, and no schema mismatch is visible in the healthy backend. No new database connection or Prisma command was attempted during frontend recovery.
 
 Final classification: `TASK_LIFECYCLE_FRONTEND_RECOVERY_SUCCESS`
+
+## Client Color and Dashboard successor release
+
+On 2026-07-20, runtime source `30fd4bb8f1f3e3e46edb944501a69f7f6c81779b` was released after additive migration `20260719120000_add_client_color_key`.
+
+- Backend deployment: `2ab2eb62-cd3c-4dc9-9475-308d1e10d07b`, active success.
+- Frontend deployment: `fe10254d-397a-4cc8-b9d4-4eee9b59d4e0`, active success.
+- The existing TaskSubmission schema and transitions were not changed by this release.
+- Task, Review, Dashboard, Intake, Agenda, Cases, Communications, Documents Compare, and Time Entries safe reads remained healthy.
+- No synthetic lifecycle row or production mutation was created.
+
+Task lifecycle remains compatible and operational after the client-color/Dashboard release.

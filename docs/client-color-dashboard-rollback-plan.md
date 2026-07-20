@@ -49,3 +49,7 @@ Dropping `clients.colorKey` or `ClientColorKey` would destroy user selections an
 - Route and authenticated smoke results.
 - Reason for rollback and selected artifact versions.
 - Confirmation that no client data was manually rewritten.
+
+## 2026-07-20 execution result
+
+Rollback was not required. The additive migration, backend deployment `2ab2eb62-cd3c-4dc9-9475-308d1e10d07b`, and frontend deployment `fe10254d-397a-4cc8-b9d4-4eee9b59d4e0` all completed and passed release-scope smoke/acceptance. Previous artifacts remain available; no enum, column, or client value was removed.
