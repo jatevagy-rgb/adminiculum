@@ -122,6 +122,8 @@ describe('getReviewTasksForUser', () => {
       case: expect.objectContaining({ clientColorKey: 'INDIGO' }),
     }));
     expect(queue[1]).toEqual(expect.objectContaining({ source: 'LEGACY_TASK', taskId: 'legacy-task' }));
+    expect(prismaMock.taskSubmission.findMany).toHaveBeenCalledTimes(1);
+    expect(prismaMock.task.findMany).toHaveBeenCalledTimes(1);
   });
 
   it('returns an empty queue for an unknown user', async () => {

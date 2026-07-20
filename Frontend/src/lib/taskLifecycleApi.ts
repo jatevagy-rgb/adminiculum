@@ -450,7 +450,9 @@ export async function listTaskReviewQueue(): Promise<TaskReviewQueueItem[]> {
 }
 
 export async function readTaskSubmissionReview(taskId: string, submissionId: string): Promise<TaskSubmissionReviewDetail> {
-  return fetchApi<TaskSubmissionReviewDetail>(`/tasks/${encoded(taskId)}/submissions/${encoded(submissionId)}/review`);
+  return fetchApi<TaskSubmissionReviewDetail>(`/tasks/${encoded(taskId)}/submissions/${encoded(submissionId)}/review`, {
+    cache: "no-store",
+  });
 }
 
 export async function returnTaskSubmission(

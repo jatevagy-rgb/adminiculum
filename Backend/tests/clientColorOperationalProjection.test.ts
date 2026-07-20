@@ -2,10 +2,12 @@ import express, { Express, NextFunction, Request, Response } from 'express';
 import http from 'http';
 
 const prismaMock = {
-  communication: { findMany: jest.fn(), findUnique: jest.fn(), count: jest.fn() },
+  communication: { findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn(), count: jest.fn() },
   communicationAttachment: { findMany: jest.fn() },
   task: { findMany: jest.fn() },
   client: { findMany: jest.fn(), findUnique: jest.fn() },
+  case: { findUnique: jest.fn() },
+  timelineEvent: { create: jest.fn() },
   notification: { findMany: jest.fn(), count: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
 };
 
@@ -27,12 +29,21 @@ jest.mock('../src/modules/tasks/services', () => ({
 import communicationsRoutes from '../src/modules/communications/routes';
 import notificationsService from '../src/modules/notifications/services';
 
-function requestJson(app: Express, path: string): Promise<{ status: number; body: any }> {
+function requestJson(app: Express, path: string, options?: { method?: string; body?: unknown }): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
     const server = app.listen(0, '127.0.0.1', () => {
       const address = server.address();
       if (!address || typeof address === 'string') return reject(new Error('Test server unavailable'));
-      http.get({ hostname: '127.0.0.1', port: address.port, path, headers: { authorization: 'Bearer test-token' } }, (response) => {
+      const request = http.request({
+        hostname: '127.0.0.1',
+        port: address.port,
+        path,
+        method: options?.method || 'GET',
+        headers: {
+          authorization: 'Bearer test-token',
+          ...(options?.body ? { 'content-type': 'application/json' } : {}),
+        },
+      }, (response) => {
         const chunks: Buffer[] = [];
         response.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
         response.on('end', () => {
@@ -40,7 +51,10 @@ function requestJson(app: Express, path: string): Promise<{ status: number; body
           const text = Buffer.concat(chunks).toString('utf8');
           resolve({ status: response.statusCode || 0, body: text ? JSON.parse(text) : null });
         });
-      }).on('error', reject);
+      });
+      request.on('error', reject);
+      if (options?.body) request.write(JSON.stringify(options.body));
+      request.end();
     });
   });
 }
@@ -109,6 +123,49 @@ describe('operational client color projections', () => {
     expect(response.body).toEqual(expect.objectContaining({ id: 'comm-assigned', clientColorKey: 'ROSE' }));
     expect(prismaMock.client.findUnique).toHaveBeenCalledTimes(1);
     delete process.env.ENABLE_COMMUNICATIONS_PERSISTENCE;
+  });
+
+  it('refreshes the communication color after case reassignment updates the persisted client relation', async () => {
+    process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
+    let row = communicationRow('comm-reassigned', 'client-alpha');
+    prismaMock.case.findUnique.mockResolvedValue({ id: 'case-beta', caseNumber: 'CASE-BETA', clientId: 'client-beta' });
+    prismaMock.communication.update.mockImplementation(async ({ data }: { data: { caseId: string; clientId: string } }) => {
+      row = { ...row, caseId: data.caseId, clientId: data.clientId };
+      return row;
+    });
+    prismaMock.timelineEvent.create.mockResolvedValue({ id: 'event-1' });
+    prismaMock.communication.findMany.mockImplementation(async () => [row]);
+    prismaMock.communication.count.mockResolvedValue(1);
+    prismaMock.client.findMany.mockImplementation(async ({ where }: { where: { id: { in: string[] } } }) =>
+      where.id.in.map((id) => ({ id, colorKey: id === 'client-beta' ? 'BLUE' : 'RED' })),
+    );
+
+    const app = express();
+    app.use(express.json());
+    app.use('/communications', communicationsRoutes);
+
+    try {
+      const linkResponse = await requestJson(app, '/communications/comm-reassigned/link-case', {
+        method: 'POST',
+        body: { caseId: 'case-beta' },
+      });
+      const refreshedResponse = await requestJson(app, '/communications?limit=8');
+
+      expect(linkResponse.status).toBe(200);
+      expect(prismaMock.communication.update).toHaveBeenCalledWith({
+        where: { id: 'comm-reassigned' },
+        data: { caseId: 'case-beta', clientId: 'client-beta' },
+      });
+      expect(refreshedResponse.body.communications[0]).toEqual(expect.objectContaining({
+        id: 'comm-reassigned',
+        caseId: 'case-beta',
+        clientId: 'client-beta',
+        clientColorKey: 'BLUE',
+      }));
+      expect(prismaMock.client.findMany).toHaveBeenCalledTimes(1);
+    } finally {
+      delete process.env.ENABLE_COMMUNICATIONS_PERSISTENCE;
+    }
   });
 
   it('keeps notifications neutral because the persisted model has no domain relation', async () => {

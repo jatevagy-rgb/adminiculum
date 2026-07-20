@@ -454,7 +454,7 @@ router.post('/:id/link-case', authenticate, requireCommunicationsFoundation, asy
 
     const communication = await prisma.communication.update({
       where: { id: String(id) },
-      data: { caseId }
+      data: { caseId, clientId: caseData.clientId }
     });
 
     // Create timeline event
