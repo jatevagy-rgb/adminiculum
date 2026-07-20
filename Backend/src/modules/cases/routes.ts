@@ -22,6 +22,7 @@ import {
   getCaseIntakeReadiness,
   IntakeServiceError,
 } from './intakeService';
+import { getDashboardOperationalOverview } from './dashboardOperational';
 
 const router = Router();
 
@@ -82,6 +83,24 @@ async function handleLifecycleMutation(
       res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
     }
   });
+
+// ============================================================================
+// GET /cases/dashboard/operational-overview
+// ============================================================================
+router.get('/dashboard/operational-overview', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
+      return;
+    }
+    const overview = await getDashboardOperationalOverview({ userId, role: req.user?.role });
+    res.json(overview);
+  } catch (error) {
+    console.error('Dashboard operational overview error:', error);
+    res.status(500).json({ status: 500, code: 'DASHBOARD_OPERATIONAL_OVERVIEW_ERROR', message: 'Operational dashboard data could not be loaded.' });
+  }
+});
 
 // ============================================================================
 // GET /cases/:caseId/timeline

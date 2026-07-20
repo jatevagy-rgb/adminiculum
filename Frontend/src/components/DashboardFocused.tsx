@@ -6,6 +6,7 @@ import {
   getCases,
   getClients,
   getCommunications,
+  getDashboardOperationalOverview,
   getDashboardStats,
   getMyTasks,
   getNewsFeed,
@@ -14,11 +15,12 @@ import {
   type Client,
   type CommunicationItem,
   type DashboardStats,
+  type DashboardOperationalOverview,
   type TaskItem,
   type WorkflowAgendaResponse,
   type WorkflowDeadlineItem,
 } from "@/lib/api";
-import { getCaseDisplayTitle } from "@/lib/caseLabels";
+import { getCaseStatusLabel } from "@/lib/caseLabels";
 import { classifyAudience } from "@/lib/communicationIntake";
 import { CompactState, OperationalPageHeader, QuietLink, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 import { ClientAccent } from "@/components/clients/ClientAccent";
@@ -47,6 +49,7 @@ type DashboardAvailability = {
   agenda: boolean;
   stats: boolean;
   communications: boolean;
+  operational: boolean;
 };
 
 const unavailableDashboardData: DashboardAvailability = {
@@ -55,10 +58,10 @@ const unavailableDashboardData: DashboardAvailability = {
   agenda: false,
   stats: false,
   communications: false,
+  operational: false,
 };
 
 const completedStatuses = new Set(["COMPLETED", "DONE", "APPROVED", "FINALIZED", "ARCHIVED", "CANCELLED"]);
-const closedCaseStatuses = new Set(["CLOSED", "COMPLETED", "ARCHIVED", "CANCELLED"]);
 
 function formatDate(value?: string | null) {
   if (!value) return "Nincs határidő";
@@ -106,7 +109,7 @@ function isOpenTask(task: TaskItem) {
   return !completedStatuses.has(String(task.status || "").toUpperCase());
 }
 
-function taskUrgency(task: TaskItem) {
+function taskUrgency(task: Pick<TaskItem, "dueDate">) {
   if (!task.dueDate) return 3;
   const due = new Date(task.dueDate).getTime();
   if (Number.isNaN(due)) return 3;
@@ -168,6 +171,7 @@ export function DashboardFocused() {
   const [communications, setCommunications] = useState<CommunicationItem[]>([]);
   const [agenda, setAgenda] = useState<WorkflowAgendaResponse | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [operational, setOperational] = useState<DashboardOperationalOverview | null>(null);
   const [news, setNews] = useState<NewsArticle[]>([]);
   const [availability, setAvailability] = useState<DashboardAvailability>(unavailableDashboardData);
   const [loading, setLoading] = useState(true);
@@ -180,13 +184,14 @@ export function DashboardFocused() {
     setError(false);
     setAvailability(unavailableDashboardData);
     try {
-      const [taskResult, caseResult, clientResult, communicationResult, agendaResult, statsResult] = await Promise.all([
+      const [taskResult, caseResult, clientResult, communicationResult, agendaResult, statsResult, operationalResult] = await Promise.all([
         getMyTasks().catch(() => null),
         getCases(1, 200).catch(() => null),
         getClients().catch(() => null),
         getCommunications({ limit: 50 }).catch(() => null),
         getWorkflowAgenda({ scope: "MY_WORK", status: "OPEN", limit: 50 }).catch(() => null),
         getDashboardStats().catch(() => null),
+        getDashboardOperationalOverview().catch(() => null),
       ]);
 
       setTasks(taskResult || []);
@@ -195,14 +200,16 @@ export function DashboardFocused() {
       setCommunications(communicationResult?.communications || []);
       setAgenda(agendaResult);
       setStats(statsResult);
+      setOperational(operationalResult);
       setAvailability({
         tasks: taskResult !== null,
         cases: caseResult !== null,
         agenda: agendaResult !== null,
         stats: statsResult !== null,
         communications: communicationResult !== null,
+        operational: operationalResult !== null,
       });
-      setError(!taskResult || !caseResult || !agendaResult || !statsResult);
+      setError(!taskResult || !caseResult || !agendaResult || !statsResult || !operationalResult);
     } catch {
       setError(true);
     } finally {
@@ -238,80 +245,20 @@ export function DashboardFocused() {
     [stats],
   );
 
-  const latestActivity = useMemo(
-    () => (stats?.recentActivity || []).find((activity) =>
-      activity.caseId
-      && cases.some((item) => item.id === activity.caseId)
-      && !/deleted|töröl/i.test(`${activity.type} ${activity.text}`)
-    ) || null,
-    [cases, stats],
-  );
-  const latestActivityCase = useMemo(
-    () => cases.find((item) => item.id === latestActivity?.caseId) || null,
-    [cases, latestActivity?.caseId],
-  );
-
-  const focusItems = useMemo<FocusItem[]>(() => {
-    const items: FocusItem[] = [];
-    const firstTask = openTasks[0];
-    const firstDeadline = deadlines[0];
-    const firstCase = cases.find((item) => Boolean(item.deadline)) || cases[0];
-
-    if (firstTask) {
-      items.push({
-        id: `task-${firstTask.id}`,
-        label: "Következő feladat",
-        title: firstTask.title,
-        meta: `${firstTask.case?.caseNumber || "Feladat"} · ${formatDate(firstTask.dueDate)}`,
-        href: `/tasks?taskId=${encodeURIComponent(firstTask.id)}`,
-        action: "Feladat megnyitása",
-        tone: taskUrgency(firstTask) <= 1 ? "amber" : "green",
-        clientColorKey: firstTask.case?.clientColorKey,
-      });
-    }
-    if (firstDeadline) {
-      items.push({
-        id: `deadline-${firstDeadline.id}`,
-        label: "Közelgő határidő",
-        title: firstDeadline.title,
-        meta: `${formatDate(firstDeadline.dueAt)} · ${firstDeadline.source.displayName || firstDeadline.sourceType}`,
-        href: firstDeadline.href || firstDeadline.source.href || "/deadlines",
-        action: "Határidő megnyitása",
-        tone: "amber",
-        clientColorKey: cases.find((item) => item.id === firstDeadline.caseId)?.clientColorKey,
-      });
-    }
-    if (firstCase) {
-      items.push({
-        id: `case-${firstCase.id}`,
-        label: "Aktív ügy",
-        title: getCaseDisplayTitle(firstCase),
-        meta: `${firstCase.caseNumber} · ${firstCase.clientName || "Nincs ügyféladat"}`,
-        href: `/cases/${encodeURIComponent(firstCase.id)}`,
-        action: "Ügy megnyitása",
-        tone: "green",
-        clientColorKey: firstCase.clientColorKey,
-      });
-    }
-    return items;
-  }, [cases, deadlines, openTasks]);
-
-  const primary = latestActivity && latestActivityCase
+  const primary = operational?.resume.item
     ? {
-        id: latestActivity.id,
-        label: getCaseDisplayTitle(latestActivityCase),
-        title: formatActivityText(latestActivity.type, latestActivity.text),
-        meta: `${latestActivityCase.caseNumber} · ${formatDateTime(latestActivity.timestamp)}`,
-        href: latestActivity.href || `/cases/${encodeURIComponent(latestActivityCase.id)}`,
-        action: "Munka folytatása",
-        tone: "green" as const,
-        clientColorKey: latestActivityCase.clientColorKey,
+        id: operational.resume.item.id,
+        label: operational.resume.item.case.title,
+        title: operational.resume.item.title,
+        meta: `${operational.resume.item.case.caseNumber} · ${operational.resume.item.case.client.displayName}${operational.resume.item.dueAt ? ` · ${formatDate(operational.resume.item.dueAt)}` : ""}`,
+        href: operational.resume.item.href,
+        action: operational.resume.item.actionLabel,
+        tone: taskUrgency({ dueDate: operational.resume.item.dueAt || undefined }) <= 1 ? "amber" as const : "green" as const,
+        clientColorKey: operational.resume.item.case.client.clientColorKey,
       }
-    : focusItems[0] || null;
-  const activeCase = cases[0] || null;
-  const caseCount = availability.cases
-    ? cases.filter((item) => !closedCaseStatuses.has(String(item.status || "").toUpperCase())).length
     : null;
+  const activeCase = cases[0] || null;
+  const caseCount = availability.operational ? operational?.summary.openCaseCount ?? 0 : null;
   const externalCommunicationCount = availability.communications
     ? communications.filter((item) => classifyAudience(item) === "external").length
     : null;
@@ -345,7 +292,7 @@ export function DashboardFocused() {
     .slice(0, 6);
   const caseById = useMemo(() => new Map(cases.map((item) => [item.id, item])), [cases]);
   const clientById = useMemo(() => new Map(clients.map((item) => [item.id, item])), [clients]);
-  const focusDataComplete = availability.tasks && availability.cases && availability.agenda && availability.stats;
+  const focusDataComplete = availability.operational;
 
   useEffect(() => {
     if (selectedClientId && !clientCommunicationOptions.some((client) => client.id === selectedClientId)) {
@@ -400,21 +347,53 @@ export function DashboardFocused() {
             />
           ) : (
             <CompactState
-              title="Nincs kiemelt következő lépés."
-              detail="Nyiss meg egy ügyet, vagy hozz létre új feladatot."
-              action={<QuietLink href="/cases">Ügyek megnyitása</QuietLink>}
+              title="Nincs félbehagyott vagy azonnali beavatkozást igénylő munkája."
+              detail="Az új feladatokat és határidőket az alábbi áttekintésekben találja."
             />
           )}
         </section>
 
-        <section aria-label="Nyitott ügyek összefoglaló">
-          <Link href="/cases" className="inline-flex items-center gap-3 border border-[var(--adm-border)] border-l-4 border-l-[var(--adm-blue-700)] bg-white px-3 py-2 transition-colors hover:bg-[var(--adm-surface)]">
-            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Nyitott ügyek</span>
-            <span className="font-serif text-[21px] font-medium leading-none text-[var(--adm-text)]">{caseCount ?? "—"}</span>
-            <span className="text-[10px] font-semibold text-[var(--adm-text-muted)]">
-              {caseCount === null ? "Most nem elérhető" : caseCount === 0 ? "Nincs nyitott ügy" : "Ügylista"} →
-            </span>
-          </Link>
+        <section className="border border-[var(--adm-border)] bg-white" aria-labelledby="dashboard-operational-cases-heading">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--adm-border)] px-4 py-3">
+            <div>
+              <h2 id="dashboard-operational-cases-heading" className="font-serif text-[20px] font-medium text-[var(--adm-text)]">Ügyek, ahol lépés szükséges</h2>
+              <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">Csak rögzített állapot, felelős, feladat és határidő alapján.</p>
+            </div>
+            <Link href="/cases" className="inline-flex items-center gap-2 text-[10px] font-semibold text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]">
+              <span>Nyitott ügyek:</span><span className="font-serif text-[19px] text-[var(--adm-text)]">{caseCount ?? "—"}</span><span>→</span>
+            </Link>
+          </div>
+          {operational ? (
+            <>
+              <div className="flex gap-1.5 overflow-x-auto border-b border-[var(--adm-border)] bg-[var(--adm-surface)] px-4 py-2" aria-label="Operatív ügycsoportok">
+                {operational.groups.map((group) => (
+                  <span key={group.code} className="shrink-0 border border-[var(--adm-border)] bg-white px-2 py-1 text-[9px] font-semibold text-[var(--adm-text-muted)]">{group.label} · {group.count}</span>
+                ))}
+              </div>
+              {operational.items.length ? (
+                <div className="divide-y divide-[var(--adm-border)]">
+                  {operational.items.slice(0, 4).map((item) => (
+                    <div key={item.id} className="relative grid gap-2 px-4 py-3 pl-5 md:grid-cols-[minmax(180px,1.2fr)_minmax(140px,0.8fr)_minmax(160px,0.9fr)_auto] md:items-center">
+                      <ClientAccent colorKey={item.client.clientColorKey} className="absolute inset-y-0 left-0 w-1" />
+                      <div className="min-w-0">
+                        <Link href={item.openHref} className="block truncate text-[12px] font-semibold text-[var(--adm-text)] hover:text-[var(--adm-green-800)]">{item.title}</Link>
+                        <p className="mt-1 truncate text-[10px] text-[var(--adm-text-muted)]">{item.caseNumber} · {item.client.displayName}</p>
+                      </div>
+                      <div className="min-w-0 text-[10px] text-[var(--adm-text-muted)]">
+                        <p className="truncate font-semibold text-[var(--adm-text)]">{item.responsible?.displayName || "Nincs kijelölt felelős"}</p>
+                        <p className="mt-1 truncate">{getCaseStatusLabel(item.status)} · {item.openTaskCount} nyitott feladat</p>
+                      </div>
+                      <div className="min-w-0 text-[10px] text-[var(--adm-text-muted)]">
+                        <p className="truncate font-semibold text-[var(--adm-text)]">{item.groupLabel}</p>
+                        <p className="mt-1 truncate">{item.waitingLabel}{item.nearestDeadline ? ` · ${item.overdue ? "Lejárt: " : "Határidő: "}${formatDate(item.nearestDeadline)}` : ""}</p>
+                      </div>
+                      <Link href={item.nextAction.href} className="shrink-0 border border-[var(--adm-border)] bg-white px-3 py-2 text-[10px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">{item.nextAction.label} →</Link>
+                    </div>
+                  ))}
+                </div>
+              ) : <div className="p-4"><CompactState title="Nincs nyitott, jogosultsági körébe tartozó ügy." /></div>}
+            </>
+          ) : <div className="p-4"><CompactState title="Az operatív ügyáttekintés most nem érhető el." /></div>}
         </section>
 
         <section className="border border-[var(--adm-border)] bg-white" aria-labelledby="dashboard-calendar-heading">

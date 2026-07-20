@@ -227,6 +227,61 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   return fetchApi<DashboardStats>('/cases/dashboard/stats');
 }
 
+export type DashboardOperationalGroupCode =
+  | 'DEADLINE_APPROACHING'
+  | 'OFFICE_ACTION'
+  | 'REVIEW'
+  | 'CLIENT_WAITING'
+  | 'UNSPECIFIED';
+
+export interface DashboardOperationalOverview {
+  generatedAt: string;
+  resume: {
+    item: null | {
+      id: string;
+      taskId: string;
+      submissionId: string | null;
+      title: string;
+      status: string;
+      nextActionCode: 'START_TASK' | 'OPEN_TASK' | 'CONTINUE_SUBMISSION' | 'OPEN_REVIEW' | 'CONTINUE_RETURNED_WORK' | 'RECORD_EXTERNAL_COMPLETION';
+      actionLabel: string;
+      href: string;
+      dueAt: string | null;
+      case: {
+        id: string;
+        caseNumber: string;
+        title: string;
+        client: { id: string; displayName: string; clientColorKey: ClientColorKey | null };
+      };
+    };
+  };
+  summary: { openCaseCount: number };
+  groups: Array<{ code: DashboardOperationalGroupCode; label: string; count: number }>;
+  items: Array<{
+    id: string;
+    caseNumber: string;
+    title: string;
+    client: { id: string; displayName: string; clientColorKey: ClientColorKey | null };
+    responsible: { id: string; displayName: string } | null;
+    status: string;
+    priority: string;
+    groupCode: DashboardOperationalGroupCode;
+    groupLabel: string;
+    waitingLabel: string;
+    nearestDeadline: string | null;
+    overdue: boolean;
+    openTaskCount: number;
+    reviewCount: number;
+    oldestOpenActivityAt: string;
+    nextAction: { code: string; label: string; href: string };
+    openHref: string;
+  }>;
+}
+
+export async function getDashboardOperationalOverview(): Promise<DashboardOperationalOverview> {
+  return fetchApi<DashboardOperationalOverview>('/cases/dashboard/operational-overview', { cache: 'no-store' });
+}
+
 export interface NewsFeedItem {
   title: string;
   source: string;

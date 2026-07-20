@@ -46,7 +46,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
   const isSignalOps = uiPack === "signal_tiles_console";
   const profileName = userProfile?.name ?? "Ügyvéd";
   const titleBySection: Record<string, string> = {
-    dashboard: "Műszerfal",
+    dashboard: "Belső munkapad",
     cases: "Aktív ügyek",
     "clause-library": "Záradék könyvtár",
     "case-detail": "Ügy részletei",

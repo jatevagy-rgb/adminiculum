@@ -38,7 +38,7 @@ export function TopBar({ title, onSignOut, profileName, uiPack = "legal_ops_atel
     <header className={`${isSignal ? "bg-[#0F172A] border-[#1F2937]" : "adm-topbar"} border-b px-5 py-2.5`}>
       <div className="flex flex-wrap items-center gap-4">
         <div>
-          <p className={`text-[9.5px] uppercase tracking-[0.2em] ${isSignal ? "text-[#94A3B8]" : "text-[var(--adm-text-muted)]"}`}>Adminiculum · belső munkapad</p>
+          <p className={`text-[9.5px] uppercase tracking-[0.2em] ${isSignal ? "text-[#94A3B8]" : "text-[var(--adm-text-muted)]"}`}>Adminiculum</p>
           <h1 className={`font-serif text-[21px] leading-tight ${isSignal ? "text-[#E5E7EB]" : "text-[var(--adm-text)]"}`}>{title}</h1>
         </div>
 
