@@ -1139,6 +1139,7 @@ export interface TaskItem {
     matterType: string;
     title?: string;
     clientId?: string;
+    clientColorKey?: ClientColorKey | null;
   };
 }
 
@@ -3047,6 +3048,7 @@ export interface CommunicationItem {
   contentPreview: string | null;
   caseId: string | null;
   clientId: string | null;
+  clientColorKey: ClientColorKey | null;
   documentId: string | null;
   createdById: string;
   createdAt: string;
@@ -4642,6 +4644,7 @@ export interface NotificationItem {
   isRead: boolean;
   userId: string;
   createdAt: string;
+  clientColorKey?: ClientColorKey | null;
 }
 
 export interface NotificationsResponse {

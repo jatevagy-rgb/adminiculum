@@ -936,7 +936,17 @@ export class TaskSubmissionService {
             status: true,
             priority: true,
             dueDate: true,
-            case: { select: { id: true, caseNumber: true, title: true, clientId: true, clientName: true, matterType: true } },
+            case: {
+              select: {
+                id: true,
+                caseNumber: true,
+                title: true,
+                clientId: true,
+                clientName: true,
+                matterType: true,
+                client: { select: { colorKey: true } },
+              },
+            },
           },
         },
         _count: { select: { documents: true } },
@@ -945,7 +955,9 @@ export class TaskSubmissionService {
       orderBy: [{ submittedAt: 'desc' }, { revisionNumber: 'desc' }],
     });
 
-    return submissions.map((submission) => ({
+    return submissions.map((submission) => {
+      const { client, ...safeCase } = submission.task.case;
+      return {
       id: submission.taskId,
       source: 'TASK_SUBMISSION',
       submissionId: submission.id,
@@ -965,8 +977,9 @@ export class TaskSubmissionService {
       submissionDocumentCount: submission._count.documents,
       linkedTimeMinutes: submission.timeEntries.reduce((sum, link) => sum + link.timeEntry.minutes, 0),
       nextActionCode: 'OPEN_REVIEW',
-      case: submission.task.case,
-    }));
+      case: { ...safeCase, clientColorKey: client?.colorKey ? String(client.colorKey) : null },
+      };
+    });
   }
 }
 

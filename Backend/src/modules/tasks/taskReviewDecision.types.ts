@@ -37,6 +37,7 @@ export interface TaskSubmissionReviewDetailDto {
   client: {
     id: string;
     displayName: string;
+    clientColorKey: string | null;
   };
   submission: {
     id: string;

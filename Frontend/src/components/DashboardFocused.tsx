@@ -21,6 +21,7 @@ import {
 import { getCaseDisplayTitle } from "@/lib/caseLabels";
 import { classifyAudience } from "@/lib/communicationIntake";
 import { CompactState, OperationalPageHeader, QuietLink, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
+import { ClientAccent } from "@/components/clients/ClientAccent";
 
 type NewsArticle = {
   title: string;
@@ -37,6 +38,7 @@ type FocusItem = {
   href: string;
   action: string;
   tone: "green" | "amber" | "blue";
+  clientColorKey?: string | null;
 };
 
 type DashboardAvailability = {
@@ -149,7 +151,7 @@ function FocusRow({ item, dominant = false }: { item: FocusItem; dominant?: bool
           <p className={`${dominant ? "mt-1 font-serif text-[24px] font-medium" : "mt-1 text-[14px] font-semibold"} truncate text-[var(--adm-text)]`}>
             {item.title}
           </p>
-          <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{item.meta}</p>
+          <p className="mt-1 flex items-center gap-2 text-[11px] text-[var(--adm-text-muted)]"><ClientAccent colorKey={item.clientColorKey} className="h-2 w-2 shrink-0 rounded-full" />{item.meta}</p>
         </div>
         <span className={`${dominant ? "bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)]" : "border border-[var(--adm-border)] bg-white text-[var(--adm-text)]"} shrink-0 px-3 py-2 text-[11px] font-semibold`}>
           {item.action} →
@@ -264,6 +266,7 @@ export function DashboardFocused() {
         href: `/tasks?taskId=${encodeURIComponent(firstTask.id)}`,
         action: "Feladat megnyitása",
         tone: taskUrgency(firstTask) <= 1 ? "amber" : "green",
+        clientColorKey: firstTask.case?.clientColorKey,
       });
     }
     if (firstDeadline) {
@@ -275,6 +278,7 @@ export function DashboardFocused() {
         href: firstDeadline.href || firstDeadline.source.href || "/deadlines",
         action: "Határidő megnyitása",
         tone: "amber",
+        clientColorKey: cases.find((item) => item.id === firstDeadline.caseId)?.clientColorKey,
       });
     }
     if (firstCase) {
@@ -286,6 +290,7 @@ export function DashboardFocused() {
         href: `/cases/${encodeURIComponent(firstCase.id)}`,
         action: "Ügy megnyitása",
         tone: "green",
+        clientColorKey: firstCase.clientColorKey,
       });
     }
     return items;
@@ -300,6 +305,7 @@ export function DashboardFocused() {
         href: latestActivity.href || `/cases/${encodeURIComponent(latestActivityCase.id)}`,
         action: "Munka folytatása",
         tone: "green" as const,
+        clientColorKey: latestActivityCase.clientColorKey,
       }
     : focusItems[0] || null;
   const activeCase = cases[0] || null;
@@ -477,7 +483,8 @@ export function DashboardFocused() {
             {openTasks.length > 0 ? (
               <div className="divide-y divide-[var(--adm-border)]">
                 {openTasks.slice(0, 3).map((task) => (
-                  <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="block px-4 py-3 hover:bg-[var(--adm-surface)]">
+                  <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="relative block px-4 py-3 pl-5 hover:bg-[var(--adm-surface)]">
+                    <ClientAccent colorKey={task.case?.clientColorKey} className="absolute inset-y-0 left-0 w-1" />
                     <p className="truncate text-[12px] font-semibold text-[var(--adm-text)]">{task.title}</p>
                     <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{task.case?.caseNumber || "Feladat"} · {formatDate(task.dueDate)}</p>
                   </Link>
@@ -496,7 +503,8 @@ export function DashboardFocused() {
             {reviewTasks.length > 0 ? (
               <div className="divide-y divide-[var(--adm-border)]">
                 {reviewTasks.slice(0, 3).map((task) => (
-                  <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="block px-4 py-3 hover:bg-[var(--adm-surface)]">
+                  <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="relative block px-4 py-3 pl-5 hover:bg-[var(--adm-surface)]">
+                    <ClientAccent colorKey={task.case?.clientColorKey} className="absolute inset-y-0 left-0 w-1" />
                     <p className="truncate text-[12px] font-semibold text-[var(--adm-text)]">{task.title}</p>
                     <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{task.case?.caseNumber || "Review tétel"} · {formatDate(task.dueDate)}</p>
                   </Link>
@@ -514,7 +522,8 @@ export function DashboardFocused() {
             </div>
             <div className="divide-y divide-[var(--adm-border)]">
               {deadlines.slice(0, 3).map((item) => (
-                <Link key={item.id} href={item.href || item.source.href || "/deadlines"} className="block px-4 py-3 hover:bg-[var(--adm-surface)]">
+                <Link key={item.id} href={item.href || item.source.href || "/deadlines"} className="relative block px-4 py-3 pl-5 hover:bg-[var(--adm-surface)]">
+                  <ClientAccent colorKey={caseById.get(item.caseId)?.clientColorKey} className="absolute inset-y-0 left-0 w-1" />
                   <p className="truncate text-[12px] font-semibold text-[var(--adm-text)]">{item.title}</p>
                   <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{formatDate(item.dueAt)} · {item.source.displayName || item.sourceType}</p>
                 </Link>
@@ -545,7 +554,8 @@ export function DashboardFocused() {
                 const relatedClient = item.clientId ? clientById.get(item.clientId) : null;
                 const audience = classifyAudience(item);
                 return (
-                  <Link key={item.id} href={`/notifications?communicationId=${encodeURIComponent(item.id)}`} className="grid gap-1 px-4 py-3 hover:bg-[var(--adm-surface)] sm:grid-cols-[minmax(150px,0.7fr)_minmax(0,1.4fr)_minmax(180px,0.8fr)_auto] sm:items-center">
+                  <Link key={item.id} href={`/notifications?communicationId=${encodeURIComponent(item.id)}`} className="relative grid gap-1 px-4 py-3 pl-5 hover:bg-[var(--adm-surface)] sm:grid-cols-[minmax(150px,0.7fr)_minmax(0,1.4fr)_minmax(180px,0.8fr)_auto] sm:items-center">
+                    <ClientAccent colorKey={item.clientColorKey} className="absolute inset-y-0 left-0 w-1" />
                     <span className="truncate text-[11px] font-semibold text-[var(--adm-text)]">{item.senderName || item.senderEmail || item.recipientName || "Nincs forrásadat"}</span>
                     <span className="truncate text-[12px] font-semibold text-[var(--adm-blue-950)]">{item.subject || "Nincs tárgy"}</span>
                     <span className="truncate text-[10px] text-[var(--adm-text-muted)]">{relatedClient?.name || "Nincs ügyfél"}{relatedCase ? ` · ${relatedCase.caseNumber}` : ""}</span>

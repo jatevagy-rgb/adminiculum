@@ -14,6 +14,7 @@ export interface NotificationDto {
   link: string | null;
   isRead: boolean;
   createdAt: string;
+  clientColorKey: null;
 }
 
 type NotificationRow = {
@@ -45,6 +46,7 @@ function mapNotification(row: NotificationRow): NotificationDto {
     link: row.link,
     isRead: row.isRead,
     createdAt: row.createdAt.toISOString(),
+    clientColorKey: null,
   };
 }
 

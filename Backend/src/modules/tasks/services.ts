@@ -899,6 +899,7 @@ export async function getReviewTasksForUser(userId: string) {
           clientId: true,
           clientName: true,
           matterType: true,
+          client: { select: { colorKey: true } },
         },
       },
     },
@@ -910,7 +911,16 @@ export async function getReviewTasksForUser(userId: string) {
   });
   return [
     ...submissionItems,
-    ...legacyTasks.map((task) => ({ ...task, source: 'LEGACY_TASK', taskId: task.id, nextActionCode: 'OPEN_REVIEW' })),
+    ...legacyTasks.map((task) => {
+      const { client, ...safeCase } = task.case;
+      return {
+        ...task,
+        case: { ...safeCase, clientColorKey: client?.colorKey ? String(client.colorKey) : null },
+        source: 'LEGACY_TASK',
+        taskId: task.id,
+        nextActionCode: 'OPEN_REVIEW',
+      };
+    }),
   ].sort((left, right) => {
     const leftDate = left.submittedAt ? new Date(left.submittedAt).getTime() : 0;
     const rightDate = right.submittedAt ? new Date(right.submittedAt).getTime() : 0;

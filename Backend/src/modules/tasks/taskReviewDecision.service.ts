@@ -46,7 +46,7 @@ const reviewTaskSelect = {
       title: true,
       assignedLawyerId: true,
       createdById: true,
-      client: { select: { id: true, name: true } },
+      client: { select: { id: true, name: true, colorKey: true } },
     },
   },
 } satisfies Prisma.TaskSelect;
@@ -390,7 +390,11 @@ export class TaskReviewDecisionService {
       },
       matter: { id: task.matter?.id || task.matterId, displayName: task.matter?.title || null },
       case: { id: task.case.id, caseNumber: task.case.caseNumber, displayName: task.case.title },
-      client: { id: task.case.client.id, displayName: task.case.client.name },
+      client: {
+        id: task.case.client.id,
+        displayName: task.case.client.name,
+        clientColorKey: task.case.client.colorKey ? String(task.case.client.colorKey) : null,
+      },
       submission: {
         id: submission.id,
         revisionNumber: submission.revisionNumber,

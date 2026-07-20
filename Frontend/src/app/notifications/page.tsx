@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ClientAccent } from "@/components/clients/ClientAccent";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import {
   ApiError,
@@ -442,7 +443,8 @@ function CommunicationWorkspace() {
                   const relatedCase = item.caseId ? caseById.get(item.caseId) : null;
                   const relatedClient = item.clientId ? clientById.get(item.clientId) : null;
                   return (
-                    <button key={item.id} type="button" onClick={() => setSelectedId(item.id)} className={`grid w-full gap-2 px-3 py-3 text-left md:grid-cols-[1.05fr_1.45fr_0.9fr_0.75fr_0.6fr] ${selected?.id === item.id ? "bg-[var(--adm-sand-100)]/55" : "hover:bg-[var(--adm-surface)]"}`}>
+                    <button key={item.id} type="button" onClick={() => setSelectedId(item.id)} className={`relative grid w-full gap-2 px-3 py-3 pl-5 text-left md:grid-cols-[1.05fr_1.45fr_0.9fr_0.75fr_0.6fr] ${selected?.id === item.id ? "bg-[var(--adm-sand-100)]/55" : "hover:bg-[var(--adm-surface)]"}`}>
+                      <ClientAccent colorKey={item.clientColorKey} className="absolute inset-y-0 left-0 w-1" />
                       <span className="min-w-0"><span className="block truncate text-[12px] font-semibold text-[var(--adm-text)]">{item.senderName || item.senderEmail || item.recipientName || "Nincs forrásadat"}</span><span className="mt-1 block truncate text-[10px] text-[var(--adm-text-muted)]">{formatContact(item)}</span></span>
                       <span className="min-w-0"><span className="block truncate text-[12px] font-semibold text-[var(--adm-blue-950)]">{item.subject || "Nincs tárgy"}</span><span className="mt-1 block truncate text-[10px] text-[var(--adm-text-muted)]">{item.summary || item.contentPreview || formatCommunicationType(item.type)}</span></span>
                       <span className="min-w-0 text-[10px] text-[var(--adm-text-muted)]"><span className="block truncate font-semibold text-[var(--adm-text)]">{relatedClient?.name || (item.clientId ? "Ügyfélhez sorolt" : "Nincs ügyfél")}</span><span className="mt-1 block truncate">{relatedCase ? `${relatedCase.caseNumber} · ${relatedCase.title}` : item.caseId ? "Ügyhöz sorolt" : "Nincs ügy"}</span></span>
@@ -494,8 +496,8 @@ function CommunicationWorkspace() {
 function CommunicationDetail({ item, relatedCase, relatedClient, linkedTasks, linkedTasksLoading, onAssign, onCreateCase, onCreateTask, onLinkTask }: { item: CommunicationItem; relatedCase?: CaseListItem; relatedClient?: Client; linkedTasks: TaskListItem[]; linkedTasksLoading: boolean; onAssign: (item: CommunicationItem) => void; onCreateCase: (item: CommunicationItem) => void; onCreateTask: (item: CommunicationItem) => void; onLinkTask: (item: CommunicationItem) => void }) {
   const signal = toCommunicationSignal(item);
   return (
-    <div>
-      <div className="border-b border-[var(--adm-border)] px-4 py-3"><p className="adm-kicker text-[var(--adm-blue-700)]">Kiválasztott kommunikáció</p><h2 className="adm-heading mt-1 text-[19px]">{item.subject || "Nincs tárgy"}</h2></div>
+      <div>
+      <div className="relative border-b border-[var(--adm-border)] px-4 py-3 pl-5"><ClientAccent colorKey={item.clientColorKey} className="absolute inset-y-0 left-0 w-1" /><p className="adm-kicker text-[var(--adm-blue-700)]">Kiválasztott kommunikáció</p><h2 className="adm-heading mt-1 text-[19px]">{item.subject || "Nincs tárgy"}</h2></div>
       <div className="space-y-4 p-4">
         <div><p className="text-[12px] font-semibold text-[var(--adm-text)]">{item.senderName || item.senderEmail || "Nincs feladóadat"}</p><p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{formatContact(item)}</p></div>
         {item.summary || item.contentPreview ? <p className="border-l-2 border-[var(--adm-blue-500)] pl-3 text-[11px] leading-5 text-[var(--adm-text-muted)]">{item.summary || item.contentPreview}</p> : null}

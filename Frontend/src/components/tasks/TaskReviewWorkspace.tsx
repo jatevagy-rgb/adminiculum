@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import { CompactState, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 import { WorkflowDialog } from "@/components/tasks/WorkflowDialog";
+import { ClientAccent } from "@/components/clients/ClientAccent";
 import {
   StableMutationAttempt,
   approveTaskSubmission,
@@ -185,7 +186,8 @@ export function TaskReviewWorkspace({
 
   return (
     <section className="min-w-0 overflow-hidden rounded-[var(--adm-radius-lg)] border border-[var(--adm-border)] bg-white" aria-labelledby="review-workspace-title">
-      <header className="flex items-start justify-between gap-4 border-b border-[var(--adm-border)] px-4 py-3">
+      <header className="relative flex items-start justify-between gap-4 border-b border-[var(--adm-border)] px-4 py-3 pl-5">
+        <ClientAccent colorKey={review?.client.clientColorKey || item.case.clientColorKey} className="absolute inset-y-0 left-0 w-1" />
         <div className="min-w-0">
           <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--adm-text-muted)]">Kiválasztott Review</p>
           <h2 id="review-workspace-title" className="mt-1 truncate font-serif text-[22px] text-[var(--adm-text)]">{item.title}</h2>

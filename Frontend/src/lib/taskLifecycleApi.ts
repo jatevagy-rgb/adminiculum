@@ -210,6 +210,7 @@ export interface TaskReviewQueueItem {
     title?: string;
     clientId?: string;
     clientName: string;
+    clientColorKey?: ClientColorKey | null;
     matterType: string;
   };
 }
@@ -226,7 +227,7 @@ export interface TaskSubmissionReviewDetail {
   };
   matter: { id: string | null; displayName: string | null };
   case: { id: string; caseNumber: string; displayName: string };
-  client: { id: string; displayName: string };
+  client: { id: string; displayName: string; clientColorKey?: ClientColorKey | null };
   submission: {
     id: string;
     revisionNumber: number;

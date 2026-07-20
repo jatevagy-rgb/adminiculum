@@ -89,6 +89,7 @@ type CommunicationListRow = {
 
 type CommunicationListItem = Omit<CommunicationListRow, 'content' | 'createdAt' | 'updatedAt'> & {
   contentPreview: string | null;
+  clientColorKey: string | null;
   createdAt: string;
   updatedAt: string;
   attachmentCount: number;
@@ -136,7 +137,8 @@ function toContentPreview(content?: string | null): string | null {
 function mapCommunicationListItem(
   row: CommunicationListRow,
   attachmentCounts: Map<string, number>,
-  sourceTaskCounts: Map<string, number>
+  sourceTaskCounts: Map<string, number>,
+  clientColorKeys: Map<string, string>
 ): CommunicationListItem {
   return {
     id: row.id,
@@ -150,6 +152,7 @@ function mapCommunicationListItem(
     contentPreview: toContentPreview(row.content),
     caseId: row.caseId,
     clientId: row.clientId,
+    clientColorKey: row.clientId ? clientColorKeys.get(row.clientId) || null : null,
     documentId: row.documentId,
     createdById: row.createdById,
     createdAt: row.createdAt.toISOString(),
@@ -254,6 +257,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     const rowIds = rows.map((row) => row.id);
     let attachmentCounts = new Map<string, number>();
     let sourceTaskCounts = new Map<string, number>();
+    let clientColorKeys = new Map<string, string>();
 
     if (rowIds.length > 0) {
       try {
@@ -275,6 +279,23 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
       } catch (error) {
         logPrismaRouteError('GET /communications source-task-counts', error);
       }
+
+      const clientIds = Array.from(new Set(rows.map((row) => row.clientId).filter((value): value is string => Boolean(value))));
+      if (clientIds.length > 0) {
+        try {
+          const clients = await prisma.client.findMany({
+            where: { id: { in: clientIds } },
+            select: { id: true, colorKey: true },
+          });
+          clientColorKeys = new Map(
+            (clients || [])
+              .filter((client) => client.colorKey)
+              .map((client): [string, string] => [client.id, String(client.colorKey)]),
+          );
+        } catch (error) {
+          logPrismaRouteError('GET /communications client-colors', error);
+        }
+      }
     }
 
     let total = 0;
@@ -286,7 +307,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     }
 
     res.json({
-      communications: rows.map((row) => mapCommunicationListItem(row, attachmentCounts, sourceTaskCounts)),
+      communications: rows.map((row) => mapCommunicationListItem(row, attachmentCounts, sourceTaskCounts, clientColorKeys)),
       pagination: {
         total,
         limit: take,
@@ -329,7 +350,14 @@ router.get('/:id', authenticate, requireCommunicationsFoundation, async (req: Re
       return;
     }
 
-    res.json(communication);
+    const clientColor = communication.clientId
+      ? await prisma.client.findUnique({ where: { id: communication.clientId }, select: { colorKey: true } })
+      : null;
+
+    res.json({
+      ...communication,
+      clientColorKey: clientColor?.colorKey ? String(clientColor.colorKey) : null,
+    });
   } catch (error) {
     console.error('Error fetching communication:', error);
     res.status(500).json({ error: 'Error fetching communication' });
