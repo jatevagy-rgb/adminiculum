@@ -32,3 +32,7 @@ Only persisted case status, responsibility, task state, submission state, stuck 
 - No Prisma schema or migration change.
 - No TaskSubmission transition or review-decision change.
 - No communications, calendar, auth, CORS, Client Portal, editor, AI, Outlook/Graph, package, environment, Azure, or deployment change.
+
+## Visual Hierarchy Candidate
+
+The follow-up branch `codex/dashboard-visual-hierarchy-1` preserves this backend contract while presenting the five authoritative groups as a bounded grouped list: maximum six visible cases and maximum two per group. Actual open, group, unspecified, and remaining counts remain derived from the same response. Known raw case-type suffixes are mapped only for display. Release/deployment status is unchanged until separate integration approval.

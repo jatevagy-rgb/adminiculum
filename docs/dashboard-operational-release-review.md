@@ -47,3 +47,7 @@ Screenshots were retained outside git under `%TEMP%/adminiculum-client-color-das
 ## Conclusion
 
 The corrected Dashboard contract is ready for production approval only as part of the complete migration/backend/frontend sequence. This document does not authorize execution.
+
+## Visual Hierarchy Follow-up
+
+`codex/dashboard-visual-hierarchy-1` is a frontend-only candidate based on production evidence commit `7ea97cde24ab9ba3b80b806c7822fd42363f38ca`. It reduces action/card uniformity, moves concrete daily work above the weekly preview, bounds the operational list, and compacts empty states without changing this document's accepted backend behavior. Fourteen authenticated local screenshots and clean frontend/backend validation support release integration review. No deployment has occurred from the feature branch.
