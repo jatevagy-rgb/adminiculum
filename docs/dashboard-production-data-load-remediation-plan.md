@@ -94,11 +94,19 @@ The following are intentional design decisions and must not be changed as part o
 
 Frontend and backend are from the same release ancestry. No deployment contract mismatch.
 
+## Validation completed (2026-07-21)
+
+1. `tsc --noEmit` — clean
+2. `npm run build` — clean
+3. `npm run verify:prod-env` — OK
+4. 27 unit tests + 22 existing frontend tests — all pass
+5. 504 backend tests — all pass
+6. Browser failure injection QA on production — bugs confirmed, patch addresses them
+7. Communications failure/empty distinction — fixed
+
 ## Next authorized step
 
-1. Install `node_modules` in the worktree and run `tsc --noEmit`, `npm run build`, `npm run verify:prod-env`
-2. Visual QA at 1366×768 and 1440×900 with synthetic failure injection
-3. Accessibility verification (tab order, screen reader)
-4. Deploy to staging for integration verification
-5. The patch does not require a backend change, schema change, or redeployment of the backend
-6. The patch requires only a frontend rebuild and redeployment
+1. Deploy to staging for full visual QA of patched code under failure injection
+2. Screen reader accessibility verification
+3. The patch does not require a backend change, schema change, or redeployment of the backend
+4. The patch requires only a frontend rebuild and redeployment

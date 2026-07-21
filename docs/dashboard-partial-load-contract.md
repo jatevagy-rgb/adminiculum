@@ -1,6 +1,7 @@
 # Dashboard Partial Load Contract
 
 Date: 2026-07-21
+Updated: 2026-07-21 (validation closeout)
 
 ## Contract summary
 
@@ -22,27 +23,41 @@ The Dashboard supports partial data loading. When individual API endpoints fail,
 - **Behavior**: Affected sections show individual fallback states; successfully loaded sections render normally
 - **Rationale**: Preserves user confidence in data that did load while acknowledging partial unavailability
 
-## Section fallback inventory
+## Failure vs empty state distinction
 
-| Section | Availability check | Fallback text | Component |
-|---|---|---|---|
-| Mai feladataim | `!availability.tasks` | "Mai feladatok most nem érhetők el." | DashboardEmptyState |
-| Nekem kijelölt Review-k | `!availability.tasks` | "Review adatok most nem érhetők el." | DashboardEmptyState |
-| Következő 7 nap határidői | `!availability.agenda` | "Határidő adatok most nem érhetők el." | DashboardEmptyState |
-| Napi események és határidők | `!availability.agenda` | "Naptáradatok most nem érhetők el." | DashboardEmptyState |
-| Itt folytasd | `!availability.operational` | "A következő lépés most nem tölthető be teljesen." | CompactState (existing) |
-| Ügyek ahol lépés szükséges | `operational === null` | "Az operatív ügyáttekintés most nem érhető el." | DashboardEmptyState (existing) |
-| Nyitott ügyek count | `!availability.operational` | "—" dash | Inline (existing) |
-| Kommunikáció | `communications === []` | "Nincs megjeleníthető kommunikáció." | DashboardEmptyState (existing) |
-| További jelzések | No data → section hidden | Not shown | Conditional render (existing) |
+Each section distinguishes between a failed request and a successful empty response:
+
+| Section | Failed text | Empty text |
+|---|---|---|
+| Mai feladataim | "Mai feladatok most nem érhetők el." | "Nincs mára kijelölt feladata." |
+| Review-k | "Review adatok most nem érhetők el." | "Nincs review-ra váró munkája." |
+| Határidők | "Határidő adatok most nem érhetők el." | "Nincs közelgő határidő." |
+| Napi események | "Naptáradatok most nem érhetők el." | "Erre a napra nincs rögzített határidő." |
+| Kommunikáció | "A kommunikációs adatok most nem érhetők el." | "Nincs megjeleníthető kommunikáció." |
+| Ügyek | "Az operatív ügyáttekintés most nem érhető el." | "Nincs nyitott, jogosultsági körébe tartozó ügy." |
+| Itt folytasd | "A következő lépés most nem tölthető be teljesen." | "Nincs félbehagyott vagy azonnali beavatkozást igénylő munkája." |
+
+## Production helper
+
+Logic is extracted to `Frontend/src/lib/dashboardLoadState.ts`:
+
+- `deriveDashboardAvailability(results)` — maps endpoint results to per-section availability
+- `getDashboardGlobalFailure(results)` — returns true only when both tasks AND cases are null
+- `getDashboardSectionFailure(availability, criticalFailed, loading)` — returns true when any tracked section is unavailable
+- `getDashboardSectionState(available, loading)` — returns "loading" | "available" | "unavailable"
+- `UNAVAILABLE` — initial state constant
+
+Both `DashboardFocused.tsx` and the test suite import the same module.
 
 ## Invariants
 
-1. The global error banner and section failure banner are mutually exclusive — when critical failure is active, the section failure banner does not show
-2. During loading (`loading === true`), section failure banner is suppressed
-3. The retry button on both banners calls the same `load()` function, re-fetching all endpoints
-4. Section fallback states are always present regardless of whether the section failure banner shows
-5. Successfully loaded sections always render their data, even when other sections have failed
+1. The global error banner and section failure banner are mutually exclusive
+2. During loading, section failure banner is suppressed
+3. The retry button on both banners calls the same `load()` function
+4. Section fallback states are always present regardless of the section failure banner
+5. Successfully loaded sections always render their data
+6. A failed endpoint NEVER shows a successful empty message
+7. `DashboardEmptyState` is the only component used for section fallbacks (consistent styling)
 
 ## Visual hierarchy preservation
 
@@ -51,4 +66,3 @@ No changes to the Dashboard visual hierarchy:
 - Same section ordering
 - SafePanelError and CompactState use existing OperationalPrimitives components
 - DashboardEmptyState is an existing component used throughout the Dashboard
-- No new visual elements introduced beyond the neutral-tone CompactState banner

@@ -1,79 +1,109 @@
 # Dashboard Partial Load Release Readiness
 
 Date: 2026-07-21
+Updated: 2026-07-21 (validation closeout)
 
-## Change summary
+## Previous validation gaps (corrected)
 
-Narrow frontend resilience patch to `DashboardFocused.tsx` that prevents optional/section-scoped endpoint failures from triggering the global "Az adatok betöltése sikertelen." banner.
+1. Previous classification `DASHBOARD_PARTIAL_LOAD_RESILIENCE_PATCH_READY_FOR_VISUAL_QA` was not from the authorized list
+2. Tests duplicated boolean logic instead of importing production helper — replaced
+3. Communications failure was indistinguishable from empty — fixed
+4. No frontend TypeScript validation — completed
+5. No production build — completed
+6. No verify:prod-env — completed
+7. No backend regression — completed
+8. Backend visual hierarchy test needed updating for CompactState — completed
 
-## Files modified
+## Files changed (from base aa98c70)
 
-| File | Change type | Lines changed |
-|---|---|---|
-| `Frontend/src/components/DashboardFocused.tsx` | Modified | ~30 lines added/changed |
-| `Frontend/tests/dashboardPartialLoadResilience.test.ts` | New | ~180 lines |
-
-## Zero-diff gates — verified
-
-| Gate | Status |
+| File | Change type |
 |---|---|
-| Backend/src | No diff |
-| Prisma schema | No diff |
-| Migrations | No diff |
-| Packages/lockfiles | No diff |
-| Auth (MSAL) | No diff |
-| CORS | No diff |
-| API route definitions | No diff |
-| ClientColorKey | No diff |
-| TaskSubmission | No diff |
-| Review lifecycle | No diff |
-| Communications backend | No diff |
-| Calendar | No diff |
-| Editor | No diff |
-| Client Portal | No diff |
-| Outlook/Graph | No diff |
-| AI/n8n | No diff |
-| Azure/config | No diff |
-| Environment files | No diff |
+| `Frontend/src/lib/dashboardLoadState.ts` | New — extracted production helper |
+| `Frontend/src/components/DashboardFocused.tsx` | Modified — imports helper, adds comms failure state |
+| `Frontend/tests/dashboardPartialLoadResilience.test.ts` | Rewritten — imports real helper |
+| `Backend/tests/dashboardVisualHierarchyFrontend.test.ts` | Modified — CompactState assertion updated |
 
-## Production safety
+## Zero-diff gates
 
-- No request URLs changed
-- No authentication flow changed
-- No CORS configuration changed
-- No DTO shapes changed
-- No new API calls introduced
-- No new dependencies added
-- All changes are frontend render-path only
+| Gate | Status | Verified |
+|---|---|---|
+| Backend/src | No diff | `git diff HEAD -- Backend/src` empty |
+| Prisma schema | No diff | `prisma validate` passed |
+| Migrations | No diff | No migration files changed |
+| Frontend/package.json | No diff | SHA256 unchanged before/after `npm ci` |
+| Frontend/package-lock.json | No diff | SHA256 unchanged before/after `npm ci` |
+| Backend/package.json | No diff | SHA256 unchanged before/after `npm ci` |
+| Backend/package-lock.json | No diff | SHA256 unchanged before/after `npm ci` |
+| API routes | No diff | No route files changed |
+| Auth (MSAL) | No diff | No auth files changed |
+| CORS | No diff | No CORS config changed |
+| ClientColorKey | No diff | No color key changes |
+| TaskSubmission | No diff | No submission lifecycle changes |
+| Review lifecycle | No diff | No review changes |
+| Communications backend | No diff | No backend comms changes |
+| Calendar | No diff | No calendar changes |
+| Azure/config | No diff | No config changes |
+| Environment files | No diff | No env changes |
 
-## Test results
+## Frontend validation
 
-- 20/20 tests pass (15 failure combination + 5 section availability)
-- 0 failures, 0 skipped
+| Check | Result |
+|---|---|
+| `tsc --noEmit` | Clean (0 errors) |
+| `npm run build` | Clean (all routes compiled) |
+| `npm run verify:prod-env` | OK: no localhost API/auth targets |
+| `npm audit` | 4 pre-existing vulnerabilities (brace-expansion, transitive) |
+| Resilience tests (27) | 27 pass, 0 fail, 0 skip |
+| Existing tests (22) | 22 pass, 0 fail, 0 skip |
 
-## Visual QA status
+## Backend regression
 
-Deferred — requires local dev server with synthetic failure injection or staging deployment. See `dashboard-partial-load-browser-qa.md` for planned checklist.
+| Check | Result |
+|---|---|
+| `prisma validate` | Valid |
+| `prisma generate` | Generated |
+| `tsc --noEmit` | Clean (0 errors) |
+| `npm test -- --runInBand` | 55 suites, 504 pass, 47 skip, 0 fail |
+| `npm run build` | Clean |
+| Backend/src diff | None |
 
-## TypeScript validation
+## Browser QA
 
-Deferred — worktree lacks `node_modules`. JSX structure balance verified by manual inspection.
+| Scenario | Tested on production | Result |
+|---|---|---|
+| All 200 (1366×768) | Yes | No error, all sections normal |
+| All 200 (1440×900) | Yes | No error, all sections normal |
+| operational-overview 500 | Yes | Global banner fires (bug confirmed) |
+| communications 500 | Yes | Shows empty text not failure (bug confirmed) |
+
+## Network and performance
+
+- No new endpoints introduced
+- No duplicate requests
+- No request loop or per-row requests
+- Retry triggers one bounded request cycle (7 parallel fetches + 1 news)
+- Bundle impact: negligible (dashboardLoadState.ts is ~60 lines of pure logic)
+- Shared JS: 102 kB (unchanged)
+
+## Remaining for release integration
+
+1. Staging deployment for full visual QA of patched code under failure injection
+2. Accessibility audit with screen reader (NVDA/JAWS)
 
 ## Risk assessment
 
-**Low risk** — changes are confined to the render path of a single component. The error classification logic is simpler (AND vs OR) and more permissive (fewer false-positive error banners). All fallback components are pre-existing. No new component APIs, no new state, no new effects.
+**Low risk** — changes confined to render path of a single component plus a tiny extracted helper. Error classification logic is simpler (AND vs OR). All fallback components are pre-existing. No new APIs, no new state, no new effects.
 
-## Remaining items before deploy
+## Database actions
 
-1. `npm install` in worktree
-2. `tsc --noEmit` — TypeScript compilation
-3. `npm run build` — Next.js production build
-4. `npm run verify:prod-env` — production environment assertion
-5. Visual QA at 1366×768 and 1440×900 with synthetic failure injection
-6. Accessibility tab-order verification
+None.
+
+## Azure and deployment status
+
+No deployment performed. No Azure configuration changed. Ticket constraint: "Do not deploy in this ticket."
 
 ## Classification
 
 ```
-DASHBOARD_PARTIAL_LOAD_RESILIENCE_PATCH_READY_FOR_VISUAL_QA
+DASHBOARD_PARTIAL_LOAD_RESILIENCE_READY_FOR_RELEASE_INTEGRATION
 ```
