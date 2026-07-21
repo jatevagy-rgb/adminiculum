@@ -122,6 +122,7 @@ backend_deploy_staging/
 # Dashboard browser-QA generated artifacts (reproduced deterministically by
 # Frontend/tests/dashboardBrowserQA.mjs)
 Frontend/qa-screenshots/
+Frontend/qa-screenshots-workload/
 
 # Temp working directories
 tmp_zip_new/
