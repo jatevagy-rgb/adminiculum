@@ -395,3 +395,21 @@ The separately approved client-color and corrected Dashboard release completed o
 - Detailed closeout: `docs/client-color-dashboard-production-final-state.md`.
 
 Current classification: `CLIENT_COLOR_DASHBOARD_PRODUCTION_SUCCESS`.
+
+## Dashboard Visual Hierarchy Production Release
+
+`DASHBOARD-VISUAL-HIERARCHY-PRODUCTION-RELEASE-1` completed on 2026-07-21 from runtime source `16700eb6389f98ce73813f5ea836af97e857c294`.
+
+- Feature branch `codex/dashboard-visual-hierarchy-1` was merged ff-only into the release branch.
+- Frontend validation passed: TypeScript, Next.js build (22/22 pages), production-env guard.
+- Backend validation passed: Prisma validate, TypeScript, 55 test suites, build.
+- First frontend deployment attempt failed due to artifact packaging error (monorepo root vs Frontend root). Deployment `211fcbba` status 3. No production impact — previous frontend remained active.
+- Corrected frontend artifact deployed. Deployment `0a985d83-a744-4560-b1eb-cb6fd9673981` is active.
+- Artifact SHA-256: `EDD12A9E4B87EA60484B8A07AE2A7E2A59D849F62C9C4CA6B6E545ECB7987D75`.
+- Backend deployment `2ab2eb62` was not modified.
+- Database migration head `20260719120000_add_client_color_key` was not modified.
+- Authenticated production acceptance passed: Dashboard structure, Quick Actions, Resume, Operational Cases, Daily Work, Calendar, Communications, route regression, responsive QA, console, network.
+- No rollback required.
+- Deployment procedure deviation documented in `docs/dashboard-visual-production-deployment-deviation.md`.
+
+Current classification: `DASHBOARD_VISUAL_PRODUCTION_SUCCESS_WITH_DEPLOYMENT_PROCEDURE_DEVIATION`.

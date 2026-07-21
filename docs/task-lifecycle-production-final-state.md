@@ -44,3 +44,16 @@ On 2026-07-20, runtime source `30fd4bb8f1f3e3e46edb944501a69f7f6c81779b` was rel
 - No synthetic lifecycle row or production mutation was created.
 
 Task lifecycle remains compatible and operational after the client-color/Dashboard release.
+
+## Dashboard Visual Hierarchy successor release
+
+On 2026-07-21, runtime source `16700eb6389f98ce73813f5ea836af97e857c294` was released as a frontend-only visual hierarchy refinement.
+
+- Frontend deployment: `0a985d83-a744-4560-b1eb-cb6fd9673981`, active success.
+- Backend deployment: `2ab2eb62-cd3c-4dc9-9475-308d1e10d07b`, unchanged and active.
+- Database migration head: `20260719120000_add_client_color_key`, unchanged.
+- The existing TaskSubmission schema and transitions were not changed by this release.
+- Task, Review, Dashboard, Cases, Communications, Time Entries, Intake, and Deadlines safe reads remained healthy in authenticated production acceptance.
+- No synthetic lifecycle row or production mutation was created.
+
+Task lifecycle remains compatible and operational after the Dashboard visual hierarchy release.
