@@ -20,37 +20,40 @@ The reported symptom did not reproduce across two controlled reloads with active
 
 The transient trigger has resolved. No data was lost. No data integrity impact. No security impact.
 
-### Recommended future patch: Frontend resilience
+### Implemented patch: Frontend resilience (DASHBOARD-PARTIAL-LOAD-RESILIENCE-PATCH-1)
 
-A narrow frontend patch should decouple the operational-overview endpoint from the global error flag.
+**Status:** Implemented on branch `claude/dashboard-partial-load-resilience-1`.
 
 **Scope:**
 - File: `Frontend/src/components/DashboardFocused.tsx`
-- Line: 298
-- Change: Remove `operationalResult` (and optionally `statsResult` and `agendaResult`) from the global error check
-- Preserve: Section-specific degraded states at lines 452, 523, and 469 (these already handle operational-overview failure correctly)
+- Change: Global error condition from OR to AND, two-tier banner system, section-specific fallbacks
 
-**Proposed change:**
+**Applied change:**
 ```typescript
 // Before (line 298):
 setError(!taskResult || !caseResult || !agendaResult || !statsResult || !operationalResult);
 
 // After:
-setError(!taskResult || !caseResult);
+const criticalLoadFailed = !taskResult && !caseResult;
+setError(criticalLoadFailed);
 ```
 
-**Rationale:** Tasks and cases are the minimum viable Dashboard data sources. Stats, agenda, and operational overview each have their own section-specific fallbacks. Only a failure of tasks or cases warrants a global error banner.
+**Additional changes:**
+- Two-tier banner: critical (SafePanelError) when tasks+cases fail, neutral (CompactState) when individual sections fail
+- Section fallbacks added for: tasks, reviews, 7-day deadlines, calendar strip
+- 20 unit tests covering 15 failure combinations
 
 **What this preserves:**
 - All existing section-specific degraded states remain unchanged
 - "A következő lépés most nem tölthető be teljesen." still shows when operational fails
 - "Az operatív ügyáttekintés most nem érhető el." still shows when operational fails
 - "Nyitott ügyek: —" still shows when operational fails
-- The global error banner still fires when tasks or cases truly fail
 
 **What this eliminates:**
 - The misleading "Az adatok betöltése sikertelen." when only a secondary endpoint fails
 - User confusion when most of the Dashboard works but the banner implies total failure
+
+See `dashboard-partial-load-contract.md` for the full two-tier error model.
 
 ### Not required
 
@@ -93,7 +96,9 @@ Frontend and backend are from the same release ancestry. No deployment contract 
 
 ## Next authorized step
 
-1. Review this diagnosis documentation
-2. If the frontend resilience patch is approved, create a separate ticket for the narrow change at DashboardFocused.tsx:298
-3. The patch does not require a backend change, schema change, or redeployment of the backend
-4. The patch requires only a frontend rebuild and redeployment
+1. Install `node_modules` in the worktree and run `tsc --noEmit`, `npm run build`, `npm run verify:prod-env`
+2. Visual QA at 1366×768 and 1440×900 with synthetic failure injection
+3. Accessibility verification (tab order, screen reader)
+4. Deploy to staging for integration verification
+5. The patch does not require a backend change, schema change, or redeployment of the backend
+6. The patch requires only a frontend rebuild and redeployment

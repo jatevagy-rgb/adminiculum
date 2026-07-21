@@ -97,4 +97,8 @@ Zero failed requests. Zero non-200 responses. All endpoints authenticated and au
 
 See: dashboard-production-error-propagation.md
 
-The frontend error aggregation at DashboardFocused.tsx:298 treats a single optional endpoint failure as a global data load failure, producing a misleading error banner even when 5 of 6 data sources loaded successfully.
+The frontend error aggregation at DashboardFocused.tsx:298 treated a single optional endpoint failure as a global data load failure, producing a misleading error banner even when 5 of 6 data sources loaded successfully.
+
+## Remediation applied
+
+The structural vulnerability was fixed in DASHBOARD-PARTIAL-LOAD-RESILIENCE-PATCH-1 (branch `claude/dashboard-partial-load-resilience-1`). The global error condition was changed from OR (any of 5 endpoints) to AND (both tasks and cases must fail). Section-specific fallbacks were added for tasks, reviews, deadlines, and calendar sections. See `dashboard-partial-load-contract.md` for the full specification.

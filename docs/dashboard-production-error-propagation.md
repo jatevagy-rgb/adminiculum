@@ -116,29 +116,19 @@ This catch is unreachable under normal conditions because `Promise.all` cannot r
 
 The `error` flag conflates "any endpoint failed" with "the Dashboard is broken." The Dashboard already has per-section degraded states that handle individual failures gracefully. The global banner is redundant and misleading.
 
-## Proposed fix (not implemented in this diagnosis)
+## Fix implemented (DASHBOARD-PARTIAL-LOAD-RESILIENCE-PATCH-1)
 
-Change line 298 from:
+Line 298 changed from:
 ```typescript
 setError(!taskResult || !caseResult || !agendaResult || !statsResult || !operationalResult);
 ```
 
-To either:
+To:
 ```typescript
-// Option A: Only flag error when ALL core endpoints fail
-setError(!taskResult && !caseResult && !agendaResult && !statsResult && !operationalResult);
+const criticalLoadFailed = !taskResult && !caseResult;
+setError(criticalLoadFailed);
 ```
 
-Or:
-```typescript
-// Option B: Only flag error for truly critical endpoints (tasks + cases)
-setError(!taskResult || !caseResult);
-```
+This implements a variant of Option B from the diagnosis: tasks AND cases must both fail for the global error banner. Additionally, a neutral-tone section failure banner was added for cases where individual sections fail without triggering critical failure.
 
-Or:
-```typescript
-// Option C: Remove the global error banner entirely — rely on section-specific degraded states
-// (delete line 298 and the error banner at line 439)
-```
-
-Option B is recommended: tasks and cases are the minimum viable Dashboard. Stats, agenda, and operational are valuable but individually degradable.
+See `dashboard-partial-load-contract.md` for the full two-tier error model and `dashboard-request-criticality-matrix.md` for the endpoint classification.
