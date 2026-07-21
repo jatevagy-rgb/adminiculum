@@ -56,4 +56,19 @@ All 4 reported symptoms are consistent with a single transient failure of `GET /
 
 ## Reproduction status
 
-All 7 endpoints returned successfully during both controlled reloads (2026-07-21T13:48Z and 2026-07-21T13:50Z). No failed requests observed.
+All endpoints returned HTTP 200 across four controlled reloads spanning two diagnosis sessions (2026-07-21T13:48Z–16:08Z). Performance Resource Timing API confirmed 10 unique backend paths, all 200. No failed requests observed.
+
+## Verified endpoint inventory (Performance API, 2026-07-21T16:08Z)
+
+| Path | Method | Status | Duration range (ms) | Required/Optional | Section |
+|---|---|---|---|---|---|
+| /api/v1/auth/me | GET | 200 | 43-46 | Required (auth) | Session |
+| /api/v1/notifications/unread-count | GET | 200 | 59-296 | Optional | Header badge |
+| /api/v1/tasks/my/tasks | GET | 200 | 107-237 | Required (error flag) | Mai feladataim, Review-k |
+| /api/v1/cases | GET | 200 | 146-236 | Required (error flag) | Quick Actions, case lookups |
+| /api/v1/clients | GET | 200 | 177-315 | Optional | Communication filter |
+| /api/v1/agenda | GET | 200 | 237 | Required (error flag) | Napi események, Határidők |
+| /api/v1/communications | GET | 200 | 158-237 | Optional | Kommunikáció |
+| /api/v1/cases/dashboard/stats | GET | 200 | 275 | Required (error flag) | További jelzések |
+| /api/v1/cases/dashboard/operational-overview | GET | 200 | 274 | Required (error flag) | Ügyek, Itt folytasd, Nyitott ügyek |
+| /api/v1/news-feed/legal | GET | 200 | 1004 | Optional | Jogi hírek |

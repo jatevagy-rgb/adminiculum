@@ -34,13 +34,21 @@ The authenticated Dashboard loaded its shell and visual layout but displayed deg
 - Zero error banners
 - "Nyitott ügyek: 11" confirmed
 
+### Third and fourth reloads (second diagnosis session)
+
+- Timestamp: 2026-07-21T16:07:14Z (third) and 2026-07-21T16:08:02Z (fourth)
+- Result: **Dashboard fully functional** on both reloads
+- Zero error banners
+- "Nyitott ügyek: 11" confirmed
+- All 5 operational groups present with data
+
 ### Conclusion
 
-The reported symptom is **not reproducible** as of 2026-07-21T13:48Z. The incident was transient.
+The reported symptom is **not reproducible** across four controlled reloads spanning two diagnosis sessions. The incident was transient.
 
 ## Console evidence
 
-8 console messages captured, all MSAL informational logs:
+8 console messages captured per reload, all MSAL informational logs:
 
 1. [msal] initialize:start
 2. [msal] initialize:done
@@ -53,12 +61,26 @@ The reported symptom is **not reproducible** as of 2026-07-21T13:48Z. The incide
 
 Zero console errors. Zero console warnings. Zero failed fetch errors. Zero CORS errors. Zero React rendering errors.
 
-## Network evidence
+## Network evidence (Performance Resource Timing API)
 
-- CORS preflight captured: `OPTIONS /api/v1/cases/dashboard/operational-overview` → 204
-- Chrome extension network tracking initialized after page load; actual GET requests completed before capture started
-- No failed requests observed in any capture window
-- MSAL token acquisition succeeded (accounts:count 1, activeAccount:set from cache)
+All 10 unique backend endpoints returned HTTP 200 across two load cycles:
+
+| Path | Status | Duration (ms) |
+|---|---|---|
+| /api/v1/auth/me | 200 | 43-46 |
+| /api/v1/notifications/unread-count | 200 | 59-296 |
+| /api/v1/tasks/my/tasks | 200 | 107-237 |
+| /api/v1/cases | 200 | 146-236 |
+| /api/v1/clients | 200 | 177-315 |
+| /api/v1/agenda | 200 | 237 |
+| /api/v1/communications | 200 | 158-237 |
+| /api/v1/cases/dashboard/stats | 200 | 275 |
+| /api/v1/cases/dashboard/operational-overview | 200 | 274 |
+| /api/v1/news-feed/legal | 200 | 1004 |
+
+CORS preflight: `OPTIONS /api/v1/cases/dashboard/operational-overview` → 204.
+
+Zero failed requests. Zero non-200 responses. All endpoints authenticated and authorized successfully.
 
 ## Authentication state
 
