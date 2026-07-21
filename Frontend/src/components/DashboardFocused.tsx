@@ -31,6 +31,13 @@ import {
   type DashboardPrimaryActionIcon,
 } from "@/lib/dashboardPresentation";
 import { taskStatusLabel } from "@/lib/taskWorkflowPresentation";
+import {
+  deriveDashboardAvailability,
+  getDashboardGlobalFailure,
+  getDashboardSectionFailure,
+  UNAVAILABLE,
+  type DashboardAvailability,
+} from "@/lib/dashboardLoadState";
 import { CompactState, OperationalPageHeader, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 import { AdminButton } from "@/components/adminiculum/ui";
 import { ClientAccent } from "@/components/clients/ClientAccent";
@@ -54,23 +61,6 @@ type FocusItem = {
   clientColorKey?: string | null;
 };
 
-type DashboardAvailability = {
-  tasks: boolean;
-  cases: boolean;
-  agenda: boolean;
-  stats: boolean;
-  communications: boolean;
-  operational: boolean;
-};
-
-const unavailableDashboardData: DashboardAvailability = {
-  tasks: false,
-  cases: false,
-  agenda: false,
-  stats: false,
-  communications: false,
-  operational: false,
-};
 
 const completedStatuses = new Set(["COMPLETED", "DONE", "APPROVED", "FINALIZED", "ARCHIVED", "CANCELLED"]);
 
@@ -259,7 +249,7 @@ export function DashboardFocused() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [operational, setOperational] = useState<DashboardOperationalOverview | null>(null);
   const [news, setNews] = useState<NewsArticle[]>([]);
-  const [availability, setAvailability] = useState<DashboardAvailability>(unavailableDashboardData);
+  const [availability, setAvailability] = useState<DashboardAvailability>(UNAVAILABLE);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState("");
@@ -269,7 +259,7 @@ export function DashboardFocused() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
-    setAvailability(unavailableDashboardData);
+    setAvailability(UNAVAILABLE);
     try {
       const [taskResult, caseResult, clientResult, communicationResult, agendaResult, statsResult, operationalResult] = await Promise.all([
         getMyTasks().catch(() => null),
@@ -288,16 +278,9 @@ export function DashboardFocused() {
       setAgenda(agendaResult);
       setStats(statsResult);
       setOperational(operationalResult);
-      setAvailability({
-        tasks: taskResult !== null,
-        cases: caseResult !== null,
-        agenda: agendaResult !== null,
-        stats: statsResult !== null,
-        communications: communicationResult !== null,
-        operational: operationalResult !== null,
-      });
-      const criticalLoadFailed = !taskResult && !caseResult;
-      setError(criticalLoadFailed);
+      const endpointResults = { taskResult, caseResult, agendaResult, statsResult, communicationResult, operationalResult };
+      setAvailability(deriveDashboardAvailability(endpointResults));
+      setError(getDashboardGlobalFailure(endpointResults));
     } catch {
       setError(true);
     } finally {
@@ -384,7 +367,7 @@ export function DashboardFocused() {
   const clientById = useMemo(() => new Map(clients.map((item) => [item.id, item])), [clients]);
   const focusDataComplete = availability.operational;
   const criticalLoadFailed = error;
-  const hasSectionFailure = !loading && !criticalLoadFailed && (!availability.tasks || !availability.cases || !availability.agenda || !availability.stats || !availability.operational || !availability.communications);
+  const hasSectionFailure = getDashboardSectionFailure(availability, criticalLoadFailed, loading);
   const operationalPresentation = useMemo(
     () => operational ? buildDashboardOperationalPresentation(operational) : null,
     [operational],
@@ -663,7 +646,9 @@ export function DashboardFocused() {
               {clientCommunicationOptions.map((client) => <button key={client.id} type="button" onClick={() => setSelectedClientId(client.id)} className={`shrink-0 px-3 py-1.5 text-[11px] font-semibold ${selectedClientId === client.id ? "bg-[var(--adm-green-800)] text-white" : "border border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>{client.name}</button>)}
             </div>
           ) : null}
-          {dashboardCommunications.length ? (
+          {!availability.communications ? (
+            <DashboardEmptyState title="A kommunikációs adatok most nem érhetők el." />
+          ) : dashboardCommunications.length ? (
             <div className="divide-y divide-[var(--adm-border)]">
               {dashboardCommunications.map((item) => {
                 const relatedCase = item.caseId ? caseById.get(item.caseId) : null;

@@ -147,7 +147,7 @@ describe('dashboard visual hierarchy structural guards', () => {
     expect(dashboard).toContain('DASHBOARD_SECONDARY_ACTIONS.map');
     expect(dashboard).toContain('focus-visible:ring-2');
     expect(dashboard).toContain('<DashboardEmptyState');
-    expect(dashboard).not.toContain('<CompactState');
+    expect(dashboard).toContain('<CompactState');
     expect(dashboard).not.toContain('xl:grid-cols-7');
     expect(dashboard).not.toContain('bg-[var(--adm-terracotta-700)] text-white');
     expect(dashboard).not.toContain('Beérkezési sor');
