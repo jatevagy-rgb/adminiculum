@@ -59,6 +59,30 @@ Both `DashboardFocused.tsx` and the test suite import the same module.
 6. A failed endpoint NEVER shows a successful empty message
 7. `DashboardEmptyState` is the only component used for section fallbacks (consistent styling)
 
+## Contract scope and the malformed boundary
+
+The contract is **null-based**: each endpoint's result is either non-null
+(success) or `null` (failure, via `.catch(() => null)` on a rejected fetch —
+i.e. non-2xx or a network error). Availability and the global/section banners are
+derived purely from these null checks.
+
+A 2xx response is assumed to carry a **well-formed DTO**. A 200 response with a
+non-conforming or invalid body is a backend-contract breach that is **outside**
+this contract: `api.ts` intentionally returns raw text for unparseable 200 bodies
+(`api.ts:197`), so such a body is treated as "present" rather than "failed". The
+genuinely optional endpoints (dashboard stats, news) are accessed defensively and
+degrade gracefully; core/section render paths access some nested fields without
+full optional-chaining. The path that actually occurs in production — endpoint
+*failure* — is the one this contract governs, and it is fully verified.
+
+## Browser QA verification (patched branch)
+
+Verified in a real rendered browser against HEAD `96b17fb` via
+`Frontend/tests/dashboardBrowserQA.mjs` (Playwright, route interception, real
+`DashboardFocused` + real `dashboardLoadState` helper) — 111/111 checks pass.
+This is the patched-code proof; production (old code) was not used. Full evidence:
+`dashboard-partial-load-browser-qa.md`.
+
 ## Visual hierarchy preservation
 
 No changes to the Dashboard visual hierarchy:

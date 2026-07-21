@@ -87,3 +87,24 @@ Same module imported by `DashboardFocused.tsx` — no parallel implementation.
 `Backend/tests/dashboardVisualHierarchyFrontend.test.ts` line 150: assertion changed from `expect(dashboard).not.toContain('<CompactState')` to `expect(dashboard).toContain('<CompactState')` because the Dashboard now legitimately uses CompactState for the section failure banner.
 
 Backend test results after update: 55 suites pass, 504 tests pass, 47 skipped (expected), 3 suites skipped.
+
+## Browser QA harness (added in browser-QA closeout)
+
+`Frontend/tests/dashboardBrowserQA.mjs` — Playwright harness (Playwright is an
+existing devDependency; no package or lockfile change). It renders the **real**
+patched `DashboardFocused` inside the production Next.js composition
+(`next start` on `http://127.0.0.1:3097`) and intercepts every `**/api/v1/**`
+call with synthetic contract-compatible DTOs. It exercises the same
+`src/lib/dashboardLoadState.ts` helper as production — it does not reproduce the
+UI and does not copy the load-state logic.
+
+- Scenarios: A–M (all-success, operational/agenda/comms/stats/news/tasks/cases
+  failures, critical tasks+cases, operational empty, malformed optional DTO,
+  401), plus three retry-recovery flows and an accessibility pass.
+- Result: **111 checks, 111 pass, 0 fail**; `hardErrors = 0` and zero external
+  `/api/v1` calls in every scenario; 22 screenshots at 1440×900 / 1366×768.
+- Run: `node tests/dashboardBrowserQA.mjs` from `Frontend/`.
+
+See `dashboard-partial-load-browser-qa.md` for the full scenario matrix,
+screenshots, request counts, retry behaviour, the malformed-DTO boundary note,
+and accessibility results.

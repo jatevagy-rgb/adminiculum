@@ -22,6 +22,12 @@ Updated: 2026-07-21 (validation closeout)
 | `Frontend/src/components/DashboardFocused.tsx` | Modified — imports helper, adds comms failure state |
 | `Frontend/tests/dashboardPartialLoadResilience.test.ts` | Rewritten — imports real helper |
 | `Backend/tests/dashboardVisualHierarchyFrontend.test.ts` | Modified — CompactState assertion updated |
+| `Frontend/tests/dashboardBrowserQA.mjs` | New (browser-QA closeout) — Playwright harness, no runtime change |
+| `.gitignore` | Modified (browser-QA closeout) — ignore generated `Frontend/qa-screenshots/` |
+
+Browser-QA closeout note: **runtime source is unchanged** — the browser QA added
+only a test harness and a `.gitignore` entry. `DashboardFocused.tsx`,
+`dashboardLoadState.ts` and `api.ts` are byte-identical to HEAD `96b17fb`.
 
 ## Zero-diff gates
 
@@ -67,14 +73,39 @@ Updated: 2026-07-21 (validation closeout)
 | `npm run build` | Clean |
 | Backend/src diff | None |
 
-## Browser QA
+## Browser QA (patched feature branch — not production)
 
-| Scenario | Tested on production | Result |
+Executed against the PATCHED branch at HEAD `96b17fb` via
+`Frontend/tests/dashboardBrowserQA.mjs` (Playwright + `**/api/v1/**` route
+interception, real `DashboardFocused`, synthetic auth/data). **Production was not
+used as the patched-code QA target.** 111 checks, 111 pass, 0 fail; 22
+screenshots (1440×900 + 1366×768); `hardErrors = 0` and zero external
+`/api/v1` calls in every scenario.
+
+| Scenario | Injected | Patched-branch result |
 |---|---|---|
-| All 200 (1366×768) | Yes | No error, all sections normal |
-| All 200 (1440×900) | Yes | No error, all sections normal |
-| operational-overview 500 | Yes | Global banner fires (bug confirmed) |
-| communications 500 | Yes | Shows empty text not failure (bug confirmed) |
+| A all-success | — | No banner; all sections + client accents render |
+| B operational only | operational 500 | No global banner; "Az operatív ügyáttekintés most nem érhető el." + resume degraded + "Nyitott ügyek: —"; rest render |
+| C agenda only | agenda 500 | No global banner; deadline + calendar "… most nem érhetők el."; rest render |
+| D communications only | comms 500 | No global banner; **"A kommunikációs adatok most nem érhetők el."** (not empty text) |
+| E communications empty | comms 200 `[]` | No banner; **"Nincs megjeleníthető kommunikáció."** (not unavailable text) |
+| F stats only | stats 500 | No global banner; no unrelated section loss |
+| G news only | news 500 | No global banner; operational + comms intact |
+| H tasks only | tasks 500 | No global banner (cases ok); task + review panels unavailable |
+| I cases only | cases 500 | No global banner (tasks ok); other sections usable |
+| J tasks + cases | both 500 | **Exactly one** global critical banner; section banner suppressed; retry present |
+| K operational empty | operational 200 empty | No banner; honest empty state (not unavailable) |
+| L malformed optional | stats+news invalid-JSON | No global banner; no crash; sections render |
+| M 401 | auth/me 401 | Auth/login state; no misleading empty section; no token in URL |
+
+Retry recovery (real in-UI `Újratöltés`, not page reload): operational 500→200,
+communications 500→200, and critical tasks+cases 500→200 each recover in **one
+bounded 7-request cycle** with no duplicates and no request storm.
+
+Note: an earlier revision recorded failure injection against the **production**
+runtime (old code `16700eb`), which demonstrated the production *bug* but did not
+prove the patch. That has been corrected — see
+`dashboard-partial-load-browser-qa.md`.
 
 ## Network and performance
 
@@ -87,8 +118,14 @@ Updated: 2026-07-21 (validation closeout)
 
 ## Remaining for release integration
 
-1. Staging deployment for full visual QA of patched code under failure injection
-2. Accessibility audit with screen reader (NVDA/JAWS)
+1. Staging deployment (optional additional confidence — the patched component and
+   helper are already exercised in a real browser under failure injection)
+2. Accessibility audit with a live screen reader (NVDA/JAWS); role/DOM-level
+   accessibility is verified
+3. Optional future hardening: full optional-chaining on core-endpoint nested
+   access (`operational?.resume?.item`, `agenda?.summary?.overdue`) to tolerate
+   malformed 200 bodies — a backend-contract-breach edge case outside the
+   null-based partial-load contract (see browser-QA doc)
 
 ## Risk assessment
 
