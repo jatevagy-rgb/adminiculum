@@ -38,6 +38,14 @@ import {
   UNAVAILABLE,
   type DashboardAvailability,
 } from "@/lib/dashboardLoadState";
+import {
+  WORKLOAD_SUMMARY_CARDS,
+  workloadSummaryCaption,
+  workloadSummaryPanelClass,
+  workloadSummaryToneClass,
+  type WorkloadSummaryCardDef,
+  type WorkloadSummaryValueKey,
+} from "@/lib/dashboardWorkloadSummary";
 import { CompactState, OperationalPageHeader, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 import { AdminButton } from "@/components/adminiculum/ui";
 import { ClientAccent } from "@/components/clients/ClientAccent";
@@ -63,6 +71,8 @@ type FocusItem = {
 
 
 const completedStatuses = new Set(["COMPLETED", "DONE", "APPROVED", "FINALIZED", "ARCHIVED", "CANCELLED"]);
+// Restored verbatim from the legacy "Napi munka összefoglaló" summary cards (DashboardFocused @ a948839).
+const closedCaseStatuses = new Set(["CLOSED", "COMPLETED", "ARCHIVED", "CANCELLED"]);
 
 function formatDate(value?: string | null) {
   if (!value) return "Nincs határidő";
@@ -240,6 +250,25 @@ function FocusRow({ item, dominant = false }: { item: FocusItem; dominant?: bool
   );
 }
 
+// Legacy "Napi munka összefoglaló" colored work-summary card, restored from
+// DashboardFocused @ a948839 (removed by 10e1bd3 → a607f6e). The whole card
+// background carries the semantic color; a translucent inner panel holds the
+// count. Labels/tones/colors/caption come from @/lib/dashboardWorkloadSummary,
+// the single source of truth shared with the tests.
+function SummaryCard({ card, value }: { card: WorkloadSummaryCardDef; value: number | null }) {
+  return (
+    <Link href={card.href} className={`${workloadSummaryToneClass(card.tone)} min-h-[92px] p-3 transition-transform hover:-translate-y-0.5`}>
+      <span className="block text-[10px] font-bold uppercase tracking-[0.14em] opacity-85">{card.label}</span>
+      <span className={`mt-2 flex items-end justify-between gap-3 border px-3 py-2 ${workloadSummaryPanelClass(card.tone)}`}>
+        <span className="font-serif text-[27px] font-medium leading-none">{value ?? "—"}</span>
+        <span className="text-right text-[10px] font-semibold opacity-85">
+          {workloadSummaryCaption(value, card.emptyLabel)}
+        </span>
+      </span>
+    </Link>
+  );
+}
+
 export function DashboardFocused() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [cases, setCases] = useState<CaseListItem[]>([]);
@@ -337,6 +366,30 @@ export function DashboardFocused() {
   const internalCommunicationCount = availability.communications
     ? communications.filter((item) => classifyAudience(item) === "internal").length
     : null;
+  // Legacy "Napi munka összefoglaló" card values, restored verbatim from a948839.
+  // availability-gated so a failed source shows "Most nem elérhető" (null), never a fake 0.
+  const summaryOpenCaseCount = availability.cases
+    ? cases.filter((item) => !closedCaseStatuses.has(String(item.status || "").toUpperCase())).length
+    : null;
+  const summaryDeadlineCount = availability.agenda ? deadlines.length : null;
+  // Legacy access hardened with optional chaining on the nested field so a
+  // malformed (non-conforming 200) source degrades to a count rather than
+  // crashing — required to keep the validated partial-load contract green.
+  // Value is identical to the legacy for well-formed data.
+  const summaryReviewCount = availability.stats
+    ? stats?.stats?.inReview ?? 0
+    : availability.tasks
+      ? reviewTasks.length
+      : null;
+  const summaryTodayTaskCount = availability.agenda ? agenda?.summary?.today ?? 0 : null;
+  const workloadSummaryValues: Record<WorkloadSummaryValueKey, number | null> = {
+    openCases: summaryOpenCaseCount,
+    todayTasks: summaryTodayTaskCount,
+    deadlines: summaryDeadlineCount,
+    reviews: summaryReviewCount,
+    externalComms: externalCommunicationCount,
+    internalComms: internalCommunicationCount,
+  };
   const calendarDays = useMemo(() => {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
@@ -445,6 +498,12 @@ export function DashboardFocused() {
               <DashboardEmptyState title="Nincs félbehagyott vagy azonnali beavatkozást igénylő munkája." detail="Az új feladatokat és határidőket az alábbi áttekintésekben találja." />
             </div>
           )}
+        </section>
+
+        <section className="grid grid-cols-2 gap-2.5 lg:grid-cols-3 xl:grid-cols-6" aria-label="Napi munka összefoglaló">
+          {WORKLOAD_SUMMARY_CARDS.map((card) => (
+            <SummaryCard key={card.valueKey} card={card} value={workloadSummaryValues[card.valueKey]} />
+          ))}
         </section>
 
         <section className="overflow-hidden rounded-xl border border-[var(--adm-border)] bg-white shadow-[0_10px_28px_rgba(0,42,35,0.035)]" aria-labelledby="dashboard-operational-cases-heading">

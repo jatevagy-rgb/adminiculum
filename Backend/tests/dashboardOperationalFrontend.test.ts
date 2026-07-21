@@ -28,7 +28,11 @@ describe('dashboard operational frontend contract', () => {
     expect(dashboard).toContain('Nyitott ügyek:');
     expect(dashboard).toContain('Kommunikáció');
     expect(dashboard).not.toContain('aria-label="Nyitott ügyek összefoglaló"');
-    expect(dashboard).not.toContain('<SummaryCard');
+    // The legacy "Napi munka összefoglaló" colored work-summary cards were
+    // restored (RESTORE-LEGACY-DASHBOARD-WORKLOAD-CARDS-1); the operational
+    // case overview coexists with them, as it did historically at a948839.
+    expect(dashboard).toContain('<SummaryCard');
+    expect(dashboard).toContain('aria-label="Napi munka összefoglaló"');
     expect(dashboard.match(/getDashboardOperationalOverview\(\)/g)).toHaveLength(1);
   });
 

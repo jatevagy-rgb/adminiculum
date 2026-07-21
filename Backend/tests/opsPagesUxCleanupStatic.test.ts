@@ -57,9 +57,12 @@ describe('ops pages UX cleanup static guards', () => {
     expect(dashboard).toContain('Új határidős feladat');
     expect(dashboard).toContain('.filter((item) => !/deleted|töröl/i.test');
     expect(dashboard).toContain('Legutóbbi tételek, opcionális ügyfélszűréssel.');
-    expect(dashboard).not.toContain('<SummaryCard label="Nyitott ügyek"');
-    expect(dashboard).not.toContain('<SummaryCard label="Mai teendők"');
-    expect(dashboard).not.toContain('<SummaryCard label="Review tételek"');
+    // The legacy "Napi munka összefoglaló" colored work-summary cards were
+    // restored (RESTORE-LEGACY-DASHBOARD-WORKLOAD-CARDS-1) via the shared
+    // WORKLOAD_SUMMARY_CARDS manifest — labels live in the helper, not inline.
+    expect(dashboard).toContain('aria-label="Napi munka összefoglaló"');
+    expect(dashboard).toContain('WORKLOAD_SUMMARY_CARDS.map');
+    // The distinct capacity / minute-estimate concept remains removed (not restored).
     expect(dashboard).not.toMatch(/Napi munkapad|Mai működési kép|Kapacitás: 8/);
   });
 
