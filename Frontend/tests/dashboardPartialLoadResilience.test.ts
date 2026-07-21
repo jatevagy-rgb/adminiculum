@@ -1,224 +1,206 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-
-type DashboardAvailability = {
-  tasks: boolean;
-  cases: boolean;
-  agenda: boolean;
-  stats: boolean;
-  communications: boolean;
-  operational: boolean;
-};
-
-type EndpointResults = {
-  taskResult: unknown | null;
-  caseResult: unknown | null;
-  agendaResult: unknown | null;
-  statsResult: unknown | null;
-  communicationResult: unknown | null;
-  clientResult: unknown | null;
-  operationalResult: unknown | null;
-};
-
-function computeAvailability(r: EndpointResults): DashboardAvailability {
-  return {
-    tasks: r.taskResult !== null,
-    cases: r.caseResult !== null,
-    agenda: r.agendaResult !== null,
-    stats: r.statsResult !== null,
-    communications: r.communicationResult !== null,
-    operational: r.operationalResult !== null,
-  };
-}
-
-function computeCriticalLoadFailed(r: EndpointResults): boolean {
-  return !r.taskResult && !r.caseResult;
-}
-
-function computeHasSectionFailure(
-  availability: DashboardAvailability,
-  criticalLoadFailed: boolean,
-  loading: boolean,
-): boolean {
-  return (
-    !loading &&
-    !criticalLoadFailed &&
-    (!availability.tasks ||
-      !availability.cases ||
-      !availability.agenda ||
-      !availability.stats ||
-      !availability.operational ||
-      !availability.communications)
-  );
-}
+import {
+  deriveDashboardAvailability,
+  getDashboardGlobalFailure,
+  getDashboardSectionFailure,
+  UNAVAILABLE,
+  type DashboardEndpointResults,
+} from "../src/lib/dashboardLoadState";
 
 const OK = { data: [] };
 const FAIL = null;
 
-function allOk(): EndpointResults {
+function allOk(): DashboardEndpointResults {
   return {
     taskResult: OK,
     caseResult: OK,
     agendaResult: OK,
     statsResult: OK,
     communicationResult: OK,
-    clientResult: OK,
     operationalResult: OK,
   };
 }
 
-describe("Dashboard partial load resilience — error classification", () => {
-  it("1. all endpoints succeed → no error, no section failure", () => {
-    const r = allOk();
-    const avail = computeAvailability(r);
-    assert.equal(computeCriticalLoadFailed(r), false);
-    assert.equal(computeHasSectionFailure(avail, false, false), false);
+describe("deriveDashboardAvailability", () => {
+  it("all OK → all available", () => {
+    const avail = deriveDashboardAvailability(allOk());
+    assert.deepEqual(avail, {
+      tasks: true,
+      cases: true,
+      agenda: true,
+      stats: true,
+      communications: true,
+      operational: true,
+    });
   });
 
-  it("2. only tasks fail → no critical error, section failure shown", () => {
-    const r = { ...allOk(), taskResult: FAIL };
-    const avail = computeAvailability(r);
-    assert.equal(computeCriticalLoadFailed(r), false);
-    assert.equal(avail.tasks, false);
-    assert.equal(computeHasSectionFailure(avail, false, false), true);
-  });
-
-  it("3. only cases fail → no critical error, section failure shown", () => {
-    const r = { ...allOk(), caseResult: FAIL };
-    const avail = computeAvailability(r);
-    assert.equal(computeCriticalLoadFailed(r), false);
-    assert.equal(avail.cases, false);
-    assert.equal(computeHasSectionFailure(avail, false, false), true);
-  });
-
-  it("4. tasks AND cases fail → critical error", () => {
-    const r = { ...allOk(), taskResult: FAIL, caseResult: FAIL };
-    assert.equal(computeCriticalLoadFailed(r), true);
-  });
-
-  it("5. only agenda fails → no critical error, section failure", () => {
-    const r = { ...allOk(), agendaResult: FAIL };
-    const avail = computeAvailability(r);
-    assert.equal(computeCriticalLoadFailed(r), false);
-    assert.equal(avail.agenda, false);
-    assert.equal(computeHasSectionFailure(avail, false, false), true);
-  });
-
-  it("6. only stats fail → no critical error, section failure", () => {
-    const r = { ...allOk(), statsResult: FAIL };
-    const avail = computeAvailability(r);
-    assert.equal(computeCriticalLoadFailed(r), false);
-    assert.equal(avail.stats, false);
-    assert.equal(computeHasSectionFailure(avail, false, false), true);
-  });
-
-  it("7. only operational fails → no critical error, section failure", () => {
-    const r = { ...allOk(), operationalResult: FAIL };
-    const avail = computeAvailability(r);
-    assert.equal(computeCriticalLoadFailed(r), false);
-    assert.equal(avail.operational, false);
-    assert.equal(computeHasSectionFailure(avail, false, false), true);
-  });
-
-  it("8. only communications fail → no critical error, section failure", () => {
-    const r = { ...allOk(), communicationResult: FAIL };
-    const avail = computeAvailability(r);
-    assert.equal(computeCriticalLoadFailed(r), false);
-    assert.equal(avail.communications, false);
-    assert.equal(computeHasSectionFailure(avail, false, false), true);
-  });
-
-  it("9. only clients fail → no critical error, no section failure (clients not tracked)", () => {
-    const r = { ...allOk(), clientResult: FAIL };
-    const avail = computeAvailability(r);
-    assert.equal(computeCriticalLoadFailed(r), false);
-    assert.equal(computeHasSectionFailure(avail, false, false), false);
-  });
-
-  it("10. agenda + stats fail → no critical error, section failure", () => {
-    const r = { ...allOk(), agendaResult: FAIL, statsResult: FAIL };
-    const avail = computeAvailability(r);
-    assert.equal(computeCriticalLoadFailed(r), false);
-    assert.equal(computeHasSectionFailure(avail, false, false), true);
-  });
-
-  it("11. tasks + operational fail → no critical error (cases still OK), section failure", () => {
-    const r = { ...allOk(), taskResult: FAIL, operationalResult: FAIL };
-    const avail = computeAvailability(r);
-    assert.equal(computeCriticalLoadFailed(r), false);
-    assert.equal(avail.tasks, false);
-    assert.equal(avail.operational, false);
-    assert.equal(computeHasSectionFailure(avail, false, false), true);
-  });
-
-  it("12. all fail → critical error (tasks AND cases both null)", () => {
-    const r: EndpointResults = {
+  it("all FAIL → all unavailable", () => {
+    const avail = deriveDashboardAvailability({
       taskResult: FAIL,
       caseResult: FAIL,
       agendaResult: FAIL,
       statsResult: FAIL,
       communicationResult: FAIL,
-      clientResult: FAIL,
       operationalResult: FAIL,
-    };
-    assert.equal(computeCriticalLoadFailed(r), true);
+    });
+    assert.deepEqual(avail, UNAVAILABLE);
   });
 
-  it("13. during loading → hasSectionFailure is false even if sections unavailable", () => {
-    const r = { ...allOk(), agendaResult: FAIL };
-    const avail = computeAvailability(r);
-    assert.equal(computeHasSectionFailure(avail, false, true), false);
-  });
-
-  it("14. critical load failed → hasSectionFailure is false (banner takes precedence)", () => {
-    const r = { ...allOk(), taskResult: FAIL, caseResult: FAIL, agendaResult: FAIL };
-    const avail = computeAvailability(r);
-    assert.equal(computeCriticalLoadFailed(r), true);
-    assert.equal(computeHasSectionFailure(avail, true, false), false);
-  });
-
-  it("15. cases + agenda + operational fail, tasks OK → no critical error, section failure", () => {
-    const r = { ...allOk(), caseResult: FAIL, agendaResult: FAIL, operationalResult: FAIL };
-    const avail = computeAvailability(r);
-    assert.equal(computeCriticalLoadFailed(r), false);
-    assert.equal(computeHasSectionFailure(avail, false, false), true);
-    assert.equal(avail.cases, false);
-    assert.equal(avail.agenda, false);
+  it("single failure → only that field false", () => {
+    const avail = deriveDashboardAvailability({ ...allOk(), operationalResult: FAIL });
     assert.equal(avail.operational, false);
     assert.equal(avail.tasks, true);
+    assert.equal(avail.cases, true);
+    assert.equal(avail.agenda, true);
+    assert.equal(avail.stats, true);
+    assert.equal(avail.communications, true);
   });
 });
 
-describe("Dashboard partial load resilience — section availability", () => {
-  it("tasks unavailable → tasks and reviews sections show fallback", () => {
-    const r = { ...allOk(), taskResult: FAIL };
-    const avail = computeAvailability(r);
-    assert.equal(avail.tasks, false);
+describe("getDashboardGlobalFailure — criticality contract", () => {
+  it("1. all succeed → no global failure", () => {
+    assert.equal(getDashboardGlobalFailure(allOk()), false);
   });
 
-  it("agenda unavailable → deadlines and calendar sections show fallback", () => {
-    const r = { ...allOk(), agendaResult: FAIL };
-    const avail = computeAvailability(r);
+  it("2. only tasks fail → no global failure", () => {
+    assert.equal(getDashboardGlobalFailure({ ...allOk(), taskResult: FAIL }), false);
+  });
+
+  it("3. only cases fail → no global failure", () => {
+    assert.equal(getDashboardGlobalFailure({ ...allOk(), caseResult: FAIL }), false);
+  });
+
+  it("4. tasks AND cases fail → global failure", () => {
+    assert.equal(getDashboardGlobalFailure({ ...allOk(), taskResult: FAIL, caseResult: FAIL }), true);
+  });
+
+  it("5. only agenda fails → no global failure", () => {
+    assert.equal(getDashboardGlobalFailure({ ...allOk(), agendaResult: FAIL }), false);
+  });
+
+  it("6. only stats fails → no global failure", () => {
+    assert.equal(getDashboardGlobalFailure({ ...allOk(), statsResult: FAIL }), false);
+  });
+
+  it("7. only operational fails → no global failure", () => {
+    assert.equal(getDashboardGlobalFailure({ ...allOk(), operationalResult: FAIL }), false);
+  });
+
+  it("8. only communications fails → no global failure", () => {
+    assert.equal(getDashboardGlobalFailure({ ...allOk(), communicationResult: FAIL }), false);
+  });
+
+  it("9. all fail → global failure (tasks AND cases both null)", () => {
+    assert.equal(getDashboardGlobalFailure({
+      taskResult: FAIL,
+      caseResult: FAIL,
+      agendaResult: FAIL,
+      statsResult: FAIL,
+      communicationResult: FAIL,
+      operationalResult: FAIL,
+    }), true);
+  });
+
+  it("10. cases + agenda + operational fail, tasks OK → no global failure", () => {
+    assert.equal(getDashboardGlobalFailure({
+      ...allOk(),
+      caseResult: FAIL,
+      agendaResult: FAIL,
+      operationalResult: FAIL,
+    }), false);
+  });
+
+  it("11. tasks + operational fail → no global failure (cases still OK)", () => {
+    assert.equal(getDashboardGlobalFailure({
+      ...allOk(),
+      taskResult: FAIL,
+      operationalResult: FAIL,
+    }), false);
+  });
+});
+
+describe("getDashboardSectionFailure — section failure banner", () => {
+  it("all available → no section failure", () => {
+    const avail = deriveDashboardAvailability(allOk());
+    assert.equal(getDashboardSectionFailure(avail, false, false), false);
+  });
+
+  it("one section unavailable → section failure shown", () => {
+    const avail = deriveDashboardAvailability({ ...allOk(), agendaResult: FAIL });
+    assert.equal(getDashboardSectionFailure(avail, false, false), true);
+  });
+
+  it("suppressed during loading", () => {
+    const avail = deriveDashboardAvailability({ ...allOk(), agendaResult: FAIL });
+    assert.equal(getDashboardSectionFailure(avail, false, true), false);
+  });
+
+  it("suppressed when critical failure active", () => {
+    const avail = deriveDashboardAvailability({ ...allOk(), taskResult: FAIL, caseResult: FAIL });
+    assert.equal(getDashboardSectionFailure(avail, true, false), false);
+  });
+
+  it("multiple sections unavailable → section failure shown", () => {
+    const avail = deriveDashboardAvailability({
+      ...allOk(),
+      agendaResult: FAIL,
+      statsResult: FAIL,
+    });
+    assert.equal(getDashboardSectionFailure(avail, false, false), true);
+  });
+});
+
+describe("failure vs empty state distinction", () => {
+  it("communications failed → availability.communications is false (distinct from empty)", () => {
+    const avail = deriveDashboardAvailability({ ...allOk(), communicationResult: FAIL });
+    assert.equal(avail.communications, false);
+  });
+
+  it("communications successful empty → availability.communications is true", () => {
+    const avail = deriveDashboardAvailability({
+      ...allOk(),
+      communicationResult: { communications: [] },
+    });
+    assert.equal(avail.communications, true);
+  });
+
+  it("agenda failed → availability.agenda is false (distinct from empty)", () => {
+    const avail = deriveDashboardAvailability({ ...allOk(), agendaResult: FAIL });
     assert.equal(avail.agenda, false);
   });
 
-  it("operational unavailable → focusDataComplete is false", () => {
-    const r = { ...allOk(), operationalResult: FAIL };
-    const avail = computeAvailability(r);
-    assert.equal(avail.operational, false);
-    const focusDataComplete = avail.operational;
-    assert.equal(focusDataComplete, false);
+  it("agenda successful empty → availability.agenda is true", () => {
+    const avail = deriveDashboardAvailability({
+      ...allOk(),
+      agendaResult: { days: [], summary: { total: 0, overdue: 0 } },
+    });
+    assert.equal(avail.agenda, true);
   });
 
-  it("stats unavailable → signals section hidden (no data to show)", () => {
-    const r = { ...allOk(), statsResult: FAIL };
-    const avail = computeAvailability(r);
+  it("operational failed → availability.operational is false (distinct from empty)", () => {
+    const avail = deriveDashboardAvailability({ ...allOk(), operationalResult: FAIL });
+    assert.equal(avail.operational, false);
+  });
+
+  it("operational successful empty → availability.operational is true", () => {
+    const avail = deriveDashboardAvailability({
+      ...allOk(),
+      operationalResult: { resume: { item: null }, groups: [], summary: { openCaseCount: 0 } },
+    });
+    assert.equal(avail.operational, true);
+  });
+
+  it("stats failed → availability.stats is false", () => {
+    const avail = deriveDashboardAvailability({ ...allOk(), statsResult: FAIL });
     assert.equal(avail.stats, false);
   });
 
-  it("communications unavailable → communication section shows empty state", () => {
-    const r = { ...allOk(), communicationResult: FAIL };
-    const avail = computeAvailability(r);
-    assert.equal(avail.communications, false);
+  it("stats successful empty → availability.stats is true", () => {
+    const avail = deriveDashboardAvailability({
+      ...allOk(),
+      statsResult: { recentActivity: [] },
+    });
+    assert.equal(avail.stats, true);
   });
 });
