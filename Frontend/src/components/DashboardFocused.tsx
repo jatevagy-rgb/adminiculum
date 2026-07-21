@@ -31,7 +31,8 @@ import {
   type DashboardPrimaryActionIcon,
 } from "@/lib/dashboardPresentation";
 import { taskStatusLabel } from "@/lib/taskWorkflowPresentation";
-import { OperationalPageHeader, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
+import { CompactState, OperationalPageHeader, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
+import { AdminButton } from "@/components/adminiculum/ui";
 import { ClientAccent } from "@/components/clients/ClientAccent";
 
 type NewsArticle = {
@@ -295,7 +296,8 @@ export function DashboardFocused() {
         communications: communicationResult !== null,
         operational: operationalResult !== null,
       });
-      setError(!taskResult || !caseResult || !agendaResult || !statsResult || !operationalResult);
+      const criticalLoadFailed = !taskResult && !caseResult;
+      setError(criticalLoadFailed);
     } catch {
       setError(true);
     } finally {
@@ -381,6 +383,8 @@ export function DashboardFocused() {
   const caseById = useMemo(() => new Map(cases.map((item) => [item.id, item])), [cases]);
   const clientById = useMemo(() => new Map(clients.map((item) => [item.id, item])), [clients]);
   const focusDataComplete = availability.operational;
+  const criticalLoadFailed = error;
+  const hasSectionFailure = !loading && !criticalLoadFailed && (!availability.tasks || !availability.cases || !availability.agenda || !availability.stats || !availability.operational || !availability.communications);
   const operationalPresentation = useMemo(
     () => operational ? buildDashboardOperationalPresentation(operational) : null,
     [operational],
@@ -436,7 +440,8 @@ export function DashboardFocused() {
           </div>
         </section>
 
-        {error ? <SafePanelError onRetry={() => void load()} detail="Egyes napi munkalisták most nem érhetők el; a betöltött adatok továbbra is használhatók." /> : null}
+        {criticalLoadFailed ? <SafePanelError onRetry={() => void load()} detail="A műszerfal alapadatai nem tölthetők be." /> : null}
+        {hasSectionFailure ? <CompactState tone="neutral" title="Egyes napi munkalisták most nem érhetők el." detail="A betöltött adatok továbbra is használhatók." action={<AdminButton size="sm" variant="neutral" onClick={() => void load()}>Újratöltés</AdminButton>} /> : null}
 
         <section aria-labelledby="dashboard-next-heading">
           <div className="mb-2 flex items-center justify-between">
@@ -532,7 +537,9 @@ export function DashboardFocused() {
           </div>
           <div className="grid gap-3 lg:grid-cols-3">
           <DashboardPanel title="Mai feladataim" action={<DashboardTextLink href="/tasks">Minden feladat</DashboardTextLink>} labelledBy="dashboard-work-heading">
-            {openTasks.length > 0 ? (
+            {!availability.tasks ? (
+              <DashboardEmptyState title="Mai feladatok most nem érhetők el." />
+            ) : openTasks.length > 0 ? (
               <div className="divide-y divide-[var(--adm-border)]">
                 {openTasks.slice(0, 3).map((task) => (
                   <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="relative block px-4 py-3 pl-5 hover:bg-[var(--adm-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--adm-green-800)]">
@@ -548,7 +555,9 @@ export function DashboardFocused() {
           </DashboardPanel>
 
           <DashboardPanel title="Nekem kijelölt Review-k" action={<DashboardTextLink href="/reviews">Review sor</DashboardTextLink>} labelledBy="dashboard-review-heading">
-            {reviewTasks.length > 0 ? (
+            {!availability.tasks ? (
+              <DashboardEmptyState title="Review adatok most nem érhetők el." />
+            ) : reviewTasks.length > 0 ? (
               <div className="divide-y divide-[var(--adm-border)]">
                 {reviewTasks.slice(0, 3).map((task) => (
                   <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="relative block px-4 py-3 pl-5 hover:bg-[var(--adm-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--adm-green-800)]">
@@ -564,6 +573,9 @@ export function DashboardFocused() {
           </DashboardPanel>
 
           <DashboardPanel title="Következő 7 nap határidői" action={<DashboardTextLink href="/deadlines">Határidők</DashboardTextLink>} labelledBy="dashboard-deadline-heading">
+            {!availability.agenda ? (
+              <DashboardEmptyState title="Határidő adatok most nem érhetők el." />
+            ) : (
             <div className="divide-y divide-[var(--adm-border)]">
               {nextSevenDayDeadlines.slice(0, 3).map((item) => (
                 <Link key={item.id} href={item.href || item.source.href || "/deadlines"} className="relative block px-4 py-3 pl-5 hover:bg-[var(--adm-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--adm-green-800)]">
@@ -574,6 +586,7 @@ export function DashboardFocused() {
               ))}
               {!loading && nextSevenDayDeadlines.length === 0 ? <DashboardEmptyState title="Nincs közelgő határidő." icon="calendar" /> : null}
             </div>
+            )}
           </DashboardPanel>
           </div>
         </section>
@@ -590,6 +603,9 @@ export function DashboardFocused() {
               <DashboardTextLink href="/deadlines?view=week">Heti nézet</DashboardTextLink>
             </nav>
           </div>
+          {!availability.agenda ? (
+            <DashboardEmptyState title="Naptáradatok most nem érhetők el." />
+          ) : (
           <div className={selectedCalendarItems.length ? "grid lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.6fr)]" : ""}>
             <div className={selectedCalendarItems.length ? "border-b border-[var(--adm-border)] p-3 lg:border-b-0 lg:border-r" : "p-3"}>
               <div className="grid grid-cols-7 gap-1.5" role="tablist" aria-label="Következő hét nap">
@@ -630,6 +646,7 @@ export function DashboardFocused() {
               </div>
             ) : null}
           </div>
+          )}
         </section>
 
         <section className="overflow-hidden rounded-xl border border-[var(--adm-border)] bg-white" aria-labelledby="dashboard-communications-heading">
