@@ -1,88 +1,77 @@
 # Production DB Metadata — Read-Access Resolution
 
-Date: 2026-07-22
-Branch: `claude/task-attention-migration-audit-1` (base `33aca42`)
-Scope: determine whether an authorized, metadata-read-only path to the production
-PostgreSQL database exists via the current Azure identity (no app credential).
+Date: 2026-07-22 (updated after operator enabled Entra dual auth)
+Branch: `claude/task-attention-migration-audit-1`
+Scope: read-only metadata access attempt via the current Azure identity's Entra
+token. No app credential, no mutation.
 
-## Outcome
+## Timeline
 
-**Entra (Azure AD) authentication is DISABLED on the production PostgreSQL
-server.** The authorized path (current Azure identity → Entra access token → TLS
-connection → metadata SELECTs) is architecturally closed. The only enabled
-authentication is password auth, which requires the backend application's
-database credential — explicitly out of scope for this ticket. **No authorized
-read-only metadata connection could be established.**
+1. **Initial state (prior ticket):** Entra auth Disabled → `ENTRA_ACCESS_BLOCKER`.
+2. **Operator action:** the user enabled Entra dual auth via the Azure Portal and
+   reported assigning themselves as Entra administrator.
+3. **This attempt:** Entra-token TLS connection attempted → **blocked by the
+   server firewall** (network). No metadata obtained.
 
-Classification: `PRODUCTION_DB_METADATA_ENTRA_ACCESS_BLOCKER`.
+## Current outcome
 
-## Phase 1 — Preflight (control-plane reads only)
+`PRODUCTION_DB_METADATA_NETWORK_BLOCKER`
+
+The read-only metadata connection could not be established because the client's
+egress IP is not in the PostgreSQL server firewall allow-list. The TCP connection
+to port 5432 timed out (`ETIMEDOUT`) before any authentication handshake, so the
+Entra admin mapping could not even be exercised yet.
+
+## Verified state (read-only control-plane)
 
 | Item | Value |
 |---|---|
-| Azure identity | `hubay.gyula@balintfy.onmicrosoft.com` (type: **user**) |
-| Tenant | `18b56834-dfea-4931-bdf8-e5ebb0cb4e0f` |
-| Subscription | `6663573b-fcf7-497d-b2f5-c3498f4b019d` ("Azure subscription 1") |
-| PostgreSQL flexible server | `adminiculum` (RG `Adminiculum-RG`) |
-| FQDN | `adminiculum.postgres.database.azure.com` |
-| Version | PostgreSQL **15** |
-| State | Ready |
+| `activeDirectoryAuth` | **Enabled** (operator-enabled) |
+| `passwordAuth` | **Enabled** (preserved) |
+| Server state | Ready |
+| Version | PostgreSQL 15 |
+| Entra admin via `microsoft-entra-admin list` | **`[]` (empty)** — no admin returned by CLI; possibly Portal→ARM propagation lag; **unverified** because the firewall blocked the connection before auth |
 | Public network access | Enabled |
-| **`authConfig.activeDirectoryAuth`** | **Disabled** |
-| `authConfig.passwordAuth` | Enabled |
-| `authConfig.tenantId` | null |
-| `microsoft-entra-admin list` | `Bad Request` (invalid while AD auth is disabled) → no mapped Entra principal |
+| Firewall allow-list | `allowAzureAppService` (68.210.130.64–68.210.171.1), Azure-services (0.0.0.0), `MyIP` 37.76.11.42, 31.46.244.157, 84.1.28.45 |
+| **This client egress IP** | **`37.76.6.18`** — **NOT** in any allow rule |
 
-Only Azure control-plane read operations were used
-(`az account show`, `az postgres flexible-server list/show`,
-`az postgres flexible-server microsoft-entra-admin list`). No App Service
-application settings or connection strings were read.
+## Connection attempt (Entra token, TLS)
 
-## Why the attempt stopped at Phase 1
-
-The server returns `activeDirectoryAuth: Disabled`. An Azure/Entra access token
-(Phase 3) cannot authenticate to a server that does not accept Entra auth, so:
-- **Phase 3 (token)** was **not** performed — a token would be useless and there
-  is no reason to materialize a credential that cannot connect.
-- **Phase 4 (connection)** was **not** attempted — it could only succeed via the
-  prohibited application password.
-- **Phase 2 (client install)** was **not** performed — no authorized connection
-  is possible, so no PostgreSQL client was needed or installed.
-
-Enabling Entra auth or adding an Entra admin would be an **Azure mutation**
-(prohibited by this ticket). Using the application DB credential is **prohibited**.
-
-## Result classification (Phase 6)
-
-Outcome **C** — "Entra authentication is unavailable or current identity is not
-mapped. Do not use application credentials." →
-`PRODUCTION_DB_METADATA_ENTRA_ACCESS_BLOCKER`.
-
-## Security & cleanup (Phase 7)
-
-- No database connection was opened.
-- No Entra/PostgreSQL token was requested or written to disk, logs, source, or Git.
-- No temporary credential files were created (none to delete).
-- No Azure resource, server setting, DB role, or permission was changed.
-- No App Service secret or connection string was read.
-- Git worktrees remain clean.
+- Client: `pg` (Node PostgreSQL driver) from the local backend `node_modules`
+  (no repository package/lockfile change; no GUI).
+- Credential: an **ephemeral** Microsoft Entra OSS-RDBMS access token for
+  `hubay.gyula@balintfy.onmicrosoft.com`, held only in a process env var, **never**
+  printed, logged, written to disk, or committed; unset immediately after the run.
+- SSL: required (TLS).
+- Result: `ETIMEDOUT` to `…:5432` — firewall drop (not an auth error).
+- Read-only safety: the session was designed to `SET default_transaction_read_only
+  = on` + `BEGIN TRANSACTION READ ONLY` and verify `transaction_read_only = on`
+  before any query; **the connection never opened**, so no query ran.
 
 ## Metadata result
 
-None obtainable via an authorized path. The metadata queries in
-`task-attention-migration-*` (enum, `tasks` columns/indexes, `_prisma_migrations`
-head, size) remain **unconfirmed** by a live read.
+**None obtained.** No server/db identity, migration head, enum, `tasks` columns,
+indexes, or size were read. **No Task content was accessed. No mutation occurred.**
 
-## Remaining blocker / paths forward (require separate explicit authorization)
+## Remaining blocker & next step (requires separate approval)
 
-To unblock the migration metadata audit, one of the following must be arranged
-under a separate approved ticket — none performed here:
-1. **Enable Microsoft Entra authentication** on the `adminiculum` server and map
-   a read-only principal for the current identity (an Azure control-plane
-   change).
-2. Provision a **dedicated read-only PostgreSQL role** and supply its credential
-   through an authorized channel (not the application credential).
-3. Run the allow-listed metadata SELECTs from an already-authorized operator
-   session and hand back the results.
+The only barrier is a **network firewall allow rule** for this client's egress IP.
+Changing production firewall rules requires separate approval, so it was **not**
+performed here. To unblock, an operator can add the IP (Portal or CLI):
 
-Until then the migration audit stays at `TASK_ATTENTION_MIGRATION_METADATA_BLOCKER`.
+```
+az postgres flexible-server firewall-rule create \
+  --resource-group Adminiculum-RG --name adminiculum \
+  --rule-name metadata-audit-client --start-ip-address 37.76.6.18 --end-ip-address 37.76.6.18
+```
+(The egress IP may change between sessions — confirm the current value first.)
+
+After the rule exists, the same read-only Entra-token inspection can be retried in
+one attempt. If the Entra admin list is still empty at that point, the admin
+mapping itself must be re-checked (it could not be tested through the firewall).
+
+## Migration audit status
+
+Remains `TASK_ATTENTION_MIGRATION_METADATA_BLOCKER` / `…_METADATA_INCOMPLETE` — the
+live enum/columns/indexes/head are still unconfirmed pending the firewall allow
+rule.
