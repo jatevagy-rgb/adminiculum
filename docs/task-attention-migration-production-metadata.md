@@ -65,3 +65,26 @@ the repo cannot substitute for it (broken/incomplete history), this audit ends a
 **TASK_ATTENTION_MIGRATION_METADATA_BLOCKER**. The SQL candidate and full rollout
 analysis are prepared so a future run with authorized read-only access can
 confirm-and-proceed quickly.
+
+## 2026-07-22 metadata retry: authentication proof blocker
+
+A later ticket authorized a temporary single-IP PostgreSQL firewall rule and one
+Entra-token TLS connection attempt. The run stopped before firewall creation
+because the required Entra administrator proof failed:
+
+- server `adminiculum` was Ready;
+- `activeDirectoryAuth` and `passwordAuth` were Enabled;
+- current Azure identity was `hubay.gyula@balintfy.onmicrosoft.com`;
+- current public egress IP was `37.76.6.18`;
+- frontend and backend health returned HTTP 200;
+- Azure CLI `microsoft-entra-admin list` returned `[]`;
+- ARM `Microsoft.DBforPostgreSQL/flexibleServers/administrators` returned `[]`.
+
+Per the authorized procedure, no firewall rule was created, no token was
+requested, no database connection was attempted, and no metadata was obtained.
+The temporary rule name `metadata-audit-client-20260722` was verified absent
+after the stopped run.
+
+Updated blocker:
+`POSTGRES_METADATA_AUTHENTICATION_BLOCKER` /
+`TASK_ATTENTION_MIGRATION_METADATA_INCOMPLETE`

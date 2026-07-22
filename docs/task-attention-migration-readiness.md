@@ -68,3 +68,59 @@ deployment, no Azure change in this audit.
 ## Classification
 
 `TASK_ATTENTION_MIGRATION_METADATA_BLOCKER`
+
+## 2026-07-22 temporary firewall retry outcome
+
+Outcome: the audit remained metadata-incomplete, but for a narrower reason than
+the earlier network-only attempt.
+
+Precheck succeeded:
+
+- PostgreSQL server Ready;
+- `activeDirectoryAuth` Enabled;
+- `passwordAuth` Enabled;
+- current public egress IP identified as `37.76.6.18`;
+- frontend and backend returned HTTP 200;
+- temporary firewall rule `metadata-audit-client-20260722` was absent.
+
+Stop condition:
+
+- Azure CLI Entra admin list returned `[]`;
+- ARM administrators resource returned `[]`;
+- the authorized run required proof that the current user is the Entra
+  administrator before opening the firewall and attempting a token connection.
+
+Actions not taken:
+
+- no firewall rule created;
+- no token requested;
+- no database connection attempted;
+- no read-only transaction opened;
+- no metadata queries run;
+- no migration, schema, runtime, Azure app setting, or deployment change.
+
+Cleanup:
+
+- temporary firewall rule remained absent;
+- server remained Ready;
+- auth settings remained Enabled/Enabled;
+- app health remained HTTP 200.
+
+Updated DONE-MEANS status:
+
+| # | Criterion | Status after retry |
+|---|---|---|
+| 1 | production metadata inspected read-only | ❌ blocked by Entra admin proof |
+| 2 | enum existence + values proven live | ❌ not queried |
+| 3 | current Task columns proven absent | ❌ not queried |
+| 4 | exact SQL candidate prepared | ✅ still candidate-only |
+| 5 | index choice justified from live metadata | ❌ not queried |
+| 6 | locking impact assessed from live size | ❌ not queried |
+| 11 | no DB mutation | ✅ |
+| 12 | no migration directory created | ✅ |
+
+Network/security classification:
+`POSTGRES_METADATA_AUTHENTICATION_BLOCKER`
+
+Migration-audit classification:
+`TASK_ATTENTION_MIGRATION_METADATA_INCOMPLETE`

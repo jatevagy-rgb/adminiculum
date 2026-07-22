@@ -75,3 +75,48 @@ mapping itself must be re-checked (it could not be tested through the firewall).
 Remains `TASK_ATTENTION_MIGRATION_METADATA_BLOCKER` / `…_METADATA_INCOMPLETE` — the
 live enum/columns/indexes/head are still unconfirmed pending the firewall allow
 rule.
+
+## 2026-07-22 temporary-firewall retry result
+
+Ticket `TEMPORARY-POSTGRES-METADATA-AUDIT-FIREWALL-AND-READ-1` authorized one
+single-IP temporary firewall rule and one Entra-token TLS metadata connection
+attempt, but only after proving the current Entra administrator assignment.
+
+Control-plane precheck:
+
+| Item | Result |
+|---|---|
+| PostgreSQL server | `adminiculum` Ready |
+| Host | `adminiculum.postgres.database.azure.com` |
+| Database | `adminiculum` |
+| `activeDirectoryAuth` | Enabled |
+| `passwordAuth` | Enabled |
+| Tenant | `18b56834-dfea-4931-bdf8-e5ebb0cb4e0f` |
+| Current Azure identity | `hubay.gyula@balintfy.onmicrosoft.com` |
+| Frontend health | HTTP 200 |
+| Backend health | HTTP 200 |
+| Current public egress IP | `37.76.6.18` |
+| Temporary rule name | `metadata-audit-client-20260722` |
+| Temporary rule pre-existence | absent |
+| Entra admin list via Azure CLI | `[]` |
+| Entra admin list via ARM `administrators` resource | `[]` |
+
+Because both Azure CLI and ARM returned an empty Entra administrator list, the
+ticket's Phase 3 stop condition applied. No temporary firewall rule was created,
+no PostgreSQL token was requested, no TLS connection was attempted, and no
+metadata query was run.
+
+Cleanup proof:
+
+- firewall rule `metadata-audit-client-20260722` remained absent;
+- no existing firewall rule was altered;
+- server remained Ready;
+- public network access remained Enabled;
+- `activeDirectoryAuth` and `passwordAuth` remained Enabled;
+- frontend and backend health remained HTTP 200.
+
+No Task content, legal content, app credential, token, secret, schema mutation,
+migration, deployment, or app configuration was accessed or changed.
+
+Network/security classification:
+`POSTGRES_METADATA_AUTHENTICATION_BLOCKER`

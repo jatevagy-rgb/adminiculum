@@ -59,3 +59,20 @@ The SQL is intentionally **non-idempotent** (fail-fast). If any object already
 exists, the statement errors — which is the desired signal for a partial
 deployment (see partial-application doc), not something to suppress with
 `IF NOT EXISTS`.
+
+## 2026-07-22 execution-readiness update
+
+The SQL remains **candidate only** and was not executed. The approved metadata
+retry stopped before firewall creation because Entra administrator proof returned
+empty. No token, connection, transaction, query, DDL, DML, migration command, or
+schema mutation was used.
+
+The exact forward and rollback SQL must not be treated as approved for execution
+until live metadata confirms:
+
+- current migration head;
+- `ReviewAttentionLevel` values;
+- absence of `tasks.attentionCategory` and `tasks.estimatedMinutes`;
+- existing `tasks` indexes;
+- `tasks` size and approximate row count;
+- no partial-application state.

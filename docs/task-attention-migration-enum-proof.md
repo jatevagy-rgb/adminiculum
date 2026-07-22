@@ -47,3 +47,12 @@ WHERE t.typname = 'ReviewAttentionLevel' ORDER BY e.enumsortorder;
 Expected: the five values in the order above. If the live enum differs →
 `TASK_ATTENTION_MIGRATION_ENUM_BLOCKER`. Applied-DDL evidence indicates it will
 match, but this is not a substitute for the live check.
+
+## 2026-07-22 live confirmation attempt
+
+The approved metadata retry did not reach the live enum query. Entra
+administrator proof returned empty via both Azure CLI and ARM, so the flow
+stopped before firewall creation and before any database token or TLS connection.
+
+Live enum status remains **unconfirmed**. The applied-DDL proof above is still
+the best available evidence, but it does not close the live metadata requirement.

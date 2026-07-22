@@ -58,3 +58,15 @@ metadata-only / index-drop operations; no data movement.
 
 Minimal for the columns. The only material risk is the index build's write lock
 on a large `tasks` table — mitigated by defer/composite/CONCURRENTLY-separate.
+
+## 2026-07-22 live sizing attempt
+
+The approved metadata retry did not obtain `tasks` size or approximate row count.
+The run stopped before firewall creation because Entra administrator proof
+returned empty via Azure CLI and ARM.
+
+Locking assessment therefore remains conditional:
+
+- nullable column additions are still expected to be metadata-only;
+- index locking cannot be finalized without live `tasks` size and index proof;
+- production execution approval remains blocked.

@@ -47,3 +47,14 @@ as a schema-candidate correction to apply **after** the live index inspection.
 Because the exact existing-index set cannot be read, the index decision is itself
 gated by the metadata blocker; it does not, on its own, upgrade to
 `INDEX_STRATEGY_BLOCKER` — the primary blocker remains missing metadata.
+
+## 2026-07-22 live index inspection attempt
+
+The approved metadata retry stopped before firewall creation because Entra
+administrator proof returned empty via both Azure CLI and ARM. Therefore the
+live `pg_indexes` and table-size queries were not run.
+
+Final index strategy remains **not execution-ready**. Until live `tasks` indexes,
+table size, and approximate row count are proven, keep the candidate index
+decision as provisional and prefer no new index in the first additive migration
+unless later metadata proves a composite index is needed.
