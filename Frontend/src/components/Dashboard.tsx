@@ -6,6 +6,7 @@ import {
   getCases,
   getCommunications,
   getCurrentUser,
+  getDashboardOperationalOverview,
   getDashboardStats,
   getIntakeQueue,
   getWorkflowAgenda,
@@ -15,12 +16,19 @@ import {
   type CaseListItem,
   type CommunicationItem,
   type CurrentUser,
+  type DashboardOperationalOverview,
   type DashboardStats,
   type IntakeQueueResponse,
   type TaskItem,
   type WorkflowAgendaResponse,
   type WorkflowDeadlineItem,
 } from "@/lib/api";
+import {
+  UNCLASSIFIED_LABEL,
+  attentionPresentation,
+  formatEstimateRange,
+  type AttentionCategory,
+} from "@/lib/attentionCategory";
 import { toCommunicationSignal, type CommunicationSignal } from "@/lib/communicationIntake";
 
 type NewsArticle = {
@@ -74,6 +82,86 @@ function KpiCard({ label, value, tone, zeroHint, href }: KpiCardProps) {
         <span className="adm-work-tile__caption">{value === 0 ? zeroHint : "Aktív tétel"}</span>
       </span>
     </Link>
+  );
+}
+
+type AttentionWorkload = NonNullable<DashboardOperationalOverview["attentionWorkload"]>;
+
+function attentionCardClass(category: AttentionCategory | "UNCLASSIFIED", count: number): string {
+  const quiet = count === 0 ? " opacity-70" : "";
+  const tone =
+    category === "QUICK_SCAN"
+      ? "border-l-[var(--adm-warm-400)] bg-[#FFF7E1]"
+      : category === "APPROVAL"
+        ? "border-l-[var(--adm-green-800)] bg-[#EEF7F2]"
+        : category === "SIGNATURE"
+          ? "border-l-[#8B5CF6] bg-[#F5F0FF]"
+          : category === "EDITING"
+            ? "border-l-[var(--adm-blue-500)] bg-[#EAF6FA]"
+            : category === "DETAILED_REVIEW"
+              ? "border-l-[var(--adm-terracotta-700)] bg-[#FBEFEB]"
+              : "border-l-[var(--adm-border-strong)] bg-[var(--adm-surface)]";
+  return `rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] border-l-4 p-3 transition hover:bg-white${quiet} ${tone}`;
+}
+
+function DashboardAttentionWorkloadBlock({
+  workload,
+  loading,
+  unavailable,
+}: {
+  workload: AttentionWorkload | null;
+  loading: boolean;
+  unavailable: boolean;
+}) {
+  const empty = Boolean(workload)
+    && workload!.categories.every((item) => item.count === 0)
+    && workload!.unclassified.count === 0;
+
+  return (
+    <section>
+      <article className="adm-panel adm-panel-primary p-4 lg:p-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="adm-kicker text-[var(--adm-blue-700)]">Munkaterhelés</p>
+            <h2 className="adm-heading mt-1 text-[24px]">Milyen munkák várnak rám?</h2>
+            <p className="mt-1 max-w-3xl text-[11.5px] leading-5 text-[var(--adm-text-muted)]">
+              Csak az Önre kiosztott nyitott feladatokat számolja; a becslés tervezési jelzés, nem időnyilvántartás.
+            </p>
+          </div>
+          <Link href="/tasks" className="adm-link-button px-3 py-1.5 text-[11px]">Feladatok megnyitása</Link>
+        </div>
+
+        {loading ? <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Munkaterhelési adatok betöltése…</p> : null}
+        {!loading && unavailable ? <p className="mt-3 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-[12px] text-[var(--adm-text-muted)]">A munkaterhelési adatok most nem érhetők el.</p> : null}
+        {!loading && empty ? <p className="mt-3 rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-[12px] text-[var(--adm-text-muted)]">Nincs besorolt, Önre váró feladat.</p> : null}
+
+        {workload ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+            {workload.categories.map((item) => {
+              const presentation = attentionPresentation(item.attentionCategory);
+              const duration = formatEstimateRange(item.minMinutes, item.maxMinutes);
+              return (
+                <Link key={item.attentionCategory} href={`/tasks?attentionCategory=${encodeURIComponent(item.attentionCategory)}`} className={attentionCardClass(item.attentionCategory, item.count)}>
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="text-[12px] font-bold text-[var(--adm-text)]">{presentation.label}</span>
+                    <span aria-hidden="true" className="text-[13px]">{presentation.mark}</span>
+                  </span>
+                  <span className="mt-1 block text-[18px] font-bold text-[var(--adm-text)]">{item.count} feladat</span>
+                  <span className="mt-0.5 block text-[10.5px] text-[var(--adm-text-muted)]">{item.count === 0 ? "Nincs ilyen feladat" : duration}</span>
+                  {item.nearestDeadline ? <span className="mt-1 block text-[10px] font-semibold text-[var(--adm-text-soft)]">Legközelebbi: {displayDate(item.nearestDeadline)}</span> : null}
+                </Link>
+              );
+            })}
+            <Link href="/tasks?attentionCategory=UNCLASSIFIED" className={attentionCardClass("UNCLASSIFIED", workload.unclassified.count)}>
+              <span className="text-[12px] font-bold text-[var(--adm-text)]">{UNCLASSIFIED_LABEL}</span>
+              <span className="mt-1 block text-[18px] font-bold text-[var(--adm-text)]">{workload.unclassified.count} feladat</span>
+              <span className="mt-0.5 block text-[10.5px] text-[var(--adm-text-muted)]">Időt nem becsülünk</span>
+              {workload.unclassified.nearestDeadline ? <span className="mt-1 block text-[10px] font-semibold text-[var(--adm-text-soft)]">Legközelebbi: {displayDate(workload.unclassified.nearestDeadline)}</span> : null}
+            </Link>
+          </div>
+        ) : null}
+      </article>
+    </section>
   );
 }
 
@@ -300,6 +388,8 @@ export function Dashboard() {
   const [cases, setCases] = useState<CaseListItem[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [agenda, setAgenda] = useState<WorkflowAgendaResponse | null>(null);
+  const [operationalOverview, setOperationalOverview] = useState<DashboardOperationalOverview | null>(null);
+  const [attentionWorkloadUnavailable, setAttentionWorkloadUnavailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -315,12 +405,13 @@ export function Dashboard() {
       const me = await getCurrentUser();
       setCurrentUser(me);
 
-      const [comm, myTasks, myCases, dashboardStats, workflowAgenda] = await Promise.all([
+      const [comm, myTasks, myCases, dashboardStats, workflowAgenda, overview] = await Promise.all([
         getCommunications({ limit: 8 }).catch(() => null),
         getMyTasks().catch(() => null),
         getCases(1, 12, me.id).catch(() => null),
         getDashboardStats().catch(() => null),
         getWorkflowAgenda({ scope: "MY_WORK", status: "OPEN", limit: 8 }).catch(() => null),
+        getDashboardOperationalOverview().catch(() => null),
       ]);
 
       const nextWarnings: string[] = [];
@@ -353,6 +444,14 @@ export function Dashboard() {
       else {
         setAgenda(null);
         nextWarnings.push("Agenda határidőnézet átmenetileg nem érhető el.");
+      }
+
+      if (overview?.attentionWorkload) {
+        setOperationalOverview(overview);
+        setAttentionWorkloadUnavailable(false);
+      } else {
+        setOperationalOverview(null);
+        setAttentionWorkloadUnavailable(true);
       }
 
       setWarnings(nextWarnings);
@@ -701,6 +800,8 @@ export function Dashboard() {
           <KpiCard label="Külső kommunikáció" value={externalComms.length} tone="cyan" zeroHint="Nincs új külső jelzés" href="/notifications?view=external" />
           <KpiCard label="Belső kommunikáció" value={internalComms.length} tone="petrol" zeroHint="Nincs új belső jelzés" href="/notifications?view=internal" />
         </section>
+
+        <DashboardAttentionWorkloadBlock workload={operationalOverview?.attentionWorkload || null} loading={loading} unavailable={attentionWorkloadUnavailable} />
 
         {/* 3b — Bounded intake panel (renders only when intake work exists) */}
         <DashboardIntakePanel />

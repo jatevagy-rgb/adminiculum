@@ -1,4 +1,9 @@
 import { prisma } from '../../prisma/prisma.service';
+import {
+  aggregateAttentionWorkload,
+  isCountableWorkloadTask,
+  type AttentionCategory,
+} from '../tasks/attentionCategory';
 
 const PRIVILEGED_ROLES = new Set(['ADMIN', 'PARTNER']);
 const TERMINAL_TASK_STATUSES = ['COMPLETED', 'DONE', 'CANCELLED'];
@@ -47,6 +52,8 @@ type TaskProjection = {
   status: unknown;
   priority: unknown;
   dueDate: Date | null;
+  attentionCategory?: AttentionCategory | null;
+  estimatedMinutes?: number | null;
   createdAt: Date;
   updatedAt: Date;
   assignedToId: string | null;
@@ -83,6 +90,10 @@ type ResumeCandidate = {
 
 function normalize(value: unknown): string {
   return String(value || '').trim().toUpperCase();
+}
+
+function isoOrNull(value: Date | null | undefined): string | null {
+  return value instanceof Date && !Number.isNaN(value.getTime()) ? value.toISOString() : null;
 }
 
 function isTerminalTask(status: unknown): boolean {
@@ -216,7 +227,7 @@ export async function getDashboardOperationalOverview(
         ],
       };
 
-  const [caseRows, reviewerSubmissions] = await Promise.all([
+  const [caseRows, reviewerSubmissions, workloadTasks] = await Promise.all([
     prisma.case.findMany({
       where: caseWhere,
       take: 200,
@@ -241,6 +252,8 @@ export async function getDashboardOperationalOverview(
             status: true,
             priority: true,
             dueDate: true,
+            attentionCategory: true,
+            estimatedMinutes: true,
             createdAt: true,
             updatedAt: true,
             assignedToId: true,
@@ -304,6 +317,21 @@ export async function getDashboardOperationalOverview(
             },
           },
         },
+      },
+    }),
+    prisma.task.findMany({
+      where: {
+        assignedToId: actor.userId,
+        status: { notIn: TERMINAL_TASK_STATUSES as any },
+      },
+      take: 500,
+      select: {
+        id: true,
+        assignedToId: true,
+        status: true,
+        attentionCategory: true,
+        estimatedMinutes: true,
+        dueDate: true,
       },
     }),
   ]);
@@ -404,6 +432,27 @@ export async function getDashboardOperationalOverview(
     return left.title.localeCompare(right.title, 'hu-HU');
   });
 
+  const countableWorkloadTasks = (workloadTasks as Array<{
+    id: string;
+    assignedToId: string | null;
+    status: string | null;
+    attentionCategory: AttentionCategory | null;
+    estimatedMinutes: number | null;
+    dueDate: Date | null;
+  }>).filter((task) => isCountableWorkloadTask(task, actor.userId));
+  const workloadSummary = aggregateAttentionWorkload(countableWorkloadTasks);
+  const nearestByCategory = new Map<AttentionCategory, Date | null>();
+  let unclassifiedNearest: Date | null = null;
+  for (const task of countableWorkloadTasks) {
+    if (!task.dueDate) continue;
+    if (task.attentionCategory) {
+      const current = nearestByCategory.get(task.attentionCategory) || null;
+      if (!current || task.dueDate.getTime() < current.getTime()) nearestByCategory.set(task.attentionCategory, task.dueDate);
+    } else if (!unclassifiedNearest || task.dueDate.getTime() < unclassifiedNearest.getTime()) {
+      unclassifiedNearest = task.dueDate;
+    }
+  }
+
   return {
     generatedAt: now.toISOString(),
     resume: {
@@ -435,6 +484,16 @@ export async function getDashboardOperationalOverview(
       label: GROUP_LABELS[code],
       count: operationalItems.filter((item) => item.groupCode === code).length,
     })),
+    attentionWorkload: {
+      categories: workloadSummary.categories.map((category) => ({
+        ...category,
+        nearestDeadline: isoOrNull(nearestByCategory.get(category.attentionCategory)),
+      })),
+      unclassified: {
+        count: workloadSummary.unclassified.count,
+        nearestDeadline: isoOrNull(unclassifiedNearest),
+      },
+    },
     items: operationalItems,
   };
 }
