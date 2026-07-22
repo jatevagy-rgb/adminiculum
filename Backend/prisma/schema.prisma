@@ -958,7 +958,14 @@ model Task {
   riskScore       Int         @default(3)
   lastProgressAt  DateTime?
   stuckSince      DateTime?
-  
+
+  // Shared attention-category workload planning (candidate — additive, nullable).
+  // Reuses the existing ReviewAttentionLevel enum (no new/renamed enum). Nullable
+  // so legacy rows stay unclassified with no default; estimatedMinutes is an
+  // optional explicit PLANNING estimate (never actual time — that stays in TimeEntry).
+  attentionCategory ReviewAttentionLevel?
+  estimatedMinutes  Int?
+
   // Dates
   dueDate         DateTime?
   startedAt       DateTime?
@@ -978,6 +985,7 @@ model Task {
   @@index([maturityStage], map: "tasks_maturityStage_idx")
   @@index([riskScore], map: "tasks_riskScore_idx")
   @@index([stuckReason], map: "tasks_stuckReason_idx")
+  @@index([attentionCategory], map: "tasks_attentionCategory_idx")
   @@map("tasks")
 }
 
