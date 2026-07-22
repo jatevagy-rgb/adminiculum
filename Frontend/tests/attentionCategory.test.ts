@@ -52,9 +52,9 @@ describe("estimate range formatting (presentation only)", () => {
     assert.equal(formatEstimateRange(50, 50), "kb. 50 perc");
     assert.equal(formatEstimateRange(120, 120), "kb. 2 óra");
   });
-  it("uses a Hungarian decimal comma and one decimal for fractional hours", () => {
-    assert.equal(formatEstimateRange(90, 90), "kb. 1,5 óra");
-    assert.equal(formatEstimateRange(90, 150), "kb. 1,5–2,5 óra");
+  it("formats fractional hours as hours plus minutes", () => {
+    assert.equal(formatEstimateRange(90, 90), "kb. 1 óra 30 perc");
+    assert.equal(formatEstimateRange(90, 150), "kb. 1 óra 30 perc–2 óra 30 perc");
   });
   it("returns empty string for a zero/empty range (count-only rendering)", () => {
     assert.equal(formatEstimateRange(0, 0), "");

@@ -62,9 +62,11 @@ export const UNCLASSIFIED_LABEL = "Nincs besorolva";
 // Duration-range formatting (presentation only — NOT a band table)
 // ---------------------------------------------------------------------------
 
-function hoursNumber(minutes: number): string {
-  const hours = Math.round((minutes / 60) * 10) / 10; // one decimal, half-up
-  return Number.isInteger(hours) ? String(hours) : String(hours).replace(".", ",");
+function hoursText(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  if (remainder === 0) return `${hours} óra`;
+  return `${hours} óra ${remainder} perc`;
 }
 
 /**
@@ -76,9 +78,9 @@ export function formatEstimateRange(minMinutes: number, maxMinutes: number): str
   if (!Number.isFinite(minMinutes) || !Number.isFinite(maxMinutes)) return "";
   if (minMinutes <= 0 && maxMinutes <= 0) return "";
   if (minMinutes === maxMinutes) {
-    return minMinutes < 60 ? `kb. ${minMinutes} perc` : `kb. ${hoursNumber(minMinutes)} óra`;
+    return minMinutes < 60 ? `kb. ${minMinutes} perc` : `kb. ${hoursText(minMinutes)}`;
   }
   if (maxMinutes < 60) return `kb. ${minMinutes}–${maxMinutes} perc`;
-  if (minMinutes >= 60) return `kb. ${hoursNumber(minMinutes)}–${hoursNumber(maxMinutes)} óra`;
-  return `kb. ${minMinutes} perc–${hoursNumber(maxMinutes)} óra`;
+  if (minMinutes >= 60) return `kb. ${hoursText(minMinutes)}–${hoursText(maxMinutes)}`;
+  return `kb. ${minMinutes} perc–${hoursText(maxMinutes)}`;
 }
