@@ -1,5 +1,6 @@
 const prismaMock = {
   case: { findMany: jest.fn() },
+  task: { findMany: jest.fn() },
   taskSubmission: { findMany: jest.fn() },
 };
 
@@ -63,6 +64,7 @@ describe('dashboard operational resume eligibility', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     prismaMock.case.findMany.mockResolvedValue([]);
+    prismaMock.task.findMany.mockResolvedValue([]);
     prismaMock.taskSubmission.findMany.mockResolvedValue([]);
   });
 
@@ -154,6 +156,7 @@ describe('dashboard operational resume eligibility', () => {
 describe('dashboard operational case grouping and scope', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    prismaMock.task.findMany.mockResolvedValue([]);
     prismaMock.taskSubmission.findMany.mockResolvedValue([]);
   });
 
@@ -189,6 +192,7 @@ describe('dashboard operational case grouping and scope', () => {
 
     expect(prismaMock.case.findMany).toHaveBeenCalledTimes(1);
     expect(prismaMock.taskSubmission.findMany).toHaveBeenCalledTimes(1);
+    expect(prismaMock.task.findMany).toHaveBeenCalledTimes(1);
     expect(prismaMock.case.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         OR: [
@@ -201,5 +205,66 @@ describe('dashboard operational case grouping and scope', () => {
     expect(prismaMock.taskSubmission.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ assignedReviewerId: 'user-1' }),
     }));
+    expect(prismaMock.task.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        assignedToId: 'user-1',
+        status: { notIn: ['COMPLETED', 'DONE', 'CANCELLED'] },
+      }),
+      select: {
+        id: true,
+        assignedToId: true,
+        status: true,
+        attentionCategory: true,
+        estimatedMinutes: true,
+        dueDate: true,
+      },
+    }));
+  });
+});
+
+describe('dashboard attention workload projection', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prismaMock.case.findMany.mockResolvedValue([]);
+    prismaMock.taskSubmission.findMany.mockResolvedValue([]);
+  });
+
+  it('returns all five categories, unclassified count and nearest deadlines', async () => {
+    prismaMock.task.findMany.mockResolvedValue([
+      { id: 'a', assignedToId: 'user-1', status: 'TODO', attentionCategory: 'QUICK_SCAN', estimatedMinutes: null, dueDate: new Date('2026-07-24T10:00:00.000Z') },
+      { id: 'b', assignedToId: 'user-1', status: 'IN_PROGRESS', attentionCategory: 'QUICK_SCAN', estimatedMinutes: 12, dueDate: new Date('2026-07-23T10:00:00.000Z') },
+      { id: 'c', assignedToId: 'user-1', status: 'TODO', attentionCategory: 'DETAILED_REVIEW', estimatedMinutes: null, dueDate: null },
+      { id: 'd', assignedToId: 'user-1', status: 'TODO', attentionCategory: null, estimatedMinutes: null, dueDate: new Date('2026-07-22T12:00:00.000Z') },
+    ]);
+
+    const result = await getDashboardOperationalOverview({ userId: 'user-1', role: 'LAWYER' }, now);
+    expect(result.attentionWorkload.categories.map((item) => item.attentionCategory)).toEqual(['QUICK_SCAN', 'APPROVAL', 'SIGNATURE', 'EDITING', 'DETAILED_REVIEW']);
+    expect(result.attentionWorkload.categories.find((item) => item.attentionCategory === 'QUICK_SCAN')).toEqual({
+      attentionCategory: 'QUICK_SCAN',
+      count: 2,
+      minMinutes: 17,
+      maxMinutes: 27,
+      nearestDeadline: '2026-07-23T10:00:00.000Z',
+    });
+    expect(result.attentionWorkload.categories.find((item) => item.attentionCategory === 'APPROVAL')?.count).toBe(0);
+    expect(result.attentionWorkload.categories.find((item) => item.attentionCategory === 'DETAILED_REVIEW')).toEqual({
+      attentionCategory: 'DETAILED_REVIEW',
+      count: 1,
+      minMinutes: 60,
+      maxMinutes: 120,
+      nearestDeadline: null,
+    });
+    expect(result.attentionWorkload.unclassified).toEqual({ count: 1, nearestDeadline: '2026-07-22T12:00:00.000Z' });
+  });
+
+  it('excludes closed and other-assignee tasks from workload', async () => {
+    prismaMock.task.findMany.mockResolvedValue([
+      { id: 'mine', assignedToId: 'user-1', status: 'TODO', attentionCategory: 'EDITING', estimatedMinutes: null, dueDate: null },
+      { id: 'closed', assignedToId: 'user-1', status: 'DONE', attentionCategory: 'EDITING', estimatedMinutes: null, dueDate: null },
+      { id: 'other', assignedToId: 'user-2', status: 'TODO', attentionCategory: 'EDITING', estimatedMinutes: null, dueDate: null },
+    ]);
+
+    const result = await getDashboardOperationalOverview({ userId: 'user-1', role: 'LAWYER' }, now);
+    expect(result.attentionWorkload.categories.find((item) => item.attentionCategory === 'EDITING')?.count).toBe(1);
   });
 });

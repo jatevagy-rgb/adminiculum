@@ -6,7 +6,7 @@ const mockPrisma = {
   caseCollaborator: { findFirst: jest.fn() },
   document: { findUnique: jest.fn() },
   communication: { findUnique: jest.fn() },
-  task: { create: jest.fn() },
+  task: { create: jest.fn(), findUnique: jest.fn() },
   timelineEvent: { create: jest.fn() },
 };
 
@@ -95,8 +95,11 @@ function requestJson(
 }
 
 describe('source-linked task creation', () => {
+  let lastTaskData: any;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    lastTaskData = {};
     process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
     mockPrisma.case.findUnique.mockResolvedValue({ id: 'case-1', assignedLawyerId: 'user-1', createdById: 'creator-1' });
     mockPrisma.caseCollaborator.findFirst.mockResolvedValue(null);
@@ -112,7 +115,9 @@ describe('source-linked task creation', () => {
       caseId: 'case-1',
       subject: 'Client email',
     });
-    mockPrisma.task.create.mockImplementation(async ({ data }: any) => ({
+    mockPrisma.task.create.mockImplementation(async ({ data }: any) => {
+      lastTaskData = data;
+      return {
       id: 'task-1',
       title: data.title,
       status: data.status,
@@ -120,6 +125,40 @@ describe('source-linked task creation', () => {
       documentId: data.documentId || null,
       sourceCommunicationId: data.sourceCommunicationId || null,
       dueDate: data.dueDate || null,
+      };
+    });
+    mockPrisma.task.findUnique.mockImplementation(async () => ({
+      id: 'task-1',
+      title: lastTaskData.title || 'Source task',
+      description: null,
+      taskType: 'REVIEW_CONTRACT',
+      type: 'REVIEW_CONTRACT',
+      status: 'TODO',
+      priority: 'MEDIUM',
+      assignedToId: lastTaskData.assignedToId || lastTaskData.assignedTo || 'user-1',
+      assignedById: lastTaskData.assignedById || lastTaskData.assignedBy || 'user-1',
+      attentionCategory: null,
+      estimatedMinutes: null,
+      documentId: lastTaskData.documentId || null,
+      sourceCommunicationId: lastTaskData.sourceCommunicationId || null,
+      caseId: 'case-1',
+      requiredSkills: lastTaskData.requiredSkills || [],
+      dueDate: lastTaskData.dueDate || null,
+      startedAt: null,
+      completedAt: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      submittedAt: null,
+      stuckReason: null,
+      stuckReasonDetails: null,
+      externalActionRequired: false,
+      externalActionNote: null,
+      externalCompletedAt: null,
+      assignedTo: { id: 'user-1', name: 'Test User', role: 'LAWYER' },
+      case: { id: 'case-1', title: 'Matter', client: { colorKey: null } },
+      _count: { documents: 0 },
+      timeEntries: [],
+      submissions: [],
     }));
     mockPrisma.timelineEvent.create.mockResolvedValue({ id: 'timeline-1' });
   });
