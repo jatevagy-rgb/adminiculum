@@ -95,3 +95,72 @@ Network/security classification:
 
 Migration-audit classification:
 `TASK_ATTENTION_MIGRATION_METADATA_INCOMPLETE`
+
+## Successful retry after Entra administrator propagation
+
+After the operator reassigned the Microsoft Entra administrator in the Azure
+Portal, both Azure CLI and ARM returned the expected principal:
+
+| Item | Value |
+|---|---|
+| Principal | `hubay.gyula@balintfy.onmicrosoft.com` |
+| Principal type | User |
+| Object ID | `d6921f2c-a5e3-4936-b24c-ab93dbd12db3` |
+| Tenant | `18b56834-dfea-4931-bdf8-e5ebb0cb4e0f` |
+
+Temporary firewall rule lifecycle:
+
+| Item | Result |
+|---|---|
+| Current public IP | `37.76.6.18` |
+| Rule name | `metadata-audit-client-20260722` |
+| Start IP | `37.76.6.18` |
+| End IP | `37.76.6.18` |
+| Creation command result | local CLI timeout, then list proof showed created |
+| Deletion command result | local CLI timeout, then list proof showed absent |
+| Final cleanup state | rule absent |
+
+The pre-existing firewall rules remained:
+
+| Rule | Start IP | End IP |
+|---|---:|---:|
+| `allowAzureAppService` | `68.210.130.64` | `68.210.171.1` |
+| `AllowAllAzureServicesAndResourcesWithinAzureIps_2026-2-17_10-37-15` | `0.0.0.0` | `0.0.0.0` |
+| `MyIP` | `37.76.11.42` | `37.76.11.42` |
+| `ClientIPAddress_2026-3-14_15-35-24` | `31.46.244.157` | `31.46.244.157` |
+| `ClientIPAddress_2026-2-17_9-39-42` | `84.1.28.45` | `84.1.28.45` |
+
+Read-only session proof:
+
+| Check | Result |
+|---|---|
+| `SHOW transaction_read_only` before `BEGIN` | `on` |
+| `BEGIN READ ONLY` | succeeded |
+| `SHOW transaction_read_only` in transaction | `on` |
+| Metadata query type | allow-listed SELECT only |
+| Final action | `ROLLBACK` and disconnect |
+
+Metadata summary:
+
+| Item | Result |
+|---|---|
+| PostgreSQL version | PostgreSQL 15.18 |
+| Database/schema | `adminiculum` / `public` |
+| Current user | `hubay.gyula@balintfy.onmicrosoft.com` |
+| Migration head | `20260719120000_add_client_color_key` |
+| `ReviewAttentionLevel` | expected five values present |
+| `tasks.attentionCategory` | absent |
+| `tasks.estimatedMinutes` | absent |
+| `tasks` indexes | pkey plus complexity/maturity/risk/stuckReason |
+| `tasks` total size | `96 kB` |
+| `tasks` table size | `8192 bytes` |
+| Approximate rows | `-1` |
+
+No Task rows, legal content, client data, app credential, token, secret, DDL,
+DML, migration command, deployment, or app configuration change was used.
+
+Final network/security classification:
+`POSTGRES_METADATA_TEMP_FIREWALL_CREATED_AND_REMOVED`
+
+Final migration-audit classification:
+`TASK_ATTENTION_MIGRATION_SCHEMA_CANDIDATE_CORRECTION_REQUIRED`

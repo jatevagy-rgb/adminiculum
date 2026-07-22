@@ -124,3 +124,67 @@ Network/security classification:
 
 Migration-audit classification:
 `TASK_ATTENTION_MIGRATION_METADATA_INCOMPLETE`
+
+## 2026-07-22 successful metadata audit and readiness update
+
+The operator-visible Entra administrator assignment became visible through both
+Azure CLI and ARM. The approved temporary-firewall read-only metadata audit then
+completed successfully.
+
+Completed proof:
+
+- Entra administrator principal:
+  `hubay.gyula@balintfy.onmicrosoft.com`;
+- current public egress IP: `37.76.6.18`;
+- temporary firewall rule:
+  `metadata-audit-client-20260722`;
+- rule scope: `37.76.6.18` to `37.76.6.18`;
+- read-only session proof: `transaction_read_only = on` before and inside
+  `BEGIN READ ONLY`;
+- final transaction action: `ROLLBACK`;
+- temporary firewall rule removed and verified absent;
+- no Task content, legal content, app credential, schema mutation, migration, or
+  deployment was used.
+
+Live metadata results:
+
+| Item | Result |
+|---|---|
+| PostgreSQL version | PostgreSQL 15.18 |
+| Database/schema | `adminiculum` / `public` |
+| Current user | `hubay.gyula@balintfy.onmicrosoft.com` |
+| Migration head | `20260719120000_add_client_color_key` |
+| `ReviewAttentionLevel` | present, expected five values |
+| `tasks.attentionCategory` | absent |
+| `tasks.estimatedMinutes` | absent |
+| Task Attention partial state | none detected |
+| `tasks` total size | `96 kB` |
+| `tasks` table size | `8192 bytes` |
+| Existing `tasks` indexes | pkey, complexity/maturity/risk/stuckReason indexes only |
+
+Updated DONE-MEANS status:
+
+| # | Criterion | Status after live audit |
+|---|---|---|
+| 1 | production metadata inspected read-only | ✅ |
+| 2 | enum existence + values proven live | ✅ |
+| 3 | current Task columns proven absent | ✅ |
+| 4 | exact SQL candidate prepared | ✅, corrected to columns-only |
+| 5 | index choice justified from live metadata | ✅, no first-migration index |
+| 6 | locking impact assessed from live size | ✅, metadata-only columns |
+| 7 | rollback SQL prepared | ✅ |
+| 8 | partial-application handling defined | ✅, no partial state observed |
+| 11 | no DB mutation | ✅ |
+| 12 | no migration directory created | ✅ |
+
+Remaining blocker:
+
+The schema/migration candidate still needs correction because it previously
+included `@@index([attentionCategory])` / `tasks_attentionCategory_idx`. The
+live metadata supports a columns-only first migration.
+
+Network/security classification:
+`POSTGRES_METADATA_TEMP_FIREWALL_CREATED_AND_REMOVED`
+
+Migration-audit classification:
+`TASK_ATTENTION_MIGRATION_SCHEMA_CANDIDATE_CORRECTION_REQUIRED`

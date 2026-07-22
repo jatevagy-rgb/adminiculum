@@ -56,3 +56,19 @@ stopped before firewall creation and before any database token or TLS connection
 
 Live enum status remains **unconfirmed**. The applied-DDL proof above is still
 the best available evidence, but it does not close the live metadata requirement.
+
+## 2026-07-22 live enum confirmation
+
+The live read-only metadata query confirmed `ReviewAttentionLevel` in `public`
+with the expected values and order:
+
+| Order | Value |
+|---:|---|
+| 1 | `QUICK_SCAN` |
+| 2 | `APPROVAL` |
+| 3 | `SIGNATURE` |
+| 4 | `EDITING` |
+| 5 | `DETAILED_REVIEW` |
+
+Result: no enum blocker. The Task Attention migration must reuse the existing
+`"ReviewAttentionLevel"` type and must not create or alter it.

@@ -58,3 +58,45 @@ Final index strategy remains **not execution-ready**. Until live `tasks` indexes
 table size, and approximate row count are proven, keep the candidate index
 decision as provisional and prefer no new index in the first additive migration
 unless later metadata proves a composite index is needed.
+
+## 2026-07-22 live index inspection
+
+Live `pg_indexes` returned:
+
+| Index | Columns |
+|---|---|
+| `tasks_pkey` | `id` |
+| `tasks_complexityScore_idx` | `complexityScore` |
+| `tasks_maturityStage_idx` | `maturityStage` |
+| `tasks_riskScore_idx` | `riskScore` |
+| `tasks_stuckReason_idx` | `stuckReason` |
+
+No existing index covers `assignedToId`, `status`, or `attentionCategory`.
+However, live size metadata shows a very small table:
+
+| Item | Live result |
+|---|---|
+| Total relation size | `96 kB` |
+| Table size | `8192 bytes` |
+| Approximate rows | `-1` (planner stats not populated/reliable) |
+
+## Final index strategy
+
+Choose **Option A: no new index in the first migration**.
+
+Rationale:
+
+- the table is currently tiny;
+- `attentionCategory` is a five-value enum and a standalone index is unlikely to
+  be useful;
+- the planned query is assignee/open-task scoped, not category-only;
+- adding no index keeps the migration metadata-only and avoids any write-blocking
+  index build;
+- a measured composite index can be added later after runtime query evidence.
+
+The current schema candidate's `@@index([attentionCategory])` is therefore not
+the recommended production candidate. It should be removed before generating or
+applying the Task Attention migration.
+
+Classification driver:
+`TASK_ATTENTION_MIGRATION_SCHEMA_CANDIDATE_CORRECTION_REQUIRED`

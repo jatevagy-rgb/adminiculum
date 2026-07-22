@@ -76,3 +76,40 @@ until live metadata confirms:
 - existing `tasks` indexes;
 - `tasks` size and approximate row count;
 - no partial-application state.
+
+## 2026-07-22 corrected SQL candidate after live metadata
+
+Live metadata confirmed:
+
+- `ReviewAttentionLevel` exists with the expected values;
+- `tasks.attentionCategory` is absent;
+- `tasks.estimatedMinutes` is absent;
+- no partial Task Attention application state exists;
+- `tasks` is small (`96 kB` total relation size);
+- no existing `tasks` index covers `assignedToId`, `status`, or
+  `attentionCategory`.
+
+Because the table is small and `attentionCategory` is low-cardinality, the
+single-column `tasks_attentionCategory_idx` should be removed from the first
+migration candidate.
+
+Corrected forward SQL candidate:
+
+```sql
+ALTER TABLE "tasks"
+  ADD COLUMN "attentionCategory" "ReviewAttentionLevel",
+  ADD COLUMN "estimatedMinutes" INTEGER;
+```
+
+Corrected rollback SQL:
+
+```sql
+ALTER TABLE "tasks"
+  DROP COLUMN "estimatedMinutes",
+  DROP COLUMN "attentionCategory";
+```
+
+No index should be created in the first Task Attention migration. A future
+composite index may be considered separately after real query-volume evidence.
+
+Status: candidate correction required before execution approval.

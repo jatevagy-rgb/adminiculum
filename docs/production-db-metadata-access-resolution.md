@@ -120,3 +120,66 @@ migration, deployment, or app configuration was accessed or changed.
 
 Network/security classification:
 `POSTGRES_METADATA_AUTHENTICATION_BLOCKER`
+
+## 2026-07-22 successful temporary-firewall metadata audit
+
+After the operator reassigned the Microsoft Entra administrator in the Azure
+Portal, the read-only control-plane proof succeeded and the approved single-IP
+metadata audit completed.
+
+Control-plane proof:
+
+| Item | Result |
+|---|---|
+| Azure CLI Entra admin principal | `hubay.gyula@balintfy.onmicrosoft.com` |
+| ARM Entra admin principal | `hubay.gyula@balintfy.onmicrosoft.com` |
+| Principal type | User |
+| Object ID | `d6921f2c-a5e3-4936-b24c-ab93dbd12db3` |
+| Tenant | `18b56834-dfea-4931-bdf8-e5ebb0cb4e0f` |
+| Current Azure identity | `hubay.gyula@balintfy.onmicrosoft.com` |
+
+Temporary firewall rule:
+
+| Item | Result |
+|---|---|
+| Rule name | `metadata-audit-client-20260722` |
+| Public egress IP | `37.76.6.18` |
+| Start IP | `37.76.6.18` |
+| End IP | `37.76.6.18` |
+| Created | Yes |
+| Removed | Yes |
+| Post-cleanup proof | rule absent from firewall list |
+
+The Azure CLI create/delete commands both timed out locally, but follow-up
+control-plane reads proved the create and delete operations completed. The rule
+was never widened beyond the single current IPv4 address.
+
+Database access:
+
+- used one ephemeral Microsoft Entra PostgreSQL token;
+- token was not printed, written, logged, committed, or retained in the shell;
+- TLS connection used `ssl` with certificate verification;
+- no app credential or connection string was used.
+
+Read-only proof:
+
+| Check | Result |
+|---|---|
+| `SET default_transaction_read_only = on` | completed |
+| `SHOW transaction_read_only` before `BEGIN` | `on` |
+| `BEGIN READ ONLY` | completed |
+| `SHOW transaction_read_only` in transaction | `on` |
+| Final action | `ROLLBACK` and disconnect |
+
+Post-cleanup state:
+
+- server Ready;
+- public network access unchanged;
+- `activeDirectoryAuth` Enabled;
+- `passwordAuth` Enabled;
+- frontend HTTP 200;
+- backend HTTP 200;
+- no token-related environment variable remained set.
+
+Network/security classification:
+`POSTGRES_METADATA_TEMP_FIREWALL_CREATED_AND_REMOVED`

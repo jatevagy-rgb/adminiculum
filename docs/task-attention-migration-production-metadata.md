@@ -88,3 +88,69 @@ after the stopped run.
 Updated blocker:
 `POSTGRES_METADATA_AUTHENTICATION_BLOCKER` /
 `TASK_ATTENTION_MIGRATION_METADATA_INCOMPLETE`
+
+## 2026-07-22 live read-only metadata obtained
+
+After the Entra administrator assignment became visible through both Azure CLI
+and ARM, a single-IP temporary firewall rule was created for `37.76.6.18`, one
+Entra-token TLS connection was opened, the session was proven read-only, the
+allow-listed metadata queries were executed, and the transaction was rolled
+back.
+
+Database identity:
+
+| Item | Live result |
+|---|---|
+| PostgreSQL version | PostgreSQL 15.18 |
+| Database | `adminiculum` |
+| Schema | `public` |
+| Current user | `hubay.gyula@balintfy.onmicrosoft.com` |
+| Transaction mode | `transaction_read_only = on` |
+
+Migration head:
+
+`20260719120000_add_client_color_key`
+
+Recent `_prisma_migrations` entries:
+
+| Migration | Finished | Rolled back |
+|---|---|---|
+| `20260719120000_add_client_color_key` | yes | no |
+| `20260718120000_add_task_submission_workflow` | yes | no |
+| `20260701120000_add_outlook_communication_provider_fields` | yes | no |
+| `20260628190000_add_communication_baseline` | yes | no |
+| `20260622150000_add_lawyer_handoff_packages_foundation` | yes | no |
+| `20260302142000_add_kb_learning_escalation` | no | yes |
+| `20260212180000_add_workload_tracking` | yes | no |
+| `20260212180000_add_workload_tracking` | no | yes |
+| `20260211153100_baseline` | yes | no |
+
+Task metadata:
+
+- table `public.tasks` exists;
+- `tasks.attentionCategory` is absent;
+- `tasks.estimatedMinutes` is absent;
+- no partial application of the Task Attention candidate was detected;
+- no Task row content was queried.
+
+Existing `tasks` indexes:
+
+| Index | Definition summary |
+|---|---|
+| `tasks_pkey` | primary key on `id` |
+| `tasks_complexityScore_idx` | btree on `complexityScore` |
+| `tasks_maturityStage_idx` | btree on `maturityStage` |
+| `tasks_riskScore_idx` | btree on `riskScore` |
+| `tasks_stuckReason_idx` | btree on `stuckReason` |
+
+Size metadata:
+
+| Item | Live result |
+|---|---|
+| Total relation size | `96 kB` |
+| Table size | `8192 bytes` |
+| Approximate row estimate | `-1` (stats not populated/reliable for this table) |
+
+The live metadata closes the earlier production metadata blocker. The remaining
+issue is candidate-shape correction: the current candidate's single-column
+`attentionCategory` index should be removed or deferred.

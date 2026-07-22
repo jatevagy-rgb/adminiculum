@@ -70,3 +70,26 @@ Locking assessment therefore remains conditional:
 - nullable column additions are still expected to be metadata-only;
 - index locking cannot be finalized without live `tasks` size and index proof;
 - production execution approval remains blocked.
+
+## 2026-07-22 locking update after live metadata
+
+Live metadata showed `tasks` total relation size `96 kB` and table size
+`8192 bytes`. The first migration candidate should now be **columns-only**:
+
+```sql
+ALTER TABLE "tasks"
+  ADD COLUMN "attentionCategory" "ReviewAttentionLevel",
+  ADD COLUMN "estimatedMinutes" INTEGER;
+```
+
+Locking impact for the corrected candidate:
+
+- brief `ACCESS EXCLUSIVE` lock on `tasks` for the catalog update;
+- no table rewrite;
+- no row scan;
+- no backfill;
+- no index build;
+- no write-blocking index phase.
+
+With the index removed, the locking profile is low. Production execution still
+requires a corrected schema/migration candidate and explicit execution approval.
