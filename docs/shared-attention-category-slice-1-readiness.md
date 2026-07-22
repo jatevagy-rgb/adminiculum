@@ -12,7 +12,7 @@ Branch: `claude/shared-attention-category-domain-1` (base `a578c2a`)
 | Estimate validation | `parseEstimatedMinutes` (typed reasons, no clamp) |
 | Aggregation + no-double-count scope | `aggregateAttentionWorkload`, `isCountableWorkloadTask` |
 | Frontend presentation mapping (unwired) | `Frontend/src/lib/attentionCategory.ts` |
-| Prisma schema candidate (nullable, additive) | `Backend/prisma/schema.prisma` (Task fields + index) |
+| Prisma schema candidate (nullable, additive) | `Backend/prisma/schema.prisma` (Task fields only; no first-migration index) |
 | Backend tests (21) | `Backend/tests/attentionCategory.test.ts` |
 | Frontend tests (10) | `Frontend/tests/attentionCategory.test.ts` |
 | DTO / auth / audit / review / dashboard-API contracts | this docs set |
@@ -30,6 +30,8 @@ Branch: `claude/shared-attention-category-domain-1` (base `a578c2a`)
 - Estimate (bands / `estimatedMinutes`) ≠ actual time (`TimeEntry`).
 - Task vs Review attention are distinct fields sharing one vocabulary.
 - Unclassified is explicit, count-only, never defaulted.
+- Production metadata rejected the standalone `attentionCategory` index for the
+  first migration; future indexing must be based on query evidence.
 
 ## DONE-MEANS status
 
@@ -37,7 +39,7 @@ Branch: `claude/shared-attention-category-domain-1` (base `a578c2a`)
 2. existing Review values unchanged — ✅
 3. one authoritative backend duration source — ✅
 4. Task schema candidate nullable/additive — ✅
-5. no migration created — ✅
+5. no migration created and no attention-category index — ✅
 6. exact DTO validation — ✅ (`INVALID_ATTENTION_CATEGORY` / `INVALID_ESTIMATED_MINUTES`)
 7. Task/Review distinction documented — ✅
 8. no-double-counting executable + tested — ✅

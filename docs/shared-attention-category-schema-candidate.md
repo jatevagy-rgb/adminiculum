@@ -29,9 +29,8 @@ Branch: `claude/shared-attention-category-domain-1` (base `a578c2a` via audit `8
    // Dates
    dueDate         DateTime?
 ...
-   @@index([stuckReason], map: "tasks_stuckReason_idx")
-+  @@index([attentionCategory], map: "tasks_attentionCategory_idx")
-   @@map("tasks")
+  @@index([stuckReason], map: "tasks_stuckReason_idx")
+  @@map("tasks")
 ```
 
 ## Confirmations
@@ -41,11 +40,35 @@ Branch: `claude/shared-attention-category-domain-1` (base `a578c2a` via audit `8
   unclassified, no data rewrite required.
 - **TaskSubmission.requestedAttention unchanged.** No edit to the submission model.
 - **No enum rename / no new enum.** Reuses the deployed `ReviewAttentionLevel`.
-- **No destructive statement.** Two additive nullable columns + one additive index.
+- **No destructive statement.** Two additive nullable columns only.
 - **No false default.** Nothing classifies a legacy task automatically.
 - **No backfill required for deployment safety** — the columns are optional.
-- **Index justified:** `@@index([attentionCategory])` supports Dashboard workload
-  aggregation / Tasks filtering by category.
+- **No first-migration index.** Production metadata proved `tasks` is tiny
+  (`96 kB` total relation size), and `attentionCategory` is a five-value
+  low-cardinality enum. A standalone index is intentionally rejected for the
+  initial candidate; future indexing must be evidence-driven.
+
+## Production metadata alignment
+
+The production metadata audit at
+`claude/task-attention-migration-audit-1` / `baf4ca6` proved:
+
+- PostgreSQL 15.18;
+- migration head `20260719120000_add_client_color_key`;
+- `ReviewAttentionLevel` exists with the five expected values;
+- `tasks.attentionCategory` and `tasks.estimatedMinutes` are absent;
+- no partial application state exists;
+- current `tasks` indexes are pkey plus complexity/maturity/risk/stuckReason;
+- `tasks` total relation size is `96 kB`.
+
+The schema candidate therefore contains only:
+
+```prisma
+attentionCategory ReviewAttentionLevel?
+estimatedMinutes  Int?
+```
+
+and no `@@index([attentionCategory])` or replacement composite index.
 
 ## Validation performed (schema-only, no DB)
 

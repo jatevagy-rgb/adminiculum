@@ -40,6 +40,16 @@ Endpoint audit:
 payload (server-computed). Correct under pagination; **no extra Dashboard
 request**.
 
+## Index posture after production metadata audit
+
+The first Task schema migration should not add a standalone `attentionCategory`
+index. The production metadata audit proved the `tasks` table is currently tiny
+(`96 kB` total relation size), and the category is a five-value low-cardinality
+enum. The Dashboard workload query is expected to be scoped by assignee/open-task
+filters, so future indexing should be evidence-driven and separate from the
+first columns-only migration. A later candidate could consider
+`assignedToId + attentionCategory`, but no replacement index is authorized here.
+
 ### Shape
 ```json
 {

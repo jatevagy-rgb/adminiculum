@@ -11,14 +11,19 @@ Date: 2026-07-22
 
 ## What the separate migration ticket must do
 
-Apply two additive nullable columns + one index to the `tasks` table:
+Apply two additive nullable columns to the `tasks` table:
 ```sql
 ALTER TABLE "tasks" ADD COLUMN "attentionCategory" "ReviewAttentionLevel";
 ALTER TABLE "tasks" ADD COLUMN "estimatedMinutes" INTEGER;
-CREATE INDEX "tasks_attentionCategory_idx" ON "tasks" ("attentionCategory");
 ```
 (illustrative — the enum type `ReviewAttentionLevel` already exists in production;
 no enum creation/alteration.)
+
+Do **not** create `tasks_attentionCategory_idx` in the first migration.
+Production metadata proved the table is tiny (`96 kB` total relation size), and
+the five-value enum does not justify a standalone category index without runtime
+query evidence. A future candidate could be a measured composite such as
+`assignedToId + attentionCategory`, but that is not authorized or required now.
 
 ## Constraints for that ticket
 
@@ -38,6 +43,7 @@ no enum creation/alteration.)
 |---|---|
 | Schema candidate authored | ✅ (additive, nullable, `prisma validate` OK) |
 | Enum reused, not renamed | ✅ |
+| First-migration index | ✅ intentionally omitted |
 | Domain contract + validation + aggregation implemented & tested | ✅ |
 | DTO / authorization / audit / dashboard contracts documented | ✅ |
 | Migration created | ❌ (intentionally deferred) |

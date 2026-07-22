@@ -71,11 +71,13 @@ model Task {
   // ... existing fields unchanged ...
   attentionCategory ReviewAttentionLevel?
   estimatedMinutes  Int?
-
-  @@index([attentionCategory])   // supports Dashboard workload aggregation by category
 }
 ```
 
 Backfill (Slice 7) is a **separate** data workflow, not part of the migration:
 legacy tasks remain `attentionCategory = null` (unclassified) until explicitly
 classified.
+
+No first-migration index is included. Production metadata proved `tasks` is tiny
+and the standalone low-cardinality category index is not justified without
+runtime query evidence.
