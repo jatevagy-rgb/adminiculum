@@ -413,3 +413,21 @@ Current classification: `CLIENT_COLOR_DASHBOARD_PRODUCTION_SUCCESS`.
 - Deployment procedure deviation documented in `docs/dashboard-visual-production-deployment-deviation.md`.
 
 Current classification: `DASHBOARD_VISUAL_PRODUCTION_SUCCESS_WITH_DEPLOYMENT_PROCEDURE_DEVIATION`.
+
+## Dashboard Resilience + Workload Cards Production Release
+
+`DASHBOARD-RESILIENCE-AND-WORKLOAD-CARDS-PRODUCTION-RELEASE-1` completed on 2026-07-22.
+
+- Source branch `claude/dashboard-legacy-workload-cards-restore-1` @ `77bece8` fast-forwarded into the release branch (`aa98c70` → `77bece8`).
+- Runtime source commit: `bddeb81` (release HEAD `77bece8` is its test/docs descendant).
+- Ancestry proven linear: `aa98c70 → c969a9b → 77bece8`; resilience runtime and workload restoration each included once; parked `24bc6c5` absent.
+- Independent diff review: only the 3 expected runtime files changed (`DashboardFocused.tsx`, `dashboardLoadState.ts`, `dashboardWorkloadSummary.ts`); zero Backend/src, Prisma, migration, API, auth, CORS, package, or lockfile change.
+- Frontend validation: tsc, build, `verify:prod-env` clean; resilience unit 27/27; workload unit 16/16; resilience browser QA 111/111; workload browser QA 27/27.
+- Backend regression: Prisma validate, tsc, 55 suites / 504 tests, build — all pass; no Backend/src or generated diff.
+- Clean frontend Oryx source artifact with Frontend contents at ZIP root (no backend package.json). SHA-256 `907a7202a3f3aded2b488a217758c6c4af03544ef8b2bfb139804d2e3f6e119b`.
+- One frontend deployment `76702f05-3a3e-4f59-861e-81e37c91cd99` — status 4, active, complete (OneDeploy). CLI timed out; not retried; authoritative state polled read-only. Superseded `0a985d83-…`.
+- Authenticated production acceptance passed: six-card "Napi munka összefoglaló" with terracotta (Külső kommunikáció) and dark-green (Belső kommunikáció) tokens, live counts; four light Quick Actions preserved; operational overview + Mai munkám + calendar + communications preserved; partial-load normal state clean; `/cases`, `/tasks`, `/reviews` healthy; console clean; no localhost calls; no new endpoint for the cards.
+- Backend deployment `2ab2eb62-…` not modified. Migration head `20260719120000_add_client_color_key` not modified. No DB action.
+- App-settings hash `9dceafa1…2882` identical before/after; B1 Basic plan, alwaysOn, resources — unchanged. No rollback required.
+
+Final classification: `DASHBOARD_RESILIENCE_WORKLOAD_PRODUCTION_SUCCESS`.
