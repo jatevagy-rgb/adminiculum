@@ -985,7 +985,6 @@ model Task {
   @@index([maturityStage], map: "tasks_maturityStage_idx")
   @@index([riskScore], map: "tasks_riskScore_idx")
   @@index([stuckReason], map: "tasks_stuckReason_idx")
-  @@index([attentionCategory], map: "tasks_attentionCategory_idx")
   @@map("tasks")
 }
 
