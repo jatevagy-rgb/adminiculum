@@ -138,4 +138,13 @@ describe('schema candidate is nullable/additive only', () => {
     // Enum not renamed.
     expect(schema).toMatch(/enum ReviewAttentionLevel/);
   });
+
+  it('does not create a premature attentionCategory index', () => {
+    const schema = readFileSync(join(__dirname, '..', 'prisma', 'schema.prisma'), 'utf8');
+
+    expect(schema).not.toMatch(/@@index\(\[attentionCategory\]/);
+    expect(schema).not.toContain('tasks_attentionCategory_idx');
+    expect(schema).not.toMatch(/@@index\(\[assignedToId,\s*attentionCategory\]/);
+    expect(schema).not.toMatch(/@@index\(\[assignedToId,\s*status,\s*attentionCategory\]/);
+  });
 });
