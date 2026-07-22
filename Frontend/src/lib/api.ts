@@ -1,6 +1,7 @@
 // Simple API utility for Adminiculum frontend
 
 import type { ClientColorKey } from './clientColors';
+import type { AttentionCategory } from './attentionCategory';
 
 // Use canonical env var for backend base URL, keep legacy fallback for compatibility.
 // Values should be host roots (e.g. http://localhost:3001), API_BASE appends /api/v1.
@@ -257,6 +258,19 @@ export interface DashboardOperationalOverview {
   };
   summary: { openCaseCount: number };
   groups: Array<{ code: DashboardOperationalGroupCode; label: string; count: number }>;
+  attentionWorkload?: {
+    categories: Array<{
+      attentionCategory: AttentionCategory;
+      count: number;
+      minMinutes: number;
+      maxMinutes: number;
+      nearestDeadline: string | null;
+    }>;
+    unclassified: {
+      count: number;
+      nearestDeadline: string | null;
+    };
+  };
   items: Array<{
     id: string;
     caseNumber: string;
@@ -1171,6 +1185,8 @@ export interface TaskItem {
   description?: string;
   status: string;
   priority: string;
+  attentionCategory?: AttentionCategory | null;
+  estimatedMinutes?: number | null;
   dueDate?: string;
   submittedAt?: string;
   createdAt?: string;
@@ -1284,11 +1300,25 @@ export interface CreateTaskData {
   priority?: string;
   dueDate?: string;
   assignedTo?: string;
+  attentionCategory?: AttentionCategory | null;
+  estimatedMinutes?: number | null;
 }
 
 export async function createTask(data: CreateTaskData): Promise<TaskItem> {
   return fetchApi<TaskItem>('/tasks', {
     method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export interface UpdateTaskAttentionData {
+  attentionCategory?: AttentionCategory | null;
+  estimatedMinutes?: number | null;
+}
+
+export async function updateTaskAttention(taskId: string, data: UpdateTaskAttentionData): Promise<TaskItem> {
+  return fetchApi<TaskItem>(`/tasks/${taskId}/attention`, {
+    method: 'PATCH',
     body: JSON.stringify(data),
   });
 }

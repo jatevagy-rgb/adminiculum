@@ -111,7 +111,7 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
   try {
     const {
       caseId, title, description, priority,
-      assignedTo, requiredSkills, dueDate, documentId 
+      assignedTo, requiredSkills, dueDate, documentId
     } = req.body;
     const rawType = req.body?.type ?? req.body?.taskType;
     
@@ -147,6 +147,8 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
       }
     }
 
+    const attentionInput = taskService.parseTaskAttentionInput(req.body || {});
+
     console.log(`[TASK_CREATE] Payload: caseId=${caseId}, title=${title}, rawType=${rawType}, mappedTaskType=${mappedTaskType}, priority=${priority}, assignedTo=${effectiveAssignedTo}`);
 
     const task = await taskService.createTask({
@@ -160,12 +162,21 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
       assignedBy,
       requiredSkills,
       dueDate: dueDate ? new Date(dueDate) : undefined,
-      documentId
+      documentId,
+      attentionCategory: attentionInput.attentionCategory,
+      estimatedMinutes: attentionInput.estimatedMinutes,
     });
 
     res.status(201).json(task);
   } catch (error) {
     console.error('Error creating task:', error);
+    if (error instanceof WorkflowTransitionError) {
+      return res.status(error.statusCode).json({
+        status: error.statusCode,
+        code: error.code,
+        message: error.message,
+      });
+    }
     if (error instanceof TaskValidationError) {
       return res.status(400).json({
         error: 'Validation error',
@@ -178,6 +189,22 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
       return res.status(prismaErr.status).json(prismaErr.body);
     }
     res.status(500).json({ error: 'Hiba a feladat létrehozásakor' });
+  }
+});
+
+// ============================================================================
+// PATCH /api/v1/tasks/:id/attention - Figyelmi kategória és becsült idő
+// ============================================================================
+router.patch('/:id/attention', authenticate, async (req: Request, res: Response) => {
+  try {
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
+    const userId = (req as any).user?.userId;
+    const task = await taskService.updateTaskAttention(id, userId, req.body);
+    res.json(task);
+  } catch (error) {
+    console.error('Error updating task attention:', error);
+    sendTaskWorkflowError(res, error, 'Hiba a feladat figyelmi besorolásának frissítésekor');
   }
 });
 

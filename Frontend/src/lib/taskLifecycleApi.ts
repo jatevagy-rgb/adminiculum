@@ -1,4 +1,5 @@
 import { ApiError, fetchApi } from "./api";
+import type { AttentionCategory } from "./attentionCategory";
 import type { ClientColorKey } from "./clientColors";
 
 export type SubmissionReadinessCode =
@@ -152,6 +153,8 @@ export interface TaskLifecycleListItem {
   description?: string | null;
   status: string;
   priority: string;
+  attentionCategory?: AttentionCategory | null;
+  estimatedMinutes?: number | null;
   dueDate?: string | null;
   matterId?: string | null;
   assignedToId?: string | null;

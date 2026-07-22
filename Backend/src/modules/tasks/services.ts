@@ -12,6 +12,11 @@ import {
   validateTaskTransition,
   WorkflowTransitionError,
 } from '../cases/workItems';
+import {
+  AttentionCategory,
+  isAttentionCategory,
+  parseEstimatedMinutes,
+} from './attentionCategory';
 
 const TaskStatus = {
   TODO: 'TODO',
@@ -64,7 +69,8 @@ const TimelineType = {
   CHECKED_OUT: 'CHECKED_OUT',
   CHECKED_IN: 'CHECKED_IN',
   VERSION_CREATED: 'VERSION_CREATED',
-  PERMISSION_GRANTED: 'PERMISSION_GRANTED'
+  PERMISSION_GRANTED: 'PERMISSION_GRANTED',
+  CUSTOM: 'CUSTOM'
 } as const;
 
 const UserRole = {
@@ -91,6 +97,8 @@ const taskRescheduleSelect = {
   caseId: true,
   assignedToId: true,
   assignedById: true,
+  attentionCategory: true,
+  estimatedMinutes: true,
   updatedAt: true,
 } as const;
 
@@ -104,6 +112,8 @@ const taskReadSelect = {
   priority: true,
   assignedToId: true,
   assignedById: true,
+  attentionCategory: true,
+  estimatedMinutes: true,
   documentId: true,
   sourceCommunicationId: true,
   caseId: true,
@@ -169,7 +179,8 @@ async function transitionTask(taskId: string, userId: string, action: SupportedT
     },
   });
 
-  return task;
+  const updatedTask = await getTask(task.id);
+  return updatedTask || task;
 }
 
 function mapAnyTaskTypeToPrisma(taskType?: string): TaskType {
@@ -282,6 +293,8 @@ export async function createTask(data: {
   dueDate?: Date;
   documentId?: string;
   sourceCommunicationId?: string;
+  attentionCategory?: AttentionCategory | null;
+  estimatedMinutes?: number | null;
 }) {
   const prismaTaskType = mapAnyTaskTypeToPrisma((data.taskType as string | undefined) || (data.type as string | undefined));
 
@@ -299,7 +312,9 @@ export async function createTask(data: {
       requiredSkills: data.requiredSkills || TASK_TYPE_SKILLS[prismaTaskType] || [],
       dueDate: data.dueDate,
       documentId: data.documentId,
-      sourceCommunicationId: data.sourceCommunicationId
+      sourceCommunicationId: data.sourceCommunicationId,
+      attentionCategory: data.attentionCategory ?? null,
+      estimatedMinutes: data.estimatedMinutes ?? null,
     } as any,
     include: {
       case: true,
@@ -323,7 +338,8 @@ export async function createTask(data: {
     console.warn('[TASK_CREATE] Timeline event creation failed (task remains created):', timelineError);
   }
 
-  return task;
+  const createdTask = await getTask(task.id);
+  return createdTask || task;
 }
 
 /**
@@ -374,6 +390,127 @@ export async function getTask(taskId: string) {
     }
   });
   return task ? withTaskSubmissionProjection(task) : null;
+}
+
+export class TaskAttentionValidationError extends WorkflowTransitionError {
+  constructor(code: 'INVALID_ATTENTION_CATEGORY' | 'INVALID_ESTIMATED_MINUTES', message: string) {
+    super(400, code, message);
+    this.name = 'TaskAttentionValidationError';
+  }
+}
+
+function parseNullableAttentionCategory(value: unknown): AttentionCategory | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  if (!isAttentionCategory(value)) {
+    throw new TaskAttentionValidationError('INVALID_ATTENTION_CATEGORY', 'attentionCategory is invalid.');
+  }
+  return value;
+}
+
+function parseNullableEstimatedMinutes(value: unknown): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const parsed = parseEstimatedMinutes(value);
+  if (!parsed.ok) {
+    throw new TaskAttentionValidationError('INVALID_ESTIMATED_MINUTES', 'estimatedMinutes must be an integer between 1 and 480.');
+  }
+  return parsed.value;
+}
+
+export function parseTaskAttentionInput(payload: Record<string, unknown>) {
+  return {
+    attentionCategory: parseNullableAttentionCategory(payload.attentionCategory),
+    estimatedMinutes: parseNullableEstimatedMinutes(payload.estimatedMinutes),
+  };
+}
+
+export async function updateTaskAttention(taskId: string, userId: string, body: unknown) {
+  if (!userId) {
+    throw new WorkflowTransitionError(401, 'NOT_AUTHENTICATED', 'Authenticated user is required.');
+  }
+  const payload = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+  const allowed = new Set(['attentionCategory', 'estimatedMinutes']);
+  for (const key of Object.keys(payload)) {
+    if (!allowed.has(key)) {
+      throw new WorkflowTransitionError(400, 'UNSUPPORTED_TASK_ATTENTION_FIELD', `Field ${key} is not accepted for task attention updates.`);
+    }
+  }
+  if (!('attentionCategory' in payload) && !('estimatedMinutes' in payload)) {
+    throw new WorkflowTransitionError(400, 'TASK_ATTENTION_FIELD_REQUIRED', 'attentionCategory or estimatedMinutes is required.');
+  }
+
+  const parsed = parseTaskAttentionInput(payload);
+  const existing = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: {
+      id: true,
+      title: true,
+      caseId: true,
+      assignedToId: true,
+      assignedById: true,
+      attentionCategory: true,
+      estimatedMinutes: true,
+    },
+  });
+  if (!existing) {
+    throw new WorkflowTransitionError(404, 'TASK_NOT_FOUND', 'Task not found.');
+  }
+  const actor = await canUserActOnTask(existing, userId);
+  if (!actor.allowed) {
+    throw new WorkflowTransitionError(403, 'TASK_ACTION_FORBIDDEN', 'You are not allowed to update this task.');
+  }
+
+  const data: Record<string, unknown> = {};
+  const auditChanges: Array<{ field: 'attentionCategory' | 'estimatedMinutes'; oldValue: string | number | null; newValue: string | number | null }> = [];
+  if (parsed.attentionCategory !== undefined && parsed.attentionCategory !== existing.attentionCategory) {
+    data.attentionCategory = parsed.attentionCategory;
+    auditChanges.push({
+      field: 'attentionCategory',
+      oldValue: existing.attentionCategory ? String(existing.attentionCategory) : null,
+      newValue: parsed.attentionCategory,
+    });
+  }
+  if (parsed.estimatedMinutes !== undefined && parsed.estimatedMinutes !== existing.estimatedMinutes) {
+    data.estimatedMinutes = parsed.estimatedMinutes;
+    auditChanges.push({
+      field: 'estimatedMinutes',
+      oldValue: existing.estimatedMinutes,
+      newValue: parsed.estimatedMinutes,
+    });
+  }
+
+  if (auditChanges.length === 0) {
+    return getTask(taskId);
+  }
+
+  const task = await prisma.task.update({
+    where: { id: taskId },
+    data: data as any,
+    select: {
+      ...taskReadSelect,
+      case: true,
+      assignedTo: true,
+      submissions: {
+        orderBy: { revisionNumber: 'desc' },
+        take: 1,
+        select: taskSubmissionProjectionSelect,
+      },
+    },
+  });
+
+  await createTimelineEvent({
+    caseId: task.caseId,
+    userId,
+    type: TimelineType.CUSTOM as TimelineType,
+    payload: {
+      taskId,
+      source: 'task_attention',
+      changes: auditChanges,
+    },
+  });
+
+  return withTaskSubmissionProjection(task);
 }
 
 /**
@@ -957,8 +1094,8 @@ function taskNextActionCode(taskStatus: unknown, submission?: any): string {
   return ['PENDING', 'TODO'].includes(String(taskStatus || '').toUpperCase()) ? 'START_TASK' : 'OPEN_TASK';
 }
 
-function withTaskSubmissionProjection<T extends { status: unknown; submissions: any[] }>(task: T) {
-  const { submissions, ...safeTask } = task;
+function withTaskSubmissionProjection<T extends { status: unknown; submissions?: any[] }>(task: T) {
+  const { submissions = [], ...safeTask } = task;
   const submission = submissions[0] || null;
   const caseRecord = (safeTask as any).case;
   const safeCase = caseRecord
@@ -1062,5 +1199,7 @@ export default {
   canAssign,
   getUserTasks,
   getReviewTasksForUser,
+  parseTaskAttentionInput,
+  updateTaskAttention,
   TaskValidationError
 };
