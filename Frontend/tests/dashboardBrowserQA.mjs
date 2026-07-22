@@ -219,6 +219,16 @@ const makeOperational = () => ({
     },
   },
   summary: { openCaseCount: 3 },
+  attentionWorkload: {
+    categories: [
+      { attentionCategory: "QUICK_SCAN", count: 2, minMinutes: 10, maxMinutes: 30, nearestDeadline: new Date(Date.now() + 86400000).toISOString() },
+      { attentionCategory: "APPROVAL", count: 0, minMinutes: 0, maxMinutes: 0, nearestDeadline: null },
+      { attentionCategory: "SIGNATURE", count: 1, minMinutes: 5, maxMinutes: 10, nearestDeadline: null },
+      { attentionCategory: "EDITING", count: 0, minMinutes: 0, maxMinutes: 0, nearestDeadline: null },
+      { attentionCategory: "DETAILED_REVIEW", count: 3, minMinutes: 180, maxMinutes: 360, nearestDeadline: null },
+    ],
+    unclassified: { count: 1, nearestDeadline: null },
+  },
   groups: [
     { code: "DEADLINE_APPROACHING", label: "Kozelgo hatarido", count: 1 },
     { code: "OFFICE_ACTION", label: "Irodai teendo", count: 1 },

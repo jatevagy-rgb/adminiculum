@@ -46,6 +46,12 @@ import {
   type WorkloadSummaryCardDef,
   type WorkloadSummaryValueKey,
 } from "@/lib/dashboardWorkloadSummary";
+import {
+  attentionPresentation,
+  formatEstimateRange,
+  UNCLASSIFIED_LABEL,
+  type AttentionCategory,
+} from "@/lib/attentionCategory";
 import { CompactState, OperationalPageHeader, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 import { AdminButton } from "@/components/adminiculum/ui";
 import { ClientAccent } from "@/components/clients/ClientAccent";
@@ -266,6 +272,86 @@ function SummaryCard({ card, value }: { card: WorkloadSummaryCardDef; value: num
         </span>
       </span>
     </Link>
+  );
+}
+
+type DashboardAttentionWorkload = NonNullable<DashboardOperationalOverview["attentionWorkload"]>;
+
+function attentionCardClass(category: AttentionCategory | "UNCLASSIFIED", count: number): string {
+  const quiet = count === 0 ? " opacity-70" : "";
+  const tone =
+    category === "QUICK_SCAN"
+      ? "border-l-[var(--adm-ochre-500)] bg-[var(--adm-ivory-100)]"
+      : category === "APPROVAL"
+        ? "border-l-[var(--adm-green-700)] bg-[#EAF3EE]"
+        : category === "SIGNATURE"
+          ? "border-l-[#8d76a8] bg-[#f4f0f8]"
+          : category === "EDITING"
+            ? "border-l-[var(--adm-blue-500)] bg-[#EAF6FA]"
+            : category === "DETAILED_REVIEW"
+              ? "border-l-[var(--adm-terracotta-700)] bg-[#FBEFEB]"
+              : "border-l-[var(--adm-border-strong)] bg-[var(--adm-surface)]";
+  return `block rounded-xl border border-[var(--adm-border)] border-l-4 p-3 transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)] focus-visible:ring-offset-2${quiet} ${tone}`;
+}
+
+// "Milyen munkák várnak rám?" — reads the attentionWorkload projection already
+// present on the operational-overview response (no second fetch, no double count).
+function DashboardAttentionWorkloadBlock({
+  workload,
+  loading,
+  unavailable,
+}: {
+  workload: DashboardAttentionWorkload | null;
+  loading: boolean;
+  unavailable: boolean;
+}) {
+  const empty =
+    Boolean(workload) &&
+    workload!.categories.every((item) => item.count === 0) &&
+    workload!.unclassified.count === 0;
+  const noData = !loading && !unavailable && !workload;
+
+  return (
+    <section aria-labelledby="dashboard-attention-workload-heading">
+      <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 id="dashboard-attention-workload-heading" className="font-serif text-[22px] font-medium text-[var(--adm-text)]">Milyen munkák várnak rám?</h2>
+          <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Csak az Önre kiosztott nyitott feladatokat számolja; a becslés tervezési jelzés, nem időnyilvántartás.</p>
+        </div>
+        <DashboardTextLink href="/tasks">Feladatok megnyitása</DashboardTextLink>
+      </div>
+      {loading ? (
+        <div className="rounded-lg border border-[var(--adm-border)] bg-white"><DashboardEmptyState title="Munkaterhelési adatok betöltése…" /></div>
+      ) : unavailable ? (
+        <div className="rounded-lg border border-[var(--adm-border)] bg-white"><DashboardEmptyState title="A munkaterhelési adatok most nem érhetők el." /></div>
+      ) : noData || empty ? (
+        <div className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-ivory-100)]"><DashboardEmptyState title="Nincs besorolt, Önre váró feladat." detail="A besorolt feladatok kategóriánként itt jelennek meg." /></div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3 xl:grid-cols-6">
+          {workload!.categories.map((item) => {
+            const presentation = attentionPresentation(item.attentionCategory);
+            const duration = formatEstimateRange(item.minMinutes, item.maxMinutes);
+            return (
+              <Link key={item.attentionCategory} href={`/tasks?attentionCategory=${encodeURIComponent(item.attentionCategory)}`} className={attentionCardClass(item.attentionCategory, item.count)}>
+                <span className="flex items-center justify-between gap-2">
+                  <span className="text-[12px] font-bold text-[var(--adm-text)]">{presentation.label}</span>
+                  <span aria-hidden="true" className="text-[13px]">{presentation.mark}</span>
+                </span>
+                <span className="mt-1 block font-serif text-[20px] font-medium text-[var(--adm-text)]">{item.count} feladat</span>
+                <span className="mt-0.5 block text-[10.5px] text-[var(--adm-text-muted)]">{item.count === 0 ? "Nincs ilyen feladat" : duration}</span>
+                {item.nearestDeadline ? <span className="mt-1 block text-[10px] font-semibold text-[var(--adm-text-soft)]">Legközelebbi: {formatDate(item.nearestDeadline)}</span> : null}
+              </Link>
+            );
+          })}
+          <Link href="/tasks?attentionCategory=UNCLASSIFIED" className={attentionCardClass("UNCLASSIFIED", workload!.unclassified.count)}>
+            <span className="text-[12px] font-bold text-[var(--adm-text)]">{UNCLASSIFIED_LABEL}</span>
+            <span className="mt-1 block font-serif text-[20px] font-medium text-[var(--adm-text)]">{workload!.unclassified.count} feladat</span>
+            <span className="mt-0.5 block text-[10.5px] text-[var(--adm-text-muted)]">Időt nem becsülünk</span>
+            {workload!.unclassified.nearestDeadline ? <span className="mt-1 block text-[10px] font-semibold text-[var(--adm-text-soft)]">Legközelebbi: {formatDate(workload!.unclassified.nearestDeadline)}</span> : null}
+          </Link>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -505,6 +591,12 @@ export function DashboardFocused() {
             <SummaryCard key={card.valueKey} card={card} value={workloadSummaryValues[card.valueKey]} />
           ))}
         </section>
+
+        <DashboardAttentionWorkloadBlock
+          workload={operational?.attentionWorkload ?? null}
+          loading={loading}
+          unavailable={!loading && !availability.operational}
+        />
 
         <section className="overflow-hidden rounded-xl border border-[var(--adm-border)] bg-white shadow-[0_10px_28px_rgba(0,42,35,0.035)]" aria-labelledby="dashboard-operational-cases-heading">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--adm-border)] px-4 py-3">
