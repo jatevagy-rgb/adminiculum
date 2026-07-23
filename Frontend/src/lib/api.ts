@@ -1615,6 +1615,124 @@ export interface DocumentVersionsResponse {
   versions: DocumentVersionItem[];
 }
 
+export type DocumentAnnotationType =
+  | 'INTERNAL_NOTE'
+  | 'REVIEW_COMMENT'
+  | 'MODIFICATION_REASON'
+  | 'CLIENT_EXPLANATION_DRAFT'
+  | 'QUESTION'
+  | 'DECISION'
+  | 'TASK_NOTE';
+
+export type DocumentAnnotationAnchorType = 'TEXT_RANGE' | 'PAGE_RECTANGLE' | 'PAGE_ELLIPSE' | 'PAGE_POINT';
+export type DocumentAnnotationStatus = 'OPEN' | 'IN_REVIEW' | 'RESOLVED' | 'REOPENED';
+export type DocumentAnnotationVisibility = 'INTERNAL' | 'CLIENT_CANDIDATE';
+
+export interface DocumentAnnotationUser {
+  id: string;
+  name: string | null;
+  email?: string;
+}
+
+export interface DocumentAnnotationItem {
+  id: string;
+  documentId: string;
+  documentVersionId: string;
+  annotationType: DocumentAnnotationType;
+  anchorType: DocumentAnnotationAnchorType;
+  status: DocumentAnnotationStatus;
+  visibility: DocumentAnnotationVisibility;
+  headline: string | null;
+  internalNote: string | null;
+  reviewComment: string | null;
+  modificationReason: string | null;
+  clientExplanationDraft: string | null;
+  legalRisk: string | null;
+  openQuestion: string | null;
+  decisionText: string | null;
+  resolutionNote: string | null;
+  selectedText: string | null;
+  normalizedSelectedText: string | null;
+  textPrefix: string | null;
+  textSuffix: string | null;
+  startOffset: number | null;
+  endOffset: number | null;
+  pageNumber: number | null;
+  pageIndex: number | null;
+  rect: { x: number | null; y: number | null; width: number | null; height: number | null } | null;
+  point: { x: number | null; y: number | null } | null;
+  pageRotation: number | null;
+  structuralPath: string | null;
+  rendererVersion: string | null;
+  contentFingerprint: string | null;
+  createdBy: DocumentAnnotationUser | null;
+  assignedTo: DocumentAnnotationUser | null;
+  resolvedBy: DocumentAnnotationUser | null;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt: string | null;
+}
+
+export interface DocumentAnnotationsResponse {
+  documentId: string;
+  documentVersionId: string;
+  items: DocumentAnnotationItem[];
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+  };
+}
+
+export interface DocumentAnnotationComment {
+  id: string;
+  annotationId: string;
+  body: string;
+  createdBy: DocumentAnnotationUser | null;
+  createdAt: string;
+  editedAt: string | null;
+}
+
+export interface CreateDocumentAnnotationPayload {
+  annotationType: DocumentAnnotationType;
+  anchorType: DocumentAnnotationAnchorType;
+  visibility?: DocumentAnnotationVisibility;
+  headline?: string;
+  internalNote?: string;
+  reviewComment?: string;
+  modificationReason?: string;
+  clientExplanationDraft?: string;
+  legalRisk?: string;
+  openQuestion?: string;
+  decisionText?: string;
+  selectedText?: string;
+  textPrefix?: string;
+  textSuffix?: string;
+  startOffset?: number;
+  endOffset?: number;
+  pageIndex?: number;
+  pageNumber?: number;
+  rect?: { x: number; y: number; width: number; height: number };
+  point?: { x: number; y: number };
+  rendererVersion?: string;
+  contentFingerprint?: string;
+  idempotencyKey?: string;
+}
+
+export type UpdateDocumentAnnotationPayload = Partial<Pick<
+  CreateDocumentAnnotationPayload,
+  | 'annotationType'
+  | 'visibility'
+  | 'headline'
+  | 'internalNote'
+  | 'reviewComment'
+  | 'modificationReason'
+  | 'clientExplanationDraft'
+  | 'legalRisk'
+  | 'openQuestion'
+  | 'decisionText'
+>>;
+
 export interface DocumentSearchItem {
   id: string;
   caseId: string;
@@ -1738,6 +1856,99 @@ export async function downloadDocumentVersion(documentId: string, versionId: str
   }
 
   return response.blob();
+}
+
+function documentAnnotationPath(documentId: string, versionId: string, suffix = ''): string {
+  return `/documents/${encodeURIComponent(documentId)}/versions/${encodeURIComponent(versionId)}/annotations${suffix}`;
+}
+
+export async function getDocumentAnnotations(
+  documentId: string,
+  versionId: string,
+  params?: { status?: DocumentAnnotationStatus; annotationType?: DocumentAnnotationType; anchorType?: DocumentAnnotationAnchorType; limit?: number; offset?: number }
+): Promise<DocumentAnnotationsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.annotationType) searchParams.set('annotationType', params.annotationType);
+  if (params?.anchorType) searchParams.set('anchorType', params.anchorType);
+  if (params?.limit) searchParams.set('limit', String(params.limit));
+  if (params?.offset) searchParams.set('offset', String(params.offset));
+  const query = searchParams.toString();
+  return fetchApi<DocumentAnnotationsResponse>(`${documentAnnotationPath(documentId, versionId)}${query ? `?${query}` : ''}`);
+}
+
+export async function createDocumentAnnotation(
+  documentId: string,
+  versionId: string,
+  payload: CreateDocumentAnnotationPayload
+): Promise<DocumentAnnotationItem> {
+  return fetchApi<DocumentAnnotationItem>(documentAnnotationPath(documentId, versionId), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateDocumentAnnotation(
+  documentId: string,
+  versionId: string,
+  annotationId: string,
+  payload: UpdateDocumentAnnotationPayload
+): Promise<DocumentAnnotationItem> {
+  return fetchApi<DocumentAnnotationItem>(documentAnnotationPath(documentId, versionId, `/${encodeURIComponent(annotationId)}`), {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function resolveDocumentAnnotation(
+  documentId: string,
+  versionId: string,
+  annotationId: string,
+  resolutionNote?: string
+): Promise<DocumentAnnotationItem> {
+  return fetchApi<DocumentAnnotationItem>(documentAnnotationPath(documentId, versionId, `/${encodeURIComponent(annotationId)}/resolve`), {
+    method: 'POST',
+    body: JSON.stringify({ resolutionNote }),
+  });
+}
+
+export async function reopenDocumentAnnotation(
+  documentId: string,
+  versionId: string,
+  annotationId: string
+): Promise<DocumentAnnotationItem> {
+  return fetchApi<DocumentAnnotationItem>(documentAnnotationPath(documentId, versionId, `/${encodeURIComponent(annotationId)}/reopen`), {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+export async function deleteDocumentAnnotation(documentId: string, versionId: string, annotationId: string): Promise<void> {
+  return fetchApi<void>(documentAnnotationPath(documentId, versionId, `/${encodeURIComponent(annotationId)}`), {
+    method: 'DELETE',
+  });
+}
+
+export async function getDocumentAnnotationComments(
+  documentId: string,
+  versionId: string,
+  annotationId: string
+): Promise<{ annotationId: string; comments: DocumentAnnotationComment[] }> {
+  return fetchApi<{ annotationId: string; comments: DocumentAnnotationComment[] }>(
+    documentAnnotationPath(documentId, versionId, `/${encodeURIComponent(annotationId)}/comments`)
+  );
+}
+
+export async function createDocumentAnnotationComment(
+  documentId: string,
+  versionId: string,
+  annotationId: string,
+  body: string
+): Promise<DocumentAnnotationComment> {
+  return fetchApi<DocumentAnnotationComment>(documentAnnotationPath(documentId, versionId, `/${encodeURIComponent(annotationId)}/comments`), {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  });
 }
 
 export async function submitDocumentForReview(documentId: string): Promise<{ success: boolean; message?: string }> {

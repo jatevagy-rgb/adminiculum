@@ -8,6 +8,7 @@ import { Prisma } from '@prisma/client';
 import documentsService from './services';
 import { DocumentDeleteError } from './services';
 import { extractText } from './textExtractor';
+import annotationRoutes from './annotations.routes';
 import reviewSuggestionsRoutes from './reviewSuggestions.routes';
 import { authenticate } from '../../middleware/auth';
 import { prisma } from '../../prisma/prisma.service';
@@ -25,6 +26,7 @@ import {
 
 const router = Router();
 router.use('/:documentId/review-suggestions', reviewSuggestionsRoutes);
+router.use('/:documentId/versions/:versionId/annotations', annotationRoutes);
 
 const MAX_DOCUMENT_UPLOAD_BYTES = 25 * 1024 * 1024;
 const ALLOWED_UPLOAD_TYPES: Record<string, Set<string>> = {

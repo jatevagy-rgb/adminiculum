@@ -51,6 +51,14 @@ model User {
   createdDocumentReviews DocumentReview[] @relation("DocumentReviewCreatedBy")
   assignedDocumentReviews DocumentReview[] @relation("DocumentReviewAssignedReviewer")
   reviewSnapshots       ReviewSnapshot[]
+  createdDocumentAnnotations DocumentAnnotation[] @relation("DocumentAnnotationCreatedBy")
+  assignedDocumentAnnotations DocumentAnnotation[] @relation("DocumentAnnotationAssignedTo")
+  resolvedDocumentAnnotations DocumentAnnotation[] @relation("DocumentAnnotationResolvedBy")
+  deletedDocumentAnnotations DocumentAnnotation[] @relation("DocumentAnnotationDeletedBy")
+  createdDocumentAnnotationComments DocumentAnnotationComment[] @relation("DocumentAnnotationCommentCreatedBy")
+  deletedDocumentAnnotationComments DocumentAnnotationComment[] @relation("DocumentAnnotationCommentDeletedBy")
+  documentAnnotationEvents DocumentAnnotationEvent[] @relation("DocumentAnnotationEventActor")
+  documentAnnotationAssignments DocumentAnnotationEvent[] @relation("DocumentAnnotationEventAssignedTo")
   caseCollaborations    CaseCollaborator[]
   documentVersions      DocumentVersion[]
   taskAssignments       TaskAssignmentHistory[]
@@ -819,6 +827,7 @@ model Document {
   
   versions        DocumentVersion[]
   reviews         DocumentReview[]
+  annotations     DocumentAnnotation[]
   reviewSuggestions DocumentReviewSuggestion[]
   anonymizedDocuments AnonymousDocument[]
   comments        Comment[]
@@ -880,6 +889,7 @@ model DocumentVersion {
   nextVersions    DocumentVersion[] @relation("DocumentVersionLineage")
   reviews          DocumentReview[]
   reviewSnapshots  ReviewSnapshot[]
+  annotations      DocumentAnnotation[]
   reviewSuggestions DocumentReviewSuggestion[]
   taskSubmissionDocuments TaskSubmissionDocument[]
 
@@ -924,6 +934,148 @@ enum DocumentVersionType {
   CLIENT_DRAFT
   FINAL
   SIGNED
+}
+
+model DocumentAnnotation {
+  id                   String   @id @default(uuid())
+  documentId           String
+  documentVersionId    String
+  annotationType       DocumentAnnotationType
+  anchorType           DocumentAnnotationAnchorType
+  status               DocumentAnnotationStatus @default(OPEN)
+  visibility           DocumentAnnotationVisibility @default(INTERNAL)
+  headline             String?
+  internalNote         String?
+  reviewComment        String?
+  modificationReason   String?
+  clientExplanationDraft String?
+  legalRisk            String?
+  openQuestion         String?
+  decisionText         String?
+  resolutionNote       String?
+  selectedText         String?
+  normalizedSelectedText String?
+  textPrefix           String?
+  textSuffix           String?
+  startOffset          Int?
+  endOffset            Int?
+  pageNumber           Int?
+  pageIndex            Int?
+  rectX                Decimal? @db.Decimal(8, 6)
+  rectY                Decimal? @db.Decimal(8, 6)
+  rectWidth            Decimal? @db.Decimal(8, 6)
+  rectHeight           Decimal? @db.Decimal(8, 6)
+  pointX               Decimal? @db.Decimal(8, 6)
+  pointY               Decimal? @db.Decimal(8, 6)
+  pageRotation         Int?
+  structuralPath       String?
+  rendererVersion      String?
+  contentFingerprint   String?
+  idempotencyKey       String?
+  createdById          String
+  assignedToId         String?
+  resolvedById         String?
+  deletedById          String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  resolvedAt           DateTime?
+  deletedAt            DateTime?
+
+  document             Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentVersion      DocumentVersion @relation(fields: [documentId, documentVersionId], references: [documentId, id], onDelete: Restrict)
+  createdBy            User @relation("DocumentAnnotationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  assignedTo           User? @relation("DocumentAnnotationAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  resolvedBy           User? @relation("DocumentAnnotationResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  deletedBy            User? @relation("DocumentAnnotationDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  comments             DocumentAnnotationComment[]
+  events               DocumentAnnotationEvent[]
+
+  @@unique([documentVersionId, idempotencyKey])
+  @@index([documentId, documentVersionId, status])
+  @@index([documentVersionId, annotationType])
+  @@index([documentVersionId, anchorType])
+  @@index([assignedToId, status])
+  @@index([createdById, status])
+  @@index([deletedAt])
+  @@map("document_annotations")
+}
+
+model DocumentAnnotationComment {
+  id             String   @id @default(uuid())
+  annotationId   String
+  body           String
+  createdById    String
+  createdAt      DateTime @default(now())
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  deletedById    String?
+
+  annotation     DocumentAnnotation @relation(fields: [annotationId], references: [id], onDelete: Cascade)
+  createdBy      User @relation("DocumentAnnotationCommentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  deletedBy      User? @relation("DocumentAnnotationCommentDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  @@index([annotationId, createdAt])
+  @@index([createdById])
+  @@map("document_annotation_comments")
+}
+
+model DocumentAnnotationEvent {
+  id             String   @id @default(uuid())
+  annotationId   String
+  eventType      DocumentAnnotationEventType
+  actorId        String
+  fromStatus     DocumentAnnotationStatus?
+  toStatus       DocumentAnnotationStatus?
+  assignedToId   String?
+  createdAt      DateTime @default(now())
+
+  annotation     DocumentAnnotation @relation(fields: [annotationId], references: [id], onDelete: Cascade)
+  actor          User @relation("DocumentAnnotationEventActor", fields: [actorId], references: [id], onDelete: Restrict)
+  assignedTo     User? @relation("DocumentAnnotationEventAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@index([annotationId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("document_annotation_events")
+}
+
+enum DocumentAnnotationType {
+  INTERNAL_NOTE
+  REVIEW_COMMENT
+  MODIFICATION_REASON
+  CLIENT_EXPLANATION_DRAFT
+  QUESTION
+  DECISION
+  TASK_NOTE
+}
+
+enum DocumentAnnotationAnchorType {
+  TEXT_RANGE
+  PAGE_RECTANGLE
+  PAGE_ELLIPSE
+  PAGE_POINT
+}
+
+enum DocumentAnnotationStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  REOPENED
+}
+
+enum DocumentAnnotationVisibility {
+  INTERNAL
+  CLIENT_CANDIDATE
+}
+
+enum DocumentAnnotationEventType {
+  CREATED
+  CONTENT_UPDATED
+  ASSIGNED
+  STATUS_CHANGED
+  RESOLVED
+  REOPENED
+  COMMENT_ADDED
+  SOFT_DELETED
 }
 
 model DocumentReview {
