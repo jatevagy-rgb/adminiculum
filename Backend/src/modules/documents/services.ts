@@ -634,8 +634,8 @@ class DocumentsService {
         data: {
           caseId: timelineCaseId,
           userId: userId,
-          eventType: 'VERSION_CREATED',
-          type: 'VERSION_CREATED' as any,
+          eventType: 'DOCUMENT_VERSION_CREATED',
+          type: 'DOCUMENT_VERSION_CREATED' as any,
           payload: {
             documentId,
             fileName: timelineFileName,
@@ -644,7 +644,7 @@ class DocumentsService {
             comment
           }
         } as any
-      });
+      }).catch(() => undefined);
 
       return {
         id: updatedDoc.id,

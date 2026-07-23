@@ -119,6 +119,8 @@ describe('contract workspace document version foundation', () => {
     expect(uploadNewVersion).toContain('data: { isCurrent: false }');
     expect(uploadNewVersion).toContain('isCurrent: true');
     expect(uploadNewVersion).toContain('driveService.deleteDocument');
+    expect(uploadNewVersion).toContain("eventType: 'DOCUMENT_VERSION_CREATED'");
+    expect(uploadNewVersion).toContain(".catch(() => undefined)");
   });
 
   it('serializes current-version promotion on the logical document row', () => {
