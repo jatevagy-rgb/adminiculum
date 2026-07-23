@@ -3,6 +3,7 @@
  * Document management with SharePoint integration + automatic workflow
  */
 
+import { randomUUID } from 'crypto';
 import { prisma } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { driveService } from '../sharepoint';
@@ -10,12 +11,22 @@ import {
   CreateDocumentInput,
   DocumentResponse,
   DocumentListItem,
+  DocumentVersionDto,
   DocumentSearchItem,
   FOLDER_BY_DOCUMENT_TYPE,
   SharePointFolderType
 } from './types';
 
 const DEFAULT_FOLDER: SharePointFolderType = 'Drafts';
+
+const SHAREPOINT_FOLDER_BY_PRISMA_FOLDER: Record<string, SharePointFolderType> = {
+  DRAFTS: 'Drafts',
+  REVIEW: 'Review',
+  APPROVED: 'Approved',
+  FINAL: 'Final',
+  CLIENT_INPUT: 'ClientInput',
+  INTERNAL_NOTES: 'Internal',
+};
 
 const normalizeSharePointItemId = (itemId: unknown): string | null => {
   if (typeof itemId !== 'string') return null;
@@ -41,6 +52,45 @@ const isMissingDatabaseObjectError = (error: unknown): boolean => {
     (error.code === 'P2021' || error.code === 'P2022')
   );
 };
+
+const splitFileName = (fileName: string): { base: string; extension: string } => {
+  const trimmed = fileName.trim() || 'document';
+  const dotIndex = trimmed.lastIndexOf('.');
+  if (dotIndex <= 0) return { base: trimmed, extension: '' };
+  return {
+    base: trimmed.slice(0, dotIndex),
+    extension: trimmed.slice(dotIndex),
+  };
+};
+
+const buildVersionStorageFileName = (originalFileName: string, documentId: string, versionNumber: number): string => {
+  const { base, extension } = splitFileName(originalFileName);
+  const safeBase = base.replace(/[<>:"|?*\u0000-\u001F\u007F]/g, '_').replace(/\s+/g, ' ').trim() || 'document';
+  return `${safeBase}.v${versionNumber}.${documentId.slice(0, 8)}${extension}`;
+};
+
+const mapDocumentVersion = (version: any): DocumentVersionDto => ({
+  id: version.id,
+  documentId: version.documentId,
+  versionNumber: version.version,
+  uploadedBy: {
+    id: version.uploadedBy?.id || version.uploadedById,
+    name: version.uploadedBy?.name || 'Ismeretlen felhasználó',
+  },
+  uploadedAt: version.createdAt,
+  originalFileName: version.originalFileName || version.name || 'document',
+  mimeType: version.mimeType || null,
+  size: version.size ?? null,
+  storageReference: version.storageReference || version.spItemId || null,
+  previousVersionId: version.previousVersionId || null,
+  isCurrent: Boolean(version.isCurrent),
+  reviewStatus: version.reviewStatus || 'NOT_IN_REVIEW',
+  publicationStatus: version.publicationStatus || 'INTERNAL_ONLY',
+  uploadSource: version.uploadSource || 'LAWYER_UPLOAD',
+  versionType: version.versionType || 'WORKING_COPY',
+  spItemId: version.spItemId || version.storageReference || null,
+  spWebUrl: version.spWebUrl || null,
+});
 
 const countOptionalDependency = async (query: Promise<number>): Promise<number> => {
   try {
@@ -105,11 +155,14 @@ class DocumentsService {
       const folderType = input.folder || FOLDER_BY_DOCUMENT_TYPE[input.documentType as keyof typeof FOLDER_BY_DOCUMENT_TYPE] || DEFAULT_FOLDER;
       const prismaFolder = (FOLDER_MAP[folderType] || 'DRAFTS') as any;
 
-      // 3. Upload to SharePoint — use caseNumber (e.g. "2024-001") not CUID for SharePoint folder path
+      const documentId = randomUUID();
+
+      // 3. Upload immutable v1 to SharePoint — use caseNumber (e.g. "2024-001") not CUID for SharePoint folder path
       const sharePointCaseRef = caseData.caseNumber || input.caseId;
+      const storageFileName = buildVersionStorageFileName(input.fileName, documentId, 1);
       const uploadResult = await driveService.uploadDocument({
         caseId: sharePointCaseRef,
-        fileName: input.fileName,
+        fileName: storageFileName,
         content: input.fileContent,
         mimeType: input.mimeType,
         folder: folderType
@@ -126,25 +179,56 @@ class DocumentsService {
       const documentTitle = (input as any).title || '';
       const nameField = uploadedFileName || storedFileName || documentTitle || `Uploaded document - ${new Date().toISOString()}`;
       const sharePointItemId = normalizeSharePointItemId(uploadResult.item.id);
+      const uploadSource = String(input.documentType || '') === 'CLIENT_INPUT' ? 'CLIENT_UPLOAD' : 'LAWYER_UPLOAD';
       const baseDocumentData = {
+        id: documentId,
         name: nameField,
         clientId: caseData.clientId,
         category: (input.documentType as any) || 'OTHER',
         caseId: input.caseId,
+        mimeType: input.mimeType,
         spItemId: sharePointItemId,
         spDriveId: '',
         spPath: uploadResult.webUrl || '',
+        spWebUrl: uploadResult.webUrl || '',
         fileName: uploadedFileName || storedFileName || null,
         folder: prismaFolder,
         version: uploadResult.version || '1',
         documentType: input.documentType,
+        currentVersion: 1,
+        currentVersionInt: 1,
+        size: input.fileContent.length,
         isLatest: true
       } as any;
 
       let persistedSpItemId = sharePointItemId;
       let document: any;
       try {
-        document = await prisma.document.create({ data: baseDocumentData });
+        document = await prisma.document.create({
+          data: {
+            ...baseDocumentData,
+            versions: {
+              create: {
+                version: 1,
+                name: nameField,
+                originalFileName: uploadedFileName || storedFileName || null,
+                mimeType: input.mimeType,
+                size: input.fileContent.length,
+                storageReference: sharePointItemId,
+                isCurrent: true,
+                reviewStatus: 'NOT_IN_REVIEW' as any,
+                publicationStatus: 'INTERNAL_ONLY' as any,
+                uploadSource: uploadSource as any,
+                versionType: 'ORIGINAL' as any,
+                spVersionLabel: uploadResult.version || '1',
+                spVersionId: uploadResult.version || null,
+                spItemId: sharePointItemId,
+                spWebUrl: uploadResult.webUrl || null,
+                uploadedById: input.createdById,
+              },
+            },
+          },
+        });
       } catch (error) {
         if (sharePointItemId && isSpItemIdUniqueConflict(error)) {
           persistedSpItemId = null;
@@ -152,6 +236,26 @@ class DocumentsService {
             data: {
               ...baseDocumentData,
               spItemId: null,
+              versions: {
+                create: {
+                  version: 1,
+                  name: nameField,
+                  originalFileName: uploadedFileName || storedFileName || null,
+                  mimeType: input.mimeType,
+                  size: input.fileContent.length,
+                  storageReference: null,
+                  isCurrent: true,
+                  reviewStatus: 'NOT_IN_REVIEW' as any,
+                  publicationStatus: 'INTERNAL_ONLY' as any,
+                  uploadSource: uploadSource as any,
+                  versionType: 'ORIGINAL' as any,
+                  spVersionLabel: uploadResult.version || '1',
+                  spVersionId: uploadResult.version || null,
+                  spItemId: null,
+                  spWebUrl: uploadResult.webUrl || null,
+                  uploadedById: input.createdById,
+                },
+              },
             },
           });
         } else {
@@ -405,38 +509,102 @@ class DocumentsService {
     documentId: string,
     fileContent: Buffer,
     userId: string,
-    comment?: string
+    comment?: string,
+    options?: { originalFileName?: string; mimeType?: string; reviewStatus?: string; publicationStatus?: string; uploadSource?: string; versionType?: string }
   ): Promise<DocumentResponse | null> {
     try {
       const document = await prisma.document.findUnique({
-        where: { id: documentId }
+        where: { id: documentId },
+        include: {
+          case: { select: { caseNumber: true } },
+          versions: { orderBy: { version: 'desc' }, take: 1 },
+        },
       });
 
       if (!document) {
         throw new Error('Document not found');
       }
-      if (!document.spItemId) {
-        throw new Error('SharePoint item ID is missing for this document');
-      }
 
-      // Upload new version to SharePoint
-      const uploadResult = await driveService.uploadNewVersion(
-        document.spItemId,
-        fileContent
-      );
+      const originalFileName = options?.originalFileName || document.fileName || document.name || 'document';
+      const folderType = SHAREPOINT_FOLDER_BY_PRISMA_FOLDER[String(document.folder || '')] || DEFAULT_FOLDER;
+      const storageFileName = buildVersionStorageFileName(originalFileName, randomUUID(), Date.now());
+
+      const uploadResult = await driveService.uploadDocument({
+        caseId: document.case?.caseNumber || document.caseId,
+        fileName: storageFileName,
+        content: fileContent,
+        mimeType: options?.mimeType || document.mimeType || 'application/octet-stream',
+        folder: folderType,
+      });
 
       if (!uploadResult.success) {
         throw new Error(uploadResult.error || 'Version upload failed');
       }
 
-      // Update document record
-      const updatedDoc = await prisma.document.update({
-        where: { id: documentId },
-        data: {
-          version: uploadResult.version || document.version || '1',
-          updatedAt: new Date()
+      const sharePointItemId = normalizeSharePointItemId(uploadResult.item?.id);
+      let updatedDoc: any;
+      let createdVersionNumber = 1;
+      try {
+        updatedDoc = await prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT "id" FROM "documents" WHERE "id" = ${documentId} FOR UPDATE`;
+          const latestVersion = await tx.documentVersion.findFirst({
+            where: { documentId },
+            orderBy: { version: 'desc' },
+            select: { id: true, version: true },
+          });
+          const versionNumber = (latestVersion?.version || document.currentVersionInt || document.currentVersion || 1) + 1;
+          createdVersionNumber = versionNumber;
+
+          await tx.documentVersion.updateMany({
+            where: { documentId },
+            data: { isCurrent: false },
+          });
+
+          await tx.documentVersion.create({
+            data: {
+              version: versionNumber,
+              name: originalFileName,
+              originalFileName,
+              mimeType: options?.mimeType || document.mimeType || 'application/octet-stream',
+              size: fileContent.length,
+              storageReference: sharePointItemId,
+              isCurrent: true,
+              reviewStatus: (options?.reviewStatus || 'NOT_IN_REVIEW') as any,
+              publicationStatus: (options?.publicationStatus || 'INTERNAL_ONLY') as any,
+              uploadSource: (options?.uploadSource || 'LAWYER_UPLOAD') as any,
+              versionType: (options?.versionType || 'WORKING_COPY') as any,
+              spVersionLabel: uploadResult.version || String(versionNumber),
+              spVersionId: uploadResult.version || null,
+              spItemId: sharePointItemId,
+              spWebUrl: uploadResult.webUrl || null,
+              uploadedById: userId,
+              documentId,
+              previousVersionId: latestVersion?.id || null,
+            },
+          });
+
+          return tx.document.update({
+            where: { id: documentId },
+            data: {
+              version: String(versionNumber),
+              currentVersion: versionNumber,
+              currentVersionInt: versionNumber,
+              spItemId: sharePointItemId,
+              spPath: uploadResult.webUrl || document.spPath,
+              spWebUrl: uploadResult.webUrl || document.spWebUrl,
+              fileName: originalFileName,
+              mimeType: options?.mimeType || document.mimeType || 'application/octet-stream',
+              size: fileContent.length,
+              updatedAt: new Date(),
+            },
+          });
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      } catch (error) {
+        if (sharePointItemId) {
+          await driveService.deleteDocument(sharePointItemId).catch(() => false);
         }
-      });
+        throw error;
+      }
 
       // Create TimelineEvent for version
       await prisma.timelineEvent.create({
@@ -449,7 +617,7 @@ class DocumentsService {
             documentId,
             fileName: document.fileName,
             previousVersion: document.version,
-            newVersion: uploadResult.version,
+            newVersion: createdVersionNumber,
             comment
           }
         } as any
@@ -478,6 +646,109 @@ class DocumentsService {
       );
       return null;
     }
+  }
+
+  async listDocumentVersions(documentId: string): Promise<DocumentVersionDto[]> {
+    const versions = await prisma.documentVersion.findMany({
+      where: { documentId },
+      include: { uploadedBy: { select: { id: true, name: true } } },
+      orderBy: { version: 'desc' },
+    });
+    return versions.map(mapDocumentVersion);
+  }
+
+  async getDocumentVersion(documentId: string, versionId: string): Promise<DocumentVersionDto | null> {
+    const version = await prisma.documentVersion.findFirst({
+      where: { id: versionId, documentId },
+      include: { uploadedBy: { select: { id: true, name: true } } },
+    });
+    return version ? mapDocumentVersion(version) : null;
+  }
+
+  async promoteCurrentVersion(documentId: string, versionId: string, userId: string): Promise<DocumentVersionDto | null> {
+    const version = await prisma.documentVersion.findFirst({
+      where: { id: versionId, documentId },
+      include: {
+        uploadedBy: { select: { id: true, name: true } },
+        document: { select: { caseId: true, spPath: true, spWebUrl: true, spItemId: true, mimeType: true, size: true } },
+      },
+    });
+
+    if (!version) return null;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.documentVersion.updateMany({
+        where: { documentId },
+        data: { isCurrent: false },
+      });
+      const selected = await tx.documentVersion.update({
+        where: { id: versionId },
+        data: { isCurrent: true },
+        include: { uploadedBy: { select: { id: true, name: true } } },
+      });
+      await tx.document.update({
+        where: { id: documentId },
+        data: {
+          version: String(selected.version),
+          currentVersion: selected.version,
+          currentVersionInt: selected.version,
+          spItemId: selected.spItemId || selected.storageReference || version.document.spItemId,
+          spPath: selected.spWebUrl || version.document.spPath,
+          spWebUrl: selected.spWebUrl || version.document.spWebUrl,
+          fileName: selected.originalFileName || selected.name,
+          mimeType: selected.mimeType || version.document.mimeType,
+          size: selected.size ?? version.document.size,
+          updatedAt: new Date(),
+        },
+      });
+      return selected;
+    });
+
+    await prisma.timelineEvent.create({
+      data: {
+        caseId: version.document.caseId,
+        userId,
+        eventType: 'DOCUMENT_VERSION_CURRENT_CHANGED',
+        type: 'DOCUMENT_VERSION_CURRENT_CHANGED' as any,
+        payload: {
+          documentId,
+          documentVersionId: versionId,
+          versionNumber: updated.version,
+        },
+      } as any,
+    }).catch(() => undefined);
+
+    return mapDocumentVersion(updated);
+  }
+
+  async downloadDocumentVersion(documentId: string, versionId: string): Promise<{
+    version: DocumentVersionDto;
+    content: Buffer;
+  } | { error: string; code: string; status: number } | null> {
+    const version = await prisma.documentVersion.findFirst({
+      where: { id: versionId, documentId },
+      include: { uploadedBy: { select: { id: true, name: true } } },
+    });
+
+    if (!version) return null;
+    const storageId = version.spItemId || version.storageReference;
+    if (!storageId) {
+      return { status: 400, code: 'NO_VERSION_STORAGE_REFERENCE', error: 'Document version has no storage reference.' };
+    }
+
+    const downloadResult = await driveService.downloadDocumentResult(storageId);
+    if (downloadResult.success === false) {
+      return {
+        status: downloadResult.status || (downloadResult.code === 'SHAREPOINT_FILE_NOT_FOUND' ? 404 : 502),
+        code: downloadResult.code,
+        error: downloadResult.error,
+      };
+    }
+
+    return {
+      version: mapDocumentVersion(version),
+      content: downloadResult.content,
+    };
   }
 
   /**

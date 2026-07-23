@@ -16,10 +16,10 @@ export interface CreateDocumentInput {
 export interface DocumentResponse {
   id: string;
   caseId: string;
-  fileName: string;
+  fileName: string | null;
   documentType: string;
-  spItemId: string;
-  spWebUrl: string;
+  spItemId: string | null;
+  spWebUrl: string | null;
   version: string;
   status: string;
   createdAt: Date;
@@ -32,13 +32,36 @@ export interface DocumentResponse {
 
 export interface DocumentListItem {
   id: string;
-  fileName: string;
+  fileName: string | null;
   documentType: string;
   version: string;
   status: string;
-  spWebUrl: string;
+  spWebUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface DocumentVersionDto {
+  id: string;
+  documentId: string;
+  versionNumber: number;
+  uploadedBy: {
+    id: string;
+    name: string;
+  };
+  uploadedAt: Date;
+  originalFileName: string;
+  mimeType: string | null;
+  size: number | null;
+  storageReference: string | null;
+  previousVersionId: string | null;
+  isCurrent: boolean;
+  reviewStatus: string;
+  publicationStatus: string;
+  uploadSource: string;
+  versionType: string;
+  spItemId: string | null;
+  spWebUrl: string | null;
 }
 
 export interface DocumentSearchItem {

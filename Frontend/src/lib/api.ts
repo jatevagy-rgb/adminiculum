@@ -1587,6 +1587,34 @@ export interface DocumentItem {
   updatedAt: string;
 }
 
+export interface DocumentVersionItem {
+  id: string;
+  documentId: string;
+  versionNumber: number;
+  uploadedBy: {
+    id: string;
+    name: string;
+  };
+  uploadedAt: string;
+  originalFileName: string;
+  mimeType: string | null;
+  size: number | null;
+  storageReference: string | null;
+  previousVersionId: string | null;
+  isCurrent: boolean;
+  reviewStatus: string;
+  publicationStatus: string;
+  uploadSource: string;
+  versionType: string;
+  spItemId: string | null;
+  spWebUrl: string | null;
+}
+
+export interface DocumentVersionsResponse {
+  documentId: string;
+  versions: DocumentVersionItem[];
+}
+
 export interface DocumentSearchItem {
   id: string;
   caseId: string;
@@ -1647,6 +1675,69 @@ export async function uploadDocumentNewVersion(documentId: string, fileContentBa
     method: 'POST',
     body: JSON.stringify({ fileContent: fileContentBase64, comment }),
   });
+}
+
+export async function getDocumentVersions(documentId: string): Promise<DocumentVersionsResponse> {
+  return fetchApi<DocumentVersionsResponse>(`/documents/${encodeURIComponent(documentId)}/versions`);
+}
+
+export async function uploadImmutableDocumentVersion(data: {
+  documentId: string;
+  fileName: string;
+  fileContentBase64: string;
+  mimeType?: string;
+  comment?: string;
+}): Promise<{ document: DocumentItem; currentVersion: DocumentVersionItem | null; versions: DocumentVersionItem[] }> {
+  return fetchApi<{ document: DocumentItem; currentVersion: DocumentVersionItem | null; versions: DocumentVersionItem[] }>(
+    `/documents/${encodeURIComponent(data.documentId)}/versions`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: data.fileName,
+        fileContent: data.fileContentBase64,
+        mimeType: data.mimeType,
+        comment: data.comment,
+      }),
+    }
+  );
+}
+
+export async function promoteDocumentVersion(documentId: string, versionId: string): Promise<DocumentVersionItem> {
+  return fetchApi<DocumentVersionItem>(
+    `/documents/${encodeURIComponent(documentId)}/versions/${encodeURIComponent(versionId)}/promote-current`,
+    {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }
+  );
+}
+
+export async function downloadDocumentVersion(documentId: string, versionId: string): Promise<Blob> {
+  const token = await waitForAuthToken(DEFAULT_AUTH_WAIT_MS);
+  const headers: HeadersInit = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
+  const path = `/documents/${encodeURIComponent(documentId)}/versions/${encodeURIComponent(versionId)}/download`;
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'GET',
+    headers,
+  });
+
+  if (!response.ok) {
+    let message = `Download failed (${response.status})`;
+    try {
+      const bodyText = await response.text();
+      if (bodyText) {
+        message = bodyText;
+      }
+    } catch {
+      // ignore
+    }
+    throw new ApiError(response.status, message, path);
+  }
+
+  return response.blob();
 }
 
 export async function submitDocumentForReview(documentId: string): Promise<{ success: boolean; message?: string }> {

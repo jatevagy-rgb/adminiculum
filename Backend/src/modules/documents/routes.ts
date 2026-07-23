@@ -33,6 +33,25 @@ const ALLOWED_UPLOAD_TYPES: Record<string, Set<string>> = {
   '.docx': new Set(['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip', 'application/octet-stream']),
   '.txt': new Set(['text/plain', 'application/octet-stream']),
 };
+const ALLOWED_VERSION_UPLOAD_SOURCES = new Set([
+  'CLIENT_UPLOAD',
+  'LAWYER_UPLOAD',
+  'EMAIL_IMPORT',
+  'SHAREPOINT',
+  'CLIENT_PORTAL',
+  'GENERATED',
+  'EXTERNAL',
+  'WORKSPACE_SAVE',
+  'IMPORT',
+]);
+const ALLOWED_VERSION_TYPES = new Set([
+  'ORIGINAL',
+  'WORKING_COPY',
+  'REVIEW_DRAFT',
+  'CLIENT_DRAFT',
+  'FINAL',
+  'SIGNED',
+]);
 
 function sanitizeUploadFileName(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -52,6 +71,16 @@ function isAllowedUploadMime(extension: string, mimeType: unknown): boolean {
   if (!accepted) return false;
   if (typeof mimeType !== 'string' || !mimeType.trim()) return true;
   return accepted.has(mimeType.toLowerCase());
+}
+
+function decodeBase64FileContent(value: unknown): Buffer | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const buffer = Buffer.from(value, 'base64');
+    return buffer.length > 0 ? buffer : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -374,6 +403,189 @@ router.get('/:id/editor', authenticate, requireDocumentReadAccess, async (req: R
 });
 
 /**
+ * GET /api/v1/documents/:id/versions
+ * Immutable version history for one logical document.
+ */
+router.get('/:id/versions', authenticate, requireDocumentReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params as { id: string };
+    const versions = await documentsService.listDocumentVersions(id);
+    res.json({ documentId: id, versions });
+  } catch (error) {
+    console.error('List document versions error:', error);
+    res.status(500).json({ status: 500, code: 'DOCUMENT_VERSIONS_UNAVAILABLE', message: 'Document versions could not be loaded.' });
+  }
+});
+
+/**
+ * POST /api/v1/documents/:id/versions
+ * Upload a new immutable content version. Never overwrites an existing file.
+ */
+router.post('/:id/versions', authenticate, requireDocumentManageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).user?.userId;
+    const { id } = req.params as { id: string };
+    const fileName = sanitizeUploadFileName(req.body?.fileName);
+
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'AUTHENTICATION_REQUIRED', message: 'Authentication is required.' });
+      return;
+    }
+    if (!fileName) {
+      res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Missing required field: fileName' });
+      return;
+    }
+
+    const extension = getUploadExtension(fileName);
+    if (!Object.prototype.hasOwnProperty.call(ALLOWED_UPLOAD_TYPES, extension)) {
+      res.status(400).json({
+        status: 400,
+        code: 'UNSUPPORTED_FILE_TYPE',
+        message: 'Nem támogatott fájltípus. Engedélyezett: PDF, DOC, DOCX vagy TXT.',
+      });
+      return;
+    }
+    if (!isAllowedUploadMime(extension, req.body?.mimeType)) {
+      res.status(400).json({
+        status: 400,
+        code: 'UNSUPPORTED_MIME_TYPE',
+        message: 'A fájl MIME típusa nem egyezik az engedélyezett fájltípussal.',
+      });
+      return;
+    }
+    const uploadSource = String(req.body?.uploadSource || 'LAWYER_UPLOAD').trim().toUpperCase();
+    if (!ALLOWED_VERSION_UPLOAD_SOURCES.has(uploadSource)) {
+      res.status(400).json({
+        status: 400,
+        code: 'INVALID_UPLOAD_SOURCE',
+        message: 'Unsupported document version upload source.',
+      });
+      return;
+    }
+    const versionType = String(req.body?.versionType || 'WORKING_COPY').trim().toUpperCase();
+    if (!ALLOWED_VERSION_TYPES.has(versionType)) {
+      res.status(400).json({
+        status: 400,
+        code: 'INVALID_VERSION_TYPE',
+        message: 'Unsupported document version type.',
+      });
+      return;
+    }
+
+    const fileBuffer = decodeBase64FileContent(req.body?.fileContent);
+    if (!fileBuffer) {
+      res.status(400).json({
+        status: 400,
+        code: 'INVALID_FILE_CONTENT',
+        message: 'A verziófájl tartalma sérült vagy nem base64 formátumú.',
+      });
+      return;
+    }
+    if (fileBuffer.length > MAX_DOCUMENT_UPLOAD_BYTES) {
+      res.status(413).json({
+        status: 413,
+        code: 'DOCUMENT_TOO_LARGE',
+        message: 'A fájl mérete meghaladja a 25 MB-os korlátot.',
+      });
+      return;
+    }
+
+    const result = await documentsService.uploadNewVersion(
+      id,
+      fileBuffer,
+      userId,
+      req.body?.comment,
+      {
+        originalFileName: fileName,
+        mimeType: req.body?.mimeType || 'application/octet-stream',
+        uploadSource,
+        versionType,
+      }
+    );
+
+    if (!result) {
+      res.status(500).json({ status: 500, code: 'UPLOAD_FAILED', message: 'Failed to upload version' });
+      return;
+    }
+
+    const versions = await documentsService.listDocumentVersions(id);
+    res.status(201).json({ document: result, currentVersion: versions.find((version) => version.isCurrent) || null, versions });
+  } catch (error) {
+    console.error('Upload immutable version error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Document version upload failed.' });
+  }
+});
+
+/**
+ * GET /api/v1/documents/:id/versions/:versionId
+ */
+router.get('/:id/versions/:versionId', authenticate, requireDocumentReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id, versionId } = req.params as { id: string; versionId: string };
+    const version = await documentsService.getDocumentVersion(id, versionId);
+    if (!version) {
+      res.status(404).json({ status: 404, code: 'DOCUMENT_VERSION_NOT_FOUND', message: 'Document version not found.' });
+      return;
+    }
+    res.json(version);
+  } catch (error) {
+    console.error('Get document version error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Document version could not be loaded.' });
+  }
+});
+
+/**
+ * GET /api/v1/documents/:id/versions/:versionId/download
+ */
+router.get('/:id/versions/:versionId/download', authenticate, requireDocumentReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id, versionId } = req.params as { id: string; versionId: string };
+    const result = await documentsService.downloadDocumentVersion(id, versionId);
+    if (!result) {
+      res.status(404).json({ status: 404, code: 'DOCUMENT_VERSION_NOT_FOUND', message: 'Document version not found.' });
+      return;
+    }
+    if ('error' in result) {
+      res.status(result.status).json({ status: result.status, code: result.code, message: result.error });
+      return;
+    }
+
+    const fileName = result.version.originalFileName || 'document';
+    const encodedFileName = encodeURIComponent(fileName);
+    res.setHeader('Content-Type', result.version.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName.replace(/"/g, "'")}"; filename*=UTF-8''${encodedFileName}`);
+    res.setHeader('Content-Length', result.content.length);
+    res.send(result.content);
+  } catch (error) {
+    console.error('Download document version error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Document version download failed.' });
+  }
+});
+
+/**
+ * POST /api/v1/documents/:id/versions/:versionId/promote-current
+ */
+router.post('/:id/versions/:versionId/promote-current', authenticate, requireDocumentManageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'AUTHENTICATION_REQUIRED', message: 'Authentication is required.' });
+      return;
+    }
+    const { id, versionId } = req.params as { id: string; versionId: string };
+    const version = await documentsService.promoteCurrentVersion(id, versionId, userId);
+    if (!version) {
+      res.status(404).json({ status: 404, code: 'DOCUMENT_VERSION_NOT_FOUND', message: 'Document version not found.' });
+      return;
+    }
+    res.json(version);
+  } catch (error) {
+    console.error('Promote document version error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Document version could not be promoted.' });
+  }
+});
+
+/**
  * GET /api/v1/documents/:id
  * Get document by ID
  */
@@ -505,17 +717,20 @@ router.post('/:id/version', authenticate, async (req: Request, res: Response): P
     }
 
     const { id } = req.params as { id: string };
-    let fileBuffer: Buffer;
-    try {
-      fileBuffer = Buffer.from(fileContent as string, 'base64');
-      if (!fileBuffer.length) {
-        throw new Error('Empty decoded buffer');
-      }
-    } catch {
+    const fileBuffer = decodeBase64FileContent(fileContent);
+    if (!fileBuffer) {
       res.status(400).json({
         status: 400,
         code: 'INVALID_FILE_CONTENT',
         message: 'A verziófájl tartalma sérült vagy nem base64 formátumú.',
+      });
+      return;
+    }
+    if (fileBuffer.length > MAX_DOCUMENT_UPLOAD_BYTES) {
+      res.status(413).json({
+        status: 413,
+        code: 'DOCUMENT_TOO_LARGE',
+        message: 'A fájl mérete meghaladja a 25 MB-os korlátot.',
       });
       return;
     }

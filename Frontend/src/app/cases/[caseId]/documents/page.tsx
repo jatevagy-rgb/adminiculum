@@ -10,9 +10,13 @@ import {
   getCaseDocuments,
   downloadContract,
   downloadDocument,
+  downloadDocumentVersion,
   deleteDocument,
+  getDocumentVersions,
   uploadCaseDocument,
+  uploadImmutableDocumentVersion,
   uploadGeneratedContractToSharePoint,
+  promoteDocumentVersion,
   createContractGenerationRevision,
   finalizeContractGeneration,
   getCommunications,
@@ -24,6 +28,7 @@ import {
   listDocumentLegalAnalyses,
   type CaseContractListItem,
   type DocumentItem,
+  type DocumentVersionItem,
   type TimelineEventItem,
   type CommunicationItem,
   type ClientHouseStyleProfile,
@@ -234,6 +239,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isUploadingVersion, setIsUploadingVersion] = useState(false);
+  const [isLoadingVersions, setIsLoadingVersions] = useState(false);
+  const [versions, setVersions] = useState<DocumentVersionItem[]>([]);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [isPromotingVersion, setIsPromotingVersion] = useState<string | null>(null);
   const [uploadPhase, setUploadPhase] = useState<string | null>(null);
   const [isUploadingToSP, setIsUploadingToSP] = useState<string | null>(null);
   const [isCreatingRevision, setIsCreatingRevision] = useState<string | null>(null);
@@ -268,6 +278,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [clientHouseStyle, setClientHouseStyle] = useState<ClientHouseStyleProfile | null>(null);
   const [isLoadingHouseStyle, setIsLoadingHouseStyle] = useState(false);
   const [showHouseStylePanel, setShowHouseStylePanel] = useState(false);
+  const versionFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const searchParams = useSearchParams();
   const requestedDocumentId = searchParams?.get("documentId") ?? null;
@@ -428,6 +439,101 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setActionResult({ type: 'error', message: 'Letöltés sikertelen' });
     } finally {
       setIsDownloading(null);
+    }
+  };
+
+  const selectedUploadedDocument = selectedLedgerItem?.kind === 'uploaded' ? selectedLedgerItem.item : null;
+  const selectedGeneratedContract = selectedLedgerItem?.kind === 'generated' ? selectedLedgerItem.item : selectedContract;
+
+  const refreshSelectedDocumentVersions = useCallback(async (documentId: string) => {
+    setIsLoadingVersions(true);
+    try {
+      const response = await getDocumentVersions(documentId);
+      setVersions(response.versions);
+      const current = response.versions.find((version) => version.isCurrent) || response.versions[0] || null;
+      setSelectedVersionId((existing) => response.versions.some((version) => version.id === existing) ? existing : current?.id || null);
+    } catch (err) {
+      console.error('Document versions load failed:', err);
+      setVersions([]);
+      setSelectedVersionId(null);
+    } finally {
+      setIsLoadingVersions(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedUploadedDocument?.id && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY') {
+      void refreshSelectedDocumentVersions(selectedUploadedDocument.id);
+    } else {
+      setVersions([]);
+      setSelectedVersionId(null);
+    }
+  }, [selectedUploadedDocument?.id, selectedUploadedDocument?.documentType, refreshSelectedDocumentVersions]);
+
+  const handleVersionFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !selectedUploadedDocument?.id || !caseRecord?.id) return;
+
+    setIsUploadingVersion(true);
+    setActionResult(null);
+    try {
+      const base64 = await fileToBase64(file);
+      const response = await uploadImmutableDocumentVersion({
+        documentId: selectedUploadedDocument.id,
+        fileName: file.name,
+        fileContentBase64: base64,
+        mimeType: file.type || 'application/octet-stream',
+      });
+      setVersions(response.versions);
+      setSelectedVersionId(response.currentVersion?.id || response.versions.find((version) => version.isCurrent)?.id || null);
+      await loadData(false);
+      setActionResult({ type: 'success', message: 'Új, változtathatatlan dokumentumverzió feltöltve.' });
+      if (versionFileInputRef.current) {
+        versionFileInputRef.current.value = '';
+      }
+    } catch (err) {
+      console.error('Version upload failed:', err);
+      setActionResult({ type: 'error', message: 'Új verzió feltöltése sikertelen.' });
+    } finally {
+      setIsUploadingVersion(false);
+    }
+  };
+
+  const handleDownloadVersion = async (version: DocumentVersionItem) => {
+    setIsDownloading(version.id);
+    try {
+      const blob = await downloadDocumentVersion(version.documentId, version.id);
+      const url = URL.createObjectURL(blob);
+      const a = globalThis.document.createElement('a');
+      a.href = url;
+      a.download = version.originalFileName || `document-v${version.versionNumber}`;
+      globalThis.document.body.appendChild(a);
+      a.click();
+      globalThis.document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setActionResult({ type: 'success', message: 'Verzió letöltése elindult.' });
+    } catch (err) {
+      console.error('Version download failed:', err);
+      setActionResult({ type: 'error', message: 'Verzió letöltése sikertelen.' });
+    } finally {
+      setIsDownloading(null);
+    }
+  };
+
+  const handlePromoteVersion = async (version: DocumentVersionItem) => {
+    setIsPromotingVersion(version.id);
+    setActionResult(null);
+    try {
+      const promoted = await promoteDocumentVersion(version.documentId, version.id);
+      setVersions((items) => items.map((item) => ({ ...item, isCurrent: item.id === promoted.id })));
+      setSelectedVersionId(promoted.id);
+      await loadData(false);
+      setActionResult({ type: 'success', message: `v${promoted.versionNumber} lett az aktuális verzió.` });
+    } catch (err) {
+      console.error('Promote version failed:', err);
+      setActionResult({ type: 'error', message: 'Aktuális verzió kijelölése sikertelen.' });
+    } finally {
+      setIsPromotingVersion(null);
     }
   };
 
@@ -633,9 +739,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     }
   };
 
-  const selectedUploadedDocument = selectedLedgerItem?.kind === 'uploaded' ? selectedLedgerItem.item : null;
-  const selectedGeneratedContract = selectedLedgerItem?.kind === 'generated' ? selectedLedgerItem.item : selectedContract;
-
   const openDeleteDocumentDialog = (document: DocumentItem) => {
     setDeleteCandidate(document);
     setDeleteError(null);
@@ -804,6 +907,22 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     }
   };
 
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return 'Nincs megadva';
+    try {
+      return new Date(value).toLocaleString('hu-HU');
+    } catch {
+      return value;
+    }
+  };
+
+  const formatFileSize = (bytes?: number | null) => {
+    if (!bytes || bytes < 0) return 'Ismeretlen méret';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   const getFileType = (fileName?: string | null) => {
     const ext = (fileName?.split('.').pop() || '').toLowerCase();
     if (['doc', 'docx'].includes(ext)) return 'DOCX';
@@ -935,6 +1054,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   ].filter(Boolean);
   const canAnonymizeActiveDocument = Boolean(selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY');
   const canDeleteSelectedDocument = Boolean(selectedUploadedDocument && caseRecord?.status !== 'ARCHIVED');
+  const selectedVersion = versions.find((version) => version.id === selectedVersionId) || versions.find((version) => version.isCurrent) || versions[0] || null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col adm-shell-bg text-[var(--adm-text)] documents-surface">
@@ -960,7 +1080,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
               <div className="flex flex-col gap-3 bg-white px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-3">
-                    <h1 className="font-serif text-[28px] font-semibold leading-tight text-[var(--adm-text)]">Dokumentumtár</h1>
+                    <h1 className="font-serif text-[28px] font-semibold leading-tight text-[var(--adm-text)]">Contract Workspace</h1>
                     <span className="rounded-full border border-[#D8C58E] bg-[var(--adm-sand-100)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[#6D5418]">
                       {totalLedgerDocuments} irat
                     </span>
@@ -973,11 +1093,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 </div>
               </div>
               <div className="border-t border-[var(--adm-border)] bg-[var(--adm-sand-100)] px-4 py-2 text-[11px] text-[#3D4842]">
-                <span className="font-bold text-[var(--adm-green-800)]">Kiválasztva:</span> {selectedDocumentActionLabel}
+                <span className="font-bold text-[var(--adm-green-800)]">Workspace fókusz:</span> {selectedDocumentActionLabel}
               </div>
             </header>
 
             <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleFileUpload} className="hidden" />
+            <input ref={versionFileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleVersionFileUpload} className="hidden" />
             {isUploading && uploadPhase ? <div className="rounded-[10px] border border-[#D8C58E] bg-[var(--adm-surface)] p-3 text-sm font-semibold text-[#6D5418]">{uploadPhase}</div> : null}
             {isRefreshing ? <div className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-4 py-2 text-xs text-[var(--adm-text-muted)]">Frissítés...</div> : null}
 
@@ -987,7 +1108,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
                 <aside className="overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white">
                   <div className="border-b border-[var(--adm-border)] bg-[var(--adm-sand-100)] p-4">
-                    <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Iratok</h2>
+                    <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Workspace elemek</h2>
                   </div>
                   <div className="max-h-[680px] space-y-4 overflow-y-auto p-3">
                     <section className="space-y-2">
@@ -1073,8 +1194,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   <div className="flex gap-4 border-b border-[rgba(22,32,26,0.12)] bg-white/70 p-5">
                     <div className="mt-1 h-16 w-1.5 rounded-full bg-[var(--adm-ochre-500)]" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--adm-green-800)]">Munkadokumentum</p>
-                      <h2 className="mt-1 truncate font-serif text-[28px] font-semibold leading-tight text-[var(--adm-text)]">{activeTitle || "Nincs még munkadokumentum"}</h2>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--adm-green-800)]">Contract Workspace</p>
+                      <h2 className="mt-1 truncate font-serif text-[28px] font-semibold leading-tight text-[var(--adm-text)]">{activeTitle || "Nincs még workspace dokumentum"}</h2>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <AdminBadge tone={activeDocument ? "gold" : "neutral"}>{selectedDocumentTypeLabel}</AdminBadge>
                         <AdminBadge tone={activeDocument ? "green" : "neutral"}>{selectedStatusLabel}</AdminBadge>
@@ -1120,6 +1241,87 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           </div>
 
                         </div>
+
+                        {selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY' ? (
+                          <div className="rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-4">
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                              <div>
+                                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Contract Workspace · verziók</p>
+                                <h3 className="font-serif text-2xl font-semibold text-[var(--adm-text)]">Változtathatatlan verziótörténet</h3>
+                                <p className="mt-1 max-w-2xl text-sm text-[#3D4842]">
+                                  Minden feltöltés új tartalmi verziót hoz létre. A korábbi verziók letölthetők, de nem szerkeszthetők és nem íródnak felül.
+                                </p>
+                              </div>
+                              <AdminButton variant="primary" onClick={() => versionFileInputRef.current?.click()} disabled={isUploadingVersion || isLoadingVersions}>
+                                {isUploadingVersion ? 'Verzió feltöltése...' : 'Új verzió feltöltése'}
+                              </AdminButton>
+                            </div>
+
+                            {isLoadingVersions ? (
+                              <p className="mt-4 rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[var(--adm-surface)] p-3 text-sm text-[var(--adm-text-muted)]">Verziótörténet betöltése...</p>
+                            ) : versions.length === 0 ? (
+                              <p className="mt-4 rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[var(--adm-surface)] p-3 text-sm text-[var(--adm-text-muted)]">Ehhez a dokumentumhoz még nincs verziórekord.</p>
+                            ) : (
+                              <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+                                <div className="space-y-2">
+                                  {versions.map((version) => (
+                                    <button
+                                      key={version.id}
+                                      type="button"
+                                      onClick={() => setSelectedVersionId(version.id)}
+                                      className={`w-full rounded-[12px] border p-3 text-left transition ${selectedVersion?.id === version.id ? 'border-[#D8C58E] bg-[var(--adm-sand-100)]' : 'border-[rgba(22,32,26,0.12)] bg-white hover:bg-[var(--adm-surface)]'}`}
+                                    >
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <span className="font-serif text-lg font-semibold text-[var(--adm-text)]">v{version.versionNumber}</span>
+                                        <span className="flex flex-wrap gap-2">
+                                          {version.isCurrent ? <AdminBadge tone="gold">Aktuális</AdminBadge> : null}
+                                          <AdminBadge tone="neutral">{version.versionType}</AdminBadge>
+                                        </span>
+                                      </div>
+                                      <p className="mt-1 truncate text-sm font-semibold text-[#3D4842]">{version.originalFileName}</p>
+                                      <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">
+                                        {version.uploadedBy.name} · {formatDateTime(version.uploadedAt)} · {formatFileSize(version.size)}
+                                      </p>
+                                    </button>
+                                  ))}
+                                </div>
+
+                                <aside className="rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-4">
+                                  {selectedVersion ? (
+                                    <div className="space-y-3">
+                                      <div>
+                                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Kiválasztott verzió</p>
+                                        <h4 className="font-serif text-2xl font-semibold text-[var(--adm-text)]">v{selectedVersion.versionNumber}</h4>
+                                      </div>
+                                      <div className="space-y-1 text-xs text-[#3D4842]">
+                                        <p><b>Fájlnév:</b> {selectedVersion.originalFileName}</p>
+                                        <p><b>Feltöltő:</b> {selectedVersion.uploadedBy.name}</p>
+                                        <p><b>Feltöltve:</b> {formatDateTime(selectedVersion.uploadedAt)}</p>
+                                        <p><b>Méret:</b> {formatFileSize(selectedVersion.size)}</p>
+                                        <p><b>MIME:</b> {selectedVersion.mimeType || 'application/octet-stream'}</p>
+                                        <p><b>Típus:</b> {selectedVersion.versionType}</p>
+                                        <p><b>Review:</b> {selectedVersion.reviewStatus}</p>
+                                        <p><b>Publikáció:</b> {selectedVersion.publicationStatus}</p>
+                                        <p><b>Forrás:</b> {selectedVersion.uploadSource}</p>
+                                        <p><b>Előző verzió:</b> {selectedVersion.previousVersionId ? 'Kapcsolva' : 'Nincs'}</p>
+                                      </div>
+                                      <div className="space-y-2 border-t border-[rgba(22,32,26,0.12)] pt-3">
+                                        <AdminButton className="w-full justify-start" variant="neutral" onClick={() => handleDownloadVersion(selectedVersion)} disabled={isDownloading === selectedVersion.id}>
+                                          {isDownloading === selectedVersion.id ? 'Letöltés...' : 'Verzió letöltése'}
+                                        </AdminButton>
+                                        <AdminButton className="w-full justify-start" variant="gold" onClick={() => handlePromoteVersion(selectedVersion)} disabled={selectedVersion.isCurrent || isPromotingVersion === selectedVersion.id}>
+                                          {selectedVersion.isCurrent ? 'Már aktuális' : isPromotingVersion === selectedVersion.id ? 'Kijelölés...' : 'Legyen aktuális'}
+                                        </AdminButton>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm text-[var(--adm-text-muted)]">Válassz verziót.</p>
+                                  )}
+                                </aside>
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
                       </>
                     )}
                   </div>
@@ -1134,7 +1336,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     <div className="space-y-2 p-4">
                       {!activeDocument ? (
                         <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-white p-3 text-[12px] text-[var(--adm-text-muted)]">
-                          Válassz dokumentumot a műveletekhez.
+                          Válassz workspace dokumentumot a műveletekhez.
                         </p>
                       ) : (
                         <>
@@ -1142,7 +1344,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             Kiválasztott dokumentum: <span className="font-semibold text-[var(--adm-text)]">{activeTitle}</span>
                           </p>
                           <AdminButton className="w-full justify-start" variant="primary" onClick={() => openWorkspace(activeDocument.id)}>
-                            Dokumentum megnyitása
+                            Contract Workspace megnyitása
                           </AdminButton>
                           <AdminButton className="w-full justify-start" variant="gold" onClick={() => litigationWorkspaceUrl && router.push(litigationWorkspaceUrl)} disabled={!litigationWorkspaceUrl}>
                             Peres munkatér
