@@ -19,6 +19,7 @@ jest.mock('../src/prisma/prisma.service', () => ({
     task: { findMany: jest.fn() },
     document: { findMany: jest.fn() },
     communication: { findMany: jest.fn(), count: jest.fn() },
+    comment: { findMany: jest.fn(), groupBy: jest.fn() },
   },
 }));
 
@@ -67,6 +68,8 @@ describe('GET /cases/:caseId/workspace', () => {
     (prisma.document.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.communication.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.communication.count as jest.Mock).mockResolvedValue(0);
+    (prisma.comment.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.comment.groupBy as jest.Mock).mockResolvedValue([]);
   });
 
   it('returns 401 without a token', async () => {
@@ -91,7 +94,7 @@ describe('GET /cases/:caseId/workspace', () => {
   it('returns the full workspace DTO shape', async () => {
     const res = await requestJson(createApp(), '/cases/case-1/workspace');
     expect(res.status).toBe(200);
-    expect(Object.keys(res.body).sort()).toEqual(['activity', 'case', 'communications', 'deadlines', 'documents', 'metrics', 'tasks', 'time', 'warnings']);
+    expect(Object.keys(res.body).sort()).toEqual(['activity', 'case', 'comments', 'communications', 'deadlines', 'documents', 'metrics', 'tasks', 'time', 'warnings']);
     expect(res.body.case).toMatchObject({ id: 'case-1', caseNumber: 'CASE-2026-001', title: 'Teszt ügy', status: 'ACTIVE', priority: 'HIGH' });
     expect(res.body.case.client).toMatchObject({ id: 'client-1', name: 'Teszt Kft.' });
     expect(res.body.metrics).toHaveProperty('openTaskCount');

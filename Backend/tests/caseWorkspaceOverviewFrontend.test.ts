@@ -78,11 +78,9 @@ describe('CaseWorkspaceOverview mini-dashboard', () => {
 });
 
 describe('CaseDetail wires the workspace overview as the dominant surface', () => {
-  it('renders CaseWorkspaceOverview above the existing overview', () => {
+  it('renders only CaseWorkspaceOverview and not the retired legacy overview', () => {
     expect(caseDetail).toContain('<CaseWorkspaceOverview caseId={canonicalCaseId} />');
-    const ws = caseDetail.indexOf('<CaseWorkspaceOverview');
-    const legacy = caseDetail.indexOf('<CaseCenterOverview');
-    expect(ws).toBeGreaterThan(-1);
-    expect(ws).toBeLessThan(legacy); // dominant (rendered first)
+    expect(caseDetail).not.toContain('import { CaseCenterOverview }');
+    expect(caseDetail).not.toContain('<CaseCenterOverview');
   });
 });

@@ -209,6 +209,24 @@ router.patch('/:id/attention', authenticate, async (req: Request, res: Response)
 });
 
 // ============================================================================
+// PATCH /api/v1/tasks/:id - Általános feladatszerkesztés (cím, leírás, prioritás,
+// határidő, felelős, figyelmi kategória, becsült idő). Státusz NEM módosítható itt;
+// az a lifecycle végpontokon keresztül megy (start/submit/complete/…).
+// ============================================================================
+router.patch('/:id', authenticate, async (req: Request, res: Response) => {
+  try {
+    const idParam = req.params.id;
+    const id = Array.isArray(idParam) ? idParam[0] : idParam;
+    const userId = (req as any).user?.userId;
+    const task = await taskService.updateTaskDetails(id, userId, req.body);
+    res.json(task);
+  } catch (error) {
+    console.error('Error updating task:', error);
+    sendTaskWorkflowError(res, error, 'Hiba a feladat frissítésekor');
+  }
+});
+
+// ============================================================================
 // GET /api/v1/cases/:caseId/tasks - Case-hez tartozó feladatok
 // ============================================================================
 router.get('/cases/:caseId/tasks', authenticate, async (req: Request, res: Response) => {

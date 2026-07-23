@@ -12,6 +12,7 @@ import reviewSuggestionsRoutes from './reviewSuggestions.routes';
 import { authenticate } from '../../middleware/auth';
 import { prisma } from '../../prisma/prisma.service';
 import { requireDocumentReadAccess, requireDocumentManageAccess } from './authorization';
+import { userCanManageCase } from '../cases/authorization';
 import { createTaskFromDocumentSource, SourceLinkedTaskError } from '../tasks/services';
 import { getDocumentEditorMetadata } from '../documentEditor/service';
 import {
@@ -24,6 +25,34 @@ import {
 
 const router = Router();
 router.use('/:documentId/review-suggestions', reviewSuggestionsRoutes);
+
+const MAX_DOCUMENT_UPLOAD_BYTES = 25 * 1024 * 1024;
+const ALLOWED_UPLOAD_TYPES: Record<string, Set<string>> = {
+  '.pdf': new Set(['application/pdf']),
+  '.doc': new Set(['application/msword', 'application/octet-stream']),
+  '.docx': new Set(['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip', 'application/octet-stream']),
+  '.txt': new Set(['text/plain', 'application/octet-stream']),
+};
+
+function sanitizeUploadFileName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const baseName = value.replace(/\\/g, '/').split('/').pop()?.trim() || '';
+  const sanitized = baseName.replace(/[\u0000-\u001F\u007F<>:"|?*]/g, '_').replace(/\s+/g, ' ').trim();
+  if (!sanitized || sanitized === '.' || sanitized === '..' || sanitized.length > 180) return null;
+  return sanitized;
+}
+
+function getUploadExtension(fileName: string): string {
+  const dotIndex = fileName.lastIndexOf('.');
+  return dotIndex >= 0 ? fileName.slice(dotIndex).toLowerCase() : '';
+}
+
+function isAllowedUploadMime(extension: string, mimeType: unknown): boolean {
+  const accepted = ALLOWED_UPLOAD_TYPES[extension];
+  if (!accepted) return false;
+  if (typeof mimeType !== 'string' || !mimeType.trim()) return true;
+  return accepted.has(mimeType.toLowerCase());
+}
 
 /**
  * GET /api/v1/documents/search
@@ -59,7 +88,8 @@ router.get('/search', authenticate, async (req: Request, res: Response): Promise
 router.post('/', authenticate, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
-    const { caseId, fileName, documentType, folder } = req.body;
+    const { caseId, documentType, folder } = req.body;
+    const fileName = sanitizeUploadFileName(req.body?.fileName);
 
     if (!caseId || !fileName) {
       res.status(400).json({ 
@@ -80,6 +110,35 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
       return;
     }
 
+    const canManage = await userCanManageCase(req, String(caseId));
+    if (canManage === null) {
+      res.status(404).json({ status: 404, code: 'NOT_FOUND', message: 'Case not found' });
+      return;
+    }
+    if (!canManage) {
+      res.status(403).json({ status: 403, code: 'DOCUMENT_UPLOAD_FORBIDDEN', message: 'You are not allowed to upload documents to this case.' });
+      return;
+    }
+
+    const extension = getUploadExtension(fileName);
+    if (!Object.prototype.hasOwnProperty.call(ALLOWED_UPLOAD_TYPES, extension)) {
+      res.status(400).json({
+        status: 400,
+        code: 'UNSUPPORTED_FILE_TYPE',
+        message: 'Nem támogatott fájltípus. Engedélyezett: PDF, DOC, DOCX vagy TXT.',
+      });
+      return;
+    }
+
+    if (!isAllowedUploadMime(extension, req.body.mimeType)) {
+      res.status(400).json({
+        status: 400,
+        code: 'UNSUPPORTED_MIME_TYPE',
+        message: 'A fájl MIME típusa nem egyezik az engedélyezett fájltípussal.',
+      });
+      return;
+    }
+
     let fileContentBuffer: Buffer;
     try {
       fileContentBuffer = Buffer.from(req.body.fileContent as string, 'base64');
@@ -91,6 +150,15 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
         status: 400,
         code: 'INVALID_FILE_CONTENT',
         message: 'A feltöltött fájl tartalma sérült vagy nem base64 formátumú.',
+      });
+      return;
+    }
+
+    if (fileContentBuffer.length > MAX_DOCUMENT_UPLOAD_BYTES) {
+      res.status(413).json({
+        status: 413,
+        code: 'DOCUMENT_TOO_LARGE',
+        message: 'A fájl mérete meghaladja a 25 MB-os korlátot.',
       });
       return;
     }

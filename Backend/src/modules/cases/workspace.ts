@@ -113,6 +113,13 @@ export interface CaseWorkspaceDto {
     objectType: string;
     objectId: string | null;
   }>;
+  comments: Array<{
+    id: string;
+    author: { id: string; name: string } | null;
+    content: string;
+    status: 'OPEN' | 'RESOLVED';
+    createdAt: string | null;
+  }>;
   warnings: CaseWorkspaceWarning[];
 }
 
@@ -214,6 +221,48 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
     warnings,
   );
 
+  // ---- case-level internal notes (Comment with caseId set, documentId null) ----
+  const caseComments = await safe(
+    'comments',
+    'CASE_COMMENTS_UNAVAILABLE',
+    'Az ügyjegyzetek most nem érhetők el.',
+    () =>
+      prisma.comment.findMany({
+        where: { caseId, documentId: null },
+        select: {
+          id: true, content: true, isResolved: true, createdAt: true,
+          user: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: ACTIVITY_LIMIT,
+      }),
+    [] as any[],
+    warnings,
+  );
+
+  // ---- per-document comment counts (bounded to the fetched documents) ----
+  const docIds = documents.map((d) => d.id);
+  const documentCommentCounts = await safe(
+    'documents',
+    'DOCUMENT_COMMENT_COUNT_UNAVAILABLE',
+    'A dokumentum-kommentek száma most nem számítható.',
+    async () => {
+      if (docIds.length === 0) return new Map<string, number>();
+      const grouped = await prisma.comment.groupBy({
+        by: ['documentId'],
+        where: { documentId: { in: docIds } },
+        _count: { _all: true },
+      });
+      const map = new Map<string, number>();
+      for (const row of grouped) {
+        if (row.documentId) map.set(row.documentId, row._count._all);
+      }
+      return map;
+    },
+    new Map<string, number>(),
+    warnings,
+  );
+
   // ---- case time: TimeEntry has no caseId (only matterId/taskId); not directly
   // attributable to a case. Never present Matter time as Case time. ----
   const time: CaseWorkspaceDto['time'] = { available: false, reason: 'CASE_TIME_NOT_ATTRIBUTABLE' };
@@ -232,10 +281,12 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
     documentId: t.documentId ?? null,
   }));
 
-  // ---- documents projection (no uploader/summary/commentCount relation in the
-  // current model → honest nulls + a warning; not fabricated) ----
+  // ---- documents projection. Uploader/summary have no persisted relation in the
+  // current model → honest nulls + a warning (not fabricated). commentCount is now
+  // real (polymorphic Comment groupBy above). A persisted document summary field is
+  // a documented additive schema candidate (see final report). ----
   if (documents.length > 0) {
-    warnings.push({ section: 'documents', code: 'DOCUMENT_META_LIMITED', message: 'A dokumentum feltöltő/összefoglaló/komment adat a jelenlegi modellből nem elérhető.' });
+    warnings.push({ section: 'documents', code: 'DOCUMENT_META_LIMITED', message: 'A dokumentum feltöltő/összefoglaló adat a jelenlegi modellből nem elérhető.' });
   }
   const documentsDto = documents.slice(0, DOCUMENT_LIMIT).map((d) => ({
     id: d.id,
@@ -247,7 +298,7 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
     uploadedAt: iso(d.updatedAt || d.createdAt),
     uploadedBy: null,
     summary: null,
-    commentCount: null,
+    commentCount: documentCommentCounts.get(d.id) ?? 0,
   }));
 
   // ---- deadlines: derived from open tasks that carry a dueDate (reliable
@@ -320,6 +371,17 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
       objectId: c.id,
     });
   }
+  for (const cm of caseComments) {
+    activityItems.push({
+      id: `comment-${cm.id}`,
+      actor: cm.user?.name || null,
+      actionLabel: 'belső megjegyzést fűzött az ügyhöz',
+      objectLabel: preview(cm.content) || 'Megjegyzés',
+      occurredAt: iso(cm.createdAt) || new Date(0).toISOString(),
+      objectType: 'COMMENT',
+      objectId: cm.id,
+    });
+  }
   activityItems.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt) || a.id.localeCompare(b.id));
   const activity = activityItems.slice(0, ACTIVITY_LIMIT);
 
@@ -353,6 +415,13 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
     time,
     communications,
     activity,
+    comments: caseComments.slice(0, ACTIVITY_LIMIT).map((cm) => ({
+      id: cm.id,
+      author: cm.user ? { id: cm.user.id, name: cm.user.name } : null,
+      content: cm.content,
+      status: cm.isResolved ? ('RESOLVED' as const) : ('OPEN' as const),
+      createdAt: iso(cm.createdAt),
+    })),
     warnings,
   };
 }

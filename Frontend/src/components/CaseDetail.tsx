@@ -6,7 +6,6 @@ import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, download
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
-import { CaseCenterOverview } from "@/components/cases/CaseCenterOverview";
 import { CaseWorkspaceOverview } from "@/components/cases/CaseWorkspaceOverview";
 import { CaseMatterDossierPanel } from "@/components/litigation/CaseMatterDossierPanel";
 import { CaseIntakeReadinessPanel } from "@/components/intake/CaseIntakeReadinessPanel";
@@ -547,12 +546,11 @@ export function CaseDetail({ params }: CaseDetailProps) {
       setIsLoadingWorkflowSummary(true);
       setWorkflowSummaryError(null);
       setWorkItemsError(null);
-      const [contracts, timeline, caseList, backendDocuments, anonDocs, communicationsResponse, workflowSummaryResponse, workItemsResponse, caseActivityResponse, caseAgendaResponse, caseResponsibilityResponse] = await Promise.all([
+      const [contracts, timeline, caseList, backendDocuments, communicationsResponse, workflowSummaryResponse, workItemsResponse, caseActivityResponse, caseAgendaResponse, caseResponsibilityResponse] = await Promise.all([
         getCaseContracts(effectiveCaseId).catch(() => []),
         getCaseTimeline(effectiveCaseId).catch(() => []),
         getCases(1, 200).catch(() => ({ data: [] })),
         getCaseDocuments(effectiveCaseId).catch(() => []),
-        getCaseAnonymousDocuments(effectiveCaseId).catch(() => []),
         getCommunications({ caseId: effectiveCaseId, limit: 50 }).catch(() => ({ communications: [], pagination: { total: 0, limit: 50, offset: 0 } })),
         getCaseWorkflowSummary(effectiveCaseId).catch((error) => {
           console.error('Failed to load workflow summary:', error);
@@ -570,7 +568,6 @@ export function CaseDetail({ params }: CaseDetailProps) {
       ]);
       setGeneratedContracts(contracts);
       setTimelineEvents(timeline);
-      setAnonymousDocuments(anonDocs);
       setCommunications(communicationsResponse.communications || []);
       setWorkflowSummary(workflowSummaryResponse);
       setWorkItems(workItemsResponse);
@@ -2240,80 +2237,36 @@ export function CaseDetail({ params }: CaseDetailProps) {
         </div>
       </div>
       ) : (
-        <div className="mx-auto max-w-[1480px] space-y-6 px-4 py-5 lg:px-6">
-        <CaseWorkspaceOverview caseId={canonicalCaseId} />
-        <CaseCenterOverview
+        <div className="mx-auto max-w-[1480px] space-y-6 px-0 py-0 lg:px-0">
+        <CaseWorkspaceNav
           caseId={canonicalCaseId}
           caseNumber={displayCaseNumber}
           title={displayTitle}
           clientName={displayClient}
-          matterType={displayMatterType}
+          activeTab="overview"
           status={caseRecord?.status}
           responsibleName={assignedLawyer?.name}
           deadline={caseRecord?.deadline}
-          nextStep={{
-            title: nextStep.title,
-            detail: nextStep.helper,
-            actionLabel: nextStep.label,
-            onAction: nextStep.action,
-          }}
-          activeWork={(filteredWorkbenchItems.length > 0
-            ? filteredWorkbenchItems.map((item) => ({
-                id: item.id,
-                title: item.title,
-                meta: `${item.assignee?.displayName || "Nincs kijelölt felelős"} · ${item.dueAt ? new Date(item.dueAt).toLocaleDateString("hu-HU") : "Nincs határidő"}`,
-                href: item.href || `/tasks?taskId=${encodeURIComponent(item.id)}`,
-                status: item.status,
-              }))
-            : openTasks.map((task) => ({
-                id: task.id,
-                title: task.title,
-                meta: `${task.assignedTo?.name || "Nincs kijelölt felelős"} · ${task.dueDate ? new Date(task.dueDate).toLocaleDateString("hu-HU") : "Nincs határidő"}`,
-                href: `/tasks?taskId=${encodeURIComponent(task.id)}`,
-                status: task.status,
-              }))).slice(0, 5)}
-          activeWorkError={Boolean(workItemsError)}
-          onReloadActiveWork={() => void loadBackendData()}
-          documents={documents.slice(0, 5).map((document) => ({
-            id: document.id,
-            title: document.name,
-            meta: `${document.type}${document.version ? ` · ${document.version}` : ""} · ${document.date}`,
-            onOpen: () => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/documents?documentId=${encodeURIComponent(document.id)}`),
-            onDownload: () => void handleDocumentClick(document),
-            onDelete: canRequestDocumentDelete ? () => openDeleteDocumentDialog(document) : undefined,
-          }))}
-          onOpenDocuments={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/documents`)}
-          onUploadDocument={!isArchived ? () => fileInputRef.current?.click() : undefined}
-          deadlineSummary={nextCaseAgendaItem ? {
-            title: nextCaseAgendaItem.title,
-            meta: `${new Date(nextCaseAgendaItem.dueAt).toLocaleString("hu-HU")} · ${nextCaseAgendaItem.source.displayName || nextCaseAgendaItem.sourceType}`,
-            href: nextCaseAgendaItem.href || nextCaseAgendaItem.source.href || `/deadlines?scope=CASE&caseId=${encodeURIComponent(canonicalCaseId)}`,
-          } : caseRecord?.deadline ? {
-            title: "Ügyhatáridő",
-            meta: new Date(caseRecord.deadline).toLocaleDateString("hu-HU"),
-            href: `/deadlines?scope=CASE&caseId=${encodeURIComponent(canonicalCaseId)}`,
-          } : null}
-          communicationSummary={latestCommunication ? {
-            title: latestCommunication.subject || "Nincs tárgy",
-            meta: `${latestCommunication.senderName || latestCommunication.senderEmail || "Kommunikáció"}${latestCommunication.createdAt ? ` · ${new Date(latestCommunication.createdAt).toLocaleDateString("hu-HU")}` : ""}`,
-            href: `/cases/${encodeURIComponent(canonicalCaseId)}/communications`,
-          } : null}
-          events={latestStoryEvents.slice(0, 5).map((event) => ({
-            id: event.id,
-            title: event.title,
-            meta: `${event.sourceLabel} · ${new Date(event.timestamp).toLocaleString("hu-HU", { dateStyle: "short", timeStyle: "short" })}`,
-            href: event.link || null,
-          }))}
-          hiddenInputs={
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.doc,.docx,.txt"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-          }
-          managementSlot={
+        />
+        <div className="space-y-6 px-4 py-5 lg:px-6">
+        <CaseWorkspaceOverview caseId={canonicalCaseId} />
+        {/* Case management panel — the legacy CaseCenterOverview (which duplicated the
+            task/document/communication/activity lists and rendered a generic
+            "Esemény rögzítve" timeline + made the anonymous-documents call) is
+            retired. The workspace overview above is the single case overview; this
+            panel keeps only genuine case-management controls. */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.doc,.docx,.txt"
+          onChange={handleFileUpload}
+          className="hidden"
+        />
+        <section aria-label="Ügykezelés" className="overflow-hidden rounded-xl border border-[var(--adm-border)] bg-white shadow-[0_10px_28px_rgba(0,42,35,0.035)]">
+          <div className="border-b border-[var(--adm-border)] px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügykezelés</p>
+          </div>
+          <div className="px-4 py-4">
             <div className="grid gap-4 lg:grid-cols-2">
               <section className="space-y-3">
                 <div>
@@ -2427,8 +2380,9 @@ export function CaseDetail({ params }: CaseDetailProps) {
                 ) : null}
               </section>
             </div>
-          }
-        />
+          </div>
+        </section>
+        </div>
         </div>
       )}
 

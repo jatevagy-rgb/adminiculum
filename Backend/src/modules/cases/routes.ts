@@ -12,6 +12,7 @@ import { getCaseWorkflowSummary } from './workflowSummary';
 import { getCaseWorkItems } from './workItems';
 import { getCaseActivity } from './activity';
 import { getCaseWorkspace } from './workspace';
+import { createCaseComment, listCaseComments, resolveCaseComment, reopenCaseComment, sendCaseCommentError } from './caseComments.service';
 import { AgendaRequestError, getCaseDeadlines } from '../agenda/service';
 import { getCaseResponsibility } from '../responsibility/service';
 import { getCaseLifecycle, closeCase, reopenCase, archiveCase, LifecycleServiceError } from './lifecycleService';
@@ -782,6 +783,46 @@ router.delete('/:caseId/collaborators/:collaboratorId', authenticate, requireCas
       return;
     }
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// Case-level comments (internal notes) — polymorphic Comment model, caseId set.
+// Authorization + author derivation handled inside the service.
+// ============================================================================
+router.get('/:caseId/comments', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await listCaseComments(req, String(req.params.caseId || ''), req.query);
+    res.json(result);
+  } catch (error) {
+    sendCaseCommentError(res, error);
+  }
+});
+
+router.post('/:caseId/comments', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await createCaseComment(req, String(req.params.caseId || ''), req.body);
+    res.status(201).json(result);
+  } catch (error) {
+    sendCaseCommentError(res, error);
+  }
+});
+
+router.post('/:caseId/comments/:commentId/resolve', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await resolveCaseComment(req, String(req.params.caseId || ''), String(req.params.commentId || ''));
+    res.json(result);
+  } catch (error) {
+    sendCaseCommentError(res, error);
+  }
+});
+
+router.post('/:caseId/comments/:commentId/reopen', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await reopenCaseComment(req, String(req.params.caseId || ''), String(req.params.commentId || ''));
+    res.json(result);
+  } catch (error) {
+    sendCaseCommentError(res, error);
   }
 });
 

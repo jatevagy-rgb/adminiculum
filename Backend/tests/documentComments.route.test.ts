@@ -80,6 +80,7 @@ jest.mock('../src/prisma/prisma.service', () => ({
 }));
 
 import documentsRoutes from '../src/modules/documents/routes';
+import documentsService from '../src/modules/documents/services';
 
 function createApp(): Express {
   const app = express();
@@ -146,6 +147,57 @@ const openComment = {
   updatedAt: new Date('2026-07-14T10:00:00Z'),
   user: { id: 'user-1', name: 'Dr. Teszt' },
 };
+
+const uploadBody = {
+  caseId: 'case-1',
+  fileName: 'smoke.txt',
+  fileContent: Buffer.from('safe smoke').toString('base64'),
+  mimeType: 'text/plain',
+};
+
+describe('document upload route safety', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockPrisma.case.findUnique.mockResolvedValue({ id: 'case-1', assignedLawyerId: 'user-1', createdById: 'creator-1' });
+    mockPrisma.timelineEvent.create.mockResolvedValue({});
+    (documentsService.createDocument as jest.Mock).mockResolvedValue({
+      id: 'doc-new',
+      caseId: 'case-1',
+      fileName: 'smoke.txt',
+      documentType: 'OTHER',
+      version: '1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  });
+
+  it('requires case-level manage access before uploading', async () => {
+    mockPrisma.case.findUnique.mockResolvedValue({ id: 'case-1', assignedLawyerId: 'other-user', createdById: 'creator-1' });
+    const res = await requestJson(createApp(), 'POST', '/documents', { body: uploadBody });
+    expect(res.status).toBe(403);
+    expect(documentsService.createDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsupported file extensions before storage upload', async () => {
+    const res = await requestJson(createApp(), 'POST', '/documents', { body: { ...uploadBody, fileName: 'unsafe.exe' } });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('UNSUPPORTED_FILE_TYPE');
+    expect(documentsService.createDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects mismatched MIME type before storage upload', async () => {
+    const res = await requestJson(createApp(), 'POST', '/documents', { body: { ...uploadBody, mimeType: 'application/x-msdownload' } });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('UNSUPPORTED_MIME_TYPE');
+    expect(documentsService.createDocument).not.toHaveBeenCalled();
+  });
+
+  it('sanitizes path-like filenames before calling the document service', async () => {
+    const res = await requestJson(createApp(), 'POST', '/documents', { body: { ...uploadBody, fileName: '..\\..\\safe smoke.txt' } });
+    expect(res.status).toBe(201);
+    expect(documentsService.createDocument).toHaveBeenCalledWith(expect.objectContaining({ fileName: 'safe smoke.txt' }));
+  });
+});
 
 describe('document comments routes', () => {
   beforeEach(() => {

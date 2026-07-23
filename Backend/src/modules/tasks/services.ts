@@ -514,6 +514,119 @@ export async function updateTaskAttention(taskId: string, userId: string, body: 
 }
 
 /**
+ * General task detail update (title, description, priority, dueDate, assignee,
+ * attentionCategory, estimatedMinutes). Status is intentionally NOT mutable here —
+ * status changes go through the lifecycle transitions (start/submit/complete/…),
+ * so this endpoint cannot bypass workflow rules. Reuses canUserActOnTask for authz.
+ */
+export async function updateTaskDetails(taskId: string, userId: string, body: unknown) {
+  if (!userId) {
+    throw new WorkflowTransitionError(401, 'NOT_AUTHENTICATED', 'Authenticated user is required.');
+  }
+  const payload = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+  const allowed = new Set(['title', 'description', 'priority', 'dueDate', 'assignedToId', 'attentionCategory', 'estimatedMinutes']);
+  for (const key of Object.keys(payload)) {
+    if (!allowed.has(key)) {
+      throw new WorkflowTransitionError(400, 'UNSUPPORTED_TASK_FIELD', `Field ${key} is not accepted for task update.`);
+    }
+  }
+  if (Object.keys(payload).length === 0) {
+    throw new WorkflowTransitionError(400, 'TASK_UPDATE_FIELD_REQUIRED', 'At least one updatable field is required.');
+  }
+
+  const existing = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { id: true, title: true, caseId: true, assignedToId: true, assignedById: true },
+  });
+  if (!existing) {
+    throw new WorkflowTransitionError(404, 'TASK_NOT_FOUND', 'Task not found.');
+  }
+  const actor = await canUserActOnTask(existing, userId);
+  if (!actor.allowed) {
+    throw new WorkflowTransitionError(403, 'TASK_ACTION_FORBIDDEN', 'You are not allowed to update this task.');
+  }
+
+  const data: Record<string, unknown> = {};
+
+  if ('title' in payload) {
+    const title = String(payload.title ?? '').replace(/\s+/g, ' ').trim();
+    if (!title) {
+      throw new WorkflowTransitionError(400, 'TASK_TITLE_REQUIRED', 'title must not be empty.');
+    }
+    if (title.length > 300) {
+      throw new WorkflowTransitionError(400, 'TASK_TITLE_TOO_LONG', 'title must be 300 characters or fewer.');
+    }
+    data.title = title;
+  }
+  if ('description' in payload) {
+    if (payload.description === null || payload.description === '') {
+      data.description = null;
+    } else {
+      const description = String(payload.description);
+      if (description.length > 5000) {
+        throw new WorkflowTransitionError(400, 'TASK_DESCRIPTION_TOO_LONG', 'description must be 5000 characters or fewer.');
+      }
+      data.description = description;
+    }
+  }
+  if ('priority' in payload) {
+    const priority = String(payload.priority || '').toUpperCase();
+    if (!['LOW', 'MEDIUM', 'HIGH', 'URGENT'].includes(priority)) {
+      throw new WorkflowTransitionError(400, 'INVALID_TASK_PRIORITY', 'priority must be LOW, MEDIUM, HIGH or URGENT.');
+    }
+    data.priority = priority;
+  }
+  if ('dueDate' in payload) {
+    if (payload.dueDate === null || payload.dueDate === '') {
+      data.dueDate = null;
+    } else {
+      const parsed = new Date(String(payload.dueDate));
+      if (Number.isNaN(parsed.getTime())) {
+        throw new WorkflowTransitionError(400, 'INVALID_DUE_DATE', 'Invalid dueDate value.');
+      }
+      data.dueDate = parsed;
+    }
+  }
+  if ('assignedToId' in payload) {
+    if (payload.assignedToId === null || payload.assignedToId === '') {
+      data.assignedToId = null;
+    } else {
+      const newAssignee = String(payload.assignedToId);
+      const assignmentAllowed = await canAssign(userId, newAssignee);
+      if (!assignmentAllowed) {
+        throw new WorkflowTransitionError(403, 'TASK_ASSIGNMENT_FORBIDDEN', 'You are not allowed to assign this task to that user.');
+      }
+      data.assignedToId = newAssignee;
+    }
+  }
+  if ('attentionCategory' in payload) {
+    data.attentionCategory = parseNullableAttentionCategory(payload.attentionCategory) ?? null;
+  }
+  if ('estimatedMinutes' in payload) {
+    data.estimatedMinutes = parseNullableEstimatedMinutes(payload.estimatedMinutes) ?? null;
+  }
+
+  if (Object.keys(data).length === 0) {
+    return getTask(taskId);
+  }
+
+  await prisma.task.update({ where: { id: taskId }, data: data as any });
+
+  try {
+    await createTimelineEvent({
+      caseId: existing.caseId,
+      userId,
+      type: TimelineType.CUSTOM as TimelineType,
+      payload: { taskId, source: 'task_update', fields: Object.keys(data) },
+    });
+  } catch (timelineError) {
+    console.warn('[TASK_UPDATE] Timeline event creation failed (task remains updated):', timelineError);
+  }
+
+  return getTask(taskId);
+}
+
+/**
  * Start a task (TODO -> IN_PROGRESS)
  */
 export async function startTask(taskId: string, userId: string) {
@@ -1201,5 +1314,6 @@ export default {
   getReviewTasksForUser,
   parseTaskAttentionInput,
   updateTaskAttention,
+  updateTaskDetails,
   TaskValidationError
 };

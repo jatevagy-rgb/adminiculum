@@ -40,13 +40,15 @@ export function CaseWorkspaceNav({
   responsibleName,
   deadline,
 }: CaseWorkspaceNavProps) {
+  // Primary case tabs are intentionally reduced to Áttekintés + Kommunikáció.
+  // Documents / Feladatok / Határidők / Munkaórák are no longer co-equal primary
+  // tabs — the Áttekintés workspace is the dominant surface and exposes those via
+  // discreet secondary actions. The underlying routes stay reachable by direct URL
+  // (compatibility), so an incoming activeTab that is no longer a primary tab simply
+  // renders with no highlighted primary tab rather than breaking.
   const tabs = [
     { id: "overview" as const, label: "Áttekintés", href: `/cases/${caseId}` },
-    { id: "documents" as const, label: "Dokumentumok", href: `/cases/${caseId}/documents` },
-    { id: "tasks" as const, label: "Feladatok", href: `/tasks?caseId=${encodeURIComponent(caseId)}` },
     { id: "communications" as const, label: "Kommunikáció", href: `/cases/${caseId}/communications` },
-    { id: "deadlines" as const, label: "Határidők", href: `/deadlines?scope=CASE&caseId=${encodeURIComponent(caseId)}` },
-    { id: "time" as const, label: "Munkaórák", href: `/time-entries?caseId=${encodeURIComponent(caseId)}` },
   ];
   const visibleDeadline = formatDeadline(deadline);
 

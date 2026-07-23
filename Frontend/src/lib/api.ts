@@ -366,11 +366,64 @@ export interface CaseWorkspace {
   time: { available: true; loggedMinutes: number; billableMinutes: number | null } | { available: false; reason: string };
   communications: Array<{ id: string; type: string; subject: string | null; contentPreview: string | null; sender: string | null; timestamp: string | null; internal: boolean; taskId: string | null; documentId: string | null }>;
   activity: Array<{ id: string; actor: string | null; actionLabel: string; objectLabel: string; occurredAt: string; objectType: string; objectId: string | null }>;
+  comments: Array<{ id: string; author: { id: string; name: string } | null; content: string; status: 'OPEN' | 'RESOLVED'; createdAt: string | null }>;
   warnings: Array<{ section: string; code: string; message: string }>;
 }
 
 export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspace> {
   return fetchApi<CaseWorkspace>(`/cases/${encodeURIComponent(caseId)}/workspace`, { cache: 'no-store' });
+}
+
+// ---- Case-level internal notes (Comment model, caseId set) ----
+export interface CaseCommentDto {
+  id: string;
+  caseId: string;
+  author: { id: string; displayName: string };
+  content: string;
+  status: 'OPEN' | 'RESOLVED';
+  createdAt: string;
+  updatedAt: string | null;
+  capabilities: { canResolve: boolean; canReopen: boolean; canDelete: false };
+}
+export interface CaseCommentsResponse {
+  comments: CaseCommentDto[];
+  pagination: { limit: number; offset: number };
+}
+export async function getCaseComments(caseId: string, params: { limit?: number; offset?: number } = {}): Promise<CaseCommentsResponse> {
+  const search = new URLSearchParams();
+  if (params.limit != null) search.set('limit', String(params.limit));
+  if (params.offset != null) search.set('offset', String(params.offset));
+  const qs = search.toString();
+  return fetchApi<CaseCommentsResponse>(`/cases/${encodeURIComponent(caseId)}/comments${qs ? `?${qs}` : ''}`, { cache: 'no-store' });
+}
+export async function createCaseComment(caseId: string, content: string): Promise<CaseCommentDto> {
+  return fetchApi<CaseCommentDto>(`/cases/${encodeURIComponent(caseId)}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
+}
+export async function resolveCaseComment(caseId: string, commentId: string): Promise<CaseCommentDto> {
+  return fetchApi<CaseCommentDto>(`/cases/${encodeURIComponent(caseId)}/comments/${encodeURIComponent(commentId)}/resolve`, { method: 'POST' });
+}
+export async function reopenCaseComment(caseId: string, commentId: string): Promise<CaseCommentDto> {
+  return fetchApi<CaseCommentDto>(`/cases/${encodeURIComponent(caseId)}/comments/${encodeURIComponent(commentId)}/reopen`, { method: 'POST' });
+}
+
+// ---- General task detail update (PATCH /tasks/:id) ----
+export interface UpdateTaskDetailsData {
+  title?: string;
+  description?: string | null;
+  priority?: string;
+  dueDate?: string | null;
+  assignedToId?: string | null;
+  attentionCategory?: string | null;
+  estimatedMinutes?: number | null;
+}
+export async function updateTask(taskId: string, patch: UpdateTaskDetailsData): Promise<TaskItem> {
+  return fetchApi<TaskItem>(`/tasks/${encodeURIComponent(taskId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
 }
 
 export async function getCases(page = 1, limit = 50, assignedLawyerId?: string, clientId?: string): Promise<CasesResponse> {
