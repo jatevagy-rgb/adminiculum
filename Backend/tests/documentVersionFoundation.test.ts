@@ -43,6 +43,7 @@ describe('contract workspace document version foundation', () => {
     expect(migration).toContain('ADD COLUMN IF NOT EXISTS "versionType"');
     expect(migration).toContain('CREATE TABLE IF NOT EXISTS "document_reviews"');
     expect(migration).toContain('CREATE TABLE IF NOT EXISTS "review_snapshots"');
+    expect(migration).toContain('ALTER TABLE "document_versions" ALTER COLUMN "name" DROP NOT NULL');
     expect(migration).toContain('CREATE INDEX IF NOT EXISTS "document_versions_documentId_currentVersion_idx"');
     expect(migration).toContain('WHERE NOT EXISTS');
     expect(migration).not.toContain('DROP TABLE "documents"');

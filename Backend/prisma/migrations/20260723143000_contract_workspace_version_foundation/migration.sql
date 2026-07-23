@@ -48,6 +48,23 @@ ALTER TABLE "document_versions" ADD COLUMN IF NOT EXISTS "spItemId" TEXT;
 ALTER TABLE "document_versions" ADD COLUMN IF NOT EXISTS "spWebUrl" TEXT;
 ALTER TABLE "document_versions" ADD COLUMN IF NOT EXISTS "previousVersionId" TEXT;
 
+-- Existing production databases may already contain an older metadata-only
+-- document_versions table with legacy columns not represented by Prisma.
+-- Make those legacy-only fields nullable so future immutable content inserts
+-- are not blocked by an unmanaged NOT NULL column.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'document_versions'
+      AND column_name = 'name'
+  ) THEN
+    ALTER TABLE "document_versions" ALTER COLUMN "name" DROP NOT NULL;
+  END IF;
+END $$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS "document_versions_documentId_version_key" ON "document_versions"("documentId", "version");
 CREATE UNIQUE INDEX IF NOT EXISTS "document_versions_documentId_id_key" ON "document_versions"("documentId", "id");
 CREATE INDEX IF NOT EXISTS "document_versions_documentId_currentVersion_idx" ON "document_versions"("documentId", "currentVersion");
