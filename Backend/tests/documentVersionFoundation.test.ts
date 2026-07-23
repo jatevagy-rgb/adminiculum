@@ -114,10 +114,20 @@ describe('contract workspace document version foundation', () => {
 
     expect(uploadNewVersion).toContain('FOR UPDATE');
     expect(uploadNewVersion).toContain('TransactionIsolationLevel.Serializable');
+    expect(uploadNewVersion).toContain('isSerializationConflict');
     expect(uploadNewVersion).toContain('orderBy: { version:');
     expect(uploadNewVersion).toContain('data: { isCurrent: false }');
     expect(uploadNewVersion).toContain('isCurrent: true');
     expect(uploadNewVersion).toContain('driveService.deleteDocument');
+  });
+
+  it('serializes current-version promotion on the logical document row', () => {
+    const service = read('Backend/src/modules/documents/services.ts');
+    const promoteCurrentVersion = service.slice(service.indexOf('async promoteCurrentVersion'), service.indexOf('async downloadDocumentVersion'));
+
+    expect(promoteCurrentVersion).toContain('FOR UPDATE');
+    expect(promoteCurrentVersion).toContain('TransactionIsolationLevel.Serializable');
+    expect(promoteCurrentVersion).toContain('where: { id: versionId, documentId }');
   });
 
   it('validates upload source and version type enums at the route boundary', () => {
