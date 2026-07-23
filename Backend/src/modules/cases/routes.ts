@@ -11,6 +11,7 @@ import { requireCaseCollaboratorManageAccess, requireCaseManageAccess, requireCa
 import { getCaseWorkflowSummary } from './workflowSummary';
 import { getCaseWorkItems } from './workItems';
 import { getCaseActivity } from './activity';
+import { getCaseWorkspace } from './workspace';
 import { AgendaRequestError, getCaseDeadlines } from '../agenda/service';
 import { getCaseResponsibility } from '../responsibility/service';
 import { getCaseLifecycle, closeCase, reopenCase, archiveCase, LifecycleServiceError } from './lifecycleService';
@@ -197,6 +198,24 @@ router.get('/:caseId/summary', authenticate, requireCaseReadAccess, async (req: 
     res.json(summary);
   } catch (error) {
     console.error('Get case summary error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// GET /cases/:caseId/workspace — case overview mini-dashboard read projection
+// ============================================================================
+router.get('/:caseId/workspace', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const workspace = await getCaseWorkspace(caseId);
+    if (!workspace) {
+      res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+      return;
+    }
+    res.json(workspace);
+  } catch (error) {
+    console.error('Get case workspace error:', error);
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 });

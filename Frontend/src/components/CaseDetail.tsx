@@ -7,6 +7,7 @@ import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/Ano
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import { CaseCenterOverview } from "@/components/cases/CaseCenterOverview";
+import { CaseWorkspaceOverview } from "@/components/cases/CaseWorkspaceOverview";
 import { CaseMatterDossierPanel } from "@/components/litigation/CaseMatterDossierPanel";
 import { CaseIntakeReadinessPanel } from "@/components/intake/CaseIntakeReadinessPanel";
 
@@ -2239,6 +2240,8 @@ export function CaseDetail({ params }: CaseDetailProps) {
         </div>
       </div>
       ) : (
+        <div className="mx-auto max-w-[1480px] space-y-6 px-4 py-5 lg:px-6">
+        <CaseWorkspaceOverview caseId={canonicalCaseId} />
         <CaseCenterOverview
           caseId={canonicalCaseId}
           caseNumber={displayCaseNumber}
@@ -2426,6 +2429,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
             </div>
           }
         />
+        </div>
       )}
 
       {/* Anonymize Modal for Client Documents */}

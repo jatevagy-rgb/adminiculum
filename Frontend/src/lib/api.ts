@@ -347,6 +347,32 @@ export interface CasesResponse {
   };
 }
 
+// Case workspace overview read projection (GET /cases/:caseId/workspace).
+export interface CaseWorkspace {
+  case: {
+    id: string; caseNumber: string; title: string; status: string; priority: string;
+    client: { id: string; name: string; colorKey: string | null } | null;
+    assignedLawyer: { id: string; name: string } | null;
+    description: string | null; nextStep: string | null;
+    createdAt: string | null; updatedAt: string | null;
+  };
+  metrics: {
+    openTaskCount: number; documentCount: number; openDeadlineCount: number;
+    communicationCount: number; reviewCount: number | null; loggedMinutes: number | null;
+  };
+  tasks: Array<{ id: string; title: string; status: string; priority: string; attentionCategory: string | null; estimatedMinutes: number | null; dueDate: string | null; assignee: { id: string; name: string } | null; documentId: string | null }>;
+  documents: Array<{ id: string; fileName: string; mimeType: string | null; type: string | null; category: string | null; version: string | null; uploadedAt: string | null; uploadedBy: { id: string; name: string } | null; summary: string | null; commentCount: number | null }>;
+  deadlines: Array<{ id: string; title: string; dueAt: string | null; status: string; assignee: { id: string; name: string } | null; taskId: string | null; documentId: string | null }>;
+  time: { available: true; loggedMinutes: number; billableMinutes: number | null } | { available: false; reason: string };
+  communications: Array<{ id: string; type: string; subject: string | null; contentPreview: string | null; sender: string | null; timestamp: string | null; internal: boolean; taskId: string | null; documentId: string | null }>;
+  activity: Array<{ id: string; actor: string | null; actionLabel: string; objectLabel: string; occurredAt: string; objectType: string; objectId: string | null }>;
+  warnings: Array<{ section: string; code: string; message: string }>;
+}
+
+export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspace> {
+  return fetchApi<CaseWorkspace>(`/cases/${encodeURIComponent(caseId)}/workspace`, { cache: 'no-store' });
+}
+
 export async function getCases(page = 1, limit = 50, assignedLawyerId?: string, clientId?: string): Promise<CasesResponse> {
   const params = new URLSearchParams();
   params.set('page', String(page));
