@@ -240,7 +240,8 @@ describe('submission', () => {
   });
 
   it('prevents double submit', () => {
-    expect(hook).toContain('if (submitting) return');
+    // Guarded synchronously on a ref; see the dedicated regression block below.
+    expect(hook).toContain('if (inFlight.current) return');
     expect(dialog).toContain('disabled={submitting}');
   });
 
@@ -328,5 +329,28 @@ describe('legacy intake implementation is fully removed', () => {
   it('exposes exactly one matter-creation workflow', () => {
     expect(list).toContain('<CaseIntakeDialog');
     expect((list.match(/CaseIntakeDialog/g) || []).length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+/**
+ * Regression found in production acceptance: two clicks in the same tick both
+ * read the same stale `submitting` closure, so two POST /cases/intake requests
+ * were issued. The guard must be synchronous.
+ */
+describe('double submit is stopped synchronously', () => {
+  it('guards on a ref, not on the async state value', () => {
+    expect(hook).toContain('const inFlight = useRef(false)');
+    expect(hook).toContain('if (inFlight.current) return');
+    expect(hook).toContain('inFlight.current = true');
+  });
+
+  it('releases the guard only on failure, since success unmounts the dialog', () => {
+    const submit = hook.slice(hook.indexOf('const submit = useCallback'));
+    expect(submit).toContain('inFlight.current = false');
+  });
+
+  it('no longer depends on the stale submitting value', () => {
+    expect(hook).not.toContain('if (submitting) return');
+    expect(hook).toContain('}, [validate, buildPayload, onCreated]);');
   });
 });

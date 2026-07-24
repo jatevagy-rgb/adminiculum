@@ -12,7 +12,7 @@
  * endpoint and no follow-up writes: the server transaction is what guarantees a
  * matter is never half-created.
  */
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { createCaseIntake, caseIntakeErrorMessage, type CaseIntakePayload, type CaseIntakeResult } from "@/lib/api";
 
 export type DeadlineMode = "ABSOLUTE" | "RELATIVE";
@@ -131,6 +131,9 @@ export function useCaseIntakeForm(onCreated: (result: CaseIntakeResult) => void)
   const [errors, setErrors] = useState<IntakeErrors>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // A ref, not the state value: two clicks in the same tick both read the same
+  // stale `submitting` closure, so state alone cannot stop a double submit.
+  const inFlight = useRef(false);
 
   const patch = useCallback(<K extends keyof IntakeState>(key: K, value: IntakeState[K]) => {
     setState((s) => ({ ...s, [key]: value }));
@@ -288,7 +291,7 @@ export function useCaseIntakeForm(onCreated: (result: CaseIntakeResult) => void)
   }, [state]);
 
   const submit = useCallback(async () => {
-    if (submitting) return; // double-submit guard
+    if (inFlight.current) return; // double-submit guard (synchronous)
     const e = validate();
     setErrors(e);
     setServerError(null);
@@ -299,15 +302,17 @@ export function useCaseIntakeForm(onCreated: (result: CaseIntakeResult) => void)
       }
       return;
     }
+    inFlight.current = true;
     setSubmitting(true);
     try {
       const result = await createCaseIntake(buildPayload());
       onCreated(result);
     } catch (err) {
       setServerError(caseIntakeErrorMessage(err));
+      inFlight.current = false;
       setSubmitting(false);
     }
-  }, [submitting, validate, buildPayload, onCreated]);
+  }, [validate, buildPayload, onCreated]);
 
   return {
     state, setState, patch, patchContext, patchDeadline,
