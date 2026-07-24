@@ -9,6 +9,14 @@ import documentsService from './services';
 import { DocumentDeleteError } from './services';
 import { extractText } from './textExtractor';
 import annotationRoutes from './annotations.routes';
+import {
+  getDocumentWorkContext,
+  updateDocumentWorkContext,
+  linkDocumentTask,
+  unlinkDocumentTask,
+  listTaskDocuments,
+  sendWorkContextError,
+} from './workContext.service';
 import reviewSuggestionsRoutes from './reviewSuggestions.routes';
 import { authenticate } from '../../middleware/auth';
 import { prisma } from '../../prisma/prisma.service';
@@ -27,6 +35,37 @@ import {
 const router = Router();
 router.use('/:documentId/review-suggestions', reviewSuggestionsRoutes);
 router.use('/:documentId/versions/:versionId/annotations', annotationRoutes);
+
+// ============================================================================
+// Document work context (DOCUMENT-WORK-CONTEXT-1)
+// Logical document work metadata and the two-way document/task relationship.
+// Version review/publication state is untouched by these routes.
+// ============================================================================
+router.get('/:id/work-context', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try { res.json(await getDocumentWorkContext(req, String(req.params.id || ''))); }
+  catch (error) { sendWorkContextError(res, error); }
+});
+
+router.patch('/:id/work-context', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try { res.json(await updateDocumentWorkContext(req, String(req.params.id || ''), req.body)); }
+  catch (error) { sendWorkContextError(res, error); }
+});
+
+router.post('/:id/task-links', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try { res.status(201).json(await linkDocumentTask(req, String(req.params.id || ''), req.body)); }
+  catch (error) { sendWorkContextError(res, error); }
+});
+
+router.delete('/:id/task-links/:taskId', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try { res.json(await unlinkDocumentTask(req, String(req.params.id || ''), String(req.params.taskId || ''))); }
+  catch (error) { sendWorkContextError(res, error); }
+});
+
+// The reverse direction: documents attached to a task.
+router.get('/task/:taskId/documents', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try { res.json(await listTaskDocuments(req, String(req.params.taskId || ''))); }
+  catch (error) { sendWorkContextError(res, error); }
+});
 
 const MAX_DOCUMENT_UPLOAD_BYTES = 25 * 1024 * 1024;
 const ALLOWED_UPLOAD_TYPES: Record<string, Set<string>> = {

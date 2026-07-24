@@ -53,6 +53,10 @@ model User {
   reviewSnapshots       ReviewSnapshot[]
   createdDocumentAnnotations DocumentAnnotation[] @relation("DocumentAnnotationCreatedBy")
   createdCaseExternalParticipants CaseExternalParticipant[] @relation("CaseExternalParticipantCreatedBy")
+  responsibleDocuments Document[] @relation("DocumentResponsible")
+  reviewerDocuments Document[] @relation("DocumentReviewer")
+  documentWorkInstructionUpdates Document[] @relation("DocumentWorkInstructionUpdatedBy")
+  createdDocumentTaskLinks DocumentTaskLink[] @relation("DocumentTaskLinkCreatedBy")
   createdCaseIntakeDeadlines CaseIntakeDeadline[] @relation("CaseIntakeDeadlineCreatedBy")
   responsibleCaseIntakeDeadlines CaseIntakeDeadline[] @relation("CaseIntakeDeadlineResponsible")
   assignedDocumentAnnotations DocumentAnnotation[] @relation("DocumentAnnotationAssignedTo")
@@ -902,7 +906,75 @@ model Document {
   timelineEvents  TimelineEvent[]
   taskSubmissionDocuments TaskSubmissionDocument[]
 
+  // ---- Document work context (DOCUMENT-WORK-CONTEXT-1) --------------------
+  // A filename is not a work instruction. These columns carry the operational
+  // meaning of the LOGICAL document: what it is, why it is in the matter, what
+  // must be done with it, who owns it and by when.
+  //
+  // Deliberately separate from per-version state:
+  //   workStatus                       -> logical document work status (here)
+  //   DocumentVersionReviewStatus      -> review state of ONE version
+  //   DocumentVersionPublicationStatus -> publication state of ONE version
+  title             String?              // human-readable title; fileName stays secondary
+  documentRole      String?              // role in the matter, e.g. DRAFT_CONTRACT, EVIDENCE
+  workStatus        DocumentWorkStatus   @default(RECEIVED)
+  workInstruction   String?              // the current executable instruction, not a chat comment
+  workInstructionUpdatedAt   DateTime?
+  workInstructionUpdatedById String?
+  responsibleId     String?
+  reviewerId        String?
+  dueDate           DateTime?
+  workPriority      Priority?
+  nextStep          String?
+  /// Provenance: the communication this document arrived on, where applicable.
+  sourceCommunicationId String?
+
+  responsible       User? @relation("DocumentResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
+  reviewer          User? @relation("DocumentReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  workInstructionUpdatedBy User? @relation("DocumentWorkInstructionUpdatedBy", fields: [workInstructionUpdatedById], references: [id], onDelete: SetNull)
+  sourceCommunication Communication? @relation("DocumentSourceCommunication", fields: [sourceCommunicationId], references: [id], onDelete: SetNull)
+  taskLinks         DocumentTaskLink[]
+
+  @@index([caseId, workStatus])
+  @@index([responsibleId, workStatus])
+  @@index([reviewerId, workStatus])
+  @@index([dueDate])
   @@map("documents")
+}
+
+/// Explicit many-to-many between documents and tasks. A join model (rather than an
+/// implicit relation) so the link records who made it and when, and so the unique
+/// constraint makes a duplicate link impossible at the database level.
+model DocumentTaskLink {
+  id          String   @id @default(uuid())
+  documentId  String
+  taskId      String
+  note        String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation("DocumentTaskLinkCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([documentId, taskId])
+  @@index([taskId])
+  @@map("document_task_links")
+}
+
+/// Logical document work status. Distinct from version review state and from
+/// publication state — a document can be IN_PROGRESS while its current version is
+/// NOT_IN_REVIEW, and APPROVED work is not the same as a published version.
+enum DocumentWorkStatus {
+  RECEIVED
+  WAITING_FOR_PROCESSING
+  IN_PROGRESS
+  INTERNAL_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  READY_FOR_CLIENT
+  SENT
+  ARCHIVED
 }
 
 enum DocumentCategory {
@@ -1307,6 +1379,7 @@ model Task {
   sourceCommunicationId String?
   submissions      TaskSubmission[]
   timeEntries      TimeEntry[]
+  documentLinks    DocumentTaskLink[]
 
   @@index([complexityScore], map: "tasks_complexityScore_idx")
   @@index([maturityStage], map: "tasks_maturityStage_idx")
@@ -1891,6 +1964,7 @@ model Communication {
   caseId          String?
   /// Exactly one linked thread per case may be marked primary at intake.
   isPrimaryForCase Boolean        @default(false)
+  sourcedDocuments Document[]    @relation("DocumentSourceCommunication")
   clientId        String?
   documentId      String?
 
