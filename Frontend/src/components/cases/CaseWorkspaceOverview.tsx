@@ -11,6 +11,7 @@
  */
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getCaseWorkspace, startTask, submitTask, type CaseWorkspace } from "@/lib/api";
 import { getCaseStatusLabel } from "@/lib/caseLabels";
 import { taskStatusLabel } from "@/lib/taskWorkflowPresentation";
@@ -18,11 +19,13 @@ import { attentionPresentation, type AttentionCategory } from "@/lib/attentionCa
 import { CompactState, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 import { AdminButton } from "@/components/adminiculum/ui";
 import { ClientAccent } from "@/components/clients/ClientAccent";
+import { DocumentWorkCard } from "@/components/documents/DocumentWorkCard";
 import {
   TaskFormModal, DocumentUploadModal, CaseCommentModal, DocumentCommentsModal,
 } from "@/components/cases/CaseWorkspaceActions";
 import {
   ACCENT, KpiCard, CockpitSection, ActionableEmpty, DeadlineRow, TaskCard,
+  StartingContextPanel,
   fmtDate, fmtDateTime, type Accent,
 } from "@/components/cases/CaseCockpitPanels";
 
@@ -49,6 +52,7 @@ const URGENCY_STYLE: Record<string, { label: string; accent: Accent }> = {
 };
 
 export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
+  const router = useRouter();
   const [ws, setWs] = useState<CaseWorkspace | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -200,6 +204,13 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
           secondary={cp.nextStep ? cp.nextStep.label : "Jelölj ki teendőt"} />
       </section>
 
+      {/* ---- 2b. Legal work context ---------------------------------------- */}
+      <StartingContextPanel
+        context={c.startingContext}
+        description={c.description}
+        onAddContext={() => setModal({ type: "case-comment" })}
+      />
+
       {/* ---- 3. Two-column operational layout ------------------------------ */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         {/* -------- Left: work and time pressure -------- */}
@@ -309,18 +320,27 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
                   const reasonAccent: Accent = d.reason === "REVIEW_PENDING" ? "navy"
                     : d.reason === "DEADLINE_PASSED" ? "terracotta" : "ochre";
                   return (
-                    <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
-                      <span className="min-w-0">
-                        <span className="block truncate text-[12.5px] font-semibold text-[var(--adm-text)]">{d.fileName}</span>
-                        <span className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ACCENT[reasonAccent].soft} ${ACCENT[reasonAccent].text}`}>
+                    <li key={d.id} className="px-2 py-2">
+                      <span className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                        <span className={`inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ACCENT[reasonAccent].soft} ${ACCENT[reasonAccent].text}`}>
                           {reasonLabel}
                         </span>
+                        {/* Document comments stay reachable from the cockpit. */}
+                        {full ? (
+                          <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "doc-comments", doc: full })}>
+                            Kommentek{full.commentCount ? ` (${full.commentCount})` : ""}
+                          </AdminButton>
+                        ) : null}
                       </span>
-                      {full ? (
-                        <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "doc-comments", doc: full })}>
-                          Kommentek{full.commentCount ? ` (${full.commentCount})` : ""}
-                        </AdminButton>
-                      ) : null}
+                      {/* Compact operational work card — title, instruction, owner,
+                          reviewer, due date and linked task, not a filename row. */}
+                      <DocumentWorkCard
+                        documentId={d.id}
+                        compact
+                        caseTasks={ws.tasks}
+                        onChanged={() => void refresh()}
+                        onOpen={() => router.push(`/cases/${caseId}/documents?documentId=${encodeURIComponent(d.id)}`)}
+                      />
                     </li>
                   );
                 })}

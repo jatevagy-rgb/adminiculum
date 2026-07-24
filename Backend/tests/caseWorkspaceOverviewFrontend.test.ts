@@ -177,3 +177,52 @@ describe('CaseDetail wiring', () => {
     expect(caseDetail).toContain('<CaseWorkspaceOverview caseId={canonicalCaseId} />');
   });
 });
+
+/**
+ * Regression: the cockpit rebuild dropped the lawyer instruction / matter
+ * description entirely. The overview must state the legal work context, not only
+ * the operational counters.
+ */
+describe('legal work context is present in the cockpit', () => {
+  it('renders a dedicated starting-context panel', () => {
+    expect(panels).toContain('StartingContextPanel');
+    expect(panels).toContain('data-testid="starting-context-panel"');
+    expect(panels).toContain('Ügyvédi instrukció / Induló helyzet');
+    expect(overview).toContain('<StartingContextPanel');
+  });
+
+  it('shows each structured intake answer under its own label', () => {
+    for (const label of ['Miért indult', 'Jelenlegi helyzet', 'Ügyfél elvárása', 'Sürgős teendő', 'Első következő lépés']) {
+      expect(panels).toContain(label);
+    }
+    expect(panels).toContain('context.originReason');
+    expect(panels).toContain('context.currentSituation');
+    expect(panels).toContain('context.clientExpectation');
+    expect(panels).toContain('context.urgentAction');
+  });
+
+  it('renders only the answers that exist, never a row of empty cards', () => {
+    // Entries are pushed conditionally on a non-empty value.
+    expect(panels).toContain('if (value && value.trim()) entries.push');
+  });
+
+  it('falls back to the free-text description for legacy matters', () => {
+    expect(panels).toContain('data-testid="starting-context-legacy"');
+    expect(panels).toContain('context.legacyOnly');
+  });
+
+  it('offers an action when there is no context at all', () => {
+    expect(panels).toContain('Induló helyzet rögzítése');
+  });
+
+  it('does not reintroduce the old equal-weight stacked module', () => {
+    // The panel uses the cockpit accent rail, not a bordered white card.
+    expect(panels).toContain('border-l-4');
+    expect(overview).not.toContain('<Panel id="cw-');
+  });
+
+  it('is fed by the server projection, not recomputed in the view', () => {
+    expect(overview).toContain('context={c.startingContext}');
+    expect(overview).toContain('description={c.description}');
+  });
+});

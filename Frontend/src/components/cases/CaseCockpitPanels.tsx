@@ -176,3 +176,77 @@ export function TaskCard({
     </div>
   );
 }
+
+/**
+ * Ügyvédi instrukció / Induló helyzet.
+ *
+ * The legal work context — why the matter started, where it stands, what the
+ * client expects, what is urgent and the first next step. Restored after the
+ * cockpit rebuild dropped it: the overview must state the legal context, not
+ * only the operational counters.
+ *
+ * Renders only the answers that exist, so a sparsely filled matter never becomes
+ * a row of empty cards. Legacy matters that predate structured intake fall back
+ * to their free-text description.
+ */
+export function StartingContextPanel({
+  context, description, onAddContext,
+}: {
+  context: CaseWorkspace["case"]["startingContext"];
+  description: string | null;
+  onAddContext?: () => void;
+}) {
+  const a = ACCENT.petrol;
+  const entries: Array<{ label: string; value: string }> = [];
+  const push = (label: string, value: string | null) => {
+    if (value && value.trim()) entries.push({ label, value: value.trim() });
+  };
+  push("Miért indult", context.originReason);
+  push("Jelenlegi helyzet", context.currentSituation);
+  push("Ügyfél elvárása", context.clientExpectation);
+  push("Sürgős teendő", context.urgentAction);
+  push("Első következő lépés", context.nextStep);
+
+  return (
+    <section
+      id="ck-instruction"
+      data-testid="starting-context-panel"
+      aria-labelledby="ck-instruction-h"
+      className="overflow-hidden rounded-lg bg-white shadow-[0_1px_2px_rgba(22,32,26,0.06),0_8px_24px_rgba(0,42,35,0.04)]"
+    >
+      <div className={`flex min-h-11 items-center justify-between gap-3 border-l-4 px-3 py-2 ${a.bar.replace("bg-", "border-")} ${a.soft}`}>
+        <h3 id="ck-instruction-h" className={`font-serif text-[15px] font-semibold ${a.text}`}>
+          Ügyvédi instrukció / Induló helyzet
+        </h3>
+        {context.legacyOnly ? (
+          <span className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">
+            Korábbi ügy
+          </span>
+        ) : null}
+      </div>
+
+      {entries.length > 0 ? (
+        <dl data-testid="starting-context-entries" className="grid grid-cols-1 gap-x-6 gap-y-2 px-3 py-2.5 sm:grid-cols-2">
+          {entries.map((e) => (
+            <div key={e.label} className="min-w-0">
+              <dt className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">{e.label}</dt>
+              <dd className="mt-0.5 whitespace-pre-line text-[12.5px] leading-5 text-[var(--adm-text)]">{e.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : description && description.trim() ? (
+        // Legacy fallback: matters created before structured intake.
+        <div data-testid="starting-context-legacy" className="px-3 py-2.5">
+          <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Ügyleírás</p>
+          <p className="mt-0.5 whitespace-pre-line text-[12.5px] leading-5 text-[var(--adm-text)]">{description.trim()}</p>
+        </div>
+      ) : (
+        <ActionableEmpty
+          message="Nincs rögzített induló helyzet vagy ügyvédi instrukció."
+          actionLabel="Induló helyzet rögzítése"
+          onAction={onAddContext}
+        />
+      )}
+    </section>
+  );
+}

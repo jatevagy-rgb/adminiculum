@@ -49,6 +49,22 @@ export interface CaseWorkspaceDto {
     assignedLawyer: { id: string; name: string } | null;
     description: string | null;
     nextStep: string | null;
+    /**
+     * Structured intake context captured when the matter was opened. Each answer
+     * stays a separate field so the overview can show the legal work context
+     * instead of a single undifferentiated note.
+     */
+    startingContext: {
+      originReason: string | null;
+      currentSituation: string | null;
+      clientExpectation: string | null;
+      urgentAction: string | null;
+      nextStep: string | null;
+      /** True when nothing structured exists and `description` is the only context. */
+      legacyOnly: boolean;
+      /** True when there is no context at all. */
+      empty: boolean;
+    };
     createdAt: string | null;
     updatedAt: string | null;
   };
@@ -147,6 +163,11 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
       priority: true,
       matterType: true,
       description: true,
+      intakeOriginReason: true,
+      intakeCurrentSituation: true,
+      intakeClientExpectation: true,
+      intakeUrgentAction: true,
+      intakeNextStep: true,
       createdAt: true,
       updatedAt: true,
       deadline: true,
@@ -394,6 +415,24 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
 
   // Operational cockpit: urgency, grouped work and KPI meaning, derived from the
   // data already loaded above so the UI never invents a summary value.
+  // Structured intake context. Legacy matters predate intake and only carry a
+  // free-text description, so the panel can fall back to it rather than showing
+  // five empty fields.
+  const ctxRow = caseRecord as unknown as Record<string, string | null | undefined>;
+  const structured = {
+    originReason: ctxRow.intakeOriginReason ?? null,
+    currentSituation: ctxRow.intakeCurrentSituation ?? null,
+    clientExpectation: ctxRow.intakeClientExpectation ?? null,
+    urgentAction: ctxRow.intakeUrgentAction ?? null,
+    nextStep: ctxRow.intakeNextStep ?? null,
+  };
+  const hasStructured = Object.values(structured).some((v) => typeof v === 'string' && v.trim().length > 0);
+  const intakeContext = {
+    ...structured,
+    legacyOnly: !hasStructured && Boolean(caseRecord.description),
+    empty: !hasStructured && !caseRecord.description,
+  };
+
   const cockpit = buildCockpit({
     caseRecord: {
       id: caseRecord.id,
@@ -429,7 +468,9 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
       client: caseRecord.client ? { id: caseRecord.client.id, name: caseRecord.client.name, colorKey: caseRecord.client.colorKey ? String(caseRecord.client.colorKey) : null } : null,
       assignedLawyer: caseRecord.assignedLawyer ? { id: caseRecord.assignedLawyer.id, name: caseRecord.assignedLawyer.name } : null,
       description: caseRecord.description ?? null,
-      nextStep: null,
+      // The first next legal step comes from intake when recorded.
+      nextStep: intakeContext.nextStep,
+      startingContext: intakeContext,
       createdAt: iso(caseRecord.createdAt),
       updatedAt: iso(caseRecord.updatedAt),
     },

@@ -365,6 +365,15 @@ export interface CaseWorkspace {
     client: { id: string; name: string; colorKey: string | null } | null;
     assignedLawyer: { id: string; name: string } | null;
     description: string | null; nextStep: string | null;
+    startingContext: {
+      originReason: string | null;
+      currentSituation: string | null;
+      clientExpectation: string | null;
+      urgentAction: string | null;
+      nextStep: string | null;
+      legacyOnly: boolean;
+      empty: boolean;
+    };
     createdAt: string | null; updatedAt: string | null;
   };
   metrics: {
@@ -5175,3 +5184,97 @@ export async function markAllNotificationsRead(): Promise<{ updatedCount: number
     body: JSON.stringify({}),
   });
 }
+
+// ---- Document work context (DOCUMENT-WORK-CONTEXT-1) ----------------------
+// The operational meaning of a logical document: what it is, what must be done
+// with it, who owns it, who reviews it and by when. Storage identifiers are
+// deliberately absent from this contract.
+export interface DocumentWorkCard {
+  id: string;
+  title: string;
+  fileName: string | null;
+  documentRole: string | null;
+  workStatus: string;
+  workInstruction: string | null;
+  workInstructionUpdatedAt: string | null;
+  workInstructionUpdatedBy: { id: string; name: string } | null;
+  responsible: { id: string; name: string } | null;
+  reviewer: { id: string; name: string } | null;
+  dueDate: string | null;
+  workPriority: string | null;
+  nextStep: string | null;
+  category: string | null;
+  documentType: string | null;
+  currentVersion: number | null;
+  updatedAt: string | null;
+  linkedTasks: Array<{ linkId: string; taskId: string; title: string; status: string; dueDate: string | null; assignee: { id: string; name: string } | null }>;
+  source: { communicationId: string; subject: string | null; sender: string | null; receivedAt: string | null } | null;
+}
+
+export interface DocumentWorkContextPatch {
+  title?: string | null;
+  documentRole?: string | null;
+  workStatus?: string;
+  workInstruction?: string | null;
+  responsibleId?: string | null;
+  reviewerId?: string | null;
+  dueDate?: string | null;
+  workPriority?: string | null;
+  nextStep?: string | null;
+}
+
+export async function getDocumentWorkContext(documentId: string): Promise<DocumentWorkCard> {
+  return fetchApi<DocumentWorkCard>(`/documents/${encodeURIComponent(documentId)}/work-context`, { cache: 'no-store' });
+}
+
+export async function updateDocumentWorkContext(documentId: string, patch: DocumentWorkContextPatch): Promise<DocumentWorkCard> {
+  return fetchApi<DocumentWorkCard>(`/documents/${encodeURIComponent(documentId)}/work-context`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function linkDocumentToTask(documentId: string, taskId: string, note?: string): Promise<DocumentWorkCard> {
+  return fetchApi<DocumentWorkCard>(`/documents/${encodeURIComponent(documentId)}/task-links`, {
+    method: 'POST',
+    body: JSON.stringify({ taskId, note }),
+  });
+}
+
+export async function unlinkDocumentFromTask(documentId: string, taskId: string): Promise<DocumentWorkCard> {
+  return fetchApi<DocumentWorkCard>(`/documents/${encodeURIComponent(documentId)}/task-links/${encodeURIComponent(taskId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export interface TaskDocumentsResponse {
+  taskId: string;
+  documents: Array<{
+    linkId: string; note: string | null; linkedAt: string | null;
+    id: string; title: string; fileName: string | null; workStatus: string;
+    documentRole: string | null; dueDate: string | null; currentVersion: number | null;
+    responsible: { id: string; name: string } | null;
+    reviewer: { id: string; name: string } | null;
+  }>;
+}
+
+export async function getTaskDocuments(taskId: string): Promise<TaskDocumentsResponse> {
+  return fetchApi<TaskDocumentsResponse>(`/documents/task/${encodeURIComponent(taskId)}/documents`, { cache: 'no-store' });
+}
+
+/** Human Hungarian labels for the logical document work statuses. */
+export const DOCUMENT_WORK_STATUS_LABELS: Record<string, string> = {
+  RECEIVED: 'Beérkezett',
+  WAITING_FOR_PROCESSING: 'Feldolgozásra vár',
+  IN_PROGRESS: 'Munka alatt',
+  INTERNAL_REVIEW: 'Belső review',
+  CHANGES_REQUESTED: 'Javítás kérve',
+  APPROVED: 'Jóváhagyva',
+  READY_FOR_CLIENT: 'Ügyfélnek kész',
+  SENT: 'Elküldve',
+  ARCHIVED: 'Archiválva',
+};
+export const DOCUMENT_WORK_STATUS_ORDER = [
+  'RECEIVED', 'WAITING_FOR_PROCESSING', 'IN_PROGRESS', 'INTERNAL_REVIEW',
+  'CHANGES_REQUESTED', 'APPROVED', 'READY_FOR_CLIENT', 'SENT', 'ARCHIVED',
+] as const;
