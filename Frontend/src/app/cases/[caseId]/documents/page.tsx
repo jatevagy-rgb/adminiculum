@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { resolveAnnotationCapabilities } from "@/lib/annotations/annotationCapabilities";
 import { AnnotationCapabilityToolbar } from "@/components/documents/annotations/AnnotationCapabilityToolbar";
+import { NotPublishedBadge, isClientExplanationDraft } from "@/components/documents/annotations/NotPublishedBadge";
 import {
   getCaseContracts,
   getCases,
@@ -1778,13 +1779,20 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         rows={2}
                                         className="rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm"
                                       />
-                                      <textarea
-                                        value={annotationDraft.clientExplanationDraft}
-                                        onChange={(event) => setAnnotationDraft((draft) => ({ ...draft, clientExplanationDraft: event.target.value }))}
-                                        placeholder="Ügyfélmagyarázat-tervezet, nem publikált"
-                                        rows={2}
-                                        className="rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm"
-                                      />
+                                      <div className="flex flex-col gap-1">
+                                        <span className="flex items-center justify-between gap-2">
+                                          <label htmlFor="cw-ann-client-draft" className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Ügyfélmagyarázat-tervezet</label>
+                                          <NotPublishedBadge />
+                                        </span>
+                                        <textarea
+                                          id="cw-ann-client-draft"
+                                          value={annotationDraft.clientExplanationDraft}
+                                          onChange={(event) => setAnnotationDraft((draft) => ({ ...draft, clientExplanationDraft: event.target.value }))}
+                                          placeholder="Ügyfélmagyarázat-tervezet"
+                                          rows={2}
+                                          className="rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm"
+                                        />
+                                      </div>
                                       <AdminButton variant="primary" onClick={handleCreateAnnotation} disabled={isCreatingAnnotation || (!pendingTextAnchor && !pendingVisualAnchor)}>
                                         {isCreatingAnnotation ? 'Mentés...' : 'Annotáció létrehozása'}
                                       </AdminButton>
@@ -1804,7 +1812,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         className={`w-full rounded-[10px] border p-3 text-left ${selectedAnnotationId === annotation.id ? 'border-[#D8C58E] bg-[var(--adm-sand-100)]' : 'border-[rgba(22,32,26,0.12)] bg-white'}`}
                                       >
                                         <div className="flex items-center justify-between gap-2">
-                                          <span className="text-xs font-bold text-[var(--adm-green-800)]">{ANNOTATION_TYPE_LABELS[annotation.annotationType]}</span>
+                                          <span className="flex flex-wrap items-center gap-1.5">
+                                            <span className="text-xs font-bold text-[var(--adm-green-800)]">{ANNOTATION_TYPE_LABELS[annotation.annotationType]}</span>
+                                            {isClientExplanationDraft(annotation.annotationType) ? <NotPublishedBadge /> : null}
+                                          </span>
                                           <AdminBadge tone={annotation.status === 'RESOLVED' ? 'green' : 'gold'}>{annotation.status}</AdminBadge>
                                         </div>
                                         <p className="mt-1 line-clamp-2 text-sm font-semibold text-[var(--adm-text)]">{annotation.headline || annotation.selectedText || 'Annotáció'}</p>
@@ -1818,11 +1829,20 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                       <div>
                                         <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Kontextus panel</p>
                                         <h5 className="font-serif text-lg font-semibold text-[var(--adm-text)]">{selectedAnnotation.headline || ANNOTATION_TYPE_LABELS[selectedAnnotation.annotationType]}</h5>
+                                        {isClientExplanationDraft(selectedAnnotation.annotationType) ? <NotPublishedBadge className="mt-1" /> : null}
                                       </div>
                                       {selectedAnnotation.selectedText ? <p className="rounded bg-[var(--adm-surface)] p-2 text-xs text-[#3D4842]">“{selectedAnnotation.selectedText}”</p> : null}
                                       {selectedAnnotation.internalNote ? <p className="text-xs"><b>Belső:</b> {selectedAnnotation.internalNote}</p> : null}
                                       {selectedAnnotation.reviewComment ? <p className="text-xs"><b>Review:</b> {selectedAnnotation.reviewComment}</p> : null}
-                                      {selectedAnnotation.clientExplanationDraft ? <p className="rounded border border-[#E7DECB] bg-[var(--adm-sand-100)] p-2 text-xs"><b>Ügyfélmagyarázat-tervezet:</b> {selectedAnnotation.clientExplanationDraft}</p> : null}
+                                      {selectedAnnotation.clientExplanationDraft ? (
+                                        <div className="rounded border border-[#E7DECB] bg-[var(--adm-sand-100)] p-2">
+                                          <div className="flex items-center justify-between gap-2">
+                                            <b className="text-xs">Ügyfélmagyarázat-tervezet</b>
+                                            <NotPublishedBadge />
+                                          </div>
+                                          <p className="mt-1 text-xs">{selectedAnnotation.clientExplanationDraft}</p>
+                                        </div>
+                                      ) : null}
                                       <div className="flex flex-wrap gap-2">
                                         {selectedAnnotation.status === 'RESOLVED' ? (
                                           <AdminButton size="sm" variant="gold" onClick={() => handleReopenAnnotation(selectedAnnotation)}>Újranyitás</AdminButton>

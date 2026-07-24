@@ -1,0 +1,67 @@
+/**
+ * Regression: CLIENT_EXPLANATION_DRAFT must carry a PERSISTENT "Nem publikált"
+ * state marker.
+ *
+ * The original implementation communicated this only through a textarea
+ * placeholder, which disappears the moment the reviewer types — leaving no
+ * indication that the draft is unpublished. Nothing in this slice publishes
+ * anything, and CLIENT_CANDIDATE visibility is not publication, so the marker
+ * must be visible wherever a client-explanation draft is shown.
+ */
+import fs from 'fs';
+import path from 'path';
+
+const repoRoot = path.join(__dirname, '..', '..');
+const read = (rel: string) => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+
+const badge = read('Frontend/src/components/documents/annotations/NotPublishedBadge.tsx');
+const page = read('Frontend/src/app/cases/[caseId]/documents/page.tsx');
+
+describe('NotPublishedBadge component', () => {
+  it('renders the exact required label', () => {
+    expect(badge).toContain('Nem publikált');
+    expect(badge).toContain('NOT_PUBLISHED_LABEL');
+  });
+
+  it('is identifiable for acceptance and carries an explanatory title', () => {
+    expect(badge).toContain('data-testid="annotation-not-published"');
+    expect(badge).toMatch(/title=/);
+  });
+
+  it('exposes a predicate keyed on the annotation type', () => {
+    expect(badge).toContain('export function isClientExplanationDraft');
+    expect(badge).toContain('CLIENT_EXPLANATION_DRAFT');
+  });
+
+  it('offers no publish affordance (marker only, never an action)', () => {
+    // The prose comment may discuss publication; what must not exist is a control.
+    expect(badge).not.toMatch(/<button/);
+    expect(badge).not.toMatch(/onClick/);
+    expect(badge).not.toMatch(/publishAnnotation|publishToClient|Publikálás/);
+  });
+});
+
+describe('the marker is wired into every client-explanation surface', () => {
+  it('is imported by the documents workspace', () => {
+    expect(page).toContain('NotPublishedBadge');
+    expect(page).toContain('isClientExplanationDraft');
+  });
+
+  it('renders in the annotation list card, the detail panel and the draft editor', () => {
+    const occurrences = (page.match(/<NotPublishedBadge/g) || []).length;
+    expect(occurrences).toBeGreaterThanOrEqual(3);
+  });
+
+  it('is gated on the client-explanation-draft type, not shown for every annotation', () => {
+    expect(page).toContain('isClientExplanationDraft(annotation.annotationType)');
+    expect(page).toContain('isClientExplanationDraft(selectedAnnotation.annotationType)');
+  });
+
+  it('no longer relies on a disappearing placeholder to convey the state', () => {
+    expect(page).not.toContain('Ügyfélmagyarázat-tervezet, nem publikált');
+  });
+
+  it('still exposes no publish control anywhere in the workspace', () => {
+    expect(page).not.toMatch(/Publikálás|publishAnnotation|publishToClient/);
+  });
+});
