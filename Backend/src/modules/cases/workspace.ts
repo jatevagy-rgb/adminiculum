@@ -7,6 +7,7 @@
  * so a single failure never 500s the whole workspace.
  */
 import { prisma } from '../../prisma/prisma.service';
+import { buildCockpit, type CaseCockpit } from './workspaceCockpit';
 
 const TASK_LIMIT = 8;
 const DOCUMENT_LIMIT = 8;
@@ -120,6 +121,7 @@ export interface CaseWorkspaceDto {
     status: 'OPEN' | 'RESOLVED';
     createdAt: string | null;
   }>;
+  cockpit: CaseCockpit;
   warnings: CaseWorkspaceWarning[];
 }
 
@@ -145,6 +147,7 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
       description: true,
       createdAt: true,
       updatedAt: true,
+      deadline: true,
       client: { select: { id: true, name: true, colorKey: true } },
       assignedLawyer: { select: { id: true, name: true } },
     },
@@ -387,6 +390,32 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
 
   const reviewCount = openTasks.filter((t) => REVIEW_TASK_STATUSES.has(String(t.status).toUpperCase())).length;
 
+  // Operational cockpit: urgency, grouped work and KPI meaning, derived from the
+  // data already loaded above so the UI never invents a summary value.
+  const cockpit = buildCockpit({
+    caseRecord: {
+      id: caseRecord.id,
+      deadline: (caseRecord as { deadline?: Date | null }).deadline ?? null,
+      assignedLawyer: caseRecord.assignedLawyer
+        ? { id: caseRecord.assignedLawyer.id, name: caseRecord.assignedLawyer.name }
+        : null,
+    },
+    openTasks: openTasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      status: String(t.status),
+      priority: String(t.priority),
+      dueDate: t.dueDate ?? null,
+      documentId: t.documentId ?? null,
+      assignedTo: t.assignedTo ? { id: t.assignedTo.id, name: t.assignedTo.name } : null,
+    })),
+    documents: documents.map((d) => ({ id: d.id, fileName: d.fileName, name: d.name })),
+    communications: communicationsRaw.map((c) => ({ id: c.id, direction: c.direction, createdAt: c.createdAt })),
+    communicationCount,
+    reviewCount,
+    documentLimit: DOCUMENT_LIMIT,
+  });
+
   return {
     case: {
       id: caseRecord.id,
@@ -415,6 +444,7 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
     time,
     communications,
     activity,
+    cockpit,
     comments: caseComments.slice(0, ACTIVITY_LIMIT).map((cm) => ({
       id: cm.id,
       author: cm.user ? { id: cm.user.id, name: cm.user.name } : null,

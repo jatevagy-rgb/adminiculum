@@ -94,7 +94,7 @@ describe('GET /cases/:caseId/workspace', () => {
   it('returns the full workspace DTO shape', async () => {
     const res = await requestJson(createApp(), '/cases/case-1/workspace');
     expect(res.status).toBe(200);
-    expect(Object.keys(res.body).sort()).toEqual(['activity', 'case', 'comments', 'communications', 'deadlines', 'documents', 'metrics', 'tasks', 'time', 'warnings']);
+    expect(Object.keys(res.body).sort()).toEqual(['activity', 'case', 'cockpit', 'comments', 'communications', 'deadlines', 'documents', 'metrics', 'tasks', 'time', 'warnings']);
     expect(res.body.case).toMatchObject({ id: 'case-1', caseNumber: 'CASE-2026-001', title: 'Teszt ügy', status: 'ACTIVE', priority: 'HIGH' });
     expect(res.body.case.client).toMatchObject({ id: 'client-1', name: 'Teszt Kft.' });
     expect(res.body.metrics).toHaveProperty('openTaskCount');
