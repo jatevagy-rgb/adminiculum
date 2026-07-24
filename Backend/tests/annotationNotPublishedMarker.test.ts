@@ -85,4 +85,17 @@ describe('annotation selection does not survive a version switch', () => {
     const guardIndex = effect.indexOf('if (selectedUploadedDocument?.id && selectedVersion?.id)');
     expect(effect.indexOf('setSelectedAnnotationId(null)')).toBeLessThan(guardIndex);
   });
+
+  it('never requests comments for an annotation outside the selected version', () => {
+    // Clearing state in a sibling effect is not enough: both effects run in the
+    // same commit, so the comment fetch must itself be gated on the annotation
+    // being present in the version-scoped list.
+    const i = page.indexOf('getDocumentAnnotationComments(');
+    const effect = page.slice(page.lastIndexOf('useEffect(', i), i);
+    expect(effect).toContain('annotations.some((annotation) => annotation.id === selectedAnnotationId)');
+    expect(effect).toContain('selectionBelongsToVersion');
+    // and the guard must react to the annotation list changing
+    const deps = page.slice(i, i + 900);
+    expect(deps).toContain('selectedAnnotationId, annotations]');
+  });
 });

@@ -1200,7 +1200,14 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   }, [selectedVersionDocumentId, selectedVersionStableId, canRenderTextVersion]);
 
   useEffect(() => {
-    if (!selectedUploadedDocument?.id || !selectedVersion?.id || !selectedAnnotationId) {
+    // The selected annotation must belong to the currently selected version.
+    // On a version switch this effect and the annotation-refresh effect run in the
+    // same commit, so clearing the selection there is not yet visible here — the
+    // stale id would be requested against the new version and (correctly) 404.
+    // Gating on the loaded, version-scoped annotation list makes that impossible.
+    const selectionBelongsToVersion =
+      !!selectedAnnotationId && annotations.some((annotation) => annotation.id === selectedAnnotationId);
+    if (!selectedUploadedDocument?.id || !selectedVersion?.id || !selectionBelongsToVersion) {
       setAnnotationComments([]);
       return;
     }
@@ -1215,7 +1222,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [selectedUploadedDocument?.id, selectedVersion?.id, selectedAnnotationId]);
+  }, [selectedUploadedDocument?.id, selectedVersion?.id, selectedAnnotationId, annotations]);
 
   const handleTextSelectionAnchor = () => {
     if (!versionText || !annotationSurfaceRef.current) return;
