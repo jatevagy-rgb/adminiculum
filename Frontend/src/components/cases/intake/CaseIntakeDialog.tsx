@@ -35,7 +35,8 @@ export function CaseIntakeDialog({
   useEffect(() => {
     if (!open) return;
     let active = true;
-    getClients().then((c) => { if (active) setClients(Array.isArray(c) ? c : []); }).catch(() => { if (active) setClients([]); });
+    // getClients resolves to { data: Client[] }.
+    getClients().then((c) => { if (active) setClients(c?.data ?? []); }).catch(() => { if (active) setClients([]); });
     getUsers().then((u) => { if (active) setUsers(u); }).catch(() => { if (active) setUsers([]); });
     return () => { active = false; };
   }, [open]);
