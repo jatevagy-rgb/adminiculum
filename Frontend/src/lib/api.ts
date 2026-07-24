@@ -5278,3 +5278,84 @@ export const DOCUMENT_WORK_STATUS_ORDER = [
   'RECEIVED', 'WAITING_FOR_PROCESSING', 'IN_PROGRESS', 'INTERNAL_REVIEW',
   'CHANGES_REQUESTED', 'APPROVED', 'READY_FOR_CLIENT', 'SENT', 'ARCHIVED',
 ] as const;
+
+// ---- Transactional matter intake (CASE-INTAKE-REDESIGN-1) -----------------
+// One request creates the matter together with its whole starting work context.
+// There is deliberately no client-side fallback to the legacy POST /cases and no
+// follow-up writes: partial matters must be impossible.
+export interface CaseIntakeDeadlineInput {
+  title: string;
+  deadlineType: 'STATUTORY' | 'CLIENT_COMMITMENT' | 'INTERNAL' | 'NEXT_ACTION' | 'OTHER';
+  inputMode: 'ABSOLUTE' | 'RELATIVE';
+  dueAt?: string;
+  relativeValue?: number;
+  relativeUnit?: 'MINUTE' | 'HOUR' | 'DAY' | 'WEEK';
+  reminderMinutesBefore?: number | null;
+  responsibleId?: string | null;
+  note?: string | null;
+}
+export interface CaseIntakePayload {
+  clientId: string;
+  title: string;
+  matterType?: string;
+  clientRole?: string | null;
+  assignedLawyerId?: string | null;
+  startingContext?: {
+    originReason?: string | null;
+    currentSituation?: string | null;
+    clientExpectation?: string | null;
+    urgentAction?: string | null;
+    nextStep?: string | null;
+  };
+  participants?: Array<{ userId: string; role: string }>;
+  externalParticipants?: Array<{ name: string; role: string; side?: string; organization?: string | null; email?: string | null; phone?: string | null; note?: string | null }>;
+  deadlines?: CaseIntakeDeadlineInput[];
+  communicationThreadIds?: string[];
+  primaryCommunicationThreadId?: string | null;
+  initialTasks?: Array<{ title: string; description?: string | null; assignedToId?: string | null; dueDate?: string | null; priority?: string }>;
+}
+export interface CaseIntakeResult {
+  case: {
+    id: string; caseNumber: string; title: string; status: string; priority: string;
+    matterType: string | null; clientRole: string | null;
+    client: { id: string; name: string } | null;
+    assignedLawyer: { id: string; name: string } | null;
+    startingContext: { originReason: string | null; currentSituation: string | null; clientExpectation: string | null; urgentAction: string | null; nextStep: string | null };
+    createdAt: string;
+  };
+  participants: Array<{ id: string; userId: string; role: string }>;
+  externalParticipants: Array<{ id: string; name: string; role: string; side: string }>;
+  deadlines: Array<{ id: string; title: string; deadlineType: string; dueAt: string; inputMode: string; relativeValue: number | null; relativeUnit: string | null; reminderMinutesBefore: number | null; responsibleId: string | null }>;
+  communicationLinks: Array<{ id: string; subject: string; isPrimary: boolean }>;
+  tasks: Array<{ id: string; title: string; status: string; priority: string; dueDate: string | null; assignedToId: string | null }>;
+}
+
+export async function createCaseIntake(payload: CaseIntakePayload): Promise<CaseIntakeResult> {
+  return fetchApi<CaseIntakeResult>('/cases/intake', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+/** Server error codes mapped to the message the lawyer should actually read. */
+export const CASE_INTAKE_ERROR_MESSAGES: Record<string, string> = {
+  FIELD_REQUIRED: 'Hiányzik egy kötelező mező.',
+  FIELD_TOO_LONG: 'Az egyik megadott érték túl hosszú.',
+  CLIENT_NOT_FOUND: 'A kiválasztott ügyfél nem található.',
+  USER_NOT_FOUND: 'A kiválasztott felhasználó nem létezik.',
+  COMMUNICATION_NOT_FOUND: 'A kiválasztott kommunikáció nem található.',
+  COMMUNICATION_ALREADY_LINKED: 'A kiválasztott levelezés már egy másik ügyhöz tartozik.',
+  COMMUNICATION_CLIENT_MISMATCH: 'A kiválasztott levelezés másik ügyfélhez tartozik.',
+  PRIMARY_THREAD_NOT_SELECTED: 'Az elsődleges levelezést a kiválasztottak közül kell választani.',
+  INVALID_RELATIVE_VALUE: 'A megadott időtartam nem érvényes.',
+  INVALID_RELATIVE_UNIT: 'A megadott időegység nem érvényes.',
+  INVALID_DEADLINE_TYPE: 'A határidő típusa nem érvényes.',
+  INVALID_REMINDER: 'Az emlékeztető értéke nem érvényes.',
+  INVALID_DATE: 'A megadott dátum nem érvényes.',
+  INVALID_TASK_PRIORITY: 'A feladat prioritása nem érvényes.',
+  TOO_MANY_ITEMS: 'Túl sok elemet adtál hozzá.',
+};
+export function caseIntakeErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error || '');
+  for (const [code, message] of Object.entries(CASE_INTAKE_ERROR_MESSAGES)) {
+    if (raw.includes(code)) return message;
+  }
+  return 'Az ügy létrehozása nem sikerült. Ellenőrizd a megadott adatokat.';
+}
