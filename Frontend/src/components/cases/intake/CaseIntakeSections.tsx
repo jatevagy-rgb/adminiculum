@@ -9,29 +9,30 @@
  * old per-field explanatory paragraphs are gone.
  */
 import { useEffect, useMemo, useState } from "react";
-import { getCommunications, type CommunicationItem, type Client, type User } from "@/lib/api";
+import { type Client, type User } from "@/lib/api";
 import { AdminButton } from "@/components/adminiculum/ui";
+import { intake, ACCENT_BG, ACCENT_TEXT } from "./intakeStyles";
 import {
   DEADLINE_TYPE_OPTIONS, RELATIVE_UNIT_OPTIONS, REMINDER_OPTIONS,
   type IntakeState, type IntakeErrors, type ParticipantRow, type TaskRow, type RelativeUnit,
 } from "./useCaseIntakeForm";
 
-export const field = "mt-1 w-full rounded-md border border-[var(--adm-border)] bg-white px-2.5 py-1.5 text-[13px] text-[var(--adm-text)] focus:border-[var(--adm-green-800)] focus:outline-none disabled:opacity-60";
-export const label = "text-[10px] font-bold uppercase tracking-[0.11em] text-[var(--adm-text-muted)]";
+export const field = intake.field;
+export const label = intake.label;
 
 export function FieldError({ message }: { message?: string }) {
   if (!message) return null;
   return <p role="alert" className="mt-1 text-[11px] font-semibold text-[#A8442A]">{message}</p>;
 }
 
-export function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+export function Section({ title, accent = "petrol", children }: { title: string; accent?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-lg bg-white p-3 shadow-[0_1px_2px_rgba(22,32,26,0.06)]">
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 className="font-serif text-[15px] font-semibold text-[var(--adm-text)]">{title}</h3>
-        {hint ? <span className="text-[10.5px] text-[var(--adm-text-muted)]">{hint}</span> : null}
-      </div>
-      <div className="mt-2">{children}</div>
+    <section className={intake.area}>
+      <h3 className={`${intake.sectionTitle} ${ACCENT_TEXT[accent] || ACCENT_TEXT.petrol}`}>
+        <span aria-hidden="true" className={`inline-block h-3 w-[3px] shrink-0 rounded-full ${ACCENT_BG[accent] || ACCENT_BG.petrol}`} />
+        {title}
+      </h3>
+      <div className="mt-2.5">{children}</div>
     </section>
   );
 }
@@ -45,7 +46,7 @@ export function CaseBasicsSection({
   clientsLoading?: boolean; clientsError?: string | null;
 }) {
   return (
-    <div data-testid="intake-basics" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <div data-testid="intake-basics" className={intake.grid}>
       <div>
         <label className={label} htmlFor="ci-client">Ügyfél</label>
         <select
@@ -115,7 +116,7 @@ export function CaseStartingContextSection({
     { key: "urgentAction", label: "Van-e sürgős teendő?", id: "ci-urgent" },
   ];
   return (
-    <div data-testid="intake-starting-context" className="grid grid-cols-1 gap-3">
+    <div data-testid="intake-starting-context" className="grid grid-cols-1 gap-2.5">
       {rows.map((r) => (
         <div key={r.key}>
           <label className={label} htmlFor={r.id}>{r.label}</label>
@@ -239,111 +240,51 @@ export function CaseDeadlineSection({
   );
 }
 
-/** Real communication threads; selection, one primary, or an explicit later choice. */
-export function CaseCommunicationPicker({
-  state, errors, onToggle, onSetPrimary, onLater,
+/**
+ * Compact communication summary row. The selectable list lives on its own
+ * drawer surface, so the intake form keeps exactly one scroll surface.
+ */
+export function CaseCommunicationSummary({
+  state, errors, onOpenPicker, onLater,
 }: {
   state: IntakeState; errors: IntakeErrors;
-  onToggle: (id: string) => void; onSetPrimary: (id: string) => void; onLater: (later: boolean) => void;
+  onOpenPicker: () => void; onLater: (later: boolean) => void;
 }) {
-  const [query, setQuery] = useState("");
-  const [items, setItems] = useState<CommunicationItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    getCommunications({ limit: 25, clientId: state.clientId || undefined })
-      .then((r) => { if (active) setItems(r.communications || []); })
-      .catch(() => { if (active) setItems([]); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [state.clientId]);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((c) => `${c.subject || ""} ${c.senderName || ""}`.toLowerCase().includes(q));
-  }, [items, query]);
+  const count = state.communicationThreadIds.length;
+  const summary = state.communicationLater
+    ? "Később kerül hozzárendelésre"
+    : count === 0
+      ? "Nincs kiválasztva"
+      : count === 1
+        ? "1 elsődleges beszélgetés kiválasztva"
+        : `1 elsődleges és ${count - 1} további beszélgetés kiválasztva`;
 
   return (
     <div data-testid="intake-communication">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <input
-          data-testid="comm-search"
-          className={`${field} mt-0 max-w-xs`}
-          placeholder="Keresés tárgy vagy feladó szerint…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <label className="flex items-center gap-1.5 text-[11.5px] text-[var(--adm-text)]">
-          <input data-testid="comm-later" type="checkbox" checked={state.communicationLater} onChange={(e) => onLater(e.target.checked)} />
-          Később kapcsolom hozzá
-        </label>
+      <div className={intake.commRow}>
+        <div className="min-w-0">
+          <p className={`${intake.sectionTitle} ${ACCENT_TEXT.terracotta}`}>
+            <span aria-hidden="true" className={`inline-block h-3 w-[3px] shrink-0 rounded-full ${ACCENT_BG.terracotta}`} />
+            Kapcsolódó kommunikáció
+          </p>
+          <p data-testid="comm-summary" className="mt-0.5 text-[12.5px] text-[#2C3A31]">{summary}</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-3">
+          <label className="flex items-center gap-1.5 text-[12px] font-medium text-[#2C3A31]">
+            <input data-testid="comm-later" type="checkbox" checked={state.communicationLater} onChange={(e) => onLater(e.target.checked)} />
+            Később kapcsolom hozzá
+          </label>
+          <button
+            type="button"
+            data-testid="comm-open-picker"
+            onClick={onOpenPicker}
+            disabled={state.communicationLater}
+            className={intake.secondaryAction}
+          >
+            Kommunikáció kiválasztása
+          </button>
+        </div>
       </div>
-
-      <button type="button" onClick={() => setShowDetails((v) => !v)} className="mt-1.5 text-[10.5px] font-semibold text-[var(--adm-text-muted)] hover:underline">
-        Mit jelent a hozzárendelés?
-      </button>
-      {showDetails ? (
-        <ul data-testid="comm-disclosure" className="mt-1 list-disc space-y-0.5 pl-4 text-[10.5px] leading-4 text-[var(--adm-text-muted)]">
-          <li>A későbbi üzenetek nem kapcsolódnak automatikusan; a hozzárendelés eseti.</li>
-          <li>A csatolmányokból nem jön létre automatikusan dokumentum.</li>
-          <li>A levelezést az ügyhöz hozzáférő munkatársak látják.</li>
-          <li>A hozzárendelt levelezés belső marad; ügyfélnek nem publikálódik.</li>
-        </ul>
-      ) : null}
-
-      {loading ? (
-        <p className="mt-2 text-[11.5px] text-[var(--adm-text-muted)]">Levelezés betöltése…</p>
-      ) : state.communicationLater ? (
-        <p className="mt-2 text-[11.5px] text-[var(--adm-text-muted)]">A levelezést később kapcsolod az ügyhöz.</p>
-      ) : filtered.length === 0 ? (
-        <p className="mt-2 text-[11.5px] text-[var(--adm-text-muted)]">Nincs találat.</p>
-      ) : (
-        <ul data-testid="comm-list" className="mt-2 max-h-56 space-y-1 overflow-y-auto">
-          {filtered.map((c) => {
-            const selected = state.communicationThreadIds.includes(c.id);
-            // Threads already on another matter cannot be taken.
-            const unavailable = Boolean(c.caseId);
-            const isPrimary = state.primaryCommunicationThreadId === c.id;
-            return (
-              <li key={c.id} className={`rounded-md border px-2 py-1.5 ${selected ? "border-[#1F5A66] bg-[#EAF1F3]" : "border-[var(--adm-border)] bg-white"} ${unavailable ? "opacity-60" : ""}`}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <label className="flex min-w-0 flex-1 items-center gap-2">
-                    <input
-                      type="checkbox"
-                      data-testid="comm-item"
-                      disabled={unavailable}
-                      checked={selected}
-                      onChange={() => onToggle(c.id)}
-                    />
-                    <span className="min-w-0">
-                      <span className="block truncate text-[12px] font-semibold text-[var(--adm-text)]">{c.subject || "Nincs tárgy"}</span>
-                      <span className="block truncate text-[10.5px] text-[var(--adm-text-muted)]">
-                        {c.senderName || "Ismeretlen feladó"} · {c.type}
-                        {c.createdAt ? ` · ${new Date(c.createdAt).toLocaleDateString("hu-HU")}` : ""}
-                        {unavailable ? " · már ügyhöz rendelve" : ""}
-                      </span>
-                    </span>
-                  </label>
-                  {selected ? (
-                    <button
-                      type="button"
-                      data-testid="comm-primary"
-                      onClick={() => onSetPrimary(c.id)}
-                      className={`shrink-0 rounded px-1.5 py-0.5 text-[9.5px] font-bold uppercase ${isPrimary ? "bg-[#1F5A66] text-white" : "bg-white text-[#1F5A66] ring-1 ring-[#1F5A66]"}`}
-                    >
-                      {isPrimary ? "Elsődleges" : "Legyen elsődleges"}
-                    </button>
-                  ) : null}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
       <FieldError message={errors.communication} />
     </div>
   );

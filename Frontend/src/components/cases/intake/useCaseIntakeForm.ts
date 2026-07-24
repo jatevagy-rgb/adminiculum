@@ -187,6 +187,17 @@ export function useCaseIntakeForm(onCreated: (result: CaseIntakeResult) => void)
   const setPrimaryThread = useCallback((id: string) => {
     setState((s) => (s.communicationThreadIds.includes(id) ? { ...s, primaryCommunicationThreadId: id } : s));
   }, []);
+  /** Commit a staged selection from the picker drawer in one update. */
+  const setCommunicationSelection = useCallback((ids: string[], primary: string) => {
+    setState((s) => ({
+      ...s,
+      communicationThreadIds: ids,
+      // The primary must always be one of the selected threads.
+      primaryCommunicationThreadId: ids.includes(primary) ? primary : (ids[0] || ""),
+      communicationLater: ids.length > 0 ? false : s.communicationLater,
+    }));
+  }, []);
+
   const setCommunicationLater = useCallback((later: boolean) => {
     setState((s) => ({
       ...s,
@@ -321,7 +332,7 @@ export function useCaseIntakeForm(onCreated: (result: CaseIntakeResult) => void)
     absoluteDeadline,
     addParticipant, updateParticipant, removeParticipant,
     addTask, updateTask, removeTask,
-    toggleThread, setPrimaryThread, setCommunicationLater,
+    toggleThread, setPrimaryThread, setCommunicationLater, setCommunicationSelection,
     submit, validate, buildPayload,
   };
 }
