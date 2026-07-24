@@ -52,6 +52,9 @@ model User {
   assignedDocumentReviews DocumentReview[] @relation("DocumentReviewAssignedReviewer")
   reviewSnapshots       ReviewSnapshot[]
   createdDocumentAnnotations DocumentAnnotation[] @relation("DocumentAnnotationCreatedBy")
+  createdCaseExternalParticipants CaseExternalParticipant[] @relation("CaseExternalParticipantCreatedBy")
+  createdCaseIntakeDeadlines CaseIntakeDeadline[] @relation("CaseIntakeDeadlineCreatedBy")
+  responsibleCaseIntakeDeadlines CaseIntakeDeadline[] @relation("CaseIntakeDeadlineResponsible")
   assignedDocumentAnnotations DocumentAnnotation[] @relation("DocumentAnnotationAssignedTo")
   resolvedDocumentAnnotations DocumentAnnotation[] @relation("DocumentAnnotationResolvedBy")
   deletedDocumentAnnotations DocumentAnnotation[] @relation("DocumentAnnotationDeletedBy")
@@ -719,6 +722,16 @@ model Case {
   assignedLawyerId String?
   assignedLawyer  User?           @relation("AssignedLawyer", fields: [assignedLawyerId], references: [id])
   
+  // ---- Intake starting context (CASE-INTAKE-REDESIGN-1) -------------------
+  // Structured, separately queryable answers captured at matter intake. These are
+  // discrete columns rather than one generic note blob, so the matter overview and
+  // later automation can read each dimension on its own.
+  intakeOriginReason      String?   // Miért indult az ügy?
+  intakeCurrentSituation  String?   // Mi a jelenlegi helyzet?
+  intakeClientExpectation String?   // Mit vár az ügyfél?
+  intakeUrgentAction      String?   // Van-e sürgős teendő?
+  intakeNextStep          String?   // Mi az első következő ügyvédi lépés?
+
 documents       Document[]
   tasks           Task[]
   timelineEvents  TimelineEvent[]
@@ -727,8 +740,63 @@ documents       Document[]
   collaborators   CaseCollaborator[]
   legalAnalyses   LegalAnalysis[]
   lawyerHandoffPackages LawyerHandoffPackage[]
+  externalParticipants CaseExternalParticipant[]
+  intakeDeadlines CaseIntakeDeadline[]
 
   @@map("cases")
+}
+
+/// Non-user participants captured at intake: client contacts, opposing party and
+/// other externals. A participant is never just a name — the role is required and
+/// persisted, and `side` makes the adversarial position explicit.
+model CaseExternalParticipant {
+  id            String   @id @default(uuid())
+  caseId        String
+  name          String
+  role          String   // CLIENT_CONTACT, OPPOSING_PARTY, OPPOSING_COUNSEL, EXPERT, OTHER
+  side          String   @default("OTHER") // CLIENT, OPPOSING, NEUTRAL, OTHER
+  organization  String?
+  email         String?
+  phone         String?
+  note          String?
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  case          Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  createdBy     User @relation("CaseExternalParticipantCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([caseId])
+  @@map("case_external_participants")
+}
+
+/// A typed, reminder-bearing deadline captured at intake. The domain distinguishes a
+/// statutory/procedural deadline from an internal working target, so the type is
+/// modelled explicitly instead of being flattened into one untyped date.
+model CaseIntakeDeadline {
+  id              String   @id @default(uuid())
+  caseId          String
+  title           String
+  deadlineType    String   // STATUTORY, CLIENT_COMMITMENT, INTERNAL, NEXT_ACTION, OTHER
+  dueAt           DateTime
+  /// How the user expressed it: ABSOLUTE (picked a moment) or RELATIVE (in N units).
+  inputMode       String   @default("ABSOLUTE")
+  relativeValue   Int?
+  relativeUnit    String?  // MINUTE, HOUR, DAY, WEEK
+  reminderMinutesBefore Int?
+  responsibleId   String?
+  note            String?
+  createdById     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  case            Case  @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  responsible     User? @relation("CaseIntakeDeadlineResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
+  createdBy       User  @relation("CaseIntakeDeadlineCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([caseId, dueAt])
+  @@index([responsibleId, dueAt])
+  @@map("case_intake_deadlines")
 }
 
 // Case collaborators — internal operational team members on a case (separate from assignedLawyer)
@@ -1821,6 +1889,8 @@ model Communication {
   
   // Linkage - using foreign keys directly to avoid relation conflicts
   caseId          String?
+  /// Exactly one linked thread per case may be marked primary at intake.
+  isPrimaryForCase Boolean        @default(false)
   clientId        String?
   documentId      String?
 

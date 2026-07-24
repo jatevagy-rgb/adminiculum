@@ -95,7 +95,11 @@ describe('contract workspace anchored annotations foundation', () => {
     expect(page).toContain('Anchored annotations');
     expect(page).toContain('Read-only review surface');
     expect(page).toContain('Nincs szerkesztés');
-    expect(page).toContain('Ügyfélmagyarázat-tervezet, nem publikált');
+    // The unpublished state is now carried by a persistent badge rather than a
+    // textarea placeholder, which disappeared as soon as the reviewer typed.
+    // See annotationNotPublishedMarker.test.ts for the full contract.
+    expect(page).toContain('NotPublishedBadge');
+    expect(page).toContain('isClientExplanationDraft');
     expect(page).not.toContain('generateClientExplanation');
     expect(page).not.toContain('publishAnnotation');
     expect(page).not.toContain('diffDocumentVersions');

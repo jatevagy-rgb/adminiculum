@@ -13,6 +13,7 @@ import { getCaseWorkItems } from './workItems';
 import { getCaseActivity } from './activity';
 import { getCaseWorkspace } from './workspace';
 import { createCaseComment, listCaseComments, resolveCaseComment, reopenCaseComment, sendCaseCommentError } from './caseComments.service';
+import { createCaseIntake, CaseIntakeError } from './intakeCreate.service';
 import { AgendaRequestError, getCaseDeadlines } from '../agenda/service';
 import { getCaseResponsibility } from '../responsibility/service';
 import { getCaseLifecycle, closeCase, reopenCase, archiveCase, LifecycleServiceError } from './lifecycleService';
@@ -783,6 +784,31 @@ router.delete('/:caseId/collaborators/:collaboratorId', authenticate, requireCas
       return;
     }
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// POST /cases/intake — transactional matter intake (CASE-INTAKE-REDESIGN-1).
+// Creates the matter together with participants, typed deadlines, communication
+// links and initial tasks atomically. The legacy POST /cases is unchanged, so
+// existing callers keep working; this is an additive, versioned intake path.
+// ============================================================================
+router.post('/intake', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required.' });
+      return;
+    }
+    const result = await createCaseIntake(userId, req.body || {});
+    res.status(201).json(result);
+  } catch (error) {
+    if (error instanceof CaseIntakeError) {
+      res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
+      return;
+    }
+    console.error('Case intake error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Matter intake failed.' });
   }
 });
 
