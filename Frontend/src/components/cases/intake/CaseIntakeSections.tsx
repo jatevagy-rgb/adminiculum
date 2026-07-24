@@ -38,19 +38,35 @@ export function Section({ title, hint, children }: { title: string; hint?: strin
 
 /** Client, name, type, responsible lawyer, role. */
 export function CaseBasicsSection({
-  state, errors, clients, users, onPatch,
+  state, errors, clients, users, onPatch, clientsLoading, clientsError,
 }: {
   state: IntakeState; errors: IntakeErrors; clients: Client[]; users: User[];
   onPatch: <K extends keyof IntakeState>(k: K, v: IntakeState[K]) => void;
+  clientsLoading?: boolean; clientsError?: string | null;
 }) {
   return (
     <div data-testid="intake-basics" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <div>
         <label className={label} htmlFor="ci-client">Ügyfél</label>
-        <select id="ci-client" className={field} value={state.clientId} onChange={(e) => onPatch("clientId", e.target.value)}>
-          <option value="">Válassz ügyfelet…</option>
+        <select
+          id="ci-client"
+          data-testid="intake-client-select"
+          className={field}
+          value={state.clientId}
+          disabled={clientsLoading || Boolean(clientsError)}
+          onChange={(e) => onPatch("clientId", e.target.value)}
+        >
+          <option value="">
+            {clientsLoading ? "Ügyfelek betöltése…" : clientsError ? "Nem elérhető" : "Válassz ügyfelet…"}
+          </option>
           {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
+        {/* Loading, genuinely empty and broken-response are distinct states. */}
+        {clientsError ? (
+          <p role="alert" data-testid="intake-clients-error" className="mt-1 text-[11px] font-semibold text-[#A8442A]">{clientsError}</p>
+        ) : !clientsLoading && clients.length === 0 ? (
+          <p data-testid="intake-clients-empty" className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Nincs rögzített ügyfél.</p>
+        ) : null}
         <FieldError message={errors.clientId} />
       </div>
       <div>

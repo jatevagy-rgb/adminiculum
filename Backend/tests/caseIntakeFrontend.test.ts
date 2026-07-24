@@ -260,3 +260,73 @@ describe('submission', () => {
     }
   });
 });
+
+/**
+ * Regression: the intake shipped unable to create a matter because the client
+ * selector treated the { data: Client[] } envelope as an array. Normalization now
+ * lives in one typed adapter, and a broken response is an error state rather than
+ * a silently empty list.
+ */
+describe('client list normalization', () => {
+  it('normalizes the envelope in one typed adapter at the API boundary', () => {
+    expect(api).toContain('export async function getClientList(): Promise<Client[]>');
+    expect(api).toContain('export class MalformedResponseError');
+    // The adapter validates the contract instead of assuming it.
+    expect(api).toContain("!Array.isArray((response as { data?: unknown }).data)");
+  });
+
+  it('the intake consumes the adapter, not the raw envelope', () => {
+    expect(dialog).toContain('getClientList()');
+    expect(dialog).not.toContain('getClients()');
+    // No envelope knowledge leaks into the component.
+    expect(dialog).not.toContain('.data ??');
+  });
+
+  it('keeps loading, empty and malformed states distinguishable', () => {
+    expect(dialog).toContain('setClientsLoading');
+    expect(dialog).toContain('setClientsError');
+    expect(sections).toContain('data-testid="intake-clients-error"');
+    expect(sections).toContain('data-testid="intake-clients-empty"');
+    expect(sections).toContain('Ügyfelek betöltése…');
+    expect(sections).toContain('Nincs rögzített ügyfél.');
+  });
+
+  it('surfaces a malformed payload as an error, never as an empty selector', () => {
+    expect(dialog).toContain("err.name === 'MalformedResponseError'");
+    expect(sections).toContain('role="alert"');
+  });
+
+  it('disables the selector while loading or broken', () => {
+    expect(sections).toContain('disabled={clientsLoading || Boolean(clientsError)}');
+  });
+
+  it('renders the real clients and submits the selected one', () => {
+    expect(sections).toContain('clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)');
+    expect(hook).toContain('clientId: state.clientId');
+  });
+});
+
+describe('legacy intake implementation is fully removed', () => {
+  it('leaves no legacy submission handler or legacy endpoint call', () => {
+    expect(list).not.toContain('handleCreateCase');
+    expect(list).not.toContain('createCase(');
+  });
+
+  it('leaves no legacy wizard state', () => {
+    for (const sym of ['workplanSteps', 'deadlineMode', 'wizardSteps', 'selectedCollaboratorIds',
+                       'relativeDeadlineValue', 'workplanPreset', 'newCaseData']) {
+      expect(list).not.toContain(sym);
+    }
+  });
+
+  it('leaves no obsolete wizard markup or copy', () => {
+    for (const marker of ['adm-wizard', 'Munkaterv', 'MUNKATERV']) {
+      expect(list).not.toContain(marker);
+    }
+  });
+
+  it('exposes exactly one matter-creation workflow', () => {
+    expect(list).toContain('<CaseIntakeDialog');
+    expect((list.match(/CaseIntakeDialog/g) || []).length).toBeGreaterThanOrEqual(1);
+  });
+});

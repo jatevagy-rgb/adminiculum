@@ -200,25 +200,9 @@ export function CasesList() {
   const [clientName, setClientName] = useState("");
   const [workPriorityFilter, setWorkPriorityFilter] = useState("all");
   const [showNewCaseModal, setShowNewCaseModal] = useState(false);
-  const [newCaseData, setNewCaseData] = useState<CreateCaseData>(defaultCaseData);
-  const [customMatterType, setCustomMatterType] = useState("");
-  const [customClientRole, setCustomClientRole] = useState("");
-  const [clientMode, setClientMode] = useState<ClientMode>("existing");
-  const [newClientData, setNewClientData] = useState<CreateClientData>(defaultNewClient);
-  const [clientType, setClientType] = useState<"Magánszemély" | "Cég">("Cég");
-  const [isSavingClient, setIsSavingClient] = useState(false);
-  const [clientMessage, setClientMessage] = useState<string | null>(null);
-  const [deadlineMode, setDeadlineMode] = useState<DeadlineMode>("none");
-  const [relativeDeadlineValue, setRelativeDeadlineValue] = useState("3");
-  const [reminder, setReminder] = useState("Nincs emlékeztető");
-  const [selectedCollaboratorIds, setSelectedCollaboratorIds] = useState<string[]>([]);
-  const [workplanSteps, setWorkplanSteps] = useState<WorkplanStepDraft[]>([]);
-  const [workplanPreset, setWorkplanPreset] = useState("none");
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [availableClients, setAvailableClients] = useState<Client[]>([]);
   const [showOtherClients, setShowOtherClients] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
   const [backendCases, setBackendCases] = useState<CaseListItem[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [isLoadingCases, setIsLoadingCases] = useState(true);
@@ -226,11 +210,6 @@ export function CasesList() {
   const requestedNewCase = searchParams?.get("newCase") === "1";
   const requestedClientId = searchParams?.get("clientId") || "";
   const [initialClientApplied, setInitialClientApplied] = useState(false);
-
-  const selectedClient = useMemo(
-    () => availableClients.find((client) => client.id === newCaseData.clientId) || null,
-    [availableClients, newCaseData.clientId],
-  );
 
   const getCoreClientKey = useCallback((client: Client): "blackbelt" | "saubermacher" | "balintfy" | null => {
     const normalized = normalizePersonName(client.name);
@@ -277,281 +256,6 @@ export function CasesList() {
     });
   }, [availableClients, getCoreClientKey, hydrateCoreClient, showOtherClients]);
 
-  const visibleParticipants = useMemo(() => {
-    const eligibleUsers = availableUsers.filter((user) =>
-      INTERNAL_PARTICIPANT_ROLES.has(String(user.role || "").toUpperCase()) &&
-      PILOT_PARTICIPANT_EMAILS.includes(String(user.email || "").toLowerCase())
-    );
-    if (eligibleUsers.length === 0) return [];
-    return [...eligibleUsers].sort((left, right) => {
-      const leftPriority = PILOT_PARTICIPANT_EMAILS.indexOf(String(left.email || "").toLowerCase());
-      const rightPriority = PILOT_PARTICIPANT_EMAILS.indexOf(String(right.email || "").toLowerCase());
-      const normalizedLeftPriority = leftPriority === -1 ? Number.MAX_SAFE_INTEGER : leftPriority;
-      const normalizedRightPriority = rightPriority === -1 ? Number.MAX_SAFE_INTEGER : rightPriority;
-      if (normalizedLeftPriority !== normalizedRightPriority) {
-        return normalizedLeftPriority - normalizedRightPriority;
-      }
-      return String(left.name || left.email).localeCompare(String(right.name || right.email), "hu-HU");
-    });
-  }, [availableUsers]);
-
-  const selectableParticipantIds = useMemo(
-    () => new Set(visibleParticipants.map((user) => user.id)),
-    [visibleParticipants],
-  );
-
-  const wizardSteps = useMemo(() => {
-    const hasClient = clientMode === "existing"
-      ? Boolean(newCaseData.clientId)
-      : Boolean(newClientData.name.trim() || newCaseData.clientName.trim());
-    const hasMatter = Boolean((newCaseData.description || "").trim() && newCaseData.matterType);
-    const hasRole = Boolean(newCaseData.clientRole);
-    const hasDeadline = deadlineMode !== "none" || Boolean(newCaseData.deadline);
-    const hasParticipants = selectedCollaboratorIds.length > 0;
-    const hasWorkplan = workplanSteps.length > 0;
-    const items = [
-      { label: "Ügyfél", complete: hasClient },
-      { label: "Ügy típusa", complete: hasMatter },
-      { label: "Szerep", complete: hasRole },
-      { label: "Határidő", complete: hasDeadline },
-      { label: "Résztvevők", complete: hasParticipants },
-      { label: "Munkaterv", complete: hasWorkplan },
-    ];
-    const firstIncompleteIndex = items.findIndex((item) => !item.complete);
-    const currentIndex = firstIncompleteIndex === -1 ? items.length - 1 : firstIncompleteIndex;
-    return items.map((item, index) => ({
-      ...item,
-      current: index === currentIndex,
-    }));
-  }, [clientMode, deadlineMode, newCaseData.clientId, newCaseData.clientName, newCaseData.clientRole, newCaseData.deadline, newCaseData.description, newCaseData.matterType, newClientData.name, selectedCollaboratorIds.length, workplanSteps.length]);
-
-  const selectClientForCase = useCallback((client: Client) => {
-    const hydrated = hydrateCoreClient(client);
-    setClientMode("existing");
-    setNewCaseData((prev) => ({ ...prev, clientId: hydrated.id, clientName: hydrated.name }));
-  }, [hydrateCoreClient]);
-
-  const applyWorkplanPreset = useCallback((preset: string) => {
-    setWorkplanPreset(preset);
-    const id = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    if (preset === "none") {
-      setWorkplanSteps([]);
-      return;
-    }
-    if (preset === "simple") {
-      setWorkplanSteps([
-        { id: id(), title: "Előkészítés", assigneeUserId: "", dueDate: "", note: "Iratok és első munkapéldány előkészítése." },
-        { id: id(), title: "Ügyvédi review", assigneeUserId: "", dueDate: "", note: "Tartalmi és kockázati ellenőrzés." },
-      ]);
-      return;
-    }
-    if (preset === "trainee-partner") {
-      setWorkplanSteps([
-        { id: id(), title: "Előkészítés", assigneeUserId: "", dueDate: "", note: "Ügyvédjelölt előkészítése." },
-        { id: id(), title: "Partner jóváhagyás", assigneeUserId: "", dueDate: "", note: "Partner átnézés és végső jóváhagyás." },
-      ]);
-      return;
-    }
-    if (preset === "three-step") {
-      const findId = (namePart: string) => {
-        const found = visibleParticipants.find((u) =>
-          normalizePersonName(u.name).includes(namePart)
-        );
-        return found ? found.id : "";
-      };
-      const amandaId = findId("szűcs amanda");
-      const csanadId = findId("trugly csanád");
-      const hubayId = findId("hubay gyula") || findId("hubay gyula máté");
-      setWorkplanSteps([
-        { id: id(), title: "Előkészítés", assigneeUserId: amandaId, dueDate: "", note: "Amanda előkészíti az iratot és a hiánypontokat." },
-        { id: id(), title: "Ügyvédi review", assigneeUserId: csanadId, dueDate: "", note: "Csanád átnézi a munkapéldányt." },
-        { id: id(), title: "Partner jóváhagyás", assigneeUserId: hubayId, dueDate: "", note: "Partner átnézés és végső jóváhagyás." },
-      ]);
-      return;
-    }
-    if (preset === "custom" && workplanSteps.length === 0) {
-      setWorkplanSteps([{ id: id(), title: "Előkészítés", assigneeUserId: "", dueDate: "", note: "" }]);
-    }
-  }, [visibleParticipants, workplanSteps.length]);
-
-  const updateWorkplanStep = (stepId: string, patch: Partial<WorkplanStepDraft>) => {
-    setWorkplanSteps((prev) => prev.map((step) => step.id === stepId ? { ...step, ...patch } : step));
-  };
-
-  const moveUpStep = (index: number) => {
-    if (index === 0) return;
-    setWorkplanSteps((prev) => {
-      const next = [...prev];
-      [next[index - 1], next[index]] = [next[index], next[index - 1]];
-      return next;
-    });
-  };
-
-  const moveDownStep = (index: number) => {
-    setWorkplanSteps((prev) => {
-      if (index >= prev.length - 1) return prev;
-      const next = [...prev];
-      [next[index], next[index + 1]] = [next[index + 1], next[index]];
-      return next;
-    });
-  };
-
-  const removeWorkplanStep = (stepId: string) => {
-    setWorkplanSteps((prev) => prev.filter((step) => step.id !== stepId));
-    if (workplanSteps.length <= 1) setWorkplanPreset("none");
-  };
-
-  const addWorkplanStep = () => {
-    setWorkplanSteps((prev) => [...prev, { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, title: "", assigneeUserId: "", dueDate: "", note: "" }]);
-    setWorkplanPreset("custom");
-  };
-
-  const addParticipantToWorkplan = (user: User) => {
-    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const currentCount = workplanSteps.length;
-    const title = getStepTitle(currentCount);
-    setWorkplanSteps((prev) => [...prev, { id, title, assigneeUserId: user.id, dueDate: "", note: "" }]);
-    setWorkplanPreset("custom");
-  };
-
-  const effectiveMatterType = newCaseData.matterType === "CUSTOM" ? customMatterType.trim() : newCaseData.matterType;
-  const effectiveClientRole = newCaseData.clientRole === "Egyéb / saját szerep" ? customClientRole.trim() : newCaseData.clientRole;
-
-  const handleCreateCase = async () => {
-    const clientOk = clientMode === "existing" ? Boolean(newCaseData.clientId) : Boolean(newClientData.name.trim());
-    if (!clientOk) {
-      setCreateError(clientMode === "existing" ? "Válassz ki egy mentett ügyfelet az ügy létrehozásához." : "Az új ügyfél hivatalos neve kötelező.");
-      return;
-    }
-    if (!newCaseData.description?.trim()) {
-      setCreateError("Az ügy megnevezése kötelező.");
-      return;
-    }
-    if (!effectiveMatterType) {
-      setCreateError("Az ügy típusa kötelező.");
-      return;
-    }
-    setIsCreating(true);
-    setCreateError(null);
-    try {
-      let clientId = newCaseData.clientId;
-      let caseClientName = newCaseData.clientName.trim();
-      if (clientMode === "new" && newClientData.name.trim()) {
-        const createdClient = await createClient({ ...newClientData, name: newClientData.name.trim() });
-        setAvailableClients((prev) => [createdClient, ...prev.filter((client) => client.id !== createdClient.id)]);
-        clientId = createdClient.id;
-        caseClientName = createdClient.name;
-      }
-      const payloadMatterType = newCaseData.matterType === "CUSTOM" ? "OTHER" : newCaseData.matterType;
-      const payloadDescription = newCaseData.matterType === "CUSTOM" && customMatterType.trim()
-        ? `${newCaseData.description?.trim() || ""} — ügytípus: ${customMatterType.trim()}`
-        : newCaseData.description;
-      const result = await createCase({
-        ...newCaseData,
-        clientId,
-        clientName: caseClientName || selectedClient?.name || newClientData.name.trim(),
-        matterType: payloadMatterType || "OTHER",
-        description: payloadDescription,
-        clientRole: effectiveClientRole,
-      });
-      let workplanPartialFailure = false;
-      for (const userId of selectedCollaboratorIds) {
-        if (!selectableParticipantIds.has(userId)) continue;
-        try {
-          await addCaseCollaborator(result.id, userId, "COLLABORATOR");
-        } catch (collabErr) {
-          console.warn(`Failed to add collaborator ${userId}:`, collabErr);
-          workplanPartialFailure = true;
-        }
-      }
-      const validWorkplanSteps = workplanSteps.filter((step) => step.title.trim());
-      for (let index = 0; index < validWorkplanSteps.length; index += 1) {
-        const step = validWorkplanSteps[index];
-        try {
-          await createTask({
-            caseId: result.id,
-            title: `${index + 1}. ${step.title.trim()}`,
-            type: index === 0 ? "DRAFT_CONTRACT" : index === validWorkplanSteps.length - 1 ? "APPROVAL" : "REVIEW_CONTRACT",
-            description: ["Munkaterv / review-útvonal", step.note.trim()].filter(Boolean).join(" — "),
-            priority: "MEDIUM",
-            dueDate: step.dueDate || undefined,
-            assignedTo: step.assigneeUserId && selectableParticipantIds.has(step.assigneeUserId) ? step.assigneeUserId : undefined,
-          });
-        } catch (taskErr) {
-          console.warn(`Failed to create workplan step ${index + 1}:`, taskErr);
-          workplanPartialFailure = true;
-        }
-      }
-      setShowNewCaseModal(false);
-      setNewCaseData(defaultCaseData);
-      setNewClientData(defaultNewClient);
-      setCustomMatterType("");
-      setCustomClientRole("");
-      setSelectedCollaboratorIds([]);
-      setWorkplanSteps([]);
-      setWorkplanPreset("none");
-      setClientMode("existing");
-      if (workplanPartialFailure) {
-        setCreateError("Az ügy létrejött. Figyelmeztetés: a munkaterv vagy a résztvevők egy része nem mentődött le. Az ügyet a Dokumentumtárban éred el.");
-        setIsCreating(false);
-        setTimeout(() => {
-          setCreateError(null);
-          router.push(`/cases/${result.id}/documents`);
-        }, 4000);
-      } else {
-        router.push(`/cases/${result.id}/documents`);
-      }
-    } catch (err) {
-      console.error("Failed to create case:", err);
-      const displayMessage =
-        err instanceof ApiError && err.status === 0
-          ? "A szolgáltatás nem érhető el. Próbáld újra később."
-          : err instanceof ApiError && err.status === 409
-            ? "Az ügy nem hozható létre a megadott adatokkal."
-            : "Az ügy létrehozása sikertelen.";
-      setCreateError(displayMessage);
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
-  const handleSaveClientOnly = async () => {
-    if (!newClientData.name.trim()) {
-      setClientMessage("Az ügyfél neve kötelező.");
-      return;
-    }
-    setIsSavingClient(true);
-    setClientMessage(null);
-    try {
-      const created = await createClient({ ...newClientData, name: newClientData.name.trim() });
-      setAvailableClients((prev) => [created, ...prev.filter((client) => client.id !== created.id)]);
-      setNewCaseData((prev) => ({ ...prev, clientId: created.id, clientName: created.name }));
-      setClientMode("existing");
-      setClientMessage("Az új ügyfél mentve és kiválasztva.");
-    } catch (err) {
-      console.error("Failed to create client:", err);
-      setClientMessage("Az ügyfél mentése sikertelen.");
-    } finally {
-      setIsSavingClient(false);
-    }
-  };
-
-  const updateDeadline = (mode: DeadlineMode, rawValue = relativeDeadlineValue) => {
-    setDeadlineMode(mode);
-    if (mode === "none") {
-      setNewCaseData((prev) => ({ ...prev, deadline: "" }));
-      return;
-    }
-    if (mode === "date") {
-      const next = newCaseData.deadline || toInputDateTimeLocal(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000));
-      setNewCaseData((prev) => ({ ...prev, deadline: next }));
-      return;
-    }
-    const amount = Math.max(1, Number.parseInt(rawValue || "1", 10) || 1);
-    const multiplier = mode === "days" ? 24 * 60 * 60 * 1000 : mode === "hours" ? 60 * 60 * 1000 : 60 * 1000;
-    setNewCaseData((prev) => ({ ...prev, deadline: toInputDateTimeLocal(new Date(Date.now() + amount * multiplier)) }));
-  };
-
   const deriveWorkPriorityLabel = useCallback((priority?: string) => {
     if (!priority) return "Közepes";
     const normalized = priority.toLowerCase();
@@ -590,23 +294,13 @@ export function CasesList() {
     }
   }, [showNewCaseModal]);
 
+  // ?newCase=1 opens the intake dialog. Any ?clientId is handed to the dialog as
+  // initialClientId — it no longer needs pre-seeding into local wizard state.
   useEffect(() => {
     if (!requestedNewCase || initialClientApplied) return;
     setShowNewCaseModal(true);
-    setClientMode("existing");
-    if (!requestedClientId) {
-      setInitialClientApplied(true);
-    }
-  }, [requestedNewCase, requestedClientId, initialClientApplied]);
-
-  useEffect(() => {
-    if (!requestedNewCase || !requestedClientId || initialClientApplied || availableClients.length === 0) return;
-    const client = availableClients.find((item) => item.id === requestedClientId);
-    if (client) {
-      selectClientForCase(client);
-      setInitialClientApplied(true);
-    }
-  }, [requestedNewCase, requestedClientId, initialClientApplied, availableClients, selectClientForCase]);
+    setInitialClientApplied(true);
+  }, [requestedNewCase, initialClientApplied]);
 
   const filteredCases = useMemo(() => {
     const normalizedQuery = clientName.trim().toLowerCase();

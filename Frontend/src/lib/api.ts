@@ -5359,3 +5359,28 @@ export function caseIntakeErrorMessage(error: unknown): string {
   }
   return 'Az ügy létrehozása nem sikerült. Ellenőrizd a megadott adatokat.';
 }
+
+/**
+ * Typed adapter returning a plain Client[]. Components must not know about the
+ * transport envelope: `getClients()` resolves to `{ data: Client[] }`, and a
+ * component that treated the whole response as an array silently rendered an
+ * empty selector, which is how the intake shipped unable to create a matter.
+ *
+ * A payload that is not the established contract raises a controlled error
+ * instead of degrading into an empty list, so "no clients" and "broken response"
+ * stay distinguishable in the UI.
+ */
+export class MalformedResponseError extends Error {
+  constructor(what: string) {
+    super(`A szerver válasza nem értelmezhető (${what}).`);
+    this.name = 'MalformedResponseError';
+  }
+}
+
+export async function getClientList(): Promise<Client[]> {
+  const response = await getClients();
+  if (!response || typeof response !== 'object' || !Array.isArray((response as { data?: unknown }).data)) {
+    throw new MalformedResponseError('ügyféllista');
+  }
+  return (response as { data: Client[] }).data;
+}

@@ -10,7 +10,7 @@
  * atomically or not at all.
  */
 import { useEffect, useState } from "react";
-import { getClients, getUsers, type Client, type User, type CaseIntakeResult } from "@/lib/api";
+import { getClientList, getUsers, type Client, type User, type CaseIntakeResult } from "@/lib/api";
 import { AdminButton } from "@/components/adminiculum/ui";
 import { useCaseIntakeForm } from "./useCaseIntakeForm";
 import {
@@ -28,6 +28,8 @@ export function CaseIntakeDialog({
   initialClientId?: string;
 }) {
   const [clients, setClients] = useState<Client[]>([]);
+  const [clientsLoading, setClientsLoading] = useState(true);
+  const [clientsError, setClientsError] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const form = useCaseIntakeForm(onCreated);
   const { state, patch, patchContext, patchDeadline, errors, serverError, submitting, absoluteDeadline } = form;
@@ -35,8 +37,20 @@ export function CaseIntakeDialog({
   useEffect(() => {
     if (!open) return;
     let active = true;
-    // getClients resolves to { data: Client[] }.
-    getClients().then((c) => { if (active) setClients(c?.data ?? []); }).catch(() => { if (active) setClients([]); });
+    // One typed adapter owns the envelope; a malformed payload is an error state,
+    // never a silently empty selector.
+    setClientsLoading(true);
+    setClientsError(null);
+    getClientList()
+      .then((list) => { if (active) setClients(list); })
+      .catch((err) => {
+        if (!active) return;
+        setClients([]);
+        setClientsError(err instanceof Error && err.name === 'MalformedResponseError'
+          ? err.message
+          : 'Az ügyféllista nem tölthető be.');
+      })
+      .finally(() => { if (active) setClientsLoading(false); });
     getUsers().then((u) => { if (active) setUsers(u); }).catch(() => { if (active) setUsers([]); });
     return () => { active = false; };
   }, [open]);
@@ -89,7 +103,7 @@ export function CaseIntakeDialog({
 
           {/* ---- Quick intake: always visible, sufficient on its own ---- */}
           <Section title="Gyors ügyindítás">
-            <CaseBasicsSection state={state} errors={errors} clients={clients} users={users} onPatch={patch} />
+            <CaseBasicsSection state={state} errors={errors} clients={clients} users={users} onPatch={patch} clientsLoading={clientsLoading} clientsError={clientsError} />
             <div className="mt-3">
               <label className={label} htmlFor="ci-next-quick">Első következő ügyvédi lépés</label>
               <input
