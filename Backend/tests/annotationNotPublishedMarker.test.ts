@@ -65,3 +65,24 @@ describe('the marker is wired into every client-explanation surface', () => {
     expect(page).not.toMatch(/Publikálás|publishAnnotation|publishToClient/);
   });
 });
+
+/**
+ * Regression: found during authenticated production acceptance. Switching V1 -> V2
+ * kept the previously selected V1 annotation id, so the comments effect re-fired
+ * against the NEW version with the OLD annotation id. The API correctly answered
+ * 404 (version scoping held), but the client logged an error for a request that
+ * should never have been made.
+ */
+describe('annotation selection does not survive a version switch', () => {
+  it('clears the selected annotation and its comments whenever the version changes', () => {
+    const effectStart = page.indexOf('const refreshAnnotations');
+    const marker = page.indexOf('}, [selectedUploadedDocument?.id, selectedVersion?.id, refreshAnnotations]);', effectStart);
+    expect(marker).toBeGreaterThan(-1);
+    const effect = page.slice(page.lastIndexOf('useEffect(', marker), marker);
+    // The reset must happen unconditionally, not only in the "no document" branch.
+    expect(effect).toContain('setSelectedAnnotationId(null)');
+    expect(effect).toContain('setAnnotationComments([])');
+    const guardIndex = effect.indexOf('if (selectedUploadedDocument?.id && selectedVersion?.id)');
+    expect(effect.indexOf('setSelectedAnnotationId(null)')).toBeLessThan(guardIndex);
+  });
+});

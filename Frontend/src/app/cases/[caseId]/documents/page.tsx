@@ -1161,12 +1161,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   }, []);
 
   useEffect(() => {
+    // Annotations are version-scoped, so a selection never survives a version
+    // switch. Clearing it first prevents the comments effect from re-firing with
+    // the previous version's annotation id against the newly selected version,
+    // which the API (correctly) rejects as not found.
+    setSelectedAnnotationId(null);
+    setAnnotationComments([]);
     if (selectedUploadedDocument?.id && selectedVersion?.id) {
       void refreshAnnotations(selectedUploadedDocument.id, selectedVersion.id);
     } else {
       setAnnotations([]);
-      setSelectedAnnotationId(null);
-      setAnnotationComments([]);
     }
   }, [selectedUploadedDocument?.id, selectedVersion?.id, refreshAnnotations]);
 
