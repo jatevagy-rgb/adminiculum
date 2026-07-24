@@ -46,10 +46,11 @@ describe('Top tabs reduced to Áttekintés + Kommunikáció', () => {
 
 describe('Inline actions wired into the workspace', () => {
   it('exposes create/edit task, upload, deadline, and case-comment triggers', () => {
-    expect(overview).toContain('+ Új feladat');
-    expect(overview).toContain('Szerkesztés');
+    // Primary actions live in the hero; panel-level triggers are compact.
+    expect(overview).toContain('Új feladat');
+    expect(overview).toContain('+ Feladat');
     expect(overview).toContain('+ Feltöltés');
-    expect(overview).toContain('+ Határidős feladat');
+    expect(overview).toContain('+ Határidő');
     expect(overview).toContain('+ Megjegyzés');
     expect(overview).toContain('Kommentek');
   });
@@ -72,8 +73,8 @@ describe('Inline actions wired into the workspace', () => {
   });
 
   it('keeps discreet secondary links into the compatibility routes', () => {
-    expect(overview).toContain('function SecondaryLink');
-    expect(overview).toContain(`/cases/${'${caseId}'}/documents`);
+    // The cockpit links out to the communication log rather than duplicating it.
+    expect(overview).toContain(`/cases/${'${caseId}'}/communications`);
   });
 
   it('preserves the explicit time-unavailable state (never fake)', () => {

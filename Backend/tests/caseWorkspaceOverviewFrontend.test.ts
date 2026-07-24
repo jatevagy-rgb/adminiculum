@@ -2,85 +2,178 @@ import fs from 'fs';
 import path from 'path';
 
 const repoRoot = path.join(__dirname, '..', '..');
-const overview = fs.readFileSync(
-  path.join(repoRoot, 'Frontend/src/components/cases/CaseWorkspaceOverview.tsx'),
-  'utf8',
-);
-const caseDetail = fs.readFileSync(
-  path.join(repoRoot, 'Frontend/src/components/CaseDetail.tsx'),
-  'utf8',
-);
+const read = (rel: string) => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
 
-describe('CaseWorkspaceOverview mini-dashboard', () => {
-  it('fetches the workspace endpoint through the central API client', () => {
+const overview = read('Frontend/src/components/cases/CaseWorkspaceOverview.tsx');
+const panels = read('Frontend/src/components/cases/CaseCockpitPanels.tsx');
+const caseDetail = read('Frontend/src/components/CaseDetail.tsx');
+
+/**
+ * The matter overview is an operational cockpit, not a stack of equal-weight
+ * white modules. These guards encode the information architecture the redesign
+ * requires, replacing the previous mini-dashboard contract.
+ */
+describe('matter cockpit — data source and states', () => {
+  it('fetches the workspace projection through the central API client', () => {
     expect(overview).toContain('getCaseWorkspace(caseId)');
-    // no ad-hoc fetch() inside the component
     expect(overview).not.toMatch(/\bfetch\(/);
   });
 
-  it('renders loading, error and empty states', () => {
+  it('renders loading, error and refresh states', () => {
     expect(overview).toContain('Az ügy-munkatér betöltése…');
     expect(overview).toContain('<SafePanelError');
-    expect(overview).toContain('void load()'); // retry
+    expect(overview).toContain('void load()');
+    expect(overview).toContain('const refresh = useCallback');
   });
 
-  it('renders the case header with client, status, priority and responsible', () => {
-    expect(overview).toContain('aria-label="Ügyfejléc"');
-    expect(overview).toContain('getCaseStatusLabel(c.status)');
-    expect(overview).toContain('c.assignedLawyer?.name');
-    expect(overview).toContain('c.client?.name');
-  });
-
-  it('renders the editable-instruction block read-only (no fake edit button)', () => {
-    expect(overview).toContain('Ügyvédi instrukció');
-    expect(overview).toContain('c.description');
-    expect(overview).toContain('Következő lépés');
-  });
-
-  it('renders six summary cards', () => {
-    const cards = (overview.match(/<SummaryCard /g) || []).length;
-    expect(cards).toBe(6);
-    expect(overview).toContain('Nyitott feladatok');
-    expect(overview).toContain('Kommunikáció');
-  });
-
-  it('renders task, document, deadline, communication and activity panels', () => {
-    for (const id of ['cw-tasks', 'cw-documents', 'cw-deadlines', 'cw-comms', 'cw-activity', 'cw-time']) {
-      expect(overview).toContain(`id="${id}"`);
+  it('takes every operational summary from the server cockpit, never inventing one', () => {
+    expect(overview).toContain('const cp = ws.cockpit');
+    for (const kpi of ['cp.kpi.openTasks', 'cp.kpi.deadlines', 'cp.kpi.communication', 'cp.kpi.review', 'cp.kpi.activeDocuments']) {
+      expect(overview).toContain(kpi);
     }
-    expect(overview).toContain('ws.tasks.map');
-    expect(overview).toContain('ws.documents.map');
-    expect(overview).toContain('ws.deadlines.map');
-    expect(overview).toContain('ws.communications.map');
-    expect(overview).toContain('ws.activity.map');
+  });
+});
+
+describe('matter hero', () => {
+  it('leads with the matter and its operational identity', () => {
+    expect(overview).toContain('data-testid="matter-hero"');
+    expect(overview).toContain('c.client?.name');
+    expect(overview).toContain('c.matterType');
+    expect(overview).toContain('getCaseStatusLabel(c.status)');
+    expect(overview).toContain('cp.responsible?.name');
   });
 
-  it('renders human-readable activity (actor + actionLabel + objectLabel), not generic', () => {
+  it('surfaces urgency, next step and next deadline in the hero', () => {
+    expect(overview).toContain('URGENCY_STYLE');
+    expect(overview).toContain('data-testid="hero-next-step"');
+    expect(overview).toContain('data-testid="hero-next-deadline"');
+  });
+
+  it('offers the three primary actions', () => {
+    expect(overview).toContain('Új feladat');
+    expect(overview).toContain('Kommunikáció hozzáadása');
+    expect(overview).toContain('Dokumentum feltöltése');
+  });
+});
+
+describe('functional KPI row', () => {
+  it('renders exactly the six required cards', () => {
+    const cards = (overview.match(/<KpiCard\b/g) || []).length;
+    expect(cards).toBe(6);
+    for (const label of ['Nyitott feladatok', 'Közelgő határidők', 'Kommunikáció', 'Review tételek', 'Aktív dokumentumok', 'Következő lépés']) {
+      expect(overview).toContain(label);
+    }
+  });
+
+  it('gives every card a meaningful secondary line, not a bare count', () => {
+    expect(overview).toContain('secondary={cp.kpi.openTasks.secondary}');
+    expect(overview).toContain('secondary={cp.kpi.deadlines.secondary}');
+    expect(overview).toContain('secondary={cp.kpi.communication.secondary}');
+  });
+
+  it('cards are click-through controls that jump to their panel', () => {
+    expect(panels).toContain('href={`#${targetId}`}');
+    expect(panels).toContain('data-testid={`kpi-${targetId}`}');
+  });
+
+  it('emphasises a card when it demands attention', () => {
+    expect(overview).toContain('emphasised={cp.kpi.openTasks.urgentCount > 0}');
+    expect(overview).toContain('emphasised={cp.kpi.communication.replyNeededCount > 0}');
+  });
+});
+
+describe('two-column operational layout', () => {
+  it('uses a responsive two-column grid that collapses to one column', () => {
+    expect(overview).toContain('xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]');
+    expect(overview).toContain('grid-cols-1');
+  });
+
+  it('groups work by when it must be acted on', () => {
+    expect(overview).toContain('data-testid="task-group-immediate"');
+    expect(overview).toContain('data-testid="task-group-today"');
+    expect(overview).toContain('data-testid="task-group-later"');
+    expect(overview).toContain('Azonnali');
+    expect(overview).toContain('cp.taskGroups.immediate');
+  });
+
+  it('renders a grouped deadline timeline', () => {
+    expect(overview).toContain('data-testid="deadline-timeline"');
+    for (const label of ['Ma', 'Holnap', 'Ezen a héten', 'Később']) {
+      expect(overview).toContain(`"${label}"`);
+    }
+    expect(overview).toContain('cp.deadlineGroups.today');
+  });
+
+  it('distinguishes matter deadlines from task deadlines', () => {
+    expect(panels).toContain('Ügyhatáridő');
+    expect(panels).toContain('d.source === "MATTER"');
+  });
+
+  it('flags communication awaiting a reply and internal vs external', () => {
+    expect(overview).toContain('data-testid="reply-needed"');
+    expect(overview).toContain('m.internal ?');
+  });
+
+  it('shows only operationally relevant documents, each with a reason', () => {
+    expect(overview).toContain('data-testid="active-documents"');
+    expect(overview).toContain('cp.activeDocuments');
+    expect(overview).toContain('Review-ra vár');
+    expect(overview).toContain('Határidő lejárt');
+    // The whole repository must not be dumped into the panel.
+    expect(overview).not.toContain('ws.documents.map');
+  });
+});
+
+describe('empty states are actionable', () => {
+  it('every empty state offers the next useful action', () => {
+    expect(panels).toContain('data-testid="actionable-empty"');
+    for (const action of [
+      'Első feladat létrehozása',
+      'Határidő hozzáadása',
+      'E-mail thread hozzárendelése',
+      'Dokumentum feltöltése',
+      'Első megjegyzés létrehozása',
+    ]) {
+      expect(overview).toContain(action);
+    }
+  });
+
+  it('does not render large passive "Nincs…" panels', () => {
+    expect(overview).not.toContain('<Empty title=');
+  });
+});
+
+describe('secondary area', () => {
+  it('renders structured activity with actor, action and object as parts', () => {
+    expect(overview).toContain('data-testid="activity-feed"');
+    expect(overview).toContain('a.actor');
     expect(overview).toContain('a.actionLabel');
     expect(overview).toContain('a.objectLabel');
     expect(overview).not.toContain('Esemény rögzítve');
   });
 
-  it('renders the explicit time-unavailable state, never a fake value', () => {
+  it('keeps time secondary and honest', () => {
     expect(overview).toContain('ws.time.available');
     expect(overview).toContain('Nem áll rendelkezésre megbízható ügy-szintű összesítés.');
   });
+});
 
-  it('surfaces per-section partial errors from warnings', () => {
-    expect(overview).toContain("warn(\"communications\")");
-    expect(overview).toContain('ws.warnings.find');
+describe('visual system', () => {
+  it('uses the shared functional accent map rather than ad-hoc colours', () => {
+    for (const accent of ['petrol', 'terracotta', 'green', 'ochre', 'navy', 'neutral']) {
+      expect(panels).toContain(`${accent}:`);
+    }
+    expect(overview).toContain('ACCENT.terracotta');
   });
 
-  it('uses the attention-category presentation for task badges', () => {
-    expect(overview).toContain('attentionPresentation(t.attentionCategory)');
-    expect(overview).toContain('formatEstimateRange');
+  it('no longer renders the old equal-weight white panel stack', () => {
+    expect(overview).not.toContain('<Panel id="cw-');
+    expect(overview).not.toContain('<SummaryCard ');
   });
 });
 
-describe('CaseDetail wires the workspace overview as the dominant surface', () => {
-  it('renders only CaseWorkspaceOverview and not the retired legacy overview', () => {
+describe('CaseDetail wiring', () => {
+  it('renders the cockpit as the case overview surface', () => {
     expect(caseDetail).toContain('<CaseWorkspaceOverview caseId={canonicalCaseId} />');
-    expect(caseDetail).not.toContain('import { CaseCenterOverview }');
-    expect(caseDetail).not.toContain('<CaseCenterOverview');
   });
 });

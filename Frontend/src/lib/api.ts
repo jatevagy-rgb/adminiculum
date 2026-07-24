@@ -348,9 +348,20 @@ export interface CasesResponse {
 }
 
 // Case workspace overview read projection (GET /cases/:caseId/workspace).
+export interface CockpitDeadline {
+  id: string;
+  title: string;
+  dueAt: string;
+  source: 'MATTER' | 'TASK';
+  deadlineType: string;
+  assignee: { id: string; name: string } | null;
+  overdue: boolean;
+}
+
 export interface CaseWorkspace {
   case: {
     id: string; caseNumber: string; title: string; status: string; priority: string;
+    matterType: string | null;
     client: { id: string; name: string; colorKey: string | null } | null;
     assignedLawyer: { id: string; name: string } | null;
     description: string | null; nextStep: string | null;
@@ -367,6 +378,24 @@ export interface CaseWorkspace {
   communications: Array<{ id: string; type: string; subject: string | null; contentPreview: string | null; sender: string | null; timestamp: string | null; internal: boolean; taskId: string | null; documentId: string | null }>;
   activity: Array<{ id: string; actor: string | null; actionLabel: string; objectLabel: string; occurredAt: string; objectType: string; objectId: string | null }>;
   comments: Array<{ id: string; author: { id: string; name: string } | null; content: string; status: 'OPEN' | 'RESOLVED'; createdAt: string | null }>;
+  cockpit: {
+    urgency: 'CRITICAL' | 'ATTENTION' | 'STEADY';
+    nextStep: { label: string; source: string; dueAt: string | null; objectId: string | null } | null;
+    responsible: { id: string; name: string } | null;
+    kpi: {
+      openTasks: { count: number; urgentCount: number; secondary: string };
+      deadlines: { count: number; nextDueAt: string | null; secondary: string };
+      communication: { count: number; replyNeededCount: number; secondary: string };
+      review: { count: number; secondary: string };
+      activeDocuments: { count: number; secondary: string };
+    };
+    taskGroups: { immediate: string[]; today: string[]; later: string[] };
+    deadlineGroups: {
+      today: CockpitDeadline[]; tomorrow: CockpitDeadline[]; thisWeek: CockpitDeadline[]; later: CockpitDeadline[];
+    };
+    replyNeeded: string[];
+    activeDocuments: Array<{ id: string; fileName: string; reason: string }>;
+  };
   warnings: Array<{ section: string; code: string; message: string }>;
 }
 

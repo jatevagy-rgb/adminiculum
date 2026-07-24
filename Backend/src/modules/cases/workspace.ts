@@ -44,6 +44,7 @@ export interface CaseWorkspaceDto {
     title: string;
     status: string;
     priority: string;
+    matterType: string | null;
     client: { id: string; name: string; colorKey: string | null } | null;
     assignedLawyer: { id: string; name: string } | null;
     description: string | null;
@@ -144,6 +145,7 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
       title: true,
       status: true,
       priority: true,
+      matterType: true,
       description: true,
       createdAt: true,
       updatedAt: true,
@@ -423,6 +425,7 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
       title: caseRecord.title,
       status: String(caseRecord.status),
       priority: String(caseRecord.priority),
+      matterType: (caseRecord as { matterType?: string | null }).matterType ?? null,
       client: caseRecord.client ? { id: caseRecord.client.id, name: caseRecord.client.name, colorKey: caseRecord.client.colorKey ? String(caseRecord.client.colorKey) : null } : null,
       assignedLawyer: caseRecord.assignedLawyer ? { id: caseRecord.assignedLawyer.id, name: caseRecord.assignedLawyer.name } : null,
       description: caseRecord.description ?? null,

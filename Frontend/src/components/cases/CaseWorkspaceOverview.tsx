@@ -1,20 +1,30 @@
 "use client";
 
+/**
+ * Matter overview cockpit (MATTER-OVERVIEW-COCKPIT-1).
+ *
+ * Replaces the former vertical stack of equal-weight white modules. The layout is
+ * organised so the first screen answers: what is urgent, what is next, who owns
+ * it, what is due, what awaits a reply, which document we are on, what is in
+ * review. All summary semantics come from the server `cockpit` projection — this
+ * component never invents an operational number.
+ */
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getCaseWorkspace, startTask, submitTask, type CaseWorkspace } from "@/lib/api";
 import { getCaseStatusLabel } from "@/lib/caseLabels";
 import { taskStatusLabel } from "@/lib/taskWorkflowPresentation";
-import { attentionPresentation, formatEstimateRange, type AttentionCategory } from "@/lib/attentionCategory";
+import { attentionPresentation, type AttentionCategory } from "@/lib/attentionCategory";
 import { CompactState, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
-import { AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
+import { AdminButton } from "@/components/adminiculum/ui";
 import { ClientAccent } from "@/components/clients/ClientAccent";
 import {
-  TaskFormModal,
-  DocumentUploadModal,
-  CaseCommentModal,
-  DocumentCommentsModal,
+  TaskFormModal, DocumentUploadModal, CaseCommentModal, DocumentCommentsModal,
 } from "@/components/cases/CaseWorkspaceActions";
+import {
+  ACCENT, KpiCard, CockpitSection, ActionableEmpty, DeadlineRow, TaskCard,
+  fmtDate, fmtDateTime, type Accent,
+} from "@/components/cases/CaseCockpitPanels";
 
 type WorkspaceTask = CaseWorkspace["tasks"][number];
 type WorkspaceDoc = CaseWorkspace["documents"][number];
@@ -24,54 +34,19 @@ type ModalState =
   | { type: "task-create" }
   | { type: "task-edit"; task: WorkspaceTask }
   | { type: "deadline-create" }
-  | { type: "deadline-edit"; task: WorkspaceTask }
   | { type: "doc-upload" }
   | { type: "case-comment" }
   | { type: "doc-comments"; doc: WorkspaceDoc };
 
-function fmtDate(v?: string | null): string {
-  if (!v) return "—";
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("hu-HU");
-}
-function fmtDateTime(v?: string | null): string {
-  if (!v) return "—";
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString("hu-HU", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-}
 function isAttention(v: string | null): v is AttentionCategory {
   return v === "QUICK_SCAN" || v === "APPROVAL" || v === "SIGNATURE" || v === "EDITING" || v === "DETAILED_REVIEW";
 }
 
-function Panel({ id, title, action, children }: { id: string; title: string; action?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section id={id} className="overflow-hidden rounded-xl border border-[var(--adm-border)] bg-white shadow-[0_10px_28px_rgba(0,42,35,0.035)]" aria-labelledby={`${id}-h`}>
-      <div className="flex min-h-14 items-center justify-between gap-3 border-b border-[var(--adm-border)] px-4 py-3">
-        <h3 id={`${id}-h`} className="font-serif text-[18px] font-medium text-[var(--adm-text)]">{title}</h3>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Empty({ title }: { title: string }) {
-  return <div className="px-4 py-5 text-[12px] text-[var(--adm-text-muted)]">{title}</div>;
-}
-
-function SummaryCard({ label, value, target }: { label: string; value: React.ReactNode; target: string }) {
-  return (
-    <a href={`#${target}`} className="block rounded-xl border border-[var(--adm-border)] bg-white p-3 shadow-[0_8px_24px_rgba(0,42,35,0.03)] transition-colors hover:bg-[var(--adm-ivory-100)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)] focus-visible:ring-offset-2">
-      <span className="block text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">{label}</span>
-      <span className="mt-1 block font-serif text-[24px] font-medium text-[var(--adm-text)]">{value}</span>
-    </a>
-  );
-}
-
-/** Secondary (non-dominant) link into a legacy compatibility route for full detail. */
-function SecondaryLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return <Link href={href} className="text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">{children}</Link>;
-}
+const URGENCY_STYLE: Record<string, { label: string; accent: Accent }> = {
+  CRITICAL: { label: "Sürgős beavatkozás", accent: "terracotta" },
+  ATTENTION: { label: "Figyelmet igényel", accent: "ochre" },
+  STEADY: { label: "Ütemben", accent: "green" },
+};
 
 export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   const [ws, setWs] = useState<CaseWorkspace | null>(null);
@@ -83,266 +58,337 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setWs(await getCaseWorkspace(caseId));
-    } catch {
-      setError("Az ügy-munkatér most nem tölthető be.");
-    } finally {
-      setLoading(false);
-    }
+    setLoading(true); setError(null);
+    try { setWs(await getCaseWorkspace(caseId)); }
+    catch { setError("Az ügy-munkatér most nem tölthető be."); }
+    finally { setLoading(false); }
   }, [caseId]);
 
-  // Panel-consistent refetch after an inline action — no full remount, no page reload.
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    try {
-      setWs(await getCaseWorkspace(caseId));
-    } catch {
-      /* keep last-good projection; surfaced errors come from the action itself */
-    } finally {
-      setRefreshing(false);
-    }
+    try { setWs(await getCaseWorkspace(caseId)); }
+    catch { /* keep the last good projection; action errors surface separately */ }
+    finally { setRefreshing(false); }
   }, [caseId]);
 
   useEffect(() => { void load(); }, [load]);
 
   const quickStatus = useCallback(async (task: WorkspaceTask, kind: "start" | "submit") => {
     if (rowBusy) return;
-    setRowBusy(task.id);
-    setActionError(null);
+    setRowBusy(task.id); setActionError(null);
     try {
-      if (kind === "start") await startTask(task.id);
-      else await submitTask(task.id);
+      if (kind === "start") await startTask(task.id); else await submitTask(task.id);
       await refresh();
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "A státuszváltás nem sikerült.");
-    } finally {
-      setRowBusy(null);
-    }
+    } finally { setRowBusy(null); }
   }, [rowBusy, refresh]);
 
+  const tasksById = useMemo(() => new Map((ws?.tasks || []).map((t) => [t.id, t])), [ws?.tasks]);
+
   if (loading) {
-    return <div className="rounded-xl border border-[var(--adm-border)] bg-white"><CompactState title="Az ügy-munkatér betöltése…" /></div>;
+    return <div className="rounded-lg bg-white"><CompactState title="Az ügy-munkatér betöltése…" /></div>;
   }
   if (error || !ws) {
     return <div role="alert"><SafePanelError onRetry={() => void load()} detail={error || "Az ügy-munkatér most nem érhető el."} /></div>;
   }
 
   const c = ws.case;
-  const warn = (section: string) => ws.warnings.find((w) => w.section === section && w.code !== "DOCUMENT_META_LIMITED" && w.code !== "CASE_TIME_NOT_ATTRIBUTABLE");
-  const timeValue = ws.time.available ? `${ws.time.loggedMinutes} perc` : "Nem elérhető";
-  const statusUpper = (s: string) => s.toUpperCase();
+  const cp = ws.cockpit;
+  const warn = (section: string) => ws.warnings.find(
+    (w) => w.section === section && w.code !== "DOCUMENT_META_LIMITED" && w.code !== "CASE_TIME_NOT_ATTRIBUTABLE",
+  );
+  const urgency = URGENCY_STYLE[cp.urgency] || URGENCY_STYLE.STEADY;
+  const groupTasks = (ids: string[]) => ids.map((id) => tasksById.get(id)).filter(Boolean) as WorkspaceTask[];
+  const immediate = groupTasks(cp.taskGroups.immediate);
+  const today = groupTasks(cp.taskGroups.today);
+  const later = groupTasks(cp.taskGroups.later);
+  const replyNeeded = new Set(cp.replyNeeded);
+  const allDeadlines = [
+    ...cp.deadlineGroups.today, ...cp.deadlineGroups.tomorrow,
+    ...cp.deadlineGroups.thisWeek, ...cp.deadlineGroups.later,
+  ];
+
+  const taskRow = (t: WorkspaceTask, accent: Accent) => (
+    <div key={t.id} className="border-b border-[rgba(22,32,26,0.06)] last:border-b-0">
+      <TaskCard
+        task={t}
+        accent={accent}
+        statusLabel={taskStatusLabel(t.status)}
+        attentionLabel={isAttention(t.attentionCategory) ? attentionPresentation(t.attentionCategory).label : null}
+        onEdit={() => setModal({ type: "task-edit", task: t })}
+      />
+      <div className="flex flex-wrap gap-2 px-3 pb-2 pl-[26px]">
+        {t.status.toUpperCase() === "TODO" || t.status.toUpperCase() === "PENDING" ? (
+          <AdminButton variant="neutral" size="xs" disabled={rowBusy === t.id} onClick={() => void quickStatus(t, "start")}>
+            {rowBusy === t.id ? "…" : "Indítás"}
+          </AdminButton>
+        ) : t.status.toUpperCase() === "IN_PROGRESS" ? (
+          <AdminButton variant="neutral" size="xs" disabled={rowBusy === t.id} onClick={() => void quickStatus(t, "submit")}>
+            {rowBusy === t.id ? "…" : "Beküldés review-ra"}
+          </AdminButton>
+        ) : null}
+      </div>
+    </div>
+  );
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {refreshing ? <div aria-live="polite" className="text-[11px] font-semibold text-[var(--adm-text-muted)]">Frissítés…</div> : null}
-      {actionError ? <div role="alert" className="rounded-md border border-[var(--adm-terracotta-700)] bg-[var(--adm-terracotta-50,#FBEBE7)] px-3 py-2 text-[12px] font-semibold text-[var(--adm-terracotta-700)]">{actionError}</div> : null}
+      {actionError ? (
+        <div role="alert" className={`rounded-md px-3 py-2 text-[12px] font-semibold ${ACCENT.terracotta.soft} ${ACCENT.terracotta.text}`}>{actionError}</div>
+      ) : null}
 
-      {/* A. Case header */}
-      <section className="overflow-hidden rounded-xl border border-[var(--adm-border)] bg-white shadow-[0_10px_28px_rgba(0,42,35,0.035)]" aria-label="Ügyfejléc">
-        <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
+      {/* ---- 1. Matter hero ------------------------------------------------ */}
+      <section aria-label="Ügy fejléc" data-testid="matter-hero" className="overflow-hidden rounded-lg bg-white shadow-[0_1px_2px_rgba(22,32,26,0.06),0_10px_28px_rgba(0,42,35,0.05)]">
+        <div className={`h-1 w-full ${ACCENT[urgency.accent].bar}`} aria-hidden="true" />
+        <div className="flex flex-wrap items-start justify-between gap-4 px-4 py-3.5">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
               <ClientAccent colorKey={c.client?.colorKey ?? null} className="h-2.5 w-2.5 shrink-0 rounded-full" />
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">{c.caseNumber}</p>
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">{c.caseNumber}</span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${ACCENT[urgency.accent].soft} ${ACCENT[urgency.accent].text}`}>
+                {urgency.label}
+              </span>
             </div>
-            <h2 className="mt-1 font-serif text-[24px] font-medium text-[var(--adm-text)]">{c.title}</h2>
-            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--adm-text-muted)]">
-              <span>{c.client?.name || "Nincs ügyfél"}</span><span aria-hidden="true">·</span>
-              <span>Felelős: {c.assignedLawyer?.name || "Nincs kijelölve"}</span><span aria-hidden="true">·</span>
-              <span>Módosítva: {fmtDate(c.updatedAt)}</span>
+            <h1 className="mt-1 font-serif text-[27px] font-semibold leading-tight text-[var(--adm-text)]">{c.title}</h1>
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-[var(--adm-text-muted)]">
+              <span className="font-semibold text-[var(--adm-text)]">{c.client?.name || "Nincs ügyfél"}</span>
+              <span aria-hidden="true">·</span><span>{c.matterType || "Ügytípus nincs"}</span>
+              <span aria-hidden="true">·</span><span>{getCaseStatusLabel(c.status)}</span>
+              <span aria-hidden="true">·</span>
+              <span>Felelős: <span className="font-semibold text-[var(--adm-text)]">{cp.responsible?.name || "Nincs kijelölve"}</span></span>
             </p>
+            <div className="mt-2.5 flex flex-wrap gap-x-6 gap-y-1.5">
+              <span className="min-w-0">
+                <span className="block text-[9.5px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Következő lépés</span>
+                <span data-testid="hero-next-step" className={`block truncate text-[12.5px] font-semibold ${ACCENT.petrol.text}`}>
+                  {cp.nextStep ? cp.nextStep.label : "Nincs kijelölt következő lépés"}
+                </span>
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[9.5px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Következő határidő</span>
+                <span data-testid="hero-next-deadline" className={`block truncate text-[12.5px] font-semibold ${cp.kpi.deadlines.nextDueAt ? ACCENT.terracotta.text : "text-[var(--adm-text-muted)]"}`}>
+                  {cp.kpi.deadlines.nextDueAt ? fmtDateTime(cp.kpi.deadlines.nextDueAt) : "Nincs határidő"}
+                </span>
+              </span>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <AdminStatusPill tone="sage">{getCaseStatusLabel(c.status)}</AdminStatusPill>
-            <AdminStatusPill tone={c.priority === "URGENT" || c.priority === "HIGH" ? "amber" : "neutral"}>{c.priority}</AdminStatusPill>
+          {/* Primary actions — secondary links must not compete with these. */}
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <AdminButton variant="primary" size="sm" onClick={() => setModal({ type: "task-create" })}>Új feladat</AdminButton>
+            <AdminButton variant="neutral" size="sm" onClick={() => setModal({ type: "case-comment" })}>Kommunikáció hozzáadása</AdminButton>
+            <AdminButton variant="neutral" size="sm" onClick={() => setModal({ type: "doc-upload" })}>Dokumentum feltöltése</AdminButton>
           </div>
         </div>
       </section>
 
-      {/* B. Instruction block (read-only in this slice) */}
-      <section className="overflow-hidden rounded-xl border border-[var(--adm-border)] bg-[var(--adm-ivory-100)]" aria-label="Ügyvédi instrukció">
-        <div className="border-b border-[var(--adm-border)] px-4 py-2.5"><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyvédi instrukció</p></div>
-        <div className="space-y-3 px-4 py-4">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">Feladatleírás / instrukció</p>
-            <p className="mt-1 whitespace-pre-line text-[13px] leading-6 text-[var(--adm-text)]">{c.description || "Ehhez az ügyhöz még nincs rögzített instrukció."}</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">Következő lépés</p>
-            <p className="mt-1 text-[13px] leading-6 text-[var(--adm-text)]">{c.nextStep || "Nincs rögzített következő lépés."}</p>
-          </div>
-        </div>
+      {/* ---- 2. Functional KPI row ----------------------------------------- */}
+      <section aria-label="Operatív mutatók" data-testid="kpi-row" className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+        <KpiCard targetId="ck-tasks" label="Nyitott feladatok" accent={cp.kpi.openTasks.urgentCount > 0 ? "terracotta" : "petrol"}
+          emphasised={cp.kpi.openTasks.urgentCount > 0} value={cp.kpi.openTasks.count} secondary={cp.kpi.openTasks.secondary} />
+        <KpiCard targetId="ck-deadlines" label="Közelgő határidők" accent="terracotta"
+          emphasised={cp.deadlineGroups.today.length > 0} value={cp.kpi.deadlines.count} secondary={cp.kpi.deadlines.secondary} />
+        <KpiCard targetId="ck-comms" label="Kommunikáció" accent="terracotta"
+          emphasised={cp.kpi.communication.replyNeededCount > 0} value={cp.kpi.communication.count} secondary={cp.kpi.communication.secondary} />
+        <KpiCard targetId="ck-tasks" label="Review tételek" accent="navy"
+          emphasised={cp.kpi.review.count > 0} value={cp.kpi.review.count} secondary={cp.kpi.review.secondary} />
+        <KpiCard targetId="ck-documents" label="Aktív dokumentumok" accent="ochre"
+          emphasised={cp.kpi.activeDocuments.count > 0} value={cp.kpi.activeDocuments.count} secondary={cp.kpi.activeDocuments.secondary} />
+        <KpiCard targetId="ck-tasks" label="Következő lépés" accent="petrol"
+          value={<span className="text-[14px] font-semibold leading-tight">{cp.nextStep ? "Kijelölve" : "Nincs"}</span>}
+          secondary={cp.nextStep ? cp.nextStep.label : "Jelölj ki teendőt"} />
       </section>
 
-      {/* C. Six summary cards */}
-      <section className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6" aria-label="Összefoglaló metrikák">
-        <SummaryCard label="Nyitott feladatok" value={ws.metrics.openTaskCount} target="cw-tasks" />
-        <SummaryCard label="Dokumentumok" value={ws.metrics.documentCount} target="cw-documents" />
-        <SummaryCard label="Munkaidő" value={timeValue === "Nem elérhető" ? <span className="text-[13px] font-semibold text-[var(--adm-text-muted)]">Nem elérhető</span> : timeValue} target="cw-time" />
-        <SummaryCard label="Határidők" value={ws.metrics.openDeadlineCount} target="cw-deadlines" />
-        <SummaryCard label="Review" value={ws.metrics.reviewCount ?? "—"} target="cw-tasks" />
-        <SummaryCard label="Kommunikáció" value={ws.metrics.communicationCount} target="cw-comms" />
-      </section>
-
-      {/* D. Active tasks — inline create / edit / quick status */}
-      <Panel id="cw-tasks" title="Aktív feladatok" action={
-        <div className="flex items-center gap-3">
-          <AdminButton variant="primary" size="xs" onClick={() => setModal({ type: "task-create" })}>+ Új feladat</AdminButton>
-          <SecondaryLink href="/tasks">Minden feladat →</SecondaryLink>
-        </div>
-      }>
-        {warn("tasks") ? <Empty title="A feladatok most nem érhetők el." /> : ws.tasks.length === 0 ? <Empty title="Nincs nyitott feladat ezen az ügyön." /> : (
-          <div className="divide-y divide-[var(--adm-border)]">
-            {ws.tasks.map((t) => (
-              <div key={t.id} className="px-4 py-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Link href={`/tasks?taskId=${encodeURIComponent(t.id)}`} className="text-[13px] font-semibold text-[var(--adm-text)] hover:underline">{t.title}</Link>
-                  {isAttention(t.attentionCategory) ? <AdminStatusPill tone="sage">{attentionPresentation(t.attentionCategory).label}</AdminStatusPill> : null}
-                </div>
-                <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-[var(--adm-text-muted)]">
-                  <span>{taskStatusLabel(t.status)}</span><span aria-hidden="true">·</span>
-                  <span>{t.priority}</span><span aria-hidden="true">·</span>
-                  <span>{t.assignee?.name || "Felelős nincs"}</span>
-                  {isAttention(t.attentionCategory) && t.estimatedMinutes != null ? <><span aria-hidden="true">·</span><span>{formatEstimateRange(t.estimatedMinutes, t.estimatedMinutes)}</span></> : null}
-                  <span aria-hidden="true">·</span><span>Határidő: {fmtDate(t.dueDate)}</span>
-                </p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "task-edit", task: t })}>Szerkesztés</AdminButton>
-                  {statusUpper(t.status) === "TODO" || statusUpper(t.status) === "PENDING" ? (
-                    <AdminButton variant="neutral" size="xs" disabled={rowBusy === t.id} onClick={() => void quickStatus(t, "start")}>{rowBusy === t.id ? "…" : "Indítás"}</AdminButton>
-                  ) : statusUpper(t.status) === "IN_PROGRESS" ? (
-                    <AdminButton variant="neutral" size="xs" disabled={rowBusy === t.id} onClick={() => void quickStatus(t, "submit")}>{rowBusy === t.id ? "…" : "Beküldés review-ra"}</AdminButton>
-                  ) : null}
-                </div>
+      {/* ---- 3. Two-column operational layout ------------------------------ */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        {/* -------- Left: work and time pressure -------- */}
+        <div className="min-w-0 space-y-4">
+          <CockpitSection id="ck-tasks" title="Teendők most" accent="petrol" count={ws.tasks.length}
+            action={<AdminButton variant="primary" size="xs" onClick={() => setModal({ type: "task-create" })}>+ Feladat</AdminButton>}>
+            {warn("tasks") ? (
+              <ActionableEmpty message="A feladatok most nem érhetők el." actionLabel="Újratöltés" onAction={() => void refresh()} />
+            ) : ws.tasks.length === 0 ? (
+              <ActionableEmpty message="Nincs nyitott feladat ezen az ügyön." actionLabel="Első feladat létrehozása" onAction={() => setModal({ type: "task-create" })} />
+            ) : (
+              <div>
+                {immediate.length > 0 ? (
+                  <div data-testid="task-group-immediate">
+                    <p className={`px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.12em] ${ACCENT.terracotta.text}`}>Azonnali</p>
+                    {immediate.map((t) => taskRow(t, "terracotta"))}
+                  </div>
+                ) : null}
+                {today.length > 0 ? (
+                  <div data-testid="task-group-today">
+                    <p className={`px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.12em] ${ACCENT.ochre.text}`}>Ma</p>
+                    {today.map((t) => taskRow(t, "ochre"))}
+                  </div>
+                ) : null}
+                {later.length > 0 ? (
+                  <div data-testid="task-group-later">
+                    <p className="px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Később</p>
+                    {later.map((t) => taskRow(t, "neutral"))}
+                  </div>
+                ) : null}
               </div>
-            ))}
-          </div>
-        )}
-      </Panel>
+            )}
+          </CockpitSection>
 
-      {/* E. Documents — inline upload + per-document comments */}
-      <Panel id="cw-documents" title="Dokumentumok" action={
-        <div className="flex items-center gap-3">
-          <AdminButton variant="primary" size="xs" onClick={() => setModal({ type: "doc-upload" })}>+ Feltöltés</AdminButton>
-          <SecondaryLink href={`/cases/${caseId}/documents`}>Dokumentumtár →</SecondaryLink>
+          <CockpitSection id="ck-deadlines" title="Határidők" accent="terracotta" count={cp.kpi.deadlines.count}
+            action={<AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "deadline-create" })}>+ Határidő</AdminButton>}>
+            {allDeadlines.length === 0 ? (
+              <ActionableEmpty message="Nincs rögzített határidő." actionLabel="Határidő hozzáadása" onAction={() => setModal({ type: "deadline-create" })} />
+            ) : (
+              <div data-testid="deadline-timeline">
+                {([
+                  ["Ma", cp.deadlineGroups.today],
+                  ["Holnap", cp.deadlineGroups.tomorrow],
+                  ["Ezen a héten", cp.deadlineGroups.thisWeek],
+                  ["Később", cp.deadlineGroups.later],
+                ] as const).map(([label, items]) => items.length > 0 ? (
+                  <div key={label}>
+                    <p className="px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">{label}</p>
+                    <ul className="divide-y divide-[rgba(22,32,26,0.06)]">
+                      {items.map((d) => <DeadlineRow key={d.id} d={d} />)}
+                    </ul>
+                  </div>
+                ) : null)}
+              </div>
+            )}
+          </CockpitSection>
         </div>
-      }>
-        {warn("documents") ? <Empty title="A dokumentumok most nem érhetők el." /> : ws.documents.length === 0 ? <Empty title="Ehhez az ügyhöz még nincs dokumentum." /> : (
-          <div className="divide-y divide-[var(--adm-border)]">
-            {ws.documents.map((d) => (
-              <div key={d.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-                <div className="min-w-0">
-                  <p className="truncate text-[13px] font-semibold text-[var(--adm-text)]">{d.fileName}</p>
-                  <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-[var(--adm-text-muted)]">
-                    <span>{d.category || d.type || d.mimeType || "Dokumentum"}</span>
-                    {d.version ? <><span aria-hidden="true">·</span><span>{d.version}</span></> : null}
-                    <span aria-hidden="true">·</span><span>{fmtDate(d.uploadedAt)}</span>
+
+        {/* -------- Right: correspondence and documents -------- */}
+        <div className="min-w-0 space-y-4">
+          <CockpitSection id="ck-comms" title="Kommunikáció" accent="terracotta" count={cp.kpi.communication.count}
+            action={<Link href={`/cases/${caseId}/communications`} className="text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">Napló →</Link>}>
+            {warn("communications") ? (
+              <ActionableEmpty message="A kommunikáció most nem érhető el." actionLabel="Újratöltés" onAction={() => void refresh()} />
+            ) : ws.communications.length === 0 ? (
+              <ActionableEmpty message="Ehhez az ügyhöz még nincs kommunikáció." actionLabel="E-mail thread hozzárendelése" href={`/cases/${caseId}/communications`} />
+            ) : (
+              <ul className="divide-y divide-[rgba(22,32,26,0.06)]">
+                {ws.communications.slice(0, 6).map((m) => {
+                  const needsReply = replyNeeded.has(m.id);
+                  return (
+                    <li key={m.id} className="px-3 py-2.5">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <span className="min-w-0 truncate text-[12.5px] font-semibold text-[var(--adm-text)]">{m.subject || "Nincs tárgy"}</span>
+                        <span className="flex shrink-0 items-center gap-1.5">
+                          {needsReply ? (
+                            <span data-testid="reply-needed" className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ACCENT.terracotta.soft} ${ACCENT.terracotta.text}`}>Válaszra vár</span>
+                          ) : null}
+                          <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${m.internal ? `${ACCENT.green.soft} ${ACCENT.green.text}` : `${ACCENT.terracotta.soft} ${ACCENT.terracotta.text}`}`}>
+                            {m.internal ? "Belső" : "Külső"}
+                          </span>
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-[11px] text-[var(--adm-text-muted)]">
+                        {m.sender || "Nincs forrásadat"} · {m.type} · {fmtDateTime(m.timestamp)}
+                      </p>
+                      {m.contentPreview ? <p className="mt-0.5 line-clamp-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">{m.contentPreview}</p> : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </CockpitSection>
+
+          <CockpitSection id="ck-documents" title="Dokumentumok" accent="ochre" count={cp.kpi.activeDocuments.count}
+            action={<AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "doc-upload" })}>+ Feltöltés</AdminButton>}>
+            {warn("documents") ? (
+              <ActionableEmpty message="A dokumentumok most nem érhetők el." actionLabel="Újratöltés" onAction={() => void refresh()} />
+            ) : cp.activeDocuments.length === 0 ? (
+              <ActionableEmpty message="Nincs aktív munkairat." actionLabel="Dokumentum feltöltése" onAction={() => setModal({ type: "doc-upload" })} />
+            ) : (
+              <ul data-testid="active-documents" className="divide-y divide-[rgba(22,32,26,0.06)]">
+                {cp.activeDocuments.map((d) => {
+                  const full = ws.documents.find((x) => x.id === d.id);
+                  const reasonLabel = d.reason === "REVIEW_PENDING" ? "Review-ra vár"
+                    : d.reason === "DEADLINE_PASSED" ? "Határidő lejárt" : "Munka alatt";
+                  const reasonAccent: Accent = d.reason === "REVIEW_PENDING" ? "navy"
+                    : d.reason === "DEADLINE_PASSED" ? "terracotta" : "ochre";
+                  return (
+                    <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
+                      <span className="min-w-0">
+                        <span className="block truncate text-[12.5px] font-semibold text-[var(--adm-text)]">{d.fileName}</span>
+                        <span className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ACCENT[reasonAccent].soft} ${ACCENT[reasonAccent].text}`}>
+                          {reasonLabel}
+                        </span>
+                      </span>
+                      {full ? (
+                        <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "doc-comments", doc: full })}>
+                          Kommentek{full.commentCount ? ` (${full.commentCount})` : ""}
+                        </AdminButton>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </CockpitSection>
+        </div>
+      </div>
+
+      {/* ---- 4. Secondary area: notes, activity, time ----------------------- */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <CockpitSection id="ck-notes" title="Jegyzetek" accent="green" count={ws.comments.length}
+          action={<AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "case-comment" })}>+ Megjegyzés</AdminButton>}>
+          {ws.comments.length === 0 ? (
+            <ActionableEmpty message="Nincs belső megjegyzés." actionLabel="Első megjegyzés létrehozása" onAction={() => setModal({ type: "case-comment" })} />
+          ) : (
+            <ul className="divide-y divide-[rgba(22,32,26,0.06)]">
+              {ws.comments.slice(0, 4).map((n) => (
+                <li key={n.id} className="px-3 py-2">
+                  <p className="line-clamp-2 text-[12px] text-[var(--adm-text)]">{n.content}</p>
+                  <p className="mt-0.5 text-[10px] text-[var(--adm-text-muted)]">{n.author?.name || "Rendszer"} · {fmtDate(n.createdAt)}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CockpitSection>
+
+        {/* Structured activity: actor / action / object / time as separate parts. */}
+        <CockpitSection id="ck-activity" title="Aktivitás" accent="petrol">
+          {ws.activity.length === 0 ? (
+            <ActionableEmpty message="Még nincs rögzített aktivitás." actionLabel="Első feladat létrehozása" onAction={() => setModal({ type: "task-create" })} />
+          ) : (
+            <ul data-testid="activity-feed" className="divide-y divide-[rgba(22,32,26,0.06)]">
+              {ws.activity.slice(0, 6).map((a) => (
+                <li key={a.id} className="px-3 py-2">
+                  <p className="text-[12px] leading-5 text-[var(--adm-text)]">
+                    <span className="font-semibold">{a.actor || "Rendszer"}</span>{" "}
+                    <span className="text-[var(--adm-text-muted)]">{a.actionLabel}</span>{" "}
+                    <span className="font-medium">{a.objectLabel}</span>
                   </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "doc-comments", doc: d })}>Kommentek{d.commentCount ? ` (${d.commentCount})` : ""}</AdminButton>
-                  <SecondaryLink href={`/cases/${caseId}/documents`}>Megnyitás →</SecondaryLink>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Panel>
+                  <p className="mt-0.5 text-[10px] text-[var(--adm-text-soft)]">{fmtDateTime(a.occurredAt)}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CockpitSection>
 
-      {/* F. Deadlines — task-backed (create/edit via the underlying task, close = complete) */}
-      <Panel id="cw-deadlines" title="Feladathatáridők" action={
-        <div className="flex items-center gap-3">
-          <AdminButton variant="primary" size="xs" onClick={() => setModal({ type: "deadline-create" })}>+ Határidős feladat</AdminButton>
-          <SecondaryLink href="/deadlines">Határidők →</SecondaryLink>
-        </div>
-      }>
-        {warn("tasks") ? <Empty title="A határidők most nem érhetők el." /> : ws.deadlines.length === 0 ? <Empty title="Nincs közelgő határidő ezen az ügyön." /> : (
-          <div className="divide-y divide-[var(--adm-border)]">
-            {ws.deadlines.map((d) => {
-              const backingTask = d.taskId ? ws.tasks.find((t) => t.id === d.taskId) : null;
-              return (
-                <div key={d.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px] font-semibold text-[var(--adm-text)]">{d.title}</p>
-                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{fmtDate(d.dueAt)} · {d.assignee?.name || "Felelős nincs"}</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {backingTask ? <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "deadline-edit", task: backingTask })}>Szerkesztés</AdminButton> : null}
-                    {d.taskId ? <SecondaryLink href={`/tasks?taskId=${encodeURIComponent(d.taskId)}`}>Feladat →</SecondaryLink> : null}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Panel>
+        {/* Time stays secondary and honest — never a fabricated figure. */}
+        <CockpitSection id="ck-time" title="Munkaidő" accent="neutral">
+          {ws.time.available ? (
+            <div className="px-3 py-3 text-[12.5px] text-[var(--adm-text)]">
+              Rögzített ügyidő: <span className="font-semibold">{ws.time.loggedMinutes} perc</span>
+            </div>
+          ) : (
+            <div className="px-3 py-3">
+              <p className="text-[11.5px] font-semibold text-[var(--adm-text)]">Nem áll rendelkezésre megbízható ügy-szintű összesítés.</p>
+              <p className="mt-1 text-[10.5px] leading-4 text-[var(--adm-text-muted)]">
+                A munkaidő (TimeEntry) jelenleg nem köthető közvetlenül ügyhöz; a Matter-idő nem jeleníthető meg ügyidőként.
+              </p>
+            </div>
+          )}
+        </CockpitSection>
+      </div>
 
-      {/* G. Communications summary */}
-      <Panel id="cw-comms" title="Kommunikációs kivonat" action={<SecondaryLink href="/notifications">Kommunikáció →</SecondaryLink>}>
-        {warn("communications") ? <Empty title="A kommunikáció most nem érhető el." /> : ws.communications.length === 0 ? <Empty title="Ehhez az ügyhöz még nincs kommunikáció." /> : (
-          <div className="divide-y divide-[var(--adm-border)]">
-            {ws.communications.map((m) => (
-              <div key={m.id} className="px-4 py-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="truncate text-[12px] font-semibold text-[var(--adm-blue-950)]">{m.subject || "Nincs tárgy"}</span>
-                  <span className="flex items-center gap-2"><span className="border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-0.5 text-[9px] font-semibold text-[var(--adm-text-muted)]">{m.internal ? "Belső" : "Külső"}</span><time className="text-[10px] text-[var(--adm-text-muted)]">{fmtDateTime(m.timestamp)}</time></span>
-                </div>
-                <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{m.sender || "Nincs forrásadat"} · {m.type}</p>
-                {m.contentPreview ? <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">{m.contentPreview}</p> : null}
-              </div>
-            ))}
-          </div>
-        )}
-      </Panel>
-
-      {/* H. Case notes (internal comments) — inline create */}
-      <Panel id="cw-notes" title="Ügyjegyzetek" action={<AdminButton variant="primary" size="xs" onClick={() => setModal({ type: "case-comment" })}>+ Megjegyzés</AdminButton>}>
-        {warn("comments") ? <Empty title="Az ügyjegyzetek most nem érhetők el." /> : ws.comments.length === 0 ? <Empty title="Még nincs belső megjegyzés ezen az ügyön." /> : (
-          <ul className="divide-y divide-[var(--adm-border)]">
-            {ws.comments.map((n) => (
-              <li key={n.id} className="px-4 py-3">
-                <p className="text-[12px] text-[var(--adm-text)]">{n.content}</p>
-                <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{n.author?.name || "Rendszer"} · {fmtDateTime(n.createdAt)}{n.status === "RESOLVED" ? " · Lezárva" : ""}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
-
-      {/* I. Activity */}
-      <Panel id="cw-activity" title="Ügy aktivitása">
-        {warn("activity") ? <Empty title="Az aktivitás most nem érhető el." /> : ws.activity.length === 0 ? <Empty title="Még nincs rögzített aktivitás." /> : (
-          <ul className="divide-y divide-[var(--adm-border)]">
-            {ws.activity.map((a) => (
-              <li key={a.id} className="px-4 py-3 text-[12px] text-[var(--adm-text)]">
-                <span className="font-semibold">{a.actor || "Rendszer"}</span> {a.actionLabel}: <span className="text-[var(--adm-text-muted)]">{a.objectLabel}</span>
-                <span className="ml-2 text-[10px] text-[var(--adm-text-soft)]">{fmtDateTime(a.occurredAt)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
-
-      {/* J. Time (explicit unavailable state — never fake) */}
-      <Panel id="cw-time" title="Munkaidő">
-        {ws.time.available ? (
-          <div className="px-4 py-4 text-[13px] text-[var(--adm-text)]">Rögzített ügyidő: <span className="font-semibold">{ws.time.loggedMinutes} perc</span></div>
-        ) : (
-          <div className="px-4 py-4">
-            <p className="text-[12px] font-semibold text-[var(--adm-text)]">Nem áll rendelkezésre megbízható ügy-szintű összesítés.</p>
-            <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">A munkaidő (TimeEntry) jelenleg nem köthető közvetlenül ügyhöz; a Matter-idő nem jeleníthető meg ügyidőként. Ehhez schema-változás szükséges.</p>
-          </div>
-        )}
-      </Panel>
-
-      {/* Inline action modals */}
+      {/* ---- inline action modals ------------------------------------------ */}
       {modal?.type === "task-create" ? <TaskFormModal caseId={caseId} mode="create" onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "task-edit" ? <TaskFormModal caseId={caseId} mode="edit" task={modal.task} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "deadline-create" ? <TaskFormModal caseId={caseId} mode="create" deadlineMode onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
-      {modal?.type === "deadline-edit" ? <TaskFormModal caseId={caseId} mode="edit" deadlineMode task={modal.task} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "doc-upload" ? <DocumentUploadModal caseId={caseId} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "case-comment" ? <CaseCommentModal caseId={caseId} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "doc-comments" ? <DocumentCommentsModal documentId={modal.doc.id} documentName={modal.doc.fileName} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
