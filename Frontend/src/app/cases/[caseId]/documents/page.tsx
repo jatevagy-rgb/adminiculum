@@ -317,6 +317,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const annotationSurfaceRef = useRef<HTMLDivElement | null>(null);
   const visualAnchorStartRef = useRef<{ x: number; y: number } | null>(null);
   const [annotations, setAnnotations] = useState<DocumentAnnotationItem[]>([]);
+  // Which document version the loaded `annotations` actually belong to. Annotations
+  // are version-scoped, so any consumer must be able to tell whether the list in
+  // hand matches the currently selected version before acting on it.
+  const [annotationsVersionId, setAnnotationsVersionId] = useState<string | null>(null);
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
   const [annotationComments, setAnnotationComments] = useState<DocumentAnnotationComment[]>([]);
   const [commentDraft, setCommentDraft] = useState('');
@@ -1149,10 +1153,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     try {
       const response = await getDocumentAnnotations(documentId, versionId, { limit: 50 });
       setAnnotations(response.items);
+      setAnnotationsVersionId(versionId);
       setSelectedAnnotationId((existing) => response.items.some((item) => item.id === existing) ? existing : response.items[0]?.id || null);
     } catch (err) {
       console.error('Annotations load failed:', err);
       setAnnotations([]);
+      setAnnotationsVersionId(null);
       setSelectedAnnotationId(null);
       setAnnotationError('Annotációk betöltése sikertelen.');
     } finally {
@@ -1206,7 +1212,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     // stale id would be requested against the new version and (correctly) 404.
     // Gating on the loaded, version-scoped annotation list makes that impossible.
     const selectionBelongsToVersion =
-      !!selectedAnnotationId && annotations.some((annotation) => annotation.id === selectedAnnotationId);
+      !!selectedAnnotationId &&
+      annotationsVersionId === selectedVersion?.id &&
+      annotations.some((annotation) => annotation.id === selectedAnnotationId);
     if (!selectedUploadedDocument?.id || !selectedVersion?.id || !selectionBelongsToVersion) {
       setAnnotationComments([]);
       return;
@@ -1222,7 +1230,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [selectedUploadedDocument?.id, selectedVersion?.id, selectedAnnotationId, annotations]);
+  }, [selectedUploadedDocument?.id, selectedVersion?.id, selectedAnnotationId, annotations, annotationsVersionId]);
 
   const handleTextSelectionAnchor = () => {
     if (!versionText || !annotationSurfaceRef.current) return;

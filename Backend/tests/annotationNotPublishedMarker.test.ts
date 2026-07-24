@@ -94,8 +94,17 @@ describe('annotation selection does not survive a version switch', () => {
     const effect = page.slice(page.lastIndexOf('useEffect(', i), i);
     expect(effect).toContain('annotations.some((annotation) => annotation.id === selectedAnnotationId)');
     expect(effect).toContain('selectionBelongsToVersion');
-    // and the guard must react to the annotation list changing
+    // The loaded list still belongs to the PREVIOUS version during the commit in
+    // which the version changes, so membership alone is not sufficient — the list's
+    // own version identity must match the selected version.
+    expect(effect).toContain('annotationsVersionId === selectedVersion?.id');
     const deps = page.slice(i, i + 900);
-    expect(deps).toContain('selectedAnnotationId, annotations]');
+    expect(deps).toContain('annotations, annotationsVersionId]');
+  });
+
+  it('records which version the loaded annotation list belongs to', () => {
+    expect(page).toContain('const [annotationsVersionId, setAnnotationsVersionId]');
+    expect(page).toContain('setAnnotationsVersionId(versionId)');
+    expect(page).toContain('setAnnotationsVersionId(null)');
   });
 });
