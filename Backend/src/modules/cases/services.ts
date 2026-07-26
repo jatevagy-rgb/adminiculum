@@ -12,6 +12,31 @@ const VALID_MATTER_TYPES = ['REAL_ESTATE_SALE', 'LEASE', 'EMPLOYMENT', 'CORPORAT
 const DEFAULT_MATTER_TYPE = 'OTHER';
 const DEFAULT_STATUS = 'CLIENT_INPUT';
 
+/**
+ * Resolve the matter title shown to users.
+ *
+ * The user-entered "Ügy megnevezése" is authoritative and is persisted on
+ * Case.title by the intake workflow. These read DTOs used to discard it and
+ * recompose `clientName - matterType`, so a matter typed as e.g. "Bérleti
+ * szerződés felülvizsgálat" surfaced as "Bálintfy és Társai Ügyvédi Iroda -
+ * CONTRACT_REVIEW". The persisted title now wins; the composed form is only a
+ * fallback for records with no stored title. Legacy cases created via the old
+ * createCase path already store that composed value, so their display is
+ * unchanged. Client name and matter type stay separate metadata.
+ */
+export function resolveDisplayTitle(row: {
+  title?: string | null;
+  clientName?: string | null;
+  matterType?: string | null;
+  caseNumber?: string | null;
+}): string {
+  const persisted = typeof row.title === 'string' ? row.title.trim() : '';
+  if (persisted) return persisted;
+  const client = (row.clientName || '').trim() || 'Unknown Client';
+  const type = (row.matterType || '').trim() || 'Unknown Type';
+  return `${client} - ${type}`;
+}
+
 interface CaseListItem {
   id: string;
   caseNumber: string;
@@ -141,7 +166,7 @@ class CasesService {
     const data: CaseListItem[] = cases.map((c: any) => ({
       id: c.id,
       caseNumber: c.caseNumber,
-      title: `${c.clientName || 'Unknown Client'} - ${c.matterType || 'Unknown Type'}`,
+      title: resolveDisplayTitle(c),
       clientName: c.client?.name || c.clientName || 'Unknown Client',
       clientId: c.clientId,
       matterType: c.matterType || 'Unknown',
@@ -195,7 +220,7 @@ class CasesService {
     return {
       id: caseData.id,
       caseNumber: caseData.caseNumber,
-      title: `${caseData.clientName || 'Unknown Client'} - ${caseData.matterType || 'Unknown Type'}`,
+      title: resolveDisplayTitle(caseData),
       clientName: caseData.client?.name || caseData.clientName || 'Unknown Client',
       clientId: caseData.clientId,
       matterType: caseData.matterType || 'Unknown',
@@ -331,7 +356,7 @@ return {
       case: {
         id: caseData.id,
         caseNumber: caseData.caseNumber,
-        title: `${caseData.clientName || 'Unknown Client'} - ${caseData.matterType || 'Unknown Type'}`,
+        title: resolveDisplayTitle(caseData),
         clientName: caseData.clientName || 'Unknown Client',
         clientId: caseData.clientId,
         matterId: caseData.matterId ?? undefined,
@@ -695,7 +720,7 @@ return {
     return {
       id: caseData.id,
       caseNumber: caseData.caseNumber,
-      title: `${caseData.clientName || 'Unknown Client'} - ${caseData.matterType || 'Unknown Type'}`,
+      title: resolveDisplayTitle(caseData),
       clientName: caseData.clientName || 'Unknown Client',
       matterType: caseData.matterType || 'Unknown',
       status: caseData.status,
