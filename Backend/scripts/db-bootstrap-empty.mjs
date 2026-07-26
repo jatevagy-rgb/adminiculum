@@ -17,7 +17,7 @@ if (!databaseUrl) {
 }
 
 const baselineSql = fs.readFileSync(baselinePath, 'utf8');
-const baselineSha256 = crypto.createHash('sha256').update(baselineSql).digest('hex');
+const baselineSha256 = crypto.createHash('sha256').update(baselineSql.replace(/\r\n/g, '\n')).digest('hex');
 
 const client = new Client({
   connectionString: databaseUrl,
