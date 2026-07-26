@@ -54,6 +54,7 @@ import { HandoffPackagePanel } from "@/components/handoff/HandoffPackagePanel";
 import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePanel";
 import { AdminBadge, AdminButton, AdminDocumentRow, AdminPanel, AdminStatusPill } from "@/components/adminiculum/ui";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
+import { DocumentWorkspaceHeader } from "@/components/documents/workContext/DocumentWorkspaceHeader";
 import { useUiPack } from "@/lib/uiPack";
 
 // Document Family / Lineage Types
@@ -1536,16 +1537,33 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     <div className="mt-1 h-16 w-1.5 rounded-full bg-[var(--adm-ochre-500)]" />
                     <div className="min-w-0 flex-1">
                       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--adm-green-800)]">Contract Workspace</p>
-                      <h2 className="mt-1 truncate font-serif text-[28px] font-semibold leading-tight text-[var(--adm-text)]">{activeTitle || "Nincs még workspace dokumentum"}</h2>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <AdminBadge tone={activeDocument ? "gold" : "neutral"}>{selectedDocumentTypeLabel}</AdminBadge>
-                        <AdminBadge tone={activeDocument ? "green" : "neutral"}>{selectedStatusLabel}</AdminBadge>
-                      </div>
-                      {selectedMetaItems.length > 0 ? (
-                        <div className="mt-4 grid gap-2 text-[12px] text-[#3D4842] sm:grid-cols-2">
-                          {selectedMetaItems.map((item) => <span key={String(item)} className="rounded-full border border-[rgba(22,32,26,0.10)] bg-white px-3 py-1">{item}</span>)}
+                      {selectedUploadedDocument ? (
+                        /* Operational work-context identity — the same legal context the
+                           cockpit card and the editor show, derived from one model.
+                           Filename, type and version internals live in its Részletek. */
+                        <div className="mt-2">
+                          <DocumentWorkspaceHeader
+                            documentId={selectedUploadedDocument.id}
+                            selectedVersion={selectedVersion?.versionNumber ?? null}
+                            currentVersion={versions.find((v) => v.isCurrent)?.versionNumber ?? selectedVersion?.versionNumber ?? null}
+                            onDownload={selectedVersion ? () => void handleDownloadVersion(selectedVersion) : undefined}
+                            onNewVersion={() => versionFileInputRef.current?.click()}
+                          />
                         </div>
-                      ) : null}
+                      ) : (
+                        <>
+                          <h2 className="mt-1 truncate font-serif text-[28px] font-semibold leading-tight text-[var(--adm-text)]">{activeTitle || "Nincs még workspace dokumentum"}</h2>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <AdminBadge tone={activeDocument ? "gold" : "neutral"}>{selectedDocumentTypeLabel}</AdminBadge>
+                            <AdminBadge tone={activeDocument ? "green" : "neutral"}>{selectedStatusLabel}</AdminBadge>
+                          </div>
+                          {selectedMetaItems.length > 0 ? (
+                            <div className="mt-4 grid gap-2 text-[12px] text-[#3D4842] sm:grid-cols-2">
+                              {selectedMetaItems.map((item) => <span key={String(item)} className="rounded-full border border-[rgba(22,32,26,0.10)] bg-white px-3 py-1">{item}</span>)}
+                            </div>
+                          ) : null}
+                        </>
+                      )}
                     </div>
                   </div>
 

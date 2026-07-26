@@ -5262,18 +5262,12 @@ export async function getTaskDocuments(taskId: string): Promise<TaskDocumentsRes
   return fetchApi<TaskDocumentsResponse>(`/documents/task/${encodeURIComponent(taskId)}/documents`, { cache: 'no-store' });
 }
 
-/** Human Hungarian labels for the logical document work statuses. */
-export const DOCUMENT_WORK_STATUS_LABELS: Record<string, string> = {
-  RECEIVED: 'Beérkezett',
-  WAITING_FOR_PROCESSING: 'Feldolgozásra vár',
-  IN_PROGRESS: 'Munka alatt',
-  INTERNAL_REVIEW: 'Belső review',
-  CHANGES_REQUESTED: 'Javítás kérve',
-  APPROVED: 'Jóváhagyva',
-  READY_FOR_CLIENT: 'Ügyfélnek kész',
-  SENT: 'Elküldve',
-  ARCHIVED: 'Archiválva',
-};
+/**
+ * Human Hungarian labels for the logical document work statuses. Defined once in
+ * the work-context model and re-exported here so existing importers of
+ * `@/lib/api` keep working while the mapping stays single-source.
+ */
+export { DOCUMENT_WORK_STATUS_LABELS } from './documents/workContext';
 export const DOCUMENT_WORK_STATUS_ORDER = [
   'RECEIVED', 'WAITING_FOR_PROCESSING', 'IN_PROGRESS', 'INTERNAL_REVIEW',
   'CHANGES_REQUESTED', 'APPROVED', 'READY_FOR_CLIENT', 'SENT', 'ARCHIVED',

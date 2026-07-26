@@ -39,10 +39,12 @@ describe('operational document work card', () => {
 
   it('renders the logical work status with a human Hungarian label', () => {
     expect(card).toContain('data-testid="doc-work-status"');
-    expect(api).toContain('DOCUMENT_WORK_STATUS_LABELS');
-    expect(api).toContain("IN_PROGRESS: 'Munka alatt'");
-    expect(api).toContain("INTERNAL_REVIEW: 'Belső review'");
-    expect(api).toContain("CHANGES_REQUESTED: 'Javítás kérve'");
+    // Labels are single-source in the work-context model; api re-exports them.
+    const model = read('Frontend/src/lib/documents/workContext.ts');
+    expect(api).toContain("export { DOCUMENT_WORK_STATUS_LABELS } from './documents/workContext'");
+    expect(model).toContain('IN_PROGRESS: "Munka alatt"');
+    expect(model).toContain('INTERNAL_REVIEW: "Belső review"');
+    expect(model).toContain('CHANGES_REQUESTED: "Javításra visszaadva"');
   });
 
   it('keeps technical values behind an expandable secondary area', () => {

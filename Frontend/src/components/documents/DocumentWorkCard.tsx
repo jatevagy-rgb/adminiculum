@@ -12,30 +12,18 @@ import { useCallback, useEffect, useState } from "react";
 import {
   getDocumentWorkContext, updateDocumentWorkContext,
   linkDocumentToTask, unlinkDocumentFromTask,
-  DOCUMENT_WORK_STATUS_LABELS, DOCUMENT_WORK_STATUS_ORDER,
+  DOCUMENT_WORK_STATUS_ORDER,
   type DocumentWorkCard as WorkCard, type CaseWorkspace,
 } from "@/lib/api";
 import { AdminButton } from "@/components/adminiculum/ui";
-import { ACCENT, type Accent } from "@/components/cases/CaseCockpitPanels";
+import { ACCENT } from "@/components/cases/CaseCockpitPanels";
+import { workStatusAccent, workStatusLabel, formatDocDate } from "@/lib/documents/workContext";
 
-/** Status → accent, so a colour carries one consistent meaning across the app. */
-export function statusAccent(status: string): Accent {
-  switch (status) {
-    case "CHANGES_REQUESTED": return "terracotta";
-    case "INTERNAL_REVIEW": return "navy";
-    case "IN_PROGRESS": case "WAITING_FOR_PROCESSING": return "ochre";
-    case "APPROVED": case "READY_FOR_CLIENT": case "SENT": return "green";
-    case "ARCHIVED": return "neutral";
-    default: return "petrol";
-  }
-}
-export const statusLabel = (s: string) => DOCUMENT_WORK_STATUS_LABELS[s] || s;
-
-function fmtDate(v?: string | null): string {
-  if (!v) return "—";
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("hu-HU");
-}
+// One mapping source for the whole app: the card, the workspace header and the
+// editor all resolve status colour/label and dates through @/lib/documents/workContext.
+export const statusAccent = workStatusAccent;
+export const statusLabel = workStatusLabel;
+const fmtDate = formatDocDate;
 
 export function DocumentWorkStatusBadge({ status }: { status: string }) {
   const a = ACCENT[statusAccent(status)];
