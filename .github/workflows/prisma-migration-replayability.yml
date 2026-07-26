@@ -1,0 +1,62 @@
+name: Prisma migration replayability
+
+on:
+  pull_request:
+    paths:
+      - 'Backend/prisma/schema.prisma'
+      - 'Backend/prisma/migrations/**'
+      - 'Backend/prisma/baseline/**'
+      - 'Backend/scripts/db-bootstrap-empty.mjs'
+      - 'Backend/scripts/verify-migration-replay.mjs'
+      - 'Backend/package.json'
+      - 'Backend/package-lock.json'
+      - '.github/workflows/prisma-migration-replayability.yml'
+  push:
+    branches:
+      - release/editor-ops-workflow-1
+    paths:
+      - 'Backend/prisma/schema.prisma'
+      - 'Backend/prisma/migrations/**'
+      - 'Backend/prisma/baseline/**'
+      - 'Backend/scripts/db-bootstrap-empty.mjs'
+      - 'Backend/scripts/verify-migration-replay.mjs'
+      - 'Backend/package.json'
+      - 'Backend/package-lock.json'
+      - '.github/workflows/prisma-migration-replayability.yml'
+
+jobs:
+  replayability:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: adminiculum_replay_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: Backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: Backend
+        run: npm ci
+
+      - name: Verify canonical empty replay
+        working-directory: Backend
+        env:
+          MIGRATION_REPLAY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: npm run db:migrations:verify-replay
