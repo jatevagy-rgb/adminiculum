@@ -42,6 +42,7 @@ Frontend/output/
 *.dump
 *.sql
 !Backend/prisma/migrations/**/*.sql
+!Backend/prisma/baseline/**/*.sql
 *.sqlite
 *.sqlite3
 *.db
