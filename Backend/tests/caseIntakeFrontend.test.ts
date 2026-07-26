@@ -545,6 +545,20 @@ describe('visual correction: mobile behaves as a full-height sheet', () => {
   });
 });
 
+describe('visual correction: mobile sheet does not bleed or clip', () => {
+  it('locks background scroll while the modal is open', () => {
+    // Without this the wide cases list scrolls behind the fixed overlay and, on
+    // narrow viewports, shows a horizontal scrollbar under the sheet.
+    expect(dialog).toContain("document.body.style.overflow = \"hidden\"");
+  });
+
+  it('wraps the communication controls instead of clipping them at 390px', () => {
+    // The trigger row must reflow to full width on mobile; production acceptance
+    // at 390px caught the button clipped past the sheet edge.
+    expect(sections).toContain('flex w-full flex-wrap items-center gap-3 sm:w-auto');
+  });
+});
+
 describe('visual correction: the modal escapes the shell containing block', () => {
   it('renders through a portal into document.body', () => {
     // The app shell content column sets backdrop-filter, which is a containing

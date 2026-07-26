@@ -269,7 +269,9 @@ export function CaseCommunicationSummary({
           </p>
           <p data-testid="comm-summary" className="mt-0.5 text-[12.5px] text-[#2C3A31]">{summary}</p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-3">
+        {/* Full width on mobile so the controls wrap below the summary instead
+            of overflowing the sheet; inline from sm up. */}
+        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
           <label className="flex items-center gap-1.5 text-[12px] font-medium text-[#2C3A31]">
             <input data-testid="comm-later" type="checkbox" checked={state.communicationLater} onChange={(e) => onLater(e.target.checked)} />
             Később kapcsolom hozzá
@@ -279,7 +281,7 @@ export function CaseCommunicationSummary({
             data-testid="comm-open-picker"
             onClick={onOpenPicker}
             disabled={state.communicationLater}
-            className={intake.secondaryAction}
+            className={`${intake.secondaryAction} ml-auto sm:ml-0`}
           >
             Kommunikáció kiválasztása
           </button>

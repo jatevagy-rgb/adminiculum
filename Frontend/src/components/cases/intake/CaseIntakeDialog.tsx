@@ -44,6 +44,15 @@ export function CaseIntakeDialog({
   // into a sliver with horizontal overflow.
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+  // Lock background scroll while the modal is open. The overlay is a fixed layer,
+  // so without this the page behind it still scrolls — on narrow viewports the
+  // wide cases list bleeds a horizontal scrollbar under the sheet.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
   const form = useCaseIntakeForm(onCreated);
   const { state, patch, patchContext, patchDeadline, errors, serverError, submitting, absoluteDeadline } = form;
 
