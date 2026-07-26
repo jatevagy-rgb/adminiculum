@@ -55,7 +55,7 @@ describe('intake architecture is separated, not another monolith', () => {
   });
 
   it('keeps the dialog itself small — composition, not implementation', () => {
-    expect(dialog.split('\n').length).toBeLessThan(220);
+    expect(dialog.split('\n').length).toBeLessThan(240);
   });
 });
 
@@ -542,6 +542,20 @@ describe('visual correction: mobile behaves as a full-height sheet', () => {
     // Long values truncate rather than widening the layout.
     expect(drawer).toContain('truncate');
     expect(drawer).toContain('min-w-0');
+  });
+});
+
+describe('visual correction: the modal escapes the shell containing block', () => {
+  it('renders through a portal into document.body', () => {
+    // The app shell content column sets backdrop-filter, which is a containing
+    // block for position:fixed. Without a portal the overlay is confined beside
+    // the sidebar and, at mobile widths, crushed into a sliver with horizontal
+    // overflow. Production acceptance at 390px caught exactly this.
+    expect(dialog).toContain("import { createPortal } from \"react-dom\"");
+    expect(dialog).toContain('return createPortal(');
+    expect(dialog).toContain('document.body');
+    // Guarded against SSR so the portal target exists before it is used.
+    expect(dialog).toContain('if (!open || !mounted) return null');
   });
 });
 

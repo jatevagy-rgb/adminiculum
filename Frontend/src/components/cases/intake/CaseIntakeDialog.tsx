@@ -13,6 +13,7 @@
  * near-identical white cards.
  */
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { getClientList, getUsers, type Client, type User, type CaseIntakeResult } from "@/lib/api";
 import { useCaseIntakeForm } from "./useCaseIntakeForm";
 import {
@@ -36,6 +37,13 @@ export function CaseIntakeDialog({
   const [clientsError, setClientsError] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Portal target: the app shell's content column sets `backdrop-filter`, which
+  // makes it a containing block for `position: fixed`. Rendering into <body>
+  // lets the overlay cover the true viewport instead of just the content pane —
+  // without it the modal is confined beside the sidebar and, on mobile, crushed
+  // into a sliver with horizontal overflow.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const form = useCaseIntakeForm(onCreated);
   const { state, patch, patchContext, patchDeadline, errors, serverError, submitting, absoluteDeadline } = form;
 
@@ -71,9 +79,9 @@ export function CaseIntakeDialog({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose, submitting, pickerOpen]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  return createPortal(
     <>
       <div className={intake.overlay} role="presentation">
         <div className="flex h-full items-start justify-center p-0 sm:p-6">
@@ -207,6 +215,7 @@ export function CaseIntakeDialog({
           setPickerOpen(false);
         }}
       />
-    </>
+    </>,
+    document.body,
   );
 }
