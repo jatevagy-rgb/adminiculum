@@ -244,6 +244,10 @@ app.use('/api/v1', legalAnalysesRoutes);
 import documentsRoutes from './modules/documents/routes';
 app.use('/api/v1/documents', documentsRoutes);
 
+import { documentScopedComparisonRouter, comparisonRouter } from './modules/documents/comparison/comparison.routes';
+app.use('/api/v1/documents', documentScopedComparisonRouter);
+app.use('/api/v1/document-comparisons', comparisonRouter);
+
 import communicationsRoutes from './modules/communications/routes';
 app.use('/api/v1/communications', communicationsRoutes);
 
