@@ -177,8 +177,9 @@ export async function transitionReview(reviewId: string, action: ReviewAction, a
     const reviewerId = input.reviewerId || review.assignedReviewerId;
     if (action === 'ASSIGN' && !reviewerId) throw new DocumentReviewWorkflowError(400, 'REVIEWER_REQUIRED', 'reviewerId is required.');
     const reviewerHasAccess = reviewerId ? await userHasCaseAccess(tx, reviewerId, review.document.caseId) : true;
-    const openPoints = await tx.reviewPoint.count({ where: { reviewId, status: { in: UNRESOLVED_POINT_STATUSES as any } } });
-    const openBlockingPoints = await tx.reviewPoint.count({ where: { reviewId, severity: 'BLOCKING', status: { in: UNRESOLVED_POINT_STATUSES as any } } });
+    const activeRoundFilter = { reviewId, reviewRoundId: review.currentRoundId! };
+    const openPoints = await tx.reviewPoint.count({ where: { ...activeRoundFilter, status: { in: UNRESOLVED_POINT_STATUSES as any } } });
+    const openBlockingPoints = await tx.reviewPoint.count({ where: { ...activeRoundFilter, severity: 'BLOCKING', status: { in: UNRESOLVED_POINT_STATUSES as any } } });
     const latest = await latestVersion(tx, review.documentId);
     const currentVersion = await tx.documentVersion.findUniqueOrThrow({ where: { id: review.currentRound!.reviewVersionId }, select: { id: true, version: true } });
     const requestedResubmitVersion = action === 'RESUBMIT' && input.versionId
