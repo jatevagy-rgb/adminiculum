@@ -1,6 +1,7 @@
 name: Prisma migration replayability
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - 'Backend/prisma/schema.prisma'
@@ -8,18 +9,23 @@ on:
       - 'Backend/prisma/baseline/**'
       - 'Backend/scripts/db-bootstrap-empty.mjs'
       - 'Backend/scripts/verify-migration-replay.mjs'
+      - 'Backend/src/modules/documents/comparison/**'
+      - 'Backend/tests/**comparison**'
       - 'Backend/package.json'
       - 'Backend/package-lock.json'
       - '.github/workflows/prisma-migration-replayability.yml'
   push:
     branches:
       - release/editor-ops-workflow-1
+      - 'codex/**'
     paths:
       - 'Backend/prisma/schema.prisma'
       - 'Backend/prisma/migrations/**'
       - 'Backend/prisma/baseline/**'
       - 'Backend/scripts/db-bootstrap-empty.mjs'
       - 'Backend/scripts/verify-migration-replay.mjs'
+      - 'Backend/src/modules/documents/comparison/**'
+      - 'Backend/tests/**comparison**'
       - 'Backend/package.json'
       - 'Backend/package-lock.json'
       - '.github/workflows/prisma-migration-replayability.yml'
@@ -60,3 +66,9 @@ jobs:
         env:
           MIGRATION_REPLAY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
         run: npm run db:migrations:verify-replay
+
+      - name: Run comparison PostgreSQL integration tests
+        working-directory: Backend
+        env:
+          COMPARISON_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: npm run test:comparison:db

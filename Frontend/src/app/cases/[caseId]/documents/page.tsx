@@ -55,6 +55,7 @@ import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePane
 import { AdminBadge, AdminButton, AdminDocumentRow, AdminPanel, AdminStatusPill } from "@/components/adminiculum/ui";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import { DocumentWorkspaceHeader } from "@/components/documents/workContext/DocumentWorkspaceHeader";
+import { ComparisonWorkspace } from "@/components/documents/comparison/ComparisonWorkspace";
 import { useUiPack } from "@/lib/uiPack";
 
 // Document Family / Lineage Types
@@ -1167,19 +1168,34 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     }
   }, []);
 
+  // The selected version is authoritative for the annotation request only when it
+  // actually belongs to the selected document AND the version list has finished
+  // loading. On a document switch `versions` briefly still holds the previous
+  // document's versions, so `selectedVersion` can resolve to a version whose
+  // documentId is the OLD document — firing (newDoc, oldVersion), which the API
+  // (correctly) rejects as "Document version not found". This invariant closes
+  // that race without any arbitrary timeout.
+  const annotationVersionEligible =
+    !isLoadingVersions &&
+    !!selectedUploadedDocument?.id &&
+    !!selectedVersion?.id &&
+    selectedVersion.documentId === selectedUploadedDocument.id &&
+    versions.some((v) => v.id === selectedVersion.id);
+
   useEffect(() => {
     // Annotations are version-scoped, so a selection never survives a version
     // switch. Clearing it first prevents the comments effect from re-firing with
-    // the previous version's annotation id against the newly selected version,
-    // which the API (correctly) rejects as not found.
+    // the previous version's annotation id against the newly selected version.
     setSelectedAnnotationId(null);
     setAnnotationComments([]);
-    if (selectedUploadedDocument?.id && selectedVersion?.id) {
+    if (annotationVersionEligible && selectedUploadedDocument?.id && selectedVersion?.id) {
       void refreshAnnotations(selectedUploadedDocument.id, selectedVersion.id);
     } else {
+      // Not yet resolvable (version list still loading, or selection not yet
+      // reconciled with the selected document): never issue a known-invalid request.
       setAnnotations([]);
     }
-  }, [selectedUploadedDocument?.id, selectedVersion?.id, refreshAnnotations]);
+  }, [selectedUploadedDocument?.id, selectedVersion?.id, annotationVersionEligible, refreshAnnotations]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1913,6 +1929,19 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     )}
                   </div>
                 </section>
+
+                {selectedUploadedDocument && versions.length >= 2 ? (
+                  <section className="adm-board-panel min-w-0 overflow-hidden p-4 xl:col-start-2" data-testid="cmp-workspace-section">
+                    <ComparisonWorkspace
+                      documentId={selectedUploadedDocument.id}
+                      documentTitle={activeTitle || selectedUploadedDocument.fileName || "Dokumentum"}
+                      versions={versions.map((v) => ({ id: v.id, versionNumber: v.versionNumber, isCurrent: v.isCurrent, supported: getFileType(v.originalFileName) === "TXT" }))}
+                      currentVersionNumber={versions.find((v) => v.isCurrent)?.versionNumber ?? null}
+                      onDownload={() => { if (selectedVersion) void handleDownloadVersion(selectedVersion); }}
+                      canManage={caseRecord?.status !== "ARCHIVED"}
+                    />
+                  </section>
+                ) : null}
 
                 <aside className="grid min-w-0 gap-3 md:grid-cols-2 xl:col-start-2">
                   <AdminPanel className="overflow-hidden border-[rgba(22,32,26,0.14)] bg-[var(--adm-surface)]">
