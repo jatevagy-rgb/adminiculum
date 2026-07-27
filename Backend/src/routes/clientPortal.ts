@@ -15,6 +15,7 @@ import { Request, Response, Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import {
   ClientPublicationError,
+  CLIENT_PUBLICATION_GATES,
   portalHomeSnapshot,
 } from '../modules/client-publication/publicationService';
 
@@ -37,6 +38,30 @@ router.get('/home', async (req, res) => {
     await new Promise<void>((resolve, reject) => authenticate(req, res, (error?: unknown) => error ? reject(error) : resolve()));
     if (res.headersSent) return;
     res.json(await portalHomeSnapshot(actor(req)));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.all('/action-requests/:requestId/complete', async (req, res) => {
+  try {
+    await new Promise<void>((resolve, reject) => authenticate(req, res, (error?: unknown) => error ? reject(error) : resolve()));
+    if (res.headersSent) return;
+    if (!CLIENT_PUBLICATION_GATES.portalActions()) {
+      res.status(503).json({
+        status: 503,
+        code: 'CLIENT_PORTAL_ACTIONS_DISABLED',
+        message: 'Client portal actions are disabled.',
+      });
+      return;
+    }
+    res.status(501).json({
+      status: 501,
+      code: 'FEATURE_NOT_AVAILABLE',
+      feature: 'CLIENT_PORTAL_ACTIONS',
+      reason: 'CLIENT_PORTAL_ACTION_UI_NOT_IMPLEMENTED',
+      message: 'Client portal action completion is not implemented.',
+    });
   } catch (error) {
     fail(res, error);
   }

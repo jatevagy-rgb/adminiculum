@@ -139,8 +139,11 @@ describeWithDatabase('Client publication foundation PostgreSQL boundary', () => 
     const published = await publishMatterPublication(actor, draft.id, { expectedRevision: approved.revision }, db);
     expect(published.status).toBe('PUBLISHED');
     await expect(db.$executeRawUnsafe('UPDATE client_matter_publication_revisions SET "clientSafeTitle"=$1 WHERE id=$2', 'mutated', published.currentRevisionId)).rejects.toThrow();
-    const samePublish = await publishMatterPublication(actor, draft.id, { expectedRevision: published.revision }, db).catch((error) => error);
-    expect(samePublish.code).toBe('INVALID_PUBLICATION_TRANSITION');
+    const eventCountBeforeRepeat = await db.$queryRaw<Array<{ count: number }>>`SELECT count(*)::int AS count FROM client_publication_events WHERE "matterPublicationId"=${draft.id} AND action='PUBLISHED'::"ClientPublicationEventAction"`;
+    const samePublish = await publishMatterPublication(actor, draft.id, { expectedRevision: published.revision }, db);
+    expect(samePublish.status).toBe('PUBLISHED');
+    const eventCountAfterRepeat = await db.$queryRaw<Array<{ count: number }>>`SELECT count(*)::int AS count FROM client_publication_events WHERE "matterPublicationId"=${draft.id} AND action='PUBLISHED'::"ClientPublicationEventAction"`;
+    expect(eventCountAfterRepeat[0].count).toBe(eventCountBeforeRepeat[0].count);
     const superseded = await supersedeMatterPublication(actor, draft.id, { expectedRevision: published.revision }, db);
     expect(superseded.status).toBe('SUPERSEDED');
     const revokable = await createMatterPublication(actor, { caseId: ids.case, clientSafeTitle: 'Current matter', clientSafeStatus: 'Published safely' }, db);
@@ -176,8 +179,12 @@ describeWithDatabase('Client publication foundation PostgreSQL boundary', () => 
 
   it('creates action requests and safe updates without exposing linked internal material', async () => {
     const action = await createActionRequest(actor, { caseId: ids.case, type: 'INFORMATION_REQUEST', clientSafeTitle: 'Please confirm company data', clientSafeInstructions: 'Confirm the public registry number.', linkedInternalTaskId: ids.task }, db);
-    const publishedAction = await transitionActionRequest(actor, action.id, 'approve', { expectedRevision: action.revision }, db);
+    const approvedAction = await transitionActionRequest(actor, action.id, 'approve', { expectedRevision: action.revision }, db);
+    expect(approvedAction.status).toBe('APPROVED');
+    const publishedAction = await transitionActionRequest(actor, action.id, 'publish', { expectedRevision: approvedAction.revision }, db);
     expect(publishedAction.status).toBe('PUBLISHED');
+    const repeatPublishedAction = await transitionActionRequest(actor, action.id, 'publish', { expectedRevision: publishedAction.revision }, db);
+    expect(repeatPublishedAction.status).toBe('PUBLISHED');
     const cancelled = await transitionActionRequest(actor, publishedAction.id, 'cancel', { expectedRevision: publishedAction.revision }, db);
     expect(cancelled.status).toBe('CANCELLED');
     const update = await createSafeUpdate(actor, { caseId: ids.case, title: 'Safe update', body: 'The reviewed document is ready for client publication.', category: 'DOCUMENT' }, db);
