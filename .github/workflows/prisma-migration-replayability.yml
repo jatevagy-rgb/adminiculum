@@ -11,8 +11,10 @@ on:
       - 'Backend/scripts/verify-migration-replay.mjs'
       - 'Backend/src/modules/documents/comparison/**'
       - 'Backend/src/modules/documents/review/**'
+      - 'Backend/src/modules/client-publication/**'
       - 'Backend/tests/**comparison**'
       - 'Backend/tests/**review**'
+      - 'Backend/tests/**publication**'
       - 'Backend/package.json'
       - 'Backend/package-lock.json'
       - '.github/workflows/prisma-migration-replayability.yml'
@@ -28,8 +30,10 @@ on:
       - 'Backend/scripts/verify-migration-replay.mjs'
       - 'Backend/src/modules/documents/comparison/**'
       - 'Backend/src/modules/documents/review/**'
+      - 'Backend/src/modules/client-publication/**'
       - 'Backend/tests/**comparison**'
       - 'Backend/tests/**review**'
+      - 'Backend/tests/**publication**'
       - 'Backend/package.json'
       - 'Backend/package-lock.json'
       - '.github/workflows/prisma-migration-replayability.yml'
@@ -82,3 +86,9 @@ jobs:
         env:
           REVIEW_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
         run: npm run test:review:db
+
+      - name: Run publication PostgreSQL integration tests
+        working-directory: Backend
+        env:
+          PUBLICATION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: npm run test:publication:db

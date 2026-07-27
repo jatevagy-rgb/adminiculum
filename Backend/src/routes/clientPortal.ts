@@ -11,23 +11,46 @@
  * code has been removed. No Prisma queries run while the feature is disabled.
  */
 
-import { Router } from 'express';
+import { Request, Response, Router } from 'express';
+import { authenticate } from '../middleware/auth';
 import {
-  isDatabaseFoundationEnabled,
-  requireDatabaseFoundation,
-} from '../middleware/featureAvailability';
+  ClientPublicationError,
+  portalHomeSnapshot,
+} from '../modules/client-publication/publicationService';
 
 const router = Router();
 
-router.use(
-  requireDatabaseFoundation({
+function actor(req: Request) {
+  return { userId: String(req.user?.userId || ''), role: String(req.user?.role || '') };
+}
+
+function fail(res: Response, error: unknown): void {
+  if (error instanceof ClientPublicationError) {
+    res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
+    return;
+  }
+  res.status(500).json({ status: 500, code: 'CLIENT_PORTAL_INTERNAL_ERROR', message: 'Client portal request failed.' });
+}
+
+router.get('/home', async (req, res) => {
+  try {
+    await new Promise<void>((resolve, reject) => authenticate(req, res, (error?: unknown) => error ? reject(error) : resolve()));
+    if (res.headersSent) return;
+    res.json(await portalHomeSnapshot(actor(req)));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.all('*', async (_req, res) => {
+  res.status(501).json({
+    status: 501,
+    code: 'FEATURE_NOT_AVAILABLE',
     feature: 'CLIENT_PORTAL',
-    enabled: () => isDatabaseFoundationEnabled('ENABLE_CLIENT_PORTAL'),
-    message: 'The client portal is not available in this environment.',
     reason: 'CLIENT_PORTAL_NOT_ENABLED',
-    nextStep:
-      'Client portal requires a separate authenticated implementation before it can be enabled.',
-  })
-);
+    message: 'The client portal is not available in this environment.',
+    nextStep: 'Client portal reads and actions remain disabled until a separate portal authentication boundary is enabled.',
+  });
+});
 
 export default router;

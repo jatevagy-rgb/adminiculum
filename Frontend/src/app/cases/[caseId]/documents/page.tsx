@@ -57,6 +57,7 @@ import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import { DocumentWorkspaceHeader } from "@/components/documents/workContext/DocumentWorkspaceHeader";
 import { ComparisonWorkspace } from "@/components/documents/comparison/ComparisonWorkspace";
 import { DocumentReviewWorkflowPanel } from "@/components/documents/review/DocumentReviewWorkflowPanel";
+import { ClientPublicationPanel } from "@/components/documents/publication/ClientPublicationPanel";
 import { useUiPack } from "@/lib/uiPack";
 
 // Document Family / Lineage Types
@@ -1700,6 +1701,18 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             {selectedUploadedDocument && versions.length > 0 ? (
                               <div className="mt-4">
                                 <DocumentReviewWorkflowPanel
+                                  documentId={selectedUploadedDocument.id}
+                                  selectedVersionId={selectedVersion?.id || null}
+                                  versions={versions}
+                                />
+                              </div>
+                            ) : null}
+
+                            {selectedUploadedDocument && canonicalCaseId ? (
+                              <div className="mt-4">
+                                <ClientPublicationPanel
+                                  caseId={canonicalCaseId}
+                                  clientId={caseRecord?.clientId || null}
                                   documentId={selectedUploadedDocument.id}
                                   selectedVersionId={selectedVersion?.id || null}
                                   versions={versions}
