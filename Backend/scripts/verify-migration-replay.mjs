@@ -1,8 +1,15 @@
 import { spawnSync } from 'child_process';
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import process from 'process';
+import { fileURLToPath } from 'url';
 import { Client } from 'pg';
 
 const databaseUrl = process.env.MIGRATION_REPLAY_DATABASE_URL;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const backendRoot = path.resolve(__dirname, '..');
+const baselineName = '20260726000000_current_schema_baseline';
 
 if (!databaseUrl) {
   console.error('VERIFY FAILED: MIGRATION_REPLAY_DATABASE_URL is required.');
@@ -43,6 +50,57 @@ async function resetDisposableSchema() {
   await client.query('CREATE SCHEMA public');
 }
 
+async function ensurePrismaMigrationsTable() {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS "_prisma_migrations" (
+      "id" VARCHAR(36) NOT NULL,
+      "checksum" VARCHAR(64) NOT NULL,
+      "finished_at" TIMESTAMPTZ,
+      "migration_name" VARCHAR(255) NOT NULL,
+      "logs" TEXT,
+      "rolled_back_at" TIMESTAMPTZ,
+      "started_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+      "applied_steps_count" INTEGER NOT NULL DEFAULT 0,
+      CONSTRAINT "_prisma_migrations_pkey" PRIMARY KEY ("id")
+    )`);
+}
+
+async function applyPostBaselineMigrations() {
+  const migrationsRoot = path.join(backendRoot, 'prisma', 'migrations');
+  const migrationNames = fs.readdirSync(migrationsRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => name > baselineName)
+    .sort();
+
+  if (migrationNames.length === 0) {
+    console.log('post-baseline migrations: none');
+    return;
+  }
+
+  await ensurePrismaMigrationsTable();
+  for (const migrationName of migrationNames) {
+    const migrationPath = path.join(migrationsRoot, migrationName, 'migration.sql');
+    const sql = fs.readFileSync(migrationPath, 'utf8');
+    const checksum = crypto.createHash('sha256').update(sql.replace(/\r\n/g, '\n')).digest('hex');
+
+    console.log(`applying migration: ${migrationName}`);
+    await client.query('BEGIN');
+    try {
+      await client.query(sql);
+      await client.query(
+        `INSERT INTO "_prisma_migrations" ("id", "checksum", "finished_at", "migration_name", "started_at", "applied_steps_count")
+         VALUES ($1, $2, now(), $3, now(), 1)`,
+        [crypto.randomUUID(), checksum, migrationName]
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+  }
+}
+
 async function verifySchemaShape() {
   const requiredTables = [
     'users',
@@ -56,6 +114,8 @@ async function verifySchemaShape() {
     'document_annotations',
     'case_intake_deadlines',
     'document_task_links',
+    'document_comparisons',
+    'document_change_segments',
   ];
   for (const table of requiredTables) {
     const row = await one('SELECT to_regclass($1) AS oid', [`public.${table}`]);
@@ -113,6 +173,7 @@ async function main() {
 
   client = createClient();
   await client.connect();
+  await applyPostBaselineMigrations();
   await verifySchemaShape();
   await verifyRepresentativeWrites();
   await client.end();
