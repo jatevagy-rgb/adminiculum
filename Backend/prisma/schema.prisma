@@ -50,6 +50,7 @@ model User {
   documentReviewSuggestions DocumentReviewSuggestion[] @relation("DocumentReviewSuggestionAuthor")
   createdDocumentReviews DocumentReview[] @relation("DocumentReviewCreatedBy")
   assignedDocumentReviews DocumentReview[] @relation("DocumentReviewAssignedReviewer")
+  createdDocumentComparisons DocumentComparison[] @relation("ComparisonCreatedBy")
   reviewSnapshots       ReviewSnapshot[]
   createdDocumentAnnotations DocumentAnnotation[] @relation("DocumentAnnotationCreatedBy")
   createdCaseExternalParticipants CaseExternalParticipant[] @relation("CaseExternalParticipantCreatedBy")
@@ -902,6 +903,7 @@ model Document {
   annotations     DocumentAnnotation[]
   reviewSuggestions DocumentReviewSuggestion[]
   anonymizedDocuments AnonymousDocument[]
+  documentComparisons DocumentComparison[]
   comments        Comment[]
   timelineEvents  TimelineEvent[]
   taskSubmissionDocuments TaskSubmissionDocument[]
@@ -1032,6 +1034,8 @@ model DocumentVersion {
   annotations      DocumentAnnotation[]
   reviewSuggestions DocumentReviewSuggestion[]
   taskSubmissionDocuments TaskSubmissionDocument[]
+  comparisonsAsBase   DocumentComparison[] @relation("ComparisonBaseVersion")
+  comparisonsAsTarget DocumentComparison[] @relation("ComparisonTargetVersion")
 
   @@unique([documentId, version])
   @@unique([documentId, id])
@@ -2428,4 +2432,127 @@ model LawyerHandoffPackage {
   @@index([sourceDocumentId])
   @@index([legalAnalysisId])
   @@map("lawyer_handoff_packages")
+}
+
+// ============================================================================
+// Structured document comparison (STRUCTURED-DOC-COMPARISON-1)
+// Additive only. A comparison is always between two immutable DocumentVersion
+// records of the same logical document; it never mutates versions and is never
+// exposed to the Client Portal.
+// ============================================================================
+
+enum ComparisonStatus {
+  PENDING
+  PROCESSING
+  READY
+  IDENTICAL
+  UNSUPPORTED
+  FAILED
+  SUPERSEDED
+}
+
+enum ChangeSegmentType {
+  INSERT
+  DELETE
+  REPLACE
+  MOVE_CANDIDATE
+  FORMAT_ONLY
+}
+
+enum SegmentReviewState {
+  UNREVIEWED
+  ACCEPTED
+  REJECTED
+  NEEDS_DISCUSSION
+  NOT_RELEVANT
+}
+
+enum SegmentCategory {
+  PARTY
+  DATE
+  AMOUNT
+  OBLIGATION
+  LIABILITY
+  TERMINATION
+  GOVERNING_LAW
+  DEFINITION
+  OTHER
+  UNCLASSIFIED
+}
+
+enum SegmentCategorySource {
+  MANUAL
+  RULE
+  NONE
+}
+
+model DocumentComparison {
+  id                   String            @id @default(uuid())
+  documentId           String
+  document             Document          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  baseVersionId        String
+  baseVersion          DocumentVersion   @relation("ComparisonBaseVersion", fields: [baseVersionId], references: [id], onDelete: Restrict)
+  targetVersionId      String
+  targetVersion        DocumentVersion   @relation("ComparisonTargetVersion", fields: [targetVersionId], references: [id], onDelete: Restrict)
+  status               ComparisonStatus  @default(PENDING)
+  algorithmRevision    Int
+  extractionRevision   Int               @default(1)
+  createdById          String
+  createdBy            User              @relation("ComparisonCreatedBy", fields: [createdById], references: [id])
+  createdAt            DateTime          @default(now())
+  startedAt            DateTime?
+  completedAt          DateTime?
+  failureCode          String?
+  failureMessageSafe   String?
+  insertCount          Int               @default(0)
+  deleteCount          Int               @default(0)
+  replaceCount         Int               @default(0)
+  formatOnlyCount      Int               @default(0)
+  moveCandidateCount   Int               @default(0)
+  totalSegmentCount    Int               @default(0)
+  reviewedSegmentCount Int               @default(0)
+  updatedAt            DateTime          @updatedAt
+
+  segments             DocumentChangeSegment[]
+
+  // Controlled uniqueness: one comparison per (document, version pair, algorithm
+  // revision) — makes creation idempotent and prevents duplicate jobs.
+  @@unique([documentId, baseVersionId, targetVersionId, algorithmRevision])
+  @@index([documentId])
+  @@index([status])
+  @@map("document_comparisons")
+}
+
+model DocumentChangeSegment {
+  id                 String                @id @default(uuid())
+  comparisonId       String
+  comparison         DocumentComparison    @relation(fields: [comparisonId], references: [id], onDelete: Cascade)
+  sequence           Int
+  changeType         ChangeSegmentType
+  baseStart          Int?
+  baseEnd            Int?
+  targetStart        Int?
+  targetEnd          Int?
+  baseExcerpt        String?
+  targetExcerpt      String?
+  contextBefore      String?
+  contextAfter       String?
+  confidence         Float                 @default(0)
+  reviewState        SegmentReviewState    @default(UNREVIEWED)
+  category           SegmentCategory       @default(UNCLASSIFIED)
+  categorySource     SegmentCategorySource @default(NONE)
+  internalRationale  String?
+  // Soft references (validated in the service). Kept as plain columns rather
+  // than FKs so the migration stays purely additive and never links a change
+  // segment to the DocumentReview subsystem.
+  linkedTaskId       String?
+  linkedAnnotationId String?
+  revision           Int                   @default(0)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@unique([comparisonId, sequence])
+  @@index([comparisonId, sequence])
+  @@index([comparisonId, reviewState])
+  @@map("document_change_segments")
 }
