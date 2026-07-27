@@ -56,6 +56,7 @@ import { AdminBadge, AdminButton, AdminDocumentRow, AdminPanel, AdminStatusPill 
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import { DocumentWorkspaceHeader } from "@/components/documents/workContext/DocumentWorkspaceHeader";
 import { ComparisonWorkspace } from "@/components/documents/comparison/ComparisonWorkspace";
+import { DocumentReviewWorkflowPanel } from "@/components/documents/review/DocumentReviewWorkflowPanel";
 import { useUiPack } from "@/lib/uiPack";
 
 // Document Family / Lineage Types
@@ -1695,6 +1696,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 </aside>
                               </div>
                             )}
+
+                            {selectedUploadedDocument && versions.length > 0 ? (
+                              <div className="mt-4">
+                                <DocumentReviewWorkflowPanel
+                                  documentId={selectedUploadedDocument.id}
+                                  selectedVersionId={selectedVersion?.id || null}
+                                  versions={versions}
+                                />
+                              </div>
+                            ) : null}
 
                             {selectedVersion ? (
                               <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
