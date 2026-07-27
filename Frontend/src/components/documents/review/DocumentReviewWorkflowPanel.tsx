@@ -52,6 +52,7 @@ export function DocumentReviewWorkflowPanel({ documentId, selectedVersionId, ver
   const reviewVersion = versions.find((v) => v.id === review?.reviewVersionId) || null;
   const latestVersion = [...versions].sort((a, b) => b.versionNumber - a.versionNumber)[0] || null;
   const mismatch = Boolean(review && selectedVersionId && review.reviewVersionId && selectedVersionId !== review.reviewVersionId);
+  const canAttemptApproval = Boolean(review && ["IN_REVIEW", "RESUBMITTED"].includes(String(review.status)));
 
   const load = useCallback(async () => {
     const reviews = await listDocumentReviews(documentId);
@@ -128,11 +129,11 @@ export function DocumentReviewWorkflowPanel({ documentId, selectedVersionId, ver
             <AdminButton variant="neutral" disabled={busy || review.status !== "ASSIGNED"} onClick={() => run(() => transitionDocumentReview(review.id, "start", { expectedRevision: review.revision }))}>Review indítása</AdminButton>
             <AdminButton variant="gold" disabled={busy || !["IN_REVIEW", "RESUBMITTED"].includes(String(review.status))} onClick={() => run(() => transitionDocumentReview(review.id, "request-changes", { safeRationale: rationale || undefined, expectedRevision: review.revision }))}>Változtatás kérése</AdminButton>
             <AdminButton variant="neutral" disabled={busy || review.status !== "CHANGES_REQUESTED" || !latestVersion} onClick={() => run(() => transitionDocumentReview(review.id, "resubmit", { versionId: latestVersion?.id, expectedRevision: review.revision }))}>Új verzió review-ra küldése</AdminButton>
-            <AdminButton variant="primary" disabled={busy || review.counts.blocking > 0 || !["IN_REVIEW", "RESUBMITTED"].includes(String(review.status)) || mismatch} onClick={() => run(() => transitionDocumentReview(review.id, "approve", { versionId: review.reviewVersionId, expectedRevision: review.revision }))}>Jóváhagyás</AdminButton>
+            <AdminButton variant="primary" disabled={busy || review.counts.blocking > 0 || !canAttemptApproval || mismatch} onClick={() => run(() => transitionDocumentReview(review.id, "approve", { versionId: review.reviewVersionId, expectedRevision: review.revision }))}>Jóváhagyás</AdminButton>
             <AdminButton variant="neutral" disabled={busy || !["APPROVED", "IN_REVIEW", "CHANGES_REQUESTED", "RESUBMITTED", "ASSIGNED", "DRAFT"].includes(String(review.status))} onClick={() => run(() => transitionDocumentReview(review.id, "close", { expectedRevision: review.revision }))}>Review lezárása</AdminButton>
             <AdminButton variant="muted" disabled={busy || ["APPROVED", "CLOSED", "CANCELLED"].includes(String(review.status))} onClick={() => run(() => transitionDocumentReview(review.id, "cancel", { expectedRevision: review.revision }))}>Review megszakítása</AdminButton>
           </div>
-          {review.counts.blocking > 0 ? <p data-testid="approval-blocked" className="text-xs font-semibold text-[var(--adm-terracotta-700)]">Jóváhagyás blokkolva: van nyitott blokkoló review pont.</p> : null}
+          {canAttemptApproval && review.counts.blocking > 0 ? <p data-testid="approval-blocked" className="text-xs font-semibold text-[var(--adm-terracotta-700)]">Jóváhagyás blokkolva: van nyitott blokkoló review pont.</p> : null}
 
           <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
             <div className="min-w-0 space-y-3">
