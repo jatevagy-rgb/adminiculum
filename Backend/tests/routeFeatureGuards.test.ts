@@ -719,6 +719,29 @@ describe('database foundation route guards', () => {
     });
   });
 
+  it('client portal action completion authenticates then returns the disabled action gate', async () => {
+    const unauthenticated = await requestJson(
+      createApp(),
+      'POST',
+      '/client-portal/action-requests/action-1/complete',
+      false
+    );
+    expect(unauthenticated.status).toBe(401);
+
+    const authenticated = await requestJson(
+      createApp(),
+      'POST',
+      '/client-portal/action-requests/action-1/complete',
+      true,
+      { 'x-test-role': 'CLIENT' }
+    );
+    expect(authenticated.status).toBe(503);
+    expect(authenticated.body).toMatchObject({
+      status: 503,
+      code: 'CLIENT_PORTAL_ACTIONS_DISABLED',
+    });
+  });
+
   it('no Prisma data queries run when client portal is disabled', async () => {
     await requestJson(createApp(), 'GET', '/client-portal/summary/client-1', false);
     await requestJson(createApp(), 'GET', '/client-portal/export/client-1', true);

@@ -282,6 +282,16 @@ async function transitionPublication(actor: Actor, table: string, idValue: strin
     const pub = await one(tx, `SELECT *, status::text FROM ${table} WHERE id=$1 FOR UPDATE`, idValue);
     if (!pub) throw new ClientPublicationError(404, 'PUBLICATION_NOT_FOUND', 'Publication not found.');
     await assertCaseAccess(tx, actor, pub.caseId); requireExpected(pub, input.expectedRevision);
+    const isMatter = table.includes('matter');
+    if (action === 'publish' && pub.status === 'PUBLISHED') {
+      return isMatter ? toClientMatterPublicationDTO(pub, await latestMatterRevision(tx, idValue)) : toClientDocumentPublicationDTO(pub);
+    }
+    if (action === 'revoke' && pub.status === 'REVOKED') {
+      return isMatter ? toClientMatterPublicationDTO(pub, await latestMatterRevision(tx, idValue)) : toClientDocumentPublicationDTO(pub);
+    }
+    if (action === 'supersede' && pub.status === 'SUPERSEDED') {
+      return isMatter ? toClientMatterPublicationDTO(pub, await latestMatterRevision(tx, idValue)) : toClientDocumentPublicationDTO(pub);
+    }
     let next: string | null = null;
     if (action === 'submit' && pub.status === 'DRAFT') next = 'READY_FOR_APPROVAL';
     if (action === 'approve' && pub.status === 'READY_FOR_APPROVAL') { if (!APPROVER_ROLES.has(String(actor.role || ''))) throw new ClientPublicationError(403, 'APPROVER_NOT_AUTHORIZED', 'Actor cannot approve publication.'); next = 'APPROVED'; }
@@ -290,7 +300,6 @@ async function transitionPublication(actor: Actor, table: string, idValue: strin
     if (action === 'supersede' && ['PUBLISHED', 'REVOKED'].includes(pub.status)) next = 'SUPERSEDED';
     if (!next) throw new ClientPublicationError(409, 'INVALID_PUBLICATION_TRANSITION', `Cannot ${action} publication in ${pub.status}.`);
     const row = await one(tx, `UPDATE ${table} SET status=$2::"ClientPublicationStatus", "approvedById"=CASE WHEN $2='APPROVED' THEN $3 ELSE "approvedById" END, "approvedAt"=CASE WHEN $2='APPROVED' THEN now() ELSE "approvedAt" END, "publishedById"=CASE WHEN $2='PUBLISHED' THEN $3 ELSE "publishedById" END, "publishedAt"=CASE WHEN $2='PUBLISHED' THEN now() ELSE "publishedAt" END, "revokedById"=CASE WHEN $2='REVOKED' THEN $3 ELSE "revokedById" END, "revokedAt"=CASE WHEN $2='REVOKED' THEN now() ELSE "revokedAt" END, "supersededById"=CASE WHEN $2='SUPERSEDED' THEN $3 ELSE "supersededById" END, "supersededAt"=CASE WHEN $2='SUPERSEDED' THEN now() ELSE "supersededAt" END, "updatedAt"=now(), revision=revision+1 WHERE id=$1 RETURNING *, status::text`, idValue, next, actor.userId);
-    const isMatter = table.includes('matter');
     await audit(tx, { action: next === 'READY_FOR_APPROVAL' ? 'SUBMITTED_FOR_APPROVAL' : next, actorId: actor.userId, caseId: pub.caseId, clientId: pub.clientId, matterPublicationId: isMatter ? idValue : null, documentPublicationId: isMatter ? null : idValue, documentVersionId: pub.documentVersionId, fromStatus: pub.status, toStatus: next, metadataSafe: input.acknowledgement ? { acknowledgement: String(input.acknowledgement).slice(0, 200) } : {} });
     if (next === 'READY_FOR_APPROVAL') await notifyOnce(tx, pub.preparedById, pub.caseId, 'Client publication awaiting approval');
     return isMatter ? toClientMatterPublicationDTO(row!, await latestMatterRevision(tx, idValue)) : toClientDocumentPublicationDTO(row!);
@@ -351,10 +360,19 @@ export async function transitionActionRequest(actor: Actor, requestId: string, a
     const row = await one(tx, 'SELECT *, type::text, status::text FROM client_action_requests WHERE id=$1 FOR UPDATE', requestId);
     if (!row) throw new ClientPublicationError(404, 'ACTION_REQUEST_NOT_FOUND', 'Action request not found.');
     await assertCaseAccess(tx, actor, row.caseId); requireExpected(row, input.expectedRevision);
-    const next = action === 'cancel' ? 'CANCELLED' : 'PUBLISHED';
-    if (row.status !== 'DRAFT' && action !== 'cancel') throw new ClientPublicationError(409, 'INVALID_ACTION_REQUEST_TRANSITION', 'Action request transition is not allowed.');
-    const updated = await one(tx, 'UPDATE client_action_requests SET status=$2::"ClientActionRequestStatus", "approvedById"=COALESCE("approvedById",$3), "publishedById"=CASE WHEN $2=$4 THEN $3 ELSE "publishedById" END, "updatedAt"=now(), revision=revision+1 WHERE id=$1 RETURNING *, type::text, status::text', requestId, next, actor.userId, 'PUBLISHED');
-    await audit(tx, { action: next === 'CANCELLED' ? 'ACTION_REQUEST_CANCELLED' : 'ACTION_REQUEST_PUBLISHED', actorId: actor.userId, caseId: row.caseId, clientId: row.clientId, actionRequestId: requestId, fromStatus: row.status, toStatus: next });
+    if (action === 'publish' && row.status === 'PUBLISHED') return toClientActionRequestDTO(row);
+    if (action === 'cancel' && row.status === 'CANCELLED') return toClientActionRequestDTO(row);
+    const next = action === 'approve' && row.status === 'DRAFT'
+      ? 'APPROVED'
+      : action === 'publish' && row.status === 'APPROVED'
+        ? 'PUBLISHED'
+        : action === 'cancel' && ['DRAFT', 'APPROVED', 'PUBLISHED'].includes(row.status)
+          ? 'CANCELLED'
+          : null;
+    if (!next) throw new ClientPublicationError(409, 'INVALID_ACTION_REQUEST_TRANSITION', 'Action request transition is not allowed.');
+    const updated = await one(tx, 'UPDATE client_action_requests SET status=$2::"ClientActionRequestStatus", "approvedById"=CASE WHEN $2 IN ($4,$5) THEN COALESCE("approvedById",$3) ELSE "approvedById" END, "publishedById"=CASE WHEN $2=$5 THEN $3 ELSE "publishedById" END, "updatedAt"=now(), revision=revision+1 WHERE id=$1 RETURNING *, type::text, status::text', requestId, next, actor.userId, 'APPROVED', 'PUBLISHED');
+    const eventAction = next === 'APPROVED' ? 'ACTION_REQUEST_APPROVED' : next === 'CANCELLED' ? 'ACTION_REQUEST_CANCELLED' : 'ACTION_REQUEST_PUBLISHED';
+    await audit(tx, { action: eventAction, actorId: actor.userId, caseId: row.caseId, clientId: row.clientId, actionRequestId: requestId, fromStatus: row.status, toStatus: next });
     return toClientActionRequestDTO(updated!);
   });
 }
@@ -374,6 +392,8 @@ export async function transitionSafeUpdate(actor: Actor, updateId: string, actio
     const row = await one(tx, 'SELECT *, category::text, status::text FROM client_safe_updates WHERE id=$1 FOR UPDATE', updateId);
     if (!row) throw new ClientPublicationError(404, 'SAFE_UPDATE_NOT_FOUND', 'Safe update not found.');
     await assertCaseAccess(tx, actor, row.caseId); requireExpected(row, input.expectedRevision);
+    if (action === 'publish' && row.status === 'PUBLISHED') return toClientSafeUpdateDTO(row);
+    if (action === 'revoke' && row.status === 'REVOKED') return toClientSafeUpdateDTO(row);
     const next = action === 'approve' && row.status === 'DRAFT' ? 'APPROVED' : action === 'publish' && row.status === 'APPROVED' ? 'PUBLISHED' : action === 'revoke' && row.status === 'PUBLISHED' ? 'REVOKED' : null;
     if (!next) throw new ClientPublicationError(409, 'INVALID_SAFE_UPDATE_TRANSITION', 'Safe update transition is not allowed.');
     const updated = await one(tx, 'UPDATE client_safe_updates SET status=$2::"ClientSafeUpdateStatus", "approvedById"=CASE WHEN $2=$4 THEN $3 ELSE "approvedById" END, "publishedById"=CASE WHEN $2=$5 THEN $3 ELSE "publishedById" END, "publishedAt"=CASE WHEN $2=$5 THEN now() ELSE "publishedAt" END, "revokedAt"=CASE WHEN $2=$6 THEN now() ELSE "revokedAt" END, "updatedAt"=now(), revision=revision+1 WHERE id=$1 RETURNING *, category::text, status::text', updateId, next, actor.userId, 'APPROVED', 'PUBLISHED', 'REVOKED');

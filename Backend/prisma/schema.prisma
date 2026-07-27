@@ -1975,6 +1975,7 @@ enum ClientActionRequestType {
 
 enum ClientActionRequestStatus {
   DRAFT
+  APPROVED
   PUBLISHED
   IN_PROGRESS
   COMPLETED
@@ -2010,6 +2011,7 @@ enum ClientPublicationEventAction {
   PUBLISHED
   REVOKED
   SUPERSEDED
+  ACTION_REQUEST_APPROVED
   ACTION_REQUEST_PUBLISHED
   ACTION_REQUEST_CANCELLED
 }
