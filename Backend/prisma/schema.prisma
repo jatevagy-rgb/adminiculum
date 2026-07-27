@@ -1933,6 +1933,268 @@ enum NotificationType {
   SYSTEM
 }
 
+enum ClientPortalGrantStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REVOKED
+  EXPIRED
+}
+
+enum ClientPortalGrantRole {
+  VIEWER
+  APPROVER
+  REPRESENTATIVE
+}
+
+enum ClientPortalPermission {
+  MATTER_READ
+  DOCUMENT_READ
+  DOCUMENT_DOWNLOAD
+  ACTION_REQUEST_READ
+  ACTION_REQUEST_COMPLETE
+  UPDATE_READ
+}
+
+enum ClientPublicationStatus {
+  DRAFT
+  READY_FOR_APPROVAL
+  APPROVED
+  PUBLISHED
+  REVOKED
+  SUPERSEDED
+}
+
+enum ClientActionRequestType {
+  DOCUMENT_UPLOAD
+  INFORMATION_REQUEST
+  APPROVAL_REQUEST
+  CONFIRMATION_REQUEST
+  QUESTION
+}
+
+enum ClientActionRequestStatus {
+  DRAFT
+  PUBLISHED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+enum ClientSafeUpdateCategory {
+  STATUS
+  DEADLINE
+  DOCUMENT
+  ACTION_REQUIRED
+  GENERAL
+}
+
+enum ClientSafeUpdateStatus {
+  DRAFT
+  APPROVED
+  PUBLISHED
+  REVOKED
+}
+
+enum ClientPublicationEventAction {
+  GRANT_INVITED
+  GRANT_ACTIVATED
+  GRANT_SUSPENDED
+  GRANT_REVOKED
+  GRANT_EXPIRED
+  DRAFT_CREATED
+  DRAFT_UPDATED
+  SUBMITTED_FOR_APPROVAL
+  APPROVED
+  PUBLISHED
+  REVOKED
+  SUPERSEDED
+  ACTION_REQUEST_PUBLISHED
+  ACTION_REQUEST_CANCELLED
+}
+
+model ClientPortalGrant {
+  id                   String                  @id @default(uuid())
+  clientUserId         String
+  clientId             String
+  caseId               String
+  role                 ClientPortalGrantRole   @default(VIEWER)
+  status               ClientPortalGrantStatus @default(INVITED)
+  permissions          ClientPortalPermission[]
+  validFrom            DateTime                @default(now())
+  validUntil           DateTime?
+  invitedById          String
+  activatedAt          DateTime?
+  suspendedAt          DateTime?
+  suspendedById        String?
+  revokedAt            DateTime?
+  revokedById          String?
+  revocationReasonSafe String?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  revision             Int                     @default(0)
+
+  @@index([clientId, caseId, status])
+  @@index([clientUserId, status])
+  @@map("client_portal_grants")
+}
+
+model ClientMatterPublication {
+  id                String                  @id @default(uuid())
+  caseId            String
+  clientId          String
+  status            ClientPublicationStatus @default(DRAFT)
+  currentRevisionId String?
+  preparedById      String
+  approvedById      String?
+  publishedById     String?
+  approvedAt        DateTime?
+  publishedAt       DateTime?
+  revokedAt         DateTime?
+  revokedById       String?
+  supersededAt      DateTime?
+  supersededById    String?
+  supersedesId      String?
+  revision          Int                     @default(0)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@index([caseId, status])
+  @@index([clientId, status])
+  @@map("client_matter_publications")
+}
+
+model ClientMatterPublicationRevision {
+  id                       String   @id @default(uuid())
+  publicationId            String
+  revisionNumber           Int
+  clientSafeTitle          String
+  clientSafeStatus         String
+  clientSafeNextStep       String?
+  responsibleLawyerDisplay String?
+  publishedDeadlinesSnapshot Json
+  safeUpdatesSnapshot      Json
+  actionRequestsSnapshot   Json
+  sourceCaseRevision       Int?
+  sourceFingerprint        String
+  audienceSnapshot         Json
+  createdById              String
+  createdAt                DateTime @default(now())
+
+  @@unique([publicationId, revisionNumber])
+  @@index([publicationId])
+  @@map("client_matter_publication_revisions")
+}
+
+model ClientDocumentPublication {
+  id                      String                  @id @default(uuid())
+  caseId                  String
+  clientId                String
+  documentId              String
+  documentVersionId       String
+  status                  ClientPublicationStatus @default(DRAFT)
+  clientFacingTitle       String
+  clientFacingExplanation String?
+  preparedById            String
+  approvedById            String?
+  publishedById           String?
+  approvedAt              DateTime?
+  publishedAt             DateTime?
+  revokedAt               DateTime?
+  revokedById             String?
+  revocationReasonSafe    String?
+  supersededAt            DateTime?
+  supersededById          String?
+  supersedesId            String?
+  audienceSnapshot        Json
+  sourceFingerprint       String
+  approvalReviewId        String?
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  revision                Int                     @default(0)
+
+  @@index([caseId, status])
+  @@index([documentId, status])
+  @@index([documentVersionId])
+  @@map("client_document_publications")
+}
+
+model ClientActionRequest {
+  id                       String                    @id @default(uuid())
+  caseId                   String
+  clientId                 String
+  type                     ClientActionRequestType
+  clientSafeTitle          String
+  clientSafeInstructions   String?
+  dueAt                    DateTime?
+  status                   ClientActionRequestStatus @default(DRAFT)
+  linkedInternalTaskId     String?
+  audienceSnapshot         Json
+  preparedById             String
+  approvedById             String?
+  publishedById            String?
+  completedAt              DateTime?
+  completionSummarySafe    String?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  revision                 Int                       @default(0)
+
+  @@index([caseId, status])
+  @@index([clientId, status])
+  @@map("client_action_requests")
+}
+
+model ClientSafeUpdate {
+  id                     String                 @id @default(uuid())
+  caseId                 String
+  clientId               String
+  title                  String
+  body                   String
+  category               ClientSafeUpdateCategory
+  status                 ClientSafeUpdateStatus @default(DRAFT)
+  sourceInternalEventType String?
+  sourceInternalEventId   String?
+  audienceSnapshot       Json
+  preparedById           String
+  approvedById           String?
+  publishedById          String?
+  publishedAt            DateTime?
+  revokedAt              DateTime?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  revision               Int                    @default(0)
+
+  @@index([caseId, status])
+  @@index([clientId, status])
+  @@map("client_safe_updates")
+}
+
+model ClientPublicationEvent {
+  id                    String                       @id @default(uuid())
+  action                ClientPublicationEventAction
+  actorId               String
+  caseId                String?
+  clientId              String?
+  grantId               String?
+  matterPublicationId   String?
+  documentPublicationId String?
+  actionRequestId       String?
+  safeUpdateId          String?
+  documentVersionId     String?
+  fromStatus            String?
+  toStatus              String?
+  metadataSafe          Json?
+  createdAt             DateTime                     @default(now())
+
+  @@index([caseId, createdAt])
+  @@index([clientId, createdAt])
+  @@index([grantId])
+  @@index([matterPublicationId])
+  @@index([documentPublicationId])
+  @@map("client_publication_events")
+}
+
 // ============================================================================
 // SYSTEM CONFIGURATION
 // ============================================================================
