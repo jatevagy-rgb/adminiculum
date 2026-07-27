@@ -50,6 +50,11 @@ model User {
   documentReviewSuggestions DocumentReviewSuggestion[] @relation("DocumentReviewSuggestionAuthor")
   createdDocumentReviews DocumentReview[] @relation("DocumentReviewCreatedBy")
   assignedDocumentReviews DocumentReview[] @relation("DocumentReviewAssignedReviewer")
+  ownedDocumentReviews DocumentReview[] @relation("DocumentReviewOwner")
+  createdDocumentReviewRounds DocumentReviewRound[] @relation("DocumentReviewRoundCreatedBy")
+  createdReviewPoints ReviewPoint[] @relation("ReviewPointCreatedBy")
+  ownedReviewPoints ReviewPoint[] @relation("ReviewPointOwner")
+  reviewDecisions ReviewDecision[] @relation("ReviewDecisionActor")
   createdDocumentComparisons DocumentComparison[] @relation("ComparisonCreatedBy")
   reviewSnapshots       ReviewSnapshot[]
   createdDocumentAnnotations DocumentAnnotation[] @relation("DocumentAnnotationCreatedBy")
@@ -1036,6 +1041,9 @@ model DocumentVersion {
   taskSubmissionDocuments TaskSubmissionDocument[]
   comparisonsAsBase   DocumentComparison[] @relation("ComparisonBaseVersion")
   comparisonsAsTarget DocumentComparison[] @relation("ComparisonTargetVersion")
+  reviewRounds     DocumentReviewRound[] @relation("DocumentReviewRoundVersion")
+  approvedReviews  DocumentReview[] @relation("DocumentReviewApprovedVersion")
+  reviewDecisions  ReviewDecision[] @relation("ReviewDecisionVersion")
 
   @@unique([documentId, version])
   @@unique([documentId, id])
@@ -1133,6 +1141,7 @@ model DocumentAnnotation {
   deletedBy            User? @relation("DocumentAnnotationDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   comments             DocumentAnnotationComment[]
   events               DocumentAnnotationEvent[]
+  reviewPoints         ReviewPoint[]
 
   @@unique([documentVersionId, idempotencyKey])
   @@index([documentId, documentVersionId, status])
@@ -1229,6 +1238,15 @@ model DocumentReview {
   documentVersionId String
   documentVersion   DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
   status            DocumentReviewStatus @default(DRAFT)
+  ownerId           String?
+  owner             User?     @relation("DocumentReviewOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  dueAt             DateTime?
+  currentRoundNumber Int      @default(1)
+  currentRoundId    String?   @unique
+  currentRound      DocumentReviewRound? @relation("DocumentReviewCurrentRound", fields: [currentRoundId], references: [id], onDelete: SetNull)
+  approvedVersionId String?
+  approvedVersion   DocumentVersion? @relation("DocumentReviewApprovedVersion", fields: [approvedVersionId], references: [id], onDelete: Restrict)
+  revision          Int       @default(0)
   createdById       String
   createdBy         User      @relation("DocumentReviewCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   assignedReviewerId String?
@@ -1236,6 +1254,9 @@ model DocumentReview {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   completedAt       DateTime?
+  rounds            DocumentReviewRound[] @relation("DocumentReviewRounds")
+  points            ReviewPoint[]
+  decisions         ReviewDecision[]
   snapshots         ReviewSnapshot[]
 
   @@unique([id, documentVersionId])
@@ -1246,12 +1267,136 @@ model DocumentReview {
 
 enum DocumentReviewStatus {
   DRAFT
+  ASSIGNED
+  IN_REVIEW
+  RESUBMITTED
+  CANCELLED
   READY_FOR_REVIEW
   CHANGES_REQUESTED
   APPROVED
   READY_FOR_CLIENT
   PUBLISHED
   CLOSED
+}
+
+model DocumentReviewRound {
+  id              String               @id @default(uuid())
+  reviewId        String
+  review          DocumentReview       @relation("DocumentReviewRounds", fields: [reviewId], references: [id], onDelete: Cascade)
+  currentForReview DocumentReview?     @relation("DocumentReviewCurrentRound")
+  roundNumber     Int
+  reviewVersionId String
+  reviewVersion   DocumentVersion      @relation("DocumentReviewRoundVersion", fields: [reviewVersionId], references: [id], onDelete: Restrict)
+  status          DocumentReviewStatus @default(DRAFT)
+  startedAt       DateTime?
+  submittedAt     DateTime?
+  completedAt     DateTime?
+  createdById     String
+  createdBy       User                 @relation("DocumentReviewRoundCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  revision        Int                  @default(0)
+  points          ReviewPoint[]
+  decisions       ReviewDecision[]
+
+  @@unique([reviewId, roundNumber])
+  @@index([reviewId, status])
+  @@index([reviewVersionId])
+  @@map("document_review_rounds")
+}
+
+enum ReviewPointType {
+  ANNOTATION
+  COMPARISON_CHANGE
+  WHOLE_DOCUMENT
+}
+
+enum ReviewPointStatus {
+  OPEN
+  ANSWERED
+  RESOLVED
+  REJECTED
+  DEFERRED
+}
+
+enum ReviewPointSeverity {
+  INFO
+  NORMAL
+  IMPORTANT
+  BLOCKING
+}
+
+model ReviewPoint {
+  id                  String              @id @default(uuid())
+  reviewId            String
+  review              DocumentReview      @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reviewRoundId       String
+  reviewRound         DocumentReviewRound @relation(fields: [reviewRoundId], references: [id], onDelete: Cascade)
+  type                ReviewPointType
+  status              ReviewPointStatus   @default(OPEN)
+  severity            ReviewPointSeverity @default(NORMAL)
+  title               String
+  internalRationale   String?
+  ownerId             String?
+  owner               User?               @relation("ReviewPointOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  dueAt               DateTime?
+  annotationId        String?
+  annotation          DocumentAnnotation? @relation(fields: [annotationId], references: [id], onDelete: SetNull)
+  comparisonSegmentId String?
+  comparisonSegment   DocumentChangeSegment? @relation(fields: [comparisonSegmentId], references: [id], onDelete: SetNull)
+  linkedTaskId        String?
+  linkedTask          Task?               @relation(fields: [linkedTaskId], references: [id], onDelete: SetNull)
+  carriedFromPointId  String?
+  carriedFromPoint    ReviewPoint?        @relation("ReviewPointLineage", fields: [carriedFromPointId], references: [id], onDelete: SetNull)
+  carriedToPoints     ReviewPoint[]       @relation("ReviewPointLineage")
+  createdById         String
+  createdBy           User                @relation("ReviewPointCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  revision            Int                 @default(0)
+
+  @@index([reviewId, status, severity])
+  @@index([reviewRoundId, status])
+  @@index([annotationId])
+  @@index([comparisonSegmentId])
+  @@index([linkedTaskId])
+  @@index([carriedFromPointId])
+  @@map("review_points")
+}
+
+enum ReviewDecisionAction {
+  CREATED
+  ASSIGNED
+  STARTED
+  POINT_ADDED
+  POINT_UPDATED
+  CHANGES_REQUESTED
+  RESUBMITTED
+  APPROVED
+  CANCELLED
+  CLOSED
+}
+
+model ReviewDecision {
+  id            String               @id @default(uuid())
+  reviewId      String
+  review        DocumentReview       @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reviewRoundId String?
+  reviewRound   DocumentReviewRound? @relation(fields: [reviewRoundId], references: [id], onDelete: SetNull)
+  action        ReviewDecisionAction
+  actorId       String
+  actor         User                 @relation("ReviewDecisionActor", fields: [actorId], references: [id], onDelete: Restrict)
+  versionId     String?
+  version       DocumentVersion?     @relation("ReviewDecisionVersion", fields: [versionId], references: [id], onDelete: Restrict)
+  safeRationale String?
+  metadataSafe  Json?
+  idempotencyKey String?             @unique
+  createdAt     DateTime             @default(now())
+
+  @@index([reviewId, createdAt])
+  @@index([reviewRoundId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("review_decisions")
 }
 
 model ReviewSnapshot {
@@ -1384,6 +1529,7 @@ model Task {
   submissions      TaskSubmission[]
   timeEntries      TimeEntry[]
   documentLinks    DocumentTaskLink[]
+  reviewPoints     ReviewPoint[]
 
   @@index([complexityScore], map: "tasks_complexityScore_idx")
   @@index([maturityStage], map: "tasks_maturityStage_idx")
@@ -2550,6 +2696,7 @@ model DocumentChangeSegment {
   revision           Int                   @default(0)
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
+  reviewPoints       ReviewPoint[]
 
   @@unique([comparisonId, sequence])
   @@index([comparisonId, sequence])

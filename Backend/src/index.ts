@@ -248,6 +248,10 @@ import { documentScopedComparisonRouter, comparisonRouter } from './modules/docu
 app.use('/api/v1/documents', documentScopedComparisonRouter);
 app.use('/api/v1/document-comparisons', comparisonRouter);
 
+import { documentReviewRouter, reviewRouter } from './modules/documents/review/review.routes';
+app.use('/api/v1/documents', documentReviewRouter);
+app.use('/api/v1/document-reviews', reviewRouter);
+
 import communicationsRoutes from './modules/communications/routes';
 app.use('/api/v1/communications', communicationsRoutes);
 
