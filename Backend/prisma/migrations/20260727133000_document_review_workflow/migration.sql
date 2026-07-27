@@ -96,9 +96,6 @@ CREATE TABLE IF NOT EXISTS "review_decisions" (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS "document_reviews_currentRoundId_key" ON "document_reviews"("currentRoundId") WHERE "currentRoundId" IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS "document_reviews_one_active_per_document_idx"
-  ON "document_reviews"("documentId")
-  WHERE "status"::text IN ('DRAFT','ASSIGNED','IN_REVIEW','CHANGES_REQUESTED','RESUBMITTED','READY_FOR_REVIEW');
 CREATE INDEX IF NOT EXISTS "document_reviews_ownerId_idx" ON "document_reviews"("ownerId");
 CREATE INDEX IF NOT EXISTS "document_reviews_assignedReviewerId_status_idx" ON "document_reviews"("assignedReviewerId", "status");
 CREATE INDEX IF NOT EXISTS "document_reviews_approvedVersionId_idx" ON "document_reviews"("approvedVersionId");

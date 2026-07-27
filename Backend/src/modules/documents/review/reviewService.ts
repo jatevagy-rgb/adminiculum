@@ -181,6 +181,11 @@ export async function transitionReview(reviewId: string, action: ReviewAction, a
     const openBlockingPoints = await tx.reviewPoint.count({ where: { reviewId, severity: 'BLOCKING', status: { in: UNRESOLVED_POINT_STATUSES as any } } });
     const latest = await latestVersion(tx, review.documentId);
     const currentVersion = await tx.documentVersion.findUniqueOrThrow({ where: { id: review.currentRound!.reviewVersionId }, select: { id: true, version: true } });
+    const requestedResubmitVersion = action === 'RESUBMIT' && input.versionId
+      ? await tx.documentVersion.findFirst({ where: { id: input.versionId, documentId: review.documentId }, select: { id: true, version: true } })
+      : null;
+    if (action === 'RESUBMIT' && input.versionId && !requestedResubmitVersion) throw new DocumentReviewWorkflowError(400, 'INVALID_REVIEW_VERSION', 'Resubmission version must belong to the reviewed document.');
+    const resubmitVersion = action === 'RESUBMIT' ? (requestedResubmitVersion || latest) : null;
     const verdict = evaluateTransition(String(review.status) as ReviewStatus, action, {
       actorAuthorized: true,
       reviewerHasAccess,
@@ -192,8 +197,8 @@ export async function transitionReview(reviewId: string, action: ReviewAction, a
       latestVersionId: latest.id,
       latestVersionNumber: latest.version,
       approveVersionId: action === 'APPROVE' ? input.versionId || currentVersion.id : undefined,
-      resubmitVersionId: action === 'RESUBMIT' ? input.versionId || latest.id : undefined,
-      resubmitVersionNumber: action === 'RESUBMIT' ? latest.version : undefined,
+      resubmitVersionId: resubmitVersion?.id,
+      resubmitVersionNumber: resubmitVersion?.version,
     });
     if (!verdict.allowed) throw new DocumentReviewWorkflowError(verdict.reason === 'BLOCKING_POINTS_OPEN' ? 409 : 400, verdict.reason || 'TRANSITION_BLOCKED', 'Review transition is not allowed.');
 
