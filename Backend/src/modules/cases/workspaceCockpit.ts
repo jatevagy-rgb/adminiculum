@@ -53,7 +53,17 @@ export interface CockpitTaskInput {
   documentId: string | null;
   assignedTo: { id: string; name: string } | null;
 }
-export interface CockpitDocumentInput { id: string; fileName?: string | null; name?: string | null }
+export interface CockpitDocumentInput {
+  id: string;
+  fileName?: string | null;
+  name?: string | null;
+  workStatus?: string | null;
+  workInstruction?: string | null;
+  responsibleId?: string | null;
+  reviewerId?: string | null;
+  dueDate?: Date | string | null;
+  nextStep?: string | null;
+}
 export interface CockpitCommunicationInput { id: string; direction?: string | null; createdAt: Date | string }
 export interface CockpitCaseInput {
   id: string;
@@ -63,6 +73,15 @@ export interface CockpitCaseInput {
 
 const URGENT_PRIORITIES = new Set(['URGENT', 'HIGH']);
 const REVIEW_STATUSES = new Set(['SUBMITTED', 'IN_REVIEW', 'UNDER_REVIEW', 'REVIEW_NEEDED']);
+const ACTIVE_DOCUMENT_WORK_STATUSES = new Set([
+  'WAITING_FOR_PROCESSING',
+  'IN_PROGRESS',
+  'INTERNAL_REVIEW',
+  'CHANGES_REQUESTED',
+  'APPROVED',
+  'READY_FOR_CLIENT',
+]);
+const REVIEW_DOCUMENT_WORK_STATUSES = new Set(['INTERNAL_REVIEW', 'CHANGES_REQUESTED']);
 
 const ms = (v: Date | string | null | undefined): number | null =>
   v ? new Date(v).getTime() : null;
@@ -155,10 +174,20 @@ export function buildCockpit(params: {
   const activeDocuments = documents
     .map((d) => {
       const linked = openTasks.find((t) => t.documentId === d.id);
-      if (!linked) return null;
       const fileName = d.fileName || d.name || 'Dokumentum';
-      if (REVIEW_STATUSES.has(String(linked.status).toUpperCase())) return { id: d.id, fileName, reason: 'REVIEW_PENDING' };
-      if (isOverdue(linked.dueDate)) return { id: d.id, fileName, reason: 'DEADLINE_PASSED' };
+      if (linked) {
+        if (REVIEW_STATUSES.has(String(linked.status).toUpperCase())) return { id: d.id, fileName, reason: 'REVIEW_PENDING' };
+        if (isOverdue(linked.dueDate)) return { id: d.id, fileName, reason: 'DEADLINE_PASSED' };
+        return { id: d.id, fileName, reason: 'IN_PROGRESS' };
+      }
+
+      const workStatus = String(d.workStatus || '').toUpperCase();
+      const hasDocumentWork =
+        ACTIVE_DOCUMENT_WORK_STATUSES.has(workStatus) ||
+        Boolean(d.workInstruction || d.responsibleId || d.reviewerId || d.dueDate || d.nextStep);
+      if (!hasDocumentWork) return null;
+      if (REVIEW_DOCUMENT_WORK_STATUSES.has(workStatus)) return { id: d.id, fileName, reason: 'REVIEW_PENDING' };
+      if (isOverdue(d.dueDate)) return { id: d.id, fileName, reason: 'DEADLINE_PASSED' };
       return { id: d.id, fileName, reason: 'IN_PROGRESS' };
     })
     .filter((x): x is { id: string; fileName: string; reason: string } => x !== null)

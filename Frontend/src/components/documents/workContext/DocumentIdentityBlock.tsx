@@ -22,9 +22,9 @@ export function DocumentWorkStatusBadge({ view }: { view: WorkContextView }) {
 
 export function DocumentIdentityBlock({ view }: { view: WorkContextView }) {
   return (
-    <div data-testid="dwh-identity" className="min-w-0">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 data-testid="dwh-title" className="min-w-0 truncate font-serif text-[17px] font-semibold leading-tight text-[var(--adm-text)]">
+    <div data-testid="dwh-identity" className="min-w-0 max-w-full flex-1">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <h2 data-testid="dwh-title" className="min-w-0 max-w-full truncate font-serif text-[17px] font-semibold leading-tight text-[var(--adm-text)]">
           {view.humanTitle}
         </h2>
         <DocumentWorkStatusBadge view={view} />

@@ -35,15 +35,15 @@ export function TopBar({ title, onSignOut, profileName, uiPack = "legal_ops_atel
   }, []);
 
   return (
-    <header className={`${isSignal ? "bg-[#0F172A] border-[#1F2937]" : "adm-topbar"} border-b px-5 py-2.5`}>
-      <div className="flex flex-wrap items-center gap-4">
-        <div>
+    <header className={`${isSignal ? "bg-[#0F172A] border-[#1F2937]" : "adm-topbar"} border-b px-3 py-2.5 sm:px-5`}>
+      <div className="flex min-w-0 flex-wrap items-center gap-3 sm:gap-4">
+        <div className="min-w-0">
           <p className={`text-[9.5px] uppercase tracking-[0.2em] ${isSignal ? "text-[#94A3B8]" : "text-[var(--adm-text-muted)]"}`}>Adminiculum</p>
-          <h1 className={`font-serif text-[21px] leading-tight ${isSignal ? "text-[#E5E7EB]" : "text-[var(--adm-text)]"}`}>{title}</h1>
+          <h1 className={`truncate font-serif text-[21px] leading-tight ${isSignal ? "text-[#E5E7EB]" : "text-[var(--adm-text)]"}`}>{title}</h1>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          <Link href="/search" className={`hidden h-9 min-w-[260px] items-center gap-2 rounded-[var(--adm-radius-sm)] border px-3 text-[12px] transition-colors md:flex ${isSignal ? "border-[#334155] bg-[#111827] text-[#CBD5E1] hover:bg-[#1F2937]" : "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)] hover:bg-[var(--adm-sand-100)]"}`} title="Keresés">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:ml-auto sm:flex-none">
+          <Link href="/search" className={`hidden h-9 min-w-0 max-w-[260px] items-center gap-2 rounded-[var(--adm-radius-sm)] border px-3 text-[12px] transition-colors lg:flex ${isSignal ? "border-[#334155] bg-[#111827] text-[#CBD5E1] hover:bg-[#1F2937]" : "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)] hover:bg-[var(--adm-sand-100)]"}`} title="Keresés">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-5-5m0-6a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
@@ -63,9 +63,9 @@ export function TopBar({ title, onSignOut, profileName, uiPack = "legal_ops_atel
               </span>
             ) : null}
           </Link>
-          <div className={`h-9 px-3 rounded-[var(--adm-radius-sm)] border flex items-center gap-2 ${isSignal ? "border-[#334155] bg-[#111827]" : "border-[var(--adm-border)] bg-[var(--adm-surface-raised)]"}`}>
+          <div className={`h-9 min-w-0 px-2 sm:px-3 rounded-[var(--adm-radius-sm)] border flex items-center gap-2 ${isSignal ? "border-[#334155] bg-[#111827]" : "border-[var(--adm-border)] bg-[var(--adm-surface-raised)]"}`}>
             <span className={`w-6 h-6 rounded-full text-[10px] grid place-items-center ${isSignal ? "bg-[#22D3EE] text-[#0B1220]" : "bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)]"}`}>A</span>
-            <span className={`max-w-[160px] truncate text-[10px] uppercase tracking-[0.16em] ${isSignal ? "text-[#CBD5E1]" : "text-[var(--adm-text)]"}`}>{profileName}</span>
+            <span className={`hidden max-w-[160px] truncate text-[10px] uppercase tracking-[0.16em] sm:block ${isSignal ? "text-[#CBD5E1]" : "text-[var(--adm-text)]"}`}>{profileName}</span>
           </div>
           <button onClick={onSignOut} className={`h-9 rounded-[var(--adm-radius-sm)] px-3 border text-[10px] uppercase tracking-[0.16em] transition-colors ${isSignal ? "border-[#334155] bg-[#111827] text-[#CBD5E1] hover:text-[#67E8F9]" : "border-[var(--adm-border)] bg-[var(--adm-surface-raised)] text-[var(--adm-text)] hover:bg-[var(--adm-sand-100)] hover:text-[var(--adm-green-800)]"}`}>
             Kilépés

@@ -1399,7 +1399,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col adm-shell-bg text-[var(--adm-text)] documents-surface">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col adm-shell-bg text-[var(--adm-text)] documents-surface">
       <CaseWorkspaceNav
         caseId={canonicalCaseId}
         caseNumber={displayCaseId}
@@ -1409,9 +1409,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
         status={caseRecord?.status}
       />
 
-      <div className="flex min-h-0 flex-1 flex-col">
-        <main className="flex-1 overflow-y-auto adm-board-page p-4 lg:p-5">
-          <section className="mx-auto flex max-w-[1540px] flex-col gap-4">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <main className="min-w-0 flex-1 overflow-y-auto adm-board-page p-3 sm:p-4 lg:p-5">
+          <section className="mx-auto flex w-full max-w-[1540px] min-w-0 flex-col gap-4">
             {actionResult && (
               <div className={`rounded-[10px] border p-3 text-sm font-medium ${actionResult.type === "success" ? "border-[#D9E3CC] bg-[var(--adm-sage-100)] text-[var(--adm-green-800)]" : "border-[#F2DAD6] bg-[var(--adm-terracotta-100)] text-[var(--adm-terracotta-700)]"}`}>
                 {actionResult.message}
@@ -1447,8 +1447,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
             {isInitialLoading ? (
               <AdminPanel className="p-10 text-center text-sm text-[var(--adm-text-muted)]">Dokumentumok betöltése...</AdminPanel>
             ) : (
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-                <aside className="overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white">
+              <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+                <aside className="min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white">
                   <div className="border-b border-[var(--adm-border)] bg-[var(--adm-sand-100)] p-4">
                     <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Workspace elemek</h2>
                   </div>
@@ -1533,8 +1533,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 </aside>
 
                 <section className="adm-board-panel min-w-0 overflow-hidden">
-                  <div className="flex gap-4 border-b border-[rgba(22,32,26,0.12)] bg-white/70 p-5">
-                    <div className="mt-1 h-16 w-1.5 rounded-full bg-[var(--adm-ochre-500)]" />
+                  <div className="flex min-w-0 gap-3 border-b border-[rgba(22,32,26,0.12)] bg-white/70 p-3 sm:gap-4 sm:p-5">
+                    <div className="mt-1 h-16 w-1.5 shrink-0 rounded-full bg-[var(--adm-ochre-500)]" />
                     <div className="min-w-0 flex-1">
                       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--adm-green-800)]">Contract Workspace</p>
                       {selectedUploadedDocument ? (
@@ -1621,8 +1621,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             ) : versions.length === 0 ? (
                               <p className="mt-4 rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[var(--adm-surface)] p-3 text-sm text-[var(--adm-text-muted)]">Ehhez a dokumentumhoz még nincs verziórekord.</p>
                             ) : (
-                              <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
-                                <div className="space-y-2">
+                              <div className="mt-4 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,300px)]">
+                                <div className="min-w-0 space-y-2">
                                   {versions.map((version) => (
                                     <button
                                       key={version.id}
@@ -1645,7 +1645,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                   ))}
                                 </div>
 
-                                <aside className="rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-4">
+                                <aside className="min-w-0 rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-4">
                                   {selectedVersion ? (
                                     <div className="space-y-3">
                                       <div>
@@ -1681,10 +1681,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             )}
 
                             {selectedVersion ? (
-                              <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-                                <div className="rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-4">
+                              <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
+                                <div className="min-w-0 rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-4">
                                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
+                                    <div className="min-w-0">
                                       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Anchored annotations · v{selectedVersion.versionNumber}</p>
                                       <h4 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Read-only review surface</h4>
                                       <p className="mt-1 text-xs text-[#3D4842]">
@@ -1774,7 +1774,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                   </div>
                                 </div>
 
-                                <aside className="rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-white p-4">
+                                <aside className="min-w-0 rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-white p-3 sm:p-4">
                                   <div className="flex items-start justify-between gap-3">
                                     <div>
                                       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Annotációk</p>
@@ -1783,16 +1783,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                     <AdminBadge tone={annotations.length ? 'gold' : 'neutral'}>{annotations.length} összes</AdminBadge>
                                   </div>
 
-                                  <div className="mt-4 rounded-[10px] border border-[#E7DECB] bg-[var(--adm-surface)] p-3">
+                                  <div className="mt-4 min-w-0 rounded-[10px] border border-[#E7DECB] bg-[var(--adm-surface)] p-3">
                                     <p className="text-xs font-bold text-[var(--adm-green-800)]">
                                       {pendingTextAnchor ? 'Szövegkijelölés aktív' : pendingVisualAnchor ? 'Vizuális horgony aktív' : 'Válassz horgonyt'}
                                     </p>
                                     {pendingTextAnchor ? <p className="mt-1 line-clamp-3 text-xs text-[#3D4842]">“{pendingTextAnchor.selectedText}”</p> : null}
-                                    <div className="mt-3 grid gap-2">
+                                    <div className="mt-3 grid min-w-0 gap-2">
                                       <select
                                         value={annotationDraft.annotationType}
                                         onChange={(event) => setAnnotationDraft((draft) => ({ ...draft, annotationType: event.target.value as DocumentAnnotationType }))}
-                                        className="rounded border border-[rgba(22,32,26,0.16)] bg-white px-3 py-2 text-sm"
+                                        className="w-full min-w-0 rounded border border-[rgba(22,32,26,0.16)] bg-white px-3 py-2 text-sm"
                                       >
                                         {TEXT_ANNOTATION_TYPES.map((type) => <option key={type} value={type}>{ANNOTATION_TYPE_LABELS[type]}</option>)}
                                       </select>
@@ -1800,25 +1800,25 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         value={annotationDraft.headline}
                                         onChange={(event) => setAnnotationDraft((draft) => ({ ...draft, headline: event.target.value }))}
                                         placeholder="Rövid cím"
-                                        className="rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm"
+                                        className="w-full min-w-0 rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm"
                                       />
                                       <textarea
                                         value={annotationDraft.internalNote}
                                         onChange={(event) => setAnnotationDraft((draft) => ({ ...draft, internalNote: event.target.value }))}
                                         placeholder="Belső megjegyzés"
                                         rows={3}
-                                        className="rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm"
+                                        className="w-full min-w-0 rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm"
                                       />
                                       <textarea
                                         value={annotationDraft.reviewComment}
                                         onChange={(event) => setAnnotationDraft((draft) => ({ ...draft, reviewComment: event.target.value }))}
                                         placeholder="Review komment"
                                         rows={2}
-                                        className="rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm"
+                                        className="w-full min-w-0 rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm"
                                       />
-                                      <div className="flex flex-col gap-1">
-                                        <span className="flex items-center justify-between gap-2">
-                                          <label htmlFor="cw-ann-client-draft" className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Ügyfélmagyarázat-tervezet</label>
+                                      <div className="flex min-w-0 flex-col gap-1">
+                                        <span className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                                          <label htmlFor="cw-ann-client-draft" className="min-w-0 break-words text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Ügyfélmagyarázat-tervezet</label>
                                           <NotPublishedBadge />
                                         </span>
                                         <textarea
@@ -1827,10 +1827,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                           onChange={(event) => setAnnotationDraft((draft) => ({ ...draft, clientExplanationDraft: event.target.value }))}
                                           placeholder="Ügyfélmagyarázat-tervezet"
                                           rows={2}
-                                          className="rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm"
+                                          className="w-full min-w-0 rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm"
                                         />
                                       </div>
-                                      <AdminButton variant="primary" onClick={handleCreateAnnotation} disabled={isCreatingAnnotation || (!pendingTextAnchor && !pendingVisualAnchor)}>
+                                      <AdminButton className="w-full" variant="primary" onClick={handleCreateAnnotation} disabled={isCreatingAnnotation || (!pendingTextAnchor && !pendingVisualAnchor)}>
                                         {isCreatingAnnotation ? 'Mentés...' : 'Annotáció létrehozása'}
                                       </AdminButton>
                                     </div>
@@ -1914,7 +1914,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   </div>
                 </section>
 
-                <aside className="grid gap-3 md:grid-cols-2 xl:col-start-2">
+                <aside className="grid min-w-0 gap-3 md:grid-cols-2 xl:col-start-2">
                   <AdminPanel className="overflow-hidden border-[rgba(22,32,26,0.14)] bg-[var(--adm-surface)]">
                     <div className="bg-[var(--adm-green-800)] p-4 text-white">
                       <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#D8C58E]">Akciók</p>

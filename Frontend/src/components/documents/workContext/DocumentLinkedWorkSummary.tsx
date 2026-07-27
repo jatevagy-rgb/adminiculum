@@ -29,7 +29,7 @@ export function DocumentLinkedWorkSummary({ view }: { view: WorkContextView }) {
       {view.nextStep ? (
         <div data-testid="dwh-next-step" className="min-w-0">
           <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Következő lépés</p>
-          <p className="mt-0.5 text-[11.5px] text-[var(--adm-text)]">{view.nextStep}</p>
+          <p className="mt-0.5 break-words text-[11.5px] text-[var(--adm-text)]">{view.nextStep}</p>
         </div>
       ) : null}
 

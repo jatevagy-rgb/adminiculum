@@ -32,7 +32,7 @@ export function DocumentTechnicalDetails({ view }: { view: WorkContextView }) {
         {open ? "Részletek elrejtése" : "Részletek"}
       </button>
       {open ? (
-        <dl data-testid="dwh-technical-panel" className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 sm:grid-cols-4">
+        <dl data-testid="dwh-technical-panel" className="mt-1 grid min-w-0 grid-cols-1 gap-x-4 gap-y-0.5 sm:grid-cols-2 lg:grid-cols-4">
           <Row label="Eredeti fájlnév" value={view.originalFilename || "—"} />
           <Row label="Típus" value={view.documentType || "—"} />
           <Row label="Aktuális verzió" value={view.currentVersion != null ? `v${view.currentVersion}` : "—"} />

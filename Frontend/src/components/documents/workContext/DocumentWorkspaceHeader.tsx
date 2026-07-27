@@ -39,7 +39,7 @@ export function DocumentWorkspaceHeader({
   const { card, view, loading, error, reload, setCard } = useDocumentWorkContext(documentId, { selectedVersion, currentVersion });
   const [editing, setEditing] = useState(false);
 
-  const shell = "rounded-lg border border-[rgba(22,32,26,0.12)] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(22,32,26,0.06)]";
+  const shell = "min-w-0 max-w-full rounded-lg border border-[rgba(22,32,26,0.12)] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(22,32,26,0.06)]";
 
   if (loading) {
     return (
@@ -62,9 +62,9 @@ export function DocumentWorkspaceHeader({
 
   return (
     <section data-testid="document-workspace-header" className={shell}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
         <DocumentIdentityBlock view={view} />
-        <div data-testid="dwh-actions" className="flex flex-wrap items-center gap-1.5">
+        <div data-testid="dwh-actions" className="flex max-w-full flex-wrap items-center gap-1.5">
           {onDownload ? <AdminButton variant="primary" size="xs" onClick={onDownload}>Letöltés</AdminButton> : null}
           {onNewVersion ? <AdminButton variant="neutral" size="xs" onClick={onNewVersion}>Új verzió</AdminButton> : null}
           {onReview ? <AdminButton variant="neutral" size="xs" onClick={onReview}>Review</AdminButton> : null}
@@ -80,8 +80,8 @@ export function DocumentWorkspaceHeader({
           <DocumentVersionIdentity view={view} />
         </div>
       ) : (
-        <div data-testid="dwh-no-context" className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md bg-[var(--adm-ivory-100)] px-2.5 py-2">
-          <p className="text-[12px] text-[var(--adm-text-muted)]">Még nincs munkautasítás vagy felelős beállítva.</p>
+        <div data-testid="dwh-no-context" className="mt-2 flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md bg-[var(--adm-ivory-100)] px-2.5 py-2">
+          <p className="min-w-0 text-[12px] text-[var(--adm-text-muted)]">Még nincs munkautasítás vagy felelős beállítva.</p>
           {canEdit ? (
             <AdminButton variant="primary" size="xs" onClick={() => setEditing(true)} data-testid="dwh-set-context">
               Munkakontextus beállítása

@@ -98,6 +98,12 @@ export interface CaseWorkspaceDto {
     uploadedBy: { id: string; name: string } | null;
     summary: string | null;
     commentCount: number | null;
+    workStatus: string | null;
+    workInstruction: string | null;
+    responsible: { id: string; name: string } | null;
+    reviewer: { id: string; name: string } | null;
+    dueDate: string | null;
+    nextStep: string | null;
   }>;
   deadlines: Array<{
     id: string;
@@ -211,6 +217,10 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
         select: {
           id: true, name: true, fileName: true, mimeType: true,
           documentType: true, category: true, version: true, currentVersion: true,
+          workStatus: true, workInstruction: true, responsibleId: true, reviewerId: true,
+          dueDate: true, nextStep: true,
+          responsible: { select: { id: true, name: true } },
+          reviewer: { select: { id: true, name: true } },
           createdAt: true, updatedAt: true,
         },
         orderBy: { updatedAt: 'desc' },
@@ -325,6 +335,12 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
     uploadedBy: null,
     summary: null,
     commentCount: documentCommentCounts.get(d.id) ?? 0,
+    workStatus: d.workStatus ? String(d.workStatus) : null,
+    workInstruction: d.workInstruction ?? null,
+    responsible: d.responsible ? { id: d.responsible.id, name: d.responsible.name } : null,
+    reviewer: d.reviewer ? { id: d.reviewer.id, name: d.reviewer.name } : null,
+    dueDate: iso(d.dueDate),
+    nextStep: d.nextStep ?? null,
   }));
 
   // ---- deadlines: derived from open tasks that carry a dueDate (reliable
@@ -450,7 +466,17 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
       documentId: t.documentId ?? null,
       assignedTo: t.assignedTo ? { id: t.assignedTo.id, name: t.assignedTo.name } : null,
     })),
-    documents: documents.map((d) => ({ id: d.id, fileName: d.fileName, name: d.name })),
+    documents: documents.map((d) => ({
+      id: d.id,
+      fileName: d.fileName,
+      name: d.name,
+      workStatus: d.workStatus ? String(d.workStatus) : null,
+      workInstruction: d.workInstruction ?? null,
+      responsibleId: d.responsibleId ?? null,
+      reviewerId: d.reviewerId ?? null,
+      dueDate: d.dueDate ?? null,
+      nextStep: d.nextStep ?? null,
+    })),
     communications: communicationsRaw.map((c) => ({ id: c.id, direction: c.direction, createdAt: c.createdAt })),
     communicationCount,
     reviewCount,

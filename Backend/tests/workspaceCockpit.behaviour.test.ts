@@ -166,6 +166,21 @@ describe('active documents are operationally selected, not dumped', () => {
     expect(c.kpi.activeDocuments.count).toBe(3);
   });
 
+  it('surfaces documents whose own work context is active even without a task link', () => {
+    const c = build({
+      documents: [
+        { id: 'd-review', fileName: 'internal-review.docx', workStatus: 'INTERNAL_REVIEW' },
+        { id: 'd-owner', fileName: 'partial-context.docx', workStatus: 'RECEIVED', responsibleId: 'u1' },
+        { id: 'd-empty', fileName: 'received.docx', workStatus: 'RECEIVED' },
+      ],
+    });
+    const byId = Object.fromEntries(c.activeDocuments.map((d) => [d.id, d.reason]));
+    expect(byId['d-review']).toBe('REVIEW_PENDING');
+    expect(byId['d-owner']).toBe('IN_PROGRESS');
+    expect(byId['d-empty']).toBeUndefined();
+    expect(c.kpi.activeDocuments.count).toBe(2);
+  });
+
   it('bounds the active document list', () => {
     const tasks = Array.from({ length: 20 }, (_, i) => task({ id: `t${i}`, documentId: `d${i}` }));
     const docs = Array.from({ length: 20 }, (_, i) => ({ id: `d${i}`, fileName: `f${i}.docx` }));
