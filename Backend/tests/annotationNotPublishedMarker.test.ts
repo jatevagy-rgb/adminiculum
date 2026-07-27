@@ -76,13 +76,14 @@ describe('the marker is wired into every client-explanation surface', () => {
 describe('annotation selection does not survive a version switch', () => {
   it('clears the selected annotation and its comments whenever the version changes', () => {
     const effectStart = page.indexOf('const refreshAnnotations');
-    const marker = page.indexOf('}, [selectedUploadedDocument?.id, selectedVersion?.id, refreshAnnotations]);', effectStart);
+    // Deps now also include the version-ownership eligibility guard (race fix).
+    const marker = page.indexOf('}, [selectedUploadedDocument?.id, selectedVersion?.id, annotationVersionEligible, refreshAnnotations]);', effectStart);
     expect(marker).toBeGreaterThan(-1);
     const effect = page.slice(page.lastIndexOf('useEffect(', marker), marker);
     // The reset must happen unconditionally, not only in the "no document" branch.
     expect(effect).toContain('setSelectedAnnotationId(null)');
     expect(effect).toContain('setAnnotationComments([])');
-    const guardIndex = effect.indexOf('if (selectedUploadedDocument?.id && selectedVersion?.id)');
+    const guardIndex = effect.indexOf('if (annotationVersionEligible && selectedUploadedDocument?.id && selectedVersion?.id)');
     expect(effect.indexOf('setSelectedAnnotationId(null)')).toBeLessThan(guardIndex);
   });
 
