@@ -108,8 +108,22 @@ export async function linkSegmentAnnotation(comparisonId: string, segmentId: str
   const seg = await prisma.documentChangeSegment.findFirst({ where: { id: segmentId, comparisonId } });
   if (!seg) throw new ComparisonError('SEGMENT_NOT_FOUND', 'Change segment not found.', 404);
   if (annotationId) {
-    const ann = await prisma.documentAnnotation.findUnique({ where: { id: annotationId }, select: { id: true } });
+    const comparison = await prisma.documentComparison.findUnique({
+      where: { id: comparisonId },
+      select: { documentId: true, baseVersionId: true, targetVersionId: true },
+    });
+    if (!comparison) throw new ComparisonError('COMPARISON_NOT_FOUND', 'Comparison not found.', 404);
+    const ann = await prisma.documentAnnotation.findUnique({
+      where: { id: annotationId },
+      select: { id: true, documentId: true, documentVersionId: true },
+    });
     if (!ann) throw new ComparisonError('ANNOTATION_NOT_FOUND', 'Annotation not found.', 404);
+    if (
+      ann.documentId !== comparison.documentId ||
+      (ann.documentVersionId !== comparison.baseVersionId && ann.documentVersionId !== comparison.targetVersionId)
+    ) {
+      throw new ComparisonError('ANNOTATION_NOT_IN_COMPARISON', 'Annotation must belong to one of the compared document versions.', 400);
+    }
   }
   return prisma.documentChangeSegment.update({ where: { id: segmentId }, data: { linkedAnnotationId: annotationId, revision: { increment: 1 } } });
 }
