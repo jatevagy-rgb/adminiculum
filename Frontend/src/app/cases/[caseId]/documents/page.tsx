@@ -333,6 +333,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [annotationError, setAnnotationError] = useState<string | null>(null);
   const [versionText, setVersionText] = useState<string | null>(null);
   const [isLoadingVersionText, setIsLoadingVersionText] = useState(false);
+  // Controlled "preview unavailable" state for a version whose stored content
+  // cannot be fetched (e.g. an invalid/synthetic storage reference). Truthful
+  // domain state — never a raw provider error surfaced to the console/UI.
+  const [versionTextUnavailable, setVersionTextUnavailable] = useState(false);
   const [pendingTextAnchor, setPendingTextAnchor] = useState<{
     selectedText: string;
     startOffset: number | null;
@@ -1202,6 +1206,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   useEffect(() => {
     let cancelled = false;
     setVersionText(null);
+    setVersionTextUnavailable(false);
     setPendingTextAnchor(null);
     setPendingVisualAnchor(null);
     setVisualMode(null);
@@ -1212,9 +1217,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       .then((text) => {
         if (!cancelled) setVersionText(text);
       })
-      .catch((err) => {
-        console.error('TXT version preview failed:', err);
-        if (!cancelled) setAnnotationError('A szöveges előnézet betöltése sikertelen.');
+      .catch(() => {
+        // The version's stored content could not be retrieved (e.g. an invalid
+        // storage reference). Show a controlled, truthful state — never log the
+        // provider's error body or surface a storage identifier. Runs once per
+        // version, so there is no retry loop.
+        if (!cancelled) setVersionTextUnavailable(true);
       })
       .finally(() => {
         if (!cancelled) setIsLoadingVersionText(false);
@@ -1750,9 +1758,17 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                     className={`relative mt-4 min-h-[420px] overflow-hidden rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-white ${visualMode ? 'cursor-crosshair' : ''}`}
                                   >
                                     {canRenderTextVersion ? (
-                                      <div className="max-h-[620px] overflow-auto whitespace-pre-wrap p-5 font-mono text-[12px] leading-6 text-[#1f2a24]">
-                                        {isLoadingVersionText ? 'Szöveges verzió betöltése...' : renderAnnotatedText()}
-                                      </div>
+                                      versionTextUnavailable && !isLoadingVersionText ? (
+                                        <div data-testid="version-preview-unavailable" className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
+                                          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Előnézet</p>
+                                          <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Az előnézet jelenleg nem érhető el</h5>
+                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.</p>
+                                        </div>
+                                      ) : (
+                                        <div className="max-h-[620px] overflow-auto whitespace-pre-wrap p-5 font-mono text-[12px] leading-6 text-[#1f2a24]">
+                                          {isLoadingVersionText ? 'Szöveges verzió betöltése...' : renderAnnotatedText()}
+                                        </div>
+                                      )
                                     ) : (
                                       <div className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
                                         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
