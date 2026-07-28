@@ -84,7 +84,7 @@ export function ClientPublicationPanel({
   const nextDocumentAction = documentPublication ? nextAction(documentPublication.status) : null;
 
   return (
-    <section data-testid="client-publication-panel" className="min-w-0 space-y-4 rounded-[18px] border border-[rgba(22,32,26,0.12)] bg-white p-4 shadow-sm">
+    <section data-testid="client-publication-panel" className="min-w-0 w-full space-y-4 overflow-hidden rounded-[18px] border border-[rgba(22,32,26,0.12)] bg-white p-3 shadow-sm [overflow-wrap:anywhere] sm:p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Publication mód · belső kontrollpont</p>
@@ -119,28 +119,28 @@ export function ClientPublicationPanel({
 
       <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
         <div data-testid="publication-preview" className="min-w-0 space-y-4">
-          <div className="rounded-[14px] border border-[rgba(22,32,26,0.12)] p-4">
+          <div className="min-w-0 rounded-[14px] border border-[rgba(22,32,26,0.12)] p-3 sm:p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h4 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Matter client preview</h4>
               <AdminBadge tone={matterPublication?.status === "PUBLISHED" ? "green" : "neutral"}>{STATUS_LABELS[matterPublication?.status || "DRAFT"]}</AdminBadge>
             </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <input value={matterTitle} onChange={(event) => setMatterTitle(event.target.value)} className="rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="Client-safe cím" />
-              <input value={matterStatus} onChange={(event) => setMatterStatus(event.target.value)} className="rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="Client-safe státusz" />
+              <input value={matterTitle} onChange={(event) => setMatterTitle(event.target.value)} className="min-w-0 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="Client-safe cím" />
+              <input value={matterStatus} onChange={(event) => setMatterStatus(event.target.value)} className="min-w-0 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="Client-safe státusz" />
             </div>
             <p className="mt-3 rounded-[12px] bg-[var(--adm-surface)] p-3 text-sm text-[#3D4842]">{matterPublication?.snapshot?.clientSafeStatus || matterStatus}</p>
             <ActionRow disabled={busy || !activeGrant} createLabel="Matter draft" onCreate={() => run(() => createMatterPublicationDraft({ caseId, clientSafeTitle: matterTitle, clientSafeStatus: matterStatus, clientSafeNextStep: "Következő ügyvédi lépés megosztása.", responsibleLawyerDisplay: "Felelős ügyvéd" }))} current={matterPublication} nextAction={nextMatterAction} onTransition={(action) => matterPublication ? run(() => transitionMatterPublication(matterPublication.id, action, matterPublication.revision)) : undefined} />
           </div>
 
-          <div className="rounded-[14px] border border-[rgba(22,32,26,0.12)] p-4">
+          <div className="min-w-0 rounded-[14px] border border-[rgba(22,32,26,0.12)] p-3 sm:p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h4 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Document exact-version preview</h4>
               <AdminBadge tone={documentPublication?.status === "PUBLISHED" ? "green" : "neutral"}>{STATUS_LABELS[documentPublication?.status || "DRAFT"]}</AdminBadge>
             </div>
             <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Kiválasztott immutable verzió: {selectedVersion ? `v${selectedVersion.versionNumber} · ${selectedVersion.originalFileName || selectedVersion.id.slice(0, 8)}` : "nincs"}</p>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <input value={documentTitle} onChange={(event) => setDocumentTitle(event.target.value)} className="rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="Client-facing cím" />
-              <input value={documentExplanation} onChange={(event) => setDocumentExplanation(event.target.value)} className="rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="Client-facing magyarázat" />
+              <input value={documentTitle} onChange={(event) => setDocumentTitle(event.target.value)} className="min-w-0 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="Client-facing cím" />
+              <input value={documentExplanation} onChange={(event) => setDocumentExplanation(event.target.value)} className="min-w-0 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="Client-facing magyarázat" />
             </div>
             <p className="mt-3 rounded-[12px] bg-[var(--adm-surface)] p-3 text-sm text-[#3D4842]">{documentPublication?.clientFacingExplanation || documentExplanation}</p>
             <ActionRow disabled={busy || !activeGrant || !selectedVersion} createLabel="Document draft" onCreate={() => selectedVersion ? run(() => createDocumentPublicationDraft({ documentId, documentVersionId: selectedVersion.id, clientFacingTitle: documentTitle, clientFacingExplanation: documentExplanation })) : undefined} current={documentPublication} nextAction={nextDocumentAction} onTransition={(action) => documentPublication ? run(() => transitionDocumentPublication(documentPublication.id, action, documentPublication.revision)) : undefined} />
@@ -148,10 +148,10 @@ export function ClientPublicationPanel({
         </div>
 
         <aside className="min-w-0 space-y-4">
-          <div data-testid="publication-audience" className="rounded-[14px] border border-[rgba(22,32,26,0.12)] p-4">
+          <div data-testid="publication-audience" className="min-w-0 rounded-[14px] border border-[rgba(22,32,26,0.12)] p-3 sm:p-4">
             <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Audience / grant</h4>
             <input value={clientUserId} onChange={(event) => setClientUserId(event.target.value)} className="mt-3 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="CLIENT felhasználó ID" />
-            <AdminButton className="mt-2 w-full justify-start" variant="neutral" disabled={busy || !clientId || !clientUserId.trim()} onClick={() => run(() => createClientPortalGrant({ caseId, clientId: clientId!, clientUserId: clientUserId.trim() }))}>Grant létrehozása</AdminButton>
+            <AdminButton className="mt-2 w-full min-w-0 justify-start whitespace-normal text-left" variant="neutral" disabled={busy || !clientId || !clientUserId.trim()} onClick={() => run(() => createClientPortalGrant({ caseId, clientId: clientId!, clientUserId: clientUserId.trim() }))}>Grant létrehozása</AdminButton>
             <div className="mt-3 space-y-2">
               {overview?.grants.map((grant) => (
                 <div key={grant.id} className="rounded-[10px] bg-[var(--adm-surface)] p-2 text-xs">
@@ -163,15 +163,15 @@ export function ClientPublicationPanel({
             </div>
           </div>
 
-          <div className="rounded-[14px] border border-[rgba(22,32,26,0.12)] p-4">
+          <div className="min-w-0 rounded-[14px] border border-[rgba(22,32,26,0.12)] p-3 sm:p-4">
             <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Action request & safe update</h4>
-            <input value={actionTitle} onChange={(event) => setActionTitle(event.target.value)} className="mt-3 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" />
-            <AdminButton className="mt-2 w-full justify-start" variant="neutral" disabled={busy || !activeGrant} onClick={() => run(async () => { const request = await createClientActionRequestDraft({ caseId, type: "INFORMATION_REQUEST", clientSafeTitle: actionTitle, clientSafeInstructions: "Kérjük, erősítse meg az adatokat." }); await approveClientActionRequest(request.id, request.revision); })}>Action request publish</AdminButton>
-            <input value={safeUpdateTitle} onChange={(event) => setSafeUpdateTitle(event.target.value)} className="mt-3 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" />
-            <AdminButton className="mt-2 w-full justify-start" variant="neutral" disabled={busy || !activeGrant} onClick={() => run(async () => { const update = await createClientSafeUpdateDraft({ caseId, title: safeUpdateTitle, body: "Ez kizárólag client-safe frissítés, nem belső audit feed.", category: "GENERAL" }); const approved = await transitionClientSafeUpdate(update.id, "approve", update.revision); await transitionClientSafeUpdate(update.id, "publish", approved.revision); })}>Safe update publish</AdminButton>
+            <input value={actionTitle} onChange={(event) => setActionTitle(event.target.value)} className="mt-3 min-w-0 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" />
+            <AdminButton className="mt-2 w-full min-w-0 justify-start whitespace-normal text-left" variant="neutral" disabled={busy || !activeGrant} onClick={() => run(async () => { const request = await createClientActionRequestDraft({ caseId, type: "INFORMATION_REQUEST", clientSafeTitle: actionTitle, clientSafeInstructions: "Kérjük, erősítse meg az adatokat." }); await approveClientActionRequest(request.id, request.revision); })}>Action request publish</AdminButton>
+            <input value={safeUpdateTitle} onChange={(event) => setSafeUpdateTitle(event.target.value)} className="mt-3 min-w-0 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" />
+            <AdminButton className="mt-2 w-full min-w-0 justify-start whitespace-normal text-left" variant="neutral" disabled={busy || !activeGrant} onClick={() => run(async () => { const update = await createClientSafeUpdateDraft({ caseId, title: safeUpdateTitle, body: "Ez kizárólag client-safe frissítés, nem belső audit feed.", category: "GENERAL" }); const approved = await transitionClientSafeUpdate(update.id, "approve", update.revision); await transitionClientSafeUpdate(update.id, "publish", approved.revision); })}>Safe update publish</AdminButton>
           </div>
 
-          <div data-testid="publication-history" className="rounded-[14px] border border-[rgba(22,32,26,0.12)] p-4">
+          <div data-testid="publication-history" className="min-w-0 rounded-[14px] border border-[rgba(22,32,26,0.12)] p-3 sm:p-4">
             <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Immutable history</h4>
             <div className="mt-2 max-h-52 space-y-1 overflow-auto text-xs text-[#3D4842]">
               {overview?.history.length ? overview.history.map((event) => <p key={event.id}>{event.action} {event.toStatus ? `→ ${event.toStatus}` : ""}</p>) : <p>Nincs publication event.</p>}
@@ -208,10 +208,10 @@ function ActionRow({
   onTransition: (action: "submit" | "approve" | "publish" | "revoke" | "supersede") => void;
 }) {
   return (
-    <div className="mt-3 flex flex-wrap gap-2">
-      {!current ? <AdminButton variant="primary" disabled={disabled} onClick={onCreate}>{createLabel}</AdminButton> : null}
-      {current && nextAction ? <AdminButton variant={nextAction === "publish" ? "primary" : nextAction === "revoke" ? "muted" : "gold"} disabled={disabled} onClick={() => onTransition(nextAction)}>{nextAction}</AdminButton> : null}
-      {current?.status === "PUBLISHED" ? <AdminButton variant="neutral" disabled={disabled} onClick={() => onTransition("supersede")}>supersede</AdminButton> : null}
+    <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+      {!current ? <AdminButton className="min-w-0 whitespace-normal text-left" variant="primary" disabled={disabled} onClick={onCreate}>{createLabel}</AdminButton> : null}
+      {current && nextAction ? <AdminButton className="min-w-0 whitespace-normal text-left" variant={nextAction === "publish" ? "primary" : nextAction === "revoke" ? "muted" : "gold"} disabled={disabled} onClick={() => onTransition(nextAction)}>{nextAction}</AdminButton> : null}
+      {current?.status === "PUBLISHED" ? <AdminButton className="min-w-0 whitespace-normal text-left" variant="neutral" disabled={disabled} onClick={() => onTransition("supersede")}>supersede</AdminButton> : null}
     </div>
   );
 }
