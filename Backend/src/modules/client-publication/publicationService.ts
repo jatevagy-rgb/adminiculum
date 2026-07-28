@@ -433,13 +433,330 @@ function buildWarnings(grants: Row[], documents: Row[], actions: Row[]): Row[] {
 }
 
 export async function portalHomeSnapshot(actor: Actor, db: PrismaClient = defaultPrisma): Promise<Row> {
-  if (!CLIENT_PUBLICATION_GATES.portalRead()) throw new ClientPublicationError(503, 'CLIENT_PORTAL_READ_DISABLED', 'Client portal reads are disabled.');
-  if (String(actor.role || '') !== 'CLIENT') throw new ClientPublicationError(403, 'PORTAL_ACTOR_REQUIRED', 'Portal reads require a client actor.');
-  const grants = await many(db, 'SELECT *, role::text, status::text, permissions::text[] FROM client_portal_grants WHERE "clientUserId"=$1 AND status=$2::"ClientPortalGrantStatus" AND ("validUntil" IS NULL OR "validUntil" > now())', actor.userId, 'ACTIVE');
-  const caseIds = grants.map((grant) => grant.caseId);
-  const matters = caseIds.length ? await many(db, 'SELECT *, status::text FROM client_matter_publications WHERE status=$1::"ClientPublicationStatus" AND "caseId"=ANY($2::text[])', 'PUBLISHED', caseIds) : [];
-  const documents = caseIds.length ? await many(db, 'SELECT *, status::text FROM client_document_publications WHERE status=$1::"ClientPublicationStatus" AND "caseId"=ANY($2::text[])', 'PUBLISHED', caseIds) : [];
-  const dto = { grants: grants.map(toClientPortalGrantSummaryDTO), matters: matters.map((row) => toClientMatterPublicationDTO(row, null)), documents: documents.map(toClientDocumentPublicationDTO), portalActionsEnabled: CLIENT_PUBLICATION_GATES.portalActions() };
+  const context = await resolvePortalContext(actor, db);
+  const [matters, actionRequests, updates] = await Promise.all([
+    listPortalMatters(actor, db),
+    listPortalActionRequests(actor, null, db),
+    listPortalSafeUpdates(actor, null, db),
+  ]);
+  const dto = {
+    portalActionsEnabled: CLIENT_PUBLICATION_GATES.portalActions(),
+    identity: { displayName: context.displayName, email: context.email },
+    access: { state: 'ACTIVE', grantCount: context.grants.length },
+    attention: actionRequests.items,
+    matters: matters.items,
+    updates: updates.items.slice(0, 8),
+  };
   assertNoForbiddenPortalFields(dto);
   return dto;
+}
+
+type PortalContext = {
+  userId: string;
+  displayName: string | null;
+  email: string | null;
+  grants: Row[];
+  caseIds: string[];
+  clientIds: string[];
+};
+
+const PORTAL_ACTION_LABELS: Record<string, string> = {
+  DOCUMENT_UPLOAD: 'Dokumentum bekérése',
+  INFORMATION_REQUEST: 'Információkérés',
+  APPROVAL_REQUEST: 'Jóváhagyási kérés',
+  CONFIRMATION_REQUEST: 'Megerősítés kérése',
+  QUESTION: 'Kérdés',
+};
+
+const PORTAL_UPDATE_LABELS: Record<string, string> = {
+  STATUS: 'Állapotfrissítés',
+  DEADLINE: 'Határidő',
+  DOCUMENT: 'Dokumentum',
+  ACTION_REQUIRED: 'Teendő',
+  GENERAL: 'Frissítés',
+};
+
+function requirePortalReadGate(): void {
+  if (!CLIENT_PUBLICATION_GATES.portalRead()) throw new ClientPublicationError(503, 'CLIENT_PORTAL_READ_DISABLED', 'Client portal reads are disabled.');
+}
+
+function requirePortalActor(actor: Actor): void {
+  if (!actor.userId || String(actor.role || '') !== 'CLIENT') throw new ClientPublicationError(403, 'PORTAL_ACTOR_REQUIRED', 'Portal reads require a client actor.');
+}
+
+function asArray(value: unknown): Row[] {
+  if (Array.isArray(value)) return value as Row[];
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function audienceGrants(row: Row): Row[] {
+  const snapshot = row.audienceSnapshot ?? row.audiencesnapshot ?? {};
+  if (snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)) {
+    return asArray((snapshot as Row).grants);
+  }
+  if (typeof snapshot === 'string') {
+    try {
+      const parsed = JSON.parse(snapshot);
+      return asArray(parsed?.grants);
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function audienceAllows(row: Row, grants: Row[], permission: string): boolean {
+  const allowedGrantIds = new Set(audienceGrants(row).map((grant) => String(grant.id || '')).filter(Boolean));
+  return grants.some((grant) => {
+    const permissions = Array.isArray(grant.permissions) ? grant.permissions.map(String) : [];
+    if (!permissions.includes(permission)) return false;
+    return allowedGrantIds.size === 0 || allowedGrantIds.has(String(grant.id));
+  });
+}
+
+function firstAuthorizedGrant(row: Row, grants: Row[], permission: string): Row | null {
+  const allowedGrantIds = new Set(audienceGrants(row).map((grant) => String(grant.id || '')).filter(Boolean));
+  return grants.find((grant) => {
+    const permissions = Array.isArray(grant.permissions) ? grant.permissions.map(String) : [];
+    if (!permissions.includes(permission)) return false;
+    return allowedGrantIds.size === 0 || allowedGrantIds.has(String(grant.id));
+  }) || null;
+}
+
+function portalDate(value: unknown): string | null {
+  return value instanceof Date ? value.toISOString() : typeof value === 'string' ? value : null;
+}
+
+function toPortalMatter(row: Row, revision: Row | null, counts: Row = {}): Row {
+  const dto = {
+    id: row.id,
+    title: revision?.clientSafeTitle || 'Közzétett ügy',
+    statusLabel: 'Folyamatban',
+    nextStepLabel: revision?.clientSafeNextStep || null,
+    responsibleLawyerDisplay: revision?.responsibleLawyerDisplay || null,
+    publicDeadlines: revision?.publishedDeadlinesSnapshot || [],
+    publishedAt: portalDate(row.publishedAt),
+    updatedAt: portalDate(row.updatedAt),
+    attentionCount: Number(counts.attentionCount || 0),
+    documentCount: Number(counts.documentCount || 0),
+    latestUpdateAt: portalDate(counts.latestUpdateAt),
+  };
+  assertNoForbiddenPortalFields(dto);
+  return dto;
+}
+
+function toPortalDocument(row: Row, matter?: Row | null): Row {
+  const versionLabel = row.versionNumber ? `Közzétett változat ${row.versionNumber}` : 'Közzétett változat';
+  const dto = {
+    id: row.id,
+    matterId: row.matterPublicationId || matter?.id || null,
+    matterTitle: matter?.title || null,
+    title: row.clientFacingTitle,
+    explanation: row.clientFacingExplanation || null,
+    versionLabel,
+    publishedAt: portalDate(row.publishedAt),
+    stateLabel: row.status === 'PUBLISHED' ? 'Dokumentum elérhető' : row.status === 'SUPERSEDED' ? 'Már nem aktuális' : 'Visszavont',
+    downloadAvailable: row.status === 'PUBLISHED',
+    mimeType: row.mimeType || 'application/octet-stream',
+    size: row.size || null,
+  };
+  assertNoForbiddenPortalFields(dto);
+  return dto;
+}
+
+function toPortalAction(row: Row, matter?: Row | null): Row {
+  const dto = {
+    id: row.id,
+    matterId: matter?.id || null,
+    matterTitle: matter?.title || null,
+    title: row.clientSafeTitle,
+    instructions: row.clientSafeInstructions || null,
+    typeLabel: PORTAL_ACTION_LABELS[row.type] || 'Teendő',
+    dueAt: portalDate(row.dueAt),
+    statusLabel: 'Teendője van',
+    readOnlyNote: 'Az online teljesítés később lesz elérhető. Ez a portál most csak olvasható.',
+  };
+  assertNoForbiddenPortalFields(dto);
+  return dto;
+}
+
+function toPortalUpdate(row: Row, matter?: Row | null): Row {
+  const dto = {
+    id: row.id,
+    matterId: matter?.id || null,
+    matterTitle: matter?.title || null,
+    title: row.title,
+    body: row.body,
+    categoryLabel: PORTAL_UPDATE_LABELS[row.category] || 'Frissítés érkezett',
+    publishedAt: portalDate(row.publishedAt),
+  };
+  assertNoForbiddenPortalFields(dto);
+  return dto;
+}
+
+async function resolvePortalContext(actor: Actor, db: Db = defaultPrisma): Promise<PortalContext> {
+  requirePortalReadGate();
+  requirePortalActor(actor);
+  const user = await one(db, 'SELECT id, email, name, role::text, status::text, "isActive" FROM users WHERE id=$1', actor.userId);
+  if (!user || user.role !== 'CLIENT' || user.status !== 'ACTIVE' || user.isActive === false) throw new ClientPublicationError(403, 'PORTAL_ACCESS_DENIED', 'Portal access is not active.');
+  const grants = await many(db, 'SELECT *, role::text, status::text, permissions::text[] FROM client_portal_grants WHERE "clientUserId"=$1 ORDER BY "updatedAt" DESC', actor.userId);
+  const active = grants.filter((grant) => grant.status === 'ACTIVE' && (!grant.validUntil || new Date(grant.validUntil).getTime() > Date.now()) && (!grant.validFrom || new Date(grant.validFrom).getTime() <= Date.now()));
+  if (active.length === 0) {
+    const latest = grants[0];
+    const code = latest?.status === 'SUSPENDED' ? 'CLIENT_PORTAL_GRANT_SUSPENDED' : latest?.status === 'REVOKED' ? 'CLIENT_PORTAL_GRANT_REVOKED' : latest?.status === 'EXPIRED' || latest?.validUntil ? 'CLIENT_PORTAL_GRANT_EXPIRED' : 'CLIENT_PORTAL_NO_ACTIVE_GRANT';
+    throw new ClientPublicationError(403, code, 'No active portal access is available.');
+  }
+  return {
+    userId: actor.userId,
+    displayName: user.name || null,
+    email: user.email || null,
+    grants: active,
+    caseIds: Array.from(new Set(active.map((grant) => String(grant.caseId)))),
+    clientIds: Array.from(new Set(active.map((grant) => String(grant.clientId)))),
+  };
+}
+
+async function matterRowsForContext(db: Db, context: PortalContext): Promise<Row[]> {
+  if (!context.caseIds.length) return [];
+  const rows = await many(db, `SELECT p.*, p.status::text, r.id AS "revisionId", r."clientSafeTitle", r."clientSafeStatus", r."clientSafeNextStep", r."responsibleLawyerDisplay", r."publishedDeadlinesSnapshot"
+    FROM client_matter_publications p
+    JOIN client_matter_publication_revisions r ON r.id=p."currentRevisionId"
+    WHERE p.status=$1::"ClientPublicationStatus" AND p."caseId"=ANY($2::text[])
+    ORDER BY p."publishedAt" DESC, p.id ASC`, 'PUBLISHED', context.caseIds);
+  return rows.filter((row) => audienceAllows(row, context.grants, 'MATTER_READ'));
+}
+
+async function portalMatterMap(db: Db, context: PortalContext): Promise<Map<string, Row>> {
+  const rows = await matterRowsForContext(db, context);
+  return new Map(rows.map((row) => [String(row.caseId), toPortalMatter(row, row)]));
+}
+
+export async function listPortalMatters(actor: Actor, db: PrismaClient = defaultPrisma): Promise<Row> {
+  const context = await resolvePortalContext(actor, db);
+  const rows = await matterRowsForContext(db, context);
+  const counts = rows.length ? await many(db, `SELECT p."caseId",
+      (SELECT count(*)::int FROM client_action_requests a WHERE a."caseId"=p."caseId" AND a.status='PUBLISHED'::"ClientActionRequestStatus") AS "attentionCount",
+      (SELECT count(*)::int FROM client_document_publications d WHERE d."caseId"=p."caseId" AND d.status='PUBLISHED'::"ClientPublicationStatus") AS "documentCount",
+      (SELECT max(u."publishedAt") FROM client_safe_updates u WHERE u."caseId"=p."caseId" AND u.status='PUBLISHED'::"ClientSafeUpdateStatus") AS "latestUpdateAt"
+    FROM client_matter_publications p WHERE p.id=ANY($1::text[])`, rows.map((row) => row.id)) : [];
+  const countByCase = new Map(counts.map((row) => [String(row.caseId), row]));
+  const dto = { items: rows.map((row) => toPortalMatter(row, row, countByCase.get(String(row.caseId)))) };
+  assertNoForbiddenPortalFields(dto);
+  return dto;
+}
+
+export async function getPortalMatter(actor: Actor, publicationId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
+  const context = await resolvePortalContext(actor, db);
+  const row = await one(db, `SELECT p.*, p.status::text, r.id AS "revisionId", r."clientSafeTitle", r."clientSafeStatus", r."clientSafeNextStep", r."responsibleLawyerDisplay", r."publishedDeadlinesSnapshot"
+    FROM client_matter_publications p JOIN client_matter_publication_revisions r ON r.id=p."currentRevisionId"
+    WHERE p.id=$1 AND p.status='PUBLISHED'::"ClientPublicationStatus"`, publicationId);
+  if (!row || !context.caseIds.includes(String(row.caseId)) || !audienceAllows(row, context.grants, 'MATTER_READ')) throw new ClientPublicationError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Portal content is not available.');
+  const matter = toPortalMatter(row, row);
+  const [documents, actions, updates] = await Promise.all([
+    listPortalDocuments(actor, row.id, db),
+    listPortalActionRequests(actor, row.id, db),
+    listPortalSafeUpdates(actor, row.id, db),
+  ]);
+  const dto = { ...matter, documents: documents.items, actionRequests: actions.items, updates: updates.items };
+  assertNoForbiddenPortalFields(dto);
+  return dto;
+}
+
+export async function listPortalDocuments(actor: Actor, matterPublicationId?: string | null, db: PrismaClient = defaultPrisma): Promise<Row> {
+  const context = await resolvePortalContext(actor, db);
+  const matterMap = await portalMatterMap(db, context);
+  const caseIds = matterPublicationId
+    ? Array.from(matterMap.entries()).filter(([, matter]) => matter.id === matterPublicationId).map(([caseId]) => caseId)
+    : context.caseIds;
+  if (!caseIds.length) return { items: [] };
+  const rows = await many(db, `SELECT p.*, p.status::text, v.version AS "versionNumber", v."mimeType", v.size
+    FROM client_document_publications p
+    JOIN document_versions v ON v.id=p."documentVersionId"
+    WHERE p.status='PUBLISHED'::"ClientPublicationStatus" AND p."caseId"=ANY($1::text[])
+    ORDER BY p."publishedAt" DESC, p.id ASC`, caseIds);
+  const dto = { items: rows.filter((row) => audienceAllows(row, context.grants, 'DOCUMENT_READ')).map((row) => toPortalDocument(row, matterMap.get(String(row.caseId)))) };
+  assertNoForbiddenPortalFields(dto);
+  return dto;
+}
+
+export async function getPortalDocument(actor: Actor, publicationId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
+  const context = await resolvePortalContext(actor, db);
+  const matterMap = await portalMatterMap(db, context);
+  const row = await one(db, `SELECT p.*, p.status::text, v.version AS "versionNumber", v."mimeType", v.size
+    FROM client_document_publications p JOIN document_versions v ON v.id=p."documentVersionId"
+    WHERE p.id=$1 AND p.status='PUBLISHED'::"ClientPublicationStatus"`, publicationId);
+  if (!row || !context.caseIds.includes(String(row.caseId)) || !audienceAllows(row, context.grants, 'DOCUMENT_READ')) throw new ClientPublicationError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Portal content is not available.');
+  return toPortalDocument(row, matterMap.get(String(row.caseId)));
+}
+
+export async function authorizePortalDocumentDownload(actor: Actor, publicationId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
+  const context = await resolvePortalContext(actor, db);
+  const row = await one(db, `SELECT p.*, p.status::text, v.version AS "versionNumber", v."originalFileName", v."mimeType", v.size
+    FROM client_document_publications p JOIN document_versions v ON v.id=p."documentVersionId"
+    WHERE p.id=$1 AND p.status='PUBLISHED'::"ClientPublicationStatus"`, publicationId);
+  if (!row || !context.caseIds.includes(String(row.caseId)) || !audienceAllows(row, context.grants, 'DOCUMENT_READ')) throw new ClientPublicationError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Portal content is not available.');
+  const grant = firstAuthorizedGrant(row, context.grants, 'DOCUMENT_DOWNLOAD');
+  if (!grant) throw new ClientPublicationError(403, 'PORTAL_DOWNLOAD_FORBIDDEN', 'Document download is not available for this grant.');
+  return {
+    grantId: grant.id,
+    publicationId: row.id,
+    documentId: row.documentId,
+    documentVersionId: row.documentVersionId,
+    fileName: row.clientFacingTitle ? `${String(row.clientFacingTitle).replace(/[\\/:*?"<>|]+/g, '-').slice(0, 120)}.txt` : 'document',
+    mimeType: row.mimeType || 'application/octet-stream',
+  };
+}
+
+export async function listPortalActionRequests(actor: Actor, matterPublicationId?: string | null, db: PrismaClient = defaultPrisma): Promise<Row> {
+  const context = await resolvePortalContext(actor, db);
+  const matterMap = await portalMatterMap(db, context);
+  const caseIds = matterPublicationId
+    ? Array.from(matterMap.entries()).filter(([, matter]) => matter.id === matterPublicationId).map(([caseId]) => caseId)
+    : context.caseIds;
+  if (!caseIds.length) return { items: [] };
+  const rows = await many(db, `SELECT *, type::text, status::text FROM client_action_requests
+    WHERE status='PUBLISHED'::"ClientActionRequestStatus" AND "caseId"=ANY($1::text[])
+    ORDER BY "dueAt" ASC NULLS LAST, "createdAt" DESC, id ASC`, caseIds);
+  const dto = { items: rows.filter((row) => audienceAllows(row, context.grants, 'ACTION_REQUEST_READ')).map((row) => toPortalAction(row, matterMap.get(String(row.caseId)))) };
+  assertNoForbiddenPortalFields(dto);
+  return dto;
+}
+
+export async function getPortalActionRequest(actor: Actor, requestId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
+  const context = await resolvePortalContext(actor, db);
+  const matterMap = await portalMatterMap(db, context);
+  const row = await one(db, 'SELECT *, type::text, status::text FROM client_action_requests WHERE id=$1 AND status=$2::"ClientActionRequestStatus"', requestId, 'PUBLISHED');
+  if (!row || !context.caseIds.includes(String(row.caseId)) || !audienceAllows(row, context.grants, 'ACTION_REQUEST_READ')) throw new ClientPublicationError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Portal content is not available.');
+  return toPortalAction(row, matterMap.get(String(row.caseId)));
+}
+
+export async function listPortalSafeUpdates(actor: Actor, matterPublicationId?: string | null, db: PrismaClient = defaultPrisma): Promise<Row> {
+  const context = await resolvePortalContext(actor, db);
+  const matterMap = await portalMatterMap(db, context);
+  const caseIds = matterPublicationId
+    ? Array.from(matterMap.entries()).filter(([, matter]) => matter.id === matterPublicationId).map(([caseId]) => caseId)
+    : context.caseIds;
+  if (!caseIds.length) return { items: [] };
+  const rows = await many(db, `SELECT *, category::text, status::text FROM client_safe_updates
+    WHERE status='PUBLISHED'::"ClientSafeUpdateStatus" AND "caseId"=ANY($1::text[])
+    ORDER BY "publishedAt" DESC NULLS LAST, id ASC`, caseIds);
+  const dto = { items: rows.filter((row) => audienceAllows(row, context.grants, 'UPDATE_READ')).map((row) => toPortalUpdate(row, matterMap.get(String(row.caseId)))) };
+  assertNoForbiddenPortalFields(dto);
+  return dto;
+}
+
+export async function getPortalSafeUpdate(actor: Actor, updateId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
+  const context = await resolvePortalContext(actor, db);
+  const matterMap = await portalMatterMap(db, context);
+  const row = await one(db, 'SELECT *, category::text, status::text FROM client_safe_updates WHERE id=$1 AND status=$2::"ClientSafeUpdateStatus"', updateId, 'PUBLISHED');
+  if (!row || !context.caseIds.includes(String(row.caseId)) || !audienceAllows(row, context.grants, 'UPDATE_READ')) throw new ClientPublicationError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Portal content is not available.');
+  return toPortalUpdate(row, matterMap.get(String(row.caseId)));
 }

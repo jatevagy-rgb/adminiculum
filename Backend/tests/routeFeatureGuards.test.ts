@@ -666,7 +666,6 @@ describe('database foundation route guards', () => {
     ['GET', '/client-portal/summary/client-1'],
     ['GET', '/client-portal/departments/client-1'],
     ['GET', '/client-portal/departments/dept-1/matters'],
-    ['GET', '/client-portal/matters/matter-1'],
     ['GET', '/client-portal/matters/matter-1/time-log'],
     ['GET', '/client-portal/export/client-1'],
   ])('client portal %s %s returns 501 when feature is disabled (unauthenticated)', async (_method, path) => {
@@ -686,7 +685,6 @@ describe('database foundation route guards', () => {
     ['GET', '/client-portal/summary/client-1'],
     ['GET', '/client-portal/departments/client-1'],
     ['GET', '/client-portal/departments/dept-1/matters'],
-    ['GET', '/client-portal/matters/matter-1'],
     ['GET', '/client-portal/matters/matter-1/time-log'],
     ['GET', '/client-portal/export/client-1'],
   ])('client portal %s %s returns 501 when feature is disabled (authenticated)', async (_method, path) => {
@@ -700,6 +698,25 @@ describe('database foundation route guards', () => {
       reason: 'CLIENT_PORTAL_NOT_ENABLED',
     });
     expect(JSON.stringify(response.body).toLowerCase()).not.toContain('prisma');
+  });
+
+  it.each([
+    ['GET', '/client-portal/home'],
+    ['GET', '/client-portal/matters'],
+    ['GET', '/client-portal/matters/matter-1'],
+    ['GET', '/client-portal/documents/document-1'],
+    ['GET', '/client-portal/action-requests/action-1'],
+    ['GET', '/client-portal/updates'],
+  ])('client portal alpha route %s %s authenticates before disabled read gate', async (_method, path) => {
+    const unauthenticated = await requestJson(createApp(), 'GET', path, false);
+    expect(unauthenticated.status).toBe(401);
+
+    const authenticated = await requestJson(createApp(), 'GET', path, true);
+    expect(authenticated.status).toBe(503);
+    expect(authenticated.body).toMatchObject({
+      status: 503,
+      code: 'CLIENT_PORTAL_READ_DISABLED',
+    });
   });
 
   it('spoofed x-user-id header cannot access client portal data', async () => {
