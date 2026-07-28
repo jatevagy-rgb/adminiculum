@@ -5,6 +5,7 @@ import path from 'node:path';
 
 const root = process.cwd();
 const shell = readFileSync(path.join(root, 'src/components/client-identity/ClientIdentityFlowShell.tsx'), 'utf8');
+const launcher = readFileSync(path.join(root, 'src/components/client-identity/CustomerAuthLauncher.tsx'), 'utf8');
 const portalShell = readFileSync(path.join(root, 'src/components/client-portal/ClientPortalShell.tsx'), 'utf8');
 
 describe('client identity registration and onboarding frontend', () => {
@@ -14,12 +15,18 @@ describe('client identity registration and onboarding frontend', () => {
     }
   });
 
-  it('renders registration, verification, password reset and onboarding copy without workforce terminology', () => {
-    for (const phrase of ['Ügyfélfiók létrehozása', 'E-mail cím ellenőrzése', 'Elfelejtett jelszó', 'Új jelszó beállítása', 'Szervezeti hozzáférés kérése', 'Regisztrációját megkaptuk']) {
+  it('renders registration, verification and password-reset copy in the hosted-flow launcher, without workforce terminology', () => {
+    for (const phrase of ['Ügyfélfiók létrehozása', 'E-mail cím ellenőrzése', 'Jelszó visszaállítása', 'Új jelszó beállítása', 'Lépjen be az ügyfélportálra']) {
+      assert.match(launcher, new RegExp(phrase));
+    }
+    assert.doesNotMatch(launcher, /Microsoft|Entra|B2B guest/i);
+  });
+
+  it('renders membership onboarding copy in the identity shell', () => {
+    for (const phrase of ['Szervezeti hozzáférés kérése', 'Regisztrációját megkaptuk']) {
       assert.match(shell, new RegExp(phrase));
     }
     assert.doesNotMatch(shell, /Microsoft|Entra workforce|B2B guest/i);
-    assert.match(shell, /Az Adminiculum nem tárol jelszót vagy ellenőrző kódot/);
   });
 
   it('keeps legal approval and portal action execution out of the customer UI', () => {

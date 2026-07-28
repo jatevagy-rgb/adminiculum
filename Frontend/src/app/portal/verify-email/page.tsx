@@ -1,5 +1,5 @@
-import { ClientIdentityFlowShell } from '@/components/client-identity/ClientIdentityFlowShell';
+import { CustomerAuthLauncher } from '@/components/client-identity/CustomerAuthLauncher';
 
 export default function Page() {
-  return <ClientIdentityFlowShell flow="verify-email" />;
+  return <CustomerAuthLauncher variant="verify-email" />;
 }

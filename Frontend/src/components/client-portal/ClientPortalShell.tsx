@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { InteractionRequiredAuthError, InteractionStatus } from '@azure/msal-browser';
 import { useMsal } from '@azure/msal-react';
-import { adminiculumApiScope, loginRequest } from '@/lib/authConfig';
-import { ApiError, clearAuthToken, setAuthToken } from '@/lib/api';
+import { adminiculumApiScope } from '@/lib/authConfig';
+import { ApiError, setAuthToken } from '@/lib/api';
+import { useCustomerAuth } from '@/lib/customerAuth';
 import {
   getPortalActionRequest,
   getPortalDocument,
@@ -163,17 +164,8 @@ export function ClientPortalShell({ view, resourceId }: Props) {
   const { instance, accounts, inProgress } = useMsal();
   const account = accounts[0] || null;
   const [state, setState] = useState<LoadState>({ status: 'loading' });
-  const [busy, setBusy] = useState(false);
-
-  const signIn = useCallback(async () => {
-    setBusy(true);
-    await instance.loginRedirect(loginRequest).finally(() => setBusy(false));
-  }, [instance]);
-
-  const signOut = useCallback(async () => {
-    clearAuthToken();
-    await instance.logoutRedirect({ account: account || undefined, postLogoutRedirectUri: window.location.origin + '/portal' });
-  }, [account, instance]);
+  // Canonical customer-auth layer: single MSAL instance, one logout config.
+  const { logoutCustomer } = useCustomerAuth();
 
   useEffect(() => {
     let cancelled = false;
@@ -221,7 +213,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <Link href="/portal" className="font-serif text-2xl font-semibold tracking-tight text-stone-950 focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">Adminiculum</Link>
           <nav className="flex flex-wrap gap-2 text-sm" aria-label="Ügyfélportál navigáció">{nav.map(([label, href]) => <Link className="rounded-full px-3 py-2 text-stone-700 hover:bg-stone-100 focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" key={label} href={href}>{label}</Link>)}</nav>
-          {state.status === 'ready' ? <button className="rounded-full border border-stone-300 px-3 py-2 text-sm" onClick={signOut}>Kijelentkezés</button> : null}
+          {state.status === 'ready' ? <button className="rounded-full border border-stone-300 px-3 py-2 text-sm" onClick={logoutCustomer}>Kijelentkezés</button> : null}
         </div>
       </header>
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">

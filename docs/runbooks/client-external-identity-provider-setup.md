@@ -5,13 +5,19 @@ that the Client Portal browser-delegated sign-in consumes. This is the privilege
 Entra-admin sequence a human must perform once, plus the exact production settings
 the already-deployed code reads.
 
-> **Scope guard.** The application already implements a *browser-delegated*
-> (MSAL authorization-code + PKCE, redirect flow) customer sign-in. The provider
-> hosts registration, e-mail verification, and password reset. The Adminiculum
-> database never stores passwords, password hashes, verification codes, reset
-> codes, or tokens — membership and portal grants are Adminiculum-side workflows,
-> **not** provider claims. Do **not** create a workforce B2B guest as the customer
-> model. Do **not** enable portal write actions as part of this runbook.
+> **Scope guard.** The application implements a *browser-delegated* (MSAL
+> authorization-code + PKCE, redirect flow) customer sign-in. **Registration,
+> e-mail verification, and password reset all happen on the External ID hosted
+> flow — Adminiculum never receives the customer password or one-time code.**
+> The local `/portal/login`, `/portal/register`, `/portal/verify-email`,
+> `/portal/forgot-password` and `/portal/reset-password` routes are **branded
+> launcher pages** that start the hosted flow (`CustomerAuthLauncher` →
+> `useCustomerAuth`); they contain no password, e-mail or verification-code
+> inputs. The Adminiculum database never stores passwords, password hashes,
+> verification codes, reset codes, or tokens — membership and portal grants are
+> Adminiculum-side workflows, **not** provider claims. Do **not** create a
+> workforce B2B guest as the customer model. Do **not** enable portal write
+> actions as part of this runbook.
 
 ---
 

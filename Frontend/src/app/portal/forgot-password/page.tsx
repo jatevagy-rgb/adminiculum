@@ -1,5 +1,5 @@
-import { ClientIdentityFlowShell } from '@/components/client-identity/ClientIdentityFlowShell';
+import { CustomerAuthLauncher } from '@/components/client-identity/CustomerAuthLauncher';
 
 export default function Page() {
-  return <ClientIdentityFlowShell flow="forgot-password" />;
+  return <CustomerAuthLauncher variant="forgot-password" />;
 }
