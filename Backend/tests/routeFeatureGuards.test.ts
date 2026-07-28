@@ -707,9 +707,13 @@ describe('database foundation route guards', () => {
     ['GET', '/client-portal/documents/document-1'],
     ['GET', '/client-portal/action-requests/action-1'],
     ['GET', '/client-portal/updates'],
-  ])('client portal alpha route %s %s authenticates before disabled read gate', async (_method, path) => {
+  ])('client portal alpha route %s %s returns controlled disabled read gate', async (_method, path) => {
     const unauthenticated = await requestJson(createApp(), 'GET', path, false);
-    expect(unauthenticated.status).toBe(401);
+    expect(unauthenticated.status).toBe(503);
+    expect(unauthenticated.body).toMatchObject({
+      status: 503,
+      code: 'CLIENT_PORTAL_READ_DISABLED',
+    });
 
     const authenticated = await requestJson(createApp(), 'GET', path, true);
     expect(authenticated.status).toBe(503);
@@ -736,14 +740,18 @@ describe('database foundation route guards', () => {
     });
   });
 
-  it('client portal action completion authenticates then returns the disabled action gate', async () => {
+  it('client portal action completion returns the disabled action gate without enabling actions', async () => {
     const unauthenticated = await requestJson(
       createApp(),
       'POST',
       '/client-portal/action-requests/action-1/complete',
       false
     );
-    expect(unauthenticated.status).toBe(401);
+    expect(unauthenticated.status).toBe(503);
+    expect(unauthenticated.body).toMatchObject({
+      status: 503,
+      code: 'CLIENT_PORTAL_ACTIONS_DISABLED',
+    });
 
     const authenticated = await requestJson(
       createApp(),

@@ -463,9 +463,13 @@ type PortalContext = {
 const PORTAL_ACTION_LABELS: Record<string, string> = {
   DOCUMENT_UPLOAD: 'Dokumentum bekérése',
   INFORMATION_REQUEST: 'Információkérés',
-  APPROVAL_REQUEST: 'Jóváhagyási kérés',
-  CONFIRMATION_REQUEST: 'Megerősítés kérése',
+  APPROVAL_REQUEST: 'Belső használatra fenntartott korábbi típus',
+  CONFIRMATION_REQUEST: 'Belső használatra fenntartott korábbi típus',
   QUESTION: 'Kérdés',
+  DATA_FORM: 'Adatbekérés',
+  QUESTION_RESPONSE: 'Kérdés megválaszolása',
+  CORRECTION_REQUEST: 'Javítási kérés',
+  MISSING_DOCUMENT_REQUEST: 'Hiányzó dokumentum bekérése',
 };
 
 const PORTAL_UPDATE_LABELS: Record<string, string> = {
@@ -481,7 +485,7 @@ function requirePortalReadGate(): void {
 }
 
 function requirePortalActor(actor: Actor): void {
-  if (!actor.userId || String(actor.role || '') !== 'CLIENT') throw new ClientPublicationError(403, 'PORTAL_ACTOR_REQUIRED', 'Portal reads require a client actor.');
+  if (!actor.userId || !['CLIENT_PORTAL', 'CLIENT'].includes(String(actor.role || ''))) throw new ClientPublicationError(403, 'PORTAL_ACTOR_REQUIRED', 'Portal reads require a customer portal actor.');
 }
 
 function asArray(value: unknown): Row[] {
@@ -605,9 +609,21 @@ function toPortalUpdate(row: Row, matter?: Row | null): Row {
 async function resolvePortalContext(actor: Actor, db: Db = defaultPrisma): Promise<PortalContext> {
   requirePortalReadGate();
   requirePortalActor(actor);
-  const user = await one(db, 'SELECT id, email, name, role::text, status::text, "isActive" FROM users WHERE id=$1', actor.userId);
-  if (!user || user.role !== 'CLIENT' || user.status !== 'ACTIVE' || user.isActive === false) throw new ClientPublicationError(403, 'PORTAL_ACCESS_DENIED', 'Portal access is not active.');
-  const grants = await many(db, 'SELECT *, role::text, status::text, permissions::text[] FROM client_portal_grants WHERE "clientUserId"=$1 ORDER BY "updatedAt" DESC', actor.userId);
+  const isCustomerIdentity = String(actor.role || '') === 'CLIENT_PORTAL';
+  const user = isCustomerIdentity
+    ? await one(db, 'SELECT id, "normalizedEmail" AS email, "displayName" AS name, status::text, "emailVerifiedAt" FROM client_portal_identities WHERE id=$1', actor.userId)
+    : await one(db, 'SELECT id, email, name, role::text, status::text, "isActive" FROM users WHERE id=$1', actor.userId);
+  if (!user) throw new ClientPublicationError(403, 'PORTAL_ACCESS_DENIED', 'Portal access is not active.');
+  if (isCustomerIdentity) {
+    if (user.status !== 'ACTIVE' || !user.emailVerifiedAt) throw new ClientPublicationError(403, user.emailVerifiedAt ? 'CLIENT_IDENTITY_NOT_ACTIVE' : 'CLIENT_EMAIL_NOT_VERIFIED', 'Portal access is not active.');
+    const activeMemberships = await many(db, 'SELECT id, "clientId", "groupId", status::text FROM client_organization_memberships WHERE "clientPortalIdentityId"=$1 AND status=$2::"ClientOrganizationMembershipStatus"', actor.userId, 'ACTIVE');
+    if (activeMemberships.length === 0) throw new ClientPublicationError(403, 'CLIENT_MEMBERSHIP_REQUIRED', 'Approved organization membership is required.');
+  } else if (user.role !== 'CLIENT' || user.status !== 'ACTIVE' || user.isActive === false) {
+    throw new ClientPublicationError(403, 'PORTAL_ACCESS_DENIED', 'Portal access is not active.');
+  }
+  const grants = isCustomerIdentity
+    ? await many(db, 'SELECT *, role::text, status::text, permissions::text[] FROM client_portal_grants WHERE "clientPortalIdentityId"=$1 ORDER BY "updatedAt" DESC', actor.userId)
+    : await many(db, 'SELECT *, role::text, status::text, permissions::text[] FROM client_portal_grants WHERE "clientUserId"=$1 ORDER BY "updatedAt" DESC', actor.userId);
   const active = grants.filter((grant) => grant.status === 'ACTIVE' && (!grant.validUntil || new Date(grant.validUntil).getTime() > Date.now()) && (!grant.validFrom || new Date(grant.validFrom).getTime() <= Date.now()));
   if (active.length === 0) {
     const latest = grants[0];

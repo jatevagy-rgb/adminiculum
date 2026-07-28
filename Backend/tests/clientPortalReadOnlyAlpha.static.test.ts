@@ -40,7 +40,11 @@ describe('client portal read-only alpha security boundary', () => {
 
   it('resolves portal access server-side from client user and active grants only', () => {
     const service = read('Backend/src/modules/client-publication/publicationService.ts');
-    expect(service).toContain("String(actor.role || '') !== 'CLIENT'");
+    expect(service).toContain("'CLIENT_PORTAL'");
+    expect(service).toContain('client_portal_identities');
+    expect(service).toContain('client_organization_memberships');
+    expect(service).toContain('CLIENT_MEMBERSHIP_REQUIRED');
+    expect(service).toContain('WHERE "clientPortalIdentityId"=$1');
     expect(service).toContain('WHERE "clientUserId"=$1');
     expect(service).toContain("grant.status === 'ACTIVE'");
     expect(service).toContain('CLIENT_PORTAL_GRANT_SUSPENDED');

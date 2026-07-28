@@ -226,7 +226,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
       </header>
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         {state.status === 'loading' ? <Card>Betöltés...</Card> : null}
-        {state.status === 'login' ? <Card><h1 className="text-3xl font-semibold">Ügyfélportál belépés</h1><p className="mt-3 text-stone-700">Jelentkezzen be a közzétett ügyfélanyagok megtekintéséhez.</p><button disabled={busy} onClick={signIn} className="mt-6 rounded-full bg-stone-950 px-5 py-3 text-white">Bejelentkezés</button></Card> : null}
+        {state.status === 'login' ? <Card><h1 className="text-3xl font-semibold">Ügyfélportál belépés</h1><p className="mt-3 text-stone-700">Jelentkezzen be e-mail címmel és jelszóval a közzétett ügyfélanyagok megtekintéséhez.</p><Link href="/portal/login" className="mt-6 inline-flex rounded-full bg-stone-950 px-5 py-3 text-white">Bejelentkezés</Link></Card> : null}
         {state.status === 'disabled' ? <Card>A client portal olvasási hozzáférése ebben a környezetben még nincs bekapcsolva.</Card> : null}
         {state.status === 'denied' ? <Card>{state.message}</Card> : null}
         {state.status === 'ready' && view === 'home' ? <HomeView home={state.home} /> : null}

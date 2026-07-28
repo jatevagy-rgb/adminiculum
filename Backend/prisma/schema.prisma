@@ -1956,6 +1956,52 @@ enum ClientPortalPermission {
   UPDATE_READ
 }
 
+enum ClientPortalIdentityProvider {
+  ENTRA_EXTERNAL_ID
+  OTHER_OIDC
+}
+
+enum ClientPortalAccountType {
+  INDIVIDUAL
+  ORGANIZATION_MEMBER
+}
+
+enum ClientPortalIdentityStatus {
+  REGISTERED
+  EMAIL_VERIFICATION_PENDING
+  MEMBERSHIP_PENDING
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+enum ClientOrganizationGroupStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ClientOrganizationMembershipRequestStatus {
+  DRAFT
+  EMAIL_VERIFICATION_PENDING
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ClientOrganizationMembershipStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+enum ClientPortalInvitationStatus {
+  ACTIVE
+  USED
+  REVOKED
+  EXPIRED
+}
+
 enum ClientPublicationStatus {
   DRAFT
   READY_FOR_APPROVAL
@@ -1971,6 +2017,10 @@ enum ClientActionRequestType {
   APPROVAL_REQUEST
   CONFIRMATION_REQUEST
   QUESTION
+  DATA_FORM
+  QUESTION_RESPONSE
+  CORRECTION_REQUEST
+  MISSING_DOCUMENT_REQUEST
 }
 
 enum ClientActionRequestStatus {
@@ -2018,7 +2068,8 @@ enum ClientPublicationEventAction {
 
 model ClientPortalGrant {
   id                   String                  @id @default(uuid())
-  clientUserId         String
+  clientUserId         String?
+  clientPortalIdentityId String?
   clientId             String
   caseId               String
   role                 ClientPortalGrantRole   @default(VIEWER)
@@ -2039,7 +2090,115 @@ model ClientPortalGrant {
 
   @@index([clientId, caseId, status])
   @@index([clientUserId, status])
+  @@index([clientPortalIdentityId, status])
   @@map("client_portal_grants")
+}
+
+model ClientPortalIdentity {
+  id              String                     @id @default(uuid())
+  provider        ClientPortalIdentityProvider
+  issuer          String
+  subject         String
+  normalizedEmail String
+  emailVerifiedAt DateTime?
+  displayName     String
+  accountType     ClientPortalAccountType
+  status          ClientPortalIdentityStatus @default(EMAIL_VERIFICATION_PENDING)
+  lastLoginAt     DateTime?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+  revision        Int                        @default(0)
+
+  @@unique([issuer, subject])
+  @@unique([normalizedEmail])
+  @@index([status, accountType])
+  @@map("client_portal_identities")
+}
+
+model ClientOrganizationGroup {
+  id              String                        @id @default(uuid())
+  clientId        String
+  name            String
+  descriptionSafe String?
+  status          ClientOrganizationGroupStatus @default(ACTIVE)
+  createdById     String
+  createdAt       DateTime                      @default(now())
+  updatedAt       DateTime                      @updatedAt
+  revision        Int                           @default(0)
+
+  @@unique([clientId, name])
+  @@index([clientId, status])
+  @@map("client_organization_groups")
+}
+
+model ClientOrganizationMembershipRequest {
+  id                        String                                    @id @default(uuid())
+  clientPortalIdentityId    String
+  requestedClientId         String?
+  requestedOrganizationName String?
+  requestedGroupId          String?
+  requestedGroupName        String?
+  corporateEmail            String?
+  roleDescriptionSafe       String?
+  status                    ClientOrganizationMembershipRequestStatus @default(DRAFT)
+  submittedAt               DateTime?
+  reviewedById              String?
+  reviewedAt                DateTime?
+  rejectionReasonSafe       String?
+  invitationId              String?
+  createdAt                 DateTime                                  @default(now())
+  updatedAt                 DateTime                                  @updatedAt
+  revision                  Int                                       @default(0)
+
+  @@index([clientPortalIdentityId, status])
+  @@index([requestedClientId, status])
+  @@index([requestedGroupId])
+  @@index([invitationId])
+  @@map("client_organization_membership_requests")
+}
+
+model ClientOrganizationMembership {
+  id                     String                             @id @default(uuid())
+  clientPortalIdentityId String
+  clientId               String
+  groupId                String?
+  status                 ClientOrganizationMembershipStatus @default(ACTIVE)
+  approvedFromRequestId  String
+  approvedById           String
+  approvedAt             DateTime
+  suspendedAt            DateTime?
+  suspendedById          String?
+  revokedAt              DateTime?
+  revokedById            String?
+  createdAt              DateTime                           @default(now())
+  updatedAt              DateTime                           @updatedAt
+  revision               Int                                @default(0)
+
+  @@unique([approvedFromRequestId])
+  @@index([clientPortalIdentityId, status])
+  @@index([clientId, status])
+  @@index([groupId, status])
+  @@map("client_organization_memberships")
+}
+
+model ClientPortalInvitation {
+  id               String                       @id @default(uuid())
+  clientId         String
+  groupId          String?
+  intendedEmail    String?
+  tokenHash        String
+  status           ClientPortalInvitationStatus @default(ACTIVE)
+  expiresAt        DateTime
+  createdById      String
+  usedByIdentityId String?
+  usedAt           DateTime?
+  createdAt        DateTime                     @default(now())
+
+  @@unique([tokenHash])
+  @@index([clientId, status])
+  @@index([groupId])
+  @@index([intendedEmail, status])
+  @@map("client_portal_invitations")
 }
 
 model ClientMatterPublication {

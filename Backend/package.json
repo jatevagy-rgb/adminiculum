@@ -30,7 +30,8 @@
     "test:automation:l1": "set DOTENV_CONFIG_PATH=.env.test&& node -r dotenv/config ./node_modules/jest/bin/jest.js --runInBand tests/automationSuggestions.accept.integration.test.ts",
     "azure:build": "npm run build",
     "verify:runtime:required": "node scripts/verify-runtime-required-endpoints.js",
-    "connector:regen:runtime": "node scripts/regenerate-powerapps-canonical-from-runtime.js"
+    "connector:regen:runtime": "node scripts/regenerate-powerapps-canonical-from-runtime.js",
+    "test:client-identity:db": "jest --runInBand tests/clientIdentityMembership.integration.test.ts"
   },
   "dependencies": {
     "@azure/identity": "^4.13.1",

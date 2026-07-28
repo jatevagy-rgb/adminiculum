@@ -12,7 +12,7 @@
  */
 
 import { Request, Response, Router } from 'express';
-import { authenticate } from '../middleware/auth';
+import { authenticateClientPortal, requireActiveClientPortalSession } from '../middleware/clientPortalAuth';
 import documentsService from '../modules/documents/services';
 import {
   authorizePortalDocumentDownload,
@@ -32,7 +32,8 @@ import {
 const router = Router();
 
 function actor(req: Request) {
-  return { userId: String(req.user?.userId || ''), role: String(req.user?.role || '') };
+  const session = requireActiveClientPortalSession(req);
+  return { userId: session.clientPortalIdentityId, role: 'CLIENT_PORTAL', clientPortalIdentityId: session.clientPortalIdentityId };
 }
 
 function fail(res: Response, error: unknown): void {
@@ -43,10 +44,18 @@ function fail(res: Response, error: unknown): void {
   res.status(500).json({ status: 500, code: 'CLIENT_PORTAL_INTERNAL_ERROR', message: 'Client portal request failed.' });
 }
 
+async function portalRead(req: Request, res: Response): Promise<boolean> {
+  if (!CLIENT_PUBLICATION_GATES.portalRead()) {
+    res.status(503).json({ status: 503, code: 'CLIENT_PORTAL_READ_DISABLED', message: 'Client portal reads are disabled.' });
+    return false;
+  }
+  await new Promise<void>((resolve, reject) => authenticateClientPortal(req, res, (error?: unknown) => error ? reject(error) : resolve()));
+  return !res.headersSent;
+}
+
 router.get('/home', async (req, res) => {
   try {
-    await new Promise<void>((resolve, reject) => authenticate(req, res, (error?: unknown) => error ? reject(error) : resolve()));
-    if (res.headersSent) return;
+    if (!(await portalRead(req, res))) return;
     res.json(await portalHomeSnapshot(actor(req)));
   } catch (error) {
     fail(res, error);
@@ -55,8 +64,7 @@ router.get('/home', async (req, res) => {
 
 router.get('/matters', async (req, res) => {
   try {
-    await new Promise<void>((resolve, reject) => authenticate(req, res, (error?: unknown) => error ? reject(error) : resolve()));
-    if (res.headersSent) return;
+    if (!(await portalRead(req, res))) return;
     res.json(await listPortalMatters(actor(req)));
   } catch (error) {
     fail(res, error);
@@ -65,8 +73,7 @@ router.get('/matters', async (req, res) => {
 
 router.get('/matters/:publicationId', async (req, res) => {
   try {
-    await new Promise<void>((resolve, reject) => authenticate(req, res, (error?: unknown) => error ? reject(error) : resolve()));
-    if (res.headersSent) return;
+    if (!(await portalRead(req, res))) return;
     res.json(await getPortalMatter(actor(req), String(req.params.publicationId)));
   } catch (error) {
     fail(res, error);
@@ -75,8 +82,7 @@ router.get('/matters/:publicationId', async (req, res) => {
 
 router.get('/matters/:publicationId/documents', async (req, res) => {
   try {
-    await new Promise<void>((resolve, reject) => authenticate(req, res, (error?: unknown) => error ? reject(error) : resolve()));
-    if (res.headersSent) return;
+    if (!(await portalRead(req, res))) return;
     res.json(await listPortalDocuments(actor(req), String(req.params.publicationId)));
   } catch (error) {
     fail(res, error);
@@ -85,8 +91,7 @@ router.get('/matters/:publicationId/documents', async (req, res) => {
 
 router.get('/documents/:publicationId', async (req, res) => {
   try {
-    await new Promise<void>((resolve, reject) => authenticate(req, res, (error?: unknown) => error ? reject(error) : resolve()));
-    if (res.headersSent) return;
+    if (!(await portalRead(req, res))) return;
     res.json(await getPortalDocument(actor(req), String(req.params.publicationId)));
   } catch (error) {
     fail(res, error);
@@ -95,8 +100,7 @@ router.get('/documents/:publicationId', async (req, res) => {
 
 router.get('/documents/:publicationId/download', async (req, res) => {
   try {
-    await new Promise<void>((resolve, reject) => authenticate(req, res, (error?: unknown) => error ? reject(error) : resolve()));
-    if (res.headersSent) return;
+    if (!(await portalRead(req, res))) return;
     const authorized = await authorizePortalDocumentDownload(actor(req), String(req.params.publicationId));
     const result = await documentsService.downloadDocumentVersion(authorized.documentId, authorized.documentVersionId);
     if (!result) {
@@ -120,8 +124,7 @@ router.get('/documents/:publicationId/download', async (req, res) => {
 
 router.get('/action-requests', async (req, res) => {
   try {
-    await new Promise<void>((resolve, reject) => authenticate(req, res, (error?: unknown) => error ? reject(error) : resolve()));
-    if (res.headersSent) return;
+    if (!(await portalRead(req, res))) return;
     res.json(await listPortalActionRequests(actor(req)));
   } catch (error) {
     fail(res, error);
@@ -130,8 +133,7 @@ router.get('/action-requests', async (req, res) => {
 
 router.get('/action-requests/:requestId', async (req, res) => {
   try {
-    await new Promise<void>((resolve, reject) => authenticate(req, res, (error?: unknown) => error ? reject(error) : resolve()));
-    if (res.headersSent) return;
+    if (!(await portalRead(req, res))) return;
     res.json(await getPortalActionRequest(actor(req), String(req.params.requestId)));
   } catch (error) {
     fail(res, error);
@@ -140,8 +142,7 @@ router.get('/action-requests/:requestId', async (req, res) => {
 
 router.get('/updates', async (req, res) => {
   try {
-    await new Promise<void>((resolve, reject) => authenticate(req, res, (error?: unknown) => error ? reject(error) : resolve()));
-    if (res.headersSent) return;
+    if (!(await portalRead(req, res))) return;
     res.json(await listPortalSafeUpdates(actor(req)));
   } catch (error) {
     fail(res, error);
@@ -150,8 +151,7 @@ router.get('/updates', async (req, res) => {
 
 router.get('/updates/:updateId', async (req, res) => {
   try {
-    await new Promise<void>((resolve, reject) => authenticate(req, res, (error?: unknown) => error ? reject(error) : resolve()));
-    if (res.headersSent) return;
+    if (!(await portalRead(req, res))) return;
     res.json(await getPortalSafeUpdate(actor(req), String(req.params.updateId)));
   } catch (error) {
     fail(res, error);
@@ -160,8 +160,6 @@ router.get('/updates/:updateId', async (req, res) => {
 
 router.all('/action-requests/:requestId/complete', async (req, res) => {
   try {
-    await new Promise<void>((resolve, reject) => authenticate(req, res, (error?: unknown) => error ? reject(error) : resolve()));
-    if (res.headersSent) return;
     if (!CLIENT_PUBLICATION_GATES.portalActions()) {
       res.status(503).json({
         status: 503,

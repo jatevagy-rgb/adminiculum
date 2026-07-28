@@ -232,6 +232,9 @@ app.use('/api/v1/time-entries', timeEntriesRoutes);
 import clientPortalRoutes from './routes/clientPortal';
 app.use('/api/v1/client-portal', clientPortalRoutes);
 
+import { clientIdentityRouter } from './modules/client-identity/routes';
+app.use('/api/v1/client-identity', clientIdentityRouter);
+
 import { clientPublicationRouter } from './modules/client-publication/publication.routes';
 app.use('/api/v1/client-publications', clientPublicationRouter);
 
