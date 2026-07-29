@@ -89,6 +89,7 @@ const routeMap: Record<string, string> = {
   "timesheet-presets": "/timesheet-presets",
   clients: "/clients",
   calendar: "/deadlines",
+  "client-portal-admin": "/client-portal-admin",
   settings: "/settings",
 };
 
@@ -106,7 +107,7 @@ const navGroups: Array<{ id: string; label: string; items: string[] }> = [
   {
     id: "resources",
     label: "Iroda",
-    items: ["time-entries", "calendar", "settings"],
+    items: ["time-entries", "calendar", "client-portal-admin", "settings"],
   },
 ];
 
@@ -138,6 +139,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
     "documents-compare": "Verzió-összevetés",
     "time-entries": "Munkaórák",
     calendar: "Határidők",
+    "client-portal-admin": "Ügyfélportál",
     settings: "Beállítások",
   };
   const initials = profileName

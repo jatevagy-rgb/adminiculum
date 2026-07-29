@@ -9,6 +9,7 @@ import {
   ClientIdentityError,
   getClientProfile,
   getCurrentMembershipRequests,
+  listActiveMemberships,
   listMembershipQueue,
   rejectMembershipRequest,
   submitMembershipRequest,
@@ -77,6 +78,10 @@ clientIdentityRouter.post('/me/membership-requests/:requestId/cancel', async (re
 clientIdentityRouter.use('/admin', authenticate, requireRole('ADMIN', 'PARTNER'));
 clientIdentityRouter.get('/admin/membership-requests', async (req, res) => {
   try { res.json(await listMembershipQueue(internalActor(req))); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.get('/admin/memberships', async (req, res) => {
+  try { res.json(await listActiveMemberships(internalActor(req))); }
   catch (error) { fail(res, error); }
 });
 clientIdentityRouter.post('/admin/groups', async (req, res) => {

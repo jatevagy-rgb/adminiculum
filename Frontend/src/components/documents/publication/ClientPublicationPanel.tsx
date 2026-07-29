@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminBadge, AdminButton } from "@/components/adminiculum/ui";
+import { CasePortalIdentityGrant } from "@/components/documents/publication/CasePortalIdentityGrant";
 import {
   approveClientActionRequest,
   createClientActionRequestDraft,
@@ -162,6 +163,8 @@ export function ClientPublicationPanel({
               ))}
             </div>
           </div>
+
+          <CasePortalIdentityGrant caseId={caseId} clientId={clientId} />
 
           <div className="min-w-0 rounded-[14px] border border-[rgba(22,32,26,0.12)] p-3 sm:p-4">
             <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Action request & safe update</h4>

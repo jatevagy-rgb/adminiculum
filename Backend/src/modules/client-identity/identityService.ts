@@ -169,16 +169,40 @@ export async function transitionMembership(actor: Actor, membershipId: string, a
   return prisma.clientOrganizationMembership.update({ where: { id: membershipId }, data: { status: 'REVOKED', revokedAt: new Date(), revokedById: actor.userId, revision: { increment: 1 } } });
 }
 
+const ALLOWED_GRANT_PERMISSIONS = new Set([
+  'MATTER_READ', 'DOCUMENT_READ', 'DOCUMENT_DOWNLOAD', 'ACTION_REQUEST_READ', 'UPDATE_READ',
+]);
+
+/**
+ * Identity-based case grant for an External ID customer. Binds the grant to the
+ * ClientPortalIdentity (never a legacy clientUserId), requires an ACTIVE
+ * membership + ACTIVE identity, and a real case. Supports an optional validity
+ * window.
+ */
 export async function createGrantForApprovedMembership(actor: Actor, input: Record<string, unknown>) {
   requireGrantActor(actor);
   const membershipId = safeString(input.membershipId, 80);
   const caseId = safeString(input.caseId, 80);
-  const permissions = Array.isArray(input.permissions) ? input.permissions.map(String) : [];
+  const permissions = Array.isArray(input.permissions)
+    ? input.permissions.map(String).filter((p) => ALLOWED_GRANT_PERMISSIONS.has(p))
+    : [];
   if (!membershipId || !caseId || !permissions.length) throw new ClientIdentityError(400, 'GRANT_INPUT_REQUIRED', 'Membership, case and permissions are required.');
+
+  let validUntil: Date | null = null;
+  if (input.validUntil != null && String(input.validUntil).trim()) {
+    const parsed = new Date(String(input.validUntil));
+    if (Number.isNaN(parsed.getTime())) throw new ClientIdentityError(400, 'GRANT_VALIDITY_INVALID', 'Grant validity date is invalid.');
+    if (parsed.getTime() <= Date.now()) throw new ClientIdentityError(400, 'GRANT_VALIDITY_PAST', 'Grant validity must be in the future.');
+    validUntil = parsed;
+  }
+
   const membership = await prisma.clientOrganizationMembership.findFirst({ where: { id: membershipId, status: 'ACTIVE' } });
   if (!membership) throw new ClientIdentityError(403, 'ACTIVE_MEMBERSHIP_REQUIRED', 'Active membership is required before creating a case grant.');
   const identity = await prisma.clientPortalIdentity.findUnique({ where: { id: membership.clientPortalIdentityId } });
   if (!identity || identity.status !== 'ACTIVE') throw new ClientIdentityError(403, 'ACTIVE_IDENTITY_REQUIRED', 'Active client identity is required before creating a case grant.');
+  const caseRow = await prisma.case.findUnique({ where: { id: caseId }, select: { id: true } });
+  if (!caseRow) throw new ClientIdentityError(404, 'CASE_NOT_FOUND', 'Case was not found.');
+
   return prisma.clientPortalGrant.create({
     data: {
       clientUserId: null,
@@ -190,6 +214,39 @@ export async function createGrantForApprovedMembership(actor: Actor, input: Reco
       permissions: permissions as any,
       invitedById: actor.userId,
       activatedAt: new Date(),
+      validUntil,
     },
   });
+}
+
+/**
+ * Active memberships awaiting/holding case grants, joined with their identity
+ * and organization so the internal grant UI can target the exact identity.
+ */
+export async function listActiveMemberships(actor: Actor) {
+  requireReviewer(actor);
+  const memberships = await prisma.clientOrganizationMembership.findMany({
+    where: { status: 'ACTIVE' },
+    orderBy: { approvedAt: 'desc' },
+    select: { id: true, clientPortalIdentityId: true, clientId: true, groupId: true, status: true, approvedAt: true, revision: true },
+  });
+  const identityIds = [...new Set(memberships.map((m) => m.clientPortalIdentityId))];
+  const clientIds = [...new Set(memberships.map((m) => m.clientId))];
+  const [identities, clients, grants] = await Promise.all([
+    prisma.clientPortalIdentity.findMany({ where: { id: { in: identityIds } }, select: { id: true, normalizedEmail: true, displayName: true, status: true } }),
+    prisma.client.findMany({ where: { id: { in: clientIds } }, select: { id: true, name: true } }),
+    prisma.clientPortalGrant.findMany({ where: { clientPortalIdentityId: { in: identityIds }, status: 'ACTIVE' }, select: { id: true, clientPortalIdentityId: true, caseId: true, status: true, permissions: true, validUntil: true } }),
+  ]);
+  const idMap = new Map(identities.map((i) => [i.id, i]));
+  const clientMap = new Map(clients.map((c) => [c.id, c]));
+  return {
+    items: memberships.map((m) => ({
+      ...m,
+      identityEmail: idMap.get(m.clientPortalIdentityId)?.normalizedEmail || null,
+      identityDisplayName: idMap.get(m.clientPortalIdentityId)?.displayName || null,
+      identityStatus: idMap.get(m.clientPortalIdentityId)?.status || null,
+      clientName: clientMap.get(m.clientId)?.name || null,
+      activeGrants: grants.filter((g) => g.clientPortalIdentityId === m.clientPortalIdentityId).map((g) => ({ id: g.id, caseId: g.caseId, permissions: g.permissions, validUntil: g.validUntil })),
+    })),
+  };
 }

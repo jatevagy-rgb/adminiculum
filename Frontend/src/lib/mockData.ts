@@ -271,6 +271,7 @@ export const navItems = [
   { id: 'time-entries', label: 'Munkaórák', icon: 'clock' },
   { id: 'clients', label: 'Ügyfelek', icon: 'file' },
   { id: 'calendar', label: 'Határidők', icon: 'calendar' },
+  { id: 'client-portal-admin', label: 'Ügyfélportál', icon: 'file' },
   { id: 'settings', label: 'Beállítások', icon: 'settings' }
 ];
 

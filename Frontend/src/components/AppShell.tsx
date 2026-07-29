@@ -23,6 +23,7 @@ type AppShellProps = {
     | "time-entries"
     | "timesheet-presets"
     | "calendar"
+    | "client-portal-admin"
     | "search";
   userProfile?: {
     id: string;
@@ -60,6 +61,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
     "time-entries": "Munkaórák",
     "timesheet-presets": "Presetek",
     calendar: "Határidők és naptár",
+    "client-portal-admin": "Ügyfélportál adminisztráció",
     search: "Keresés",
   };
 
