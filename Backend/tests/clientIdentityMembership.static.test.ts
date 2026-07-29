@@ -8,6 +8,7 @@ describe('client identity and membership foundation static boundary', () => {
   const portalRoutes = readFileSync(path.join(root, 'src/routes/clientPortal.ts'), 'utf8');
   const service = readFileSync(path.join(root, 'src/modules/client-identity/identityService.ts'), 'utf8');
   const frontend = readFileSync(path.resolve(root, '../Frontend/src/components/client-identity/ClientIdentityFlowShell.tsx'), 'utf8');
+  const authLauncher = readFileSync(path.resolve(root, '../Frontend/src/components/client-identity/CustomerAuthLauncher.tsx'), 'utf8');
 
   it('stores external identity metadata but no credential material', () => {
     expect(schema).toContain('model ClientPortalIdentity');
@@ -41,7 +42,10 @@ describe('client identity and membership foundation static boundary', () => {
     const publicationService = readFileSync(path.join(root, 'src/modules/client-publication/publicationService.ts'), 'utf8');
     expect(publicationService).toContain('Belső használatra fenntartott korábbi típus');
     expect(frontend).toContain('A szervezet vagy csoport megadása önmagában nem ad hozzáférést');
-    expect(frontend).toContain('Az Adminiculum nem tárol jelszót vagy ellenőrző kódot');
+    // Credential-handling reassurance now lives on the auth launcher (the surface
+    // where the customer registers/logs in); the shell is onboarding-only.
+    expect(authLauncher).toContain('Az Adminiculum nem tárol jelszót vagy ellenőrző kódot');
     expect(frontend).not.toContain('Microsoft');
+    expect(authLauncher).not.toContain('Microsoft');
   });
 });

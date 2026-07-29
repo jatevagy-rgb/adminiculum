@@ -8,7 +8,7 @@
  * calls the canonical customer-auth layer.
  */
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useCustomerAuth } from '@/lib/customerAuth';
 import { sanitizeAuthError } from '@/lib/customerAuthPolicy';
 
@@ -63,9 +63,15 @@ const COPY: Record<AuthVariant, VariantCopy> = {
 
 export function CustomerAuthLauncher({ variant }: { variant: AuthVariant }) {
   const copy = COPY[variant];
-  const { configured, interactionInProgress, beginCustomerLogin, beginCustomerRegistration, beginPasswordReset } =
+  const { configured, interactionInProgress, isAuthenticated, beginCustomerLogin, beginCustomerRegistration, beginPasswordReset } =
     useCustomerAuth();
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (variant === 'login' && isAuthenticated && !interactionInProgress) {
+      window.location.replace('/portal');
+    }
+  }, [interactionInProgress, isAuthenticated, variant]);
 
   const start = async () => {
     setError(null);
@@ -97,6 +103,7 @@ export function CustomerAuthLauncher({ variant }: { variant: AuthVariant }) {
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#9b7b25]">{copy.eyebrow}</p>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-5xl">{copy.title}</h1>
           <p className="mt-4 text-stone-700">{copy.body}</p>
+          <p className="mt-2 text-sm text-stone-500">Az azonosítást biztonságos külső szolgáltató végzi. Az Adminiculum nem tárol jelszót vagy ellenőrző kódot.</p>
 
           {!configured && (
             <p

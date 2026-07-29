@@ -1,6 +1,9 @@
 "use client";
 
 import Link from 'next/link';
+import { FormEvent, useState } from 'react';
+import { useCustomerAuth } from '@/lib/customerAuth';
+import { backendBaseUrl } from '@/lib/authConfig';
 
 // Authentication (register / login / verify-email / forgot-password /
 // reset-password) is handled by the browser-delegated External ID hosted flow
@@ -16,12 +19,45 @@ const flowCopy: Record<Flow, { title: string; eyebrow: string; body: string }> =
   pending: { title: 'Kérelem ellenőrzés alatt', eyebrow: 'Függőben', body: 'Regisztrációját megkaptuk. A szervezeti hozzáférést az iroda ellenőrzi. Ügyanyag csak külön jóváhagyott tagság és ügyhozzáférési grant után jelenik meg.' },
 };
 
-function Field({ label, type = 'text' }: { label: string; type?: string }) {
-  return <label className="grid gap-2 text-sm font-medium text-stone-800"><span>{label}</span><input type={type} className="rounded-2xl border border-stone-300 px-4 py-3 text-stone-950 shadow-sm" /></label>;
+function Field({ label, name, type = 'text', required = false }: { label: string; name: string; type?: string; required?: boolean }) {
+  return <label className="grid gap-2 text-sm font-medium text-stone-800"><span>{label}</span><input name={name} type={type} required={required} className="rounded-2xl border border-stone-300 px-4 py-3 text-stone-950 shadow-sm" /></label>;
 }
 
 export function ClientIdentityFlowShell({ flow }: Props) {
   const copy = flowCopy[flow];
+  const { acquireCustomerApiToken, interactionInProgress } = useCustomerAuth();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submitOnboarding(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    const form = new FormData(event.currentTarget);
+    try {
+      const token = await acquireCustomerApiToken();
+      if (!token) return;
+      const root = backendBaseUrl.replace(/\/+$/, '').replace(/\/api\/v1$/i, '');
+      const response = await fetch(`${root}/api/v1/client-identity/me/membership-requests`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestedOrganizationName: String(form.get('requestedOrganizationName') || '').trim(),
+          corporateEmail: String(form.get('corporateEmail') || '').trim(),
+          requestedGroupName: String(form.get('requestedGroupName') || '').trim(),
+          invitationId: String(form.get('invitationId') || '').trim(),
+          roleDescriptionSafe: String(form.get('roleDescriptionSafe') || '').trim(),
+        }),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      window.location.href = '/portal/onboarding/pending';
+    } catch (error) {
+      const detail = error instanceof Error && error.message ? ` (${error.message.slice(0, 240)})` : '';
+      setError(`A tagsági kérelem beküldése nem sikerült. Ellenőrizze az adatokat, majd próbálja újra.${detail}`);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <main className="min-h-screen bg-[#f7f4ee] px-4 py-8 text-stone-950 sm:px-8">
@@ -37,7 +73,7 @@ export function ClientIdentityFlowShell({ flow }: Props) {
           <p className="mt-4 max-w-3xl text-stone-700">{copy.body}</p>
         </section>
 
-        {flow === 'onboarding' && <section className="grid gap-4 rounded-[2rem] border border-stone-200 bg-white p-6 shadow-sm sm:grid-cols-2"><Field label="Szervezet neve" /><Field label="Vállalati e-mail" type="email" /><Field label="Kért szervezeti csoport" /><Field label="Meghívókód (opcionális)" /><label className="grid gap-2 text-sm font-medium text-stone-800 sm:col-span-2"><span>Szerepkör / kapcsolattartói leírás</span><textarea className="min-h-28 rounded-2xl border border-stone-300 px-4 py-3" /></label></section>}
+        {flow === 'onboarding' && <form onSubmit={submitOnboarding} className="grid gap-4 rounded-[2rem] border border-stone-200 bg-white p-6 shadow-sm sm:grid-cols-2"><Field label="Szervezet neve" name="requestedOrganizationName" required /><Field label="Vállalati e-mail" name="corporateEmail" type="email" /><Field label="Kért szervezeti csoport" name="requestedGroupName" /><Field label="Meghívókód (opcionális)" name="invitationId" /><label className="grid gap-2 text-sm font-medium text-stone-800 sm:col-span-2"><span>Szerepkör / kapcsolattartói leírás</span><textarea name="roleDescriptionSafe" className="min-h-28 rounded-2xl border border-stone-300 px-4 py-3" /></label>{error ? <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 sm:col-span-2">{error}</p> : null}<button type="submit" disabled={submitting || interactionInProgress} className="inline-flex w-fit rounded-full bg-stone-950 px-5 py-3 font-semibold text-white disabled:opacity-60 sm:col-span-2">{submitting ? 'Beküldés…' : 'Tagsági kérelem beküldése'}</button></form>}
         {flow === 'pending' && <section className="rounded-[2rem] border border-stone-200 bg-white p-6 text-stone-700 shadow-sm">Nincs látható ügyanyag, amíg a tagság és az ügyhozzáférés külön jóváhagyást nem kap.</section>}
       </div>
     </main>

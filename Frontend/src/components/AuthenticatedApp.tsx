@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { InteractionRequiredAuthError, InteractionStatus } from "@azure/msal-browser";
 import { useMsal } from "@azure/msal-react";
-import { adminiculumApiScope, backendBaseUrl, loginRequest } from "@/lib/authConfig";
+import { backendBaseUrl, loginRequest, workforceApiScopes } from "@/lib/authConfig";
 import { clearAuthToken, setAuthToken } from "@/lib/api";
 import { LoginScreen } from "@/components/LoginScreen";
 import { AppShell } from "@/components/AppShell";
@@ -237,7 +237,7 @@ export function AuthenticatedApp({ section = "dashboard", children, fullViewport
     try {
       const tokenResponse = await instance.acquireTokenSilent({
         account,
-        scopes: [adminiculumApiScope],
+        scopes: workforceApiScopes,
       });
 
       setAuthToken(tokenResponse.accessToken);
@@ -261,7 +261,7 @@ export function AuthenticatedApp({ section = "dashboard", children, fullViewport
       if (err instanceof InteractionRequiredAuthError) {
         await instance.acquireTokenRedirect({
           account,
-          scopes: [adminiculumApiScope],
+          scopes: workforceApiScopes,
         });
         return;
       }

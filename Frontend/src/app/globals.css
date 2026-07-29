@@ -882,8 +882,10 @@ select {
   border: 1px solid var(--adm-border);
   border-radius: var(--adm-radius-md);
   background: var(--adm-surface);
+  color: inherit;
   padding: 12px 14px;
   cursor: pointer;
+  text-decoration: none;
   transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
 

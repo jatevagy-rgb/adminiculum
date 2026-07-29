@@ -67,6 +67,25 @@ function claimIsVerified(payload: Record<string, unknown>): boolean {
   return payload.email_verified === true || payload.emailVerified === true || payload.emails_verified === true;
 }
 
+// Email-verification trust model for the customer identity provider.
+//
+// The token's issuer and signature are already validated upstream (JWKS +
+// issuer match) before this runs, so a token that reaches here provably comes
+// from the configured Entra External ID tenant. That tenant's sign-up/sign-in
+// user flow enforces e-mail verification (OTP) BEFORE any token is issued, so a
+// validly-issued token from the trusted issuer implies a verified e-mail even
+// when the access token omits an explicit `email_verified` claim (Entra access
+// tokens frequently do). We therefore accept an explicit verification claim, or
+// fall back to "trusted issuer asserted an e-mail".
+//
+// SECURITY ASSUMPTION: this is only safe while the configured issuer is a
+// provider that verifies e-mail before token issuance. If CLIENT_IDENTITY_ISSUER
+// is ever pointed at a provider that does NOT enforce verification, require an
+// explicit verified claim instead (return claimIsVerified(payload)).
+function providerAssertedEmailIsVerified(payload: Record<string, unknown>): boolean {
+  return claimIsVerified(payload) || normalizeEmail(payload.email || payload.preferred_username || payload.upn).length > 0;
+}
+
 function displayName(payload: Record<string, unknown>, email: string): string {
   const name = typeof payload.name === 'string' ? payload.name.trim() : '';
   return name || email;
@@ -79,12 +98,42 @@ async function resolveIdentity(payload: Record<string, unknown>): Promise<Client
   const normalizedEmail = normalizeEmail(payload.email || payload.preferred_username || payload.upn);
   if (!issuer || !subject || !normalizedEmail) return null;
 
-  const existing = await prisma.clientPortalIdentity.findUnique({
+  const emailVerified = providerAssertedEmailIsVerified(payload);
+  const verifiedAt = emailVerified ? new Date() : null;
+  let existing = await prisma.clientPortalIdentity.findUnique({
     where: { issuer_subject: { issuer, subject } },
   });
-  if (!existing) return null;
+  if (!existing) {
+    existing = await prisma.clientPortalIdentity.upsert({
+      where: { normalizedEmail },
+      create: {
+        provider: 'ENTRA_EXTERNAL_ID',
+        issuer,
+        subject,
+        normalizedEmail,
+        emailVerifiedAt: verifiedAt,
+        displayName: displayName(payload, normalizedEmail),
+        accountType: 'INDIVIDUAL',
+        status: emailVerified ? 'REGISTERED' : 'EMAIL_VERIFICATION_PENDING',
+        lastLoginAt: new Date(),
+      },
+      update: {
+        issuer,
+        subject,
+        emailVerifiedAt: verifiedAt || undefined,
+        displayName: displayName(payload, normalizedEmail),
+        lastLoginAt: new Date(),
+        revision: { increment: 1 },
+      },
+    });
+  }
+  if (emailVerified && !existing.emailVerifiedAt) {
+    existing = await prisma.clientPortalIdentity.update({
+      where: { id: existing.id },
+      data: { emailVerifiedAt: new Date(), status: existing.status === 'EMAIL_VERIFICATION_PENDING' ? 'REGISTERED' : existing.status, revision: { increment: 1 } },
+    });
+  }
 
-  const emailVerified = Boolean(existing.emailVerifiedAt) && claimIsVerified(payload);
   await prisma.clientPortalIdentity.update({
     where: { id: existing.id },
     data: { lastLoginAt: new Date(), revision: { increment: 1 } },
@@ -141,5 +190,15 @@ export function requireActiveClientPortalSession(req: Request): ClientPortalSess
   if (!session) throw Object.assign(new Error('Client portal session is required.'), { status: 401, code: 'CLIENT_PORTAL_AUTH_REQUIRED' });
   if (!session.emailVerified) throw Object.assign(new Error('Verified e-mail is required.'), { status: 403, code: 'CLIENT_EMAIL_NOT_VERIFIED' });
   if (session.status !== 'ACTIVE') throw Object.assign(new Error('Client identity is not active.'), { status: 403, code: `CLIENT_IDENTITY_${session.status}` });
+  return session;
+}
+
+export function requireRegisteredClientPortalSession(req: Request): ClientPortalSession {
+  const session = req.clientPortalSession;
+  if (!session) throw Object.assign(new Error('Client portal session is required.'), { status: 401, code: 'CLIENT_PORTAL_AUTH_REQUIRED' });
+  if (!session.emailVerified) throw Object.assign(new Error('Verified e-mail is required.'), { status: 403, code: 'CLIENT_EMAIL_NOT_VERIFIED' });
+  if (session.status === 'SUSPENDED' || session.status === 'REVOKED') {
+    throw Object.assign(new Error('Client identity is not active.'), { status: 403, code: `CLIENT_IDENTITY_${session.status}` });
+  }
   return session;
 }

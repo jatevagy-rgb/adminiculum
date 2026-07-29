@@ -2,11 +2,16 @@
 
 import { PublicClientApplication } from "@azure/msal-browser";
 import { MsalProvider } from "@azure/msal-react";
+import { usePathname } from "next/navigation";
 import { PropsWithChildren, useMemo, useState, useEffect } from "react";
-import { msalConfig } from "@/lib/authConfig";
+import { customerMsalConfig, workforceMsalConfig } from "@/lib/authConfig";
 
 export function AppProviders({ children }: PropsWithChildren) {
-  const msalInstance = useMemo(() => new PublicClientApplication(msalConfig), []);
+  const pathname = usePathname();
+  const isCustomerPortalRoute = pathname === "/portal" || pathname?.startsWith("/portal/");
+  const authSurface = isCustomerPortalRoute ? "customer" : "workforce";
+  const activeMsalConfig = isCustomerPortalRoute ? customerMsalConfig : workforceMsalConfig;
+  const msalInstance = useMemo(() => new PublicClientApplication(activeMsalConfig), [activeMsalConfig]);
   
   const [msalReady, setMsalReady] = useState(false);
   const [msalInitError, setMsalInitError] = useState<string | null>(null);
@@ -16,24 +21,20 @@ export function AppProviders({ children }: PropsWithChildren) {
 
     const initMsal = async () => {
       try {
+        setMsalReady(false);
+        setMsalInitError(null);
         console.log('[msal] initialize:start');
 
         await msalInstance.initialize();
         console.log('[msal] initialize:done');
 
         console.log('[msal] redirect:start');
-        const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-
         let authResult: Awaited<ReturnType<typeof msalInstance.handleRedirectPromise>> | null = null;
         try {
-          if (isLocalhost) {
-            authResult = await Promise.race([
-              msalInstance.handleRedirectPromise(),
-              new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
-            ]);
-          } else {
-            authResult = await msalInstance.handleRedirectPromise();
-          }
+          authResult = await Promise.race([
+            msalInstance.handleRedirectPromise(),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
+          ]);
         } catch (redirectError) {
           console.error('[msal] redirect:error', redirectError);
           throw redirectError;
@@ -143,5 +144,5 @@ export function AppProviders({ children }: PropsWithChildren) {
     );
   }
 
-  return <MsalProvider instance={msalInstance}>{children}</MsalProvider>;
+  return <MsalProvider instance={msalInstance} key={authSurface}>{children}</MsalProvider>;
 }

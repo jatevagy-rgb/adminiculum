@@ -1,6 +1,6 @@
 import { Request, Response, Router } from 'express';
 import { authenticate, requireRole } from '../../middleware/auth';
-import { authenticateClientPortal, requireActiveClientPortalSession } from '../../middleware/clientPortalAuth';
+import { authenticateClientPortal, requireRegisteredClientPortalSession } from '../../middleware/clientPortalAuth';
 import {
   approveMembershipRequest,
   cancelMembershipRequest,
@@ -58,19 +58,19 @@ clientIdentityRouter.post('/invitations/validate', async (req, res) => {
 
 clientIdentityRouter.use('/me', authenticateClientPortal);
 clientIdentityRouter.get('/me/profile', async (req, res) => {
-  try { res.json(await getClientProfile(requireActiveClientPortalSession(req))); }
+  try { res.json(await getClientProfile(requireRegisteredClientPortalSession(req))); }
   catch (error) { fail(res, error); }
 });
 clientIdentityRouter.get('/me/membership-requests', async (req, res) => {
-  try { res.json(await getCurrentMembershipRequests(requireActiveClientPortalSession(req))); }
+  try { res.json(await getCurrentMembershipRequests(requireRegisteredClientPortalSession(req))); }
   catch (error) { fail(res, error); }
 });
 clientIdentityRouter.post('/me/membership-requests', async (req, res) => {
-  try { res.status(202).json(await submitMembershipRequest(requireActiveClientPortalSession(req), req.body || {})); }
+  try { res.status(202).json(await submitMembershipRequest(requireRegisteredClientPortalSession(req), req.body || {})); }
   catch (error) { fail(res, error); }
 });
 clientIdentityRouter.post('/me/membership-requests/:requestId/cancel', async (req, res) => {
-  try { res.json(await cancelMembershipRequest(requireActiveClientPortalSession(req), String(req.params.requestId), Number(req.body?.revision))); }
+  try { res.json(await cancelMembershipRequest(requireRegisteredClientPortalSession(req), String(req.params.requestId), Number(req.body?.revision))); }
   catch (error) { fail(res, error); }
 });
 

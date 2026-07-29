@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { InteractionRequiredAuthError, InteractionStatus } from '@azure/msal-browser';
 import { useMsal } from '@azure/msal-react';
-import { adminiculumApiScope } from '@/lib/authConfig';
+import { customerApiScopes } from '@/lib/authConfig';
 import { ApiError, setAuthToken } from '@/lib/api';
 import { useCustomerAuth } from '@/lib/customerAuth';
 import {
@@ -176,7 +176,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         return;
       }
       try {
-        const token = await instance.acquireTokenSilent({ account, scopes: [adminiculumApiScope] });
+        const token = await instance.acquireTokenSilent({ account, scopes: customerApiScopes });
         setAuthToken(token.accessToken);
         const home = await getPortalHome();
         let detail = {};
@@ -186,7 +186,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         if (!cancelled) setState({ status: 'ready', home, ...detail });
       } catch (error) {
         if (error instanceof InteractionRequiredAuthError) {
-          await instance.acquireTokenRedirect({ account, scopes: [adminiculumApiScope] });
+          await instance.acquireTokenRedirect({ account, scopes: customerApiScopes });
           return;
         }
         if (!cancelled) {

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type AuthShellProps = {
@@ -115,13 +116,12 @@ export function AuthShell({
                   <span className="auth-entry-sub">Meghívott külsős jogászok is Microsoft-fiókkal lépnek be.</span>
                 </button>
 
-                <div className="auth-entry auth-entry-disabled" aria-disabled="true">
+                <Link className="auth-entry" href="/portal">
                   <span className="auth-entry-title">
                     Ügyfélportál
-                    <span className="auth-entry-tag">Hamarosan</span>
                   </span>
-                  <span className="auth-entry-sub">Külön, hitelesített ügyfélfelület — később, ezen a felületen nem elérhető.</span>
-                </div>
+                  <span className="auth-entry-sub">Külön, hitelesített ügyfélfelület — csak erre kattintva nyílik meg.</span>
+                </Link>
               </div>
 
               {showDevSignIn && onDevSignIn && (

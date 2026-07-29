@@ -14,7 +14,7 @@
 import { useCallback } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { InteractionRequiredAuthError, InteractionStatus } from '@azure/msal-browser';
-import { adminiculumApiScope, loginRequest, msalConfig } from './authConfig';
+import { customerApiScopes, customerLoginRequest, customerMsalConfig } from './authConfig';
 import { clearAuthToken, setAuthToken } from './api';
 import {
   REGISTRATION_PROMPT,
@@ -26,16 +26,16 @@ import {
 /** Whether the customer identity provider is usable in the current runtime. */
 export function isCustomerProviderConfigured(): boolean {
   return evaluateCustomerProvider({
-    clientId: msalConfig.auth.clientId,
-    authority: msalConfig.auth.authority,
+    clientId: customerMsalConfig.auth.clientId,
+    authority: customerMsalConfig.auth.authority,
     isProduction: isProductionRuntime(),
   }).configured;
 }
 
-const registrationRequest = { ...loginRequest, prompt: REGISTRATION_PROMPT };
+const registrationRequest = { ...customerLoginRequest, prompt: REGISTRATION_PROMPT };
 // External ID combines password reset into the same hosted sign-in journey
 // ("Elfelejtette a jelszavát?" on the provider page), so reset re-enters it.
-const passwordResetRequest = { ...loginRequest };
+const passwordResetRequest = { ...customerLoginRequest };
 
 export interface CustomerAuth {
   configured: boolean;
@@ -56,7 +56,7 @@ export function useCustomerAuth(): CustomerAuth {
 
   const beginCustomerLogin = useCallback(async () => {
     if (!configured || interactionInProgress) return;
-    await instance.loginRedirect(loginRequest);
+    await instance.loginRedirect(customerLoginRequest);
   }, [configured, interactionInProgress, instance]);
 
   const beginCustomerRegistration = useCallback(async () => {
@@ -80,12 +80,12 @@ export function useCustomerAuth(): CustomerAuth {
   const acquireCustomerApiToken = useCallback(async (): Promise<string | null> => {
     if (!account) return null;
     try {
-      const res = await instance.acquireTokenSilent({ account, scopes: [adminiculumApiScope] });
+      const res = await instance.acquireTokenSilent({ account, scopes: customerApiScopes });
       setAuthToken(res.accessToken);
       return res.accessToken;
     } catch (error) {
       if (error instanceof InteractionRequiredAuthError) {
-        await instance.acquireTokenRedirect({ account, scopes: [adminiculumApiScope] });
+        await instance.acquireTokenRedirect({ account, scopes: customerApiScopes });
         return null;
       }
       throw error;
