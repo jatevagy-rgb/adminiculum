@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { InteractionRequiredAuthError, InteractionStatus } from '@azure/msal-browser';
 import { useMsal } from '@azure/msal-react';
-import { customerApiScopes } from '@/lib/authConfig';
+import { customerApiScopes, customerTenantId, pickAccountByTenant } from '@/lib/authConfig';
 import { ApiError, setAuthToken } from '@/lib/api';
 import { useCustomerAuth } from '@/lib/customerAuth';
 import {
@@ -162,7 +162,7 @@ function ActionView({ action }: { action: PortalActionRequest }) {
 
 export function ClientPortalShell({ view, resourceId }: Props) {
   const { instance, accounts, inProgress } = useMsal();
-  const account = accounts[0] || null;
+  const account = pickAccountByTenant(accounts, customerTenantId);
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   // Canonical customer-auth layer: single MSAL instance, one logout config.
   const { logoutCustomer } = useCustomerAuth();

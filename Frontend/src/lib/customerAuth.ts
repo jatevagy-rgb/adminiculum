@@ -14,7 +14,7 @@
 import { useCallback } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { InteractionRequiredAuthError, InteractionStatus } from '@azure/msal-browser';
-import { customerApiScopes, customerLoginRequest, customerMsalConfig } from './authConfig';
+import { customerApiScopes, customerLoginRequest, customerMsalConfig, customerTenantId, pickAccountByTenant } from './authConfig';
 import { clearAuthToken, setAuthToken } from './api';
 import {
   REGISTRATION_PROMPT,
@@ -50,7 +50,7 @@ export interface CustomerAuth {
 
 export function useCustomerAuth(): CustomerAuth {
   const { instance, inProgress, accounts } = useMsal();
-  const account = accounts[0] || null;
+  const account = pickAccountByTenant(accounts, customerTenantId);
   const configured = isCustomerProviderConfigured();
   const interactionInProgress = inProgress !== InteractionStatus.None;
 

@@ -4,7 +4,7 @@ import { PublicClientApplication } from "@azure/msal-browser";
 import { MsalProvider } from "@azure/msal-react";
 import { usePathname } from "next/navigation";
 import { PropsWithChildren, useMemo, useState, useEffect } from "react";
-import { customerMsalConfig, workforceMsalConfig } from "@/lib/authConfig";
+import { customerMsalConfig, customerTenantId, pickAccountByTenant, resolvedWorkforceTenantId, workforceMsalConfig } from "@/lib/authConfig";
 
 export function AppProviders({ children }: PropsWithChildren) {
   const pathname = usePathname();
@@ -50,9 +50,13 @@ export function AppProviders({ children }: PropsWithChildren) {
         } else {
           const accounts = msalInstance.getAllAccounts();
           console.log('[msal] accounts:count', accounts.length);
-          if (accounts.length > 0) {
-            msalInstance.setActiveAccount(accounts[0]);
-            console.log('[msal] activeAccount:set from cache');
+          // Select the cached account for THIS surface's tenant; a cross-tenant
+          // account would trigger MSAL authority_mismatch on silent token calls.
+          const surfaceTenantId = isCustomerPortalRoute ? customerTenantId : resolvedWorkforceTenantId;
+          const scopedAccount = pickAccountByTenant(accounts, surfaceTenantId);
+          if (scopedAccount) {
+            msalInstance.setActiveAccount(scopedAccount);
+            console.log('[msal] activeAccount:set from cache (tenant-scoped)');
           }
         }
 

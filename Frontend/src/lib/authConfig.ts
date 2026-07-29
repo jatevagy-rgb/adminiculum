@@ -1,4 +1,4 @@
-import { Configuration, LogLevel } from "@azure/msal-browser";
+import { AccountInfo, Configuration, LogLevel } from "@azure/msal-browser";
 
 // Auth configuration — all values must be provided explicitly per deployment.
 // No hardcoded production defaults — each deployment (local/container) must provide its own values.
@@ -113,4 +113,45 @@ export const loginRequest = {
 export const customerLoginRequest = {
   scopes: ["openid", "profile", "email", ...customerApiScopes],
 };
+
+// --- Tenant-scoped account selection ---------------------------------------
+// The customer portal and the internal workforce app run in the same browser
+// tab and share the sessionStorage MSAL cache, so getAllAccounts() can return
+// an account from the *other* tenant. Using such an account against this
+// surface's authority throws MSAL `authority_mismatch`. Select the account that
+// belongs to the surface's own tenant instead of blindly taking accounts[0].
+
+function tenantIdFromAuthority(authority: string): string {
+  const m = String(authority || '').match(
+    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+  );
+  return m ? m[0] : '';
+}
+
+export const customerTenantId =
+  process.env.NEXT_PUBLIC_ENTRA_TENANT_ID ||
+  process.env.NEXT_PUBLIC_AZURE_TENANT_ID ||
+  tenantIdFromAuthority(customerAuthority);
+
+export const resolvedWorkforceTenantId =
+  workforceTenantId || tenantIdFromAuthority(workforceAuthority);
+
+/**
+ * Pick the cached account that belongs to `tenantId`. Returns null when no
+ * account matches (e.g. only the other surface is signed in) so the caller
+ * shows its signed-out state rather than borrowing a cross-tenant account.
+ * Falls back to accounts[0] only when no tenant is configured.
+ */
+export function pickAccountByTenant(
+  accounts: AccountInfo[] | undefined,
+  tenantId: string,
+): AccountInfo | null {
+  if (!accounts || accounts.length === 0) return null;
+  const t = String(tenantId || '').toLowerCase();
+  if (!t) return accounts[0] || null;
+  const match = accounts.find((a) => String(a.tenantId || '').toLowerCase() === t);
+  if (match) return match;
+  // homeAccountId embeds the tenant; use it as a secondary signal.
+  return accounts.find((a) => String(a.homeAccountId || '').toLowerCase().includes(t)) || null;
+}
 

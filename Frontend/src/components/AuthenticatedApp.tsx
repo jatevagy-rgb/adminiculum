@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { InteractionRequiredAuthError, InteractionStatus } from "@azure/msal-browser";
 import { useMsal } from "@azure/msal-react";
-import { backendBaseUrl, loginRequest, workforceApiScopes } from "@/lib/authConfig";
+import { backendBaseUrl, loginRequest, pickAccountByTenant, resolvedWorkforceTenantId, workforceApiScopes } from "@/lib/authConfig";
 import { clearAuthToken, setAuthToken } from "@/lib/api";
 import { LoginScreen } from "@/components/LoginScreen";
 import { AppShell } from "@/components/AppShell";
@@ -90,7 +90,7 @@ type AuthenticatedAppProps = {
 export function AuthenticatedApp({ section = "dashboard", children, fullViewport = false }: AuthenticatedAppProps) {
   const { instance, accounts, inProgress } = useMsal();
   const searchParams = useSearchParams();
-  const account = accounts[0] || null;
+  const account = pickAccountByTenant(accounts, resolvedWorkforceTenantId);
 
   const initialCachedToken = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
   const initialCachedProfile = readCachedProfile();
