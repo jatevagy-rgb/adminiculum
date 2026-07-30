@@ -23,12 +23,9 @@ export function AppProviders({ children }: PropsWithChildren) {
       try {
         setMsalReady(false);
         setMsalInitError(null);
-        console.log('[msal] initialize:start');
 
         await msalInstance.initialize();
-        console.log('[msal] initialize:done');
 
-        console.log('[msal] redirect:start');
         let authResult: Awaited<ReturnType<typeof msalInstance.handleRedirectPromise>> | null = null;
         try {
           authResult = await Promise.race([
@@ -39,32 +36,22 @@ export function AppProviders({ children }: PropsWithChildren) {
           console.error('[msal] redirect:error', redirectError);
           throw redirectError;
         }
-
-        console.log('[msal] redirect:result', { hasAuthResult: !!authResult });
-
         if (!mounted) return;
 
         if (authResult?.account) {
           msalInstance.setActiveAccount(authResult.account);
-          console.log('[msal] activeAccount:set from redirect');
         } else {
           const accounts = msalInstance.getAllAccounts();
-          console.log('[msal] accounts:count', accounts.length);
           // Select the cached account for THIS surface's tenant; a cross-tenant
           // account would trigger MSAL authority_mismatch on silent token calls.
           const surfaceTenantId = isCustomerPortalRoute ? customerTenantId : resolvedWorkforceTenantId;
           const scopedAccount = pickAccountByTenant(accounts, surfaceTenantId);
           if (scopedAccount) {
             msalInstance.setActiveAccount(scopedAccount);
-            console.log('[msal] activeAccount:set from cache (tenant-scoped)');
           }
         }
 
-        const msalKeys = Object.keys(window.sessionStorage).filter(k => k.toLowerCase().includes('msal'));
-        console.log('[msal] storage:keys_after_redirect', msalKeys);
-
         setMsalReady(true);
-        console.log('[msal] ready:true');
       } catch (error) {
         console.error('[AppProviders] MSAL initialization failed:', error);
         if (mounted) {
@@ -78,7 +65,7 @@ export function AppProviders({ children }: PropsWithChildren) {
     return () => {
       mounted = false;
     };
-  }, [msalInstance]);
+  }, [isCustomerPortalRoute, msalInstance]);
 
   if (msalInitError) {
     return (

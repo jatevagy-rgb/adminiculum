@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { InteractionRequiredAuthError, InteractionStatus } from '@azure/msal-browser';
 import { useMsal } from '@azure/msal-react';
 import { customerApiScopes, customerTenantId, pickAccountByTenant } from '@/lib/authConfig';
-import { ApiError, setAuthToken } from '@/lib/api';
+import { ApiError, getAuthToken, setAuthToken } from '@/lib/api';
 import { useCustomerAuth } from '@/lib/customerAuth';
 import {
   getPortalActionRequest,
@@ -140,7 +140,7 @@ function MatterView({ matter }: { matter: PortalMatter & { documents: PortalDocu
 }
 
 function DocumentView({ document }: { document: PortalDocument }) {
-  const token = typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null;
+  const token = getAuthToken('customer');
   const onDownload = useCallback(async () => {
     const response = await fetch(portalDownloadUrl(document.id), { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
     if (!response.ok) throw new Error('A dokumentum jelenleg nem tölthető le.');
@@ -170,14 +170,14 @@ export function ClientPortalShell({ view, resourceId }: Props) {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (inProgress !== InteractionStatus.None) return;
       if (!account) {
         setState({ status: 'login' });
         return;
       }
+      if (inProgress !== InteractionStatus.None) return;
       try {
         const token = await instance.acquireTokenSilent({ account, scopes: customerApiScopes });
-        setAuthToken(token.accessToken);
+        setAuthToken(token.accessToken, 'customer');
         const home = await getPortalHome();
         let detail = {};
         if (view === 'matter' && resourceId) detail = { matter: await getPortalMatter(resourceId) };

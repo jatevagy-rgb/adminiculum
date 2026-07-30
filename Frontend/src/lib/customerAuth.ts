@@ -70,7 +70,7 @@ export function useCustomerAuth(): CustomerAuth {
   }, [configured, interactionInProgress, instance]);
 
   const logoutCustomer = useCallback(async () => {
-    clearAuthToken();
+    clearAuthToken('customer');
     await instance.logoutRedirect({
       account: account || undefined,
       postLogoutRedirectUri: customerPostLogoutRedirectUri(window.location.origin),
@@ -81,7 +81,7 @@ export function useCustomerAuth(): CustomerAuth {
     if (!account) return null;
     try {
       const res = await instance.acquireTokenSilent({ account, scopes: customerApiScopes });
-      setAuthToken(res.accessToken);
+      setAuthToken(res.accessToken, 'customer');
       return res.accessToken;
     } catch (error) {
       if (error instanceof InteractionRequiredAuthError) {

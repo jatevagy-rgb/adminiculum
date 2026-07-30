@@ -114,11 +114,13 @@ webapp-logs*.zip
 webapp_logs*.zip
 
 # Test/build artifacts
+.artifacts/
 test-results/
 Frontend/test-results/
 Frontend/tmp-*.cjs
 Frontend/docs/
 backend_deploy_staging/
+graphify-out/
 
 # Dashboard browser-QA generated artifacts (reproduced deterministically by
 # Frontend/tests/dashboardBrowserQA.mjs)

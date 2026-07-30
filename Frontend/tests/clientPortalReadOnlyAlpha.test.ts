@@ -9,6 +9,7 @@ const read = (relative: string) => readFileSync(path.join(root, relative), 'utf8
 describe('client portal read-only alpha frontend', () => {
   const shell = () => read('src/components/client-portal/ClientPortalShell.tsx');
   const api = () => read('src/lib/clientPortalApi.ts');
+  const authApi = () => read('src/lib/api.ts');
 
   it('uses a separate client-facing shell and does not import the internal AppShell', () => {
     const source = shell();
@@ -45,5 +46,16 @@ describe('client portal read-only alpha frontend', () => {
     ]) {
       assert.match(read(relative), /ClientPortalShell/);
     }
+  });
+
+  it('keeps customer and workforce bearer tokens in separate local slots', () => {
+    const apiSource = authApi();
+    const shellSource = shell();
+    assert.match(apiSource, /adminiculum:auth_token:workforce/);
+    assert.match(apiSource, /adminiculum:auth_token:customer/);
+    assert.match(apiSource, /currentAuthContext/);
+    assert.match(shellSource, /setAuthToken\(token\.accessToken, 'customer'\)/);
+    assert.match(shellSource, /getAuthToken\('customer'\)/);
+    assert.doesNotMatch(shellSource, /localStorage\.getItem\('auth_token'\)/);
   });
 });

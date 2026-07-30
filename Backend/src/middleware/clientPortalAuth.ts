@@ -31,6 +31,7 @@ declare global {
 const CUSTOMER_IDENTITY_ISSUER = String(process.env.CLIENT_IDENTITY_ISSUER || process.env.CLIENT_PORTAL_IDENTITY_ISSUER || '').trim();
 const CUSTOMER_IDENTITY_AUDIENCE = String(process.env.CLIENT_IDENTITY_AUDIENCE || process.env.CLIENT_PORTAL_IDENTITY_AUDIENCE || '').trim();
 const CUSTOMER_IDENTITY_JWKS_URI = String(process.env.CLIENT_IDENTITY_JWKS_URI || process.env.CLIENT_PORTAL_IDENTITY_JWKS_URI || '').trim();
+const CUSTOMER_IDENTITY_REQUIRED_SCOPE = String(process.env.CLIENT_PORTAL_IDENTITY_REQUIRED_SCOPE || 'access_as_client').trim();
 
 let cachedCustomerJwks: ReturnType<typeof jwksClient> | null = null;
 
@@ -49,6 +50,24 @@ export function acceptedAudiences(configuredAudience: string = CUSTOMER_IDENTITY
   if (a.startsWith('api://')) set.add(a.slice('api://'.length));
   else set.add(`api://${a}`);
   return [...set];
+}
+
+function tokenScopes(payload: Record<string, unknown>): string[] {
+  const values = [payload.scp, payload.scope, payload.scopes];
+  return values.flatMap((value) => {
+    if (Array.isArray(value)) return value.map(String);
+    if (typeof value === 'string') return value.split(/\s+/);
+    return [];
+  }).map((scope) => scope.trim()).filter(Boolean);
+}
+
+export function hasRequiredClientPortalScope(
+  payload: Record<string, unknown>,
+  requiredScope: string = CUSTOMER_IDENTITY_REQUIRED_SCOPE,
+): boolean {
+  const scope = String(requiredScope || '').trim();
+  if (!scope) return false;
+  return tokenScopes(payload).includes(scope);
 }
 
 function customerJwks() {
@@ -110,10 +129,9 @@ async function resolveIdentity(payload: Record<string, unknown>): Promise<Client
   const subject = String(payload.sub || '').trim();
   const normalizedEmail = normalizeEmail(payload.email || payload.preferred_username || payload.upn);
   if (!issuer || !subject || !normalizedEmail) {
-    // Safe diagnostic: presence flags + claim KEYS only (no values, no PII).
+    // Safe diagnostic: presence flags only. Do not log raw claim keys or values.
     console.warn('[clientPortalAuth] resolveIdentity unresolved', JSON.stringify({
       hasIssuer: Boolean(issuer), hasSubject: Boolean(subject), hasEmail: Boolean(normalizedEmail),
-      claimKeys: Object.keys(payload || {}),
     }));
     return null;
   }
@@ -193,6 +211,10 @@ export async function authenticateClientPortal(req: Request, res: Response, next
         algorithms: ['RS256'],
       }, (error, decoded) => error ? reject(error) : resolve((decoded as Record<string, unknown>) || {}));
     });
+    if (!hasRequiredClientPortalScope(payload)) {
+      res.status(403).json({ status: 403, code: 'CLIENT_PORTAL_SCOPE_REQUIRED', message: 'Client portal token is missing the required delegated scope.' });
+      return;
+    }
     const session = await resolveIdentity(payload);
     if (!session) {
       res.status(403).json({ status: 403, code: 'CLIENT_IDENTITY_NOT_REGISTERED', message: 'Client identity is not registered for Adminiculum.' });
@@ -201,18 +223,15 @@ export async function authenticateClientPortal(req: Request, res: Response, next
     req.clientPortalSession = session;
     next();
   } catch (verifyError) {
-    // Safe diagnostic: decode (no verify) to log NON-SECRET aud/iss + claim keys +
-    // the verifier's reason. aud/iss are the API id and tenant issuer (already
-    // configured, not secrets); token value and claim values are never logged.
+    // Safe diagnostic: bounded reason + expected provider context. Never log
+    // token, Authorization header, raw claim values, or claim-key inventory.
     try {
       const decoded = jwt.decode(token) as Record<string, unknown> | null;
       console.warn('[clientPortalAuth] token rejected', JSON.stringify({
         reason: (verifyError as Error)?.message,
-        aud: decoded?.aud,
-        iss: decoded?.iss,
-        claimKeys: decoded ? Object.keys(decoded) : [],
-        expectedAud: CUSTOMER_IDENTITY_AUDIENCE,
-        expectedIss: CUSTOMER_IDENTITY_ISSUER,
+        provider: 'CLIENT_PORTAL_EXTERNAL_ID',
+        hasAudience: Boolean(decoded?.aud),
+        hasIssuer: Boolean(decoded?.iss),
       }));
     } catch { /* ignore decode failures */ }
     res.status(401).json({ status: 401, code: 'CLIENT_PORTAL_TOKEN_INVALID', message: 'Client portal token is invalid.' });

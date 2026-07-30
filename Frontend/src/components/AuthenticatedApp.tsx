@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { InteractionRequiredAuthError, InteractionStatus } from "@azure/msal-browser";
 import { useMsal } from "@azure/msal-react";
 import { backendBaseUrl, loginRequest, pickAccountByTenant, resolvedWorkforceTenantId, workforceApiScopes } from "@/lib/authConfig";
-import { clearAuthToken, setAuthToken } from "@/lib/api";
+import { clearAuthToken, getAuthToken, setAuthToken } from "@/lib/api";
 import { LoginScreen } from "@/components/LoginScreen";
 import { AppShell } from "@/components/AppShell";
 
@@ -93,7 +93,7 @@ export function AuthenticatedApp({ section = "dashboard", children, fullViewport
   const searchParams = useSearchParams();
   const account = pickAccountByTenant(accounts, resolvedWorkforceTenantId);
 
-  const initialCachedToken = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const initialCachedToken = getAuthToken('workforce');
   const initialCachedProfile = readCachedProfile();
   const hasInitialTokenAndProfile = Boolean(initialCachedToken && initialCachedProfile);
 
@@ -106,7 +106,7 @@ export function AuthenticatedApp({ section = "dashboard", children, fullViewport
   const isLocalhost = typeof window !== "undefined" && window.location.hostname === "localhost";
   const enableLocalDevAuth = process.env.NEXT_PUBLIC_ENABLE_LOCAL_DEV_AUTH === "true" || isLocalhost;
   const showDevSignIn = enableLocalDevAuth;
-  const hasLocalDevSession = !account && enableLocalDevAuth && authState === "authenticated" && !!profile && !!(typeof window !== "undefined" ? localStorage.getItem("auth_token") : null);
+  const hasLocalDevSession = !account && enableLocalDevAuth && authState === "authenticated" && !!profile && !!getAuthToken('workforce');
 
   const callAuthMe = useCallback(async (accessToken: string): Promise<MeResponse | null> => {
     const authMeUrl = `${backendBaseUrl}/api/v1/auth/me`;
@@ -160,7 +160,7 @@ export function AuthenticatedApp({ section = "dashboard", children, fullViewport
         throw new Error("Local dev login did not return accessToken");
       }
 
-      setAuthToken(loginData.accessToken);
+      setAuthToken(loginData.accessToken, 'workforce');
       const profileData = await callAuthMe(loginData.accessToken);
 
       if (!profileData) {
@@ -207,7 +207,7 @@ export function AuthenticatedApp({ section = "dashboard", children, fullViewport
     clearCachedProfile();
 
     if (!account) {
-      clearAuthToken();
+      clearAuthToken('workforce');
       return;
     }
 
@@ -241,7 +241,7 @@ export function AuthenticatedApp({ section = "dashboard", children, fullViewport
         scopes: workforceApiScopes,
       });
 
-      setAuthToken(tokenResponse.accessToken);
+      setAuthToken(tokenResponse.accessToken, 'workforce');
       const profileData = await callAuthMe(tokenResponse.accessToken);
 
       if (!profileData) {
@@ -276,7 +276,7 @@ export function AuthenticatedApp({ section = "dashboard", children, fullViewport
     let mounted = true;
 
     if (!account) {
-      const cachedToken = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+      const cachedToken = getAuthToken('workforce');
       const cachedProfile = readCachedProfile();
 
       if (cachedToken && cachedProfile) {
@@ -292,7 +292,7 @@ export function AuthenticatedApp({ section = "dashboard", children, fullViewport
           } catch {
             if (!mounted) return;
 
-            clearAuthToken();
+            clearAuthToken('workforce');
             clearCachedProfile();
             setProfile(null);
 
@@ -309,7 +309,7 @@ export function AuthenticatedApp({ section = "dashboard", children, fullViewport
       }
 
       clearCachedProfile();
-      clearAuthToken();
+      clearAuthToken('workforce');
       setProfile(null);
       setAuthState("idle");
       return;

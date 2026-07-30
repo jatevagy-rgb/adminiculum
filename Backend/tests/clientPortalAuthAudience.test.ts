@@ -1,4 +1,4 @@
-import { acceptedAudiences } from '../src/middleware/clientPortalAuth';
+import { acceptedAudiences, hasRequiredClientPortalScope } from '../src/middleware/clientPortalAuth';
 
 /**
  * Regression for the production defect where External ID v2 access tokens carry
@@ -24,5 +24,24 @@ describe('acceptedAudiences', () => {
   it('does not duplicate when only one form is configured', () => {
     expect(acceptedAudiences('api://x').length).toBe(2);
     expect(new Set(acceptedAudiences('api://x')).size).toBe(2);
+  });
+});
+
+describe('hasRequiredClientPortalScope', () => {
+  it('accepts the exact delegated access_as_client scope from scp', () => {
+    expect(hasRequiredClientPortalScope({ scp: 'openid profile access_as_client' })).toBe(true);
+  });
+
+  it('denies valid issuer/audience tokens when the delegated scope is missing', () => {
+    expect(hasRequiredClientPortalScope({ iss: 'issuer', aud: 'audience' })).toBe(false);
+  });
+
+  it('denies unrelated delegated scopes', () => {
+    expect(hasRequiredClientPortalScope({ scp: 'openid profile User.Read' })).toBe(false);
+  });
+
+  it('accepts array-form scopes only when the exact scope is present', () => {
+    expect(hasRequiredClientPortalScope({ scopes: ['openid', 'access_as_client'] })).toBe(true);
+    expect(hasRequiredClientPortalScope({ scopes: ['openid', 'access_as_user'] })).toBe(false);
   });
 });

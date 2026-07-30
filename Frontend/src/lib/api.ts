@@ -36,16 +36,33 @@ export class ApiError extends Error {
   }
 }
 
-const AUTH_TOKEN_KEY = 'auth_token';
+export type AuthTokenContext = 'workforce' | 'customer';
+
+const LEGACY_AUTH_TOKEN_KEY = 'auth_token';
+const AUTH_TOKEN_KEYS: Record<AuthTokenContext, string> = {
+  workforce: 'adminiculum:auth_token:workforce',
+  customer: 'adminiculum:auth_token:customer',
+};
 const AUTH_TOKEN_EVENT = 'adminiculum:auth-token-updated';
 const DEFAULT_AUTH_WAIT_MS = 3000;
 
-function readAuthToken(): string | null {
-  return typeof window !== 'undefined' ? localStorage.getItem(AUTH_TOKEN_KEY) : null;
+function currentAuthContext(): AuthTokenContext {
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/portal')) {
+    return 'customer';
+  }
+  return 'workforce';
+}
+
+export function getAuthToken(context: AuthTokenContext = currentAuthContext()): string | null {
+  if (typeof window === 'undefined') return null;
+  const token = localStorage.getItem(AUTH_TOKEN_KEYS[context]);
+  if (token) return token;
+  return context === 'workforce' ? localStorage.getItem(LEGACY_AUTH_TOKEN_KEY) : null;
 }
 
 async function waitForAuthToken(timeoutMs = DEFAULT_AUTH_WAIT_MS): Promise<string | null> {
-  const immediate = readAuthToken();
+  const context = currentAuthContext();
+  const immediate = getAuthToken(context);
   if (immediate) return immediate;
   if (typeof window === 'undefined' || timeoutMs <= 0) return null;
 
@@ -60,7 +77,7 @@ async function waitForAuthToken(timeoutMs = DEFAULT_AUTH_WAIT_MS): Promise<strin
     };
 
     const checkNow = () => {
-      const token = readAuthToken();
+      const token = getAuthToken(context);
       if (token) {
         finish(token);
       } else if (Date.now() - startedAt >= timeoutMs) {
@@ -76,15 +93,17 @@ async function waitForAuthToken(timeoutMs = DEFAULT_AUTH_WAIT_MS): Promise<strin
   });
 }
 
-export function setAuthToken(token: string): void {
+export function setAuthToken(token: string, context: AuthTokenContext = currentAuthContext()): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(AUTH_TOKEN_KEY, token);
+  localStorage.setItem(AUTH_TOKEN_KEYS[context], token);
+  localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
   window.dispatchEvent(new Event(AUTH_TOKEN_EVENT));
 }
 
-export function clearAuthToken(): void {
+export function clearAuthToken(context: AuthTokenContext = currentAuthContext()): void {
   if (typeof window === 'undefined') return;
-  localStorage.removeItem(AUTH_TOKEN_KEY);
+  localStorage.removeItem(AUTH_TOKEN_KEYS[context]);
+  localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
   window.dispatchEvent(new Event(AUTH_TOKEN_EVENT));
 }
 
