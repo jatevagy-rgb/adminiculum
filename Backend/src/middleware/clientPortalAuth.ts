@@ -96,7 +96,14 @@ async function resolveIdentity(payload: Record<string, unknown>): Promise<Client
   const audience = Array.isArray(payload.aud) ? String(payload.aud[0] || '') : String(payload.aud || '');
   const subject = String(payload.sub || '').trim();
   const normalizedEmail = normalizeEmail(payload.email || payload.preferred_username || payload.upn);
-  if (!issuer || !subject || !normalizedEmail) return null;
+  if (!issuer || !subject || !normalizedEmail) {
+    // Safe diagnostic: presence flags + claim KEYS only (no values, no PII).
+    console.warn('[clientPortalAuth] resolveIdentity unresolved', JSON.stringify({
+      hasIssuer: Boolean(issuer), hasSubject: Boolean(subject), hasEmail: Boolean(normalizedEmail),
+      claimKeys: Object.keys(payload || {}),
+    }));
+    return null;
+  }
 
   const emailVerified = providerAssertedEmailIsVerified(payload);
   const verifiedAt = emailVerified ? new Date() : null;
@@ -180,7 +187,21 @@ export async function authenticateClientPortal(req: Request, res: Response, next
     }
     req.clientPortalSession = session;
     next();
-  } catch {
+  } catch (verifyError) {
+    // Safe diagnostic: decode (no verify) to log NON-SECRET aud/iss + claim keys +
+    // the verifier's reason. aud/iss are the API id and tenant issuer (already
+    // configured, not secrets); token value and claim values are never logged.
+    try {
+      const decoded = jwt.decode(token) as Record<string, unknown> | null;
+      console.warn('[clientPortalAuth] token rejected', JSON.stringify({
+        reason: (verifyError as Error)?.message,
+        aud: decoded?.aud,
+        iss: decoded?.iss,
+        claimKeys: decoded ? Object.keys(decoded) : [],
+        expectedAud: CUSTOMER_IDENTITY_AUDIENCE,
+        expectedIss: CUSTOMER_IDENTITY_ISSUER,
+      }));
+    } catch { /* ignore decode failures */ }
     res.status(401).json({ status: 401, code: 'CLIENT_PORTAL_TOKEN_INVALID', message: 'Client portal token is invalid.' });
   }
 }
