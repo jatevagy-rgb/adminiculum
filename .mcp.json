@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "graphify": {
+      "command": "uv",
+      "args": [
+        "tool",
+        "run",
+        "--from",
+        "graphifyy[mcp]",
+        "python",
+        "-m",
+        "graphify.serve",
+        "graphify-out/graph.json"
+      ]
+    }
+  }
+}

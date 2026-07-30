@@ -1,0 +1,110 @@
+# Graphify source-only policy for Adminiculum.
+# Keep generated output, local evidence, secrets, deployment artifacts and caches
+# out of the repository knowledge graph.
+
+.git/
+graphify-out/
+.artifacts/
+.next/
+node_modules/
+coverage/
+dist/
+build/
+out/
+.turbo/
+.cache/
+.parcel-cache/
+.vite/
+.vercel/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!.env.container.example
+!.env.*.example
+*.pem
+*.key
+*.pfx
+*.crt
+*secret*
+*Secret*
+*SECRETS*
+Backend/SECRETS.md
+
+# Deployment/build artifacts
+*.zip
+*.tar
+*.tgz
+*.7z
+*_deploy*
+*deploy*.zip
+backend_deploy*/
+frontend_deploy*/
+backend-deploy*/
+frontend-deploy*/
+backend_deploy_artifact/
+backend_deploy_staging/
+frontend_deploy_staging/
+build-output.txt
+*_result.txt
+tsc*.txt
+*.tsbuildinfo
+release-manifest.json
+
+# Logs, reports, evidence, screenshots
+*.log
+logs/
+test-results/
+screenshots/
+playwright-report/
+coverage/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.mp4
+*.mov
+*.avi
+*.wav
+*.mp3
+frontend-appservice-logs/
+frontend-appservice-logs.zip
+
+# Runtime/user uploaded or quarantine material
+uploads/
+quarantine/
+Archive/
+docs/_archive/
+tmp_*/
+temp/
+*.dump
+*.bak
+*.sqlite
+*.db
+
+# Generated clients and package-manager caches
+Backend/node_modules/
+Frontend/node_modules/
+Backend/prisma/generated/
+Backend/src/generated/
+Frontend/.next/
+Frontend/out/
+Frontend/dist/
+
+# Editor/OS caches
+.idea/
+.vscode/
+.vs/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Known local diagnostics, not product source
+Backend/scripts/diag-membership.ts
+.frontend-dev.pid
+.kilo/
+.kilocodemodes
