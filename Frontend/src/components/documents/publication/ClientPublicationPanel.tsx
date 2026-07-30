@@ -156,7 +156,7 @@ export function ClientPublicationPanel({
             <div className="mt-3 space-y-2">
               {overview?.grants.map((grant) => (
                 <div key={grant.id} className="rounded-[10px] bg-[var(--adm-surface)] p-2 text-xs">
-                  <div className="flex flex-wrap items-center justify-between gap-2"><b>{grant.clientUserId.slice(0, 8)}</b><AdminBadge tone={grant.status === "ACTIVE" ? "green" : "neutral"}>{grant.status}</AdminBadge></div>
+                  <div className="flex flex-wrap items-center justify-between gap-2"><b>{grant.clientPortalIdentityId ? `id:${grant.clientPortalIdentityId.slice(0, 8)}` : grant.clientUserId ? grant.clientUserId.slice(0, 8) : "—"}</b><AdminBadge tone={grant.status === "ACTIVE" ? "green" : "neutral"}>{grant.status}</AdminBadge></div>
                   {grant.status === "INVITED" ? <AdminButton className="mt-2" size="sm" variant="gold" disabled={busy} onClick={() => run(() => transitionClientPortalGrant(grant.id, "activate", grant.revision))}>Aktiválás</AdminButton> : null}
                   {grant.status === "ACTIVE" ? <div className="mt-2 flex gap-2"><AdminButton size="sm" variant="muted" disabled={busy} onClick={() => run(() => transitionClientPortalGrant(grant.id, "suspend", grant.revision))}>Suspend</AdminButton><AdminButton size="sm" variant="muted" disabled={busy} onClick={() => run(() => transitionClientPortalGrant(grant.id, "revoke", grant.revision))}>Revoke</AdminButton></div> : null}
                 </div>

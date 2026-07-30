@@ -4,7 +4,8 @@ export type PublicationStatus = "DRAFT" | "READY_FOR_APPROVAL" | "APPROVED" | "P
 
 export interface ClientPortalGrantSummaryDTO {
   id: string;
-  clientUserId: string;
+  clientUserId: string | null;
+  clientPortalIdentityId: string | null;
   clientId: string;
   caseId: string;
   role: string;
