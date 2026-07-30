@@ -22,15 +22,20 @@ describe('client identity registration and onboarding frontend', () => {
     assert.doesNotMatch(launcher, /Microsoft|Entra|B2B guest/i);
   });
 
-  it('renders membership onboarding copy in the identity shell', () => {
-    for (const phrase of ['Szervezeti hozzáférés kérése', 'Regisztrációját megkaptuk']) {
+  it('renders membership onboarding copy and truthful pending status in the identity shell', () => {
+    for (const phrase of ['Szervezeti hozzáférés kérése', 'Kérelem ellenőrzés alatt']) {
       assert.match(shell, new RegExp(phrase));
     }
+    // Pending status is resolved from the backend, not shown unconditionally.
+    assert.match(shell, /me\/membership-requests/);
+    assert.match(shell, /Nincs beküldött tagsági kérelem/);
     assert.doesNotMatch(shell, /Microsoft|Entra workforce|B2B guest/i);
   });
 
-  it('keeps legal approval and portal action execution out of the customer UI', () => {
-    assert.doesNotMatch(shell, /dokumentum jóváhagyása|szerződés jóváhagyása|approve/i);
+  it('keeps legal document/contract approval controls out of the customer UI', () => {
+    // Note: "APPROVED" here would be the membership status enum, not a legal
+    // approval control — match only legal-document approval wording.
+    assert.doesNotMatch(shell, /dokumentum jóváhagyása|szerződés jóváhagyása|approve document|approve contract/i);
     assert.doesNotMatch(portalShell, /Jóváhagyási kérés|Megerősítés kérése/);
     assert.doesNotMatch(portalShell, /completeAction|uploadDocument|approveDocument/);
   });

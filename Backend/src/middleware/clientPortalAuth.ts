@@ -38,6 +38,19 @@ function configured(): boolean {
   return Boolean(CUSTOMER_IDENTITY_ISSUER && CUSTOMER_IDENTITY_AUDIENCE && CUSTOMER_IDENTITY_JWKS_URI);
 }
 
+// An Entra/External ID access token's `aud` is the API's App ID URI
+// (`api://<clientId>`) for v1 tokens but the bare client id (`<clientId>`) for
+// v2 tokens. Both identify the same API resource, so accept either form of the
+// configured audience to avoid `jwt audience invalid` rejections.
+export function acceptedAudiences(configuredAudience: string = CUSTOMER_IDENTITY_AUDIENCE): string[] {
+  const a = String(configuredAudience || '').trim();
+  if (!a) return [];
+  const set = new Set<string>([a]);
+  if (a.startsWith('api://')) set.add(a.slice('api://'.length));
+  else set.add(`api://${a}`);
+  return [...set];
+}
+
 function customerJwks() {
   if (!cachedCustomerJwks) {
     cachedCustomerJwks = jwksClient({ jwksUri: CUSTOMER_IDENTITY_JWKS_URI, cache: true, rateLimit: true });
@@ -175,7 +188,7 @@ export async function authenticateClientPortal(req: Request, res: Response, next
   try {
     const payload = await new Promise<Record<string, unknown>>((resolve, reject) => {
       jwt.verify(token, signingKey, {
-        audience: CUSTOMER_IDENTITY_AUDIENCE,
+        audience: acceptedAudiences() as [string, ...string[]],
         issuer: CUSTOMER_IDENTITY_ISSUER,
         algorithms: ['RS256'],
       }, (error, decoded) => error ? reject(error) : resolve((decoded as Record<string, unknown>) || {}));
