@@ -1,0 +1,96 @@
+{
+  "generatedAt": "2026-07-31T00:00:00+02:00",
+  "branch": "codex/client-portal-interaction-frontend-closeout",
+  "basis": [
+    "original client portal baseline decisions",
+    "client portal interaction foundation implementation",
+    "graphify scoped queries in .artifacts/acceptance/client-portal-interaction-foundation/graphify",
+    "v0.2 product closeout brief"
+  ],
+  "criticalReleaseRequirements": [
+    {
+      "id": "portal-matter-status",
+      "requirement": "Matter view exposes client-safe current status, waiting state, next step, contact label, deadlines and visible update timestamp.",
+      "status": "IMPLEMENTED",
+      "evidence": [
+        "Backend/src/modules/client-publication/publicationService.ts",
+        "Frontend/src/components/client-portal/ClientPortalShell.tsx",
+        "Frontend/src/lib/clientPortalApi.ts"
+      ]
+    },
+    {
+      "id": "customer-question-thread",
+      "requirement": "Customer can create a bounded question and view client-safe thread states through customer auth.",
+      "status": "IMPLEMENTED",
+      "evidence": [
+        "Frontend/src/components/client-portal/ClientPortalShell.tsx",
+        "Frontend/src/lib/clientInteractionApi.ts",
+        "Backend/src/modules/client-interaction/customerRoutes.ts"
+      ]
+    },
+    {
+      "id": "customer-request-response",
+      "requirement": "Customer can answer published data fields, attach allowed files and submit a response through customer auth.",
+      "status": "IMPLEMENTED",
+      "evidence": [
+        "Frontend/src/components/client-portal/ClientPortalShell.tsx",
+        "Frontend/src/lib/clientInteractionApi.ts",
+        "Backend/src/modules/client-interaction/submissionService.ts"
+      ]
+    },
+    {
+      "id": "upload-quarantine-scan",
+      "requirement": "Customer files are quarantined and may enter matter documents only after server-side acceptable scan state.",
+      "status": "IMPLEMENTED_PROVIDER_DEPENDENT",
+      "evidence": [
+        "Backend/src/modules/client-interaction/submissionService.ts",
+        "Backend/src/modules/client-interaction/quarantineAdapter.ts",
+        "Backend/src/modules/client-interaction/scanAdapter.ts"
+      ],
+      "blockingDependency": "Real production scanner provider is not configured in this thread."
+    },
+    {
+      "id": "internal-operational-queues",
+      "requirement": "Workforce surface exposes request, question, submission and notification failure queues with workforce auth.",
+      "status": "IMPLEMENTED",
+      "evidence": [
+        "Frontend/src/app/client-portal-admin/page.tsx",
+        "Frontend/src/lib/clientInteractionApi.ts",
+        "Backend/src/modules/client-interaction/internalRoutes.ts"
+      ]
+    },
+    {
+      "id": "notification-delivery",
+      "requirement": "Notification outbox persists delivery state and retry intent.",
+      "status": "IMPLEMENTED_PROVIDER_DEPENDENT",
+      "evidence": [
+        "Backend/src/modules/client-interaction/notificationService.ts",
+        "Backend/src/modules/client-interaction/mailAdapter.ts",
+        "Frontend/src/app/client-portal-admin/page.tsx"
+      ],
+      "blockingDependency": "Real production mail provider is not configured in this thread."
+    },
+    {
+      "id": "token-boundary",
+      "requirement": "Customer and workforce API clients use separate auth contexts.",
+      "status": "IMPLEMENTED",
+      "evidence": [
+        "Frontend/src/lib/api.ts",
+        "Frontend/src/lib/clientInteractionApi.ts"
+      ]
+    }
+  ],
+  "deferredNonGoals": [
+    "Outlook integration",
+    "external workflow application webhook bridge",
+    "EIG/worklog redesign",
+    "contract workspace redesign",
+    "task manager replacement",
+    "AI/customer legal approval"
+  ],
+  "productionCompletionBlockers": [
+    "Real scanner provider acceptance",
+    "Real mail provider acceptance",
+    "Post-merge release replay and production deployment are intentionally not run until provider-independent validations complete green from the updated feature branch."
+  ]
+}

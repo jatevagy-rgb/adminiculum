@@ -5,13 +5,21 @@ export type PortalMatter = {
   caseId: string;
   title: string;
   statusLabel: string;
+  currentSummary?: string | null;
+  waitingOnLabel?: string | null;
+  waitingDescription?: string | null;
   nextStepLabel?: string | null;
+  nextStepTitle?: string | null;
+  nextStepDescription?: string | null;
+  estimatedTiming?: string | null;
   responsibleLawyerDisplay?: string | null;
+  responsibleLawyerContactSafe?: string | null;
   publicDeadlines?: Array<{ label?: string; dueAt?: string }>;
   publishedAt?: string | null;
   attentionCount?: number;
   documentCount?: number;
   latestUpdateAt?: string | null;
+  lastClientVisibleUpdateAt?: string | null;
 };
 
 export type PortalDocument = {

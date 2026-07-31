@@ -7,7 +7,7 @@ import { useMsal } from '@azure/msal-react';
 import { customerApiScopes, customerTenantId, pickAccountByTenant } from '@/lib/authConfig';
 import { ApiError, getAuthToken, setAuthToken } from '@/lib/api';
 import { useCustomerAuth } from '@/lib/customerAuth';
-import { clientSafeError, customerInteractionApi, localizedInteractionStatus, type CustomerQuestionThreadDTO, type CustomerRequestDTO } from '@/lib/clientInteractionApi';
+import { clientSafeError, customerInteractionApi, localizedInteractionStatus, type ClientRequestFieldDTO, type CustomerQuestionThreadDTO, type CustomerRequestDTO, type CustomerSubmissionDTO } from '@/lib/clientInteractionApi';
 import {
   getPortalActionRequest,
   getPortalDocument,
@@ -39,6 +39,15 @@ function formatDate(value?: string | null) {
 
 function deadlineText(deadline: { label?: string; dueAt?: string }) {
   return [deadline.label, deadline.dueAt ? formatDate(deadline.dueAt) : null].filter(Boolean).join(' · ');
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+    reader.onerror = () => reject(reader.error || new Error('A fájl nem olvasható.'));
+    reader.readAsDataURL(file);
+  });
 }
 
 
@@ -126,10 +135,30 @@ function MatterView({ matter }: { matter: PortalMatter & { documents: PortalDocu
       <Card>
         <p className="text-sm font-semibold text-[#7a5f18]">Közzétett ügy</p>
         <h1 className="mt-2 break-words text-3xl font-semibold text-stone-950">{matter.title}</h1>
-        <p className="mt-3 break-words text-stone-700">{matter.nextStepLabel || 'Nincs közzétett következő lépés.'}</p>
+        <div className="mt-5 grid gap-3 lg:grid-cols-2">
+          <div className="rounded-2xl bg-stone-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Most itt tartunk</p>
+            <p className="mt-2 break-words text-stone-800">{matter.currentSummary || matter.statusLabel}</p>
+          </div>
+          <div className="rounded-2xl bg-stone-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Mire várunk?</p>
+            <p className="mt-2 font-semibold text-stone-900">{matter.waitingOnLabel || 'Nincs közzétett ügyféloldali teendő'}</p>
+            <p className="mt-1 break-words text-sm text-stone-700">{matter.waitingDescription || 'Az iroda frissíti a portált, ha új lépés következik.'}</p>
+          </div>
+          <div className="rounded-2xl bg-stone-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">{matter.nextStepTitle || 'Következő lépés'}</p>
+            <p className="mt-2 break-words text-stone-800">{matter.nextStepDescription || matter.nextStepLabel || 'Nincs közzétett következő lépés.'}</p>
+            {matter.estimatedTiming ? <p className="mt-2 text-sm text-stone-600">Várható időzítés: {matter.estimatedTiming}</p> : null}
+          </div>
+          <div className="rounded-2xl bg-stone-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Kapcsolattartó</p>
+            <p className="mt-2 text-stone-800">{matter.responsibleLawyerDisplay || 'Közzététel szerint'}</p>
+            {matter.responsibleLawyerContactSafe ? <p className="mt-1 text-sm text-stone-600">{matter.responsibleLawyerContactSafe}</p> : null}
+          </div>
+        </div>
         <div className="mt-4 grid gap-2 text-sm text-stone-600 sm:grid-cols-2">
-          <span>Felelős: {matter.responsibleLawyerDisplay || 'Közzététel szerint'}</span>
           <span>Közzétéve: {formatDate(matter.publishedAt)}</span>
+          <span>Utolsó ügyféloldali frissítés: {formatDate(matter.lastClientVisibleUpdateAt || matter.latestUpdateAt)}</span>
         </div>
         {matter.publicDeadlines?.length ? <ul className="mt-4 list-disc space-y-1 pl-5 text-stone-700">{matter.publicDeadlines.map((deadline, index) => <li key={index}>{deadlineText(deadline)}</li>)}</ul> : null}
       </Card>
@@ -158,21 +187,81 @@ function DocumentView({ document }: { document: PortalDocument }) {
   return <Card><p className="text-sm font-semibold text-[#7a5f18]">{document.stateLabel}</p><h1 className="mt-2 break-words text-3xl font-semibold text-stone-950">{document.title}</h1><p className="mt-3 break-words text-stone-700">{document.explanation || 'Nincs külön ügyfélmagyarázat.'}</p><dl className="mt-5 grid gap-3 text-sm text-stone-700 sm:grid-cols-2"><div><dt className="font-semibold">Változat</dt><dd>{document.versionLabel}</dd></div><div><dt className="font-semibold">Közzétéve</dt><dd>{formatDate(document.publishedAt)}</dd></div><div><dt className="font-semibold">Ügy</dt><dd>{document.matterTitle || 'Közzétett ügy'}</dd></div></dl>{document.downloadAvailable ? <button className="mt-6 rounded-full bg-stone-950 px-5 py-3 text-white focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" onClick={onDownload}>Dokumentum letöltése</button> : <p className="mt-6 rounded-2xl bg-stone-100 p-4 text-stone-700">A dokumentum már nem elérhető letöltésre.</p>}</Card>;
 }
 
+function FieldInput({ field, value, onChange }: { field: ClientRequestFieldDTO; value: string; onChange: (value: string) => void }) {
+  const common = "mt-1 w-full rounded-xl border border-stone-300 px-3 py-2";
+  if (field.type === 'LONG_TEXT' || field.type === 'ADDRESS') return <textarea value={value} onChange={(event) => onChange(event.target.value)} maxLength={field.maxLength || 2000} className={`${common} min-h-24`} />;
+  if (field.type === 'YES_NO') return <select value={value} onChange={(event) => onChange(event.target.value)} className={common}><option value="">Válasszon</option><option value="igen">Igen</option><option value="nem">Nem</option></select>;
+  if (field.type === 'DATE') return <input type="date" value={value} onChange={(event) => onChange(event.target.value)} className={common} />;
+  if (field.type === 'NUMBER') return <input type="number" value={value} onChange={(event) => onChange(event.target.value)} className={common} />;
+  if (field.type === 'EMAIL') return <input type="email" value={value} onChange={(event) => onChange(event.target.value)} maxLength={field.maxLength || 320} className={common} />;
+  if (field.type === 'PHONE') return <input type="tel" value={value} onChange={(event) => onChange(event.target.value)} maxLength={field.maxLength || 80} className={common} />;
+  return <input value={value} onChange={(event) => onChange(event.target.value)} maxLength={field.maxLength || 500} className={common} />;
+}
+
+function RequestResponseCard({
+  request,
+  submission,
+  busy,
+  answers,
+  note,
+  onAnswer,
+  onNote,
+  onSubmit,
+}: {
+  request: CustomerRequestDTO;
+  submission?: CustomerSubmissionDTO;
+  busy: boolean;
+  answers: Record<string, string>;
+  note: string;
+  onAnswer: (fieldId: string, value: string) => void;
+  onNote: (value: string) => void;
+  onSubmit: (request: CustomerRequestDTO, files: File[]) => Promise<void>;
+}) {
+  const [files, setFiles] = useState<File[]>([]);
+  const canRespond = !['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(request.status);
+  return (
+    <div className="rounded-xl bg-stone-50 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="font-semibold">{request.title}</p>
+          <p className="mt-1 text-sm text-stone-600">{localizedInteractionStatus(request.status)} · Határidő: {formatDate(request.dueAt)}</p>
+        </div>
+        {submission ? <span className="rounded-full bg-white px-3 py-1 text-xs text-stone-700">{localizedInteractionStatus(submission.status)}</span> : null}
+      </div>
+      {request.instructions ? <p className="mt-2 break-words text-sm text-stone-700">{request.instructions}</p> : null}
+      {request.fields.length ? <div className="mt-3 space-y-3">{request.fields.map((field) => <label key={field.id} className="block text-sm text-stone-700"><span className="font-medium">{field.label}{field.required ? ' *' : ''}</span>{field.helpText ? <span className="block text-xs text-stone-500">{field.helpText}</span> : null}<FieldInput field={field} value={answers[field.id] || ''} onChange={(value) => onAnswer(field.id, value)} /></label>)}</div> : null}
+      <label className="mt-3 block text-sm text-stone-700">
+        <span className="font-medium">Dokumentum feltöltése</span>
+        <span className="block text-xs text-stone-500">PDF, JPEG vagy PNG; telefonon kamerából is választható.</span>
+        <input type="file" multiple accept="application/pdf,image/jpeg,image/png" capture="environment" className="mt-1 block w-full text-sm" onChange={(event) => setFiles(Array.from(event.target.files || []))} />
+      </label>
+      <textarea value={note} onChange={(event) => onNote(event.target.value)} maxLength={1000} className="mt-3 min-h-20 w-full rounded-xl border border-stone-300 px-3 py-2 text-sm" placeholder="Megjegyzés az irodának (opcionális)" />
+      <button className="mt-3 rounded-full bg-stone-950 px-4 py-2 text-sm text-white disabled:opacity-50" disabled={busy || !canRespond || (!files.length && !request.fields.some((field) => (answers[field.id] || '').trim()))} onClick={() => void onSubmit(request, files)}>Válasz beküldése</button>
+      <p className="mt-2 text-xs text-stone-500">A fájl csak ellenőrzés után kerülhet be az ügy iratai közé.</p>
+    </div>
+  );
+}
+
 function CustomerInteractionCard({ caseId }: { caseId: string }) {
   const [requests, setRequests] = useState<CustomerRequestDTO[]>([]);
   const [questions, setQuestions] = useState<CustomerQuestionThreadDTO[]>([]);
+  const [submissions, setSubmissions] = useState<CustomerSubmissionDTO[]>([]);
+  const [answersByRequest, setAnswersByRequest] = useState<Record<string, Record<string, string>>>({});
+  const [notesByRequest, setNotesByRequest] = useState<Record<string, string>>({});
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [requestPage, questionPage] = await Promise.all([
+    const [requestPage, questionPage, submissionPage] = await Promise.all([
       customerInteractionApi.listRequests(caseId),
       customerInteractionApi.listQuestions(caseId),
+      customerInteractionApi.listSubmissions(caseId),
     ]);
     setRequests(requestPage.items || []);
     setQuestions(questionPage.items || []);
+    setSubmissions(submissionPage.items || []);
   }, [caseId]);
 
   useEffect(() => { void load().catch(() => setMessage('Az interakciók jelenleg nem érhetők el.')); }, [load]);
@@ -193,6 +282,34 @@ function CustomerInteractionCard({ caseId }: { caseId: string }) {
     }
   };
 
+  const submitRequest = async (request: CustomerRequestDTO, files: File[]) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const submission = await customerInteractionApi.createSubmission(caseId, request.id);
+      const answers = request.fields
+        .map((field) => ({ label: field.label, value: (answersByRequest[request.id]?.[field.id] || '').trim() }))
+        .filter((answer) => answer.value);
+      if (answers.length) await customerInteractionApi.submitAnswers(caseId, submission.id, answers);
+      for (const file of files) {
+        await customerInteractionApi.uploadFile(caseId, submission.id, {
+          originalFileName: file.name,
+          declaredMimeType: file.type || 'application/octet-stream',
+          base64: await fileToBase64(file),
+        });
+      }
+      await customerInteractionApi.submitSubmission(caseId, submission.id, notesByRequest[request.id]);
+      setAnswersByRequest((current) => ({ ...current, [request.id]: {} }));
+      setNotesByRequest((current) => ({ ...current, [request.id]: '' }));
+      setMessage('A válasz beküldve. Az iroda ellenőrzés után frissíti az ügy állapotát.');
+      await load();
+    } catch (error) {
+      setMessage(clientSafeError(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Card>
       <h2 className="text-2xl font-semibold">Kérdések és bekérések</h2>
@@ -201,7 +318,7 @@ function CustomerInteractionCard({ caseId }: { caseId: string }) {
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         <div className="rounded-2xl border border-stone-200 p-4">
           <h3 className="font-semibold">Ügyvédi bekérések</h3>
-          <div className="mt-3 space-y-2">{requests.length ? requests.map((request) => <div key={request.id} className="rounded-xl bg-stone-50 p-3"><p className="font-semibold">{request.title}</p><p className="mt-1 text-sm text-stone-600">{localizedInteractionStatus(request.status)} · Határidő: {formatDate(request.dueAt)}</p></div>) : <p className="text-sm text-stone-600">Nincs aktív dokumentum- vagy adatbekérés.</p>}</div>
+          <div className="mt-3 space-y-3">{requests.length ? requests.map((request) => <RequestResponseCard key={request.id} request={request} submission={submissions.find((submission) => submission.requestId === request.id)} busy={busy} answers={answersByRequest[request.id] || {}} note={notesByRequest[request.id] || ''} onAnswer={(fieldId, value) => setAnswersByRequest((current) => ({ ...current, [request.id]: { ...(current[request.id] || {}), [fieldId]: value } }))} onNote={(value) => setNotesByRequest((current) => ({ ...current, [request.id]: value }))} onSubmit={submitRequest} />) : <p className="text-sm text-stone-600">Nincs aktív dokumentum- vagy adatbekérés.</p>}</div>
         </div>
         <div className="rounded-2xl border border-stone-200 p-4">
           <h3 className="font-semibold">Kérdés küldése</h3>

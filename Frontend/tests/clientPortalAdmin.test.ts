@@ -63,6 +63,11 @@ describe('internal portal-admin UI', () => {
     assert.match(src, /CustomerInteractionCard/);
     assert.match(src, /Kérdések és bekérések/);
     assert.match(src, /customerInteractionApi\.createQuestion/);
+    assert.match(src, /customerInteractionApi\.submitAnswers/);
+    assert.match(src, /customerInteractionApi\.uploadFile/);
+    assert.match(src, /customerInteractionApi\.submitSubmission/);
+    assert.match(src, /Mire várunk\?/);
+    assert.match(src, /Most itt tartunk/);
     assert.match(src, /caseId={matter\.caseId}/);
   });
 

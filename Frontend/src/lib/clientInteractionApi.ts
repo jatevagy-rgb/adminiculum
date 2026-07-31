@@ -134,6 +134,8 @@ export const customerInteractionApi = {
     fetchApi<{ id: string; state: string; codeSafe?: string }>(`/client-interaction/cases/${encodeURIComponent(caseId)}/submissions/${encodeURIComponent(submissionId)}/files`, { method: "POST", body: JSON.stringify(payload), authContext: "customer" }),
   submitSubmission: (caseId: string, submissionId: string, customerNote?: string) =>
     fetchApi<CustomerSubmissionDTO>(`/client-interaction/cases/${encodeURIComponent(caseId)}/submissions/${encodeURIComponent(submissionId)}/submit`, { method: "POST", body: JSON.stringify({ customerNote }), authContext: "customer" }),
+  listSubmissions: (caseId: string, requestId?: string) =>
+    fetchApi<Page<CustomerSubmissionDTO>>(`/client-interaction/cases/${encodeURIComponent(caseId)}/submissions${qs({ requestId })}`, { authContext: "customer" }),
 };
 
 export const workforceInteractionApi = {
