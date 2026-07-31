@@ -102,8 +102,8 @@ export function buildDashboardOperationalPresentation(
   };
 }
 
-export function getDashboardCaseTitle(title: string): string {
-  const normalizedTitle = title.trim();
+export function getDashboardCaseTitle(title?: string | null): string {
+  const normalizedTitle = String(title || "").trim();
   const contractDraftingSuffix = " - CONTRACT_DRAFTING";
 
   if (normalizedTitle.toUpperCase().endsWith(contractDraftingSuffix)) {
