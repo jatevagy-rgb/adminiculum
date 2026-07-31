@@ -7,6 +7,7 @@ import { useMsal } from '@azure/msal-react';
 import { customerApiScopes, customerTenantId, pickAccountByTenant } from '@/lib/authConfig';
 import { ApiError, getAuthToken, setAuthToken } from '@/lib/api';
 import { useCustomerAuth } from '@/lib/customerAuth';
+import { clientSafeError, customerInteractionApi, localizedInteractionStatus, type CustomerQuestionThreadDTO, type CustomerRequestDTO } from '@/lib/clientInteractionApi';
 import {
   getPortalActionRequest,
   getPortalDocument,
@@ -134,6 +135,7 @@ function MatterView({ matter }: { matter: PortalMatter & { documents: PortalDocu
       </Card>
       <Card><h2 className="text-2xl font-semibold">Dokumentumok</h2><div className="mt-4 grid gap-3">{matter.documents.map((doc) => <DocumentCard key={doc.id} document={doc} />)}</div></Card>
       <Card><h2 className="text-2xl font-semibold">Teendők</h2><div className="mt-4 grid gap-3">{matter.actionRequests.map((action) => <ActionCard key={action.id} action={action} />)}</div></Card>
+      <CustomerInteractionCard caseId={matter.caseId} />
       <Card><h2 className="text-2xl font-semibold">Frissítések</h2><div className="mt-4 grid gap-3">{matter.updates.map((update) => <UpdateCard key={update.id} update={update} />)}</div></Card>
     </div>
   );
@@ -154,6 +156,63 @@ function DocumentView({ document }: { document: PortalDocument }) {
   }, [document.id, document.title, token]);
 
   return <Card><p className="text-sm font-semibold text-[#7a5f18]">{document.stateLabel}</p><h1 className="mt-2 break-words text-3xl font-semibold text-stone-950">{document.title}</h1><p className="mt-3 break-words text-stone-700">{document.explanation || 'Nincs külön ügyfélmagyarázat.'}</p><dl className="mt-5 grid gap-3 text-sm text-stone-700 sm:grid-cols-2"><div><dt className="font-semibold">Változat</dt><dd>{document.versionLabel}</dd></div><div><dt className="font-semibold">Közzétéve</dt><dd>{formatDate(document.publishedAt)}</dd></div><div><dt className="font-semibold">Ügy</dt><dd>{document.matterTitle || 'Közzétett ügy'}</dd></div></dl>{document.downloadAvailable ? <button className="mt-6 rounded-full bg-stone-950 px-5 py-3 text-white focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" onClick={onDownload}>Dokumentum letöltése</button> : <p className="mt-6 rounded-2xl bg-stone-100 p-4 text-stone-700">A dokumentum már nem elérhető letöltésre.</p>}</Card>;
+}
+
+function CustomerInteractionCard({ caseId }: { caseId: string }) {
+  const [requests, setRequests] = useState<CustomerRequestDTO[]>([]);
+  const [questions, setQuestions] = useState<CustomerQuestionThreadDTO[]>([]);
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const [requestPage, questionPage] = await Promise.all([
+      customerInteractionApi.listRequests(caseId),
+      customerInteractionApi.listQuestions(caseId),
+    ]);
+    setRequests(requestPage.items || []);
+    setQuestions(questionPage.items || []);
+  }, [caseId]);
+
+  useEffect(() => { void load().catch(() => setMessage('Az interakciók jelenleg nem érhetők el.')); }, [load]);
+
+  const sendQuestion = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await customerInteractionApi.createQuestion(caseId, { subject, bodySafe: body });
+      setSubject('');
+      setBody('');
+      setMessage('A kérdés beküldve. Az iroda válasza itt fog megjelenni.');
+      await load();
+    } catch (error) {
+      setMessage(clientSafeError(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <h2 className="text-2xl font-semibold">Kérdések és bekérések</h2>
+      <p className="mt-2 text-sm text-stone-600">Csak ehhez a kifejezetten megosztott ügyhöz kapcsolódó ügyfélportál-műveletek jelennek meg.</p>
+      {message ? <p className="mt-3 rounded-2xl bg-stone-100 p-3 text-sm text-stone-700">{message}</p> : null}
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="rounded-2xl border border-stone-200 p-4">
+          <h3 className="font-semibold">Ügyvédi bekérések</h3>
+          <div className="mt-3 space-y-2">{requests.length ? requests.map((request) => <div key={request.id} className="rounded-xl bg-stone-50 p-3"><p className="font-semibold">{request.title}</p><p className="mt-1 text-sm text-stone-600">{localizedInteractionStatus(request.status)} · Határidő: {formatDate(request.dueAt)}</p></div>) : <p className="text-sm text-stone-600">Nincs aktív dokumentum- vagy adatbekérés.</p>}</div>
+        </div>
+        <div className="rounded-2xl border border-stone-200 p-4">
+          <h3 className="font-semibold">Kérdés küldése</h3>
+          <input value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={200} className="mt-3 w-full rounded-xl border border-stone-300 px-3 py-2" placeholder="Tárgy" />
+          <textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={4000} className="mt-2 min-h-28 w-full rounded-xl border border-stone-300 px-3 py-2" placeholder="Kérdés szövege" />
+          <button className="mt-2 rounded-full bg-stone-950 px-4 py-2 text-white disabled:opacity-50" disabled={busy || !subject.trim() || !body.trim()} onClick={sendQuestion}>Kérdés beküldése</button>
+          <div className="mt-4 space-y-2">{questions.length ? questions.map((thread) => <p key={thread.id} className="rounded-xl bg-stone-50 p-3 text-sm">{thread.subject} · {localizedInteractionStatus(thread.status)}</p>) : <p className="text-sm text-stone-600">Még nincs kérdésszál.</p>}</div>
+        </div>
+      </div>
+    </Card>
+  );
 }
 
 function ActionView({ action }: { action: PortalActionRequest }) {

@@ -19,6 +19,7 @@ const API_BASE = normalizedBackendBaseUrl
 
 export interface FetchOptions extends RequestInit {
   skipAuth?: boolean;
+  authContext?: AuthTokenContext;
   suppressErrorStatuses?: number[];
   suppressErrorLogging?: boolean;
   waitForAuthMs?: number;
@@ -60,8 +61,7 @@ export function getAuthToken(context: AuthTokenContext = currentAuthContext()): 
   return context === 'workforce' ? localStorage.getItem(LEGACY_AUTH_TOKEN_KEY) : null;
 }
 
-async function waitForAuthToken(timeoutMs = DEFAULT_AUTH_WAIT_MS): Promise<string | null> {
-  const context = currentAuthContext();
+async function waitForAuthToken(timeoutMs = DEFAULT_AUTH_WAIT_MS, context: AuthTokenContext = currentAuthContext()): Promise<string | null> {
   const immediate = getAuthToken(context);
   if (immediate) return immediate;
   if (typeof window === 'undefined' || timeoutMs <= 0) return null;
@@ -118,9 +118,9 @@ function asErrorPayload(value: unknown): { code?: string; message?: string; erro
 }
 
 export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
-  const { skipAuth, suppressErrorStatuses, suppressErrorLogging, waitForAuthMs, ...fetchOptions } = options;
+  const { skipAuth, authContext, suppressErrorStatuses, suppressErrorLogging, waitForAuthMs, ...fetchOptions } = options;
   
-  const token = skipAuth ? null : await waitForAuthToken(waitForAuthMs ?? DEFAULT_AUTH_WAIT_MS);
+  const token = skipAuth ? null : await waitForAuthToken(waitForAuthMs ?? DEFAULT_AUTH_WAIT_MS, authContext ?? currentAuthContext());
   if (!skipAuth && !token) {
     throw new ApiError(401, 'Authentication token unavailable', endpoint);
   }

@@ -245,3 +245,59 @@ ALTER TABLE "client_submission_files" ADD CONSTRAINT "client_submission_files_su
 -- AddForeignKey
 ALTER TABLE "client_submission_fields" ADD CONSTRAINT "client_submission_fields_submissionId_fkey" FOREIGN KEY ("submissionId") REFERENCES "client_submissions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
+-- AddForeignKey
+ALTER TABLE "client_requests" ADD CONSTRAINT "client_requests_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "clients"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_requests" ADD CONSTRAINT "client_requests_caseId_fkey" FOREIGN KEY ("caseId") REFERENCES "cases"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_requests" ADD CONSTRAINT "client_requests_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_requests" ADD CONSTRAINT "client_requests_assignedInternalUserId_fkey" FOREIGN KEY ("assignedInternalUserId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_question_threads" ADD CONSTRAINT "client_question_threads_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "clients"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_question_threads" ADD CONSTRAINT "client_question_threads_caseId_fkey" FOREIGN KEY ("caseId") REFERENCES "cases"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_question_threads" ADD CONSTRAINT "client_question_threads_clientPortalIdentityId_fkey" FOREIGN KEY ("clientPortalIdentityId") REFERENCES "client_portal_identities"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_question_threads" ADD CONSTRAINT "client_question_threads_assignedInternalUserId_fkey" FOREIGN KEY ("assignedInternalUserId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_question_messages" ADD CONSTRAINT "client_question_messages_clientPortalIdentityId_fkey" FOREIGN KEY ("clientPortalIdentityId") REFERENCES "client_portal_identities"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_question_messages" ADD CONSTRAINT "client_question_messages_internalUserId_fkey" FOREIGN KEY ("internalUserId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_submissions" ADD CONSTRAINT "client_submissions_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "clients"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_submissions" ADD CONSTRAINT "client_submissions_caseId_fkey" FOREIGN KEY ("caseId") REFERENCES "cases"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_submissions" ADD CONSTRAINT "client_submissions_clientPortalIdentityId_fkey" FOREIGN KEY ("clientPortalIdentityId") REFERENCES "client_portal_identities"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_submissions" ADD CONSTRAINT "client_submissions_reviewedById_fkey" FOREIGN KEY ("reviewedById") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_submissions" ADD CONSTRAINT "client_submissions_acceptedDocumentId_fkey" FOREIGN KEY ("acceptedDocumentId") REFERENCES "documents"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_submissions" ADD CONSTRAINT "client_submissions_acceptedDocumentVersionId_fkey" FOREIGN KEY ("acceptedDocumentVersionId") REFERENCES "document_versions"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_submission_fields" ADD CONSTRAINT "client_submission_fields_fieldId_fkey" FOREIGN KEY ("fieldId") REFERENCES "client_request_fields"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_notification_deliveries" ADD CONSTRAINT "client_notification_deliveries_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "clients"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "client_notification_deliveries" ADD CONSTRAINT "client_notification_deliveries_caseId_fkey" FOREIGN KEY ("caseId") REFERENCES "cases"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

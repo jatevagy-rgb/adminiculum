@@ -9,7 +9,7 @@ import { setScanner } from '../src/modules/client-interaction/scannerAdapter';
 import { setMailSender } from '../src/modules/client-interaction/mailAdapter';
 import { setQuarantineStore } from '../src/modules/client-interaction/quarantineAdapter';
 
-const databaseUrl = process.env.CLIENT_IDENTITY_TEST_DATABASE_URL;
+const databaseUrl = process.env.CLIENT_INTERACTION_TEST_DATABASE_URL || process.env.CLIENT_IDENTITY_TEST_DATABASE_URL;
 const d = databaseUrl ? describe : describe.skip;
 
 // A deterministic in-memory quarantine + CLEAN scanner + capturing mail sender,
@@ -25,8 +25,10 @@ d('client portal interaction foundation (PostgreSQL)', () => {
   const ids = {
     admin: crypto.randomUUID(), client: crypto.randomUUID(), otherCase: crypto.randomUUID(),
     case: crypto.randomUUID(), identity: crypto.randomUUID(), grant: crypto.randomUUID(),
+    unassignedLawyer: crypto.randomUUID(),
   };
   const internalActor = { userId: ids.admin, role: 'ADMIN' };
+  const unassignedLawyerActor = { userId: ids.unassignedLawyer, role: 'LAWYER' };
 
   beforeAll(async () => {
     process.env.DATABASE_URL = databaseUrl;
@@ -39,6 +41,7 @@ d('client portal interaction foundation (PostgreSQL)', () => {
     setMailSender({ provider: 'TEST', async send(m) { sent.push({ to: m.to, idempotencyKey: m.idempotencyKey }); return { providerMessageId: `msg-${sent.length}`, provider: 'TEST' }; } });
 
     await db.user.create({ data: { id: ids.admin, email: `a-${ids.admin}@t.io`, name: 'Admin', role: 'ADMIN', status: 'ACTIVE' } as any });
+    await db.user.create({ data: { id: ids.unassignedLawyer, email: `l-${ids.unassignedLawyer}@t.io`, name: 'Unassigned Lawyer', role: 'LAWYER', status: 'ACTIVE' } as any });
     await db.client.create({ data: { id: ids.client, name: 'Interaction Client' } });
     await db.case.create({ data: { id: ids.case, caseNumber: `IX-${ids.case.slice(0, 6)}`, title: 'Interaction case', caseType: 'CONTRACT_REVIEW', clientId: ids.client, createdById: ids.admin, assignedLawyerId: ids.admin } as any });
     await db.case.create({ data: { id: ids.otherCase, caseNumber: `IY-${ids.otherCase.slice(0, 6)}`, title: 'Other case', caseType: 'CONTRACT_REVIEW', clientId: ids.client, createdById: ids.admin, assignedLawyerId: ids.admin } as any });
@@ -112,5 +115,16 @@ d('client portal interaction foundation (PostgreSQL)', () => {
     const b = await notifications.enqueueNotification({ eventType: 'X', clientId: ids.client, caseId: ids.case, recipientEmail: 'r@t.io', subjectSafe: 's', createdById: ids.admin, idempotencyKey: key }, db);
     expect(a.id).toBe(b.id);
     expect(b.deduped).toBe(true);
+  });
+
+  it('non-admin internal queues are scoped to accessible cases only', async () => {
+    const request = await requests.createRequestDraft(internalActor, { caseId: ids.case, type: 'DATA_FORM', clientSafeTitle: 'Scoped data' }, db);
+    await notifications.enqueueNotification({ eventType: 'SCOPED', clientId: ids.client, caseId: ids.case, recipientEmail: 'r@t.io', subjectSafe: 's', createdById: ids.admin, idempotencyKey: `scoped-${request.id}` }, db);
+
+    await expect(requests.listRequestsInternal(unassignedLawyerActor, { caseId: ids.case }, db)).rejects.toMatchObject({ code: 'CASE_ACCESS_FORBIDDEN' });
+    expect((await requests.listRequestsInternal(unassignedLawyerActor, {}, db)).total).toBe(0);
+    expect((await questions.listThreadsInternal(unassignedLawyerActor, {}, db)).total).toBe(0);
+    expect((await submissions.listSubmissionsInternal(unassignedLawyerActor, {}, db)).total).toBe(0);
+    expect((await notifications.listNotificationDeliveries(unassignedLawyerActor, {}, db)).total).toBe(0);
   });
 });

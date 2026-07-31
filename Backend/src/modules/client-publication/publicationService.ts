@@ -542,6 +542,7 @@ function portalDate(value: unknown): string | null {
 function toPortalMatter(row: Row, revision: Row | null, counts: Row = {}): Row {
   const dto = {
     id: row.id,
+    caseId: row.caseId,
     title: revision?.clientSafeTitle || 'Közzétett ügy',
     statusLabel: 'Folyamatban',
     nextStepLabel: revision?.clientSafeNextStep || null,

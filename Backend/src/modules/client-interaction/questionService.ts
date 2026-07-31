@@ -7,7 +7,7 @@
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import {
   InteractionError, InternalActor, Prisma, CustomerContext,
-  requireInternal, requireExpected, assertInternalCaseAccess, safeText, assertClientSafe,
+  requireInternal, requireExpected, assertInternalCaseAccess, applyInternalQueueCaseScope, safeText, assertClientSafe,
 } from './base';
 import { requireCapability, isCapabilityEnabled } from './gates';
 import { enqueueNotification } from './notificationService';
@@ -64,8 +64,9 @@ export async function getCustomerThread(ctx: CustomerContext, threadId: string, 
 export async function listThreadsInternal(actor: InternalActor, filter: { caseId?: string; status?: string; limit?: number; offset?: number }, prisma: Prisma = defaultPrisma) {
   requireInternal(actor);
   const where: any = {};
-  if (filter.caseId) { await assertInternalCaseAccess(actor, filter.caseId, prisma); where.caseId = filter.caseId; }
+  if (filter.caseId) where.caseId = filter.caseId;
   if (filter.status) where.status = filter.status;
+  await applyInternalQueueCaseScope(where, actor, prisma);
   const limit = Math.min(Math.max(1, filter.limit ?? 50), 200);
   const offset = Math.max(0, filter.offset ?? 0);
   const [items, total] = await Promise.all([

@@ -2,6 +2,7 @@ import { fetchApi } from './api';
 
 export type PortalMatter = {
   id: string;
+  caseId: string;
   title: string;
   statusLabel: string;
   nextStepLabel?: string | null;
