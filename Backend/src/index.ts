@@ -235,6 +235,12 @@ app.use('/api/v1/client-portal', clientPortalRoutes);
 import { clientIdentityRouter } from './modules/client-identity/routes';
 app.use('/api/v1/client-identity', clientIdentityRouter);
 
+import { clientInteractionCustomerRouter } from './modules/client-interaction/customerRoutes';
+app.use('/api/v1/client-interaction', clientInteractionCustomerRouter);
+
+import { clientInteractionInternalRouter } from './modules/client-interaction/internalRoutes';
+app.use('/api/v1/internal/client-interaction', clientInteractionInternalRouter);
+
 import { clientPublicationRouter } from './modules/client-publication/publication.routes';
 app.use('/api/v1/client-publications', clientPublicationRouter);
 
