@@ -255,7 +255,17 @@ export async function acceptFileIntoMatter(actor: InternalActor, submissionId: s
       const doc = await tx.document.findFirst({ where: { id: documentId, caseId: submission.caseId } });
       if (!doc) throw new InteractionError(404, 'DOCUMENT_NOT_FOUND', 'Destination document not found.');
     } else {
-      const doc = await tx.document.create({ data: { caseId: submission.caseId, clientId, name: safeText(input.documentName, 'documentName', 200) || file.originalFileNameSafe, createdById: actor.userId } as any });
+      const doc = await tx.document.create({
+        data: {
+          caseId: submission.caseId,
+          clientId,
+          name: safeText(input.documentName, 'documentName', 200) || file.originalFileNameSafe,
+          fileName: file.originalFileNameSafe,
+          mimeType: file.detectedMimeType || 'application/octet-stream',
+          category: 'CLIENT_INPUT',
+          size: file.sizeBytes || undefined,
+        } as any,
+      });
       documentId = doc.id;
     }
     const maxVersion = await tx.documentVersion.aggregate({ where: { documentId }, _max: { version: true } });
@@ -264,7 +274,8 @@ export async function acceptFileIntoMatter(actor: InternalActor, submissionId: s
       data: {
         documentId: documentId!, version: nextVersion, name: file.originalFileNameSafe,
         originalFileName: file.originalFileNameSafe, mimeType: file.detectedMimeType, size: file.sizeBytes || undefined,
-        storageReference: file.quarantineStorageReference || undefined, isCurrent: true, createdById: actor.userId,
+        storageReference: file.quarantineStorageReference || undefined, isCurrent: true,
+        uploadedById: actor.userId, uploadSource: 'CLIENT_PORTAL', versionType: 'IMPORT',
       } as any,
     });
     await tx.documentVersion.updateMany({ where: { documentId, id: { not: version.id } }, data: { isCurrent: false } });
