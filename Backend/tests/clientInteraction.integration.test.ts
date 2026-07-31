@@ -46,7 +46,7 @@ d('client portal interaction foundation (PostgreSQL)', () => {
     await db.case.create({ data: { id: ids.case, caseNumber: `IX-${ids.case.slice(0, 6)}`, title: 'Interaction case', caseType: 'CONTRACT_REVIEW', clientId: ids.client, createdById: ids.admin, assignedLawyerId: ids.admin } as any });
     await db.case.create({ data: { id: ids.otherCase, caseNumber: `IY-${ids.otherCase.slice(0, 6)}`, title: 'Other case', caseType: 'CONTRACT_REVIEW', clientId: ids.client, createdById: ids.admin, assignedLawyerId: ids.admin } as any });
     await db.clientPortalIdentity.create({ data: { id: ids.identity, provider: 'ENTRA_EXTERNAL_ID', issuer: 'iss', subject: `sub-${ids.identity}`, normalizedEmail: `c-${ids.identity}@t.io`, emailVerifiedAt: new Date(), displayName: 'Customer', accountType: 'INDIVIDUAL', status: 'ACTIVE' } });
-    await db.clientPortalGrant.create({ data: { id: ids.grant, clientPortalIdentityId: ids.identity, clientId: ids.client, caseId: ids.case, status: 'ACTIVE', permissions: ['MATTER_READ', 'DOCUMENT_READ'] } as any });
+    await db.clientPortalGrant.create({ data: { id: ids.grant, clientPortalIdentityId: ids.identity, clientId: ids.client, caseId: ids.case, status: 'ACTIVE', permissions: ['MATTER_READ', 'DOCUMENT_READ'], invitedById: ids.admin, activatedAt: new Date() } as any });
   });
 
   afterAll(async () => { setScanner(null); setMailSender(null); setQuarantineStore(null); await db.$disconnect(); });
