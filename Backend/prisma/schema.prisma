@@ -3126,3 +3126,270 @@ model DocumentChangeSegment {
   @@index([comparisonId, reviewState])
   @@map("document_change_segments")
 }
+
+// ============================================================================
+// CLIENT PORTAL INTERACTION FOUNDATION
+// Additive, gate-guarded client-interaction domain: requests, questions,
+// submissions, files, structured fields and transactional notification
+// deliveries. Soft references (plain columns) keep the migration purely
+// additive. Customer-facing content is client-safe; internal drafts are hidden.
+// ============================================================================
+
+enum ClientRequestType {
+  DOCUMENT_UPLOAD
+  INFORMATION_REQUEST
+  DATA_FORM
+  QUESTION_RESPONSE
+  CORRECTION_REQUEST
+  MISSING_DOCUMENT_REQUEST
+}
+
+enum ClientRequestStatus {
+  DRAFT
+  READY_TO_PUBLISH
+  PUBLISHED
+  PARTIALLY_SUBMITTED
+  SUBMITTED
+  UNDER_INTERNAL_REVIEW
+  CORRECTION_REQUESTED
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+model ClientRequest {
+  id                     String              @id @default(uuid())
+  clientId               String
+  caseId                 String
+  createdById            String
+  assignedInternalUserId String?
+  type                   ClientRequestType
+  status                 ClientRequestStatus @default(DRAFT)
+  clientSafeTitle        String
+  clientSafeInstructions String?
+  dueAt                  DateTime?
+  required               Boolean             @default(true)
+  documentSpec           Json?
+  audienceSnapshot       Json
+  publishedAt            DateTime?
+  completedAt            DateTime?
+  cancelledAt            DateTime?
+  expiresAt              DateTime?
+  revision               Int                 @default(0)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+
+  fields      ClientRequestField[]
+  submissions ClientSubmission[]
+
+  @@index([caseId, status])
+  @@index([clientId, status])
+  @@index([status, dueAt])
+  @@map("client_requests")
+}
+
+enum ClientFieldType {
+  SHORT_TEXT
+  LONG_TEXT
+  DATE
+  NUMBER
+  EMAIL
+  PHONE
+  ADDRESS
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  YES_NO
+}
+
+model ClientRequestField {
+  id              String          @id @default(uuid())
+  requestId       String
+  request         ClientRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  clientSafeLabel String
+  helpTextSafe    String?
+  type            ClientFieldType
+  required        Boolean         @default(false)
+  maxLength       Int?
+  options         Json?
+  dataCategory    String?
+  displayOrder    Int             @default(0)
+  createdAt       DateTime        @default(now())
+
+  @@index([requestId, displayOrder])
+  @@map("client_request_fields")
+}
+
+enum ClientQuestionThreadStatus {
+  OPEN
+  INTERNAL_REVIEW
+  ANSWERED
+  CLOSED
+}
+
+model ClientQuestionThread {
+  id                     String                     @id @default(uuid())
+  clientId               String
+  caseId                 String
+  clientPortalIdentityId String
+  subject                String
+  status                 ClientQuestionThreadStatus @default(OPEN)
+  assignedInternalUserId String?
+  revision               Int                        @default(0)
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+
+  messages ClientQuestionMessage[]
+
+  @@index([caseId, status])
+  @@index([clientPortalIdentityId, status])
+  @@map("client_question_threads")
+}
+
+enum ClientQuestionAuthorType {
+  CLIENT
+  INTERNAL
+}
+
+model ClientQuestionMessage {
+  id                     String                   @id @default(uuid())
+  threadId               String
+  thread                 ClientQuestionThread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  authorType             ClientQuestionAuthorType
+  clientPortalIdentityId String?
+  internalUserId         String?
+  bodySafe               String
+  visibility             String                   @default("DRAFT")
+  sentAt                 DateTime?
+  revision               Int                      @default(0)
+  createdAt              DateTime                 @default(now())
+
+  @@index([threadId, createdAt])
+  @@map("client_question_messages")
+}
+
+enum ClientSubmissionStatus {
+  DRAFT
+  UPLOADING
+  SUBMITTED
+  SCANNING
+  RECEIVED
+  UNDER_INTERNAL_REVIEW
+  ACCEPTED_INTO_MATTER
+  CORRECTION_REQUESTED
+  REJECTED
+  CANCELLED
+}
+
+model ClientSubmission {
+  id                        String                 @id @default(uuid())
+  clientRequestId           String
+  request                   ClientRequest          @relation(fields: [clientRequestId], references: [id], onDelete: Cascade)
+  clientId                  String
+  caseId                    String
+  clientPortalIdentityId    String
+  status                    ClientSubmissionStatus @default(DRAFT)
+  customerNote              String?
+  submittedAt               DateTime?
+  reviewedById              String?
+  reviewedAt                DateTime?
+  correctionReasonSafe      String?
+  rejectionReasonSafe       String?
+  acceptedDocumentId        String?
+  acceptedDocumentVersionId String?
+  revision                  Int                    @default(0)
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+
+  files  ClientSubmissionFile[]
+  fields ClientSubmissionField[]
+
+  @@index([clientRequestId, status])
+  @@index([caseId, status])
+  @@index([clientPortalIdentityId, status])
+  @@map("client_submissions")
+}
+
+enum ClientSubmissionFileStatus {
+  UPLOADING
+  UPLOADED
+  SCANNING
+  CLEAN
+  UNSUPPORTED
+  INFECTED
+  SCAN_FAILED
+  REJECTED
+  ACCEPTED
+}
+
+model ClientSubmissionFile {
+  id                         String                     @id @default(uuid())
+  submissionId               String
+  submission                 ClientSubmission           @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  originalFileNameSafe       String
+  declaredMimeType           String?
+  detectedMimeType           String?
+  sizeBytes                  Int?
+  checksum                   String?
+  storageProvider            String?
+  quarantineStorageReference String?
+  status                     ClientSubmissionFileStatus @default(UPLOADING)
+  pageOrSideLabel            String?
+  previewDerivativeReference String?
+  scanProvider               String?
+  scanCodeSafe               String?
+  uploadedAt                 DateTime?
+  scannedAt                  DateTime?
+  createdAt                  DateTime                   @default(now())
+
+  @@index([submissionId, status])
+  @@index([status])
+  @@map("client_submission_files")
+}
+
+model ClientSubmissionField {
+  id            String           @id @default(uuid())
+  submissionId  String
+  submission    ClientSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  fieldId       String?
+  labelSnapshot String
+  valueSafe     String?
+  dataCategory  String?
+  createdAt     DateTime         @default(now())
+
+  @@index([submissionId])
+  @@map("client_submission_fields")
+}
+
+enum ClientNotificationDeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED_RETRYABLE
+  FAILED_FINAL
+  CANCELLED
+}
+
+model ClientNotificationDelivery {
+  id                String                           @id @default(uuid())
+  eventType         String
+  clientId          String
+  caseId            String
+  recipientSnapshot Json
+  subjectSafe       String
+  templateId        String?
+  provider          String?
+  providerMessageId String?
+  idempotencyKey    String                           @unique
+  status            ClientNotificationDeliveryStatus @default(PENDING)
+  attemptCount      Int                              @default(0)
+  lastErrorCodeSafe String?
+  nextAttemptAt     DateTime?
+  sentAt            DateTime?
+  createdAt         DateTime                         @default(now())
+  updatedAt         DateTime                         @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([caseId])
+  @@index([clientId])
+  @@map("client_notification_deliveries")
+}
