@@ -275,7 +275,7 @@ export async function acceptFileIntoMatter(actor: InternalActor, submissionId: s
         documentId: documentId!, version: nextVersion, name: file.originalFileNameSafe,
         originalFileName: file.originalFileNameSafe, mimeType: file.detectedMimeType, size: file.sizeBytes || undefined,
         storageReference: file.quarantineStorageReference || undefined, isCurrent: true,
-        uploadedById: actor.userId, uploadSource: 'CLIENT_PORTAL', versionType: 'IMPORT',
+        uploadedById: actor.userId, uploadSource: 'CLIENT_PORTAL', versionType: 'ORIGINAL',
       } as any,
     });
     await tx.documentVersion.updateMany({ where: { documentId, id: { not: version.id } }, data: { isCurrent: false } });
