@@ -540,18 +540,30 @@ function portalDate(value: unknown): string | null {
 }
 
 function toPortalMatter(row: Row, revision: Row | null, counts: Row = {}): Row {
+  const statusText = revision?.clientSafeStatus || 'Az ügyvédi iroda által közzétett ügyfélbiztos státusz.';
+  const nextStepText = revision?.clientSafeNextStep || null;
+  const latestVisibleAt = portalDate(counts.latestUpdateAt) || portalDate(row.publishedAt) || portalDate(row.updatedAt);
   const dto = {
     id: row.id,
+    caseId: row.caseId,
     title: revision?.clientSafeTitle || 'Közzétett ügy',
     statusLabel: 'Folyamatban',
-    nextStepLabel: revision?.clientSafeNextStep || null,
+    currentSummary: statusText,
+    waitingOnLabel: counts.attentionCount ? 'Ügyfél válasza szükséges' : 'Irodai feldolgozás',
+    waitingDescription: counts.attentionCount ? 'Közzétett teendő vár teljesítésre az ügyfélportálon.' : 'Jelenleg nincs közzétett ügyféloldali teendő.',
+    nextStepLabel: nextStepText,
+    nextStepTitle: nextStepText ? 'Következő lépés' : null,
+    nextStepDescription: nextStepText,
+    estimatedTiming: null,
     responsibleLawyerDisplay: revision?.responsibleLawyerDisplay || null,
+    responsibleLawyerContactSafe: null,
     publicDeadlines: revision?.publishedDeadlinesSnapshot || [],
     publishedAt: portalDate(row.publishedAt),
     updatedAt: portalDate(row.updatedAt),
     attentionCount: Number(counts.attentionCount || 0),
     documentCount: Number(counts.documentCount || 0),
-    latestUpdateAt: portalDate(counts.latestUpdateAt),
+    latestUpdateAt: latestVisibleAt,
+    lastClientVisibleUpdateAt: latestVisibleAt,
   };
   assertNoForbiddenPortalFields(dto);
   return dto;

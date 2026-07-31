@@ -81,6 +81,35 @@ export async function assertInternalCaseAccess(actor: InternalActor, caseId: str
   throw new InteractionError(403, 'CASE_ACCESS_FORBIDDEN', 'Actor cannot access this case.');
 }
 
+/**
+ * Case queue scope for internal list endpoints. ADMIN/PARTNER may see all rows;
+ * lawyers and collaborating lawyers are limited to cases they created, are
+ * assigned to, or collaborate on. Returns `null` for global access.
+ */
+export async function internalCaseScope(actor: InternalActor, prisma: Prisma = defaultPrisma): Promise<string[] | null> {
+  const user = await prisma.user.findUnique({ where: { id: actor.userId }, select: { id: true, role: true, status: true, isActive: true } });
+  if (!user || user.isActive === false || String(user.status) !== 'ACTIVE') throw new InteractionError(403, 'CASE_ACCESS_FORBIDDEN', 'Actor cannot access client-portal queues.');
+  if (['ADMIN', 'PARTNER'].includes(String(user.role))) return null;
+  const [owned, collaborated] = await Promise.all([
+    prisma.case.findMany({
+      where: { OR: [{ createdById: actor.userId }, { assignedLawyerId: actor.userId }] },
+      select: { id: true },
+    }),
+    prisma.caseCollaborator.findMany({ where: { userId: actor.userId }, select: { caseId: true } }),
+  ]);
+  return Array.from(new Set([...owned.map((c: { id: string }) => c.id), ...collaborated.map((c: { caseId: string }) => c.caseId)]));
+}
+
+export async function applyInternalQueueCaseScope(where: Record<string, unknown>, actor: InternalActor, prisma: Prisma = defaultPrisma): Promise<Record<string, unknown>> {
+  if (where.caseId) {
+    await assertInternalCaseAccess(actor, String(where.caseId), prisma);
+    return where;
+  }
+  const scope = await internalCaseScope(actor, prisma);
+  if (scope) where.caseId = { in: scope };
+  return where;
+}
+
 export interface CustomerContext {
   clientPortalIdentityId: string;
   caseId: string;

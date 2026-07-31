@@ -8,7 +8,7 @@
  * (MAIL_PROVIDER_NOT_CONFIGURED) — never SENT. The portal remains authoritative.
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
-import { InteractionError, InternalActor, Prisma, requireInternal } from './base';
+import { InteractionError, InternalActor, Prisma, applyInternalQueueCaseScope, requireInternal } from './base';
 import { getMailSender, MailProviderError, DEFAULT_NOTIFICATION_BODY } from './mailAdapter';
 
 type Tx = Prisma | any;
@@ -108,6 +108,7 @@ export async function listNotificationDeliveries(actor: InternalActor, filter: {
   const where: any = {};
   if (filter.caseId) where.caseId = filter.caseId;
   if (filter.status) where.status = filter.status;
+  await applyInternalQueueCaseScope(where, actor, prisma);
   const limit = Math.min(Math.max(1, filter.limit ?? 50), 200);
   const offset = Math.max(0, filter.offset ?? 0);
   const [items, total] = await Promise.all([
@@ -120,8 +121,9 @@ export async function listNotificationDeliveries(actor: InternalActor, filter: {
 /** Authorized manual retry of a failed delivery. */
 export async function retryDelivery(actor: InternalActor, deliveryId: string, prisma: Prisma = defaultPrisma) {
   requireInternal(actor);
-  const row = await prisma.clientNotificationDelivery.findUnique({ where: { id: deliveryId }, select: { id: true, status: true } });
+  const row = await prisma.clientNotificationDelivery.findUnique({ where: { id: deliveryId }, select: { id: true, status: true, caseId: true } });
   if (!row) throw new InteractionError(404, 'DELIVERY_NOT_FOUND', 'Notification delivery not found.');
+  await applyInternalQueueCaseScope({ caseId: row.caseId }, actor, prisma);
   if (row.status !== 'FAILED_RETRYABLE' && row.status !== 'FAILED_FINAL') {
     throw new InteractionError(409, 'DELIVERY_NOT_RETRYABLE', 'Only failed deliveries can be retried.');
   }

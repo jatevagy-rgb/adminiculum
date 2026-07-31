@@ -10,6 +10,8 @@ describe('internal portal-admin UI', () => {
   const api = () => read('src/lib/clientPortalAdminApi.ts');
   const page = () => read('src/app/client-portal-admin/page.tsx');
   const caseGrant = () => read('src/components/documents/publication/CasePortalIdentityGrant.tsx');
+  const interactionApi = () => read('src/lib/clientInteractionApi.ts');
+  const portalShell = () => read('src/components/client-portal/ClientPortalShell.tsx');
 
   it('defines the admin page route', () => {
     assert.equal(existsSync(path.join(root, 'src/app/client-portal-admin/page.tsx')), true);
@@ -33,6 +35,9 @@ describe('internal portal-admin UI', () => {
     assert.match(src, /approveMembershipRequest/);
     assert.match(src, /rejectMembershipRequest/);
     assert.match(src, /createIdentityGrant/);
+    assert.match(src, /createClient/);
+    assert.match(src, /Új ügyfél létrehozása/);
+    assert.match(src, /Lehetséges egyezés/);
     assert.match(src, /membership-request-row/);
     assert.match(src, /active-membership-row/);
     assert.match(src, /create-grant-btn/);
@@ -40,6 +45,30 @@ describe('internal portal-admin UI', () => {
     assert.match(src, /revision: r\.revision/);
     // no legacy clientUserId grant path in the admin surface.
     assert.doesNotMatch(src, /clientUserId/);
+  });
+
+  it('defines explicit customer and workforce interaction API boundaries', () => {
+    const src = interactionApi();
+    assert.match(src, /customerInteractionApi/);
+    assert.match(src, /workforceInteractionApi/);
+    assert.match(src, /authContext: "customer"/);
+    assert.match(src, /authContext: "workforce"/);
+    assert.match(src, /\/client-interaction\/cases/);
+    assert.match(src, /\/internal\/client-interaction\/requests/);
+    assert.doesNotMatch(src, /Invalid token/);
+  });
+
+  it('customer portal matter view renders client interaction foundation', () => {
+    const src = portalShell();
+    assert.match(src, /CustomerInteractionCard/);
+    assert.match(src, /Kérdések és bekérések/);
+    assert.match(src, /customerInteractionApi\.createQuestion/);
+    assert.match(src, /customerInteractionApi\.submitAnswers/);
+    assert.match(src, /customerInteractionApi\.uploadFile/);
+    assert.match(src, /customerInteractionApi\.submitSubmission/);
+    assert.match(src, /Mire várunk\?/);
+    assert.match(src, /Most itt tartunk/);
+    assert.match(src, /caseId={matter\.caseId}/);
   });
 
   it('case-level identity grant is available and identity-based', () => {

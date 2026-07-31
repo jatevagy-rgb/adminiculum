@@ -12,7 +12,7 @@ import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import crypto from 'crypto';
 import {
   InteractionError, InternalActor, Prisma, CustomerContext,
-  requireInternal, requireExpected, assertInternalCaseAccess, safeText, assertClientSafe,
+  requireInternal, requireExpected, assertInternalCaseAccess, applyInternalQueueCaseScope, safeText, assertClientSafe,
 } from './base';
 import { requireCapability, isCapabilityEnabled } from './gates';
 import { validateUploadFile, DEFAULT_MAX_FILE_BYTES } from './fileValidation';
@@ -194,9 +194,10 @@ export async function getCustomerSubmission(ctx: CustomerContext, submissionId: 
 export async function listSubmissionsInternal(actor: InternalActor, filter: { caseId?: string; requestId?: string; status?: string; limit?: number; offset?: number }, prisma: Prisma = defaultPrisma) {
   requireInternal(actor);
   const where: any = {};
-  if (filter.caseId) { await assertInternalCaseAccess(actor, filter.caseId, prisma); where.caseId = filter.caseId; }
+  if (filter.caseId) where.caseId = filter.caseId;
   if (filter.requestId) where.clientRequestId = filter.requestId;
   if (filter.status) where.status = filter.status;
+  await applyInternalQueueCaseScope(where, actor, prisma);
   const limit = Math.min(Math.max(1, filter.limit ?? 50), 200);
   const offset = Math.max(0, filter.offset ?? 0);
   const [items, total] = await Promise.all([
@@ -254,7 +255,17 @@ export async function acceptFileIntoMatter(actor: InternalActor, submissionId: s
       const doc = await tx.document.findFirst({ where: { id: documentId, caseId: submission.caseId } });
       if (!doc) throw new InteractionError(404, 'DOCUMENT_NOT_FOUND', 'Destination document not found.');
     } else {
-      const doc = await tx.document.create({ data: { caseId: submission.caseId, clientId, name: safeText(input.documentName, 'documentName', 200) || file.originalFileNameSafe, createdById: actor.userId } as any });
+      const doc = await tx.document.create({
+        data: {
+          caseId: submission.caseId,
+          clientId,
+          name: safeText(input.documentName, 'documentName', 200) || file.originalFileNameSafe,
+          fileName: file.originalFileNameSafe,
+          mimeType: file.detectedMimeType || 'application/octet-stream',
+          category: 'CLIENT_INPUT',
+          size: file.sizeBytes || undefined,
+        } as any,
+      });
       documentId = doc.id;
     }
     const maxVersion = await tx.documentVersion.aggregate({ where: { documentId }, _max: { version: true } });
@@ -263,7 +274,8 @@ export async function acceptFileIntoMatter(actor: InternalActor, submissionId: s
       data: {
         documentId: documentId!, version: nextVersion, name: file.originalFileNameSafe,
         originalFileName: file.originalFileNameSafe, mimeType: file.detectedMimeType, size: file.sizeBytes || undefined,
-        storageReference: file.quarantineStorageReference || undefined, isCurrent: true, createdById: actor.userId,
+        storageReference: file.quarantineStorageReference || undefined, isCurrent: true,
+        uploadedById: actor.userId, uploadSource: 'CLIENT_PORTAL', versionType: 'ORIGINAL',
       } as any,
     });
     await tx.documentVersion.updateMany({ where: { documentId, id: { not: version.id } }, data: { isCurrent: false } });
