@@ -45,6 +45,12 @@ describe('customer auth entry surfaces are truthful hosted-flow launchers', () =
     assert.match(src, /onClick=\{start\}/);
   });
 
+  it('provides an explicit customer account-switch path', () => {
+    assert.match(launcher(), /Másik fiókkal jelentkezem be/);
+    assert.match(launcher(), /switchAccount/);
+    assert.match(hook(), /prompt: 'select_account'/);
+  });
+
   it('duplicate clicks cannot start duplicate redirects (guarded by interaction state)', () => {
     const h = hook();
     assert.match(h, /interactionInProgress/);

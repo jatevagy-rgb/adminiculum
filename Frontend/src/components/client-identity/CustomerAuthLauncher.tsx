@@ -66,6 +66,7 @@ export function CustomerAuthLauncher({ variant }: { variant: AuthVariant }) {
   const { configured, interactionInProgress, isAuthenticated, beginCustomerLogin, beginCustomerRegistration, beginPasswordReset } =
     useCustomerAuth();
   const [error, setError] = useState<string | null>(null);
+  const [switchingAccount, setSwitchingAccount] = useState(false);
 
   useEffect(() => {
     if (variant === 'login' && isAuthenticated && !interactionInProgress) {
@@ -88,7 +89,18 @@ export function CustomerAuthLauncher({ variant }: { variant: AuthVariant }) {
     }
   };
 
-  const busy = interactionInProgress;
+  const switchAccount = async () => {
+    setError(null);
+    setSwitchingAccount(true);
+    try {
+      await beginCustomerLogin('select-account');
+    } catch (err) {
+      setSwitchingAccount(false);
+      setError(sanitizeAuthError(err));
+    }
+  };
+
+  const busy = interactionInProgress || switchingAccount;
 
   return (
     <main className="min-h-screen bg-[#f7f4ee] px-4 py-8 text-stone-950 sm:px-8">
@@ -127,6 +139,17 @@ export function CustomerAuthLauncher({ variant }: { variant: AuthVariant }) {
               >
                 {busy ? 'Átirányítás…' : copy.action}
               </button>
+
+              {variant === 'login' && (
+                <button
+                  type="button"
+                  onClick={switchAccount}
+                  disabled={busy}
+                  className="inline-flex w-fit items-center rounded-full border border-stone-300 px-6 py-3 font-semibold text-stone-800 transition disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Másik fiókkal jelentkezem be
+                </button>
+              )}
 
               {error && (
                 <p role="alert" data-testid="customer-auth-error" className="text-sm text-red-700">
