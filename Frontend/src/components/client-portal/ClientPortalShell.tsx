@@ -1,13 +1,14 @@
 "use client";
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { InteractionRequiredAuthError, InteractionStatus } from '@azure/msal-browser';
 import { useMsal } from '@azure/msal-react';
 import { customerApiScopes, customerTenantId, pickAccountByTenant } from '@/lib/authConfig';
 import { ApiError, getAuthToken, setAuthToken } from '@/lib/api';
 import { useCustomerAuth } from '@/lib/customerAuth';
 import { clientSafeError, customerInteractionApi, localizedInteractionStatus, type ClientRequestFieldDTO, type CustomerQuestionThreadDTO, type CustomerRequestDTO, type CustomerSubmissionDTO } from '@/lib/clientInteractionApi';
+import { humanFileSize, makeUploadItem, PAGE_SIDE_LABELS, uploadReducer, uploadStateMessage, uploadSummary, type UploadItem } from '@/lib/customerUpload';
 import {
   getPortalActionRequest,
   getPortalDocument,
@@ -220,26 +221,109 @@ function FieldInput({ field, value, onChange }: { field: ClientRequestFieldDTO; 
 }
 
 function RequestResponseCard({
+  caseId,
   request,
   submission,
-  busy,
   answers,
   note,
   onAnswer,
   onNote,
-  onSubmit,
+  onReload,
 }: {
+  caseId: string;
   request: CustomerRequestDTO;
   submission?: CustomerSubmissionDTO;
-  busy: boolean;
   answers: Record<string, string>;
   note: string;
   onAnswer: (fieldId: string, value: string) => void;
   onNote: (value: string) => void;
-  onSubmit: (request: CustomerRequestDTO, files: File[]) => Promise<void>;
+  onReload: () => Promise<void>;
 }) {
-  const [files, setFiles] = useState<File[]>([]);
+  const [items, dispatch] = useReducer(uploadReducer, [] as UploadItem[]);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  // Actual File objects + preview object URLs live outside the pure reducer.
+  const filesRef = useRef<Map<string, { file: File; url?: string }>>(new Map());
+  const submissionRef = useRef<{ id: string; answersSent: boolean } | null>(null);
   const canRespond = !['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(request.status);
+
+  const addFiles = (fileList: FileList | null) => {
+    const chosen = Array.from(fileList || []);
+    const created: UploadItem[] = [];
+    for (const file of chosen) {
+      const item = makeUploadItem({ fileName: file.name, sizeBytes: file.size, mimeType: file.type || 'application/octet-stream' });
+      filesRef.current.set(item.id, { file, url: item.isImage ? URL.createObjectURL(file) : undefined });
+      created.push(item);
+    }
+    if (created.length) dispatch({ type: 'add', items: created });
+  };
+
+  const removeItem = (id: string) => {
+    const entry = filesRef.current.get(id);
+    if (entry?.url) URL.revokeObjectURL(entry.url);
+    filesRef.current.delete(id);
+    dispatch({ type: 'remove', id });
+  };
+
+  const summary = uploadSummary(items);
+
+  const submit = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      if (!submissionRef.current) {
+        const created = await customerInteractionApi.createSubmission(caseId, request.id);
+        submissionRef.current = { id: created.id, answersSent: false };
+      }
+      const submissionId = submissionRef.current.id;
+      if (!submissionRef.current.answersSent) {
+        const filled = request.fields
+          .map((field) => ({ label: field.label, value: (answers[field.id] || '').trim() }))
+          .filter((answer) => answer.value);
+        if (filled.length) await customerInteractionApi.submitAnswers(caseId, submissionId, filled);
+        submissionRef.current.answersSent = true;
+      }
+      // Upload only files not yet accepted by the server (pending or previously
+      // failed). dispatch() is async, so track failures locally in this pass.
+      let failedThisPass = 0;
+      for (const item of items) {
+        if (item.status === 'done' || item.status === 'uploading') continue;
+        const entry = filesRef.current.get(item.id);
+        if (!entry) continue;
+        dispatch({ type: 'status', id: item.id, status: 'uploading' });
+        try {
+          const result = await customerInteractionApi.uploadFile(caseId, submissionId, {
+            originalFileName: entry.file.name,
+            declaredMimeType: entry.file.type || 'application/octet-stream',
+            base64: await fileToBase64(entry.file),
+            pageOrSideLabel: item.label || undefined,
+          });
+          dispatch({ type: 'status', id: item.id, status: 'done', serverState: result.state });
+        } catch {
+          failedThisPass += 1;
+          dispatch({ type: 'status', id: item.id, status: 'error' });
+        }
+      }
+      if (failedThisPass > 0) {
+        setMessage('Néhány fájl feltöltése nem sikerült. Kérjük, küldje újra a sikertelen fájlokat.');
+        return;
+      }
+      await customerInteractionApi.submitSubmission(caseId, submissionId, note);
+      submissionRef.current = null;
+      for (const entry of filesRef.current.values()) if (entry.url) URL.revokeObjectURL(entry.url);
+      filesRef.current.clear();
+      dispatch({ type: 'reset' });
+      setMessage('A válasz beküldve. Az iroda ellenőrzés után frissíti az ügy állapotát.');
+      await onReload();
+    } catch (error) {
+      setMessage(clientSafeError(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const canSubmit = canRespond && !busy && (summary.total > 0 || request.fields.some((field) => (answers[field.id] || '').trim()));
+
   return (
     <div className="rounded-xl bg-stone-50 p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -250,15 +334,41 @@ function RequestResponseCard({
         {submission ? <span className="rounded-full bg-white px-3 py-1 text-xs text-stone-700">{localizedInteractionStatus(submission.status)}</span> : null}
       </div>
       {request.instructions ? <p className="mt-2 break-words text-sm text-stone-700">{request.instructions}</p> : null}
+      {submission?.correctionReason ? <p className="mt-2 rounded-lg bg-[#fdf3e2] p-2 text-sm text-[#7a5f18]">Javítás szükséges: {submission.correctionReason}</p> : null}
       {request.fields.length ? <div className="mt-3 space-y-3">{request.fields.map((field) => <label key={field.id} className="block text-sm text-stone-700"><span className="font-medium">{field.label}{field.required ? ' *' : ''}</span>{field.helpText ? <span className="block text-xs text-stone-500">{field.helpText}</span> : null}<FieldInput field={field} value={answers[field.id] || ''} onChange={(value) => onAnswer(field.id, value)} /></label>)}</div> : null}
       <label className="mt-3 block text-sm text-stone-700">
         <span className="font-medium">Dokumentum feltöltése</span>
-        <span className="block text-xs text-stone-500">PDF, JPEG vagy PNG; telefonon kamerából is választható.</span>
-        <input type="file" multiple accept="application/pdf,image/jpeg,image/png" capture="environment" className="mt-1 block w-full text-sm" onChange={(event) => setFiles(Array.from(event.target.files || []))} />
+        <span className="block text-xs text-stone-500">PDF, JPEG vagy PNG; telefonon kamerából vagy a galériából is választható.</span>
+        <input type="file" multiple accept="application/pdf,image/jpeg,image/png" capture="environment" className="mt-1 block w-full text-sm" onChange={(event) => { addFiles(event.target.files); event.target.value = ''; }} />
       </label>
+      {items.length ? (
+        <ul className="mt-3 space-y-2" aria-label="Kiválasztott fájlok">
+          {items.map((item) => {
+            const entry = filesRef.current.get(item.id);
+            return (
+              <li key={item.id} data-testid="upload-item" className="flex items-start gap-3 rounded-xl border border-stone-200 bg-white p-2">
+                {item.isImage && entry?.url ? <img src={entry.url} alt="" className="h-14 w-14 flex-none rounded-lg object-cover" /> : <span className="flex h-14 w-14 flex-none items-center justify-center rounded-lg bg-stone-100 text-xs text-stone-500">PDF</span>}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-stone-800">{item.fileName}</p>
+                  <p className="text-xs text-stone-500">{humanFileSize(item.sizeBytes)} · <span aria-live="polite">{uploadStateMessage(item)}</span></p>
+                  <select value={item.label} onChange={(event) => dispatch({ type: 'relabel', id: item.id, label: event.target.value })} className="mt-1 rounded-lg border border-stone-300 px-2 py-1 text-xs" aria-label="Oldal megjelölése">
+                    <option value="">Megjelölés (opcionális)</option>
+                    {PAGE_SIDE_LABELS.map((label) => <option key={label} value={label}>{label}</option>)}
+                  </select>
+                </div>
+                <button type="button" className="flex-none text-xs text-stone-500 underline disabled:opacity-40" disabled={busy || item.status === 'done'} onClick={() => removeItem(item.id)}>Eltávolítás</button>
+              </li>
+            );
+          })}
+          {summary.total ? <li className="text-xs text-stone-500" aria-live="polite">Feltöltve: {summary.done}/{summary.total}{summary.failed ? ` · sikertelen: ${summary.failed}` : ''}</li> : null}
+        </ul>
+      ) : null}
       <textarea value={note} onChange={(event) => onNote(event.target.value)} maxLength={1000} className="mt-3 min-h-20 w-full rounded-xl border border-stone-300 px-3 py-2 text-sm" placeholder="Megjegyzés az irodának (opcionális)" />
-      <button className="mt-3 rounded-full bg-stone-950 px-4 py-2 text-sm text-white disabled:opacity-50" disabled={busy || !canRespond || (!files.length && !request.fields.some((field) => (answers[field.id] || '').trim()))} onClick={() => void onSubmit(request, files)}>Válasz beküldése</button>
-      <p className="mt-2 text-xs text-stone-500">A fájl csak ellenőrzés után kerülhet be az ügy iratai közé.</p>
+      {message ? <p className="mt-2 rounded-lg bg-stone-100 p-2 text-sm text-stone-700" role="status">{message}</p> : null}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button className="rounded-full bg-stone-950 px-4 py-2 text-sm text-white disabled:opacity-50" disabled={!canSubmit} onClick={() => void submit()}>{items.some((i) => i.status === 'error') ? 'Sikertelen fájlok újraküldése' : 'Válasz beküldése'}</button>
+      </div>
+      <p className="mt-2 text-xs text-stone-500">A fájl csak sikeres biztonsági ellenőrzés után kerülhet be az ügy iratai közé.</p>
     </div>
   );
 }
@@ -338,34 +448,6 @@ function CustomerInteractionCard({ caseId }: { caseId: string }) {
     }
   };
 
-  const submitRequest = async (request: CustomerRequestDTO, files: File[]) => {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const submission = await customerInteractionApi.createSubmission(caseId, request.id);
-      const answers = request.fields
-        .map((field) => ({ label: field.label, value: (answersByRequest[request.id]?.[field.id] || '').trim() }))
-        .filter((answer) => answer.value);
-      if (answers.length) await customerInteractionApi.submitAnswers(caseId, submission.id, answers);
-      for (const file of files) {
-        await customerInteractionApi.uploadFile(caseId, submission.id, {
-          originalFileName: file.name,
-          declaredMimeType: file.type || 'application/octet-stream',
-          base64: await fileToBase64(file),
-        });
-      }
-      await customerInteractionApi.submitSubmission(caseId, submission.id, notesByRequest[request.id]);
-      setAnswersByRequest((current) => ({ ...current, [request.id]: {} }));
-      setNotesByRequest((current) => ({ ...current, [request.id]: '' }));
-      setMessage('A válasz beküldve. Az iroda ellenőrzés után frissíti az ügy állapotát.');
-      await load();
-    } catch (error) {
-      setMessage(clientSafeError(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <Card>
       <h2 className="text-2xl font-semibold">Kérdések és bekérések</h2>
@@ -374,7 +456,7 @@ function CustomerInteractionCard({ caseId }: { caseId: string }) {
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         <div className="rounded-2xl border border-stone-200 p-4">
           <h3 className="font-semibold">Ügyvédi bekérések</h3>
-          <div className="mt-3 space-y-3">{requests.length ? requests.map((request) => <RequestResponseCard key={request.id} request={request} submission={submissions.find((submission) => submission.requestId === request.id)} busy={busy} answers={answersByRequest[request.id] || {}} note={notesByRequest[request.id] || ''} onAnswer={(fieldId, value) => setAnswersByRequest((current) => ({ ...current, [request.id]: { ...(current[request.id] || {}), [fieldId]: value } }))} onNote={(value) => setNotesByRequest((current) => ({ ...current, [request.id]: value }))} onSubmit={submitRequest} />) : <p className="text-sm text-stone-600">Nincs aktív dokumentum- vagy adatbekérés.</p>}</div>
+          <div className="mt-3 space-y-3">{requests.length ? requests.map((request) => <RequestResponseCard key={request.id} caseId={caseId} request={request} submission={submissions.find((submission) => submission.requestId === request.id)} answers={answersByRequest[request.id] || {}} note={notesByRequest[request.id] || ''} onAnswer={(fieldId, value) => setAnswersByRequest((current) => ({ ...current, [request.id]: { ...(current[request.id] || {}), [fieldId]: value } }))} onNote={(value) => setNotesByRequest((current) => ({ ...current, [request.id]: value }))} onReload={load} />) : <p className="text-sm text-stone-600">Nincs aktív dokumentum- vagy adatbekérés.</p>}</div>
         </div>
         <div className="rounded-2xl border border-stone-200 p-4">
           <h3 className="font-semibold">Kérdés küldése</h3>
