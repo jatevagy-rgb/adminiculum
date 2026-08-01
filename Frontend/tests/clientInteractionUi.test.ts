@@ -12,6 +12,7 @@ import {
   ACCEPTED_UPLOAD_MIME,
   type UploadItem,
 } from '../src/lib/customerUpload';
+import { isFileAcceptable } from '../src/lib/clientInteractionApi';
 
 const root = process.cwd();
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
@@ -80,6 +81,48 @@ describe('client interaction API layer', () => {
     assert.match(src, /authContext: "workforce"/);
     // workforce retry present for notification failure queue
     assert.match(src, /retryNotification/);
+  });
+
+  it('exposes the internal question/submission/notification action surface', () => {
+    const src = api();
+    for (const method of ['getQuestion', 'draftAnswer', 'sendAnswer', 'closeQuestion', 'getSubmission', 'acceptFile', 'requestCorrection', 'rejectSubmission']) {
+      assert.match(src, new RegExp(`${method}:`), `workforce API missing ${method}`);
+    }
+  });
+
+  it('gates matter acceptance on a CLEAN scan status only', () => {
+    assert.equal(isFileAcceptable('CLEAN'), true);
+    for (const s of ['UPLOADING', 'RECEIVED', 'SCANNING', 'INFECTED', 'SCAN_FAILED', 'UNSUPPORTED']) {
+      assert.equal(isFileAcceptable(s), false, `${s} must not be acceptable`);
+    }
+  });
+});
+
+describe('internal interaction actions (source contract)', () => {
+  const comp = () => read('src/components/client-portal/ClientInteractionInternalActions.tsx');
+
+  it('answers keep drafts hidden until an explicit send', () => {
+    const src = comp();
+    assert.match(src, /draftAnswer/);
+    assert.match(src, /sendAnswer/);
+    assert.match(src, /visibility === "DRAFT"/);
+    assert.match(src, /az ügyfél nem látja/);
+    assert.match(src, /Válasz elküldése/);
+  });
+
+  it('disables matter acceptance until CLEAN and shows the safe internal warning', () => {
+    const src = comp();
+    assert.match(src, /isFileAcceptable\(f\.status\)/);
+    assert.match(src, /data-testid="accept-file-btn"/);
+    assert.match(src, /disabled=\{busy \|\| !acceptable\}/);
+    assert.match(src, /nem emelhető az ügy iratai közé/);
+  });
+
+  it('offers correction, rejection and notification retry', () => {
+    const src = comp();
+    assert.match(src, /requestCorrection/);
+    assert.match(src, /rejectSubmission/);
+    assert.match(src, /data-testid="retry-notification-btn"/);
   });
 });
 

@@ -5,6 +5,7 @@ import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminBadge, AdminButton, AdminPanel, AdminSectionHeader } from "@/components/adminiculum/ui";
 import { createClient, getCases, getClients, type CaseListItem, type Client, type CreateClientData } from "@/lib/api";
 import { localizedInteractionStatus, workforceInteractionApi, type InternalInteractionRow } from "@/lib/clientInteractionApi";
+import { ClientInteractionInternalActions } from "@/components/client-portal/ClientInteractionInternalActions";
 import {
   approveMembershipRequest,
   createIdentityGrant,
@@ -265,6 +266,18 @@ function PageBody() {
           <InteractionQueueCard title="Kérdések" items={interactionQueues.questions} empty="Nincs megválaszolatlan kérdés." />
           <InteractionQueueCard title="Beküldések" items={interactionQueues.submissions} empty="Nincs új beküldés." />
           <InteractionQueueCard title="Sikertelen értesítések" items={interactionQueues.notifications} empty="Nincs újrapróbálható hiba." />
+        </div>
+        <div className="mt-5 border-t border-[var(--adm-border)] pt-4">
+          <h3 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Ügyfélportál műveletek</h3>
+          <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Kérdés megválaszolása (piszkozat majd kifejezett küldés), beküldött fájlok elbírálása (CLEAN után emelhető az ügybe) és sikertelen értesítések újraküldése.</p>
+          <div className="mt-3">
+            <ClientInteractionInternalActions
+              questions={interactionQueues.questions}
+              submissions={interactionQueues.submissions}
+              notifications={interactionQueues.notifications}
+              onDone={reload}
+            />
+          </div>
         </div>
       </AdminPanel>
 
