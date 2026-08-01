@@ -124,6 +124,8 @@ export const customerInteractionApi = {
     fetchApi<Page<CustomerRequestDTO>>(`/client-interaction/cases/${encodeURIComponent(caseId)}/requests`, { authContext: "customer" }),
   listQuestions: (caseId: string) =>
     fetchApi<Page<CustomerQuestionThreadDTO>>(`/client-interaction/cases/${encodeURIComponent(caseId)}/questions`, { authContext: "customer" }),
+  getThread: (caseId: string, threadId: string) =>
+    fetchApi<CustomerQuestionThreadDTO>(`/client-interaction/cases/${encodeURIComponent(caseId)}/questions/${encodeURIComponent(threadId)}`, { authContext: "customer" }),
   createQuestion: (caseId: string, payload: { subject: string; bodySafe: string }) =>
     fetchApi<CustomerQuestionThreadDTO>(`/client-interaction/cases/${encodeURIComponent(caseId)}/questions`, { method: "POST", body: JSON.stringify(payload), authContext: "customer" }),
   createSubmission: (caseId: string, requestId: string) =>

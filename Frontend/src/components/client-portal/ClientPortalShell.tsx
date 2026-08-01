@@ -187,10 +187,31 @@ function DocumentView({ document }: { document: PortalDocument }) {
   return <Card><p className="text-sm font-semibold text-[#7a5f18]">{document.stateLabel}</p><h1 className="mt-2 break-words text-3xl font-semibold text-stone-950">{document.title}</h1><p className="mt-3 break-words text-stone-700">{document.explanation || 'Nincs külön ügyfélmagyarázat.'}</p><dl className="mt-5 grid gap-3 text-sm text-stone-700 sm:grid-cols-2"><div><dt className="font-semibold">Változat</dt><dd>{document.versionLabel}</dd></div><div><dt className="font-semibold">Közzétéve</dt><dd>{formatDate(document.publishedAt)}</dd></div><div><dt className="font-semibold">Ügy</dt><dd>{document.matterTitle || 'Közzétett ügy'}</dd></div></dl>{document.downloadAvailable ? <button className="mt-6 rounded-full bg-stone-950 px-5 py-3 text-white focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" onClick={onDownload}>Dokumentum letöltése</button> : <p className="mt-6 rounded-2xl bg-stone-100 p-4 text-stone-700">A dokumentum már nem elérhető letöltésre.</p>}</Card>;
 }
 
+function fieldOptions(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((option) => (typeof option === 'string' ? option : option && typeof option === 'object' ? String((option as { label?: unknown; value?: unknown }).label ?? (option as { value?: unknown }).value ?? '') : ''))
+    .filter((option) => option.length > 0);
+}
+
 function FieldInput({ field, value, onChange }: { field: ClientRequestFieldDTO; value: string; onChange: (value: string) => void }) {
   const common = "mt-1 w-full rounded-xl border border-stone-300 px-3 py-2";
   if (field.type === 'LONG_TEXT' || field.type === 'ADDRESS') return <textarea value={value} onChange={(event) => onChange(event.target.value)} maxLength={field.maxLength || 2000} className={`${common} min-h-24`} />;
   if (field.type === 'YES_NO') return <select value={value} onChange={(event) => onChange(event.target.value)} className={common}><option value="">Válasszon</option><option value="igen">Igen</option><option value="nem">Nem</option></select>;
+  if (field.type === 'SINGLE_CHOICE') {
+    const options = fieldOptions(field.options);
+    return <select value={value} onChange={(event) => onChange(event.target.value)} className={common}><option value="">Válasszon</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select>;
+  }
+  if (field.type === 'MULTIPLE_CHOICE') {
+    const options = fieldOptions(field.options);
+    const selected = new Set(value.split('|').map((entry) => entry.trim()).filter(Boolean));
+    const toggle = (option: string) => {
+      const next = new Set(selected);
+      if (next.has(option)) next.delete(option); else next.add(option);
+      onChange(Array.from(next).join(' | '));
+    };
+    return <div className="mt-1 space-y-1">{options.map((option) => <label key={option} className="flex items-center gap-2 text-sm text-stone-700"><input type="checkbox" checked={selected.has(option)} onChange={() => toggle(option)} />{option}</label>)}</div>;
+  }
   if (field.type === 'DATE') return <input type="date" value={value} onChange={(event) => onChange(event.target.value)} className={common} />;
   if (field.type === 'NUMBER') return <input type="number" value={value} onChange={(event) => onChange(event.target.value)} className={common} />;
   if (field.type === 'EMAIL') return <input type="email" value={value} onChange={(event) => onChange(event.target.value)} maxLength={field.maxLength || 320} className={common} />;
@@ -238,6 +259,41 @@ function RequestResponseCard({
       <textarea value={note} onChange={(event) => onNote(event.target.value)} maxLength={1000} className="mt-3 min-h-20 w-full rounded-xl border border-stone-300 px-3 py-2 text-sm" placeholder="Megjegyzés az irodának (opcionális)" />
       <button className="mt-3 rounded-full bg-stone-950 px-4 py-2 text-sm text-white disabled:opacity-50" disabled={busy || !canRespond || (!files.length && !request.fields.some((field) => (answers[field.id] || '').trim()))} onClick={() => void onSubmit(request, files)}>Válasz beküldése</button>
       <p className="mt-2 text-xs text-stone-500">A fájl csak ellenőrzés után kerülhet be az ügy iratai közé.</p>
+    </div>
+  );
+}
+
+function QuestionThreadRow({ caseId, thread }: { caseId: string; thread: CustomerQuestionThreadDTO }) {
+  const [open, setOpen] = useState(false);
+  const [detail, setDetail] = useState<CustomerQuestionThreadDTO | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const toggle = async () => {
+    const next = !open;
+    setOpen(next);
+    if (next && !detail) {
+      try { setDetail(await customerInteractionApi.getThread(caseId, thread.id)); }
+      catch (err) { setError(clientSafeError(err)); }
+    }
+  };
+  const messages = detail?.messages || [];
+  return (
+    <div className="rounded-xl bg-stone-50 p-3 text-sm">
+      <button className="flex w-full items-center justify-between gap-2 text-left" aria-expanded={open} onClick={toggle}>
+        <span className="font-medium text-stone-800">{thread.subject}</span>
+        <span className="text-xs text-stone-600">{localizedInteractionStatus(thread.status)}</span>
+      </button>
+      {open ? (
+        <div className="mt-3 space-y-2">
+          {error ? <p className="text-stone-600">{error}</p> : null}
+          {!error && !detail ? <p className="text-stone-500">Betöltés…</p> : null}
+          {messages.length ? messages.map((msg) => (
+            <div key={msg.id} className={`rounded-lg p-2 ${msg.authorType === 'INTERNAL' ? 'bg-[#f3ead2] text-[#5c470f]' : 'bg-white text-stone-800'}`}>
+              <p className="text-[11px] font-semibold uppercase tracking-wide">{msg.authorType === 'INTERNAL' ? 'Ügyvédi iroda' : 'Ön'} · {formatDate(msg.sentAt)}</p>
+              <p className="mt-1 break-words">{msg.body}</p>
+            </div>
+          )) : (!error && detail ? <p className="text-stone-600">Erre a kérdésre még nem érkezett elküldött válasz.</p> : null)}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -325,7 +381,7 @@ function CustomerInteractionCard({ caseId }: { caseId: string }) {
           <input value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={200} className="mt-3 w-full rounded-xl border border-stone-300 px-3 py-2" placeholder="Tárgy" />
           <textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={4000} className="mt-2 min-h-28 w-full rounded-xl border border-stone-300 px-3 py-2" placeholder="Kérdés szövege" />
           <button className="mt-2 rounded-full bg-stone-950 px-4 py-2 text-white disabled:opacity-50" disabled={busy || !subject.trim() || !body.trim()} onClick={sendQuestion}>Kérdés beküldése</button>
-          <div className="mt-4 space-y-2">{questions.length ? questions.map((thread) => <p key={thread.id} className="rounded-xl bg-stone-50 p-3 text-sm">{thread.subject} · {localizedInteractionStatus(thread.status)}</p>) : <p className="text-sm text-stone-600">Még nincs kérdésszál.</p>}</div>
+          <div className="mt-4 space-y-2">{questions.length ? questions.map((thread) => <QuestionThreadRow key={thread.id} caseId={caseId} thread={thread} />) : <p className="text-sm text-stone-600">Még nincs kérdésszál.</p>}</div>
         </div>
       </div>
     </Card>
