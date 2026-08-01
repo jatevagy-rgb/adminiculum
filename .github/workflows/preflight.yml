@@ -83,3 +83,6 @@ jobs:
 
       - name: Typecheck (run after build for .next/types)
         run: npx tsc --noEmit
+
+      - name: Behavioural tests
+        run: npm test

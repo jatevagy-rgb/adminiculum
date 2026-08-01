@@ -124,6 +124,8 @@ export const customerInteractionApi = {
     fetchApi<Page<CustomerRequestDTO>>(`/client-interaction/cases/${encodeURIComponent(caseId)}/requests`, { authContext: "customer" }),
   listQuestions: (caseId: string) =>
     fetchApi<Page<CustomerQuestionThreadDTO>>(`/client-interaction/cases/${encodeURIComponent(caseId)}/questions`, { authContext: "customer" }),
+  getThread: (caseId: string, threadId: string) =>
+    fetchApi<CustomerQuestionThreadDTO>(`/client-interaction/cases/${encodeURIComponent(caseId)}/questions/${encodeURIComponent(threadId)}`, { authContext: "customer" }),
   createQuestion: (caseId: string, payload: { subject: string; bodySafe: string }) =>
     fetchApi<CustomerQuestionThreadDTO>(`/client-interaction/cases/${encodeURIComponent(caseId)}/questions`, { method: "POST", body: JSON.stringify(payload), authContext: "customer" }),
   createSubmission: (caseId: string, requestId: string) =>
@@ -149,4 +151,67 @@ export const workforceInteractionApi = {
     fetchApi<Page<InternalInteractionRow>>(`/internal/client-interaction/notifications${qs(params)}`, { authContext: "workforce" }),
   retryNotification: (deliveryId: string) =>
     fetchApi<{ status: string; codeSafe?: string }>(`/internal/client-interaction/notifications/${encodeURIComponent(deliveryId)}/retry`, { method: "POST", body: JSON.stringify({}), authContext: "workforce" }),
+
+  // --- internal question workflow (draft hidden until explicit send) ---
+  getQuestion: (threadId: string) =>
+    fetchApi<InternalQuestionThreadDTO>(`/internal/client-interaction/questions/${encodeURIComponent(threadId)}`, { authContext: "workforce" }),
+  draftAnswer: (threadId: string, bodySafe: string) =>
+    fetchApi<{ id: string }>(`/internal/client-interaction/questions/${encodeURIComponent(threadId)}/answer`, { method: "POST", body: JSON.stringify({ bodySafe }), authContext: "workforce" }),
+  sendAnswer: (threadId: string, messageId: string, sendNotification: boolean) =>
+    fetchApi<{ status: string }>(`/internal/client-interaction/questions/${encodeURIComponent(threadId)}/answer/${encodeURIComponent(messageId)}/send`, { method: "POST", body: JSON.stringify({ sendNotification }), authContext: "workforce" }),
+  closeQuestion: (threadId: string) =>
+    fetchApi<{ status: string }>(`/internal/client-interaction/questions/${encodeURIComponent(threadId)}/close`, { method: "POST", body: JSON.stringify({}), authContext: "workforce" }),
+
+  // --- internal submission review (accept gated on CLEAN server-side) ---
+  getSubmission: (submissionId: string) =>
+    fetchApi<InternalSubmissionDTO>(`/internal/client-interaction/submissions/${encodeURIComponent(submissionId)}`, { authContext: "workforce" }),
+  acceptFile: (submissionId: string, fileId: string, payload: { documentName?: string; documentId?: string } = {}) =>
+    fetchApi<{ documentVersionId?: string }>(`/internal/client-interaction/submissions/${encodeURIComponent(submissionId)}/files/${encodeURIComponent(fileId)}/accept`, { method: "POST", body: JSON.stringify(payload), authContext: "workforce" }),
+  requestCorrection: (submissionId: string, reasonSafe: string) =>
+    fetchApi<{ status: string }>(`/internal/client-interaction/submissions/${encodeURIComponent(submissionId)}/request-correction`, { method: "POST", body: JSON.stringify({ reasonSafe }), authContext: "workforce" }),
+  rejectSubmission: (submissionId: string, reasonSafe: string) =>
+    fetchApi<{ status: string }>(`/internal/client-interaction/submissions/${encodeURIComponent(submissionId)}/reject`, { method: "POST", body: JSON.stringify({ reasonSafe }), authContext: "workforce" }),
 };
+
+export interface InternalQuestionMessageDTO {
+  id: string;
+  authorType: "CLIENT" | "INTERNAL";
+  visibility: string; // 'DRAFT' (hidden from customer) | 'SENT'
+  bodySafe: string;
+  sentAt: string | null;
+  createdAt: string;
+}
+
+export interface InternalQuestionThreadDTO {
+  thread: { id: string; subjectSafe?: string; subject?: string; status: string; caseId: string };
+  messages: InternalQuestionMessageDTO[];
+}
+
+export interface InternalSubmissionFileDTO {
+  id: string;
+  originalFileNameSafe: string;
+  sizeBytes: number | null;
+  declaredMimeType: string | null;
+  detectedMimeType: string | null;
+  checksum: string | null;
+  status: string; // ClientSubmissionFileStatus; acceptance requires 'CLEAN'
+  scanCodeSafe: string | null;
+  pageOrSideLabel: string | null;
+}
+
+export interface InternalSubmissionDTO {
+  id: string;
+  requestId: string;
+  caseId: string;
+  status: string;
+  customerNoteSafe?: string | null;
+  acceptedDocumentVersionId: string | null;
+  files: InternalSubmissionFileDTO[];
+  fields: Array<{ labelSafe?: string; label?: string; valueSafe?: string | null; value?: string | null }>;
+}
+
+// A file may be accepted into the official matter only when its scan status is
+// CLEAN; the button is disabled otherwise and the server re-checks regardless.
+export function isFileAcceptable(status: string): boolean {
+  return status === "CLEAN";
+}
