@@ -64,10 +64,32 @@ async function loadOwnedSubmission(ctx: CustomerContext, submissionId: string, p
 }
 
 async function loadPublishedRequest(ctx: CustomerContext, requestId: string, prisma: Prisma) {
-  const req = await prisma.clientRequest.findFirst({ where: { id: requestId, caseId: ctx.caseId, clientId: ctx.clientId } });
+  const req = await prisma.clientRequest.findFirst({ where: { id: requestId, caseId: ctx.caseId, clientId: ctx.clientId }, include: { fields: { orderBy: { displayOrder: 'asc' } } } });
   if (!req) throw new InteractionError(404, 'REQUEST_NOT_FOUND', 'Request is not available.');
   if (!['PUBLISHED', 'PARTIALLY_SUBMITTED', 'CORRECTION_REQUESTED'].includes(req.status)) throw new InteractionError(409, 'REQUEST_NOT_OPEN', 'Request is not open for submission.');
   return req;
+}
+
+function fieldOptions(field: any): string[] {
+  return Array.isArray(field?.options) ? field.options.map((option: unknown) => String(option)).filter(Boolean) : [];
+}
+
+export function validateStructuredAnswer(field: any, rawValue: unknown): string {
+  const value = String(rawValue ?? '').trim();
+  if (!value) return value;
+  if (field.maxLength && value.length > field.maxLength) throw new InteractionError(400, 'INVALID_FIELD_VALUE', 'Az adatmező értéke túl hosszú.');
+  if (field.type === 'EMAIL' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) throw new InteractionError(400, 'INVALID_FIELD_VALUE', 'Érvényes e-mail-cím szükséges.');
+  if (field.type === 'NUMBER' && !Number.isFinite(Number(value))) throw new InteractionError(400, 'INVALID_FIELD_VALUE', 'Érvényes szám szükséges.');
+  if (field.type === 'DATE' && (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`)))) throw new InteractionError(400, 'INVALID_FIELD_VALUE', 'Érvényes dátum szükséges.');
+  if (field.type === 'PHONE' && !/^[+\d][\d\s().-]{5,79}$/.test(value)) throw new InteractionError(400, 'INVALID_FIELD_VALUE', 'Érvényes telefonszám szükséges.');
+  const options = fieldOptions(field);
+  if (field.type === 'SINGLE_CHOICE' && !options.includes(value)) throw new InteractionError(400, 'INVALID_FIELD_VALUE', 'Érvényes választási lehetőség szükséges.');
+  if (field.type === 'MULTIPLE_CHOICE') {
+    const selected = value.split('|').map((item) => item.trim()).filter(Boolean);
+    if (new Set(selected).size !== selected.length || selected.some((item) => !options.includes(item))) throw new InteractionError(400, 'INVALID_FIELD_VALUE', 'Érvényes választási lehetőségek szükségesek.');
+  }
+  if (field.type === 'YES_NO' && !['igen', 'nem'].includes(value.toLowerCase())) throw new InteractionError(400, 'INVALID_FIELD_VALUE', 'Igen vagy nem válasz szükséges.');
+  return value;
 }
 
 // ---- Customer side
@@ -87,12 +109,19 @@ export async function addStructuredAnswers(ctx: CustomerContext, submissionId: s
   requireCapability('DATA_REQUESTS');
   const sub = await loadOwnedSubmission(ctx, submissionId, prisma);
   if (!['DRAFT', 'CORRECTION_REQUESTED'].includes(sub.status)) throw new InteractionError(409, 'SUBMISSION_NOT_EDITABLE', 'Submission is not editable.');
-  const rows = (Array.isArray(answers) ? answers : []).slice(0, 60).map((a) => ({
+  const request = await loadPublishedRequest(ctx, sub.clientRequestId, prisma);
+  const fieldsByLabel = new Map(request.fields.map((field: any) => [field.clientSafeLabel, field]));
+  const rows = (Array.isArray(answers) ? answers : []).slice(0, 60).map((a) => {
+    const label = safeText(a.label, 'answer.label', 160, true)!;
+    const field = fieldsByLabel.get(label);
+    if (!field) throw new InteractionError(400, 'INVALID_FIELD_VALUE', 'Ismeretlen adatmező.');
+    return {
     submissionId,
-    labelSnapshot: safeText(a.label, 'answer.label', 160, true)!,
-    valueSafe: safeText(a.value, 'answer.value', 4000),
+    labelSnapshot: label,
+    valueSafe: validateStructuredAnswer(field, safeText(a.value, 'answer.value', 4000)),
     dataCategory: a.dataCategory ? String(a.dataCategory).slice(0, 60) : null,
-  }));
+    };
+  });
   await prisma.$transaction([
     prisma.clientSubmissionField.deleteMany({ where: { submissionId } }),
     prisma.clientSubmissionField.createMany({ data: rows }),
@@ -169,11 +198,21 @@ export async function addFile(ctx: CustomerContext, submissionId: string, input:
 export async function submitSubmission(ctx: CustomerContext, submissionId: string, input: { customerNote?: unknown }, prisma: Prisma = defaultPrisma) {
   const sub = await loadOwnedSubmission(ctx, submissionId, prisma);
   if (!['DRAFT', 'UPLOADING', 'CORRECTION_REQUESTED'].includes(sub.status)) throw new InteractionError(409, 'SUBMISSION_NOT_SUBMITTABLE', 'Submission cannot be submitted.');
-  const [fileCount, fieldCount] = await Promise.all([
+  const [fileCount, fieldRows, request] = await Promise.all([
     prisma.clientSubmissionFile.count({ where: { submissionId, status: { notIn: ['REJECTED', 'UNSUPPORTED'] } } }),
-    prisma.clientSubmissionField.count({ where: { submissionId } }),
+    prisma.clientSubmissionField.findMany({ where: { submissionId } }),
+    prisma.clientRequest.findUnique({ where: { id: sub.clientRequestId }, include: { fields: true } }),
   ]);
+  const fieldCount = fieldRows.length;
   if (fileCount === 0 && fieldCount === 0) throw new InteractionError(400, 'SUBMISSION_EMPTY', 'Provide at least one file or answer before submitting.');
+  if (request?.type === 'DATA_FORM') {
+    const answersByLabel = new Map(fieldRows.map((row: any) => [row.labelSnapshot, row.valueSafe]));
+    for (const field of (request.fields || [])) {
+      const value = answersByLabel.get(field.clientSafeLabel);
+      if (field.required && !String(value || '').trim()) throw new InteractionError(400, 'REQUIRED_FIELD_MISSING', 'Minden kötelező adatmezőt ki kell tölteni.');
+      if (value) validateStructuredAnswer(field, value);
+    }
+  }
   return toClientSafeSubmission({ ...await prisma.clientSubmission.update({ where: { id: submissionId }, data: { status: 'SUBMITTED', submittedAt: new Date(), customerNote: safeText(input.customerNote, 'customerNote', 1000), revision: { increment: 1 } } }), files: [], fields: [] });
 }
 
