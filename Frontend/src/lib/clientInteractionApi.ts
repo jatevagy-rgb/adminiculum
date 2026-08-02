@@ -76,8 +76,41 @@ export interface InternalInteractionRow {
   clientSafeTitle?: string;
   createdAt?: string;
   updatedAt?: string;
+  revision?: number;
   attemptCount?: number;
   lastErrorCodeSafe?: string | null;
+}
+
+export interface InternalClientRequestDTO extends InternalInteractionRow {
+  clientId: string;
+  type: ClientRequestType;
+  clientSafeTitle: string;
+  clientSafeInstructions: string | null;
+  required: boolean;
+  dueAt: string | null;
+  revision: number;
+  fields?: ClientRequestFieldDTO[];
+  documentSpec?: Record<string, unknown> | null;
+}
+
+export interface CreateClientRequestDraftInput {
+  clientId?: string;
+  caseId: string;
+  type: ClientRequestType;
+  clientSafeTitle: string;
+  clientSafeInstructions?: string;
+  required?: boolean;
+  dueAt?: string | null;
+  documentSpec?: Record<string, unknown>;
+  fields?: Array<{
+    label: string;
+    helpText?: string;
+    type: ClientFieldType;
+    required?: boolean;
+    maxLength?: number | null;
+    options?: string[];
+    order?: number;
+  }>;
 }
 
 function qs(params: Record<string, string | number | undefined | null>) {
@@ -143,6 +176,14 @@ export const customerInteractionApi = {
 export const workforceInteractionApi = {
   listRequests: (params: { caseId?: string; status?: string; limit?: number; offset?: number } = {}) =>
     fetchApi<Page<InternalInteractionRow>>(`/internal/client-interaction/requests${qs(params)}`, { authContext: "workforce" }),
+  createRequestDraft: (payload: CreateClientRequestDraftInput) =>
+    fetchApi<InternalClientRequestDTO>("/internal/client-interaction/requests", { method: "POST", body: JSON.stringify(payload), authContext: "workforce" }),
+  updateRequestDraft: (requestId: string, payload: Partial<CreateClientRequestDraftInput> & { expectedRevision: number; status?: "READY_TO_PUBLISH" }) =>
+    fetchApi<InternalClientRequestDTO>(`/internal/client-interaction/requests/${encodeURIComponent(requestId)}`, { method: "PATCH", body: JSON.stringify(payload), authContext: "workforce" }),
+  publishRequest: (requestId: string, expectedRevision: number) =>
+    fetchApi<InternalClientRequestDTO>(`/internal/client-interaction/requests/${encodeURIComponent(requestId)}/publish`, { method: "POST", body: JSON.stringify({ expectedRevision }), authContext: "workforce" }),
+  cancelRequest: (requestId: string, expectedRevision: number) =>
+    fetchApi<InternalClientRequestDTO>(`/internal/client-interaction/requests/${encodeURIComponent(requestId)}/cancel`, { method: "POST", body: JSON.stringify({ expectedRevision }), authContext: "workforce" }),
   listQuestions: (params: { caseId?: string; status?: string; limit?: number; offset?: number } = {}) =>
     fetchApi<Page<InternalInteractionRow>>(`/internal/client-interaction/questions${qs(params)}`, { authContext: "workforce" }),
   listSubmissions: (params: { caseId?: string; requestId?: string; status?: string; limit?: number; offset?: number } = {}) =>

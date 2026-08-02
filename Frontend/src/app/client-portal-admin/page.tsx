@@ -6,6 +6,7 @@ import { AdminBadge, AdminButton, AdminPanel, AdminSectionHeader } from "@/compo
 import { createClient, getCases, getClients, type CaseListItem, type Client, type CreateClientData } from "@/lib/api";
 import { localizedInteractionStatus, workforceInteractionApi, type InternalInteractionRow } from "@/lib/clientInteractionApi";
 import { ClientInteractionInternalActions } from "@/components/client-portal/ClientInteractionInternalActions";
+import { ClientRequestComposer } from "@/components/client-portal/ClientRequestComposer";
 import {
   approveMembershipRequest,
   createIdentityGrant,
@@ -249,6 +250,14 @@ function PageBody() {
         subtitle="Tagsági kérelmek elbírálása és személyazonosság-alapú ügyhozzáférés (grant). Csak a jóváhagyott tagság ad hozzáférést, és önmagában a tagság még nem tesz láthatóvá ügyanyagot."
       />
 
+      <AdminPanel className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <div>
+          <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Kérések létrehozása</h2>
+          <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Globális indításkor csak az engedélyezett ügyfelek és ügyek választhatók. A tervezet külön publikálható.</p>
+        </div>
+        <ClientRequestComposer cases={cases} clients={clients} onChanged={reload} />
+      </AdminPanel>
+
       {feedback && (
         <div
           data-testid="admin-feedback"
@@ -262,7 +271,11 @@ function PageBody() {
         <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Operatív ügyfélportál sorok</h2>
         <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Case-access alapján szűrt, ügyfélportál-specifikus munkasorok. Nem helyettesíti az Ügyek, Teendők vagy Kommunikáció oldalakat.</p>
         <div className="mt-4 grid gap-3 lg:grid-cols-4">
-          <InteractionQueueCard title="Bekérések" items={interactionQueues.requests} empty="Nincs aktív bekérés." />
+          <InteractionQueueCard title="Bekérések" items={interactionQueues.requests} empty="Nincs aktív bekérés." onRequestAction={(item, action) => run(async () => {
+            if (item.revision == null) throw new Error("A kérés verziója nem érhető el.");
+            if (action === "publish") await workforceInteractionApi.publishRequest(item.id, item.revision);
+            else await workforceInteractionApi.cancelRequest(item.id, item.revision);
+          }, action === "publish" ? "Kérés közzétéve." : "Kérés visszavonva.")} />
           <InteractionQueueCard title="Kérdések" items={interactionQueues.questions} empty="Nincs megválaszolatlan kérdés." />
           <InteractionQueueCard title="Beküldések" items={interactionQueues.submissions} empty="Nincs új beküldés." />
           <InteractionQueueCard title="Sikertelen értesítések" items={interactionQueues.notifications} empty="Nincs újrapróbálható hiba." />
@@ -352,7 +365,7 @@ function PageBody() {
   );
 }
 
-function InteractionQueueCard({ title, items, empty }: { title: string; items: InternalInteractionRow[]; empty: string }) {
+function InteractionQueueCard({ title, items, empty, onRequestAction }: { title: string; items: InternalInteractionRow[]; empty: string; onRequestAction?: (item: InternalInteractionRow, action: "publish" | "cancel") => void }) {
   return (
     <div className="rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
       <div className="flex items-center justify-between gap-2">
@@ -364,6 +377,7 @@ function InteractionQueueCard({ title, items, empty }: { title: string; items: I
           <div key={item.id} className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-2 text-xs">
             <p className="font-semibold text-[var(--adm-text)]">{item.clientSafeTitle || item.subject || item.type || "Ügyfélportál elem"}</p>
             <p className="mt-1 text-[var(--adm-text-muted)]">{localizedInteractionStatus(item.status)} · ügy: {item.caseId.slice(0, 8)}</p>
+            {onRequestAction && (item.status === "DRAFT" || item.status === "READY_TO_PUBLISH" || item.status === "PUBLISHED") ? <div className="mt-2 flex gap-1"><AdminButton size="sm" variant="muted" disabled={item.revision == null || item.status === "PUBLISHED"} onClick={() => onRequestAction(item, "publish")}>Közzététel</AdminButton><AdminButton size="sm" variant="muted" disabled={item.revision == null} onClick={() => onRequestAction(item, "cancel")}>Visszavonás</AdminButton></div> : null}
           </div>
         )) : <p className="text-xs text-[var(--adm-text-muted)]">{empty}</p>}
       </div>

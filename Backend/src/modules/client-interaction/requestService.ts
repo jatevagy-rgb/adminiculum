@@ -14,6 +14,41 @@ import { requireCapability, ClientInteractionCapability } from './gates';
 const REQUEST_TYPES = new Set(['DOCUMENT_UPLOAD', 'INFORMATION_REQUEST', 'DATA_FORM', 'QUESTION_RESPONSE', 'CORRECTION_REQUEST', 'MISSING_DOCUMENT_REQUEST']);
 // Customer-facing requests must never use legal-approval concepts.
 const FORBIDDEN_TYPES = new Set(['APPROVAL_REQUEST', 'CONFIRMATION_REQUEST']);
+const FIELD_TYPES = new Set(['SHORT_TEXT', 'LONG_TEXT', 'DATE', 'NUMBER', 'EMAIL', 'PHONE', 'ADDRESS', 'SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'YES_NO']);
+
+function normalizeFields(fields: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(fields)) return [];
+  if (fields.length > 40) throw new InteractionError(400, 'TOO_MANY_FIELDS', 'A kérés legfeljebb 40 adatmezőt tartalmazhat.');
+  return fields.map((field: any, index) => {
+    const type = String(field?.type || '');
+    if (!FIELD_TYPES.has(type)) throw new InteractionError(400, 'INVALID_FIELD_TYPE', 'Ismeretlen ügyfél-adatmező típus.');
+    const label = safeText(field?.label, 'field.label', 160, true)!;
+    const helpText = safeText(field?.helpText, 'field.helpText', 400);
+    const options = type === 'SINGLE_CHOICE' || type === 'MULTIPLE_CHOICE'
+      ? (Array.isArray(field?.options) ? field.options.map((option: unknown) => safeText(option, 'field.option', 160, true)!) : [])
+      : undefined;
+    if (options && (!options.length || new Set(options).size !== options.length || options.length > 20)) {
+      throw new InteractionError(400, 'INVALID_FIELD_OPTIONS', 'A választási lehetőségeknek egyedieknek és korlátozott számúnak kell lenniük.');
+    }
+    return { label, helpText, type, required: Boolean(field?.required), maxLength: field?.maxLength ? Math.min(Number(field.maxLength), 10000) : null, options, dataCategory: null, order: index };
+  });
+}
+
+function normalizeDocumentSpec(value: unknown): Record<string, unknown> | undefined {
+  if (value == null) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new InteractionError(400, 'INVALID_DOCUMENT_SPEC', 'A dokumentumkövetelmény nem érvényes.');
+  const spec = value as Record<string, unknown>;
+  return {
+    acceptedMimeTypes: Array.isArray(spec.acceptedMimeTypes) ? spec.acceptedMimeTypes.map((mime) => String(mime).slice(0, 100)).slice(0, 10) : ['application/pdf', 'image/jpeg', 'image/png'],
+    maxFileCount: Math.min(Math.max(Number(spec.maxFileCount) || 1, 1), 20),
+    maxFileSizeBytes: Math.min(Math.max(Number(spec.maxFileSizeBytes) || 10 * 1024 * 1024, 1), 50 * 1024 * 1024),
+    totalSizeBytes: Math.min(Math.max(Number(spec.totalSizeBytes) || 20 * 1024 * 1024, 1), 200 * 1024 * 1024),
+    mobilePhotoAccepted: Boolean(spec.mobilePhotoAccepted),
+    frontBackRequired: Boolean(spec.frontBackRequired),
+    replacementAllowed: Boolean(spec.replacementAllowed),
+    internalReviewRequired: true,
+  };
+}
 
 function capabilityForType(type: string): ClientInteractionCapability {
   if (type === 'DATA_FORM' || type === 'INFORMATION_REQUEST') return 'DATA_REQUESTS';
@@ -51,7 +86,7 @@ export async function createRequestDraft(actor: InternalActor, input: any, prism
   const { clientId } = await assertInternalCaseAccess(actor, caseId, prisma);
   const clientSafeTitle = safeText(input.clientSafeTitle, 'clientSafeTitle', 200, true)!;
   const clientSafeInstructions = safeText(input.clientSafeInstructions, 'clientSafeInstructions', 4000);
-  const fields = Array.isArray(input.fields) ? input.fields : [];
+  const fields = normalizeFields(input.fields);
   const created = await prisma.clientRequest.create({
     data: {
       clientId, caseId, createdById: actor.userId,
@@ -61,18 +96,18 @@ export async function createRequestDraft(actor: InternalActor, input: any, prism
       clientSafeTitle, clientSafeInstructions,
       dueAt: input.dueAt ? new Date(input.dueAt) : null,
       required: input.required !== false,
-      documentSpec: input.documentSpec ?? undefined,
+      documentSpec: normalizeDocumentSpec(input.documentSpec) as any,
       audienceSnapshot: {},
       fields: fields.length ? {
-        create: fields.slice(0, 40).map((f: any, i: number) => ({
-          clientSafeLabel: safeText(f.label, 'field.label', 160, true)!,
-          helpTextSafe: safeText(f.helpText, 'field.helpText', 400),
-          type: String(f.type || 'SHORT_TEXT') as any,
-          required: Boolean(f.required),
-          maxLength: f.maxLength ? Number(f.maxLength) : null,
+          create: fields.map((f: any, i: number) => ({
+          clientSafeLabel: f.label,
+          helpTextSafe: f.helpText,
+          type: f.type as any,
+          required: f.required,
+          maxLength: f.maxLength,
           options: f.options ?? undefined,
-          dataCategory: f.dataCategory ? String(f.dataCategory).slice(0, 60) : null,
-          displayOrder: Number.isFinite(f.order) ? Number(f.order) : i,
+          dataCategory: null,
+          displayOrder: i,
         })),
       } : undefined,
     },

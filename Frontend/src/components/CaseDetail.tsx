@@ -9,6 +9,7 @@ import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import { CaseWorkspaceOverview } from "@/components/cases/CaseWorkspaceOverview";
 import { CaseMatterDossierPanel } from "@/components/litigation/CaseMatterDossierPanel";
 import { CaseIntakeReadinessPanel } from "@/components/intake/CaseIntakeReadinessPanel";
+import { ClientRequestComposer } from "@/components/client-portal/ClientRequestComposer";
 
 type CaseDocument = {
   id: string;
@@ -2250,6 +2251,16 @@ export function CaseDetail({ params }: CaseDetailProps) {
         />
         <div className="space-y-6 px-4 py-5 lg:px-6">
         <CaseWorkspaceOverview caseId={canonicalCaseId} />
+        <section aria-label="Ügyfélportál kérések" className="rounded-xl border border-[var(--adm-border)] bg-white p-4 shadow-[0_10px_28px_rgba(0,42,35,0.035)]">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyfélportál</p>
+              <h2 className="mt-1 text-lg font-semibold text-[var(--adm-text)]">Ügyfélportál kérések</h2>
+              <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Az ügyhöz kötött, ügyfélbiztos bekérések tervezete és közzététele.</p>
+            </div>
+            <ClientRequestComposer initialCaseId={canonicalCaseId} />
+          </div>
+        </section>
         {/* Case management panel — the legacy CaseCenterOverview (which duplicated the
             task/document/communication/activity lists and rendered a generic
             "Esemény rögzítve" timeline + made the anonymous-documents call) is
