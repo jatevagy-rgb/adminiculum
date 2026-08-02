@@ -1,6 +1,7 @@
 const { spawnSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { Client } = require('pg');
 
@@ -10,7 +11,8 @@ const appRoot = process.env.MIGRATION_WEBJOB_ROOT || path.resolve(jobDirectory, 
 const schemaPath = process.env.MIGRATION_WEBJOB_SCHEMA_PATH || path.join(appRoot, 'prisma', 'schema.prisma');
 const prismaBin = process.env.MIGRATION_WEBJOB_PRISMA_BIN || path.join(appRoot, 'node_modules', '.bin', 'prisma');
 const expectedSite = process.env.MIGRATION_WEBJOB_EXPECTED_SITE || 'adminiculumbackend-b1-01';
-const lockPath = process.env.MIGRATION_WEBJOB_LOCK_PATH || path.join(jobDirectory, 'runner.lock');
+const lockDirectory = process.env.WEBJOBS_DATA_PATH || process.env.HOME || os.tmpdir();
+const lockPath = process.env.MIGRATION_WEBJOB_LOCK_PATH || path.join(lockDirectory, 'adminiculum-db-migrate.lock');
 
 function sanitize(value) {
   return String(value || '')
