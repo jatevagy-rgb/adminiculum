@@ -6,6 +6,7 @@ import { InteractionRequiredAuthError, InteractionStatus } from "@azure/msal-bro
 import { useMsal } from "@azure/msal-react";
 import { backendBaseUrl, loginRequest, pickAccountByTenant, resolvedWorkforceTenantId, workforceApiScopes } from "@/lib/authConfig";
 import { clearAuthToken, getAuthToken, setAuthToken } from "@/lib/api";
+import { canStartWorkforceSignIn } from "@/lib/workforceAuthPolicy";
 import { LoginScreen } from "@/components/LoginScreen";
 import { AppShell } from "@/components/AppShell";
 
@@ -185,7 +186,12 @@ export function AuthenticatedApp({ section = "dashboard", children, fullViewport
   }, [account, authState, enableLocalDevAuth, devLogin]);
 
   const signIn = useCallback(async () => {
-    if (inProgress !== InteractionStatus.None || loginPending || account || authState !== "idle") {
+    if (!canStartWorkforceSignIn({
+      msalInteractionInProgress: inProgress !== InteractionStatus.None,
+      loginPending,
+      hasAccount: Boolean(account),
+      isAuthenticated: authState === "authenticated",
+    })) {
       return;
     }
 
@@ -193,6 +199,9 @@ export function AuthenticatedApp({ section = "dashboard", children, fullViewport
     setBootstrapError(null);
 
     try {
+      // Idempotent: guarantees the instance is initialized before a redirect so a
+      // fast click on a freshly loaded page cannot hit an uninitialized instance.
+      await instance.initialize();
       await instance.loginRedirect(loginRequest);
     } catch {
       setLoginPending(false);
