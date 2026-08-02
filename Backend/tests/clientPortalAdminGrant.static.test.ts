@@ -11,6 +11,7 @@ import path from 'path';
 const root = path.resolve(__dirname, '..');
 const service = readFileSync(path.join(root, 'src/modules/client-identity/identityService.ts'), 'utf8');
 const routes = readFileSync(path.join(root, 'src/modules/client-identity/routes.ts'), 'utf8');
+const grantTriggerMigration = readFileSync(path.join(root, 'prisma/migrations/20260802200000_client_identity_grant_trigger_fix/migration.sql'), 'utf8');
 
 describe('internal portal-admin grant contract', () => {
   it('exposes admin membership + grant routes behind ADMIN/PARTNER only', () => {
@@ -59,5 +60,11 @@ describe('internal portal-admin grant contract', () => {
     const fn = service.slice(service.indexOf('export async function listActiveMemberships'));
     expect(fn).toContain('requireReviewer(actor)');
     expect(fn).toContain("status: 'ACTIVE'");
+  });
+
+  it('database trigger accepts identity grants without weakening legacy user grants', () => {
+    expect(grantTriggerMigration).toContain('NEW."clientPortalIdentityId" IS NULL');
+    expect(grantTriggerMigration).toContain('identity grant cannot include legacy client user');
+    expect(grantTriggerMigration).toContain('client portal grant user must be CLIENT role');
   });
 });
