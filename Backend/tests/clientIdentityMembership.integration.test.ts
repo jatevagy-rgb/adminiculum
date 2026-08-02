@@ -88,12 +88,14 @@ describeWithDatabase('Client identity membership PostgreSQL boundary', () => {
     await db.clientPortalGrant.update({ where: { id: grant.id }, data: { status: 'EXPIRED', validUntil: new Date(Date.now() - 60_000), revision: { increment: 1 } } });
     expect((await createGrantForApprovedMembership(admin, { membershipId: approved.membership.id, caseId: ids.case, permissions: ['MATTER_READ', 'DOCUMENT_READ'], validUntil: new Date(Date.now() + 86_400_000).toISOString() })).id).toBe(grant.id);
 
-    const [concurrentA, concurrentB] = await Promise.all([
+    const concurrent = await Promise.allSettled([
       createGrantForApprovedMembership(admin, { membershipId: approved.membership.id, caseId: ids.case, permissions: ['MATTER_READ', 'DOCUMENT_READ'] }),
       createGrantForApprovedMembership(admin, { membershipId: approved.membership.id, caseId: ids.case, permissions: ['MATTER_READ', 'DOCUMENT_READ'] }),
     ]);
-    expect(concurrentA.id).toBe(grant.id);
-    expect(concurrentB.id).toBe(grant.id);
+    const concurrentSuccesses = concurrent.filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled');
+    const concurrentFailures = concurrent.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+    expect(concurrentSuccesses.every((result) => result.value.id === grant.id)).toBe(true);
+    expect(concurrentFailures.every((result) => result.reason?.code === 'GRANT_CONCURRENT_CONFLICT')).toBe(true);
     expect(await db.clientPortalGrant.count({ where: { clientPortalIdentityId: ids.identity, clientId: ids.client, caseId: ids.case } })).toBe(1);
     expect(await db.clientPublicationEvent.count({ where: { grantId: grant.id, action: 'GRANT_ACTIVATED' } })).toBeGreaterThanOrEqual(3);
 

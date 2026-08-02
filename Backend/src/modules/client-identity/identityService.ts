@@ -276,7 +276,7 @@ export async function createGrantForApprovedMembership(actor: Actor, input: Reco
     }, { isolationLevel: 'Serializable' });
   } catch (error) {
     if (error instanceof ClientIdentityError) throw error;
-    if ((error as { code?: string })?.code === 'P2002') throw new ClientIdentityError(409, 'GRANT_CONCURRENT_CONFLICT', 'The case grant changed concurrently.');
+    if (['P2002', 'P2034'].includes((error as { code?: string })?.code || '')) throw new ClientIdentityError(409, 'GRANT_CONCURRENT_CONFLICT', 'The case grant changed concurrently.');
     throw error;
   }
 }
