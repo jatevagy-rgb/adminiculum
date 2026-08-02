@@ -73,6 +73,7 @@ try {
     MIGRATION_WEBJOB_ROOT: tempRoot,
     MIGRATION_WEBJOB_SCHEMA_PATH: path.join(tempRoot, 'prisma', 'schema.prisma'),
     MIGRATION_WEBJOB_PRISMA_BIN: prismaBin,
+    MIGRATION_WEBJOB_LOCK_PATH: path.join(tempRoot, 'runner.lock'),
   };
   const first = runRunner(common);
   if (first.status !== 0 || !first.stdout.includes('"state":"APPLIED"')) throw new Error(`first runner execution failed: ${first.stdout}${first.stderr}`);
