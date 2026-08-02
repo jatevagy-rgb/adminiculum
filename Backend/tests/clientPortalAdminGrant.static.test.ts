@@ -41,6 +41,11 @@ describe('internal portal-admin grant contract', () => {
     // Whitelists permissions and supports a validity window.
     expect(fn).toContain('ALLOWED_GRANT_PERMISSIONS');
     expect(fn).toContain('validUntil');
+    expect(fn).toContain('findFirst');
+    expect(fn).toContain('GRANT_ALREADY_ACTIVE');
+    expect(fn).toContain('GRANT_CONCURRENT_CONFLICT');
+    expect(fn).toContain('GRANT_ACTIVATED');
+    expect(fn).toContain('Serializable');
   });
 
   it('membership approval alone does not create any grant', () => {
