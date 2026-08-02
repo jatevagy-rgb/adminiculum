@@ -113,6 +113,12 @@ jobs:
           CLIENT_IDENTITY_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
         run: npm run test:client-identity:db
 
+      - name: Run migration WebJob PostgreSQL tests
+        working-directory: Backend
+        env:
+          WEBJOB_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: npm run test:migration:webjob
+
       - name: Run client interaction PostgreSQL integration tests
         working-directory: Backend
         env:

@@ -17,6 +17,7 @@
     "db:bootstrap": "prisma db push",
     "db:bootstrap:empty": "node scripts/db-bootstrap-empty.mjs",
     "db:migrations:verify-replay": "node scripts/verify-migration-replay.mjs",
+    "test:migration:webjob": "node scripts/test-migration-webjob-runner.mjs",
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx prisma/seed.ts",
     "seed:pilot:users": "node scripts/seed-core-team-users.mjs",
