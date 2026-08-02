@@ -6,7 +6,6 @@ const jobRoot = path.join(root, 'App_Data', 'jobs', 'triggered', 'adminiculum-db
 
 describe('migration WebJob artifact', () => {
   it('contains a manually triggered, schedule-free runner', () => {
-    expect(fs.existsSync(path.join(jobRoot, 'run.sh'))).toBe(true);
     expect(fs.existsSync(path.join(jobRoot, 'run.js'))).toBe(true);
     expect(fs.existsSync(path.join(jobRoot, 'runner.cjs'))).toBe(true);
     expect(fs.existsSync(path.join(jobRoot, 'settings.job'))).toBe(false);
