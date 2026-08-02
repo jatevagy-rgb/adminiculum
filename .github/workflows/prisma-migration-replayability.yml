@@ -116,7 +116,7 @@ jobs:
       - name: Run migration WebJob PostgreSQL tests
         working-directory: Backend
         env:
-          WEBJOB_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+          WEBJOB_TEST_ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
         run: npm run test:migration:webjob
 
       - name: Run client interaction PostgreSQL integration tests
