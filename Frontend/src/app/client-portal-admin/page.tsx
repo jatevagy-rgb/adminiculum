@@ -274,8 +274,9 @@ function PageBody() {
           <InteractionQueueCard title="Bekérések" items={interactionQueues.requests} empty="Nincs aktív bekérés." onRequestAction={(item, action) => run(async () => {
             if (item.revision == null) throw new Error("A kérés verziója nem érhető el.");
             if (action === "publish") await workforceInteractionApi.publishRequest(item.id, item.revision);
-            else await workforceInteractionApi.cancelRequest(item.id, item.revision);
-          }, action === "publish" ? "Kérés közzétéve." : "Kérés visszavonva.")} />
+            else if (action === "cancel") await workforceInteractionApi.cancelRequest(item.id, item.revision);
+            else await workforceInteractionApi.completeRequest(item.id, item.revision);
+          }, action === "publish" ? "Kérés közzétéve." : action === "cancel" ? "Kérés visszavonva." : "Kérés lezárva.")} />
           <InteractionQueueCard title="Kérdések" items={interactionQueues.questions} empty="Nincs megválaszolatlan kérdés." />
           <InteractionQueueCard title="Beküldések" items={interactionQueues.submissions} empty="Nincs új beküldés." />
           <InteractionQueueCard title="Sikertelen értesítések" items={interactionQueues.notifications} empty="Nincs újrapróbálható hiba." />
@@ -365,7 +366,7 @@ function PageBody() {
   );
 }
 
-function InteractionQueueCard({ title, items, empty, onRequestAction }: { title: string; items: InternalInteractionRow[]; empty: string; onRequestAction?: (item: InternalInteractionRow, action: "publish" | "cancel") => void }) {
+function InteractionQueueCard({ title, items, empty, onRequestAction }: { title: string; items: InternalInteractionRow[]; empty: string; onRequestAction?: (item: InternalInteractionRow, action: "publish" | "cancel" | "complete") => void }) {
   return (
     <div className="rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
       <div className="flex items-center justify-between gap-2">
@@ -377,7 +378,7 @@ function InteractionQueueCard({ title, items, empty, onRequestAction }: { title:
           <div key={item.id} className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-2 text-xs">
             <p className="font-semibold text-[var(--adm-text)]">{item.clientSafeTitle || item.subject || item.type || "Ügyfélportál elem"}</p>
             <p className="mt-1 text-[var(--adm-text-muted)]">{localizedInteractionStatus(item.status)} · ügy: {item.caseId.slice(0, 8)}</p>
-            {onRequestAction && (item.status === "DRAFT" || item.status === "READY_TO_PUBLISH" || item.status === "PUBLISHED") ? <div className="mt-2 flex gap-1"><AdminButton size="sm" variant="muted" disabled={item.revision == null || item.status === "PUBLISHED"} onClick={() => onRequestAction(item, "publish")}>Közzététel</AdminButton><AdminButton size="sm" variant="muted" disabled={item.revision == null} onClick={() => onRequestAction(item, "cancel")}>Visszavonás</AdminButton></div> : null}
+            {onRequestAction && (item.status === "DRAFT" || item.status === "READY_TO_PUBLISH" || item.status === "PUBLISHED" || item.status === "SUBMITTED" || item.status === "CORRECTION_REQUESTED" || item.status === "UNDER_INTERNAL_REVIEW") ? <div className="mt-2 flex flex-wrap gap-1"><AdminButton size="sm" variant="muted" disabled={item.revision == null || item.status === "PUBLISHED"} onClick={() => onRequestAction(item, "publish")}>Közzététel</AdminButton><AdminButton size="sm" variant="muted" disabled={item.revision == null || item.status === "SUBMITTED" || item.status === "CORRECTION_REQUESTED" || item.status === "UNDER_INTERNAL_REVIEW"} onClick={() => onRequestAction(item, "cancel")}>Visszavonás</AdminButton><AdminButton size="sm" variant="gold" disabled={item.revision == null || item.status === "DRAFT" || item.status === "READY_TO_PUBLISH"} onClick={() => onRequestAction(item, "complete")}>Lezárás</AdminButton></div> : null}
           </div>
         )) : <p className="text-xs text-[var(--adm-text-muted)]">{empty}</p>}
       </div>
