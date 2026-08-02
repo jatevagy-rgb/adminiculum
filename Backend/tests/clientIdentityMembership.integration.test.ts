@@ -71,6 +71,25 @@ describeWithDatabase('Client identity membership PostgreSQL boundary', () => {
     const grant = await createGrantForApprovedMembership(admin, { membershipId: approved.membership.id, caseId: ids.case, permissions: ['MATTER_READ', 'DOCUMENT_READ'] });
     expect(grant.clientPortalIdentityId).toBe(ids.identity);
     expect(grant.clientId).toBe(ids.client);
+
+    const equivalent = await createGrantForApprovedMembership(admin, { membershipId: approved.membership.id, caseId: ids.case, permissions: ['DOCUMENT_READ', 'MATTER_READ'] });
+    expect(equivalent.id).toBe(grant.id);
+    expect(await db.clientPortalGrant.count({ where: { clientPortalIdentityId: ids.identity, clientId: ids.client, caseId: ids.case } })).toBe(1);
+    await expect(createGrantForApprovedMembership(admin, { membershipId: approved.membership.id, caseId: ids.case, permissions: ['MATTER_READ'] })).rejects.toMatchObject({ code: 'GRANT_ALREADY_ACTIVE', status: 409 });
+
+    const revoked = await db.clientPortalGrant.update({ where: { id: grant.id }, data: { status: 'REVOKED', revision: { increment: 1 }, revokedAt: new Date() } });
+    const reactivated = await createGrantForApprovedMembership(admin, { membershipId: approved.membership.id, caseId: ids.case, permissions: ['MATTER_READ', 'DOCUMENT_READ'] });
+    expect(reactivated.id).toBe(grant.id);
+    expect(reactivated.status).toBe('ACTIVE');
+    expect(reactivated.revision).toBe(revoked.revision + 1);
+
+    await db.clientPortalGrant.update({ where: { id: grant.id }, data: { status: 'SUSPENDED', revision: { increment: 1 }, suspendedAt: new Date() } });
+    const suspendedReactivation = await createGrantForApprovedMembership(admin, { membershipId: approved.membership.id, caseId: ids.case, permissions: ['MATTER_READ', 'DOCUMENT_READ'] });
+    expect(suspendedReactivation.id).toBe(grant.id);
+    expect(await db.clientPortalGrant.count({ where: { clientPortalIdentityId: ids.identity, clientId: ids.client, caseId: ids.case } })).toBe(1);
+    expect(await db.clientPublicationEvent.count({ where: { grantId: grant.id, action: 'GRANT_ACTIVATED' } })).toBeGreaterThanOrEqual(3);
+
+    await expect(createGrantForApprovedMembership(admin, { membershipId: approved.membership.id, caseId: crypto.randomUUID(), permissions: ['MATTER_READ'] })).rejects.toMatchObject({ code: 'CASE_NOT_FOUND', status: 404 });
   });
 
   it('uses non-enumerating invitation validation and prevents double review', async () => {

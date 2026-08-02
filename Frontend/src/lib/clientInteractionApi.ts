@@ -184,6 +184,8 @@ export const workforceInteractionApi = {
     fetchApi<InternalClientRequestDTO>(`/internal/client-interaction/requests/${encodeURIComponent(requestId)}/publish`, { method: "POST", body: JSON.stringify({ expectedRevision }), authContext: "workforce" }),
   cancelRequest: (requestId: string, expectedRevision: number) =>
     fetchApi<InternalClientRequestDTO>(`/internal/client-interaction/requests/${encodeURIComponent(requestId)}/cancel`, { method: "POST", body: JSON.stringify({ expectedRevision }), authContext: "workforce" }),
+  completeRequest: (requestId: string, expectedRevision: number) =>
+    fetchApi<InternalClientRequestDTO>(`/internal/client-interaction/requests/${encodeURIComponent(requestId)}/complete`, { method: "POST", body: JSON.stringify({ expectedRevision }), authContext: "workforce" }),
   listQuestions: (params: { caseId?: string; status?: string; limit?: number; offset?: number } = {}) =>
     fetchApi<Page<InternalInteractionRow>>(`/internal/client-interaction/questions${qs(params)}`, { authContext: "workforce" }),
   listSubmissions: (params: { caseId?: string; requestId?: string; status?: string; limit?: number; offset?: number } = {}) =>

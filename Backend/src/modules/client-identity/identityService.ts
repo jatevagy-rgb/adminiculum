@@ -200,23 +200,85 @@ export async function createGrantForApprovedMembership(actor: Actor, input: Reco
   if (!membership) throw new ClientIdentityError(403, 'ACTIVE_MEMBERSHIP_REQUIRED', 'Active membership is required before creating a case grant.');
   const identity = await prisma.clientPortalIdentity.findUnique({ where: { id: membership.clientPortalIdentityId } });
   if (!identity || identity.status !== 'ACTIVE') throw new ClientIdentityError(403, 'ACTIVE_IDENTITY_REQUIRED', 'Active client identity is required before creating a case grant.');
-  const caseRow = await prisma.case.findUnique({ where: { id: caseId }, select: { id: true } });
+  const caseRow = await prisma.case.findUnique({ where: { id: caseId }, select: { id: true, clientId: true } });
   if (!caseRow) throw new ClientIdentityError(404, 'CASE_NOT_FOUND', 'Case was not found.');
+  if (caseRow.clientId !== membership.clientId) throw new ClientIdentityError(409, 'CASE_CLIENT_MISMATCH', 'The case does not belong to the membership client.');
 
-  return prisma.clientPortalGrant.create({
-    data: {
-      clientUserId: null,
-      clientPortalIdentityId: identity.id,
-      clientId: membership.clientId,
-      caseId,
-      role: 'VIEWER',
-      status: 'ACTIVE',
-      permissions: permissions as any,
-      invitedById: actor.userId,
-      activatedAt: new Date(),
-      validUntil,
-    },
-  });
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const existing = await tx.clientPortalGrant.findFirst({
+        where: { clientPortalIdentityId: identity.id, clientId: membership.clientId, caseId },
+        orderBy: { updatedAt: 'desc' },
+      });
+      const requestedPermissions = [...new Set(permissions)].sort();
+      const existingPermissions = existing ? [...new Set(existing.permissions.map(String))].sort() : [];
+      const samePermissions = existingPermissions.length === requestedPermissions.length
+        && existingPermissions.every((permission, index) => permission === requestedPermissions[index]);
+      const sameValidity = (existing?.validUntil?.getTime() || null) === (validUntil?.getTime() || null);
+
+      if (existing?.status === 'ACTIVE') {
+        if (!samePermissions || !sameValidity) throw new ClientIdentityError(409, 'GRANT_ALREADY_ACTIVE', 'An equivalent active case grant already exists.');
+        return existing;
+      }
+
+      if (existing) {
+        const reactivated = await tx.clientPortalGrant.update({
+          where: { id: existing.id },
+          data: {
+            status: 'ACTIVE',
+            permissions: permissions as any,
+            validUntil,
+            activatedAt: new Date(),
+            revision: { increment: 1 },
+          },
+        });
+        await tx.clientPublicationEvent.create({
+          data: {
+            action: 'GRANT_ACTIVATED' as any,
+            actorId: actor.userId,
+            caseId,
+            clientId: membership.clientId,
+            grantId: existing.id,
+            fromStatus: existing.status,
+            toStatus: 'ACTIVE',
+            metadataSafe: { source: 'identity-grant-create-reactivation' },
+          },
+        });
+        return reactivated;
+      }
+
+      const created = await tx.clientPortalGrant.create({
+        data: {
+          clientUserId: null,
+          clientPortalIdentityId: identity.id,
+          clientId: membership.clientId,
+          caseId,
+          role: 'VIEWER',
+          status: 'ACTIVE',
+          permissions: permissions as any,
+          invitedById: actor.userId,
+          activatedAt: new Date(),
+          validUntil,
+        },
+      });
+      await tx.clientPublicationEvent.create({
+        data: {
+          action: 'GRANT_ACTIVATED' as any,
+          actorId: actor.userId,
+          caseId,
+          clientId: membership.clientId,
+          grantId: created.id,
+          toStatus: 'ACTIVE',
+          metadataSafe: { source: 'identity-grant-create' },
+        },
+      });
+      return created;
+    }, { isolationLevel: 'Serializable' });
+  } catch (error) {
+    if (error instanceof ClientIdentityError) throw error;
+    if (['P2002', 'P2034'].includes((error as { code?: string })?.code || '')) throw new ClientIdentityError(409, 'GRANT_CONCURRENT_CONFLICT', 'The case grant changed concurrently.');
+    throw error;
+  }
 }
 
 /**

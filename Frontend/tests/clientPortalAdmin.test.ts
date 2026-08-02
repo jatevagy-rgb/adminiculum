@@ -55,6 +55,7 @@ describe('internal portal-admin UI', () => {
     assert.match(src, /authContext: "workforce"/);
     assert.match(src, /\/client-interaction\/cases/);
     assert.match(src, /\/internal\/client-interaction\/requests/);
+    assert.match(src, /completeRequest/);
     assert.doesNotMatch(src, /Invalid token/);
   });
 
