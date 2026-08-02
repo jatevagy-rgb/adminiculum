@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildClientRequestDraftPayload, validateRequestFields } from "../src/components/client-portal/ClientRequestComposer";
+import { requestAllowsDocumentUpload } from "../src/components/client-portal/ClientPortalShell";
 
 test("request composer builds a client-safe DATA_FORM draft with stable field order", () => {
   const payload = buildClientRequestDraftPayload({
@@ -19,4 +20,12 @@ test("request composer rejects empty and duplicate choice options", () => {
   assert.equal(validateRequestFields([{ label: "", type: "SHORT_TEXT" }]), "Minden adatmezőnek kell ügyfélbiztos címke.");
   assert.equal(validateRequestFields([{ label: "Típus", type: "SINGLE_CHOICE", options: ["A", "A"] }]), "A választási lehetőségek nem lehetnek üresek vagy ismétlődők.");
   assert.equal(validateRequestFields([{ label: "Típus", type: "SINGLE_CHOICE", options: ["A", "B"] }]), null);
+});
+
+test("document upload controls are limited to document-bearing request types", () => {
+  assert.equal(requestAllowsDocumentUpload("DATA_FORM"), false);
+  assert.equal(requestAllowsDocumentUpload("INFORMATION_REQUEST"), false);
+  assert.equal(requestAllowsDocumentUpload("DOCUMENT_UPLOAD"), true);
+  assert.equal(requestAllowsDocumentUpload("MISSING_DOCUMENT_REQUEST"), true);
+  assert.equal(requestAllowsDocumentUpload("CORRECTION_REQUEST"), true);
 });

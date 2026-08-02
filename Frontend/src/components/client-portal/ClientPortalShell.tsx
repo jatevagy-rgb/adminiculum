@@ -195,6 +195,10 @@ function fieldOptions(raw: unknown): string[] {
     .filter((option) => option.length > 0);
 }
 
+export function requestAllowsDocumentUpload(type: CustomerRequestDTO['type']): boolean {
+  return type === 'DOCUMENT_UPLOAD' || type === 'MISSING_DOCUMENT_REQUEST' || type === 'CORRECTION_REQUEST';
+}
+
 function FieldInput({ field, value, onChange }: { field: ClientRequestFieldDTO; value: string; onChange: (value: string) => void }) {
   const common = "mt-1 w-full rounded-xl border border-stone-300 px-3 py-2";
   if (field.type === 'LONG_TEXT' || field.type === 'ADDRESS') return <textarea value={value} onChange={(event) => onChange(event.target.value)} maxLength={field.maxLength || 2000} className={`${common} min-h-24`} />;
@@ -246,6 +250,7 @@ function RequestResponseCard({
   const filesRef = useRef<Map<string, { file: File; url?: string }>>(new Map());
   const submissionRef = useRef<{ id: string; answersSent: boolean } | null>(null);
   const canRespond = !['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(request.status);
+  const allowsDocumentUpload = requestAllowsDocumentUpload(request.type);
 
   const addFiles = (fileList: FileList | null) => {
     const chosen = Array.from(fileList || []);
@@ -336,12 +341,12 @@ function RequestResponseCard({
       {request.instructions ? <p className="mt-2 break-words text-sm text-stone-700">{request.instructions}</p> : null}
       {submission?.correctionReason ? <p className="mt-2 rounded-lg bg-[#fdf3e2] p-2 text-sm text-[#7a5f18]">Javítás szükséges: {submission.correctionReason}</p> : null}
       {request.fields.length ? <div className="mt-3 space-y-3">{request.fields.map((field) => <label key={field.id} className="block text-sm text-stone-700"><span className="font-medium">{field.label}{field.required ? ' *' : ''}</span>{field.helpText ? <span className="block text-xs text-stone-500">{field.helpText}</span> : null}<FieldInput field={field} value={answers[field.id] || ''} onChange={(value) => onAnswer(field.id, value)} /></label>)}</div> : null}
-      <label className="mt-3 block text-sm text-stone-700">
+      {allowsDocumentUpload ? <label className="mt-3 block text-sm text-stone-700">
         <span className="font-medium">Dokumentum feltöltése</span>
         <span className="block text-xs text-stone-500">PDF, JPEG vagy PNG; telefonon kamerából vagy a galériából is választható.</span>
         <input type="file" multiple accept="application/pdf,image/jpeg,image/png" capture="environment" className="mt-1 block w-full text-sm" onChange={(event) => { addFiles(event.target.files); event.target.value = ''; }} />
-      </label>
-      {items.length ? (
+      </label> : null}
+      {allowsDocumentUpload && items.length ? (
         <ul className="mt-3 space-y-2" aria-label="Kiválasztott fájlok">
           {items.map((item) => {
             const entry = filesRef.current.get(item.id);
