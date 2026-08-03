@@ -23,6 +23,7 @@ export interface FetchOptions extends RequestInit {
   suppressErrorStatuses?: number[];
   suppressErrorLogging?: boolean;
   waitForAuthMs?: number;
+  skipWorkspaceContext?: boolean;
 }
 
 export class ApiError extends Error {
@@ -118,7 +119,7 @@ function asErrorPayload(value: unknown): { code?: string; message?: string; erro
 }
 
 export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
-  const { skipAuth, authContext, suppressErrorStatuses, suppressErrorLogging, waitForAuthMs, ...fetchOptions } = options;
+  const { skipAuth, authContext, suppressErrorStatuses, suppressErrorLogging, waitForAuthMs, skipWorkspaceContext, ...fetchOptions } = options;
   
   const token = skipAuth ? null : await waitForAuthToken(waitForAuthMs ?? DEFAULT_AUTH_WAIT_MS, authContext ?? currentAuthContext());
   if (!skipAuth && !token) {
@@ -132,6 +133,9 @@ export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}):
     ...(hasBody && !isFormData ? { 'Content-Type': 'application/json' } : {}),
     'Accept': 'application/json',
     ...(token && !skipAuth ? { 'Authorization': `Bearer ${token}` } : {}),
+    ...(!skipWorkspaceContext && (authContext ?? currentAuthContext()) === 'customer' && typeof window !== 'undefined' && localStorage.getItem('adminiculum:client-portal-workspace')
+      ? { 'x-client-portal-workspace': String(localStorage.getItem('adminiculum:client-portal-workspace')) }
+      : {}),
     ...customHeaders,
   };
 
