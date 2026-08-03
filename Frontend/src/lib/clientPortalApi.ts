@@ -67,8 +67,56 @@ export type PortalHome = {
   updates: PortalSafeUpdate[];
 };
 
+export type PortalWorkspaceAction = {
+  id: string;
+  matterId: string;
+  matterTitle: string;
+  type: string;
+  title: string;
+  description?: string | null;
+  dueAt?: string | null;
+  status: string;
+  bucket: 'now' | 'upcoming' | 'completed';
+  actionUrl: string;
+};
+
+export type PortalWorkspaceDocument = {
+  id: string;
+  matterId?: string | null;
+  matterTitle?: string | null;
+  title: string;
+  explanation?: string | null;
+  description?: string | null;
+  status?: string | null;
+  publishedAt?: string | null;
+  kind: 'SHARED_DOCUMENT' | 'DOCUMENT_REQUEST' | 'CORRECTION_REQUEST' | 'SUBMISSION' | 'CORRECTION_SUBMISSION';
+  actionUrl: string;
+};
+
+export type PortalWorkspaceMessage = {
+  id: string;
+  matterId: string;
+  matterTitle: string;
+  subject: string;
+  status: string;
+  updatedAt?: string | null;
+  actionUrl: string;
+};
+
+export type PortalWorkspace = {
+  actions: PortalWorkspaceAction[];
+  documents: PortalWorkspaceDocument[];
+  messages: PortalWorkspaceMessage[];
+  upcomingDeadlines: PortalWorkspaceAction[];
+  matterCount: number;
+};
+
 export async function getPortalHome() {
   return fetchApi<PortalHome>('/client-portal/home', { suppressErrorStatuses: [401, 403, 503], suppressErrorLogging: true });
+}
+
+export async function getPortalWorkspace() {
+  return fetchApi<PortalWorkspace>('/client-portal/workspace', { suppressErrorStatuses: [401, 403, 503], suppressErrorLogging: true });
 }
 
 export async function getPortalMatters() {

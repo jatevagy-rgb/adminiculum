@@ -85,6 +85,17 @@ describe('internal portal-admin UI', () => {
     assert.doesNotMatch(shell, /Belső munkapad|Review sor|Munkaórák/);
   });
 
+  it('uses the customer-safe workspace aggregate for documents, actions and questions', () => {
+    const source = portalShell() + read('src/lib/clientPortalApi.ts');
+    assert.match(source, /getPortalWorkspace/);
+    assert.match(source, /Most intézendő/);
+    assert.match(source, /Közelgő/);
+    assert.match(source, /Befejezett/);
+    assert.match(source, /Megosztott dokumentumok és kérések/);
+    assert.match(source, /Itt csak az Ön kérdései/);
+    assert.doesNotMatch(source, /storageProvider|quarantineStorageReference|scanProvider|scanCodeSafe/);
+  });
+
   it('case-level identity grant is available and identity-based', () => {
     const src = caseGrant();
     assert.match(src, /createIdentityGrant/);
