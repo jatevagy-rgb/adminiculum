@@ -111,6 +111,15 @@ describe('internal portal-admin UI', () => {
     assert.doesNotMatch(src, /clientUserId\s*[:=]/);
   });
 
+  it('embeds canonical request creation and review workflows in the Case portal panel', () => {
+    const source = publicationPanel();
+    assert.match(source, /ClientRequestComposer/);
+    assert.match(source, /ClientInteractionInternalActions/);
+    assert.match(source, /workforceInteractionApi\.listQuestions/);
+    assert.match(source, /workforceInteractionApi\.listSubmissions/);
+    assert.match(source, /A tervezet rejtve marad/);
+  });
+
   it('exposes workforce-only operational grant observability', () => {
     const api = publicationApi();
     const panel = publicationPanel();

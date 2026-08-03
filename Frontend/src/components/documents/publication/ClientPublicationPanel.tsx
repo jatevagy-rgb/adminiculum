@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminBadge, AdminButton } from "@/components/adminiculum/ui";
 import { CasePortalIdentityGrant } from "@/components/documents/publication/CasePortalIdentityGrant";
+import { ClientRequestComposer } from "@/components/client-portal/ClientRequestComposer";
+import { ClientInteractionInternalActions } from "@/components/client-portal/ClientInteractionInternalActions";
 import {
   approveClientActionRequest,
   createClientActionRequestDraft,
@@ -18,6 +20,7 @@ import {
   type ClientPublicationOverviewDTO,
   type PublicationStatus,
 } from "@/lib/clientPublicationApi";
+import { workforceInteractionApi, type InternalInteractionRow } from "@/lib/clientInteractionApi";
 
 type VersionOption = { id: string; versionNumber: number; isCurrent: boolean; originalFileName?: string | null; size?: number | null };
 
@@ -53,6 +56,9 @@ export function ClientPublicationPanel({
   const [safeUpdateTitle, setSafeUpdateTitle] = useState("Biztonságos ügyfélfrissítés");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [questions, setQuestions] = useState<InternalInteractionRow[]>([]);
+  const [submissions, setSubmissions] = useState<InternalInteractionRow[]>([]);
+  const [notifications, setNotifications] = useState<InternalInteractionRow[]>([]);
 
   const selectedVersion = useMemo(() => versions.find((version) => version.id === selectedVersionId) || null, [selectedVersionId, versions]);
   const latestVersion = useMemo(() => versions.reduce<VersionOption | null>((latest, version) => (!latest || version.versionNumber > latest.versionNumber ? version : latest), null), [versions]);
@@ -63,7 +69,16 @@ export function ClientPublicationPanel({
 
   const load = useCallback(async () => {
     if (!caseId) return;
-    setOverview(await getClientPublicationOverview(caseId, documentId));
+    const [nextOverview, questionPage, submissionPage, notificationPage] = await Promise.all([
+      getClientPublicationOverview(caseId, documentId),
+      workforceInteractionApi.listQuestions({ caseId, limit: 25 }),
+      workforceInteractionApi.listSubmissions({ caseId, limit: 25 }),
+      workforceInteractionApi.listNotifications({ caseId, status: "FAILED_RETRYABLE", limit: 25 }),
+    ]);
+    setOverview(nextOverview);
+    setQuestions(questionPage.items);
+    setSubmissions(submissionPage.items);
+    setNotifications(notificationPage.items);
   }, [caseId, documentId]);
 
   useEffect(() => { void load().catch(() => undefined); }, [load]);
@@ -198,6 +213,10 @@ export function ClientPublicationPanel({
           </div>
         </aside>
       </div>
+      <section className="rounded-[14px] border border-[rgba(22,32,26,0.12)] p-3 sm:p-4" data-testid="case-client-interaction-workflow">
+        <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Case szintű ügyfélworkflow</p><h4 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Kérések, válaszok és elbírálás</h4><p className="mt-1 text-xs text-[var(--adm-text-muted)]">A tervezet rejtve marad; minden ügyfél felé látható művelet explicit közzétételhez kötött.</p></div><ClientRequestComposer initialCaseId={caseId} onChanged={load} /></div>
+        <div className="mt-4"><ClientInteractionInternalActions questions={questions} submissions={submissions} notifications={notifications} onDone={load} /></div>
+      </section>
     </section>
   );
 }
