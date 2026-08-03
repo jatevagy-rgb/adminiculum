@@ -32,17 +32,28 @@ import { resolveActiveCustomerGrant } from '../modules/client-interaction/base';
 import { listCustomerRequests } from '../modules/client-interaction/requestService';
 import { listCustomerSubmissions } from '../modules/client-interaction/submissionService';
 import { listCustomerThreads } from '../modules/client-interaction/questionService';
+import {
+  getPortalIdentityContext,
+  resolvePortalWorkspace,
+  ResolvedPortalWorkspace,
+} from '../modules/client-workspace/workspaceService';
 
 const router = Router();
 
 function actor(req: Request) {
   const session = requireActiveClientPortalSession(req);
-  return { userId: session.clientPortalIdentityId, role: 'CLIENT_PORTAL', clientPortalIdentityId: session.clientPortalIdentityId };
+  const workspace = (req as Request & { clientPortalWorkspace?: ResolvedPortalWorkspace }).clientPortalWorkspace;
+  return { userId: session.clientPortalIdentityId, role: 'CLIENT_PORTAL', clientPortalIdentityId: session.clientPortalIdentityId, workspaceId: workspace?.id };
 }
 
 function fail(res: Response, error: unknown): void {
   if (error instanceof ClientPublicationError) {
     res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
+    return;
+  }
+  const shaped = error as { status?: number; code?: string; message?: string };
+  if (shaped?.status && shaped?.code) {
+    res.status(shaped.status).json({ status: shaped.status, code: shaped.code, message: shaped.message || 'Client portal request failed.' });
     return;
   }
   res.status(500).json({ status: 500, code: 'CLIENT_PORTAL_INTERNAL_ERROR', message: 'Client portal request failed.' });
@@ -54,6 +65,9 @@ async function portalRead(req: Request, res: Response): Promise<boolean> {
     return false;
   }
   await new Promise<void>((resolve, reject) => authenticateClientPortal(req, res, (error?: unknown) => error ? reject(error) : resolve()));
+  if (res.headersSent) return false;
+  const session = requireActiveClientPortalSession(req);
+  (req as Request & { clientPortalWorkspace?: ResolvedPortalWorkspace }).clientPortalWorkspace = await resolvePortalWorkspace(session, req.header('x-client-portal-workspace'));
   return !res.headersSent;
 }
 
@@ -93,7 +107,7 @@ async function portalWorkspace(req: Request) {
   const byCase = new Map(matters.map((matter) => [matter.caseId, matter]));
   const identityId = portalActor.clientPortalIdentityId;
   const interactionRows = await Promise.all(matters.map(async (matter) => {
-    const context = await resolveActiveCustomerGrant(identityId, matter.caseId);
+    const context = await resolveActiveCustomerGrant(identityId, matter.caseId, portalActor.workspaceId || '');
     const [requests, submissions, questions] = await Promise.all([
       listCustomerRequests(context),
       listCustomerSubmissions(context, undefined),
@@ -172,6 +186,29 @@ async function portalWorkspace(req: Request) {
     matterCount: byCase.size,
   };
 }
+
+router.get('/me', async (req, res) => {
+  try {
+    await new Promise<void>((resolve, reject) => authenticateClientPortal(req, res, (error?: unknown) => error ? reject(error) : resolve()));
+    if (res.headersSent) return;
+    const session = requireActiveClientPortalSession(req);
+    res.json(await getPortalIdentityContext(session, req.header('x-client-portal-workspace')));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/workspaces', async (req, res) => {
+  try {
+    await new Promise<void>((resolve, reject) => authenticateClientPortal(req, res, (error?: unknown) => error ? reject(error) : resolve()));
+    if (res.headersSent) return;
+    const session = requireActiveClientPortalSession(req);
+    const context = await getPortalIdentityContext(session, req.header('x-client-portal-workspace'));
+    res.json({ state: context.state, items: context.workspaces, selectedWorkspace: context.selectedWorkspace });
+  } catch (error) {
+    fail(res, error);
+  }
+});
 
 router.get('/home', async (req, res) => {
   try {

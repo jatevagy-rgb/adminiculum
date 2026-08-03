@@ -42,8 +42,9 @@ describe('client portal read-only alpha security boundary', () => {
     const service = read('Backend/src/modules/client-publication/publicationService.ts');
     expect(service).toContain("'CLIENT_PORTAL'");
     expect(service).toContain('client_portal_identities');
-    expect(service).toContain('client_organization_memberships');
-    expect(service).toContain('CLIENT_MEMBERSHIP_REQUIRED');
+    expect(service).toContain('client_portal_workspace_memberships');
+    expect(service).toContain('client_portal_workspaces');
+    expect(service).toContain('CLIENT_WORKSPACE_MEMBERSHIP_REQUIRED');
     expect(service).toContain('WHERE "clientPortalIdentityId"=$1');
     expect(service).toContain('WHERE "clientUserId"=$1');
     expect(service).toContain("grant.status === 'ACTIVE'");

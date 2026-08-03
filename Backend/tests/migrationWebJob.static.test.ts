@@ -25,8 +25,8 @@ describe('migration WebJob artifact', () => {
     const latest = fs.readdirSync(migrationsDir).filter((d) => /^\d{14}_/.test(d)).sort().pop()!;
     const runner = fs.readFileSync(path.join(jobRoot, 'runner.cjs'), 'utf8');
     expect(runner).toContain(`const migrationName = '${latest}'`);
-    // current slice: verify the client_relationship_mode column effect
-    expect(runner).toContain("column_name = 'relationshipMode'");
+    expect(runner).toContain("to_regclass('public.client_portal_workspaces')");
+    expect(runner).toContain("table_name = 'client_portal_grants' AND column_name = 'workspaceId'");
   });
 
   it('ships the prisma CLI in production dependencies so the WebJob can spawn it', () => {

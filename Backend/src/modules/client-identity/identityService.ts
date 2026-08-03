@@ -55,11 +55,18 @@ export async function getClientProfile(session: ClientPortalSession) {
 export async function submitMembershipRequest(session: ClientPortalSession, input: Record<string, unknown>) {
   if (!session.emailVerified) throw new ClientIdentityError(403, 'CLIENT_EMAIL_NOT_VERIFIED', 'Verify e-mail before requesting organization membership.');
   if (session.status === 'SUSPENDED' || session.status === 'REVOKED') throw new ClientIdentityError(403, `CLIENT_IDENTITY_${session.status}`, 'Client identity is not active.');
-  const requestedOrganizationName = safeString(input.requestedOrganizationName, 180);
-  const requestedClientId = safeString(input.requestedClientId, 80);
+  let requestedOrganizationName = safeString(input.requestedOrganizationName, 180);
+  let requestedClientId = safeString(input.requestedClientId, 80);
   const requestedGroupId = safeString(input.requestedGroupId, 80);
   const requestedGroupName = safeString(input.requestedGroupName, 120);
   const corporateEmail = normalizeEmail(input.corporateEmail) || session.normalizedEmail;
+  const invitationId = safeString(input.invitationId, 80);
+  if (invitationId) {
+    const invitation = await prisma.clientPortalInvitation.findFirst({ where: { id: invitationId, status: 'ACTIVE', expiresAt: { gt: new Date() } } });
+    if (!invitation || (invitation.intendedEmail && invitation.intendedEmail.toLowerCase() !== session.normalizedEmail)) throw new ClientIdentityError(400, 'INVITATION_UNAVAILABLE', 'Invitation is not available.');
+    requestedClientId = invitation.clientId;
+    if (!requestedOrganizationName) requestedOrganizationName = (await prisma.client.findUnique({ where: { id: invitation.clientId }, select: { name: true } }))?.name || null;
+  }
   if (!requestedOrganizationName && !requestedClientId) throw new ClientIdentityError(400, 'ORGANIZATION_CONTEXT_REQUIRED', 'Organization context is required.');
 
   if (requestedGroupId && requestedClientId) {
@@ -76,7 +83,7 @@ export async function submitMembershipRequest(session: ClientPortalSession, inpu
       requestedGroupName,
       corporateEmail,
       roleDescriptionSafe: safeString(input.roleDescriptionSafe, 200),
-      invitationId: safeString(input.invitationId, 80),
+      invitationId,
       status: 'PENDING_REVIEW',
       submittedAt: new Date(),
     },
@@ -143,11 +150,25 @@ export async function approveMembershipRequest(actor: Actor, requestId: string, 
     const group = await prisma.clientOrganizationGroup.findFirst({ where: { id: groupId, clientId, status: 'ACTIVE' } });
     if (!group) throw new ClientIdentityError(400, 'CROSS_CLIENT_GROUP_REJECTED', 'Requested group is not available for that organization.');
   }
+  const invitation = request.invitationId
+    ? await prisma.clientPortalInvitation.findFirst({ where: { id: request.invitationId, status: 'ACTIVE', expiresAt: { gt: new Date() } } })
+    : null;
+  if (request.invitationId && (!invitation || invitation.clientId !== clientId || !invitation.workspaceId)) throw new ClientIdentityError(409, 'INVITATION_WORKSPACE_MISMATCH', 'The invitation does not match the selected workspace.');
   return prisma.$transaction(async (tx) => {
     const membership = await tx.clientOrganizationMembership.create({ data: { clientPortalIdentityId: request.clientPortalIdentityId, clientId, groupId, approvedFromRequestId: request.id, approvedById: actor.userId, approvedAt: new Date() } });
     await tx.clientOrganizationMembershipRequest.update({ where: { id: request.id }, data: { requestedClientId: clientId, requestedGroupId: groupId, status: 'APPROVED', reviewedById: actor.userId, reviewedAt: new Date(), revision: { increment: 1 } } });
     await tx.clientPortalIdentity.update({ where: { id: request.clientPortalIdentityId }, data: { status: 'ACTIVE', revision: { increment: 1 } } });
-    return { membership, grantRequired: true, nextAction: 'Hozzáférés adása ügyhöz' };
+    let workspaceMembership = null;
+    if (invitation?.workspaceId) {
+      workspaceMembership = await tx.clientPortalWorkspaceMembership.upsert({
+        where: { clientPortalIdentityId_workspaceId: { clientPortalIdentityId: request.clientPortalIdentityId, workspaceId: invitation.workspaceId } },
+        create: { clientPortalIdentityId: request.clientPortalIdentityId, workspaceId: invitation.workspaceId, status: 'ACTIVE', role: 'MEMBER', invitedAt: invitation.createdAt, invitedById: invitation.createdById, approvedAt: new Date(), approvedById: actor.userId },
+        update: { status: 'ACTIVE', approvedAt: new Date(), approvedById: actor.userId, revokedAt: null, revokedById: null, suspendedAt: null, suspendedById: null, revision: { increment: 1 } },
+      });
+      await tx.clientPortalInvitation.update({ where: { id: invitation.id }, data: { status: 'USED', usedByIdentityId: request.clientPortalIdentityId, usedAt: new Date() } });
+      await tx.clientPortalWorkspaceEvent.create({ data: { workspaceId: invitation.workspaceId, membershipId: workspaceMembership.id, actorId: actor.userId, action: 'MEMBERSHIP_APPROVED', toStatus: 'ACTIVE', metadataSafe: { source: 'approved-invitation' } } });
+    }
+    return { membership, workspaceMembership, grantRequired: true, nextAction: 'Hozzáférés adása ügyhöz' };
   });
 }
 
@@ -182,11 +203,12 @@ const ALLOWED_GRANT_PERMISSIONS = new Set([
 export async function createGrantForApprovedMembership(actor: Actor, input: Record<string, unknown>) {
   requireGrantActor(actor);
   const membershipId = safeString(input.membershipId, 80);
+  const workspaceMembershipId = safeString(input.workspaceMembershipId, 80);
   const caseId = safeString(input.caseId, 80);
   const permissions = Array.isArray(input.permissions)
     ? input.permissions.map(String).filter((p) => ALLOWED_GRANT_PERMISSIONS.has(p))
     : [];
-  if (!membershipId || !caseId || !permissions.length) throw new ClientIdentityError(400, 'GRANT_INPUT_REQUIRED', 'Membership, case and permissions are required.');
+  if ((!membershipId && !workspaceMembershipId) || !caseId || !permissions.length) throw new ClientIdentityError(400, 'GRANT_INPUT_REQUIRED', 'Workspace membership, case and permissions are required.');
 
   let validUntil: Date | null = null;
   if (input.validUntil != null && String(input.validUntil).trim()) {
@@ -196,18 +218,39 @@ export async function createGrantForApprovedMembership(actor: Actor, input: Reco
     validUntil = parsed;
   }
 
-  const membership = await prisma.clientOrganizationMembership.findFirst({ where: { id: membershipId, status: 'ACTIVE' } });
-  if (!membership) throw new ClientIdentityError(403, 'ACTIVE_MEMBERSHIP_REQUIRED', 'Active membership is required before creating a case grant.');
-  const identity = await prisma.clientPortalIdentity.findUnique({ where: { id: membership.clientPortalIdentityId } });
+  const legacyMembership = membershipId
+    ? await prisma.clientOrganizationMembership.findFirst({ where: { id: membershipId, status: 'ACTIVE' } })
+    : null;
+  const compatibleWorkspaceIds = legacyMembership
+    ? (await prisma.clientPortalWorkspace.findMany({ where: { clientId: legacyMembership.clientId, status: 'ACTIVE' }, select: { id: true } })).map((workspace) => workspace.id)
+    : [];
+  if (legacyMembership && compatibleWorkspaceIds.length > 1 && !workspaceMembershipId) {
+    throw new ClientIdentityError(409, 'WORKSPACE_MEMBERSHIP_SELECTION_REQUIRED', 'Select the exact workspace membership for the case grant.');
+  }
+  const resolvedWorkspaceMembership = workspaceMembershipId
+    ? await prisma.clientPortalWorkspaceMembership.findFirst({ where: { id: workspaceMembershipId, status: 'ACTIVE', OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] } })
+    : legacyMembership
+      ? await prisma.clientPortalWorkspaceMembership.findFirst({
+        where: { clientPortalIdentityId: legacyMembership.clientPortalIdentityId, workspaceId: { in: compatibleWorkspaceIds }, status: 'ACTIVE', OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+        orderBy: { createdAt: 'asc' },
+      })
+      : null;
+  if (!resolvedWorkspaceMembership) throw new ClientIdentityError(403, 'ACTIVE_WORKSPACE_MEMBERSHIP_REQUIRED', 'Active workspace membership is required before creating a case grant.');
+  const workspace = await prisma.clientPortalWorkspace.findFirst({ where: { id: resolvedWorkspaceMembership.workspaceId, status: 'ACTIVE' } });
+  if (!workspace) throw new ClientIdentityError(403, 'ACTIVE_WORKSPACE_REQUIRED', 'Active workspace is required before creating a case grant.');
+  if (legacyMembership && (legacyMembership.clientPortalIdentityId !== resolvedWorkspaceMembership.clientPortalIdentityId || legacyMembership.clientId !== workspace.clientId)) {
+    throw new ClientIdentityError(409, 'WORKSPACE_MEMBERSHIP_MISMATCH', 'The workspace membership does not match the approved membership.');
+  }
+  const identity = await prisma.clientPortalIdentity.findUnique({ where: { id: resolvedWorkspaceMembership.clientPortalIdentityId } });
   if (!identity || identity.status !== 'ACTIVE') throw new ClientIdentityError(403, 'ACTIVE_IDENTITY_REQUIRED', 'Active client identity is required before creating a case grant.');
   const caseRow = await prisma.case.findUnique({ where: { id: caseId }, select: { id: true, clientId: true } });
   if (!caseRow) throw new ClientIdentityError(404, 'CASE_NOT_FOUND', 'Case was not found.');
-  if (caseRow.clientId !== membership.clientId) throw new ClientIdentityError(409, 'CASE_CLIENT_MISMATCH', 'The case does not belong to the membership client.');
+  if (caseRow.clientId !== workspace.clientId) throw new ClientIdentityError(409, 'CASE_CLIENT_MISMATCH', 'The case does not belong to the workspace client.');
 
   try {
     return await prisma.$transaction(async (tx) => {
       const existing = await tx.clientPortalGrant.findFirst({
-        where: { clientPortalIdentityId: identity.id, clientId: membership.clientId, caseId },
+        where: { clientPortalIdentityId: identity.id, workspaceId: workspace.id, caseId },
         orderBy: { updatedAt: 'desc' },
       });
       const requestedPermissions = [...new Set(permissions)].sort();
@@ -226,6 +269,7 @@ export async function createGrantForApprovedMembership(actor: Actor, input: Reco
           where: { id: existing.id },
           data: {
             status: 'ACTIVE',
+            workspaceId: workspace.id,
             permissions: permissions as any,
             validUntil,
             activatedAt: new Date(),
@@ -237,7 +281,7 @@ export async function createGrantForApprovedMembership(actor: Actor, input: Reco
             action: 'GRANT_ACTIVATED' as any,
             actorId: actor.userId,
             caseId,
-            clientId: membership.clientId,
+            clientId: workspace.clientId,
             grantId: existing.id,
             fromStatus: existing.status,
             toStatus: 'ACTIVE',
@@ -251,7 +295,8 @@ export async function createGrantForApprovedMembership(actor: Actor, input: Reco
         data: {
           clientUserId: null,
           clientPortalIdentityId: identity.id,
-          clientId: membership.clientId,
+          workspaceId: workspace.id,
+          clientId: workspace.clientId,
           caseId,
           role: 'VIEWER',
           status: 'ACTIVE',
@@ -266,7 +311,7 @@ export async function createGrantForApprovedMembership(actor: Actor, input: Reco
           action: 'GRANT_ACTIVATED' as any,
           actorId: actor.userId,
           caseId,
-          clientId: membership.clientId,
+          clientId: workspace.clientId,
           grantId: created.id,
           toStatus: 'ACTIVE',
           metadataSafe: { source: 'identity-grant-create' },

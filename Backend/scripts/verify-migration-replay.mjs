@@ -10,6 +10,7 @@ const databaseUrl = process.env.MIGRATION_REPLAY_DATABASE_URL;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendRoot = path.resolve(__dirname, '..');
 const baselineName = '20260726000000_current_schema_baseline';
+const cp0MigrationName = '20260803190000_client_portal_workspace_foundation';
 
 if (!databaseUrl) {
   console.error('VERIFY FAILED: MIGRATION_REPLAY_DATABASE_URL is required.');
@@ -65,6 +66,32 @@ async function ensurePrismaMigrationsTable() {
     )`);
 }
 
+async function seedCp0CompatibilityFixture() {
+  await client.query(`INSERT INTO users (id, email, name, role, "createdAt", "updatedAt") VALUES
+    ('cp0-admin', 'cp0-admin@example.invalid', 'CP0 Admin', 'ADMIN', now(), now()),
+    ('cp0-legacy-client', 'cp0-legacy@example.invalid', 'CP0 Legacy Client', 'CLIENT', now(), now())`);
+  await client.query(`INSERT INTO clients (id, name, "createdAt", "updatedAt") VALUES ('cp0-client', 'CP0 Client', now(), now())`);
+  await client.query(`INSERT INTO cases (id, "caseNumber", title, "caseType", "clientId", "assignedLawyerId", "createdById", "createdAt", "updatedAt", status, "matterType") VALUES
+    ('cp0-case-authorized', 'CP0-AUTH', 'Authorized legacy case', 'CONTRACT_REVIEW', 'cp0-client', 'cp0-admin', 'cp0-admin', now(), now(), 'DRAFT', 'CONTRACT'),
+    ('cp0-case-orphan', 'CP0-ORPHAN', 'Orphan grant case', 'CONTRACT_REVIEW', 'cp0-client', 'cp0-admin', 'cp0-admin', now(), now(), 'DRAFT', 'CONTRACT'),
+    ('cp0-case-legacy', 'CP0-LEGACY', 'Legacy user case', 'CONTRACT_REVIEW', 'cp0-client', 'cp0-admin', 'cp0-admin', now(), now(), 'DRAFT', 'CONTRACT')`);
+  await client.query(`INSERT INTO client_portal_identities (id, provider, issuer, subject, "normalizedEmail", "emailVerifiedAt", "displayName", "accountType", status, "createdAt", "updatedAt") VALUES
+    ('cp0-identity-authorized', 'ENTRA_EXTERNAL_ID', 'https://cp0.example.invalid/', 'authorized', 'authorized@example.invalid', now(), 'Authorized Identity', 'INDIVIDUAL', 'ACTIVE', now(), now()),
+    ('cp0-identity-orphan', 'ENTRA_EXTERNAL_ID', 'https://cp0.example.invalid/', 'orphan', 'orphan@example.invalid', now(), 'Orphan Identity', 'INDIVIDUAL', 'ACTIVE', now(), now()),
+    ('cp0-identity-no-grant', 'ENTRA_EXTERNAL_ID', 'https://cp0.example.invalid/', 'no-grant', 'no-grant@example.invalid', now(), 'No Grant Identity', 'INDIVIDUAL', 'ACTIVE', now(), now())`);
+  await client.query(`INSERT INTO client_organization_membership_requests (id, "clientPortalIdentityId", "requestedClientId", status, "createdAt", "updatedAt") VALUES
+    ('cp0-request-authorized', 'cp0-identity-authorized', 'cp0-client', 'APPROVED', now(), now()),
+    ('cp0-request-no-grant', 'cp0-identity-no-grant', 'cp0-client', 'APPROVED', now(), now())`);
+  await client.query(`INSERT INTO client_organization_memberships (id, "clientPortalIdentityId", "clientId", status, "approvedFromRequestId", "approvedById", "approvedAt", "createdAt", "updatedAt") VALUES
+    ('cp0-membership-authorized', 'cp0-identity-authorized', 'cp0-client', 'ACTIVE', 'cp0-request-authorized', 'cp0-admin', now(), now(), now()),
+    ('cp0-membership-no-grant', 'cp0-identity-no-grant', 'cp0-client', 'ACTIVE', 'cp0-request-no-grant', 'cp0-admin', now(), now(), now())`);
+  await client.query(`INSERT INTO client_portal_grants (id, "clientPortalIdentityId", "clientUserId", "clientId", "caseId", role, status, permissions, "validFrom", "invitedById", "activatedAt", "createdAt", "updatedAt") VALUES
+    ('cp0-grant-authorized', 'cp0-identity-authorized', NULL, 'cp0-client', 'cp0-case-authorized', 'VIEWER', 'ACTIVE', ARRAY['MATTER_READ']::"ClientPortalPermission"[], now(), 'cp0-admin', now(), now(), now()),
+    ('cp0-grant-orphan', 'cp0-identity-orphan', NULL, 'cp0-client', 'cp0-case-orphan', 'VIEWER', 'ACTIVE', ARRAY['MATTER_READ']::"ClientPortalPermission"[], now(), 'cp0-admin', now(), now(), now()),
+    ('cp0-grant-legacy', NULL, 'cp0-legacy-client', 'cp0-client', 'cp0-case-legacy', 'VIEWER', 'ACTIVE', ARRAY['MATTER_READ']::"ClientPortalPermission"[], now(), 'cp0-admin', now(), now(), now())`);
+  console.log('CP0 compatibility fixture seeded before workspace migration.');
+}
+
 async function applyPostBaselineMigrations() {
   const migrationsRoot = path.join(backendRoot, 'prisma', 'migrations');
   const migrationNames = fs.readdirSync(migrationsRoot, { withFileTypes: true })
@@ -80,6 +107,7 @@ async function applyPostBaselineMigrations() {
 
   await ensurePrismaMigrationsTable();
   for (const migrationName of migrationNames) {
+    if (migrationName === cp0MigrationName) await seedCp0CompatibilityFixture();
     const migrationPath = path.join(migrationsRoot, migrationName, 'migration.sql');
     const sql = fs.readFileSync(migrationPath, 'utf8');
     const checksum = crypto.createHash('sha256').update(sql.replace(/\r\n/g, '\n')).digest('hex');
@@ -116,6 +144,9 @@ async function verifySchemaShape() {
     'document_task_links',
     'document_comparisons',
     'document_change_segments',
+    'client_portal_workspaces',
+    'client_portal_workspace_memberships',
+    'client_portal_workspace_events',
   ];
   for (const table of requiredTables) {
     const row = await one('SELECT to_regclass($1) AS oid', [`public.${table}`]);
@@ -127,6 +158,22 @@ async function verifySchemaShape() {
     const active = await one('SELECT count(*)::int AS count FROM "_prisma_migrations" WHERE finished_at IS NULL AND rolled_back_at IS NULL');
     if (active.count !== 0) throw new Error(`active failed migrations present: ${active.count}`);
   }
+}
+
+async function verifyCp0CompatibilityBackfill() {
+  const workspace = await one(`SELECT id, "clientId", status::text FROM client_portal_workspaces WHERE "clientId"='cp0-client'`);
+  if (!workspace || workspace.status !== 'ACTIVE') throw new Error('CP0 compatibility workspace was not created for the previously authorized identity.');
+  const workspaceMemberships = await client.query(`SELECT "clientPortalIdentityId", status::text FROM client_portal_workspace_memberships WHERE "workspaceId"=$1 ORDER BY "clientPortalIdentityId"`, [workspace.id]);
+  if (workspaceMemberships.rowCount !== 1 || workspaceMemberships.rows[0].clientPortalIdentityId !== 'cp0-identity-authorized' || workspaceMemberships.rows[0].status !== 'ACTIVE') {
+    throw new Error('CP0 backfill broadened workspace membership beyond the exact active membership + active grant intersection.');
+  }
+  const grants = await client.query(`SELECT id, "workspaceId" FROM client_portal_grants WHERE id LIKE 'cp0-grant-%' ORDER BY id`);
+  if (grants.rowCount !== 3) throw new Error('CP0 backfill changed the legacy grant inventory.');
+  const byId = new Map(grants.rows.map((row) => [row.id, row.workspaceId]));
+  if (byId.get('cp0-grant-authorized') !== workspace.id || byId.get('cp0-grant-orphan') !== null || byId.get('cp0-grant-legacy') !== null) {
+    throw new Error('CP0 backfill expanded or reassigned an ineligible legacy grant.');
+  }
+  console.log('CP0 backfill OK: exact prior access preserved; orphan and legacy-user grants received no workspace access.');
 }
 
 async function verifyRepresentativeWrites() {
@@ -175,6 +222,7 @@ async function main() {
   await client.connect();
   await applyPostBaselineMigrations();
   await verifySchemaShape();
+  await verifyCp0CompatibilityBackfill();
   await verifyRepresentativeWrites();
   await client.end();
 
