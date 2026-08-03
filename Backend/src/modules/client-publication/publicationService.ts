@@ -119,7 +119,7 @@ export function assertNoForbiddenPortalFields(dto: unknown): void {
 }
 
 export function toClientPortalGrantSummaryDTO(row: Row): Row {
-  return pick(row, ['id', 'clientUserId', 'clientPortalIdentityId', 'clientId', 'caseId', 'role', 'status', 'permissions', 'validFrom', 'validUntil', 'activatedAt', 'suspendedAt', 'revokedAt', 'revocationReasonSafe', 'revision']);
+  return pick(row, ['id', 'clientUserId', 'clientPortalIdentityId', 'clientId', 'caseId', 'role', 'status', 'permissions', 'validFrom', 'validUntil', 'activatedAt', 'suspendedAt', 'revokedAt', 'revocationReasonSafe', 'createdAt', 'updatedAt', 'revision']);
 }
 
 export function toClientMatterPublicationDTO(row: Row, revision?: Row | null): Row {

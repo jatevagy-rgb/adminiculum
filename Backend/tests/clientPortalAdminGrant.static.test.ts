@@ -10,6 +10,7 @@ import path from 'path';
  */
 const root = path.resolve(__dirname, '..');
 const service = readFileSync(path.join(root, 'src/modules/client-identity/identityService.ts'), 'utf8');
+const publicationService = readFileSync(path.join(root, 'src/modules/client-publication/publicationService.ts'), 'utf8');
 const routes = readFileSync(path.join(root, 'src/modules/client-identity/routes.ts'), 'utf8');
 const grantTriggerMigration = readFileSync(path.join(root, 'prisma/migrations/20260802200000_client_identity_grant_trigger_fix/migration.sql'), 'utf8');
 
@@ -66,5 +67,17 @@ describe('internal portal-admin grant contract', () => {
     expect(grantTriggerMigration).toContain('NEW."clientPortalIdentityId" IS NULL');
     expect(grantTriggerMigration).toContain('identity grant cannot include legacy client user');
     expect(grantTriggerMigration).toContain('client portal grant user must be CLIENT role');
+  });
+
+  it('workforce publication grant DTO exposes operational timestamps without secrets', () => {
+    const mapper = publicationService.slice(publicationService.indexOf('export function toClientPortalGrantSummaryDTO'), publicationService.indexOf('export function toClientMatterPublicationDTO'));
+    expect(mapper).toContain("'id'");
+    expect(mapper).toContain("'status'");
+    expect(mapper).toContain("'revision'");
+    expect(mapper).toContain("'permissions'");
+    expect(mapper).toContain("'createdAt'");
+    expect(mapper).toContain("'updatedAt'");
+    expect(mapper).toContain("'revokedAt'");
+    expect(mapper).not.toMatch(/token|secret|password|storageKey/i);
   });
 });
