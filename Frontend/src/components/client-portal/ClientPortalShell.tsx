@@ -128,12 +128,17 @@ function WorkspaceMessageCard({ message }: { message: PortalWorkspaceMessage }) 
 }
 
 function HomeView({ home, workspace }: { home: PortalHome; workspace: PortalWorkspace }) {
+  const modeMessage = home.relationshipMode === 'EMAIL_CENTRIC'
+    ? 'Az e-mail továbbra is az elsődleges kapcsolattartási csatorna. Itt az ügy állapota, a megosztott dokumentumok és a strukturált kérések érhetők el.'
+    : home.relationshipMode === 'CONNECTED_SYSTEM'
+      ? 'Az ügyfélportál a közzétett ügyállapotot, dokumentumokat és kéréseket mutatja. Külső rendszerrel nem indít automatikus szinkronizációt.'
+      : 'Az ügyfélportál az elsődleges közös munkatér az iroda által kifejezetten közzétett ügyinformációkhoz és teendőkhöz.';
   return (
     <div className="space-y-6">
       <Card className="bg-gradient-to-br from-white to-[#f7f1e2]">
         <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#9b7b25]">Adminiculum ügyfélportál</p>
         <h1 className="mt-3 break-words text-3xl font-semibold text-stone-950 sm:text-4xl">Üdvözöljük</h1>
-        <p className="mt-3 max-w-2xl text-stone-700">Csak az ügyvédi iroda által kifejezetten közzétett, ügyfélbiztos információk jelennek meg.</p>
+        <p className="mt-3 max-w-2xl text-stone-700">{modeMessage}</p>
       </Card>
       <Card>
         <h2 className="text-2xl font-semibold text-stone-950">Figyelmet igényel</h2>

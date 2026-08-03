@@ -60,6 +60,7 @@ export type PortalSafeUpdate = {
 
 export type PortalHome = {
   portalActionsEnabled: boolean;
+  relationshipMode?: 'PORTAL_CENTRIC' | 'EMAIL_CENTRIC' | 'CONNECTED_SYSTEM';
   identity?: { displayName?: string | null; email?: string | null };
   access: { state: string; grantCount: number };
   attention: PortalActionRequest[];

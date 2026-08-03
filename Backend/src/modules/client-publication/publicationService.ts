@@ -434,15 +434,17 @@ function buildWarnings(grants: Row[], documents: Row[], actions: Row[]): Row[] {
 
 export async function portalHomeSnapshot(actor: Actor, db: PrismaClient = defaultPrisma): Promise<Row> {
   const context = await resolvePortalContext(actor, db);
-  const [matters, actionRequests, updates] = await Promise.all([
+  const [matters, actionRequests, updates, relationship] = await Promise.all([
     listPortalMatters(actor, db),
     listPortalActionRequests(actor, null, db),
     listPortalSafeUpdates(actor, null, db),
+    one(db, 'SELECT "relationshipMode"::text AS "relationshipMode" FROM clients WHERE id=ANY($1::text[]) ORDER BY id ASC LIMIT 1', context.clientIds),
   ]);
   const dto = {
     portalActionsEnabled: CLIENT_PUBLICATION_GATES.portalActions(),
     identity: { displayName: context.displayName, email: context.email },
     access: { state: 'ACTIVE', grantCount: context.grants.length },
+    relationshipMode: relationship?.relationshipMode || 'PORTAL_CENTRIC',
     attention: actionRequests.items,
     matters: matters.items,
     updates: updates.items.slice(0, 8),

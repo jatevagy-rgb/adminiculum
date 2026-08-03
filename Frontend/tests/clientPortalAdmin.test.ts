@@ -96,6 +96,14 @@ describe('internal portal-admin UI', () => {
     assert.doesNotMatch(source, /storageProvider|quarantineStorageReference|scanProvider|scanCodeSafe/);
   });
 
+  it('presents the configured relationship mode without a customer mode selector', () => {
+    const source = portalShell() + read('src/lib/clientPortalApi.ts') + read('../Backend/src/modules/client-publication/publicationService.ts');
+    assert.match(source, /relationshipMode/);
+    assert.match(source, /Az e-mail továbbra is az elsődleges/);
+    assert.match(source, /nem indít automatikus szinkronizációt/);
+    assert.doesNotMatch(portalShell(), /Válasszon működési módot/);
+  });
+
   it('case-level identity grant is available and identity-based', () => {
     const src = caseGrant();
     assert.match(src, /createIdentityGrant/);
