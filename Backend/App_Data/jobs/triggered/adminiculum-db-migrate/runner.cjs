@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { Client } = require('pg');
 
-const migrationName = '20260802200000_client_identity_grant_trigger_fix';
+const migrationName = '20260803130000_client_relationship_mode';
 const jobDirectory = __dirname;
 const appRoot = process.env.MIGRATION_WEBJOB_ROOT || path.resolve(jobDirectory, '../../../..');
 const schemaPath = process.env.MIGRATION_WEBJOB_SCHEMA_PATH || path.join(appRoot, 'prisma', 'schema.prisma');
@@ -52,19 +52,18 @@ async function readState(client) {
        FROM "_prisma_migrations"
       WHERE finished_at IS NULL AND rolled_back_at IS NULL`,
   );
-  const trigger = await client.query(
-    `SELECT pg_get_functiondef(p.oid) AS definition
-       FROM pg_proc p
-       JOIN pg_namespace n ON n.oid = p.pronamespace
-      WHERE n.nspname = 'public' AND p.proname = 'client_portal_validate_grant'
-      ORDER BY p.oid DESC
-      LIMIT 1`,
+  // Verify the concrete effect of 20260803130000_client_relationship_mode: the
+  // clients.relationshipMode column (backed by the ClientRelationshipMode enum).
+  const schemaCheck = await client.query(
+    `SELECT EXISTS(
+       SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'clients' AND column_name = 'relationshipMode'
+     ) AS present`,
   );
   const row = migration.rows[0] || null;
-  const marker = process.env.MIGRATION_WEBJOB_EXPECTED_TRIGGER_MARKER || 'clientPortalIdentityId';
+  const schemaPresent = schemaCheck.rows[0]?.present === true;
   const verified = Boolean(
-    row && row.finished_at && !row.rolled_back_at && failed.rows[0].count === 0
-      && trigger.rows[0]?.definition?.includes(marker),
+    row && row.finished_at && !row.rolled_back_at && failed.rows[0].count === 0 && schemaPresent,
   );
   return {
     migration: row ? {
@@ -75,7 +74,7 @@ async function readState(client) {
       logsPresent: Boolean(row.logs),
     } : null,
     failedMigrationCount: failed.rows[0].count,
-    triggerVerified: verified,
+    schemaVerified: verified,
     verification: verified ? 'PASS' : 'FAIL',
   };
 }

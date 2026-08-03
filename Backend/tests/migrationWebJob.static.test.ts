@@ -12,9 +12,21 @@ describe('migration WebJob artifact', () => {
     const runner = fs.readFileSync(path.join(jobRoot, 'runner.cjs'), 'utf8');
     expect(runner).toContain("migrate', 'deploy");
     expect(runner).toContain('failedMigrationCount');
-    expect(runner).toContain('clientPortalIdentityId');
     expect(runner).not.toContain('db push');
     expect(runner).not.toContain('migrate resolve');
+  });
+
+  it('targets the current migration and verifies its concrete effect', () => {
+    // Regression: the runner previously stayed pinned to an already-applied
+    // migration name, so alreadyApplied short-circuited migrate deploy and the
+    // newer migration never ran. It must target the current migration and verify
+    // that migration's real schema effect.
+    const migrationsDir = path.join(root, 'prisma', 'migrations');
+    const latest = fs.readdirSync(migrationsDir).filter((d) => /^\d{14}_/.test(d)).sort().pop()!;
+    const runner = fs.readFileSync(path.join(jobRoot, 'runner.cjs'), 'utf8');
+    expect(runner).toContain(`const migrationName = '${latest}'`);
+    // current slice: verify the client_relationship_mode column effect
+    expect(runner).toContain("column_name = 'relationshipMode'");
   });
 
   it('ships the prisma CLI in production dependencies so the WebJob can spawn it', () => {
