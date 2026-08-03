@@ -12,6 +12,13 @@ export interface ClientPortalGrantSummaryDTO {
   status: string;
   permissions: string[];
   validUntil: string | null;
+  validFrom: string | null;
+  activatedAt: string | null;
+  suspendedAt: string | null;
+  revokedAt: string | null;
+  revocationReasonSafe: string | null;
+  createdAt: string;
+  updatedAt: string;
   revision: number;
 }
 
@@ -92,7 +99,7 @@ export interface ClientPublicationOverviewDTO {
   documentPublications: ClientDocumentPublicationDTO[];
   actionRequests: ClientActionRequestDTO[];
   safeUpdates: ClientSafeUpdateDTO[];
-  history: Array<{ id: string; action: string; fromStatus: string | null; toStatus: string | null; createdAt: string }>;
+  history: Array<{ id: string; action: string; grantId: string | null; fromStatus: string | null; toStatus: string | null; createdAt: string }>;
 }
 
 export async function getClientPublicationOverview(caseId: string, documentId?: string | null): Promise<ClientPublicationOverviewDTO> {

@@ -10,6 +10,8 @@ describe('internal portal-admin UI', () => {
   const api = () => read('src/lib/clientPortalAdminApi.ts');
   const page = () => read('src/app/client-portal-admin/page.tsx');
   const caseGrant = () => read('src/components/documents/publication/CasePortalIdentityGrant.tsx');
+  const publicationApi = () => read('src/lib/clientPublicationApi.ts');
+  const publicationPanel = () => read('src/components/documents/publication/ClientPublicationPanel.tsx');
   const interactionApi = () => read('src/lib/clientInteractionApi.ts');
   const portalShell = () => read('src/components/client-portal/ClientPortalShell.tsx');
 
@@ -77,6 +79,23 @@ describe('internal portal-admin UI', () => {
     assert.match(src, /createIdentityGrant/);
     assert.match(src, /case-identity-grant/);
     assert.doesNotMatch(src, /clientUserId\s*[:=]/);
+  });
+
+  it('exposes workforce-only operational grant observability', () => {
+    const api = publicationApi();
+    const panel = publicationPanel();
+    assert.match(api, /validFrom: string \| null/);
+    assert.match(api, /createdAt: string/);
+    assert.match(api, /updatedAt: string/);
+    assert.match(api, /revokedAt: string \| null/);
+    assert.match(api, /grantId: string \| null/);
+    assert.match(panel, /Grant: \{grant\.id\}/);
+    assert.match(panel, /grant\.revision/);
+    assert.match(panel, /grant\.permissions\.join/);
+    assert.match(panel, /grant\.revokedAt/);
+    assert.match(panel, /grant-lifecycle-history/);
+    assert.match(panel, /transitionClientPortalGrant\(grant\.id/);
+    assert.doesNotMatch(panel, /localStorage|getAuthToken|Authorization/);
   });
 
   it('is registered in internal navigation', () => {

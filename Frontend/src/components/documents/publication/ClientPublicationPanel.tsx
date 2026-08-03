@@ -155,8 +155,23 @@ export function ClientPublicationPanel({
             <AdminButton className="mt-2 w-full min-w-0 justify-start whitespace-normal text-left" variant="neutral" disabled={busy || !clientId || !clientUserId.trim()} onClick={() => run(() => createClientPortalGrant({ caseId, clientId: clientId!, clientUserId: clientUserId.trim() }))}>Grant létrehozása</AdminButton>
             <div className="mt-3 space-y-2">
               {overview?.grants.map((grant) => (
-                <div key={grant.id} className="rounded-[10px] bg-[var(--adm-surface)] p-2 text-xs">
-                  <div className="flex flex-wrap items-center justify-between gap-2"><b>{grant.clientPortalIdentityId ? `id:${grant.clientPortalIdentityId.slice(0, 8)}` : grant.clientUserId ? grant.clientUserId.slice(0, 8) : "—"}</b><AdminBadge tone={grant.status === "ACTIVE" ? "green" : "neutral"}>{grant.status}</AdminBadge></div>
+                <div key={grant.id} data-testid={`grant-row-${grant.id}`} className="rounded-[10px] bg-[var(--adm-surface)] p-2 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2"><b>Grant: {grant.id}</b><AdminBadge tone={grant.status === "ACTIVE" ? "green" : "neutral"}>{grant.status}</AdminBadge></div>
+                  <dl data-testid="grant-operational-details" className="mt-2 grid gap-x-3 gap-y-1 text-[11px] text-[var(--adm-text-muted)] sm:grid-cols-2">
+                    <div><dt className="font-semibold">Revision</dt><dd>{grant.revision}</dd></div>
+                    <div><dt className="font-semibold">Identity</dt><dd className="break-all">{grant.clientPortalIdentityId || "—"}</dd></div>
+                    <div><dt className="font-semibold">Client</dt><dd className="break-all">{grant.clientId}</dd></div>
+                    <div><dt className="font-semibold">Case</dt><dd className="break-all">{grant.caseId}</dd></div>
+                    <div><dt className="font-semibold">Permissions</dt><dd>{grant.permissions.join(", ") || "—"}</dd></div>
+                    <div><dt className="font-semibold">Érvényes eddig</dt><dd>{formatGrantDate(grant.validUntil)}</dd></div>
+                    <div><dt className="font-semibold">Létrehozva</dt><dd>{formatGrantDate(grant.createdAt)}</dd></div>
+                    <div><dt className="font-semibold">Módosítva</dt><dd>{formatGrantDate(grant.updatedAt)}</dd></div>
+                    {grant.revokedAt ? <div><dt className="font-semibold">Visszavonva</dt><dd>{formatGrantDate(grant.revokedAt)}</dd></div> : null}
+                  </dl>
+                  <div data-testid="grant-lifecycle-history" className="mt-2 border-t border-[rgba(22,32,26,0.08)] pt-2">
+                    <p className="font-semibold">Lifecycle</p>
+                    {overview.history.filter((event) => event.grantId === grant.id).map((event) => <p key={event.id}>{event.fromStatus || "—"} → {event.toStatus || "—"} · {event.action} · {formatGrantDate(event.createdAt)}</p>)}
+                  </div>
                   {grant.status === "INVITED" ? <AdminButton className="mt-2" size="sm" variant="gold" disabled={busy} onClick={() => run(() => transitionClientPortalGrant(grant.id, "activate", grant.revision))}>Aktiválás</AdminButton> : null}
                   {grant.status === "ACTIVE" ? <div className="mt-2 flex gap-2"><AdminButton size="sm" variant="muted" disabled={busy} onClick={() => run(() => transitionClientPortalGrant(grant.id, "suspend", grant.revision))}>Suspend</AdminButton><AdminButton size="sm" variant="muted" disabled={busy} onClick={() => run(() => transitionClientPortalGrant(grant.id, "revoke", grant.revision))}>Revoke</AdminButton></div> : null}
                 </div>
@@ -184,6 +199,10 @@ export function ClientPublicationPanel({
       </div>
     </section>
   );
+}
+
+function formatGrantDate(value: string | null | undefined): string {
+  return value ? new Date(value).toLocaleString("hu-HU") : "—";
 }
 
 function nextAction(status: PublicationStatus | string): "submit" | "approve" | "publish" | "revoke" | "supersede" | null {
