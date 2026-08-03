@@ -78,10 +78,10 @@ describe('contract workspace document version foundation', () => {
     expect(schema).toContain('model DocumentReview');
     expect(schema).toContain('documentVersionId String');
     expect(schema).toContain('assignedReviewerId String?');
-    expect(schema).toContain('completedAt       DateTime?');
+    expect(schema).toMatch(/completedAt\s+DateTime\?/);
     expect(schema).toContain('@@unique([id, documentVersionId])');
     expect(schema).toContain('model ReviewSnapshot');
-    expect(schema).toContain('payload           Json');
+    expect(schema).toMatch(/payload\s+Json/);
     expect(migration).toContain('document_reviews_same_document_version_fkey');
     expect(migration).toContain('review_snapshots_same_review_version_fkey');
   });

@@ -3,7 +3,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 
 type Db = PrismaClient | Prisma.TransactionClient;
-type Actor = { userId: string; role?: string };
+type Actor = { userId: string; role?: string; workspaceId?: string };
 type Row = Record<string, any>;
 
 const INTERNAL_ROLES = new Set(['ADMIN', 'PARTNER', 'LAWYER', 'COLLAB_LAWYER']);
@@ -630,13 +630,20 @@ async function resolvePortalContext(actor: Actor, db: Db = defaultPrisma): Promi
   if (!user) throw new ClientPublicationError(403, 'PORTAL_ACCESS_DENIED', 'Portal access is not active.');
   if (isCustomerIdentity) {
     if (user.status !== 'ACTIVE' || !user.emailVerifiedAt) throw new ClientPublicationError(403, user.emailVerifiedAt ? 'CLIENT_IDENTITY_NOT_ACTIVE' : 'CLIENT_EMAIL_NOT_VERIFIED', 'Portal access is not active.');
-    const activeMemberships = await many(db, 'SELECT id, "clientId", "groupId", status::text FROM client_organization_memberships WHERE "clientPortalIdentityId"=$1 AND status=$2::"ClientOrganizationMembershipStatus"', actor.userId, 'ACTIVE');
-    if (activeMemberships.length === 0) throw new ClientPublicationError(403, 'CLIENT_MEMBERSHIP_REQUIRED', 'Approved organization membership is required.');
+    if (!actor.workspaceId) throw new ClientPublicationError(409, 'CLIENT_WORKSPACE_SELECTION_REQUIRED', 'Select an authorized workspace.');
+    const activeMemberships = await many(db, `SELECT m.id, m."workspaceId", m.status::text
+      FROM client_portal_workspace_memberships m
+      JOIN client_portal_workspaces w ON w.id=m."workspaceId"
+      WHERE m."clientPortalIdentityId"=$1 AND m."workspaceId"=$2
+        AND m.status='ACTIVE'::"ClientPortalWorkspaceMembershipStatus"
+        AND (m."expiresAt" IS NULL OR m."expiresAt" > now())
+        AND w.status='ACTIVE'::"ClientPortalWorkspaceStatus"`, actor.userId, actor.workspaceId);
+    if (activeMemberships.length === 0) throw new ClientPublicationError(403, 'CLIENT_WORKSPACE_MEMBERSHIP_REQUIRED', 'Active workspace membership is required.');
   } else if (user.role !== 'CLIENT' || user.status !== 'ACTIVE' || user.isActive === false) {
     throw new ClientPublicationError(403, 'PORTAL_ACCESS_DENIED', 'Portal access is not active.');
   }
   const grants = isCustomerIdentity
-    ? await many(db, 'SELECT *, role::text, status::text, permissions::text[] FROM client_portal_grants WHERE "clientPortalIdentityId"=$1 ORDER BY "updatedAt" DESC', actor.userId)
+    ? await many(db, 'SELECT *, role::text, status::text, permissions::text[] FROM client_portal_grants WHERE "clientPortalIdentityId"=$1 AND "workspaceId"=$2 ORDER BY "updatedAt" DESC', actor.userId, actor.workspaceId)
     : await many(db, 'SELECT *, role::text, status::text, permissions::text[] FROM client_portal_grants WHERE "clientUserId"=$1 ORDER BY "updatedAt" DESC', actor.userId);
   const active = grants.filter((grant) => grant.status === 'ACTIVE' && (!grant.validUntil || new Date(grant.validUntil).getTime() > Date.now()) && (!grant.validFrom || new Date(grant.validFrom).getTime() <= Date.now()));
   if (active.length === 0) {

@@ -36,8 +36,9 @@ describe('internal portal-admin grant contract', () => {
     const fn = service.slice(service.indexOf('export async function createGrantForApprovedMembership'), service.indexOf('export async function listActiveMemberships'));
     expect(fn).toContain('clientUserId: null');
     expect(fn).toContain('clientPortalIdentityId: identity.id');
-    // Requires an active membership AND active identity AND a real case.
-    expect(fn).toContain('ACTIVE_MEMBERSHIP_REQUIRED');
+    // Requires an active workspace membership AND active identity AND a real case.
+    expect(fn).toContain('ACTIVE_WORKSPACE_MEMBERSHIP_REQUIRED');
+    expect(fn).toContain('workspaceId: workspace.id');
     expect(fn).toContain('ACTIVE_IDENTITY_REQUIRED');
     expect(fn).toContain('CASE_NOT_FOUND');
     // Whitelists permissions and supports a validity window.

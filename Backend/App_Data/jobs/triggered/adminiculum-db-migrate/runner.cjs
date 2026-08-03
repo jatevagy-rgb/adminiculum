@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { Client } = require('pg');
 
-const migrationName = '20260803130000_client_relationship_mode';
+const migrationName = '20260803190000_client_portal_workspace_foundation';
 const jobDirectory = __dirname;
 const appRoot = process.env.MIGRATION_WEBJOB_ROOT || path.resolve(jobDirectory, '../../../..');
 const schemaPath = process.env.MIGRATION_WEBJOB_SCHEMA_PATH || path.join(appRoot, 'prisma', 'schema.prisma');
@@ -52,16 +52,20 @@ async function readState(client) {
        FROM "_prisma_migrations"
       WHERE finished_at IS NULL AND rolled_back_at IS NULL`,
   );
-  // Verify the concrete effect of 20260803130000_client_relationship_mode: the
-  // clients.relationshipMode column (backed by the ClientRelationshipMode enum).
+  // Verify the concrete CP0 effect rather than trusting migration metadata alone.
   const schemaCheck = await client.query(
-    `SELECT EXISTS(
-       SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'public' AND table_name = 'clients' AND column_name = 'relationshipMode'
-     ) AS present`,
+    `SELECT
+       to_regclass('public.client_portal_workspaces') IS NOT NULL AS workspace_table,
+       to_regclass('public.client_portal_workspace_memberships') IS NOT NULL AS membership_table,
+       EXISTS(
+         SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'client_portal_grants' AND column_name = 'workspaceId'
+       ) AS grant_workspace_column`,
   );
   const row = migration.rows[0] || null;
-  const schemaPresent = schemaCheck.rows[0]?.present === true;
+  const schemaPresent = schemaCheck.rows[0]?.workspace_table === true
+    && schemaCheck.rows[0]?.membership_table === true
+    && schemaCheck.rows[0]?.grant_workspace_column === true;
   const verified = Boolean(
     row && row.finished_at && !row.rolled_back_at && failed.rows[0].count === 0 && schemaPresent,
   );

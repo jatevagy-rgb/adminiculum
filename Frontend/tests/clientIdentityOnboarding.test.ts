@@ -42,6 +42,7 @@ describe('client identity registration and onboarding frontend', () => {
 
   it('points portal login to the dedicated customer login route', () => {
     assert.match(portalShell, /href="\/portal\/login"/);
-    assert.match(portalShell, /e-mail címmel és jelszóval/);
+    assert.match(portalShell, /biztonságos Microsoft ügyfélfiókos azonosításhoz/);
+    assert.doesNotMatch(portalShell, /e-mail címmel és jelszóval/);
   });
 });

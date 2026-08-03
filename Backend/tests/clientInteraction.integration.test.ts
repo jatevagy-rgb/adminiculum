@@ -24,7 +24,7 @@ d('client portal interaction foundation (PostgreSQL)', () => {
   let db: PrismaClient;
   const ids = {
     admin: crypto.randomUUID(), client: crypto.randomUUID(), otherCase: crypto.randomUUID(),
-    case: crypto.randomUUID(), identity: crypto.randomUUID(), grant: crypto.randomUUID(),
+    case: crypto.randomUUID(), identity: crypto.randomUUID(), grant: crypto.randomUUID(), workspace: crypto.randomUUID(), workspaceMembership: crypto.randomUUID(),
     unassignedLawyer: crypto.randomUUID(),
   };
   const internalActor = { userId: ids.admin, role: 'ADMIN' };
@@ -46,12 +46,14 @@ d('client portal interaction foundation (PostgreSQL)', () => {
     await db.case.create({ data: { id: ids.case, caseNumber: `IX-${ids.case.slice(0, 6)}`, title: 'Interaction case', caseType: 'CONTRACT_REVIEW', clientId: ids.client, createdById: ids.admin, assignedLawyerId: ids.admin } as any });
     await db.case.create({ data: { id: ids.otherCase, caseNumber: `IY-${ids.otherCase.slice(0, 6)}`, title: 'Other case', caseType: 'CONTRACT_REVIEW', clientId: ids.client, createdById: ids.admin, assignedLawyerId: ids.admin } as any });
     await db.clientPortalIdentity.create({ data: { id: ids.identity, provider: 'ENTRA_EXTERNAL_ID', issuer: 'iss', subject: `sub-${ids.identity}`, normalizedEmail: `c-${ids.identity}@t.io`, emailVerifiedAt: new Date(), displayName: 'Customer', accountType: 'INDIVIDUAL', status: 'ACTIVE' } });
-    await db.clientPortalGrant.create({ data: { id: ids.grant, clientPortalIdentityId: ids.identity, clientId: ids.client, caseId: ids.case, status: 'ACTIVE', permissions: ['MATTER_READ', 'DOCUMENT_READ'], invitedById: ids.admin, activatedAt: new Date() } as any });
+    await db.clientPortalWorkspace.create({ data: { id: ids.workspace, clientId: ids.client, name: 'Interaction workspace', mode: 'INDIVIDUAL', publicReference: `interaction-${ids.workspace}`, createdById: ids.admin } });
+    await db.clientPortalWorkspaceMembership.create({ data: { id: ids.workspaceMembership, clientPortalIdentityId: ids.identity, workspaceId: ids.workspace, status: 'ACTIVE', approvedAt: new Date(), approvedById: ids.admin } });
+    await db.clientPortalGrant.create({ data: { id: ids.grant, clientPortalIdentityId: ids.identity, workspaceId: ids.workspace, clientId: ids.client, caseId: ids.case, status: 'ACTIVE', permissions: ['MATTER_READ', 'DOCUMENT_READ'], invitedById: ids.admin, activatedAt: new Date() } as any });
   });
 
   afterAll(async () => { setScanner(null); setMailSender(null); setQuarantineStore(null); await db.$disconnect(); });
 
-  const ctx = () => resolveActiveCustomerGrant(ids.identity, ids.case, db);
+  const ctx = () => resolveActiveCustomerGrant(ids.identity, ids.case, ids.workspace, db);
 
   it('draft request is hidden from the customer until published', async () => {
     const draft = await requests.createRequestDraft(internalActor, { caseId: ids.case, type: 'DATA_FORM', clientSafeTitle: 'Adatok', fields: [{ label: 'Név', type: 'SHORT_TEXT', required: true }] }, db);
@@ -63,7 +65,7 @@ d('client portal interaction foundation (PostgreSQL)', () => {
   });
 
   it('customer cannot see a request on a non-granted case (cross-case denial)', async () => {
-    await expect(resolveActiveCustomerGrant(ids.identity, ids.otherCase, db)).rejects.toMatchObject({ code: 'CLIENT_PORTAL_NO_ACTIVE_GRANT' });
+    await expect(resolveActiveCustomerGrant(ids.identity, ids.otherCase, ids.workspace, db)).rejects.toMatchObject({ code: 'CLIENT_PORTAL_NO_ACTIVE_GRANT' });
   });
 
   it('internal answer draft is hidden until explicitly sent, then delivered once', async () => {

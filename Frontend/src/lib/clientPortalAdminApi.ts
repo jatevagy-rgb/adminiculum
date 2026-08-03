@@ -64,6 +64,34 @@ export interface ClientPortalGrantDTO {
   revision: number;
 }
 
+export interface WorkspaceMembershipDTO {
+  id: string;
+  clientPortalIdentityId: string;
+  workspaceId: string;
+  status: 'INVITED' | 'PENDING_APPROVAL' | 'ACTIVE' | 'SUSPENDED' | 'REVOKED' | 'EXPIRED';
+  role: 'MEMBER' | 'REPRESENTATIVE' | 'APPROVER';
+  revision: number;
+  invitedAt: string | null;
+  approvedAt: string | null;
+}
+
+export interface AdminWorkspaceDTO {
+  id: string;
+  clientId: string;
+  clientName: string | null;
+  name: string;
+  mode: 'INDIVIDUAL' | 'ORGANIZATION' | 'CASE_RELAY';
+  status: 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED';
+  communicationMode: 'PORTAL_PRIMARY' | 'EMAIL_LINKED' | 'EXTERNAL_ONLY';
+  connectedSystemState: 'NOT_CONFIGURED' | 'CONFIGURATION_REQUIRED' | 'READY' | 'DISABLED';
+  revision: number;
+  activeMembershipCount: number;
+  pendingInvitationCount: number;
+  pendingApprovalCount: number;
+  memberships: WorkspaceMembershipDTO[];
+  events: Array<{ id: string; action: string; fromStatus: string | null; toStatus: string | null; createdAt: string }>;
+}
+
 export const GRANT_PERMISSIONS = [
   "MATTER_READ",
   "DOCUMENT_READ",
@@ -112,7 +140,8 @@ export async function transitionMembership(
 
 // Identity-based grant — never uses the legacy clientUserId path.
 export async function createIdentityGrant(payload: {
-  membershipId: string;
+  membershipId?: string;
+  workspaceMembershipId?: string;
   caseId: string;
   permissions: string[];
   validUntil?: string | null;
@@ -121,4 +150,28 @@ export async function createIdentityGrant(payload: {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export async function listAdminWorkspaces(clientId?: string): Promise<{ items: AdminWorkspaceDTO[] }> {
+  return fetchApi(`/client-identity/admin/workspaces${clientId ? `?clientId=${encodeURIComponent(clientId)}` : ''}`);
+}
+
+export async function createAdminWorkspace(payload: { clientId: string; name: string; mode: AdminWorkspaceDTO['mode']; communicationMode: AdminWorkspaceDTO['communicationMode']; connectedSystemState: AdminWorkspaceDTO['connectedSystemState'] }): Promise<AdminWorkspaceDTO> {
+  return fetchApi('/client-identity/admin/workspaces', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function transitionAdminWorkspace(workspaceId: string, action: 'activate' | 'suspend' | 'archive', revision: number): Promise<AdminWorkspaceDTO> {
+  return fetchApi(`/client-identity/admin/workspaces/${encodeURIComponent(workspaceId)}/${action}`, { method: 'POST', body: JSON.stringify({ revision }) });
+}
+
+export async function updateAdminWorkspace(workspaceId: string, payload: { name: string; communicationMode: AdminWorkspaceDTO['communicationMode']; connectedSystemState: AdminWorkspaceDTO['connectedSystemState']; revision: number }): Promise<AdminWorkspaceDTO> {
+  return fetchApi(`/client-identity/admin/workspaces/${encodeURIComponent(workspaceId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+}
+
+export async function inviteAdminWorkspaceMember(workspaceId: string, payload: { email: string; role: WorkspaceMembershipDTO['role'] }) {
+  return fetchApi<{ state: string; membershipId?: string; invitationId?: string }>(`/client-identity/admin/workspaces/${encodeURIComponent(workspaceId)}/invitations`, { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function transitionAdminWorkspaceMembership(membershipId: string, action: 'approve' | 'suspend' | 'revoke', revision: number): Promise<WorkspaceMembershipDTO> {
+  return fetchApi(`/client-identity/admin/workspace-memberships/${encodeURIComponent(membershipId)}/${action}`, { method: 'POST', body: JSON.stringify({ revision }) });
 }

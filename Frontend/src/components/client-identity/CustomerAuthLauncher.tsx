@@ -34,7 +34,7 @@ const COPY: Record<AuthVariant, VariantCopy> = {
   register: {
     eyebrow: 'Ügyfélregisztráció',
     title: 'Ügyfélfiók létrehozása',
-    body: 'A következő lépésben megadhatja e-mail-címét és jelszavát, majd ellenőrizheti e-mail-címét.',
+    body: 'A következő lépés a biztonságos külső ügyfélfiók-folyamatban történik.',
     action: 'Regisztráció',
     intent: 'register',
   },
@@ -67,6 +67,15 @@ export function CustomerAuthLauncher({ variant }: { variant: AuthVariant }) {
     useCustomerAuth();
   const [error, setError] = useState<string | null>(null);
   const [switchingAccount, setSwitchingAccount] = useState(false);
+  const [modeIntent, setModeIntent] = useState<string | null>(null);
+
+  useEffect(() => {
+    const mode = new URLSearchParams(window.location.search).get('mode');
+    if (['individual', 'organization', 'case-relay'].includes(mode || '')) {
+      setModeIntent(mode);
+      sessionStorage.setItem('adminiculum:client-portal-login-intent', String(mode));
+    }
+  }, []);
 
   useEffect(() => {
     if (variant === 'login' && isAuthenticated && !interactionInProgress) {
@@ -115,6 +124,7 @@ export function CustomerAuthLauncher({ variant }: { variant: AuthVariant }) {
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#9b7b25]">{copy.eyebrow}</p>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-5xl">{copy.title}</h1>
           <p className="mt-4 text-stone-700">{copy.body}</p>
+          {variant === 'login' && modeIntent ? <p className="mt-3 rounded-xl border border-[#dfb4aa] bg-[#fff7f5] p-3 text-sm text-stone-700">Kiválasztott belépési szándék: <strong>{modeIntent === 'individual' ? 'Magánügyfél' : modeIntent === 'organization' ? 'Szervezeti ügyfél' : 'Ügyátvezető'}</strong>. Ez nem módosítja az iroda által engedélyezett hozzáféréseket.</p> : null}
           <p className="mt-2 text-sm text-stone-500">Az azonosítást biztonságos külső szolgáltató végzi. Az Adminiculum nem tárol jelszót vagy ellenőrző kódot.</p>
 
           {!configured && (

@@ -5,6 +5,16 @@ const root = path.resolve(__dirname, '..', '..');
 const read = (relative: string) => readFileSync(path.join(root, relative), 'utf8');
 
 describe('client portal workspace projection', () => {
+  it('registers server-authoritative context routes and no production bypass routes', () => {
+    const routes = read('Backend/src/routes/clientPortal.ts');
+    const index = read('Backend/src/index.ts');
+    expect(routes).toContain("router.get('/me'");
+    expect(routes).toContain("router.get('/workspaces'");
+    expect(routes).toContain('resolvePortalWorkspace');
+    expect(index).not.toMatch(/routes\/debug|debugWhoami/);
+    expect(index).not.toMatch(/app\.(get|post|use)\([^\n]*(dbcheck|test-auth|migrate|registration-bypass)/i);
+  });
+
   it('aggregates only through authenticated customer services', () => {
     const routes = read('Backend/src/routes/clientPortal.ts');
     expect(routes).toContain("router.get('/workspace'");

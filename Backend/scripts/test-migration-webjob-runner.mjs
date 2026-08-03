@@ -11,7 +11,8 @@ if (!adminUrl) throw new Error('WEBJOB_TEST_ADMIN_DATABASE_URL or DATABASE_URL i
 const backendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const runnerPath = path.join(backendRoot, 'App_Data', 'jobs', 'triggered', 'adminiculum-db-migrate', 'runner.cjs');
 const prismaBin = path.join(backendRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'prisma.cmd' : 'prisma');
-const migrationName = '20260802200000_client_identity_grant_trigger_fix';
+const baselineName = '20260726000000_current_schema_baseline';
+const migrationName = '20260803190000_client_portal_workspace_foundation';
 const databaseName = `adminiculum_webjob_${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}`;
 const databaseUrl = `${adminUrl.replace(/\/[^/]*$/, '')}/${databaseName}`;
 
@@ -49,6 +50,8 @@ try {
   await fs.writeFile(path.join(tempRoot, 'prisma', 'schema.prisma'), 'datasource db {\n  provider = "postgresql"\n  url = env("DATABASE_URL")\n}\n');
   await fs.copyFile(path.join(backendRoot, 'prisma', 'migrations', migrationName, 'migration.sql'), path.join(migrationDir, 'migration.sql'));
 
+  run(process.execPath, [path.join(backendRoot, 'scripts', 'db-bootstrap-empty.mjs')], { DATABASE_URL: databaseUrl });
+
   const db = new Client({ connectionString: databaseUrl });
   await db.connect();
   await db.query(`
@@ -62,8 +65,29 @@ try {
       "started_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
       "applied_steps_count" INTEGER NOT NULL DEFAULT 0
     );
-    CREATE TABLE "client_portal_grants" ("id" TEXT PRIMARY KEY);
   `);
+  const migrationEntries = await fs.readdir(path.join(backendRoot, 'prisma', 'migrations'), { withFileTypes: true });
+  const prerequisites = migrationEntries
+    .filter((entry) => entry.isDirectory() && entry.name > baselineName && entry.name < migrationName)
+    .map((entry) => entry.name)
+    .sort();
+  for (const prerequisite of prerequisites) {
+    const sql = await fs.readFile(path.join(backendRoot, 'prisma', 'migrations', prerequisite, 'migration.sql'), 'utf8');
+    const checksum = crypto.createHash('sha256').update(sql.replace(/\r\n/g, '\n')).digest('hex');
+    await db.query('BEGIN');
+    try {
+      await db.query(sql);
+      await db.query(
+        `INSERT INTO "_prisma_migrations" (id, checksum, finished_at, migration_name, started_at, applied_steps_count)
+         VALUES ($1, $2, now(), $3, now(), 1)`,
+        [crypto.randomUUID(), checksum, prerequisite],
+      );
+      await db.query('COMMIT');
+    } catch (error) {
+      await db.query('ROLLBACK');
+      throw error;
+    }
+  }
   await db.end();
 
   const common = {
@@ -79,7 +103,11 @@ try {
   if (first.status !== 0 || !first.stdout.includes('"state":"APPLIED"')) throw new Error(`first runner execution failed: ${first.stdout}${first.stderr}`);
   const second = runRunner(common);
   if (second.status !== 0 || !second.stdout.includes('"state":"ALREADY_APPLIED"')) throw new Error(`second runner execution failed: ${second.stdout}${second.stderr}`);
-  const failed = runRunner({ ...common, MIGRATION_WEBJOB_EXPECTED_TRIGGER_MARKER: 'not-present-in-function' });
+  const broken = new Client({ connectionString: databaseUrl });
+  await broken.connect();
+  await broken.query('DROP TABLE client_portal_workspace_memberships CASCADE');
+  await broken.end();
+  const failed = runRunner(common);
   if (failed.status === 0 || !failed.stdout.includes('"state":"FAILED"')) throw new Error('intentional verification failure did not fail');
 
   const after = new Client({ connectionString: databaseUrl });

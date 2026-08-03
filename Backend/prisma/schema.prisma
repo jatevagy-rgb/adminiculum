@@ -26,70 +26,70 @@ datasource db {
 // ============================================================================
 
 model User {
-  id           String    @id @default(uuid())
-  email        String    @unique
+  id           String     @id @default(uuid())
+  email        String     @unique
   passwordHash String?
   name         String
-  role         UserRole  @default(LEGAL_ASSISTANT)
+  role         UserRole   @default(LEGAL_ASSISTANT)
   status       UserStatus @default(ACTIVE)
   department   String?
-  skills       String[]  // JSON array of skills
-  
-  isActive     Boolean   @default(true)
-  lastLoginAt   DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  skills       String[] // JSON array of skills
+
+  isActive    Boolean   @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Relations
-  assignedTasks         Task[]              @relation("AssignedTo")
-  assignedByTasks       Task[]              @relation("AssignedBy")  // Tasks assigned by this user
-  createdCases          Case[]              @relation("CreatedBy")
-  assignedCases         Case[]              @relation("AssignedLawyer")
-  timelineEvents        TimelineEvent[]
-  comments              Comment[]
-  documentReviewSuggestions DocumentReviewSuggestion[] @relation("DocumentReviewSuggestionAuthor")
-  createdDocumentReviews DocumentReview[] @relation("DocumentReviewCreatedBy")
-  assignedDocumentReviews DocumentReview[] @relation("DocumentReviewAssignedReviewer")
-  ownedDocumentReviews DocumentReview[] @relation("DocumentReviewOwner")
-  createdDocumentReviewRounds DocumentReviewRound[] @relation("DocumentReviewRoundCreatedBy")
-  createdReviewPoints ReviewPoint[] @relation("ReviewPointCreatedBy")
-  ownedReviewPoints ReviewPoint[] @relation("ReviewPointOwner")
-  reviewDecisions ReviewDecision[] @relation("ReviewDecisionActor")
-  createdDocumentComparisons DocumentComparison[] @relation("ComparisonCreatedBy")
-  reviewSnapshots       ReviewSnapshot[]
-  createdDocumentAnnotations DocumentAnnotation[] @relation("DocumentAnnotationCreatedBy")
-  createdCaseExternalParticipants CaseExternalParticipant[] @relation("CaseExternalParticipantCreatedBy")
-  responsibleDocuments Document[] @relation("DocumentResponsible")
-  reviewerDocuments Document[] @relation("DocumentReviewer")
-  documentWorkInstructionUpdates Document[] @relation("DocumentWorkInstructionUpdatedBy")
-  createdDocumentTaskLinks DocumentTaskLink[] @relation("DocumentTaskLinkCreatedBy")
-  createdCaseIntakeDeadlines CaseIntakeDeadline[] @relation("CaseIntakeDeadlineCreatedBy")
-  responsibleCaseIntakeDeadlines CaseIntakeDeadline[] @relation("CaseIntakeDeadlineResponsible")
-  assignedDocumentAnnotations DocumentAnnotation[] @relation("DocumentAnnotationAssignedTo")
-  resolvedDocumentAnnotations DocumentAnnotation[] @relation("DocumentAnnotationResolvedBy")
-  deletedDocumentAnnotations DocumentAnnotation[] @relation("DocumentAnnotationDeletedBy")
-  createdDocumentAnnotationComments DocumentAnnotationComment[] @relation("DocumentAnnotationCommentCreatedBy")
-  deletedDocumentAnnotationComments DocumentAnnotationComment[] @relation("DocumentAnnotationCommentDeletedBy")
-  documentAnnotationEvents DocumentAnnotationEvent[] @relation("DocumentAnnotationEventActor")
-  documentAnnotationAssignments DocumentAnnotationEvent[] @relation("DocumentAnnotationEventAssignedTo")
-  caseCollaborations    CaseCollaborator[]
-  documentVersions      DocumentVersion[]
-  taskAssignments       TaskAssignmentHistory[]
-  notifications         Notification[]
-  timeEntries           TimeEntry[]         // Time entries created by user
-  createdTaskSubmissions TaskSubmission[]    @relation("TaskSubmissionCreatedBy")
-  submittedTaskSubmissions TaskSubmission[]  @relation("TaskSubmissionSubmittedBy")
-  assignedTaskSubmissions TaskSubmission[]   @relation("TaskSubmissionAssignedReviewer")
-  zeroTimeConfirmedTaskSubmissions TaskSubmission[] @relation("TaskSubmissionZeroTimeConfirmedBy")
-  externalCompletedTaskSubmissions TaskSubmission[] @relation("TaskSubmissionExternalCompletedBy")
-  createdTaskSubmissionDocuments TaskSubmissionDocument[] @relation("TaskSubmissionDocumentCreatedBy")
-  taskReviewDecisions   TaskReviewDecision[] @relation("TaskReviewDecisionReviewer")
-  automationExecutionLogs AutomationExecutionLog[]
-  automationExecutionStepLogs AutomationExecutionStepLog[]
-  automationSuggestions AutomationSuggestion[]
-  automationTriggerEvents AutomationTriggerEvent[]
-  automationPreference  UserAutomationPreference?
-  automationSuppressions UserAutomationSuppression[]
+  assignedTasks                     Task[]                       @relation("AssignedTo")
+  assignedByTasks                   Task[]                       @relation("AssignedBy") // Tasks assigned by this user
+  createdCases                      Case[]                       @relation("CreatedBy")
+  assignedCases                     Case[]                       @relation("AssignedLawyer")
+  timelineEvents                    TimelineEvent[]
+  comments                          Comment[]
+  documentReviewSuggestions         DocumentReviewSuggestion[]   @relation("DocumentReviewSuggestionAuthor")
+  createdDocumentReviews            DocumentReview[]             @relation("DocumentReviewCreatedBy")
+  assignedDocumentReviews           DocumentReview[]             @relation("DocumentReviewAssignedReviewer")
+  ownedDocumentReviews              DocumentReview[]             @relation("DocumentReviewOwner")
+  createdDocumentReviewRounds       DocumentReviewRound[]        @relation("DocumentReviewRoundCreatedBy")
+  createdReviewPoints               ReviewPoint[]                @relation("ReviewPointCreatedBy")
+  ownedReviewPoints                 ReviewPoint[]                @relation("ReviewPointOwner")
+  reviewDecisions                   ReviewDecision[]             @relation("ReviewDecisionActor")
+  createdDocumentComparisons        DocumentComparison[]         @relation("ComparisonCreatedBy")
+  reviewSnapshots                   ReviewSnapshot[]
+  createdDocumentAnnotations        DocumentAnnotation[]         @relation("DocumentAnnotationCreatedBy")
+  createdCaseExternalParticipants   CaseExternalParticipant[]    @relation("CaseExternalParticipantCreatedBy")
+  responsibleDocuments              Document[]                   @relation("DocumentResponsible")
+  reviewerDocuments                 Document[]                   @relation("DocumentReviewer")
+  documentWorkInstructionUpdates    Document[]                   @relation("DocumentWorkInstructionUpdatedBy")
+  createdDocumentTaskLinks          DocumentTaskLink[]           @relation("DocumentTaskLinkCreatedBy")
+  createdCaseIntakeDeadlines        CaseIntakeDeadline[]         @relation("CaseIntakeDeadlineCreatedBy")
+  responsibleCaseIntakeDeadlines    CaseIntakeDeadline[]         @relation("CaseIntakeDeadlineResponsible")
+  assignedDocumentAnnotations       DocumentAnnotation[]         @relation("DocumentAnnotationAssignedTo")
+  resolvedDocumentAnnotations       DocumentAnnotation[]         @relation("DocumentAnnotationResolvedBy")
+  deletedDocumentAnnotations        DocumentAnnotation[]         @relation("DocumentAnnotationDeletedBy")
+  createdDocumentAnnotationComments DocumentAnnotationComment[]  @relation("DocumentAnnotationCommentCreatedBy")
+  deletedDocumentAnnotationComments DocumentAnnotationComment[]  @relation("DocumentAnnotationCommentDeletedBy")
+  documentAnnotationEvents          DocumentAnnotationEvent[]    @relation("DocumentAnnotationEventActor")
+  documentAnnotationAssignments     DocumentAnnotationEvent[]    @relation("DocumentAnnotationEventAssignedTo")
+  caseCollaborations                CaseCollaborator[]
+  documentVersions                  DocumentVersion[]
+  taskAssignments                   TaskAssignmentHistory[]
+  notifications                     Notification[]
+  timeEntries                       TimeEntry[] // Time entries created by user
+  createdTaskSubmissions            TaskSubmission[]             @relation("TaskSubmissionCreatedBy")
+  submittedTaskSubmissions          TaskSubmission[]             @relation("TaskSubmissionSubmittedBy")
+  assignedTaskSubmissions           TaskSubmission[]             @relation("TaskSubmissionAssignedReviewer")
+  zeroTimeConfirmedTaskSubmissions  TaskSubmission[]             @relation("TaskSubmissionZeroTimeConfirmedBy")
+  externalCompletedTaskSubmissions  TaskSubmission[]             @relation("TaskSubmissionExternalCompletedBy")
+  createdTaskSubmissionDocuments    TaskSubmissionDocument[]     @relation("TaskSubmissionDocumentCreatedBy")
+  taskReviewDecisions               TaskReviewDecision[]         @relation("TaskReviewDecisionReviewer")
+  automationExecutionLogs           AutomationExecutionLog[]
+  automationExecutionStepLogs       AutomationExecutionStepLog[]
+  automationSuggestions             AutomationSuggestion[]
+  automationTriggerEvents           AutomationTriggerEvent[]
+  automationPreference              UserAutomationPreference?
+  automationSuppressions            UserAutomationSuppression[]
 
   @@map("users")
 }
@@ -129,33 +129,33 @@ enum ClientColorKey {
 }
 
 model Client {
-  id              String    @id @default(uuid())
-  name            String
-  email           String?
-  phone           String?
-  address         String?
-  taxNumber       String?
+  id                        String                 @id @default(uuid())
+  name                      String
+  email                     String?
+  phone                     String?
+  address                   String?
+  taxNumber                 String?
   companyRegistrationNumber String?
   authorizedRepresentative  String?
-  company         String?
-  vatNumber       String?
-  contactPerson   String?
-  notes           String?
-  color           String?   @db.VarChar(16) // Legacy hexadecimal field; not a rendering source
-  colorKey        ClientColorKey?
-  relationshipMode ClientRelationshipMode @default(PORTAL_CENTRIC)
-  portalAccessEnabled Boolean @default(false)
-  connectedSystemState String? @db.VarChar(80)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  company                   String?
+  vatNumber                 String?
+  contactPerson             String?
+  notes                     String?
+  color                     String?                @db.VarChar(16) // Legacy hexadecimal field; not a rendering source
+  colorKey                  ClientColorKey?
+  relationshipMode          ClientRelationshipMode @default(PORTAL_CENTRIC)
+  portalAccessEnabled       Boolean                @default(false)
+  connectedSystemState      String?                @db.VarChar(80)
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
 
   // Relations
-  cases           Case[]
-  documents       Document[]
-  departments     Department[]         // Client departments
-  matters         Matter[]            // All matters for this client
-  workgroups      ClientWorkgroup[]   // Client workgroups for workload tracking
-  redactorProfile ClientRedactionProfile? // One-to-one relation for anonymization
+  cases             Case[]
+  documents         Document[]
+  departments       Department[] // Client departments
+  matters           Matter[] // All matters for this client
+  workgroups        ClientWorkgroup[] // Client workgroups for workload tracking
+  redactorProfile   ClientRedactionProfile? // One-to-one relation for anonymization
   houseStyleProfile ClientHouseStyleProfile? // One-to-one relation for document house style
 
   @@map("clients")
@@ -168,48 +168,48 @@ enum ClientRelationshipMode {
 }
 
 model ClientHouseStyleProfile {
-  id                 String   @id @default(uuid())
-  clientId           String   @unique
+  id       String @id @default(uuid())
+  clientId String @unique
 
-  officialName        String?
-  shortName           String?
-  registeredSeat      String?
-  taxNumber           String?
-  registrationNumber  String?
-  contactPerson       String?
-  contactEmail        String?
-  contactPhone        String?
+  officialName       String?
+  shortName          String?
+  registeredSeat     String?
+  taxNumber          String?
+  registrationNumber String?
+  contactPerson      String?
+  contactEmail       String?
+  contactPhone       String?
 
   preferredLanguage    String?
   documentLanguageMode String?
 
-  fontFamily          String?
-  fontSize            String?
-  headingStyle        String?
-  numberingStyle      String?
+  fontFamily     String?
+  fontSize       String?
+  headingStyle   String?
+  numberingStyle String?
 
-  headerRequirements  String?
-  footerRequirements  String?
-  signatureBlock      String?
-  headerAssetPath     String?
-  headerDescription   String?
-  brandingNotes       String?
+  headerRequirements String?
+  footerRequirements String?
+  signatureBlock     String?
+  headerAssetPath    String?
+  headerDescription  String?
+  brandingNotes      String?
 
-  bilingualNotes      String?
-  translationNotes    String?
-  preferredTone       String?
-  prohibitedWording   String?
+  bilingualNotes    String?
+  translationNotes  String?
+  preferredTone     String?
+  prohibitedWording String?
 
   reusablePromptInstructions String?
   wordFormattingInstructions String?
   externalAiInstructions     String?
 
-  notes              String?
+  notes String?
 
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  client             Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@map("client_house_style_profiles")
 }
@@ -223,17 +223,17 @@ model ClientHouseStyleProfile {
 // ============================================================================
 
 model ClientWorkgroup {
-  id              String    @id @default(uuid())
-  name            String
-  description     String?
-  isActive        Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   // Relations
-  clientId        String
-  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
   workloadRecords WorkloadRecord[]
 
   @@unique([clientId, name])
@@ -250,16 +250,16 @@ model ClientWorkgroup {
 // ============================================================================
 
 model WorkloadRecord {
-  id              String    @id @default(uuid())
-  period          String    // YYYY-MM format
-  reportedHours   Float
-  note            String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id            String   @id @default(uuid())
+  period        String // YYYY-MM format
+  reportedHours Float
+  note          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Relations
-  workgroupId     String
-  workgroup       ClientWorkgroup @relation(fields: [workgroupId], references: [id], onDelete: Cascade)
+  workgroupId String
+  workgroup   ClientWorkgroup @relation(fields: [workgroupId], references: [id], onDelete: Cascade)
 
   @@unique([workgroupId, period])
   @@index([workgroupId])
@@ -275,19 +275,19 @@ model WorkloadRecord {
 // ============================================================================
 
 model Department {
-  id              String    @id @default(uuid())
-  name            String    // e.g., "HR", "Legal", "Compliance", "Finance"
-  description     String?
-  isActive        Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id          String   @id @default(uuid())
+  name        String // e.g., "HR", "Legal", "Compliance", "Finance"
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   // Relations
-  clientId        String
-  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  
-  matters         Matter[]
-  timeEntries     TimeEntry[]
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  matters     Matter[]
+  timeEntries TimeEntry[]
 
   @@unique([clientId, name])
   @@map("departments")
@@ -303,32 +303,32 @@ model Department {
 // ============================================================================
 
 model Matter {
-  id              String      @id @default(uuid())
-  title           String      // e.g., "Munkaszerződés módosítás projekt"
-  description     String?
-  matterType      MatterType
-  status          MatterStatus @default(OPEN)
-  
+  id          String       @id @default(uuid())
+  title       String // e.g., "Munkaszerződés módosítás projekt"
+  description String?
+  matterType  MatterType
+  status      MatterStatus @default(OPEN)
+
   // Financial/Tracking info
-  budgetHours     Float?      // Estimated hours
-  totalMinutes    Int         @default(0)  // Actual minutes logged
-  
+  budgetHours  Float? // Estimated hours
+  totalMinutes Int    @default(0) // Actual minutes logged
+
   // Dates
-  openedAt        DateTime    @default(now())
-  closedAt        DateTime?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  openedAt  DateTime  @default(now())
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   // Relations
-  clientId        String
-  client          Client      @relation(fields: [clientId], references: [id])
-  
-  departmentId    String?
-  department      Department? @relation(fields: [departmentId], references: [id])
-  
-  cases           Case[]
-  timeEntries     TimeEntry[]
-  tasks           Task[]
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  cases       Case[]
+  timeEntries TimeEntry[]
+  tasks       Task[]
 
   @@map("matters")
 }
@@ -360,30 +360,30 @@ enum MatterStatus {
 // ============================================================================
 
 model TimeEntry {
-  id              String      @id @default(uuid())
-  workType        WorkType
-  description     String      // Client-friendly description (high-level only)
-  minutes         Int         // Time spent in minutes
-  billable        Boolean     @default(true)
-  
+  id          String   @id @default(uuid())
+  workType    WorkType
+  description String // Client-friendly description (high-level only)
+  minutes     Int // Time spent in minutes
+  billable    Boolean  @default(true)
+
   // Date of work (can be backdated)
-  workDate        DateTime    @default(now())
-  
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  workDate DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  matterId        String
-  matter          Matter      @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  
-  userId          String
-  user            User        @relation(fields: [userId], references: [id])
-  
-  departmentId    String?
-  department      Department? @relation(fields: [departmentId], references: [id])
-  taskId          String?
-  task            Task?       @relation(fields: [taskId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  timelineEvents  TimelineEvent[]
+  matterId String
+  matter   Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  departmentId        String?
+  department          Department?               @relation(fields: [departmentId], references: [id])
+  taskId              String?
+  task                Task?                     @relation(fields: [taskId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  timelineEvents      TimelineEvent[]
   taskSubmissionLinks TaskSubmissionTimeEntry[]
 
   @@index([matterId, workDate])
@@ -416,7 +416,7 @@ model TimesheetReportInstance {
   createdAt              DateTime                      @default(now())
   updatedAt              DateTime                      @updatedAt
 
-  renderedArtifacts      TimesheetReportArtifact[]
+  renderedArtifacts TimesheetReportArtifact[]
 
   @@index([updatedAt])
   @@index([reportPeriod])
@@ -424,22 +424,22 @@ model TimesheetReportInstance {
 }
 
 model TimesheetReportArtifact {
-  id               String                       @id @default(uuid())
+  id               String                        @id @default(uuid())
   reportInstanceId String
-  reportInstance   TimesheetReportInstance      @relation(fields: [reportInstanceId], references: [id], onDelete: Cascade)
+  reportInstance   TimesheetReportInstance       @relation(fields: [reportInstanceId], references: [id], onDelete: Cascade)
   format           TimesheetReportArtifactFormat
   mimeType         String
   fileName         String
   contentText      String?
   contentBase64    String?
-  createdAt        DateTime                     @default(now())
+  createdAt        DateTime                      @default(now())
 
   @@index([reportInstanceId, createdAt])
   @@map("timesheet_report_artifacts")
 }
 
 model TimesheetPreset {
-  id                     String                    @id @default(uuid())
+  id                     String                        @id @default(uuid())
   name                   String
   templateFamily         TimesheetReportTemplateFamily
   layer                  TimesheetPresetLayer
@@ -451,9 +451,9 @@ model TimesheetPreset {
   pendingOpenMattersNote String?
   clientClosingText      String?
   defaultLawyerName      String?
-  isActive               Boolean                   @default(true)
-  createdAt              DateTime                  @default(now())
-  updatedAt              DateTime                  @updatedAt
+  isActive               Boolean                       @default(true)
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @updatedAt
 
   @@index([templateFamily, isActive])
   @@index([layer, isActive])
@@ -484,16 +484,16 @@ enum TimesheetPresetLayer {
 }
 
 enum WorkType {
-  DRAFTING           // Szerkesztés, tervezet készítés
-  REVIEW             // Átnézés, ellenőrzés
-  CLIENT_CALL        // Ügyfélhívás
-  LEGAL_RESEARCH     // Jogi kutatás
-  INTERNAL_MEETING   // Belső megbeszélés
+  DRAFTING // Szerkesztés, tervezet készítés
+  REVIEW // Átnézés, ellenőrzés
+  CLIENT_CALL // Ügyfélhívás
+  LEGAL_RESEARCH // Jogi kutatás
+  INTERNAL_MEETING // Belső megbeszélés
   DOCUMENT_GENERATION // Dokumentum generálás
-  COURT_PREPARATION  // Bírósági felkészülés
-  TRANSLATION        // Fordítás
-  ADMIN              // Adminisztratív
-  OTHER              // Egyéb
+  COURT_PREPARATION // Bírósági felkészülés
+  TRANSLATION // Fordítás
+  ADMIN // Adminisztratív
+  OTHER // Egyéb
 }
 
 // ============================================================================
@@ -501,16 +501,16 @@ enum WorkType {
 // ============================================================================
 
 model UserAutomationPreference {
-  id                 String  @id
-  userId             String  @unique
-  suggestionsEnabled Boolean @default(true)
-  level1Enabled      Boolean @default(true)
-  level2Enabled      Boolean @default(true)
-  level3Enabled      Boolean @default(false)
+  id                 String   @id
+  userId             String   @unique
+  suggestionsEnabled Boolean  @default(true)
+  level1Enabled      Boolean  @default(true)
+  level2Enabled      Boolean  @default(true)
+  level3Enabled      Boolean  @default(false)
   createdAt          DateTime @default(now())
   updatedAt          DateTime
 
-  user               User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "user_automation_preferences_userId_fkey")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "user_automation_preferences_userId_fkey")
 
   @@map("user_automation_preferences")
 }
@@ -522,7 +522,7 @@ model UserAutomationSuppression {
   value           String
   createdAt       DateTime                  @default(now())
 
-  user            User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "user_automation_suppressions_userId_fkey")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "user_automation_suppressions_userId_fkey")
 
   @@index([userId, suppressionType, value], map: "user_automation_suppressions_userId_suppressionType_value_idx")
   @@map("user_automation_suppressions")
@@ -541,7 +541,7 @@ model AutomationTriggerEvent {
   source       AutomationEventSource @default(HUMAN)
   createdAt    DateTime              @default(now())
 
-  user         User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "automation_trigger_events_userId_fkey")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "automation_trigger_events_userId_fkey")
 
   @@index([createdAt], map: "automation_trigger_events_createdAt_idx")
   @@index([userId, contextKey], map: "automation_trigger_events_userId_contextKey_idx")
@@ -565,34 +565,34 @@ model AutomationSuggestion {
   processingStartedAt   DateTime?
   bundlePreview         Json?
 
-  user                  User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "automation_suggestions_userId_fkey")
-  executionLogs         AutomationExecutionLog[]
-  executionStepLogs     AutomationExecutionStepLog[]
+  user              User                         @relation(fields: [userId], references: [id], onDelete: Cascade, map: "automation_suggestions_userId_fkey")
+  executionLogs     AutomationExecutionLog[]
+  executionStepLogs AutomationExecutionStepLog[]
 
   @@index([userId, entityType, entityId, state], map: "automation_suggestions_userId_entityType_entityId_state_idx")
   @@map("automation_suggestions")
 }
 
 model AutomationExecutionLog {
-  id                 String                    @id
-  userId             String
-  entityType         AutomationEntityType
-  entityId           String
-  suggestionId       String?
-  executionMode      AutomationExecutionMode
-  status             AutomationExecutionStatus
-  resultSummary      String?
-  rollbackData       Json?
-  createdAt          DateTime                  @default(now())
-  operationToken     String?                   @unique
-  startedAt          DateTime?
-  finishedAt         DateTime?
-  failureCode        String?
-  failureDetails     Json?
+  id             String                    @id
+  userId         String
+  entityType     AutomationEntityType
+  entityId       String
+  suggestionId   String?
+  executionMode  AutomationExecutionMode
+  status         AutomationExecutionStatus
+  resultSummary  String?
+  rollbackData   Json?
+  createdAt      DateTime                  @default(now())
+  operationToken String?                   @unique
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  failureCode    String?
+  failureDetails Json?
 
-  user               User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "automation_execution_logs_userId_fkey")
-  suggestion         AutomationSuggestion? @relation(fields: [suggestionId], references: [id], onDelete: SetNull, map: "automation_execution_logs_suggestionId_fkey")
-  executionStepLogs  AutomationExecutionStepLog[]
+  user              User                         @relation(fields: [userId], references: [id], onDelete: Cascade, map: "automation_execution_logs_userId_fkey")
+  suggestion        AutomationSuggestion?        @relation(fields: [suggestionId], references: [id], onDelete: SetNull, map: "automation_execution_logs_suggestionId_fkey")
+  executionStepLogs AutomationExecutionStepLog[]
 
   @@index([createdAt], map: "automation_execution_logs_createdAt_idx")
   @@index([userId, entityType, entityId], map: "automation_execution_logs_userId_entityType_entityId_idx")
@@ -623,9 +623,9 @@ model AutomationExecutionStepLog {
   finishedAt            DateTime?
   createdAt             DateTime                        @default(now())
 
-  executionLog          AutomationExecutionLog @relation(fields: [executionLogId], references: [id], onDelete: Cascade, map: "automation_execution_step_logs_executionLogId_fkey")
-  suggestion            AutomationSuggestion? @relation(fields: [suggestionId], references: [id], onDelete: SetNull, map: "automation_execution_step_logs_suggestionId_fkey")
-  user                  User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "automation_execution_step_logs_userId_fkey")
+  executionLog AutomationExecutionLog @relation(fields: [executionLogId], references: [id], onDelete: Cascade, map: "automation_execution_step_logs_executionLogId_fkey")
+  suggestion   AutomationSuggestion?  @relation(fields: [suggestionId], references: [id], onDelete: SetNull, map: "automation_execution_step_logs_suggestionId_fkey")
+  user         User                   @relation(fields: [userId], references: [id], onDelete: Cascade, map: "automation_execution_step_logs_userId_fkey")
 
   @@unique([executionLogId, stepOrder], map: "automation_execution_step_logs_executionLogId_stepOrder_key")
   @@index([actionKey, createdAt], map: "automation_execution_step_logs_actionKey_createdAt_idx")
@@ -699,68 +699,68 @@ enum AutomationSuppressionType {
 // ============================================================================
 
 model Case {
-  id              String          @id @default(uuid())
-  caseNumber      String          @unique
-  title           String
-  description     String?
-  caseType        CaseType
-  status          CaseStatus      @default(CLIENT_INPUT)
-  priority        Priority        @default(MEDIUM)
-  
+  id          String     @id @default(uuid())
+  caseNumber  String     @unique
+  title       String
+  description String?
+  caseType    CaseType
+  status      CaseStatus @default(CLIENT_INPUT)
+  priority    Priority   @default(MEDIUM)
+
   // Additional fields for code compatibility
-  clientName      String?         // Computed from client relation
-  matterType      String?         // Computed from matter relation
-  sharepointRoot  String?         // Base SharePoint path
-  clientRole     String?         // Case-level client role for generation/anonymization targeting (e.g., CLIENT, COUNTERPARTY, OPPOSING_COUNSEL, BENEFICIARY)
-  sharepointSite  String?         // SharePoint site ID (code compatibility)
-  caseAssignment  Json?          // Case assignment data (code compatibility)
-  
+  clientName     String? // Computed from client relation
+  matterType     String? // Computed from matter relation
+  sharepointRoot String? // Base SharePoint path
+  clientRole     String? // Case-level client role for generation/anonymization targeting (e.g., CLIENT, COUNTERPARTY, OPPOSING_COUNSEL, BENEFICIARY)
+  sharepointSite String? // SharePoint site ID (code compatibility)
+  caseAssignment Json? // Case assignment data (code compatibility)
+
   // SharePoint Integration
-  spSiteId        String?
-  spDriveId       String?
-  spFolderPath    String?         // /Cases/{caseNumber} - {clientName}
-  spMainFolderId  String?
-  
+  spSiteId       String?
+  spDriveId      String?
+  spFolderPath   String? // /Cases/{caseNumber} - {clientName}
+  spMainFolderId String?
+
   // Dates
-  receivedAt      DateTime        @default(now())
-  deadline        DateTime?
-  completedAt     DateTime?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  receivedAt  DateTime  @default(now())
+  deadline    DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Relations
-  clientId        String
-  client          Client          @relation(fields: [clientId], references: [id])
-  
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
   // Matter relation (NEW - cases belong to matters)
-  matterId        String?
-  matter          Matter?         @relation(fields: [matterId], references: [id])
-  
-  createdById     String
-  createdBy       User            @relation("CreatedBy", fields: [createdById], references: [id])
+  matterId String?
+  matter   Matter? @relation(fields: [matterId], references: [id])
+
+  createdById      String
+  createdBy        User    @relation("CreatedBy", fields: [createdById], references: [id])
   assignedLawyerId String?
-  assignedLawyer  User?           @relation("AssignedLawyer", fields: [assignedLawyerId], references: [id])
-  
+  assignedLawyer   User?   @relation("AssignedLawyer", fields: [assignedLawyerId], references: [id])
+
   // ---- Intake starting context (CASE-INTAKE-REDESIGN-1) -------------------
   // Structured, separately queryable answers captured at matter intake. These are
   // discrete columns rather than one generic note blob, so the matter overview and
   // later automation can read each dimension on its own.
-  intakeOriginReason      String?   // Miért indult az ügy?
-  intakeCurrentSituation  String?   // Mi a jelenlegi helyzet?
-  intakeClientExpectation String?   // Mit vár az ügyfél?
-  intakeUrgentAction      String?   // Van-e sürgős teendő?
-  intakeNextStep          String?   // Mi az első következő ügyvédi lépés?
+  intakeOriginReason      String? // Miért indult az ügy?
+  intakeCurrentSituation  String? // Mi a jelenlegi helyzet?
+  intakeClientExpectation String? // Mit vár az ügyfél?
+  intakeUrgentAction      String? // Van-e sürgős teendő?
+  intakeNextStep          String? // Mi az első következő ügyvédi lépés?
 
-documents       Document[]
-  tasks           Task[]
-  timelineEvents  TimelineEvent[]
-  comments        Comment[]
+  documents                 Document[]
+  tasks                     Task[]
+  timelineEvents            TimelineEvent[]
+  comments                  Comment[]
   documentReviewSuggestions DocumentReviewSuggestion[]
-  collaborators   CaseCollaborator[]
-  legalAnalyses   LegalAnalysis[]
-  lawyerHandoffPackages LawyerHandoffPackage[]
-  externalParticipants CaseExternalParticipant[]
-  intakeDeadlines CaseIntakeDeadline[]
+  collaborators             CaseCollaborator[]
+  legalAnalyses             LegalAnalysis[]
+  lawyerHandoffPackages     LawyerHandoffPackage[]
+  externalParticipants      CaseExternalParticipant[]
+  intakeDeadlines           CaseIntakeDeadline[]
 
   @@map("cases")
 }
@@ -769,21 +769,21 @@ documents       Document[]
 /// other externals. A participant is never just a name — the role is required and
 /// persisted, and `side` makes the adversarial position explicit.
 model CaseExternalParticipant {
-  id            String   @id @default(uuid())
-  caseId        String
-  name          String
-  role          String   // CLIENT_CONTACT, OPPOSING_PARTY, OPPOSING_COUNSEL, EXPERT, OTHER
-  side          String   @default("OTHER") // CLIENT, OPPOSING, NEUTRAL, OTHER
-  organization  String?
-  email         String?
-  phone         String?
-  note          String?
-  createdById   String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(uuid())
+  caseId       String
+  name         String
+  role         String // CLIENT_CONTACT, OPPOSING_PARTY, OPPOSING_COUNSEL, EXPERT, OTHER
+  side         String   @default("OTHER") // CLIENT, OPPOSING, NEUTRAL, OTHER
+  organization String?
+  email        String?
+  phone        String?
+  note         String?
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  case          Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  createdBy     User @relation("CaseExternalParticipantCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  case      Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  createdBy User @relation("CaseExternalParticipantCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   @@index([caseId])
   @@map("case_external_participants")
@@ -793,25 +793,25 @@ model CaseExternalParticipant {
 /// statutory/procedural deadline from an internal working target, so the type is
 /// modelled explicitly instead of being flattened into one untyped date.
 model CaseIntakeDeadline {
-  id              String   @id @default(uuid())
-  caseId          String
-  title           String
-  deadlineType    String   // STATUTORY, CLIENT_COMMITMENT, INTERNAL, NEXT_ACTION, OTHER
-  dueAt           DateTime
+  id                    String   @id @default(uuid())
+  caseId                String
+  title                 String
+  deadlineType          String // STATUTORY, CLIENT_COMMITMENT, INTERNAL, NEXT_ACTION, OTHER
+  dueAt                 DateTime
   /// How the user expressed it: ABSOLUTE (picked a moment) or RELATIVE (in N units).
-  inputMode       String   @default("ABSOLUTE")
-  relativeValue   Int?
-  relativeUnit    String?  // MINUTE, HOUR, DAY, WEEK
+  inputMode             String   @default("ABSOLUTE")
+  relativeValue         Int?
+  relativeUnit          String? // MINUTE, HOUR, DAY, WEEK
   reminderMinutesBefore Int?
-  responsibleId   String?
-  note            String?
-  createdById     String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  responsibleId         String?
+  note                  String?
+  createdById           String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  case            Case  @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  responsible     User? @relation("CaseIntakeDeadlineResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
-  createdBy       User  @relation("CaseIntakeDeadlineCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  case        Case  @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  responsible User? @relation("CaseIntakeDeadlineResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
+  createdBy   User  @relation("CaseIntakeDeadlineCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   @@index([caseId, dueAt])
   @@index([responsibleId, dueAt])
@@ -820,14 +820,14 @@ model CaseIntakeDeadline {
 
 // Case collaborators — internal operational team members on a case (separate from assignedLawyer)
 model CaseCollaborator {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  caseId    String
-  userId    String
-  role      String   @default("COLLABORATOR") // ASSISTANT, REVIEWER, CONSULTANT, PARALEGAL
-  addedAt   DateTime @default(now()) @db.Timestamp(6)
+  id      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  caseId  String
+  userId  String
+  role    String   @default("COLLABORATOR") // ASSISTANT, REVIEWER, CONSULTANT, PARALEGAL
+  addedAt DateTime @default(now()) @db.Timestamp(6)
 
-  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade, map: "case_collaborators_caseid_fkey")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "case_collaborators_userid_fkey")
+  case Case @relation(fields: [caseId], references: [id], onDelete: Cascade, map: "case_collaborators_caseid_fkey")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "case_collaborators_userid_fkey")
 
   @@unique([caseId, userId], map: "case_collaborators_caseid_userid_key")
   @@index([caseId], map: "case_collaborators_caseid_index")
@@ -872,54 +872,54 @@ enum Priority {
 // ============================================================================
 
 model Document {
-  id              String          @id @default(uuid())
-  name            String
-  description     String?
-  mimeType        String          @default("application/octet-stream")
-  category        DocumentCategory
-  
+  id          String           @id @default(uuid())
+  name        String
+  description String?
+  mimeType    String           @default("application/octet-stream")
+  category    DocumentCategory
+
   // Code compatibility fields
-  fileName        String?         // Original file name
-  documentType    String?         // Document type
-  spPath          String?         // SharePoint path
-  spDriveId       String?         // SharePoint drive ID
-  version         String?         // Document version
-  folder          String?         // Folder location
-  
+  fileName     String? // Original file name
+  documentType String? // Document type
+  spPath       String? // SharePoint path
+  spDriveId    String? // SharePoint drive ID
+  version      String? // Document version
+  folder       String? // Folder location
+
   // SharePoint Metadata
-  spItemId        String?         @unique  // SharePoint DriveItem ID
-  spWebUrl        String?         // SharePoint web URL
-  spParentPath    String?         // SP folder path (e.g., /Cases/2024-001/02_Drafts)
-  spVersionId     String?         // SP version ID
-  spCheckOutUser  String?         // Who has it checked out
-  
+  spItemId       String? @unique // SharePoint DriveItem ID
+  spWebUrl       String? // SharePoint web URL
+  spParentPath   String? // SP folder path (e.g., /Cases/2024-001/02_Drafts)
+  spVersionId    String? // SP version ID
+  spCheckOutUser String? // Who has it checked out
+
   // Local Metadata
-  currentVersion  Int             @default(1)
-  currentVersionInt Int           @default(1)
-  isLatest        Boolean         @default(true)
-  size            Int?            // bytes
-  checksum        String?         // SHA-256 hash for change detection
+  currentVersion    Int     @default(1)
+  currentVersionInt Int     @default(1)
+  isLatest          Boolean @default(true)
+  size              Int? // bytes
+  checksum          String? // SHA-256 hash for change detection
 
   // Persistent workspace text for modified working copy documents
-  workspaceText   String?         // Stores the workspace editor draft text when documentType = 'MODIFIED_WORKING_COPY'
+  workspaceText String? // Stores the workspace editor draft text when documentType = 'MODIFIED_WORKING_COPY'
 
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  caseId          String
-  case            Case            @relation(fields: [caseId], references: [id])
-  clientId        String
-  client          Client          @relation(fields: [clientId], references: [id])
-  
-  versions        DocumentVersion[]
-  reviews         DocumentReview[]
-  annotations     DocumentAnnotation[]
-  reviewSuggestions DocumentReviewSuggestion[]
-  anonymizedDocuments AnonymousDocument[]
-  documentComparisons DocumentComparison[]
-  comments        Comment[]
-  timelineEvents  TimelineEvent[]
+  caseId   String
+  case     Case   @relation(fields: [caseId], references: [id])
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  versions                DocumentVersion[]
+  reviews                 DocumentReview[]
+  annotations             DocumentAnnotation[]
+  reviewSuggestions       DocumentReviewSuggestion[]
+  anonymizedDocuments     AnonymousDocument[]
+  documentComparisons     DocumentComparison[]
+  comments                Comment[]
+  timelineEvents          TimelineEvent[]
   taskSubmissionDocuments TaskSubmissionDocument[]
 
   // ---- Document work context (DOCUMENT-WORK-CONTEXT-1) --------------------
@@ -931,25 +931,25 @@ model Document {
   //   workStatus                       -> logical document work status (here)
   //   DocumentVersionReviewStatus      -> review state of ONE version
   //   DocumentVersionPublicationStatus -> publication state of ONE version
-  title             String?              // human-readable title; fileName stays secondary
-  documentRole      String?              // role in the matter, e.g. DRAFT_CONTRACT, EVIDENCE
-  workStatus        DocumentWorkStatus   @default(RECEIVED)
-  workInstruction   String?              // the current executable instruction, not a chat comment
+  title                      String? // human-readable title; fileName stays secondary
+  documentRole               String? // role in the matter, e.g. DRAFT_CONTRACT, EVIDENCE
+  workStatus                 DocumentWorkStatus @default(RECEIVED)
+  workInstruction            String? // the current executable instruction, not a chat comment
   workInstructionUpdatedAt   DateTime?
   workInstructionUpdatedById String?
-  responsibleId     String?
-  reviewerId        String?
-  dueDate           DateTime?
-  workPriority      Priority?
-  nextStep          String?
+  responsibleId              String?
+  reviewerId                 String?
+  dueDate                    DateTime?
+  workPriority               Priority?
+  nextStep                   String?
   /// Provenance: the communication this document arrived on, where applicable.
-  sourceCommunicationId String?
+  sourceCommunicationId      String?
 
-  responsible       User? @relation("DocumentResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
-  reviewer          User? @relation("DocumentReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
-  workInstructionUpdatedBy User? @relation("DocumentWorkInstructionUpdatedBy", fields: [workInstructionUpdatedById], references: [id], onDelete: SetNull)
-  sourceCommunication Communication? @relation("DocumentSourceCommunication", fields: [sourceCommunicationId], references: [id], onDelete: SetNull)
-  taskLinks         DocumentTaskLink[]
+  responsible              User?              @relation("DocumentResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
+  reviewer                 User?              @relation("DocumentReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  workInstructionUpdatedBy User?              @relation("DocumentWorkInstructionUpdatedBy", fields: [workInstructionUpdatedById], references: [id], onDelete: SetNull)
+  sourceCommunication      Communication?     @relation("DocumentSourceCommunication", fields: [sourceCommunicationId], references: [id], onDelete: SetNull)
+  taskLinks                DocumentTaskLink[]
 
   @@index([caseId, workStatus])
   @@index([responsibleId, workStatus])
@@ -969,9 +969,9 @@ model DocumentTaskLink {
   createdById String
   createdAt   DateTime @default(now())
 
-  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  createdBy   User     @relation("DocumentTaskLinkCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  document  Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdBy User     @relation("DocumentTaskLinkCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   @@unique([documentId, taskId])
   @@index([taskId])
@@ -1010,49 +1010,49 @@ enum DocumentCategory {
 // ============================================================================
 
 model DocumentVersion {
-  id              String    @id @default(uuid())
-  version         Int
-  name            String
-  description     String?
-  originalFileName String?
-  mimeType        String?
-  size            Int?
-  storageReference String?
-  isCurrent       Boolean   @default(false) @map("currentVersion")
-  reviewStatus    DocumentVersionReviewStatus @default(NOT_IN_REVIEW)
+  id                String                           @id @default(uuid())
+  version           Int
+  name              String
+  description       String?
+  originalFileName  String?
+  mimeType          String?
+  size              Int?
+  storageReference  String?
+  isCurrent         Boolean                          @default(false) @map("currentVersion")
+  reviewStatus      DocumentVersionReviewStatus      @default(NOT_IN_REVIEW)
   publicationStatus DocumentVersionPublicationStatus @default(INTERNAL_ONLY)
-  uploadSource    DocumentVersionUploadSource @default(LAWYER_UPLOAD)
-  versionType     DocumentVersionType @default(WORKING_COPY)
-  
+  uploadSource      DocumentVersionUploadSource      @default(LAWYER_UPLOAD)
+  versionType       DocumentVersionType              @default(WORKING_COPY)
+
   // SharePoint Version Info
-  spVersionLabel  String?   // e.g., "1.0", "2.0"
-  spVersionId     String?
-  spAuthorId      String?   // SP user ID
-  spItemId         String?
-  spWebUrl         String?
-  
+  spVersionLabel String? // e.g., "1.0", "2.0"
+  spVersionId    String?
+  spAuthorId     String? // SP user ID
+  spItemId       String?
+  spWebUrl       String?
+
   // Local Tracking
-  uploadedById    String
-  uploadedBy      User      @relation(fields: [uploadedById], references: [id])
-  
-  createdAt       DateTime  @default(now())
+  uploadedById String
+  uploadedBy   User   @relation(fields: [uploadedById], references: [id])
+
+  createdAt DateTime @default(now())
 
   // Relations
-  documentId      String
-  document        Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  previousVersionId String?
-  previousVersion DocumentVersion? @relation("DocumentVersionLineage", fields: [previousVersionId], references: [id], onDelete: Restrict)
-  nextVersions    DocumentVersion[] @relation("DocumentVersionLineage")
-  reviews          DocumentReview[]
-  reviewSnapshots  ReviewSnapshot[]
-  annotations      DocumentAnnotation[]
-  reviewSuggestions DocumentReviewSuggestion[]
+  documentId              String
+  document                Document                   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  previousVersionId       String?
+  previousVersion         DocumentVersion?           @relation("DocumentVersionLineage", fields: [previousVersionId], references: [id], onDelete: Restrict)
+  nextVersions            DocumentVersion[]          @relation("DocumentVersionLineage")
+  reviews                 DocumentReview[]
+  reviewSnapshots         ReviewSnapshot[]
+  annotations             DocumentAnnotation[]
+  reviewSuggestions       DocumentReviewSuggestion[]
   taskSubmissionDocuments TaskSubmissionDocument[]
-  comparisonsAsBase   DocumentComparison[] @relation("ComparisonBaseVersion")
-  comparisonsAsTarget DocumentComparison[] @relation("ComparisonTargetVersion")
-  reviewRounds     DocumentReviewRound[] @relation("DocumentReviewRoundVersion")
-  approvedReviews  DocumentReview[] @relation("DocumentReviewApprovedVersion")
-  reviewDecisions  ReviewDecision[] @relation("ReviewDecisionVersion")
+  comparisonsAsBase       DocumentComparison[]       @relation("ComparisonBaseVersion")
+  comparisonsAsTarget     DocumentComparison[]       @relation("ComparisonTargetVersion")
+  reviewRounds            DocumentReviewRound[]      @relation("DocumentReviewRoundVersion")
+  approvedReviews         DocumentReview[]           @relation("DocumentReviewApprovedVersion")
+  reviewDecisions         ReviewDecision[]           @relation("ReviewDecisionVersion")
 
   @@unique([documentId, version])
   @@unique([documentId, id])
@@ -1098,59 +1098,59 @@ enum DocumentVersionType {
 }
 
 model DocumentAnnotation {
-  id                   String   @id @default(uuid())
-  documentId           String
-  documentVersionId    String
-  annotationType       DocumentAnnotationType
-  anchorType           DocumentAnnotationAnchorType
-  status               DocumentAnnotationStatus @default(OPEN)
-  visibility           DocumentAnnotationVisibility @default(INTERNAL)
-  headline             String?
-  internalNote         String?
-  reviewComment        String?
-  modificationReason   String?
+  id                     String                       @id @default(uuid())
+  documentId             String
+  documentVersionId      String
+  annotationType         DocumentAnnotationType
+  anchorType             DocumentAnnotationAnchorType
+  status                 DocumentAnnotationStatus     @default(OPEN)
+  visibility             DocumentAnnotationVisibility @default(INTERNAL)
+  headline               String?
+  internalNote           String?
+  reviewComment          String?
+  modificationReason     String?
   clientExplanationDraft String?
-  legalRisk            String?
-  openQuestion         String?
-  decisionText         String?
-  resolutionNote       String?
-  selectedText         String?
+  legalRisk              String?
+  openQuestion           String?
+  decisionText           String?
+  resolutionNote         String?
+  selectedText           String?
   normalizedSelectedText String?
-  textPrefix           String?
-  textSuffix           String?
-  startOffset          Int?
-  endOffset            Int?
-  pageNumber           Int?
-  pageIndex            Int?
-  rectX                Decimal? @db.Decimal(8, 6)
-  rectY                Decimal? @db.Decimal(8, 6)
-  rectWidth            Decimal? @db.Decimal(8, 6)
-  rectHeight           Decimal? @db.Decimal(8, 6)
-  pointX               Decimal? @db.Decimal(8, 6)
-  pointY               Decimal? @db.Decimal(8, 6)
-  pageRotation         Int?
-  structuralPath       String?
-  rendererVersion      String?
-  contentFingerprint   String?
-  idempotencyKey       String?
-  createdById          String
-  assignedToId         String?
-  resolvedById         String?
-  deletedById          String?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-  resolvedAt           DateTime?
-  deletedAt            DateTime?
+  textPrefix             String?
+  textSuffix             String?
+  startOffset            Int?
+  endOffset              Int?
+  pageNumber             Int?
+  pageIndex              Int?
+  rectX                  Decimal?                     @db.Decimal(8, 6)
+  rectY                  Decimal?                     @db.Decimal(8, 6)
+  rectWidth              Decimal?                     @db.Decimal(8, 6)
+  rectHeight             Decimal?                     @db.Decimal(8, 6)
+  pointX                 Decimal?                     @db.Decimal(8, 6)
+  pointY                 Decimal?                     @db.Decimal(8, 6)
+  pageRotation           Int?
+  structuralPath         String?
+  rendererVersion        String?
+  contentFingerprint     String?
+  idempotencyKey         String?
+  createdById            String
+  assignedToId           String?
+  resolvedById           String?
+  deletedById            String?
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+  resolvedAt             DateTime?
+  deletedAt              DateTime?
 
-  document             Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  documentVersion      DocumentVersion @relation(fields: [documentId, documentVersionId], references: [documentId, id], onDelete: Restrict)
-  createdBy            User @relation("DocumentAnnotationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  assignedTo           User? @relation("DocumentAnnotationAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
-  resolvedBy           User? @relation("DocumentAnnotationResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
-  deletedBy            User? @relation("DocumentAnnotationDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
-  comments             DocumentAnnotationComment[]
-  events               DocumentAnnotationEvent[]
-  reviewPoints         ReviewPoint[]
+  document        Document                    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentVersion DocumentVersion             @relation(fields: [documentId, documentVersionId], references: [documentId, id], onDelete: Restrict)
+  createdBy       User                        @relation("DocumentAnnotationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  assignedTo      User?                       @relation("DocumentAnnotationAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  resolvedBy      User?                       @relation("DocumentAnnotationResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  deletedBy       User?                       @relation("DocumentAnnotationDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  comments        DocumentAnnotationComment[]
+  events          DocumentAnnotationEvent[]
+  reviewPoints    ReviewPoint[]
 
   @@unique([documentVersionId, idempotencyKey])
   @@index([documentId, documentVersionId, status])
@@ -1163,18 +1163,18 @@ model DocumentAnnotation {
 }
 
 model DocumentAnnotationComment {
-  id             String   @id @default(uuid())
-  annotationId   String
-  body           String
-  createdById    String
-  createdAt      DateTime @default(now())
-  editedAt       DateTime?
-  deletedAt      DateTime?
-  deletedById    String?
+  id           String    @id @default(uuid())
+  annotationId String
+  body         String
+  createdById  String
+  createdAt    DateTime  @default(now())
+  editedAt     DateTime?
+  deletedAt    DateTime?
+  deletedById  String?
 
-  annotation     DocumentAnnotation @relation(fields: [annotationId], references: [id], onDelete: Cascade)
-  createdBy      User @relation("DocumentAnnotationCommentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  deletedBy      User? @relation("DocumentAnnotationCommentDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  annotation DocumentAnnotation @relation(fields: [annotationId], references: [id], onDelete: Cascade)
+  createdBy  User               @relation("DocumentAnnotationCommentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  deletedBy  User?              @relation("DocumentAnnotationCommentDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@index([annotationId, createdAt])
   @@index([createdById])
@@ -1182,18 +1182,18 @@ model DocumentAnnotationComment {
 }
 
 model DocumentAnnotationEvent {
-  id             String   @id @default(uuid())
-  annotationId   String
-  eventType      DocumentAnnotationEventType
-  actorId        String
-  fromStatus     DocumentAnnotationStatus?
-  toStatus       DocumentAnnotationStatus?
-  assignedToId   String?
-  createdAt      DateTime @default(now())
+  id           String                      @id @default(uuid())
+  annotationId String
+  eventType    DocumentAnnotationEventType
+  actorId      String
+  fromStatus   DocumentAnnotationStatus?
+  toStatus     DocumentAnnotationStatus?
+  assignedToId String?
+  createdAt    DateTime                    @default(now())
 
-  annotation     DocumentAnnotation @relation(fields: [annotationId], references: [id], onDelete: Cascade)
-  actor          User @relation("DocumentAnnotationEventActor", fields: [actorId], references: [id], onDelete: Restrict)
-  assignedTo     User? @relation("DocumentAnnotationEventAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  annotation DocumentAnnotation @relation(fields: [annotationId], references: [id], onDelete: Cascade)
+  actor      User               @relation("DocumentAnnotationEventActor", fields: [actorId], references: [id], onDelete: Restrict)
+  assignedTo User?              @relation("DocumentAnnotationEventAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
 
   @@index([annotationId, createdAt])
   @@index([actorId, createdAt])
@@ -1241,32 +1241,32 @@ enum DocumentAnnotationEventType {
 }
 
 model DocumentReview {
-  id                String    @id @default(uuid())
-  documentId        String
-  document          Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  documentVersionId String
-  documentVersion   DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
-  status            DocumentReviewStatus @default(DRAFT)
-  ownerId           String?
-  owner             User?     @relation("DocumentReviewOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  dueAt             DateTime?
-  currentRoundNumber Int      @default(1)
-  currentRoundId    String?   @unique
-  currentRound      DocumentReviewRound? @relation("DocumentReviewCurrentRound", fields: [currentRoundId], references: [id], onDelete: SetNull)
-  approvedVersionId String?
-  approvedVersion   DocumentVersion? @relation("DocumentReviewApprovedVersion", fields: [approvedVersionId], references: [id], onDelete: Restrict)
-  revision          Int       @default(0)
-  createdById       String
-  createdBy         User      @relation("DocumentReviewCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  id                 String                @id @default(uuid())
+  documentId         String
+  document           Document              @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentVersionId  String
+  documentVersion    DocumentVersion       @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
+  status             DocumentReviewStatus  @default(DRAFT)
+  ownerId            String?
+  owner              User?                 @relation("DocumentReviewOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  dueAt              DateTime?
+  currentRoundNumber Int                   @default(1)
+  currentRoundId     String?               @unique
+  currentRound       DocumentReviewRound?  @relation("DocumentReviewCurrentRound", fields: [currentRoundId], references: [id], onDelete: SetNull)
+  approvedVersionId  String?
+  approvedVersion    DocumentVersion?      @relation("DocumentReviewApprovedVersion", fields: [approvedVersionId], references: [id], onDelete: Restrict)
+  revision           Int                   @default(0)
+  createdById        String
+  createdBy          User                  @relation("DocumentReviewCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   assignedReviewerId String?
-  assignedReviewer   User?   @relation("DocumentReviewAssignedReviewer", fields: [assignedReviewerId], references: [id], onDelete: Restrict)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  completedAt       DateTime?
-  rounds            DocumentReviewRound[] @relation("DocumentReviewRounds")
-  points            ReviewPoint[]
-  decisions         ReviewDecision[]
-  snapshots         ReviewSnapshot[]
+  assignedReviewer   User?                 @relation("DocumentReviewAssignedReviewer", fields: [assignedReviewerId], references: [id], onDelete: Restrict)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  completedAt        DateTime?
+  rounds             DocumentReviewRound[] @relation("DocumentReviewRounds")
+  points             ReviewPoint[]
+  decisions          ReviewDecision[]
+  snapshots          ReviewSnapshot[]
 
   @@unique([id, documentVersionId])
   @@index([documentId, status])
@@ -1289,24 +1289,24 @@ enum DocumentReviewStatus {
 }
 
 model DocumentReviewRound {
-  id              String               @id @default(uuid())
-  reviewId        String
-  review          DocumentReview       @relation("DocumentReviewRounds", fields: [reviewId], references: [id], onDelete: Cascade)
-  currentForReview DocumentReview?     @relation("DocumentReviewCurrentRound")
-  roundNumber     Int
-  reviewVersionId String
-  reviewVersion   DocumentVersion      @relation("DocumentReviewRoundVersion", fields: [reviewVersionId], references: [id], onDelete: Restrict)
-  status          DocumentReviewStatus @default(DRAFT)
-  startedAt       DateTime?
-  submittedAt     DateTime?
-  completedAt     DateTime?
-  createdById     String
-  createdBy       User                 @relation("DocumentReviewRoundCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  revision        Int                  @default(0)
-  points          ReviewPoint[]
-  decisions       ReviewDecision[]
+  id               String               @id @default(uuid())
+  reviewId         String
+  review           DocumentReview       @relation("DocumentReviewRounds", fields: [reviewId], references: [id], onDelete: Cascade)
+  currentForReview DocumentReview?      @relation("DocumentReviewCurrentRound")
+  roundNumber      Int
+  reviewVersionId  String
+  reviewVersion    DocumentVersion      @relation("DocumentReviewRoundVersion", fields: [reviewVersionId], references: [id], onDelete: Restrict)
+  status           DocumentReviewStatus @default(DRAFT)
+  startedAt        DateTime?
+  submittedAt      DateTime?
+  completedAt      DateTime?
+  createdById      String
+  createdBy        User                 @relation("DocumentReviewRoundCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  revision         Int                  @default(0)
+  points           ReviewPoint[]
+  decisions        ReviewDecision[]
 
   @@unique([reviewId, roundNumber])
   @@index([reviewId, status])
@@ -1336,33 +1336,33 @@ enum ReviewPointSeverity {
 }
 
 model ReviewPoint {
-  id                  String              @id @default(uuid())
+  id                  String                 @id @default(uuid())
   reviewId            String
-  review              DocumentReview      @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  review              DocumentReview         @relation(fields: [reviewId], references: [id], onDelete: Cascade)
   reviewRoundId       String
-  reviewRound         DocumentReviewRound @relation(fields: [reviewRoundId], references: [id], onDelete: Cascade)
+  reviewRound         DocumentReviewRound    @relation(fields: [reviewRoundId], references: [id], onDelete: Cascade)
   type                ReviewPointType
-  status              ReviewPointStatus   @default(OPEN)
-  severity            ReviewPointSeverity @default(NORMAL)
+  status              ReviewPointStatus      @default(OPEN)
+  severity            ReviewPointSeverity    @default(NORMAL)
   title               String
   internalRationale   String?
   ownerId             String?
-  owner               User?               @relation("ReviewPointOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  owner               User?                  @relation("ReviewPointOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   dueAt               DateTime?
   annotationId        String?
-  annotation          DocumentAnnotation? @relation(fields: [annotationId], references: [id], onDelete: SetNull)
+  annotation          DocumentAnnotation?    @relation(fields: [annotationId], references: [id], onDelete: SetNull)
   comparisonSegmentId String?
   comparisonSegment   DocumentChangeSegment? @relation(fields: [comparisonSegmentId], references: [id], onDelete: SetNull)
   linkedTaskId        String?
-  linkedTask          Task?               @relation(fields: [linkedTaskId], references: [id], onDelete: SetNull)
+  linkedTask          Task?                  @relation(fields: [linkedTaskId], references: [id], onDelete: SetNull)
   carriedFromPointId  String?
-  carriedFromPoint    ReviewPoint?        @relation("ReviewPointLineage", fields: [carriedFromPointId], references: [id], onDelete: SetNull)
-  carriedToPoints     ReviewPoint[]       @relation("ReviewPointLineage")
+  carriedFromPoint    ReviewPoint?           @relation("ReviewPointLineage", fields: [carriedFromPointId], references: [id], onDelete: SetNull)
+  carriedToPoints     ReviewPoint[]          @relation("ReviewPointLineage")
   createdById         String
-  createdBy           User                @relation("ReviewPointCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  revision            Int                 @default(0)
+  createdBy           User                   @relation("ReviewPointCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  revision            Int                    @default(0)
 
   @@index([reviewId, status, severity])
   @@index([reviewRoundId, status])
@@ -1387,20 +1387,20 @@ enum ReviewDecisionAction {
 }
 
 model ReviewDecision {
-  id            String               @id @default(uuid())
-  reviewId      String
-  review        DocumentReview       @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-  reviewRoundId String?
-  reviewRound   DocumentReviewRound? @relation(fields: [reviewRoundId], references: [id], onDelete: SetNull)
-  action        ReviewDecisionAction
-  actorId       String
-  actor         User                 @relation("ReviewDecisionActor", fields: [actorId], references: [id], onDelete: Restrict)
-  versionId     String?
-  version       DocumentVersion?     @relation("ReviewDecisionVersion", fields: [versionId], references: [id], onDelete: Restrict)
-  safeRationale String?
-  metadataSafe  Json?
-  idempotencyKey String?             @unique
-  createdAt     DateTime             @default(now())
+  id             String               @id @default(uuid())
+  reviewId       String
+  review         DocumentReview       @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reviewRoundId  String?
+  reviewRound    DocumentReviewRound? @relation(fields: [reviewRoundId], references: [id], onDelete: SetNull)
+  action         ReviewDecisionAction
+  actorId        String
+  actor          User                 @relation("ReviewDecisionActor", fields: [actorId], references: [id], onDelete: Restrict)
+  versionId      String?
+  version        DocumentVersion?     @relation("ReviewDecisionVersion", fields: [versionId], references: [id], onDelete: Restrict)
+  safeRationale  String?
+  metadataSafe   Json?
+  idempotencyKey String?              @unique
+  createdAt      DateTime             @default(now())
 
   @@index([reviewId, createdAt])
   @@index([reviewRoundId, createdAt])
@@ -1409,15 +1409,15 @@ model ReviewDecision {
 }
 
 model ReviewSnapshot {
-  id                String    @id @default(uuid())
-  documentReviewId String
-  documentReview   DocumentReview @relation(fields: [documentReviewId], references: [id], onDelete: Cascade)
+  id                String          @id @default(uuid())
+  documentReviewId  String
+  documentReview    DocumentReview  @relation(fields: [documentReviewId], references: [id], onDelete: Cascade)
   documentVersionId String
   documentVersion   DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
   payload           Json
   createdById       String
-  createdBy         User      @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt         DateTime  @default(now())
+  createdBy         User            @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt         DateTime        @default(now())
 
   @@index([documentReviewId, createdAt])
   @@index([documentVersionId, createdAt])
@@ -1461,10 +1461,10 @@ model DocumentReviewSuggestion {
   updatedAt           DateTime                       @updatedAt
   resolvedAt          DateTime?
 
-  case                Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  document            Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  documentVersion     DocumentVersion? @relation(fields: [documentVersionId], references: [id], onDelete: SetNull)
-  author              User?            @relation("DocumentReviewSuggestionAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  case            Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  document        Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentVersion DocumentVersion? @relation(fields: [documentVersionId], references: [id], onDelete: SetNull)
+  author          User?            @relation("DocumentReviewSuggestionAuthor", fields: [authorId], references: [id], onDelete: SetNull)
 
   @@index([documentId, status])
   @@index([caseId, createdAt])
@@ -1479,40 +1479,40 @@ model DocumentReviewSuggestion {
 // ============================================================================
 
 model Task {
-  id              String      @id @default(uuid())
-  title           String
-  description     String?
-  taskType        TaskType
-  type            String?     // For code compatibility (alternative to taskType)
-  status          TaskStatus  @default(PENDING)
-  priority        Priority    @default(MEDIUM)
-  
+  id          String     @id @default(uuid())
+  title       String
+  description String?
+  taskType    TaskType
+  type        String? // For code compatibility (alternative to taskType)
+  status      TaskStatus @default(PENDING)
+  priority    Priority   @default(MEDIUM)
+
   // Assignment
-  assignedToId     String?
-  assignedTo       User?       @relation("AssignedTo", fields: [assignedToId], references: [id])
-  assignedById     String?     // Who assigned this task
-  assignedBy       User?       @relation("AssignedBy", fields: [assignedById], references: [id])
-  skillMatch      Float?       // Score of skill matching (0-1)
-  skillProfile     Json?       // Required skills profile
-  requiredSkills  String[]     // Required skills for this task
-  
+  assignedToId   String?
+  assignedTo     User?    @relation("AssignedTo", fields: [assignedToId], references: [id])
+  assignedById   String? // Who assigned this task
+  assignedBy     User?    @relation("AssignedBy", fields: [assignedById], references: [id])
+  skillMatch     Float? // Score of skill matching (0-1)
+  skillProfile   Json? // Required skills profile
+  requiredSkills String[] // Required skills for this task
+
   // Document reference (if task is related to a document)
-  documentId       String?
-  
+  documentId String?
+
   // Workflow Integration
-  caseId          String
-  case            Case        @relation(fields: [caseId], references: [id])
-  workflowEvent   String?     // Event that triggered this task
-  
+  caseId        String
+  case          Case    @relation(fields: [caseId], references: [id])
+  workflowEvent String? // Event that triggered this task
+
   // Matter reference (NEW)
-  matterId        String?
-  matter          Matter?     @relation(fields: [matterId], references: [id])
+  matterId String?
+  matter   Matter? @relation(fields: [matterId], references: [id])
 
   // Task intelligence fields preserved from the deployed database
   stuckReason     TaskStuckReason?
   maturityStage   TaskMaturityStage?
-  complexityScore Int         @default(3)
-  riskScore       Int         @default(3)
+  complexityScore Int                @default(3)
+  riskScore       Int                @default(3)
   lastProgressAt  DateTime?
   stuckSince      DateTime?
 
@@ -1524,21 +1524,21 @@ model Task {
   estimatedMinutes  Int?
 
   // Dates
-  dueDate         DateTime?
-  startedAt       DateTime?
-  completedAt     DateTime?
-  submittedAt     DateTime?   // Submitted date (code compatibility)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  dueDate     DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+  submittedAt DateTime? // Submitted date (code compatibility)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Relations
-  assignmentHistory TaskAssignmentHistory[]
-  sourceCommunication Communication? @relation("CommunicationTasks", fields: [sourceCommunicationId], references: [id])
+  assignmentHistory     TaskAssignmentHistory[]
+  sourceCommunication   Communication?          @relation("CommunicationTasks", fields: [sourceCommunicationId], references: [id])
   sourceCommunicationId String?
-  submissions      TaskSubmission[]
-  timeEntries      TimeEntry[]
-  documentLinks    DocumentTaskLink[]
-  reviewPoints     ReviewPoint[]
+  submissions           TaskSubmission[]
+  timeEntries           TimeEntry[]
+  documentLinks         DocumentTaskLink[]
+  reviewPoints          ReviewPoint[]
 
   @@index([complexityScore], map: "tasks_complexityScore_idx")
   @@index([maturityStage], map: "tasks_maturityStage_idx")
@@ -1611,10 +1611,10 @@ enum ExternalActionType {
 }
 
 model TaskSubmission {
-  id                     String               @id @default(uuid())
+  id                     String                @id @default(uuid())
   taskId                 String
   revisionNumber         Int
-  status                 TaskSubmissionStatus @default(DRAFT)
+  status                 TaskSubmissionStatus  @default(DRAFT)
   createdById            String
   submittedById          String?
   assignedReviewerId     String
@@ -1622,30 +1622,30 @@ model TaskSubmission {
   remainingIssues        String?
   reviewerNote           String?
   requestedAttention     ReviewAttentionLevel?
-  externalActionRequired Boolean              @default(false)
+  externalActionRequired Boolean               @default(false)
   externalActionType     ExternalActionType?
-  zeroTimeConfirmed      Boolean              @default(false)
+  zeroTimeConfirmed      Boolean               @default(false)
   zeroTimeConfirmedById  String?
   zeroTimeConfirmedAt    DateTime?
   externalCompletedById  String?
-  idempotencyKey         String?              @unique
-  supersedesSubmissionId String?              @unique
-  createdAt              DateTime             @default(now())
-  updatedAt              DateTime             @updatedAt
+  idempotencyKey         String?               @unique
+  supersedesSubmissionId String?               @unique
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
   submittedAt            DateTime?
   returnedAt             DateTime?
   approvedAt             DateTime?
   supersededAt           DateTime?
   externalCompletedAt    DateTime?
 
-  task                 Task            @relation(fields: [taskId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  createdBy            User            @relation("TaskSubmissionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  submittedBy          User?           @relation("TaskSubmissionSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  assignedReviewer     User            @relation("TaskSubmissionAssignedReviewer", fields: [assignedReviewerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  zeroTimeConfirmedBy  User?           @relation("TaskSubmissionZeroTimeConfirmedBy", fields: [zeroTimeConfirmedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  externalCompletedBy  User?           @relation("TaskSubmissionExternalCompletedBy", fields: [externalCompletedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  supersedesSubmission TaskSubmission? @relation("TaskSubmissionRevisionChain", fields: [supersedesSubmissionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  supersededBy         TaskSubmission? @relation("TaskSubmissionRevisionChain")
+  task                 Task                      @relation(fields: [taskId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdBy            User                      @relation("TaskSubmissionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  submittedBy          User?                     @relation("TaskSubmissionSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  assignedReviewer     User                      @relation("TaskSubmissionAssignedReviewer", fields: [assignedReviewerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  zeroTimeConfirmedBy  User?                     @relation("TaskSubmissionZeroTimeConfirmedBy", fields: [zeroTimeConfirmedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  externalCompletedBy  User?                     @relation("TaskSubmissionExternalCompletedBy", fields: [externalCompletedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  supersedesSubmission TaskSubmission?           @relation("TaskSubmissionRevisionChain", fields: [supersedesSubmissionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  supersededBy         TaskSubmission?           @relation("TaskSubmissionRevisionChain")
   documents            TaskSubmissionDocument[]
   reviewDecision       TaskReviewDecision?
   timeEntries          TaskSubmissionTimeEntry[]
@@ -1730,14 +1730,14 @@ enum TaskStuckReason {
 }
 
 model TaskAssignmentHistory {
-  id          String    @id @default(uuid())
-  taskId      String
-  task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  fromUserId  String?
-  toUserId    String
-  toUser      User      @relation(fields: [toUserId], references: [id])
-  reason      String?
-  assignedAt  DateTime  @default(now())
+  id         String   @id @default(uuid())
+  taskId     String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fromUserId String?
+  toUserId   String
+  toUser     User     @relation(fields: [toUserId], references: [id])
+  reason     String?
+  assignedAt DateTime @default(now())
 
   @@map("task_assignment_history")
 }
@@ -1747,62 +1747,62 @@ model TaskAssignmentHistory {
 // ============================================================================
 
 model ClientRedactionProfile {
-  id              String    @id @default(uuid())
-  clientId        String    @unique
-  client          Client    @relation(fields: [clientId], references: [id])
-  fullName        String?   // Full name for code compatibility
-  aliases         Json?     // Aliases for code compatibility
-  addresses       Json?     // Addresses for code compatibility
-  taxId           String?   // Tax ID for code compatibility
-  
+  id        String  @id @default(uuid())
+  clientId  String  @unique
+  client    Client  @relation(fields: [clientId], references: [id])
+  fullName  String? // Full name for code compatibility
+  aliases   Json? // Aliases for code compatibility
+  addresses Json? // Addresses for code compatibility
+  taxId     String? // Tax ID for code compatibility
+
   // Redaction Rules (JSON stored as text)
-  patterns        Json      // [{ type: 'name', pattern: '...', replacement: '...' }]
-  personas        Json      // [{ name: 'Person A', details: {...} }]
-  
+  patterns Json // [{ type: 'name', pattern: '...', replacement: '...' }]
+  personas Json // [{ name: 'Person A', details: {...} }]
+
   // AI Anonymization Settings
-  useLLM          Boolean   @default(false)
-  llmPrompt       String?
-  
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  useLLM    Boolean @default(false)
+  llmPrompt String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("client_redaction_profiles")
 }
 
 model AnonymousDocument {
-  id              String    @id @default(uuid())
-  name            String    // Original document name with _anon suffix
-  content         String    // Anonymized content
-  addresses       Json?     // Addresses (code compatibility)
-  
+  id        String @id @default(uuid())
+  name      String // Original document name with _anon suffix
+  content   String // Anonymized content
+  addresses Json? // Addresses (code compatibility)
+
   // Reference to source
-  sourceDocId     String
-  sourceDocument  Document  @relation(fields: [sourceDocId], references: [id], onDelete: Restrict, map: "anonymous_documents_sourceDocId_fkey")
-  
-  redactedItems   Json      // Array of {type, original, replacement, position} for rehydration
-  
+  sourceDocId    String
+  sourceDocument Document @relation(fields: [sourceDocId], references: [id], onDelete: Restrict, map: "anonymous_documents_sourceDocId_fkey")
+
+  redactedItems Json // Array of {type, original, replacement, position} for rehydration
+
   // AI task metadata
-  aiTask          String?   // AI task type (REVIEW_RISKS, COMPARE_TEMPLATE, SUMMARIZE, CUSTOM)
-  customPrompt    String?   // Custom AI instructions if aiTask is CUSTOM
-  originalDocId   String?   // Original document ID (code compatibility)
-  caseId          String?   // Case ID (code compatibility)
-  
+  aiTask        String? // AI task type (REVIEW_RISKS, COMPARE_TEMPLATE, SUMMARIZE, CUSTOM)
+  customPrompt  String? // Custom AI instructions if aiTask is CUSTOM
+  originalDocId String? // Original document ID (code compatibility)
+  caseId        String? // Case ID (code compatibility)
+
   // Anonymization details
-  redactedAt      DateTime  @default(now())
-  patternCount    Int       // Number of redactions applied
-  
+  redactedAt   DateTime @default(now())
+  patternCount Int // Number of redactions applied
+
   // AI Response & Rehydration (added for Secure Bridge workflow)
-  aiResponseText    String?   // Raw AI response text imported from external AI
-  rehydratedContent String?  // Rehydrated result with real names restored
-  rehydrationStatus String?  // PENDING | COMPLETE | PARTIAL | FAILED
+  aiResponseText      String? // Raw AI response text imported from external AI
+  rehydratedContent   String? // Rehydrated result with real names restored
+  rehydrationStatus   String? // PENDING | COMPLETE | PARTIAL | FAILED
   rehydrationWarnings Json? // Array of unresolved token warnings
-  rehydratedAt      DateTime? // When rehydration was performed
-  
+  rehydratedAt        DateTime? // When rehydration was performed
+
   // SharePoint (optional - could be uploaded)
-  spItemId        String?
-  spWebUrl        String?
-  
-  createdAt       DateTime  @default(now())
+  spItemId String?
+  spWebUrl String?
+
+  createdAt DateTime @default(now())
 
   @@map("anonymous_documents")
 }
@@ -1812,38 +1812,38 @@ model AnonymousDocument {
 // ============================================================================
 
 model TimelineEvent {
-  id              String        @id @default(uuid())
-  eventType       TimelineEventType
-  type            String?       // For code compatibility
-  payload         Json?         // Additional event data (for code compatibility)
-  description     String?
-  metadata        Json?         // Additional event data
-  
+  id          String            @id @default(uuid())
+  eventType   TimelineEventType
+  type        String? // For code compatibility
+  payload     Json? // Additional event data (for code compatibility)
+  description String?
+  metadata    Json? // Additional event data
+
   // Case reference
-  caseId          String
-  
+  caseId String
+
   // User who performed action
-  userId          String?
-  
+  userId String?
+
   // Document reference (if applicable)
-  documentId      String?
-  
+  documentId String?
+
   // Task reference (if applicable)
-  taskId          String?
-  
+  taskId String?
+
   // Communication reference (if applicable)
   communicationId String?
-  
+
   // TimeEntry reference (NEW)
-  timeEntryId     String?
-  
+  timeEntryId String?
+
   // Back relations
-  case            Case          @relation(fields: [caseId], references: [id])
-  user            User?         @relation(fields: [userId], references: [id])
-  document        Document?     @relation(fields: [documentId], references: [id], onDelete: SetNull, map: "timeline_events_documentId_fkey")
-  timeEntry       TimeEntry?    @relation(fields: [timeEntryId], references: [id], onDelete: SetNull, map: "timeline_events_timeEntryId_fkey")
-  
-  createdAt       DateTime      @default(now())
+  case      Case       @relation(fields: [caseId], references: [id])
+  user      User?      @relation(fields: [userId], references: [id])
+  document  Document?  @relation(fields: [documentId], references: [id], onDelete: SetNull, map: "timeline_events_documentId_fkey")
+  timeEntry TimeEntry? @relation(fields: [timeEntryId], references: [id], onDelete: SetNull, map: "timeline_events_timeEntryId_fkey")
+
+  createdAt DateTime @default(now())
 
   @@index([caseId, createdAt])
   @@map("timeline_events")
@@ -1875,7 +1875,7 @@ enum TimelineEventType {
   DEADLINE_SET
   DEADLINE_WARNING
   DEADLINE_MISSED
-  TIME_LOGGED           // NEW: Time entry logged
+  TIME_LOGGED // NEW: Time entry logged
   CUSTOM
 }
 
@@ -1884,24 +1884,24 @@ enum TimelineEventType {
 // ============================================================================
 
 model Comment {
-  id              String    @id @default(uuid())
-  content         String
-  isResolved      Boolean   @default(false)
-  
+  id         String  @id @default(uuid())
+  content    String
+  isResolved Boolean @default(false)
+
   // Polymorphic relation (document or case)
-  documentId      String?
-  caseId          String?
-  
+  documentId String?
+  caseId     String?
+
   // Author
-  userId          String
-  
+  userId String
+
   // Back relations
-  user            User      @relation(fields: [userId], references: [id])
-  case            Case?     @relation(fields: [caseId], references: [id])
-  document        Document? @relation(fields: [documentId], references: [id], onDelete: SetNull, map: "comments_documentId_fkey")
-  
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  user     User      @relation(fields: [userId], references: [id])
+  case     Case?     @relation(fields: [caseId], references: [id])
+  document Document? @relation(fields: [documentId], references: [id], onDelete: SetNull, map: "comments_documentId_fkey")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("comments")
 }
@@ -1911,17 +1911,17 @@ model Comment {
 // ============================================================================
 
 model Notification {
-  id              String            @id @default(uuid())
-  type            NotificationType
-  title           String
-  message         String
-  link            String?
-  isRead          Boolean           @default(false)
-  
-  userId          String
-  user            User              @relation(fields: [userId], references: [id])
-  
-  createdAt       DateTime          @default(now())
+  id      String           @id @default(uuid())
+  type    NotificationType
+  title   String
+  message String
+  link    String?
+  isRead  Boolean          @default(false)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
 
   @@index([userId, isRead])
   @@map("notifications")
@@ -2011,6 +2011,46 @@ enum ClientPortalInvitationStatus {
   EXPIRED
 }
 
+enum ClientPortalWorkspaceMode {
+  INDIVIDUAL
+  ORGANIZATION
+  CASE_RELAY
+}
+
+enum ClientPortalWorkspaceStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum ClientPortalCommunicationMode {
+  PORTAL_PRIMARY
+  EMAIL_LINKED
+  EXTERNAL_ONLY
+}
+
+enum ClientPortalConnectedSystemState {
+  NOT_CONFIGURED
+  CONFIGURATION_REQUIRED
+  READY
+  DISABLED
+}
+
+enum ClientPortalWorkspaceMembershipStatus {
+  INVITED
+  PENDING_APPROVAL
+  ACTIVE
+  SUSPENDED
+  REVOKED
+  EXPIRED
+}
+
+enum ClientPortalWorkspaceMembershipRole {
+  MEMBER
+  REPRESENTATIVE
+  APPROVER
+}
+
 enum ClientPublicationStatus {
   DRAFT
   READY_FOR_APPROVAL
@@ -2076,35 +2116,37 @@ enum ClientPublicationEventAction {
 }
 
 model ClientPortalGrant {
-  id                   String                  @id @default(uuid())
-  clientUserId         String?
+  id                     String                   @id @default(uuid())
+  clientUserId           String?
   clientPortalIdentityId String?
-  clientId             String
-  caseId               String
-  role                 ClientPortalGrantRole   @default(VIEWER)
-  status               ClientPortalGrantStatus @default(INVITED)
-  permissions          ClientPortalPermission[]
-  validFrom            DateTime                @default(now())
-  validUntil           DateTime?
-  invitedById          String
-  activatedAt          DateTime?
-  suspendedAt          DateTime?
-  suspendedById        String?
-  revokedAt            DateTime?
-  revokedById          String?
-  revocationReasonSafe String?
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
-  revision             Int                     @default(0)
+  workspaceId            String?
+  clientId               String
+  caseId                 String
+  role                   ClientPortalGrantRole    @default(VIEWER)
+  status                 ClientPortalGrantStatus  @default(INVITED)
+  permissions            ClientPortalPermission[]
+  validFrom              DateTime                 @default(now())
+  validUntil             DateTime?
+  invitedById            String
+  activatedAt            DateTime?
+  suspendedAt            DateTime?
+  suspendedById          String?
+  revokedAt              DateTime?
+  revokedById            String?
+  revocationReasonSafe   String?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  revision               Int                      @default(0)
 
   @@index([clientId, caseId, status])
   @@index([clientUserId, status])
   @@index([clientPortalIdentityId, status])
+  @@index([workspaceId, status])
   @@map("client_portal_grants")
 }
 
 model ClientPortalIdentity {
-  id              String                     @id @default(uuid())
+  id              String                       @id @default(uuid())
   provider        ClientPortalIdentityProvider
   issuer          String
   subject         String
@@ -2112,16 +2154,79 @@ model ClientPortalIdentity {
   emailVerifiedAt DateTime?
   displayName     String
   accountType     ClientPortalAccountType
-  status          ClientPortalIdentityStatus @default(EMAIL_VERIFICATION_PENDING)
+  status          ClientPortalIdentityStatus   @default(EMAIL_VERIFICATION_PENDING)
   lastLoginAt     DateTime?
-  createdAt       DateTime                   @default(now())
-  updatedAt       DateTime                   @updatedAt
-  revision        Int                        @default(0)
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
+  revision        Int                          @default(0)
 
   @@unique([issuer, subject])
   @@unique([normalizedEmail])
   @@index([status, accountType])
   @@map("client_portal_identities")
+}
+
+model ClientPortalWorkspace {
+  id                   String                           @id @default(uuid())
+  clientId             String
+  name                 String
+  mode                 ClientPortalWorkspaceMode
+  status               ClientPortalWorkspaceStatus      @default(ACTIVE)
+  communicationMode    ClientPortalCommunicationMode    @default(PORTAL_PRIMARY)
+  connectedSystemState ClientPortalConnectedSystemState @default(NOT_CONFIGURED)
+  publicReference      String                           @unique
+  createdById          String
+  createdAt            DateTime                         @default(now())
+  updatedAt            DateTime                         @updatedAt
+  archivedAt           DateTime?
+  revision             Int                              @default(0)
+
+  @@index([clientId])
+  @@index([status])
+  @@index([mode])
+  @@index([clientId, status])
+  @@map("client_portal_workspaces")
+}
+
+model ClientPortalWorkspaceMembership {
+  id                     String                                @id @default(uuid())
+  clientPortalIdentityId String
+  workspaceId            String
+  status                 ClientPortalWorkspaceMembershipStatus @default(INVITED)
+  role                   ClientPortalWorkspaceMembershipRole   @default(MEMBER)
+  invitedAt              DateTime?
+  invitedById            String?
+  approvedAt             DateTime?
+  approvedById           String?
+  suspendedAt            DateTime?
+  suspendedById          String?
+  revokedAt              DateTime?
+  revokedById            String?
+  expiresAt              DateTime?
+  createdAt              DateTime                              @default(now())
+  updatedAt              DateTime                              @updatedAt
+  revision               Int                                   @default(0)
+
+  @@unique([clientPortalIdentityId, workspaceId])
+  @@index([clientPortalIdentityId, status])
+  @@index([workspaceId, status])
+  @@map("client_portal_workspace_memberships")
+}
+
+model ClientPortalWorkspaceEvent {
+  id           String   @id @default(uuid())
+  workspaceId  String
+  membershipId String?
+  actorId      String
+  action       String   @db.VarChar(80)
+  fromStatus   String?  @db.VarChar(40)
+  toStatus     String?  @db.VarChar(40)
+  metadataSafe Json?
+  createdAt    DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([membershipId, createdAt])
+  @@map("client_portal_workspace_events")
 }
 
 model ClientOrganizationGroup {
@@ -2193,6 +2298,7 @@ model ClientOrganizationMembership {
 model ClientPortalInvitation {
   id               String                       @id @default(uuid())
   clientId         String
+  workspaceId      String?
   groupId          String?
   intendedEmail    String?
   tokenHash        String
@@ -2205,6 +2311,7 @@ model ClientPortalInvitation {
 
   @@unique([tokenHash])
   @@index([clientId, status])
+  @@index([workspaceId, status])
   @@index([groupId])
   @@index([intendedEmail, status])
   @@map("client_portal_invitations")
@@ -2236,21 +2343,21 @@ model ClientMatterPublication {
 }
 
 model ClientMatterPublicationRevision {
-  id                       String   @id @default(uuid())
-  publicationId            String
-  revisionNumber           Int
-  clientSafeTitle          String
-  clientSafeStatus         String
-  clientSafeNextStep       String?
-  responsibleLawyerDisplay String?
+  id                         String   @id @default(uuid())
+  publicationId              String
+  revisionNumber             Int
+  clientSafeTitle            String
+  clientSafeStatus           String
+  clientSafeNextStep         String?
+  responsibleLawyerDisplay   String?
   publishedDeadlinesSnapshot Json
-  safeUpdatesSnapshot      Json
-  actionRequestsSnapshot   Json
-  sourceCaseRevision       Int?
-  sourceFingerprint        String
-  audienceSnapshot         Json
-  createdById              String
-  createdAt                DateTime @default(now())
+  safeUpdatesSnapshot        Json
+  actionRequestsSnapshot     Json
+  sourceCaseRevision         Int?
+  sourceFingerprint          String
+  audienceSnapshot           Json
+  createdById                String
+  createdAt                  DateTime @default(now())
 
   @@unique([publicationId, revisionNumber])
   @@index([publicationId])
@@ -2291,24 +2398,24 @@ model ClientDocumentPublication {
 }
 
 model ClientActionRequest {
-  id                       String                    @id @default(uuid())
-  caseId                   String
-  clientId                 String
-  type                     ClientActionRequestType
-  clientSafeTitle          String
-  clientSafeInstructions   String?
-  dueAt                    DateTime?
-  status                   ClientActionRequestStatus @default(DRAFT)
-  linkedInternalTaskId     String?
-  audienceSnapshot         Json
-  preparedById             String
-  approvedById             String?
-  publishedById            String?
-  completedAt              DateTime?
-  completionSummarySafe    String?
-  createdAt                DateTime                  @default(now())
-  updatedAt                DateTime                  @updatedAt
-  revision                 Int                       @default(0)
+  id                     String                    @id @default(uuid())
+  caseId                 String
+  clientId               String
+  type                   ClientActionRequestType
+  clientSafeTitle        String
+  clientSafeInstructions String?
+  dueAt                  DateTime?
+  status                 ClientActionRequestStatus @default(DRAFT)
+  linkedInternalTaskId   String?
+  audienceSnapshot       Json
+  preparedById           String
+  approvedById           String?
+  publishedById          String?
+  completedAt            DateTime?
+  completionSummarySafe  String?
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  revision               Int                       @default(0)
 
   @@index([caseId, status])
   @@index([clientId, status])
@@ -2316,24 +2423,24 @@ model ClientActionRequest {
 }
 
 model ClientSafeUpdate {
-  id                     String                 @id @default(uuid())
-  caseId                 String
-  clientId               String
-  title                  String
-  body                   String
-  category               ClientSafeUpdateCategory
-  status                 ClientSafeUpdateStatus @default(DRAFT)
+  id                      String                   @id @default(uuid())
+  caseId                  String
+  clientId                String
+  title                   String
+  body                    String
+  category                ClientSafeUpdateCategory
+  status                  ClientSafeUpdateStatus   @default(DRAFT)
   sourceInternalEventType String?
   sourceInternalEventId   String?
-  audienceSnapshot       Json
-  preparedById           String
-  approvedById           String?
-  publishedById          String?
-  publishedAt            DateTime?
-  revokedAt              DateTime?
-  createdAt              DateTime               @default(now())
-  updatedAt              DateTime               @updatedAt
-  revision               Int                    @default(0)
+  audienceSnapshot        Json
+  preparedById            String
+  approvedById            String?
+  publishedById           String?
+  publishedAt             DateTime?
+  revokedAt               DateTime?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  revision                Int                      @default(0)
 
   @@index([caseId, status])
   @@index([clientId, status])
@@ -2370,11 +2477,11 @@ model ClientPublicationEvent {
 // ============================================================================
 
 model SystemSetting {
-  id              String    @id @default(uuid())
-  key             String    @unique
-  value           Json
-  description     String?
-  updatedAt       DateTime  @updatedAt
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       Json
+  description String?
+  updatedAt   DateTime @updatedAt
 
   @@map("system_settings")
 }
@@ -2387,18 +2494,18 @@ model SystemSetting {
 // ============================================================================
 
 model ContractTemplate {
-  id              String          @id @default(uuid())
-  name            String
-  description     String?
-  category        TemplateCategory
-  templatePath    String
+  id               String           @id @default(uuid())
+  name             String
+  description      String?
+  category         TemplateCategory
+  templatePath     String
   originalFileName String?
-  variables       Json
-  isActive        Boolean         @default(true)
-  isDefault       Boolean         @default(false)
-  version         Int             @default(1)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  variables        Json
+  isActive         Boolean          @default(true)
+  isDefault        Boolean          @default(false)
+  version          Int              @default(1)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   generatedContracts ContractGeneration[]
 
@@ -2419,33 +2526,33 @@ enum TemplateCategory {
 // ============================================================================
 
 model ContractGeneration {
-  id              String          @id @default(uuid())
-  title           String
-  templateId      String
-  template        ContractTemplate @relation(fields: [templateId], references: [id])
-  caseId          String?
-  templateData    Json
+  id                 String           @id @default(uuid())
+  title              String
+  templateId         String
+  template           ContractTemplate @relation(fields: [templateId], references: [id])
+  caseId             String?
+  templateData       Json
   comparisonSnapshot Json?
-  fileName        String
-  filePath        String
-  fileSize        Int?
-  status          GenerationStatus @default(PENDING)
-  generatedAt     DateTime        @default(now())
-  expiresAt       DateTime?
-  
+  fileName           String
+  filePath           String
+  fileSize           Int?
+  status             GenerationStatus @default(PENDING)
+  generatedAt        DateTime         @default(now())
+  expiresAt          DateTime?
+
   // SharePoint metadata - persisted for reliable "Open in SharePoint"
-  spItemId        String?
-  spWebUrl        String?
-  
+  spItemId String?
+  spWebUrl String?
+
   // Finalization semantics
-  isFinalRevision Boolean         @default(false)
+  isFinalRevision Boolean   @default(false)
   finalizedAt     DateTime?
-  
+
   // Revision lineage
-  revisionNumber  Int             @default(1)
-  parentRevisionId String?
-  isCurrentRevision Boolean       @default(true)
-  supersededAt    DateTime?
+  revisionNumber    Int       @default(1)
+  parentRevisionId  String?
+  isCurrentRevision Boolean   @default(true)
+  supersededAt      DateTime?
 
   @@map("contract_generations")
 }
@@ -2459,31 +2566,31 @@ model ContractGeneration {
 // ============================================================================
 
 model LegalAnalysis {
-  id                            String                          @id @default(uuid())
-  caseId                        String
-  documentId                    String?
-  documentSourceType            LegalAnalysisSourceDocumentType @default(DOCUMENT)
+  id                 String                          @id @default(uuid())
+  caseId             String
+  documentId         String?
+  documentSourceType LegalAnalysisSourceDocumentType @default(DOCUMENT)
 
-  title                         String
-  analysisText                  String
-  status                        LegalAnalysisStatus             @default(DRAFT)
-  sourceType                    LegalAnalysisSourceType         @default(PASTED_AI_OUTPUT)
-  aiToolName                    String?
-  anonymizedInputSnapshot       String?
+  title                   String
+  analysisText            String
+  status                  LegalAnalysisStatus     @default(DRAFT)
+  sourceType              LegalAnalysisSourceType @default(PASTED_AI_OUTPUT)
+  aiToolName              String?
+  anonymizedInputSnapshot String?
 
-  riskMatrixDetected            Boolean                         @default(false)
-  missingDataDetected           Boolean                         @default(false)
-  suggestedChangesDetected      Boolean                         @default(false)
-  lawyerDecisionPointsDetected  Boolean                         @default(false)
+  riskMatrixDetected           Boolean @default(false)
+  missingDataDetected          Boolean @default(false)
+  suggestedChangesDetected     Boolean @default(false)
+  lawyerDecisionPointsDetected Boolean @default(false)
 
-  createdById                   String?
-  reviewedById                  String?
-  reviewedAt                    DateTime?
+  createdById  String?
+  reviewedById String?
+  reviewedAt   DateTime?
 
-  createdAt                     DateTime                        @default(now())
-  updatedAt                     DateTime                        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  case                          Case                            @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  case Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
 
   @@index([caseId, updatedAt])
   @@index([documentId, updatedAt])
@@ -2532,47 +2639,47 @@ enum GenerationStatus {
 // ============================================================================
 
 model Communication {
-  id              String          @id @default(uuid())
-  type            CommunicationType
-  subject         String
-  senderName      String?
-  senderEmail     String?
-  recipientName   String?
-  recipientEmail  String?
-  content         String?         // Full message content
-  summary         String?         // AI-extracted summary
-  
+  id             String            @id @default(uuid())
+  type           CommunicationType
+  subject        String
+  senderName     String?
+  senderEmail    String?
+  recipientName  String?
+  recipientEmail String?
+  content        String? // Full message content
+  summary        String? // AI-extracted summary
+
   // Linkage - using foreign keys directly to avoid relation conflicts
-  caseId          String?
+  caseId           String?
   /// Exactly one linked thread per case may be marked primary at intake.
-  isPrimaryForCase Boolean        @default(false)
-  sourcedDocuments Document[]    @relation("DocumentSourceCommunication")
-  clientId        String?
-  documentId      String?
+  isPrimaryForCase Boolean    @default(false)
+  sourcedDocuments Document[] @relation("DocumentSourceCommunication")
+  clientId         String?
+  documentId       String?
 
   // Provider-sourced email import foundation (Microsoft Graph / Outlook).
   // All additive + nullable so existing manually-logged rows remain valid and
   // the read-only list contract is unaffected. No ingestion is implemented yet.
-  externalMessageId      String?                   @unique(map: "communications_externalMessageId_key") // Graph message id / internetMessageId — dedupe key
-  providerConversationId String?                   // Graph conversationId — thread grouping (provider-derived, not a persisted thread model)
-  mailboxAddress         String?                   // which mailbox the message was imported from
-  direction              CommunicationDirection?   // INBOUND / OUTBOUND (nullable: manual rows stay heuristic-only)
-  receivedAt             DateTime?                 // Graph receivedDateTime
-  sentAt                 DateTime?                 // Graph sentDateTime
-  source                 CommunicationSource?      @default(MANUAL) // provenance; existing rows are MANUAL
-  syncStatus             CommunicationSyncStatus?  // import lifecycle
-  importedAt             DateTime?                 // when ingested
-  metadata               Json?                     // selected provider metadata only (not full raw headers)
-  recipients             Json?                     // to/cc/bcc array [{ name?, email, kind }]
+  externalMessageId      String?                  @unique(map: "communications_externalMessageId_key") // Graph message id / internetMessageId — dedupe key
+  providerConversationId String? // Graph conversationId — thread grouping (provider-derived, not a persisted thread model)
+  mailboxAddress         String? // which mailbox the message was imported from
+  direction              CommunicationDirection? // INBOUND / OUTBOUND (nullable: manual rows stay heuristic-only)
+  receivedAt             DateTime? // Graph receivedDateTime
+  sentAt                 DateTime? // Graph sentDateTime
+  source                 CommunicationSource?     @default(MANUAL) // provenance; existing rows are MANUAL
+  syncStatus             CommunicationSyncStatus? // import lifecycle
+  importedAt             DateTime? // when ingested
+  metadata               Json? // selected provider metadata only (not full raw headers)
+  recipients             Json? // to/cc/bcc array [{ name?, email, kind }]
 
   // Meta
-  createdById     String
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   // Relations - optional back relations
-  attachments     CommunicationAttachment[]
-  relatedTasks    Task[]          @relation("CommunicationTasks")
+  attachments  CommunicationAttachment[]
+  relatedTasks Task[]                    @relation("CommunicationTasks")
 
   @@index([caseId, createdAt])
   @@index([clientId, createdAt])
@@ -2609,23 +2716,23 @@ enum CommunicationSyncStatus {
 // ============================================================================
 
 model CommunicationAttachment {
-  id              String    @id @default(uuid())
-  fileName        String
-  fileType        String?
-  description     String?
-  url             String?   // URL or path to file
-  spItemId        String?   // SharePoint item ID
-  
+  id          String  @id @default(uuid())
+  fileName    String
+  fileType    String?
+  description String?
+  url         String? // URL or path to file
+  spItemId    String? // SharePoint item ID
+
   // Provider-sourced attachment foundation (additive, nullable).
-  providerAttachmentId String?  // Graph attachment id — idempotent re-import key
-  sizeBytes            Int?     // attachment size in bytes (metadata only; bytes not stored in v1)
+  providerAttachmentId String? // Graph attachment id — idempotent re-import key
+  sizeBytes            Int? // attachment size in bytes (metadata only; bytes not stored in v1)
 
   // Relations
   communicationId String
   communication   Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
   documentId      String?
   uploadedById    String
-  createdAt       DateTime  @default(now())
+  createdAt       DateTime      @default(now())
 
   @@unique([communicationId, providerAttachmentId], map: "communication_attachments_provider_unique_idx")
   @@map("communication_attachments")
@@ -2636,34 +2743,33 @@ model CommunicationAttachment {
 // ============================================================================
 
 model GenerationDraft {
-  id              String          @id @default(uuid())
-  
+  id String @id @default(uuid())
+
   // Case reference
-  caseId          String
-  
+  caseId String
+
   // Template reference (which document type this draft is for)
-  templateId      String?
-  templateName    String?         // Store template name for display
-  
+  templateId   String?
+  templateName String? // Store template name for display
+
   // Document family (sale_purchase, gift_usufruct, standalone_registration)
-  documentFamily  String?
-  
+  documentFamily String?
+
   // Persisted draft data - all user-entered fields
-  draftData       Json            // { fieldKey: value, ... }
-  
+  draftData Json // { fieldKey: value, ... }
+
   // Timestamps
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Who created/edited
-  createdById     String?
-  lastEditedById   String?
+  createdById    String?
+  lastEditedById String?
 
   // Index for fast lookup
   @@unique([caseId, templateId])
   @@index([caseId])
   @@index([templateId])
-  
   @@map("generation_drafts")
 }
 
@@ -2675,17 +2781,17 @@ model GenerationDraft {
 // ============================================================================
 
 model ContractReviewRecord {
-  id              String    @id @default(uuid())
-  generationId    String    @unique  // one review record per ContractGeneration revision
-  overallStatus   ReviewOverallStatus @default(NEEDS_REVISION)
-  overallTitle    String?
-  overallNote     String?
-  authorId        String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id            String              @id @default(uuid())
+  generationId  String              @unique // one review record per ContractGeneration revision
+  overallStatus ReviewOverallStatus @default(NEEDS_REVISION)
+  overallTitle  String?
+  overallNote   String?
+  authorId      String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 
   // Block-level notes
-  blockNotes      BlockReviewNote[]
+  blockNotes BlockReviewNote[]
 
   @@map("contract_review_records")
 }
@@ -2697,18 +2803,18 @@ enum ReviewOverallStatus {
 }
 
 model BlockReviewNote {
-  id              String           @id @default(uuid())
+  id              String            @id @default(uuid())
   reviewRecordId  String
-  blockKey        String           // stable block identity (slug / paragraph ref / clause id)
+  blockKey        String // stable block identity (slug / paragraph ref / clause id)
   blockOrderIndex Int?
   sourceClauseId  String?
   status          BlockReviewStatus @default(OK)
   title           String?
   note            String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
-  reviewRecord    ContractReviewRecord @relation(fields: [reviewRecordId], references: [id], onDelete: Cascade)
+  reviewRecord ContractReviewRecord @relation(fields: [reviewRecordId], references: [id], onDelete: Cascade)
 
   @@unique([reviewRecordId, blockKey])
   @@index([reviewRecordId])
@@ -2730,44 +2836,44 @@ enum BlockReviewStatus {
 // ============================================================================
 
 model ClauseLibraryItem {
-  id              String          @id @default(uuid())
-  
+  id String @id @default(uuid())
+
   // Identification
-  title           String          // Short human-readable title (e.g., "Eladói szavatosság")
-  slug            String          // URL-safe identifier (e.g., "elado-szavatossag")
-  body            String          // Full clause text (Hungarian legal prose)
-  summary         String?         // One-line description for UI listings
-  
+  title   String // Short human-readable title (e.g., "Eladói szavatosság")
+  slug    String // URL-safe identifier (e.g., "elado-szavatossag")
+  body    String // Full clause text (Hungarian legal prose)
+  summary String? // One-line description for UI listings
+
   // Classification
   contractType    ClauseContractType
-  clauseKind     ClauseKind      // REQUIRED | RECOMMENDED | OPTIONAL | SPECIAL
+  clauseKind      ClauseKind // REQUIRED | RECOMMENDED | OPTIONAL | SPECIAL
   representedSide RepresentedSide // Which party this clause protects/favors
-  category        ClauseCategory  // PARTY | PROPERTY | WARRANTIES | PRICE | FINANCING | POSSESSION | TITLE | CLOSING | SPECIAL
-  
+  category        ClauseCategory // PARTY | PROPERTY | WARRANTIES | PRICE | FINANCING | POSSESSION | TITLE | CLOSING | SPECIAL
+
   // Search & discovery
-  keywords        String[]        // For clause search (e.g., ["szavatosság", "hibak", "kötelezettség"])
-  isActive        Boolean         @default(true)
-  
+  keywords String[] // For clause search (e.g., ["szavatosság", "hibak", "kötelezettség"])
+  isActive Boolean  @default(true)
+
   // Ordering
-  sortOrder       Int             @default(0)   // Display order within category
-  version         Int             @default(1)
-  
+  sortOrder Int @default(0) // Display order within category
+  version   Int @default(1)
+
   // Source tracking
-  sourceType      String?         // "STANDARD" | "BANK_TEMPLATE" | "CUSTOM"
-  bankPackTag    String?         // e.g., "OTP_BANK" | "GENERIC_BANK" — for bank-specific packs
-  lawyerProfileId String?         // Null = shared across all lawyers
-  lawyerProfile   LawyerProfile?   @relation(fields: [lawyerProfileId], references: [id])
-  
+  sourceType      String? // "STANDARD" | "BANK_TEMPLATE" | "CUSTOM"
+  bankPackTag     String? // e.g., "OTP_BANK" | "GENERIC_BANK" — for bank-specific packs
+  lawyerProfileId String? // Null = shared across all lawyers
+  lawyerProfile   LawyerProfile? @relation(fields: [lawyerProfileId], references: [id])
+
   // Trigger conditions — simple key-value rules that the recommendation engine evaluates
   // Stored as JSON array: [{ field: "financingType", operator: "neq", value: "CASH" }]
   triggerConditions Json?
-  
+
   // Relations
   assemblyClauses ContractAssemblyClause[]
-  
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([slug, lawyerProfileId])
   @@index([contractType, clauseKind])
   @@index([representedSide])
@@ -2784,30 +2890,30 @@ enum ClauseContractType {
 }
 
 enum ClauseKind {
-  REQUIRED     // Always included in this contract type
+  REQUIRED // Always included in this contract type
   RECOMMENDED // Suggested by default, can be removed
-  OPTIONAL    // Not suggested, added manually
-  SPECIAL     // Conditional on specific facts (e.g., condominium, foreign party)
+  OPTIONAL // Not suggested, added manually
+  SPECIAL // Conditional on specific facts (e.g., condominium, foreign party)
 }
 
 enum RepresentedSide {
-  EITHER      // Neutral clause applicable to both sides
-  ELOADO       // Favors/addresses the seller (Eladó)
-  VEVO        // Favors/addresses the buyer (Vevő)
-  NEUTRAL     // Procedural clause (határidők, jogszabályi hivatkozások)
+  EITHER // Neutral clause applicable to both sides
+  ELOADO // Favors/addresses the seller (Eladó)
+  VEVO // Favors/addresses the buyer (Vevő)
+  NEUTRAL // Procedural clause (határidők, jogszabályi hivatkozások)
 }
 
 enum ClauseCategory {
-  PARTY            // Felek megnevezése
-  PROPERTY         // Ingatlan leírás
-  OWNERSHIP_PROOF  // Tulajdonjog igazolása
-  TITLE            // Tulajdonjog, bejegyzés
-  WARRANTIES       // Szavatosság, nyilatkozatok
-  PRICE            // Vételár, fizetés
-  FINANCING        // Finanszírozás, bank, jelzálog
-  POSSESSION       // Birtokbaadás
-  CLOSING          // Záró rendelkezések, aláírás
-  SPECIAL          // Condominium, preemption, usufruct, farmland, etc.
+  PARTY // Felek megnevezése
+  PROPERTY // Ingatlan leírás
+  OWNERSHIP_PROOF // Tulajdonjog igazolása
+  TITLE // Tulajdonjog, bejegyzés
+  WARRANTIES // Szavatosság, nyilatkozatok
+  PRICE // Vételár, fizetés
+  FINANCING // Finanszírozás, bank, jelzálog
+  POSSESSION // Birtokbaadás
+  CLOSING // Záró rendelkezések, aláírás
+  SPECIAL // Condominium, preemption, usufruct, farmland, etc.
 }
 
 // ============================================================================
@@ -2819,50 +2925,50 @@ enum ClauseCategory {
 // ============================================================================
 
 model LawyerProfile {
-  id              String          @id @default(uuid())
-  
+  id String @id @default(uuid())
+
   // Lawyer identification
-  lawyerName      String          // e.g., "Dr. Trugly Csanád"
-  lawyerEmail     String?         // Unique email for lookup
-  
+  lawyerName  String // e.g., "Dr. Trugly Csanád"
+  lawyerEmail String? // Unique email for lookup
+
   // Style preferences
-  preferredNumbering String?     // "DECIMAL" | "ALPHA" | "ROMAN" | "BULLET"
-  defaultClosingText String?     // Standard closing clause text this lawyer uses
-  
+  preferredNumbering String? // "DECIMAL" | "ALPHA" | "ROMAN" | "BULLET"
+  defaultClosingText String? // Standard closing clause text this lawyer uses
+
   // Notes
-  styleNotes      String?         // Free-text notes on clause style preferences
-  
-  isActive        Boolean         @default(true)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  
+  styleNotes String? // Free-text notes on clause style preferences
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relations
-  clauses         ClauseLibraryItem[]
+  clauses          ClauseLibraryItem[]
   preferredClauses LawyerPreferredClause[]
-  assemblyDrafts  ContractAssemblyDraft[]
-  
+  assemblyDrafts   ContractAssemblyDraft[]
+
   @@unique([lawyerEmail])
   @@map("lawyer_profiles")
 }
 
 // Explicit ordering preference for a specific clause within a category
 model LawyerPreferredClause {
-  id              String          @id @default(uuid())
+  id              String        @id @default(uuid())
   lawyerProfileId String
-  lawyerProfile   LawyerProfile   @relation(fields: [lawyerProfileId], references: [id], onDelete: Cascade)
+  lawyerProfile   LawyerProfile @relation(fields: [lawyerProfileId], references: [id], onDelete: Cascade)
   clauseId        String
-  
+
   // Override sort order for this lawyer
-  sortOrder       Int             @default(0)
-  
+  sortOrder Int @default(0)
+
   // Whether this lawyer always includes this clause (even if OPTIONAL)
-  alwaysInclude   Boolean         @default(false)
-  
+  alwaysInclude Boolean @default(false)
+
   // Whether this lawyer always excludes this clause
-  alwaysExclude   Boolean         @default(false)
-  
-  createdAt       DateTime        @default(now())
-  
+  alwaysExclude Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
   @@unique([lawyerProfileId, clauseId])
   @@map("lawyer_preferred_clauses")
 }
@@ -2877,73 +2983,72 @@ model LawyerPreferredClause {
 // ============================================================================
 
 model ContractAssemblyDraft {
-  id              String          @id @default(uuid())
-  
+  id String @id @default(uuid())
+
   // Case reference
-  caseId          String
-  
+  caseId String
+
   // Contract type
-  contractType    ClauseContractType  @default(ADASVETEL)
-  
+  contractType ClauseContractType @default(ADASVETEL)
+
   // Intake answers (B400-style structured facts)
-  intakeData      Json            // { representedSide, sellerCount, buyerCount, ... }
-  
+  intakeData Json // { representedSide, sellerCount, buyerCount, ... }
+
   // Assembled clause IDs and order
-  selectedClauses Json            // [{ clauseId, sortOrder, editedBody? }]
-  
+  selectedClauses Json // [{ clauseId, sortOrder, editedBody? }]
+
   // Final assembled text (for display/preview)
-  assembledText   String?         // Concatenated clause bodies, ready for review
-  
+  assembledText String? // Concatenated clause bodies, ready for review
+
   // Status
-  status          AssemblyStatus  @default(IN_PROGRESS)
-  
+  status AssemblyStatus @default(IN_PROGRESS)
+
   // Link to the lawyer profile used
   lawyerProfileId String?
-  lawyerProfile   LawyerProfile?  @relation(fields: [lawyerProfileId], references: [id])
-  
+  lawyerProfile   LawyerProfile? @relation(fields: [lawyerProfileId], references: [id])
+
   // Link to ContractTemplate used for final generation (if generated)
-  templateId      String?
-  
+  templateId String?
+
   // Timestamps
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  createdById     String?
-  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+
   // Relations
-  clauses         ContractAssemblyClause[]
-  
+  clauses ContractAssemblyClause[]
+
   @@unique([caseId, contractType])
   @@index([caseId])
   @@index([lawyerProfileId])
-  
   @@map("contract_assembly_drafts")
 }
 
 enum AssemblyStatus {
-  IN_PROGRESS   // User is still assembling
-  READY          // Ready to generate
-  GENERATED      // A contract has been generated from this assembly
+  IN_PROGRESS // User is still assembling
+  READY // Ready to generate
+  GENERATED // A contract has been generated from this assembly
 }
 
 // Junction table for assembly-to-clause relationship
 model ContractAssemblyClause {
-  id              String          @id @default(uuid())
+  id              String                @id @default(uuid())
   assemblyDraftId String
   assemblyDraft   ContractAssemblyDraft @relation(fields: [assemblyDraftId], references: [id], onDelete: Cascade)
   clauseId        String
-  clause          ClauseLibraryItem @relation(fields: [clauseId], references: [id], onDelete: Cascade)
-  
+  clause          ClauseLibraryItem     @relation(fields: [clauseId], references: [id], onDelete: Cascade)
+
   // Override: lawyer-edited body text (null = use clause.body as-is)
-  editedBody     String?
-  
+  editedBody String?
+
   // Position in the assembled contract
-  sortOrder      Int             @default(0)
-  
+  sortOrder Int @default(0)
+
   // Whether this clause was manually added vs. auto-recommended
-  isManual       Boolean         @default(false)
-  
-  createdAt       DateTime        @default(now())
-  
+  isManual Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
   @@unique([assemblyDraftId, clauseId])
   @@index([assemblyDraftId])
   @@map("contract_assembly_clauses")
@@ -2979,32 +3084,32 @@ enum LawyerHandoffDecision {
 }
 
 model LawyerHandoffPackage {
-  id                    String                   @id @default(uuid())
-  caseId                String
+  id     String @id @default(uuid())
+  caseId String
 
-  status                LawyerHandoffStatus     @default(DRAFT)
-  packageType           LawyerHandoffPackageType @default(STANDARD)
+  status      LawyerHandoffStatus      @default(DRAFT)
+  packageType LawyerHandoffPackageType @default(STANDARD)
 
-  sourceDocumentId      String?
-  anonymizedDocumentId  String?
-  generatedContractId   String?
-  legalAnalysisId       String?
-  reviewNotesId         String?
+  sourceDocumentId     String?
+  anonymizedDocumentId String?
+  generatedContractId  String?
+  legalAnalysisId      String?
+  reviewNotesId        String?
 
-  preparerSummary       String?
+  preparerSummary String?
 
-  preparedById          String?
-  submittedAt           DateTime?
+  preparedById String?
+  submittedAt  DateTime?
 
-  reviewedById          String?
-  reviewedAt            DateTime?
-  reviewDecision        LawyerHandoffDecision?
-  reviewComment         String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  reviewDecision LawyerHandoffDecision?
+  reviewComment  String?
 
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  case                  Case                    @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  case Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
 
   @@index([caseId, status])
   @@index([sourceDocumentId])
@@ -3065,33 +3170,33 @@ enum SegmentCategorySource {
 }
 
 model DocumentComparison {
-  id                   String            @id @default(uuid())
+  id                   String           @id @default(uuid())
   documentId           String
-  document             Document          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document             Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
   baseVersionId        String
-  baseVersion          DocumentVersion   @relation("ComparisonBaseVersion", fields: [baseVersionId], references: [id], onDelete: Restrict)
+  baseVersion          DocumentVersion  @relation("ComparisonBaseVersion", fields: [baseVersionId], references: [id], onDelete: Restrict)
   targetVersionId      String
-  targetVersion        DocumentVersion   @relation("ComparisonTargetVersion", fields: [targetVersionId], references: [id], onDelete: Restrict)
-  status               ComparisonStatus  @default(PENDING)
+  targetVersion        DocumentVersion  @relation("ComparisonTargetVersion", fields: [targetVersionId], references: [id], onDelete: Restrict)
+  status               ComparisonStatus @default(PENDING)
   algorithmRevision    Int
-  extractionRevision   Int               @default(1)
+  extractionRevision   Int              @default(1)
   createdById          String
-  createdBy            User              @relation("ComparisonCreatedBy", fields: [createdById], references: [id])
-  createdAt            DateTime          @default(now())
+  createdBy            User             @relation("ComparisonCreatedBy", fields: [createdById], references: [id])
+  createdAt            DateTime         @default(now())
   startedAt            DateTime?
   completedAt          DateTime?
   failureCode          String?
   failureMessageSafe   String?
-  insertCount          Int               @default(0)
-  deleteCount          Int               @default(0)
-  replaceCount         Int               @default(0)
-  formatOnlyCount      Int               @default(0)
-  moveCandidateCount   Int               @default(0)
-  totalSegmentCount    Int               @default(0)
-  reviewedSegmentCount Int               @default(0)
-  updatedAt            DateTime          @updatedAt
+  insertCount          Int              @default(0)
+  deleteCount          Int              @default(0)
+  replaceCount         Int              @default(0)
+  formatOnlyCount      Int              @default(0)
+  moveCandidateCount   Int              @default(0)
+  totalSegmentCount    Int              @default(0)
+  reviewedSegmentCount Int              @default(0)
+  updatedAt            DateTime         @updatedAt
 
-  segments             DocumentChangeSegment[]
+  segments DocumentChangeSegment[]
 
   // Controlled uniqueness: one comparison per (document, version pair, algorithm
   // revision) — makes creation idempotent and prevents duplicate jobs.

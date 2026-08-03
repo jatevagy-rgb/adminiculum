@@ -112,6 +112,41 @@ export type PortalWorkspace = {
   matterCount: number;
 };
 
+export type PortalWorkspaceSummary = {
+  publicReference: string;
+  name: string;
+  clientDisplayName: string;
+  mode: 'INDIVIDUAL' | 'ORGANIZATION' | 'CASE_RELAY';
+  status: 'ACTIVE';
+  communicationMode: 'PORTAL_PRIMARY' | 'EMAIL_LINKED' | 'EXTERNAL_ONLY';
+  connectedSystemState: 'NOT_CONFIGURED' | 'CONFIGURATION_REQUIRED' | 'READY' | 'DISABLED';
+  membershipRole: 'MEMBER' | 'REPRESENTATIVE' | 'APPROVER';
+  capabilities: { home: boolean; matters: boolean; tasks: boolean; documents: boolean; messages: boolean };
+};
+
+export type PortalIdentityContext = {
+  identity: { displayName: string; email: string; accountType: string };
+  state: 'NO_ACCESS' | 'READY' | 'SELECTION_REQUIRED';
+  workspaces: PortalWorkspaceSummary[];
+  selectedWorkspace: PortalWorkspaceSummary | null;
+};
+
+export function setSelectedPortalWorkspace(publicReference: string | null): void {
+  if (typeof window === 'undefined') return;
+  if (publicReference) localStorage.setItem('adminiculum:client-portal-workspace', publicReference);
+  else localStorage.removeItem('adminiculum:client-portal-workspace');
+}
+
+export async function getPortalIdentityContext(publicReference?: string) {
+  return fetchApi<PortalIdentityContext>('/client-portal/me', {
+    authContext: 'customer',
+    skipWorkspaceContext: !publicReference,
+    headers: publicReference ? { 'x-client-portal-workspace': publicReference } : undefined,
+    suppressErrorStatuses: [401, 403, 409, 503],
+    suppressErrorLogging: true,
+  });
+}
+
 export async function getPortalHome() {
   return fetchApi<PortalHome>('/client-portal/home', { suppressErrorStatuses: [401, 403, 503], suppressErrorLogging: true });
 }

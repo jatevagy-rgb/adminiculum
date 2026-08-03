@@ -14,6 +14,7 @@ on:
       - 'Backend/src/modules/client-publication/**'
       - 'Backend/src/modules/client-identity/**'
       - 'Backend/src/modules/client-interaction/**'
+      - 'Backend/src/modules/client-workspace/**'
       - 'Backend/src/middleware/clientPortalAuth.ts'
       - 'Backend/tests/**comparison**'
       - 'Backend/tests/**review**'
@@ -22,6 +23,7 @@ on:
       - 'Backend/tests/clientIdentityMembership.integration.test.ts'
       - 'Backend/tests/**Interaction**'
       - 'Backend/tests/**interaction**'
+      - 'Backend/tests/**workspace**'
       - 'Backend/package.json'
       - 'Backend/package-lock.json'
       - '.github/workflows/prisma-migration-replayability.yml'
@@ -40,6 +42,7 @@ on:
       - 'Backend/src/modules/client-publication/**'
       - 'Backend/src/modules/client-identity/**'
       - 'Backend/src/modules/client-interaction/**'
+      - 'Backend/src/modules/client-workspace/**'
       - 'Backend/src/middleware/clientPortalAuth.ts'
       - 'Backend/tests/**comparison**'
       - 'Backend/tests/**review**'
@@ -48,6 +51,7 @@ on:
       - 'Backend/tests/clientIdentityMembership.integration.test.ts'
       - 'Backend/tests/**Interaction**'
       - 'Backend/tests/**interaction**'
+      - 'Backend/tests/**workspace**'
       - 'Backend/package.json'
       - 'Backend/package-lock.json'
       - '.github/workflows/prisma-migration-replayability.yml'
@@ -124,3 +128,9 @@ jobs:
         env:
           CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
         run: npm run test:client-interaction:db
+
+      - name: Run CP0 workspace PostgreSQL integration tests
+        working-directory: Backend
+        env:
+          CLIENT_WORKSPACE_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: npm run test:client-workspace:db

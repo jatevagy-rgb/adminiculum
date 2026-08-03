@@ -115,6 +115,7 @@ export interface CustomerContext {
   caseId: string;
   clientId: string;
   grantId: string;
+  workspaceId: string;
   permissions: string[];
 }
 
@@ -124,21 +125,38 @@ export interface CustomerContext {
  * an ACTIVE, unexpired ClientPortalGrant bound to (identity, case). The client
  * and case are derived from the grant — never from customer input.
  */
-export async function resolveActiveCustomerGrant(clientPortalIdentityId: string, caseId: string, prisma: Prisma = defaultPrisma): Promise<CustomerContext> {
+export async function resolveActiveCustomerGrant(clientPortalIdentityId: string, caseId: string, workspaceId: string, prisma: Prisma = defaultPrisma): Promise<CustomerContext> {
   if (!clientPortalIdentityId) throw new InteractionError(401, 'CLIENT_PORTAL_AUTH_REQUIRED', 'Client portal authentication is required.');
+  if (!workspaceId) throw new InteractionError(409, 'CLIENT_WORKSPACE_SELECTION_REQUIRED', 'Select an authorized workspace.');
   const identity = await prisma.clientPortalIdentity.findUnique({ where: { id: clientPortalIdentityId }, select: { status: true } });
   if (!identity || String(identity.status) !== 'ACTIVE') throw new InteractionError(403, 'CLIENT_IDENTITY_NOT_ACTIVE', 'Client identity is not active.');
+  const membership = await prisma.clientPortalWorkspaceMembership.findFirst({
+    where: {
+      clientPortalIdentityId,
+      workspaceId,
+      status: 'ACTIVE',
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    },
+    select: { id: true },
+  });
+  const workspace = membership
+    ? await prisma.clientPortalWorkspace.findFirst({ where: { id: workspaceId, status: 'ACTIVE' }, select: { id: true, clientId: true } })
+    : null;
+  if (!membership || !workspace) throw new InteractionError(403, 'CLIENT_WORKSPACE_MEMBERSHIP_REQUIRED', 'Active workspace membership is required.');
   const grant = await prisma.clientPortalGrant.findFirst({
     where: {
       clientPortalIdentityId,
       caseId,
+      workspaceId,
       status: 'ACTIVE',
+      validFrom: { lte: new Date() },
       OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }],
     },
     select: { id: true, clientId: true, caseId: true, permissions: true },
   });
   if (!grant) throw new InteractionError(403, 'CLIENT_PORTAL_NO_ACTIVE_GRANT', 'No active case grant for this client.');
-  return { clientPortalIdentityId, caseId: grant.caseId, clientId: grant.clientId, grantId: grant.id, permissions: (grant.permissions as string[]) || [] };
+  if (grant.clientId !== workspace.clientId) throw new InteractionError(403, 'CLIENT_WORKSPACE_CLIENT_MISMATCH', 'The case grant is outside the selected workspace.');
+  return { clientPortalIdentityId, caseId: grant.caseId, clientId: grant.clientId, grantId: grant.id, workspaceId, permissions: (grant.permissions as string[]) || [] };
 }
 
 /** The client-safe audience snapshot stored on published requests. */

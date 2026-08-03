@@ -35,7 +35,7 @@ describe('client identity and membership foundation static boundary', () => {
     expect(service).toContain('grantRequired: true');
     expect(service).toContain('Hozzáférés adása ügyhöz');
     expect(service).toContain('createGrantForApprovedMembership');
-    expect(service).toContain('ACTIVE_MEMBERSHIP_REQUIRED');
+    expect(service).toContain('ACTIVE_WORKSPACE_MEMBERSHIP_REQUIRED');
   });
 
   it('does not present legal approval wording to customers', () => {

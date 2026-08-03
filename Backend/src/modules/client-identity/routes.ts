@@ -16,6 +16,14 @@ import {
   transitionMembership,
   validateInvitation,
 } from './identityService';
+import {
+  createWorkspace,
+  inviteWorkspaceMember,
+  listAdminWorkspaces,
+  transitionWorkspace,
+  transitionWorkspaceMembership,
+  updateWorkspace,
+} from '../client-workspace/workspaceService';
 
 export const clientIdentityRouter = Router();
 
@@ -84,6 +92,34 @@ clientIdentityRouter.get('/admin/memberships', async (req, res) => {
   try { res.json(await listActiveMemberships(internalActor(req))); }
   catch (error) { fail(res, error); }
 });
+clientIdentityRouter.get('/admin/workspaces', async (req, res) => {
+  try { res.json(await listAdminWorkspaces(internalActor(req), req.query.clientId ? String(req.query.clientId) : undefined)); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/workspaces', async (req, res) => {
+  try { res.status(201).json(await createWorkspace(internalActor(req), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.patch('/admin/workspaces/:workspaceId', async (req, res) => {
+  try { res.json(await updateWorkspace(internalActor(req), String(req.params.workspaceId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+for (const action of ['activate', 'suspend', 'archive'] as const) {
+  clientIdentityRouter.post(`/admin/workspaces/:workspaceId/${action}`, async (req, res) => {
+    try { res.json(await transitionWorkspace(internalActor(req), String(req.params.workspaceId), action, req.body?.revision)); }
+    catch (error) { fail(res, error); }
+  });
+}
+clientIdentityRouter.post('/admin/workspaces/:workspaceId/invitations', async (req, res) => {
+  try { res.status(201).json(await inviteWorkspaceMember(internalActor(req), String(req.params.workspaceId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+for (const action of ['approve', 'suspend', 'revoke'] as const) {
+  clientIdentityRouter.post(`/admin/workspace-memberships/:membershipId/${action}`, async (req, res) => {
+    try { res.json(await transitionWorkspaceMembership(internalActor(req), String(req.params.membershipId), action, req.body?.revision)); }
+    catch (error) { fail(res, error); }
+  });
+}
 clientIdentityRouter.post('/admin/groups', async (req, res) => {
   try { res.status(201).json(await createOrganizationGroup(internalActor(req), req.body || {})); }
   catch (error) { fail(res, error); }

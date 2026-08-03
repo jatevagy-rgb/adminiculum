@@ -5,10 +5,8 @@
  * unique sentinel strings; any client-facing surface that echoed annotation
  * content would leak a sentinel and fail these tests.
  *
- * Established fact: the Client Portal router is fully quarantined — every path
- * returns 501 FEATURE_NOT_AVAILABLE and no Prisma query runs — so the portal
- * cannot leak annotations by construction. That guarantee is asserted here so a
- * future change which enables the portal without an isolation review fails.
+ * Unknown paths remain quarantined and implemented paths remain protected by
+ * feature/auth/workspace gates. Neither boundary may query annotation storage.
  */
 import express, { Express } from 'express';
 import http from 'http';
@@ -61,9 +59,9 @@ const PORTAL_PATHS = [
 ];
 
 describe('Client Portal cannot expose annotation data', () => {
-  it.each(PORTAL_PATHS)('%s is quarantined (501) and returns no annotation content', async () => {
-    const res = await request(createPortalApp(), 'GET', PORTAL_PATHS[0]);
-    expect(res.status).toBe(501);
+  it.each(PORTAL_PATHS)('%s is refused and returns no annotation content', async (portalPath) => {
+    const res = await request(createPortalApp(), 'GET', portalPath);
+    expect([501, 503]).toContain(res.status);
     expect(res.rawBody).not.toContain(ANNOTATION_INTERNAL_SENTINEL);
     expect(res.rawBody).not.toContain(CLIENT_EXPLANATION_DRAFT_SENTINEL);
     expect(res.rawBody.toLowerCase()).not.toContain('annotation');
@@ -73,7 +71,7 @@ describe('Client Portal cannot expose annotation data', () => {
     for (const path of PORTAL_PATHS) {
       for (const method of ['GET', 'POST']) {
         const res = await request(createPortalApp(), method, path);
-        expect(res.status).toBe(501);
+        expect([501, 503]).toContain(res.status);
       }
     }
     // The quarantine must short-circuit before Prisma is ever touched.

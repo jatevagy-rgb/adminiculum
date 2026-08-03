@@ -9,12 +9,16 @@ import { ApiError, getAuthToken, setAuthToken } from '@/lib/api';
 import { useCustomerAuth } from '@/lib/customerAuth';
 import { clientSafeError, customerInteractionApi, localizedInteractionStatus, type ClientRequestFieldDTO, type CustomerQuestionThreadDTO, type CustomerRequestDTO, type CustomerSubmissionDTO } from '@/lib/clientInteractionApi';
 import { humanFileSize, makeUploadItem, PAGE_SIDE_LABELS, uploadReducer, uploadStateMessage, uploadSummary, type UploadItem } from '@/lib/customerUpload';
+import { PortalEntryLanding } from './PortalEntryLanding';
+import { PortalWorkspaceSelector } from './PortalWorkspaceSelector';
 import {
   getPortalActionRequest,
   getPortalDocument,
   getPortalHome,
   getPortalMatter,
   getPortalWorkspace,
+  getPortalIdentityContext,
+  setSelectedPortalWorkspace,
   portalDownloadUrl,
   type PortalActionRequest,
   type PortalDocument,
@@ -25,6 +29,7 @@ import {
   type PortalWorkspaceAction,
   type PortalWorkspaceDocument,
   type PortalWorkspaceMessage,
+  type PortalIdentityContext,
 } from '@/lib/clientPortalApi';
 
 type PortalView = 'home' | 'matters' | 'tasks' | 'documents' | 'messages' | 'matter' | 'document' | 'action';
@@ -34,9 +39,10 @@ type Props = { view: PortalView; resourceId?: string };
 type LoadState =
   | { status: 'loading' }
   | { status: 'login' }
+  | { status: 'select'; context: PortalIdentityContext }
   | { status: 'denied'; message: string }
   | { status: 'disabled' }
-  | { status: 'ready'; home: PortalHome; workspace: PortalWorkspace; matter?: PortalMatter & { documents: PortalDocument[]; actionRequests: PortalActionRequest[]; updates: PortalSafeUpdate[] }; document?: PortalDocument; action?: PortalActionRequest };
+  | { status: 'ready'; context: PortalIdentityContext; home: PortalHome; workspace: PortalWorkspace; matter?: PortalMatter & { documents: PortalDocument[]; actionRequests: PortalActionRequest[]; updates: PortalSafeUpdate[] }; document?: PortalDocument; action?: PortalActionRequest };
 
 function formatDate(value?: string | null) {
   if (!value) return 'Nincs megadva';
@@ -212,7 +218,11 @@ function MatterView({ matter }: { matter: PortalMatter & { documents: PortalDocu
 function DocumentView({ document }: { document: PortalDocument }) {
   const token = getAuthToken('customer');
   const onDownload = useCallback(async () => {
-    const response = await fetch(portalDownloadUrl(document.id), { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+    const workspace = typeof window !== 'undefined' ? localStorage.getItem('adminiculum:client-portal-workspace') : null;
+    const response = await fetch(portalDownloadUrl(document.id), { headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(workspace ? { 'x-client-portal-workspace': workspace } : {}),
+    } });
     if (!response.ok) throw new Error('A dokumentum jelenleg nem tölthető le.');
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -521,6 +531,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
   const { instance, accounts, inProgress } = useMsal();
   const account = pickAccountByTenant(accounts, customerTenantId);
   const [state, setState] = useState<LoadState>({ status: 'loading' });
+  const [selectedReference, setSelectedReference] = useState<string | null>(null);
   // Canonical customer-auth layer: single MSAL instance, one logout config.
   const { logoutCustomer } = useCustomerAuth();
 
@@ -535,12 +546,24 @@ export function ClientPortalShell({ view, resourceId }: Props) {
       try {
         const token = await instance.acquireTokenSilent({ account, scopes: customerApiScopes });
         setAuthToken(token.accessToken, 'customer');
+        const context = await getPortalIdentityContext(selectedReference || undefined);
+        if (context.state === 'NO_ACCESS') {
+          setSelectedPortalWorkspace(null);
+          if (!cancelled) setState({ status: 'denied', message: 'Jelenleg nincs aktív, jóváhagyott ügyfélmunkatere.' });
+          return;
+        }
+        if (context.state === 'SELECTION_REQUIRED' || !context.selectedWorkspace) {
+          setSelectedPortalWorkspace(null);
+          if (!cancelled) setState({ status: 'select', context });
+          return;
+        }
+        setSelectedPortalWorkspace(context.selectedWorkspace.publicReference);
         const [home, workspace] = await Promise.all([getPortalHome(), getPortalWorkspace()]);
         let detail = {};
         if (view === 'matter' && resourceId) detail = { matter: await getPortalMatter(resourceId) };
         if (view === 'document' && resourceId) detail = { document: await getPortalDocument(resourceId) };
         if (view === 'action' && resourceId) detail = { action: await getPortalActionRequest(resourceId) };
-        if (!cancelled) setState({ status: 'ready', home, workspace, ...detail });
+        if (!cancelled) setState({ status: 'ready', context, home, workspace, ...detail });
       } catch (error) {
         if (error instanceof InteractionRequiredAuthError) {
           await instance.acquireTokenRedirect({ account, scopes: customerApiScopes });
@@ -555,28 +578,35 @@ export function ClientPortalShell({ view, resourceId }: Props) {
     }
     load();
     return () => { cancelled = true; };
-  }, [account, inProgress, instance, resourceId, view]);
+  }, [account, inProgress, instance, resourceId, selectedReference, view]);
 
-  const nav = useMemo(() => [
-    ['Főoldal', '/portal'],
-    ['Ügyeim', '/portal/ugyeim'],
-    ['Teendőim', '/portal/teendoim'],
-    ['Dokumentumok', '/portal/dokumentumok'],
-    ['Üzenetek', '/portal/uzenetek'],
-  ], []);
+  const nav = useMemo(() => {
+    if (state.status !== 'ready' || !state.context.selectedWorkspace) return [];
+    const capabilities = state.context.selectedWorkspace.capabilities;
+    return [
+      capabilities.home ? ['Főoldal', '/portal'] : null,
+      capabilities.matters ? ['Ügyeim', '/portal/ugyeim'] : null,
+      capabilities.tasks ? ['Teendőim', '/portal/teendoim'] : null,
+      capabilities.documents ? ['Dokumentumok', '/portal/dokumentumok'] : null,
+      capabilities.messages ? ['Üzenetek', '/portal/uzenetek'] : null,
+    ].filter(Boolean) as string[][];
+  }, [state]);
+
+  if (state.status === 'login' && view === 'home') return <PortalEntryLanding />;
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#faf8f3] text-stone-900" data-testid="client-portal-shell">
+    <main className="min-h-screen overflow-x-hidden bg-white text-stone-900" data-testid="client-portal-shell">
       <header className="sticky top-0 z-20 border-b border-stone-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <Link href="/portal" className="font-serif text-2xl font-semibold tracking-tight text-stone-950 focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">Adminiculum</Link>
-          <nav className="flex flex-wrap gap-2 text-sm" aria-label="Ügyfélportál navigáció">{nav.map(([label, href]) => <Link className="rounded-full px-3 py-2 text-stone-700 hover:bg-stone-100 focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" key={label} href={href}>{label}</Link>)}</nav>
-          {state.status === 'ready' ? <button className="rounded-full border border-stone-300 px-3 py-2 text-sm" onClick={logoutCustomer}>Kijelentkezés</button> : null}
+          {state.status === 'ready' ? <nav className="flex flex-wrap gap-2 text-sm" aria-label="Ügyfélportál navigáció">{nav.map(([label, href]) => <Link className="rounded-full px-3 py-2 text-stone-700 hover:bg-stone-100 focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" key={label} href={href}>{label}</Link>)}</nav> : null}
+          {state.status === 'ready' || state.status === 'select' ? <div className="flex gap-2">{state.status === 'ready' && state.context.workspaces.length > 1 ? <button className="rounded-full border border-stone-300 px-3 py-2 text-sm" onClick={() => { setSelectedPortalWorkspace(null); setSelectedReference(null); setState({ status: 'select', context: { ...state.context, state: 'SELECTION_REQUIRED', selectedWorkspace: null } }); }}>Munkatérváltás</button> : null}<button className="rounded-full border border-stone-300 px-3 py-2 text-sm" onClick={logoutCustomer}>Kijelentkezés</button></div> : null}
         </div>
       </header>
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         {state.status === 'loading' ? <Card>Betöltés...</Card> : null}
-        {state.status === 'login' ? <Card><h1 className="text-3xl font-semibold">Ügyfélportál belépés</h1><p className="mt-3 text-stone-700">Jelentkezzen be e-mail címmel és jelszóval a közzétett ügyfélanyagok megtekintéséhez.</p><Link href="/portal/login" className="mt-6 inline-flex rounded-full bg-stone-950 px-5 py-3 text-white">Bejelentkezés</Link></Card> : null}
+        {state.status === 'login' ? <Card><h1 className="text-3xl font-semibold">Ügyfélportál belépés</h1><p className="mt-3 text-stone-700">A biztonságos Microsoft ügyfélfiókos azonosításhoz folytassa a belépést.</p><Link href="/portal/login" className="mt-6 inline-flex rounded-full bg-stone-950 px-5 py-3 text-white">Belépés Microsoft-fiókkal</Link></Card> : null}
+        {state.status === 'select' ? <PortalWorkspaceSelector workspaces={state.context.workspaces} onSelect={(reference) => { setState({ status: 'loading' }); setSelectedReference(reference); }} /> : null}
         {state.status === 'disabled' ? <Card>A client portal olvasási hozzáférése ebben a környezetben még nincs bekapcsolva.</Card> : null}
         {state.status === 'denied' ? <Card>{state.message}</Card> : null}
         {state.status === 'ready' && view === 'home' ? <HomeView home={state.home} workspace={state.workspace} /> : null}

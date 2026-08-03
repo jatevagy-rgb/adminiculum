@@ -11,6 +11,7 @@ import { ClientInteractionGateError } from './gates';
 import * as requests from './requestService';
 import * as questions from './questionService';
 import * as submissions from './submissionService';
+import { resolvePortalWorkspace } from '../client-workspace/workspaceService';
 
 export const clientInteractionCustomerRouter = Router();
 
@@ -23,7 +24,9 @@ function fail(res: Response, error: unknown): void {
 async function ctxFor(req: Request): Promise<CustomerContext> {
   const identityId = String(req.clientPortalSession?.clientPortalIdentityId || '');
   const caseId = String(req.params.caseId || '');
-  return resolveActiveCustomerGrant(identityId, caseId);
+  if (!req.clientPortalSession) throw new InteractionError(401, 'CLIENT_PORTAL_AUTH_REQUIRED', 'Client portal authentication is required.');
+  const workspace = await resolvePortalWorkspace(req.clientPortalSession, req.header('x-client-portal-workspace'));
+  return resolveActiveCustomerGrant(identityId, caseId, workspace.id);
 }
 
 clientInteractionCustomerRouter.use(authenticateClientPortal);
