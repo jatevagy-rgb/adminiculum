@@ -21,8 +21,21 @@ export interface MembershipRequestDTO {
 export interface ActiveGrantSummary {
   id: string;
   caseId: string;
+  status: string;
   permissions: string[];
   validUntil: string | null;
+  createdAt: string;
+  updatedAt: string;
+  revokedAt: string | null;
+  revision: number;
+  lifecycleEvents: Array<{
+    id: string;
+    grantId: string | null;
+    action: string;
+    fromStatus: string | null;
+    toStatus: string | null;
+    createdAt: string;
+  }>;
 }
 
 export interface ActiveMembershipDTO {

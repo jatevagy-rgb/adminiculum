@@ -98,6 +98,21 @@ describe('internal portal-admin UI', () => {
     assert.doesNotMatch(panel, /localStorage|getAuthToken|Authorization/);
   });
 
+  it('renders exact operational metadata only in the workforce grant list', () => {
+    const src = page();
+    const apiSrc = api();
+    assert.match(apiSrc, /createdAt: string/);
+    assert.match(apiSrc, /updatedAt: string/);
+    assert.match(apiSrc, /revokedAt: string \| null/);
+    assert.match(apiSrc, /lifecycleEvents/);
+    assert.match(src, /Grant ID/);
+    assert.match(src, /\{g\.id\}/);
+    assert.doesNotMatch(src, /g\.id\.slice/);
+    assert.match(src, /g\.revision/);
+    assert.match(src, /grant-lifecycle-\$\{g\.id\}/);
+    assert.doesNotMatch(src, /Authorization|Bearer|localStorage|getAuthToken/);
+  });
+
   it('is registered in internal navigation', () => {
     const sidebar = read('src/components/Sidebar.tsx');
     assert.match(sidebar, /"client-portal-admin": "\/client-portal-admin"/);
