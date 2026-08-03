@@ -522,8 +522,9 @@ export function ClientPortalShell({ view, resourceId }: Props) {
   const nav = useMemo(() => [
     ['Főoldal', '/portal'],
     ['Ügyeim', '/portal#ugyeim'],
+    ['Teendőim', '/portal#teendok'],
     ['Dokumentumok', '/portal#dokumentumok'],
-    ['Teendők', '/portal#teendok'],
+    ['Üzenetek', '/portal#uzenetek'],
   ], []);
 
   return (

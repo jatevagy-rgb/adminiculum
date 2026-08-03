@@ -30,6 +30,9 @@ const CLIENT_DETAIL_SELECT = {
   contactPerson: true,
   notes: true,
   colorKey: true,
+  relationshipMode: true,
+  portalAccessEnabled: true,
+  connectedSystemState: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.ClientSelect;
@@ -560,6 +563,9 @@ router.patch('/:clientId', authenticate, requireClientIdentityManageAccess, asyn
       authorizedRepresentative,
       contactPerson,
       colorKey,
+      relationshipMode,
+      portalAccessEnabled,
+      connectedSystemState,
     } = req.body;
 
     const resolvedTaxNumber = taxNumber !== undefined ? taxNumber : vatNumber;
@@ -576,6 +582,9 @@ router.patch('/:clientId', authenticate, requireClientIdentityManageAccess, asyn
         ...(companyRegistrationNumber !== undefined && { companyRegistrationNumber }),
         ...(authorizedRepresentative !== undefined && { authorizedRepresentative }),
         ...(contactPerson !== undefined && { contactPerson }),
+        ...(relationshipMode !== undefined && { relationshipMode }),
+        ...(portalAccessEnabled !== undefined && { portalAccessEnabled: Boolean(portalAccessEnabled) }),
+        ...(connectedSystemState !== undefined && { connectedSystemState: connectedSystemState || null }),
         ...(validatedColorKey !== undefined ? { colorKey: validatedColorKey } : {}),
       },
       select: CLIENT_DETAIL_SELECT,

@@ -2455,6 +2455,9 @@ export async function getCurrentUser(): Promise<CurrentUser> {
 export interface Client {
   id: string;
   name: string;
+  relationshipMode?: "PORTAL_CENTRIC" | "EMAIL_CENTRIC" | "CONNECTED_SYSTEM";
+  portalAccessEnabled?: boolean;
+  connectedSystemState?: string | null;
   email?: string;
   phone?: string;
   address?: string;
@@ -2558,6 +2561,9 @@ export interface UpdateClientData {
   authorizedRepresentative?: string;
   contactPerson?: string;
   colorKey?: ClientColorKey | null;
+  relationshipMode?: "PORTAL_CENTRIC" | "EMAIL_CENTRIC" | "CONNECTED_SYSTEM";
+  portalAccessEnabled?: boolean;
+  connectedSystemState?: string | null;
 }
 
 export async function updateClient(clientId: string, data: UpdateClientData): Promise<Client> {
