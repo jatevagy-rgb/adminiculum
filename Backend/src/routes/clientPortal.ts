@@ -28,6 +28,10 @@ import {
   listPortalSafeUpdates,
   portalHomeSnapshot,
 } from '../modules/client-publication/publicationService';
+import { resolveActiveCustomerGrant } from '../modules/client-interaction/base';
+import { listCustomerRequests } from '../modules/client-interaction/requestService';
+import { listCustomerSubmissions } from '../modules/client-interaction/submissionService';
+import { listCustomerThreads } from '../modules/client-interaction/questionService';
 
 const router = Router();
 
@@ -53,10 +57,135 @@ async function portalRead(req: Request, res: Response): Promise<boolean> {
   return !res.headersSent;
 }
 
+const COMPLETED_REQUEST_STATUSES = new Set(['COMPLETED', 'CANCELLED', 'EXPIRED']);
+const DOCUMENT_REQUEST_TYPES = new Set(['DOCUMENT_UPLOAD', 'MISSING_DOCUMENT_REQUEST', 'CORRECTION_REQUEST']);
+
+function customerRequestStatus(status: string): string {
+  const labels: Record<string, string> = {
+    PUBLISHED: 'Teendő',
+    PARTIALLY_SUBMITTED: 'Folyamatban',
+    SUBMITTED: 'Beküldve',
+    UNDER_INTERNAL_REVIEW: 'Feldolgozás alatt',
+    CORRECTION_REQUESTED: 'Javítás szükséges',
+    COMPLETED: 'Lezárva',
+  };
+  return labels[status] || 'Folyamatban';
+}
+
+function actionBucket(status: string, dueAt: string | null): 'now' | 'upcoming' | 'completed' {
+  if (COMPLETED_REQUEST_STATUSES.has(status)) return 'completed';
+  if (dueAt && new Date(dueAt).getTime() > Date.now() + 7 * 24 * 60 * 60 * 1000) return 'upcoming';
+  return 'now';
+}
+
+/**
+ * A customer-safe cross-matter projection. It reuses the canonical
+ * publication and interaction services; no client, case or grant id is ever
+ * accepted from the browser.
+ */
+async function portalWorkspace(req: Request) {
+  const portalActor = actor(req);
+  const [home, documents] = await Promise.all([
+    portalHomeSnapshot(portalActor),
+    listPortalDocuments(portalActor),
+  ]);
+  const matters = home.matters as Array<{ id: string; caseId: string; title: string }>;
+  const byCase = new Map(matters.map((matter) => [matter.caseId, matter]));
+  const identityId = portalActor.clientPortalIdentityId;
+  const interactionRows = await Promise.all(matters.map(async (matter) => {
+    const context = await resolveActiveCustomerGrant(identityId, matter.caseId);
+    const [requests, submissions, questions] = await Promise.all([
+      listCustomerRequests(context),
+      listCustomerSubmissions(context, undefined),
+      listCustomerThreads(context),
+    ]);
+    return { matter, requests: requests.items, submissions: submissions.items, questions: questions.items };
+  }));
+
+  const requests = interactionRows.flatMap(({ matter, requests: items }) => items.map((item: any) => ({
+    id: item.id,
+    matterId: matter.id,
+    matterTitle: matter.title,
+    type: item.type,
+    title: item.title,
+    description: item.instructions || null,
+    dueAt: item.dueAt,
+    status: customerRequestStatus(item.status),
+    rawStatus: item.status,
+    publishedAt: item.publishedAt,
+    actionUrl: `/portal/matters/${encodeURIComponent(matter.id)}`,
+  })));
+  const submissions = interactionRows.flatMap(({ matter, submissions: items }) => items.map((item: any) => ({
+    id: item.id,
+    requestId: item.requestId,
+    matterId: matter.id,
+    matterTitle: matter.title,
+    status: customerRequestStatus(item.status),
+    submittedAt: item.submittedAt,
+    correctionNeeded: item.status === 'CORRECTION_REQUESTED',
+    actionUrl: `/portal/matters/${encodeURIComponent(matter.id)}`,
+  })));
+  const messages = interactionRows.flatMap(({ matter, questions }) => questions.map((item: any) => ({
+    id: item.id,
+    matterId: matter.id,
+    matterTitle: matter.title,
+    subject: item.subject,
+    status: item.status === 'ANSWERED' ? 'Megválaszolva' : item.status === 'CLOSED' ? 'Lezárva' : 'Válaszra vár',
+    updatedAt: item.updatedAt || null,
+    actionUrl: `/portal/matters/${encodeURIComponent(matter.id)}`,
+  })));
+  const actions = requests.map(({ rawStatus, ...request }) => ({
+    ...request,
+    bucket: actionBucket(rawStatus, request.dueAt),
+  }));
+  const documentItems = [
+    ...(documents.items as Array<Record<string, unknown>>).map((item) => ({ ...item, kind: 'SHARED_DOCUMENT', actionUrl: `/portal/documents/${encodeURIComponent(String(item.id))}` })),
+    ...requests.filter((request) => DOCUMENT_REQUEST_TYPES.has(request.type)).map((request) => ({
+      id: request.id,
+      matterId: request.matterId,
+      matterTitle: request.matterTitle,
+      title: request.title,
+      description: request.description,
+      status: request.status,
+      publishedAt: request.publishedAt,
+      kind: request.type === 'CORRECTION_REQUEST' ? 'CORRECTION_REQUEST' : 'DOCUMENT_REQUEST',
+      actionUrl: request.actionUrl,
+    })),
+    ...submissions.map((submission) => ({
+      id: submission.id,
+      matterId: submission.matterId,
+      matterTitle: submission.matterTitle,
+      title: submission.correctionNeeded ? 'Javítandó beküldés' : 'Beküldött dokumentum vagy adat',
+      description: null,
+      status: submission.status,
+      publishedAt: submission.submittedAt,
+      kind: submission.correctionNeeded ? 'CORRECTION_SUBMISSION' : 'SUBMISSION',
+      actionUrl: submission.actionUrl,
+    })),
+  ];
+
+  return {
+    actions,
+    documents: documentItems,
+    messages,
+    upcomingDeadlines: actions.filter((item) => item.bucket !== 'completed' && item.dueAt).sort((left, right) => String(left.dueAt).localeCompare(String(right.dueAt))).slice(0, 6),
+    matterCount: byCase.size,
+  };
+}
+
 router.get('/home', async (req, res) => {
   try {
     if (!(await portalRead(req, res))) return;
     res.json(await portalHomeSnapshot(actor(req)));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/workspace', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    res.json(await portalWorkspace(req));
   } catch (error) {
     fail(res, error);
   }

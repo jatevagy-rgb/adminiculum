@@ -194,8 +194,8 @@ export async function listRequestsInternal(actor: InternalActor, filter: { caseI
   return { items: items.map(toInternalRequest), total, limit, offset };
 }
 
-// ---- Customer side: only PUBLISHED (and active) requests on the granted case.
-const CUSTOMER_VISIBLE = ['PUBLISHED', 'PARTIALLY_SUBMITTED', 'SUBMITTED', 'UNDER_INTERNAL_REVIEW', 'CORRECTION_REQUESTED'];
+// ---- Customer side: published requests and the customer's completed history on the granted case.
+const CUSTOMER_VISIBLE = ['PUBLISHED', 'PARTIALLY_SUBMITTED', 'SUBMITTED', 'UNDER_INTERNAL_REVIEW', 'CORRECTION_REQUESTED', 'COMPLETED'];
 
 export async function listCustomerRequests(ctx: CustomerContext, prisma: Prisma = defaultPrisma) {
   const items = await prisma.clientRequest.findMany({

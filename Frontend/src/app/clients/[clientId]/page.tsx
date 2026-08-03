@@ -65,10 +65,18 @@ function ClientDetailContent() {
   const [cases, setCases] = useState<CaseListItem[]>([]);
   const [documents, setDocuments] = useState<DossierDocument[]>([]);
   const [communications, setCommunications] = useState<CommunicationItem[]>([]);
+  const [savingPortal, setSavingPortal] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [casesLoadError, setCasesLoadError] = useState<string | null>(null);
+
+  const savePortalSettings = async (patch: Partial<Pick<Client, 'relationshipMode' | 'portalAccessEnabled' | 'connectedSystemState'>>) => {
+    if (!client) return;
+    setSavingPortal(true);
+    try { setClient(await updateClient(client.id, patch)); }
+    finally { setSavingPortal(false); }
+  };
 
   const [showNewCaseModal, setShowNewCaseModal] = useState(false);
   const [caseFormData, setCaseFormData] = useState<CreateCaseData>({
@@ -284,6 +292,11 @@ function ClientDetailContent() {
                   <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Kapcsolt ügyek, dokumentumok és kommunikációk belső operatív nézete</p>
                 </div>
               </div>
+              <section className="mt-5 rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Client Portal control plane</p><h2 className="mt-1 font-serif text-xl text-[var(--adm-text)]">Ügyfélkapcsolati működés</h2></div><span className="rounded-full bg-[var(--adm-gold-soft,#f3ead2)] px-3 py-1 text-xs font-semibold">{client.portalAccessEnabled ? 'Portál előkészítve' : 'Portál hozzáférés kikapcsolva'}</span></div>
+                <div className="mt-3 grid gap-3 md:grid-cols-3"><label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]"><span>Működési mód</span><select value={client.relationshipMode || 'PORTAL_CENTRIC'} disabled={savingPortal} onChange={(event) => void savePortalSettings({ relationshipMode: event.target.value as Client['relationshipMode'] })} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-sm text-[var(--adm-text)]"><option value="PORTAL_CENTRIC">Portálközpontú</option><option value="EMAIL_CENTRIC">E-mail központú</option><option value="CONNECTED_SYSTEM">Kapcsolt rendszer</option></select></label><label className="flex items-end gap-2 text-sm"><input type="checkbox" checked={Boolean(client.portalAccessEnabled)} disabled={savingPortal} onChange={(event) => void savePortalSettings({ portalAccessEnabled: event.target.checked })} />Portál elérhetőségének előkészítése</label><label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]"><span>Kapcsolt rendszer állapota</span><input value={client.connectedSystemState || ''} disabled={savingPortal} onChange={(event) => setClient((current) => current ? { ...current, connectedSystemState: event.target.value } : current)} onBlur={(event) => void savePortalSettings({ connectedSystemState: event.target.value })} placeholder="Nincs konfigurálva" className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-sm text-[var(--adm-text)]" /></label></div>
+                <p className="mt-3 text-xs text-[var(--adm-text-muted)]">A kapcsolt rendszer ebben a slice-ban csak konfigurációs állapot; külső rendszer felé nem indít automatikus szinkronizációt.</p>
+              </section>
 
               <div className="flex gap-2">
                 <button onClick={openEditClient} className="adm-link-button px-4 py-2 text-xs">

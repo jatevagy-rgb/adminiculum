@@ -143,6 +143,9 @@ model Client {
   notes           String?
   color           String?   @db.VarChar(16) // Legacy hexadecimal field; not a rendering source
   colorKey        ClientColorKey?
+  relationshipMode ClientRelationshipMode @default(PORTAL_CENTRIC)
+  portalAccessEnabled Boolean @default(false)
+  connectedSystemState String? @db.VarChar(80)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -156,6 +159,12 @@ model Client {
   houseStyleProfile ClientHouseStyleProfile? // One-to-one relation for document house style
 
   @@map("clients")
+}
+
+enum ClientRelationshipMode {
+  PORTAL_CENTRIC
+  EMAIL_CENTRIC
+  CONNECTED_SYSTEM
 }
 
 model ClientHouseStyleProfile {

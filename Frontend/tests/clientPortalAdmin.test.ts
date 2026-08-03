@@ -74,11 +74,50 @@ describe('internal portal-admin UI', () => {
     assert.match(src, /caseId={matter\.caseId}/);
   });
 
+  it('customer shell exposes coherent customer routes without workforce navigation', () => {
+    const shell = portalShell();
+    assert.match(shell, /'\/portal\/ugyeim'/);
+    assert.match(shell, /'\/portal\/teendoim'/);
+    assert.match(shell, /'\/portal\/dokumentumok'/);
+    assert.match(shell, /'\/portal\/uzenetek'/);
+    assert.match(shell, /Amit most érdemes elintézni/);
+    assert.match(shell, /Kérdések és válaszok/);
+    assert.doesNotMatch(shell, /Belső munkapad|Review sor|Munkaórák/);
+  });
+
+  it('uses the customer-safe workspace aggregate for documents, actions and questions', () => {
+    const source = portalShell() + read('src/lib/clientPortalApi.ts');
+    assert.match(source, /getPortalWorkspace/);
+    assert.match(source, /Most intézendő/);
+    assert.match(source, /Közelgő/);
+    assert.match(source, /Befejezett/);
+    assert.match(source, /Megosztott dokumentumok és kérések/);
+    assert.match(source, /Itt csak az Ön kérdései/);
+    assert.doesNotMatch(source, /storageProvider|quarantineStorageReference|scanProvider|scanCodeSafe/);
+  });
+
+  it('presents the configured relationship mode without a customer mode selector', () => {
+    const source = portalShell() + read('src/lib/clientPortalApi.ts') + read('../Backend/src/modules/client-publication/publicationService.ts');
+    assert.match(source, /relationshipMode/);
+    assert.match(source, /Az e-mail továbbra is az elsődleges/);
+    assert.match(source, /nem indít automatikus szinkronizációt/);
+    assert.doesNotMatch(portalShell(), /Válasszon működési módot/);
+  });
+
   it('case-level identity grant is available and identity-based', () => {
     const src = caseGrant();
     assert.match(src, /createIdentityGrant/);
     assert.match(src, /case-identity-grant/);
     assert.doesNotMatch(src, /clientUserId\s*[:=]/);
+  });
+
+  it('embeds canonical request creation and review workflows in the Case portal panel', () => {
+    const source = publicationPanel();
+    assert.match(source, /ClientRequestComposer/);
+    assert.match(source, /ClientInteractionInternalActions/);
+    assert.match(source, /workforceInteractionApi\.listQuestions/);
+    assert.match(source, /workforceInteractionApi\.listSubmissions/);
+    assert.match(source, /A tervezet rejtve marad/);
   });
 
   it('exposes workforce-only operational grant observability', () => {

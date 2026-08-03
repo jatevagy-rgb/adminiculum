@@ -14,15 +14,20 @@ import {
   getPortalDocument,
   getPortalHome,
   getPortalMatter,
+  getPortalWorkspace,
   portalDownloadUrl,
   type PortalActionRequest,
   type PortalDocument,
   type PortalHome,
   type PortalMatter,
   type PortalSafeUpdate,
+  type PortalWorkspace,
+  type PortalWorkspaceAction,
+  type PortalWorkspaceDocument,
+  type PortalWorkspaceMessage,
 } from '@/lib/clientPortalApi';
 
-type PortalView = 'home' | 'matter' | 'document' | 'action';
+type PortalView = 'home' | 'matters' | 'tasks' | 'documents' | 'messages' | 'matter' | 'document' | 'action';
 
 type Props = { view: PortalView; resourceId?: string };
 
@@ -31,7 +36,7 @@ type LoadState =
   | { status: 'login' }
   | { status: 'denied'; message: string }
   | { status: 'disabled' }
-  | { status: 'ready'; home: PortalHome; matter?: PortalMatter & { documents: PortalDocument[]; actionRequests: PortalActionRequest[]; updates: PortalSafeUpdate[] }; document?: PortalDocument; action?: PortalActionRequest };
+  | { status: 'ready'; home: PortalHome; workspace: PortalWorkspace; matter?: PortalMatter & { documents: PortalDocument[]; actionRequests: PortalActionRequest[]; updates: PortalSafeUpdate[] }; document?: PortalDocument; action?: PortalActionRequest };
 
 function formatDate(value?: string | null) {
   if (!value) return 'Nincs megadva';
@@ -109,13 +114,31 @@ function DocumentCard({ document }: { document: PortalDocument }) {
   );
 }
 
-function HomeView({ home }: { home: PortalHome }) {
+function WorkspaceActionCard({ action }: { action: PortalWorkspaceAction }) {
+  return <Link className="block rounded-2xl border border-[#eadfbf] bg-[#fffaf0] p-4 focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" href={action.actionUrl}><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7a5f18]">{action.matterTitle}</p><h3 className="mt-1 break-words text-lg font-semibold text-stone-950">{action.title}</h3><p className="mt-2 text-sm text-stone-700">{action.status}{action.dueAt ? ` · Határidő: ${formatDate(action.dueAt)}` : ''}</p></Link>;
+}
+
+function WorkspaceDocumentCard({ document }: { document: PortalWorkspaceDocument }) {
+  const kind = document.kind === 'SHARED_DOCUMENT' ? 'Megosztott dokumentum' : document.kind.includes('CORRECTION') ? 'Javítás' : document.kind === 'SUBMISSION' ? 'Beküldés' : 'Dokumentumkérés';
+  return <Link className="block rounded-2xl border border-stone-200 bg-white p-4 focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" href={document.actionUrl}><p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">{kind} · {document.matterTitle || 'Közzétett ügy'}</p><h3 className="mt-1 break-words text-lg font-semibold text-stone-950">{document.title}</h3><p className="mt-2 text-sm text-stone-700">{document.status || 'Elérhető'}{document.publishedAt ? ` · ${formatDate(document.publishedAt)}` : ''}</p></Link>;
+}
+
+function WorkspaceMessageCard({ message }: { message: PortalWorkspaceMessage }) {
+  return <Link className="block rounded-2xl border border-stone-200 bg-stone-50 p-4 focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" href={message.actionUrl}><p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">{message.matterTitle}</p><h3 className="mt-1 break-words text-lg font-semibold text-stone-950">{message.subject}</h3><p className="mt-2 text-sm text-stone-700">{message.status}{message.updatedAt ? ` · ${formatDate(message.updatedAt)}` : ''}</p></Link>;
+}
+
+function HomeView({ home, workspace }: { home: PortalHome; workspace: PortalWorkspace }) {
+  const modeMessage = home.relationshipMode === 'EMAIL_CENTRIC'
+    ? 'Az e-mail továbbra is az elsődleges kapcsolattartási csatorna. Itt az ügy állapota, a megosztott dokumentumok és a strukturált kérések érhetők el.'
+    : home.relationshipMode === 'CONNECTED_SYSTEM'
+      ? 'Az ügyfélportál a közzétett ügyállapotot, dokumentumokat és kéréseket mutatja. Külső rendszerrel nem indít automatikus szinkronizációt.'
+      : 'Az ügyfélportál az elsődleges közös munkatér az iroda által kifejezetten közzétett ügyinformációkhoz és teendőkhöz.';
   return (
     <div className="space-y-6">
       <Card className="bg-gradient-to-br from-white to-[#f7f1e2]">
         <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#9b7b25]">Adminiculum ügyfélportál</p>
         <h1 className="mt-3 break-words text-3xl font-semibold text-stone-950 sm:text-4xl">Üdvözöljük</h1>
-        <p className="mt-3 max-w-2xl text-stone-700">Csak az ügyvédi iroda által kifejezetten közzétett, ügyfélbiztos információk jelennek meg.</p>
+        <p className="mt-3 max-w-2xl text-stone-700">{modeMessage}</p>
       </Card>
       <Card>
         <h2 className="text-2xl font-semibold text-stone-950">Figyelmet igényel</h2>
@@ -126,8 +149,23 @@ function HomeView({ home }: { home: PortalHome }) {
         <h2 className="text-2xl font-semibold text-stone-950">Legutóbbi frissítések</h2>
         <div className="mt-4 grid gap-3">{home.updates.length ? home.updates.map((update) => <UpdateCard key={update.id} update={update} />) : <p className="text-stone-600">Nincs közzétett frissítés.</p>}</div>
       </Card>
+      <Card>
+        <h2 className="text-2xl font-semibold text-stone-950">Közelgő határidők</h2>
+        <div className="mt-4 grid gap-3">{workspace.upcomingDeadlines.length ? workspace.upcomingDeadlines.map((action) => <WorkspaceActionCard key={action.id} action={action} />) : <p className="text-stone-600">Nincs közzétett közelgő határidő.</p>}</div>
+      </Card>
+      <Card>
+        <h2 className="text-2xl font-semibold text-stone-950">Dokumentumok és kérések</h2>
+        <div className="mt-4 grid gap-3">{workspace.documents.length ? workspace.documents.slice(0, 6).map((document) => <WorkspaceDocumentCard key={`${document.kind}-${document.id}`} document={document} />) : <p className="text-stone-600">Nincs megosztott dokumentum vagy közzétett kérés.</p>}</div>
+      </Card>
     </div>
   );
+}
+
+function ListView({ view, home, workspace }: { view: 'matters' | 'tasks' | 'documents' | 'messages'; home: PortalHome; workspace: PortalWorkspace }) {
+  if (view === 'matters') return <div className="space-y-5"><div><p className="text-sm font-semibold uppercase tracking-[.18em] text-[#b95e4b]">Ügyeim</p><h1 className="mt-2 text-3xl font-semibold text-stone-950">Aktív ügyeim</h1></div><div className="grid gap-4 lg:grid-cols-2">{home.matters.length ? home.matters.map((matter) => <MatterCard key={matter.id} matter={matter} />) : <EmptyState />}</div></div>;
+  if (view === 'tasks') return <div className="space-y-5"><div><p className="text-sm font-semibold uppercase tracking-[.18em] text-[#b95e4b]">Teendőim</p><h1 className="mt-2 text-3xl font-semibold text-stone-950">Amit most érdemes elintézni</h1></div>{[['now', 'Most intézendő'], ['upcoming', 'Közelgő'], ['completed', 'Befejezett']].map(([bucket, title]) => { const items = workspace.actions.filter((action) => action.bucket === bucket); return <Card key={bucket}><h2 className="text-xl font-semibold text-stone-950">{title}</h2><div className="mt-4 grid gap-3">{items.length ? items.map((action) => <WorkspaceActionCard key={action.id} action={action} />) : <p className="text-stone-600">Nincs elem ebben a csoportban.</p>}</div></Card>; })}</div>;
+  if (view === 'documents') return <div className="space-y-5"><div><p className="text-sm font-semibold uppercase tracking-[.18em] text-[#b95e4b]">Dokumentumok</p><h1 className="mt-2 text-3xl font-semibold text-stone-950">Megosztott dokumentumok és kérések</h1></div><Card><div className="grid gap-3">{workspace.documents.length ? workspace.documents.map((document) => <WorkspaceDocumentCard key={`${document.kind}-${document.id}`} document={document} />) : <p className="text-stone-600">Nincs megosztott dokumentum vagy közzétett kérés.</p>}</div></Card></div>;
+  return <div className="space-y-5"><div><p className="text-sm font-semibold uppercase tracking-[.18em] text-[#b95e4b]">Üzenetek</p><h1 className="mt-2 text-3xl font-semibold text-stone-950">Kérdések és válaszok</h1></div><Card><p className="text-stone-700">Itt csak az Ön kérdései és az iroda kifejezetten elküldött válaszai jelennek meg.</p><div className="mt-4 grid gap-3">{workspace.messages.length ? workspace.messages.map((message) => <WorkspaceMessageCard key={message.id} message={message} />) : <p className="text-stone-600">Nincs kérdés vagy megválaszolt üzenet.</p>}</div></Card></div>;
 }
 
 function MatterView({ matter }: { matter: PortalMatter & { documents: PortalDocument[]; actionRequests: PortalActionRequest[]; updates: PortalSafeUpdate[] } }) {
@@ -497,12 +535,12 @@ export function ClientPortalShell({ view, resourceId }: Props) {
       try {
         const token = await instance.acquireTokenSilent({ account, scopes: customerApiScopes });
         setAuthToken(token.accessToken, 'customer');
-        const home = await getPortalHome();
+        const [home, workspace] = await Promise.all([getPortalHome(), getPortalWorkspace()]);
         let detail = {};
         if (view === 'matter' && resourceId) detail = { matter: await getPortalMatter(resourceId) };
         if (view === 'document' && resourceId) detail = { document: await getPortalDocument(resourceId) };
         if (view === 'action' && resourceId) detail = { action: await getPortalActionRequest(resourceId) };
-        if (!cancelled) setState({ status: 'ready', home, ...detail });
+        if (!cancelled) setState({ status: 'ready', home, workspace, ...detail });
       } catch (error) {
         if (error instanceof InteractionRequiredAuthError) {
           await instance.acquireTokenRedirect({ account, scopes: customerApiScopes });
@@ -521,9 +559,10 @@ export function ClientPortalShell({ view, resourceId }: Props) {
 
   const nav = useMemo(() => [
     ['Főoldal', '/portal'],
-    ['Ügyeim', '/portal#ugyeim'],
-    ['Dokumentumok', '/portal#dokumentumok'],
-    ['Teendők', '/portal#teendok'],
+    ['Ügyeim', '/portal/ugyeim'],
+    ['Teendőim', '/portal/teendoim'],
+    ['Dokumentumok', '/portal/dokumentumok'],
+    ['Üzenetek', '/portal/uzenetek'],
   ], []);
 
   return (
@@ -540,7 +579,8 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         {state.status === 'login' ? <Card><h1 className="text-3xl font-semibold">Ügyfélportál belépés</h1><p className="mt-3 text-stone-700">Jelentkezzen be e-mail címmel és jelszóval a közzétett ügyfélanyagok megtekintéséhez.</p><Link href="/portal/login" className="mt-6 inline-flex rounded-full bg-stone-950 px-5 py-3 text-white">Bejelentkezés</Link></Card> : null}
         {state.status === 'disabled' ? <Card>A client portal olvasási hozzáférése ebben a környezetben még nincs bekapcsolva.</Card> : null}
         {state.status === 'denied' ? <Card>{state.message}</Card> : null}
-        {state.status === 'ready' && view === 'home' ? <HomeView home={state.home} /> : null}
+        {state.status === 'ready' && view === 'home' ? <HomeView home={state.home} workspace={state.workspace} /> : null}
+        {state.status === 'ready' && (view === 'matters' || view === 'tasks' || view === 'documents' || view === 'messages') ? <ListView view={view} home={state.home} workspace={state.workspace} /> : null}
         {state.status === 'ready' && view === 'matter' && state.matter ? <MatterView matter={state.matter} /> : null}
         {state.status === 'ready' && view === 'document' && state.document ? <DocumentView document={state.document} /> : null}
         {state.status === 'ready' && view === 'action' && state.action ? <ActionView action={state.action} /> : null}
