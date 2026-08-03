@@ -95,6 +95,7 @@ export function ClientPublicationPanel({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <a href="/client-portal-admin" className="rounded-full border border-[var(--adm-border)] px-3 py-1 text-xs font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Teljes portálkezelés</a>
           <AdminBadge tone={overview?.gates.foundationEnabled ? "green" : "neutral"}>Foundation {overview?.gates.foundationEnabled ? "ON" : "OFF"}</AdminBadge>
           <AdminBadge tone={overview?.gates.portalReadEnabled ? "gold" : "neutral"}>Portal read OFF</AdminBadge>
           <AdminBadge tone={overview?.gates.portalActionsEnabled ? "gold" : "neutral"}>Portal actions OFF</AdminBadge>

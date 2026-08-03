@@ -22,7 +22,7 @@ import {
   type PortalSafeUpdate,
 } from '@/lib/clientPortalApi';
 
-type PortalView = 'home' | 'matter' | 'document' | 'action';
+type PortalView = 'home' | 'matters' | 'tasks' | 'documents' | 'messages' | 'matter' | 'document' | 'action';
 
 type Props = { view: PortalView; resourceId?: string };
 
@@ -128,6 +128,13 @@ function HomeView({ home }: { home: PortalHome }) {
       </Card>
     </div>
   );
+}
+
+function ListView({ view, home }: { view: 'matters' | 'tasks' | 'documents' | 'messages'; home: PortalHome }) {
+  if (view === 'matters') return <div className="space-y-5"><div><p className="text-sm font-semibold uppercase tracking-[.18em] text-[#b95e4b]">Ügyeim</p><h1 className="mt-2 text-3xl font-semibold text-stone-950">Aktív ügyeim</h1></div><div className="grid gap-4 lg:grid-cols-2">{home.matters.length ? home.matters.map((matter) => <MatterCard key={matter.id} matter={matter} />) : <EmptyState />}</div></div>;
+  if (view === 'tasks') return <div className="space-y-5"><div><p className="text-sm font-semibold uppercase tracking-[.18em] text-[#b95e4b]">Teendőim</p><h1 className="mt-2 text-3xl font-semibold text-stone-950">Amit most érdemes elintézni</h1></div><Card><div className="grid gap-3">{home.attention.length ? home.attention.map((action) => <ActionCard key={action.id} action={action} />) : <p className="text-stone-600">Nincs ügyféloldali teendő.</p>}</div></Card></div>;
+  if (view === 'documents') return <div className="space-y-5"><div><p className="text-sm font-semibold uppercase tracking-[.18em] text-[#b95e4b]">Dokumentumok</p><h1 className="mt-2 text-3xl font-semibold text-stone-950">Megosztott dokumentumok és kérések</h1></div><Card><p className="text-stone-700">A kifejezetten megosztott dokumentumok és a feltöltendő anyagok az adott ügy oldalán jelennek meg.</p><div className="mt-4 grid gap-3">{home.matters.map((matter) => <MatterCard key={matter.id} matter={matter} />)}</div></Card></div>;
+  return <div className="space-y-5"><div><p className="text-sm font-semibold uppercase tracking-[.18em] text-[#b95e4b]">Üzenetek</p><h1 className="mt-2 text-3xl font-semibold text-stone-950">Kérdések és válaszok</h1></div><Card><p className="text-stone-700">Kérdést az adott ügy oldalán küldhet. Az iroda kifejezetten elküldött válaszai ugyanott jelennek meg.</p><div className="mt-4 grid gap-3">{home.matters.map((matter) => <MatterCard key={matter.id} matter={matter} />)}</div></Card></div>;
 }
 
 function MatterView({ matter }: { matter: PortalMatter & { documents: PortalDocument[]; actionRequests: PortalActionRequest[]; updates: PortalSafeUpdate[] } }) {
@@ -521,10 +528,10 @@ export function ClientPortalShell({ view, resourceId }: Props) {
 
   const nav = useMemo(() => [
     ['Főoldal', '/portal'],
-    ['Ügyeim', '/portal#ugyeim'],
-    ['Teendőim', '/portal#teendok'],
-    ['Dokumentumok', '/portal#dokumentumok'],
-    ['Üzenetek', '/portal#uzenetek'],
+    ['Ügyeim', '/portal/ugyeim'],
+    ['Teendőim', '/portal/teendoim'],
+    ['Dokumentumok', '/portal/dokumentumok'],
+    ['Üzenetek', '/portal/uzenetek'],
   ], []);
 
   return (
@@ -542,6 +549,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         {state.status === 'disabled' ? <Card>A client portal olvasási hozzáférése ebben a környezetben még nincs bekapcsolva.</Card> : null}
         {state.status === 'denied' ? <Card>{state.message}</Card> : null}
         {state.status === 'ready' && view === 'home' ? <HomeView home={state.home} /> : null}
+        {state.status === 'ready' && (view === 'matters' || view === 'tasks' || view === 'documents' || view === 'messages') ? <ListView view={view} home={state.home} /> : null}
         {state.status === 'ready' && view === 'matter' && state.matter ? <MatterView matter={state.matter} /> : null}
         {state.status === 'ready' && view === 'document' && state.document ? <DocumentView document={state.document} /> : null}
         {state.status === 'ready' && view === 'action' && state.action ? <ActionView action={state.action} /> : null}

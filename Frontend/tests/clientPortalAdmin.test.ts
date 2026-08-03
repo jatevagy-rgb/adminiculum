@@ -74,6 +74,17 @@ describe('internal portal-admin UI', () => {
     assert.match(src, /caseId={matter\.caseId}/);
   });
 
+  it('customer shell exposes coherent customer routes without workforce navigation', () => {
+    const shell = portalShell();
+    assert.match(shell, /'\/portal\/ugyeim'/);
+    assert.match(shell, /'\/portal\/teendoim'/);
+    assert.match(shell, /'\/portal\/dokumentumok'/);
+    assert.match(shell, /'\/portal\/uzenetek'/);
+    assert.match(shell, /Amit most érdemes elintézni/);
+    assert.match(shell, /Kérdések és válaszok/);
+    assert.doesNotMatch(shell, /Belső munkapad|Review sor|Munkaórák/);
+  });
+
   it('case-level identity grant is available and identity-based', () => {
     const src = caseGrant();
     assert.match(src, /createIdentityGrant/);
