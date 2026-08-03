@@ -297,8 +297,20 @@ export async function listActiveMemberships(actor: Actor) {
   const [identities, clients, grants] = await Promise.all([
     prisma.clientPortalIdentity.findMany({ where: { id: { in: identityIds } }, select: { id: true, normalizedEmail: true, displayName: true, status: true } }),
     prisma.client.findMany({ where: { id: { in: clientIds } }, select: { id: true, name: true } }),
-    prisma.clientPortalGrant.findMany({ where: { clientPortalIdentityId: { in: identityIds }, status: 'ACTIVE' }, select: { id: true, clientPortalIdentityId: true, caseId: true, status: true, permissions: true, validUntil: true } }),
+    prisma.clientPortalGrant.findMany({
+      where: { clientPortalIdentityId: { in: identityIds } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, clientPortalIdentityId: true, caseId: true, status: true, permissions: true, validUntil: true, createdAt: true, updatedAt: true, revokedAt: true, revision: true },
+    }),
   ]);
+  const grantIds = grants.map((grant) => grant.id);
+  const events = grantIds.length
+    ? await prisma.clientPublicationEvent.findMany({
+      where: { grantId: { in: grantIds } },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, grantId: true, action: true, fromStatus: true, toStatus: true, createdAt: true },
+    })
+    : [];
   const idMap = new Map(identities.map((i) => [i.id, i]));
   const clientMap = new Map(clients.map((c) => [c.id, c]));
   return {
@@ -308,7 +320,10 @@ export async function listActiveMemberships(actor: Actor) {
       identityDisplayName: idMap.get(m.clientPortalIdentityId)?.displayName || null,
       identityStatus: idMap.get(m.clientPortalIdentityId)?.status || null,
       clientName: clientMap.get(m.clientId)?.name || null,
-      activeGrants: grants.filter((g) => g.clientPortalIdentityId === m.clientPortalIdentityId).map((g) => ({ id: g.id, caseId: g.caseId, permissions: g.permissions, validUntil: g.validUntil })),
+      activeGrants: grants.filter((g) => g.clientPortalIdentityId === m.clientPortalIdentityId).map((g) => ({
+        ...g,
+        lifecycleEvents: events.filter((event) => event.grantId === g.id),
+      })),
     })),
   };
 }

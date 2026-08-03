@@ -61,6 +61,12 @@ describe('internal portal-admin grant contract', () => {
     const fn = service.slice(service.indexOf('export async function listActiveMemberships'));
     expect(fn).toContain('requireReviewer(actor)');
     expect(fn).toContain("status: 'ACTIVE'");
+    expect(fn).toContain('revision: true');
+    expect(fn).toContain('createdAt: true');
+    expect(fn).toContain('updatedAt: true');
+    expect(fn).toContain('revokedAt: true');
+    expect(fn).toContain('clientPublicationEvent.findMany');
+    expect(fn).toContain('event.grantId === g.id');
   });
 
   it('database trigger accepts identity grants without weakening legacy user grants', () => {

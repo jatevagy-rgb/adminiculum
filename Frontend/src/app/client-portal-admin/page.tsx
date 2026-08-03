@@ -21,6 +21,10 @@ import {
 
 const DEFAULT_PERMISSIONS = ["MATTER_READ", "DOCUMENT_READ", "DOCUMENT_DOWNLOAD", "UPDATE_READ"];
 
+function formatGrantDate(value: string | null) {
+  return value ? new Date(value).toLocaleString("hu-HU") : "—";
+}
+
 function ApproveForm({ request, clients, busy, onApprove, onReject, onCreateClient }: {
   request: MembershipRequestDTO;
   clients: Client[];
@@ -343,8 +347,24 @@ function PageBody() {
               {m.activeGrants.length > 0 && (
                 <div className="mt-3 grid gap-1">
                   {m.activeGrants.map((g) => (
-                    <div key={g.id} data-testid="active-grant-row" className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-2 text-xs text-[var(--adm-text-muted)]">
-                      Ügy: <span className="font-mono">{g.caseId.slice(0, 8)}</span> · {g.permissions.join(", ")}{g.validUntil ? ` · lejár: ${new Date(g.validUntil).toLocaleDateString("hu-HU")}` : ""}
+                    <div key={g.id} data-testid="active-grant-row" className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3 text-xs text-[var(--adm-text-muted)]">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span>Ügy: <span className="font-mono">{g.caseId.slice(0, 8)}</span></span>
+                        <AdminBadge tone={g.status === "ACTIVE" ? "green" : "neutral"}>{g.status}</AdminBadge>
+                      </div>
+                      <dl data-testid="grant-technical-details" className="mt-2 grid gap-x-3 gap-y-1 sm:grid-cols-2">
+                        <div><dt className="font-semibold">Grant ID</dt><dd><code className="select-all break-all">{g.id}</code></dd></div>
+                        <div><dt className="font-semibold">Revision</dt><dd>{g.revision}</dd></div>
+                        <div><dt className="font-semibold">Permissions</dt><dd>{g.permissions.join(", ") || "—"}</dd></div>
+                        <div><dt className="font-semibold">Érvényes eddig</dt><dd>{formatGrantDate(g.validUntil)}</dd></div>
+                        <div><dt className="font-semibold">Létrehozva</dt><dd>{formatGrantDate(g.createdAt)}</dd></div>
+                        <div><dt className="font-semibold">Módosítva</dt><dd>{formatGrantDate(g.updatedAt)}</dd></div>
+                        {g.revokedAt ? <div><dt className="font-semibold">Visszavonva</dt><dd>{formatGrantDate(g.revokedAt)}</dd></div> : null}
+                      </dl>
+                      <div data-testid={`grant-lifecycle-${g.id}`} className="mt-2 border-t border-[var(--adm-border)] pt-2">
+                        <p className="font-semibold">Lifecycle</p>
+                        {g.lifecycleEvents.length ? g.lifecycleEvents.map((event) => <p key={event.id}>{formatGrantDate(event.createdAt)} · {event.action} · {event.fromStatus || "—"} → {event.toStatus || "—"}</p>) : <p>Nincs rögzített lifecycle esemény.</p>}
+                      </div>
                     </div>
                   ))}
                 </div>
