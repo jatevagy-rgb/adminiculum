@@ -116,7 +116,12 @@ export interface CustomerContext {
   clientId: string;
   grantId: string;
   workspaceId: string;
+  membershipId: string;
   permissions: string[];
+  // CP1 participant dimension. participantRole may be null for legacy grants that
+  // predate the CP1 backfill; callers treat null as PARTICIPANT.
+  participantRole: string | null;
+  isRequester: boolean;
 }
 
 /**
@@ -152,11 +157,21 @@ export async function resolveActiveCustomerGrant(clientPortalIdentityId: string,
       validFrom: { lte: new Date() },
       OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }],
     },
-    select: { id: true, clientId: true, caseId: true, permissions: true },
+    select: { id: true, clientId: true, caseId: true, permissions: true, participantRole: true, isRequester: true },
   });
   if (!grant) throw new InteractionError(403, 'CLIENT_PORTAL_NO_ACTIVE_GRANT', 'No active case grant for this client.');
   if (grant.clientId !== workspace.clientId) throw new InteractionError(403, 'CLIENT_WORKSPACE_CLIENT_MISMATCH', 'The case grant is outside the selected workspace.');
-  return { clientPortalIdentityId, caseId: grant.caseId, clientId: grant.clientId, grantId: grant.id, workspaceId, permissions: (grant.permissions as string[]) || [] };
+  return {
+    clientPortalIdentityId,
+    caseId: grant.caseId,
+    clientId: grant.clientId,
+    grantId: grant.id,
+    workspaceId,
+    membershipId: membership.id,
+    permissions: (grant.permissions as string[]) || [],
+    participantRole: grant.participantRole ? String(grant.participantRole) : null,
+    isRequester: Boolean(grant.isRequester),
+  };
 }
 
 /** The client-safe audience snapshot stored on published requests. */
