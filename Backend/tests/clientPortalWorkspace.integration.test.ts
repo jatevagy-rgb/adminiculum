@@ -59,7 +59,7 @@ d('CP0 workspace authorization (PostgreSQL)', () => {
     const individual = await createWorkspace(actor, { clientId: ids.client, name: 'Privát tér', mode: 'INDIVIDUAL', communicationMode: 'PORTAL_PRIMARY' }, db);
     const invitation = await inviteWorkspaceMember(actor, individual.id, { email: session.normalizedEmail }, db);
     let membership = await db.clientPortalWorkspaceMembership.findUniqueOrThrow({ where: { id: invitation.membershipId! } });
-    expect((await getPortalIdentityContext(session, null, db)).state).toBe('NO_ACCESS');
+    expect((await getPortalIdentityContext(session, null, db)).state).toBe('PENDING_APPROVAL');
     membership = await transitionWorkspaceMembership(actor, membership.id, 'approve', membership.revision, db);
     const one = await getPortalIdentityContext(session, null, db);
     expect(one.state).toBe('READY');
@@ -93,7 +93,7 @@ d('CP0 workspace authorization (PostgreSQL)', () => {
     await expect(resolveActiveCustomerGrant(ids.identity, ids.case, individual.id, db)).rejects.toMatchObject({ code: 'CLIENT_WORKSPACE_MEMBERSHIP_REQUIRED' });
     const currentRelay = await db.clientPortalWorkspace.findUniqueOrThrow({ where: { id: relay.id } });
     const suspendedRelay = await transitionWorkspace(actor, relay.id, 'suspend', currentRelay.revision, db);
-    expect((await getPortalIdentityContext(session, null, db)).state).toBe('NO_ACCESS');
+    expect((await getPortalIdentityContext(session, null, db)).state).toBe('ACCESS_SUSPENDED');
     await transitionWorkspace(actor, relay.id, 'archive', suspendedRelay.revision, db);
     expect((await getPortalIdentityContext(session, null, db)).state).toBe('NO_ACCESS');
   });

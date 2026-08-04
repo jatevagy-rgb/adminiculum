@@ -56,7 +56,7 @@ function enumValue(value: unknown, values: Set<string>, field: string): string {
 }
 
 function capabilitiesFor(mode: string, permissions: string[]): PortalWorkspaceCapabilities {
-  const set = new Set(permissions);
+  const set = new Set(portalContentReadEnabled() ? permissions : []);
   const matters = set.has('MATTER_READ');
   return {
     home: true,
@@ -65,6 +65,28 @@ function capabilitiesFor(mode: string, permissions: string[]): PortalWorkspaceCa
     documents: mode !== 'CASE_RELAY' && set.has('DOCUMENT_READ'),
     messages: mode !== 'CASE_RELAY' && (set.has('ACTION_REQUEST_READ') || set.has('ACTION_REQUEST_COMPLETE')),
   };
+}
+
+function portalContentReadEnabled(): boolean {
+  return ['1', 'true', 'yes', 'on'].includes(String(process.env.CLIENT_PORTAL_READ_ENABLED || '').toLowerCase());
+}
+
+async function inactiveAccessState(identityId: string, db: Prisma = defaultPrisma) {
+  const memberships = await db.clientPortalWorkspaceMembership.findMany({
+    where: { clientPortalIdentityId: identityId },
+    orderBy: { updatedAt: 'desc' },
+  });
+  if (!memberships.length) return 'NO_ACCESS' as const;
+  if (memberships.some((membership) => ['INVITED', 'PENDING_APPROVAL'].includes(String(membership.status)))) {
+    return 'PENDING_APPROVAL' as const;
+  }
+  const workspaceIds = memberships.map((membership) => membership.workspaceId);
+  const workspaces = await db.clientPortalWorkspace.findMany({ where: { id: { in: workspaceIds } }, select: { id: true, status: true } });
+  const workspaceStatus = new Map(workspaces.map((workspace) => [workspace.id, String(workspace.status)]));
+  if (memberships.some((membership) => membership.status === 'SUSPENDED' || workspaceStatus.get(membership.workspaceId) === 'SUSPENDED')) {
+    return 'ACCESS_SUSPENDED' as const;
+  }
+  return 'NO_ACCESS' as const;
 }
 
 async function activeWorkspaceRows(identityId: string, db: Prisma = defaultPrisma) {
@@ -127,6 +149,7 @@ export async function listAuthorizedPortalWorkspaces(session: ClientPortalSessio
 
 export async function getPortalIdentityContext(session: ClientPortalSession, requestedReference?: string | null, db: Prisma = defaultPrisma) {
   const workspaces = await listAuthorizedPortalWorkspaces(session, db);
+  const emptyState = workspaces.length === 0 ? await inactiveAccessState(session.clientPortalIdentityId, db) : null;
   const requested = String(requestedReference || '').trim();
   const selected = requested
     ? workspaces.find((workspace) => workspace.publicReference === requested)
@@ -134,7 +157,7 @@ export async function getPortalIdentityContext(session: ClientPortalSession, req
   if (requested && !selected) throw new ClientWorkspaceError(403, 'CLIENT_WORKSPACE_FORBIDDEN', 'The requested workspace is not available.');
   return {
     identity: { displayName: session.displayName, email: session.normalizedEmail, accountType: session.accountType },
-    state: workspaces.length === 0 ? 'NO_ACCESS' : selected ? 'READY' : 'SELECTION_REQUIRED',
+    state: emptyState || (selected ? 'READY' : 'SELECTION_REQUIRED'),
     workspaces: workspaces.map(({ id: _id, clientId: _clientId, membershipId: _membershipId, ...workspace }) => workspace),
     selectedWorkspace: selected ? (({ id: _id, clientId: _clientId, membershipId: _membershipId, ...workspace }) => workspace)(selected) : null,
   };
