@@ -27,6 +27,11 @@ describe('CP0 anonymous entry and authenticated workspace shell', () => {
     assert.match(shell, /capabilities\.messages/);
     assert.match(shell, /setSelectedPortalWorkspace\(null\)/);
     assert.match(shell, /PortalWorkspaceSelector/);
+    assert.match(shell, /Nincs aktív ügyfélfelülete/);
+    assert.match(shell, /Jóváhagyásra vár/);
+    assert.match(shell, /A hozzáférés szünetel/);
+    assert.match(shell, /hozzáférése aktív, de ezen a felületen jelenleg nincs elérhető tartalom/);
+    assert.match(shell, /status: 'service-error'/);
   });
 
   it('treats mode as login intent while every API request carries revalidated workspace context', () => {

@@ -126,7 +126,7 @@ export type PortalWorkspaceSummary = {
 
 export type PortalIdentityContext = {
   identity: { displayName: string; email: string; accountType: string };
-  state: 'NO_ACCESS' | 'READY' | 'SELECTION_REQUIRED';
+  state: 'NO_ACCESS' | 'PENDING_APPROVAL' | 'ACCESS_SUSPENDED' | 'READY' | 'SELECTION_REQUIRED';
   workspaces: PortalWorkspaceSummary[];
   selectedWorkspace: PortalWorkspaceSummary | null;
 };

@@ -40,8 +40,10 @@ type LoadState =
   | { status: 'loading' }
   | { status: 'login' }
   | { status: 'select'; context: PortalIdentityContext }
+  | { status: 'no-workspace' | 'pending' | 'suspended'; context: PortalIdentityContext }
+  | { status: 'workspace-empty'; context: PortalIdentityContext }
   | { status: 'denied'; message: string }
-  | { status: 'disabled' }
+  | { status: 'service-error' }
   | { status: 'ready'; context: PortalIdentityContext; home: PortalHome; workspace: PortalWorkspace; matter?: PortalMatter & { documents: PortalDocument[]; actionRequests: PortalActionRequest[]; updates: PortalSafeUpdate[] }; document?: PortalDocument; action?: PortalActionRequest };
 
 function formatDate(value?: string | null) {
@@ -549,7 +551,17 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         const context = await getPortalIdentityContext(selectedReference || undefined);
         if (context.state === 'NO_ACCESS') {
           setSelectedPortalWorkspace(null);
-          if (!cancelled) setState({ status: 'denied', message: 'Jelenleg nincs aktív, jóváhagyott ügyfélmunkatere.' });
+          if (!cancelled) setState({ status: 'no-workspace', context });
+          return;
+        }
+        if (context.state === 'PENDING_APPROVAL') {
+          setSelectedPortalWorkspace(null);
+          if (!cancelled) setState({ status: 'pending', context });
+          return;
+        }
+        if (context.state === 'ACCESS_SUSPENDED') {
+          setSelectedPortalWorkspace(null);
+          if (!cancelled) setState({ status: 'suspended', context });
           return;
         }
         if (context.state === 'SELECTION_REQUIRED' || !context.selectedWorkspace) {
@@ -558,6 +570,11 @@ export function ClientPortalShell({ view, resourceId }: Props) {
           return;
         }
         setSelectedPortalWorkspace(context.selectedWorkspace.publicReference);
+        const capabilities = context.selectedWorkspace.capabilities;
+        if (![capabilities.matters, capabilities.tasks, capabilities.documents, capabilities.messages].some(Boolean)) {
+          if (!cancelled) setState({ status: 'workspace-empty', context });
+          return;
+        }
         const [home, workspace] = await Promise.all([getPortalHome(), getPortalWorkspace()]);
         let detail = {};
         if (view === 'matter' && resourceId) detail = { matter: await getPortalMatter(resourceId) };
@@ -570,7 +587,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
           return;
         }
         if (!cancelled) {
-          if (error instanceof ApiError && error.status === 503) setState({ status: 'disabled' });
+          if (error instanceof ApiError && error.status === 503) setState({ status: 'service-error' });
           else if (error instanceof ApiError && [401, 403, 404].includes(error.status)) setState({ status: 'denied', message: 'A portálhozzáférés jelenleg nem aktív. Kérjük, vegye fel a kapcsolatot az irodával.' });
           else setState({ status: 'denied', message: 'A portál jelenleg nem érhető el. Kérjük, próbálja újra később.' });
         }
@@ -600,14 +617,18 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <Link href="/portal" className="font-serif text-2xl font-semibold tracking-tight text-stone-950 focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">Adminiculum</Link>
           {state.status === 'ready' ? <nav className="flex flex-wrap gap-2 text-sm" aria-label="Ügyfélportál navigáció">{nav.map(([label, href]) => <Link className="rounded-full px-3 py-2 text-stone-700 hover:bg-stone-100 focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" key={label} href={href}>{label}</Link>)}</nav> : null}
-          {state.status === 'ready' || state.status === 'select' ? <div className="flex gap-2">{state.status === 'ready' && state.context.workspaces.length > 1 ? <button className="rounded-full border border-stone-300 px-3 py-2 text-sm" onClick={() => { setSelectedPortalWorkspace(null); setSelectedReference(null); setState({ status: 'select', context: { ...state.context, state: 'SELECTION_REQUIRED', selectedWorkspace: null } }); }}>Munkatérváltás</button> : null}<button className="rounded-full border border-stone-300 px-3 py-2 text-sm" onClick={logoutCustomer}>Kijelentkezés</button></div> : null}
+          {['ready', 'select', 'no-workspace', 'pending', 'suspended', 'workspace-empty', 'service-error'].includes(state.status) ? <div className="flex gap-2">{state.status === 'ready' && state.context.workspaces.length > 1 ? <button className="rounded-full border border-stone-300 px-3 py-2 text-sm" onClick={() => { setSelectedPortalWorkspace(null); setSelectedReference(null); setState({ status: 'select', context: { ...state.context, state: 'SELECTION_REQUIRED', selectedWorkspace: null } }); }}>Munkatérváltás</button> : null}<button className="rounded-full border border-stone-300 px-3 py-2 text-sm" onClick={logoutCustomer}>Kijelentkezés</button></div> : null}
         </div>
       </header>
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         {state.status === 'loading' ? <Card>Betöltés...</Card> : null}
         {state.status === 'login' ? <Card><h1 className="text-3xl font-semibold">Ügyfélportál belépés</h1><p className="mt-3 text-stone-700">A biztonságos Microsoft ügyfélfiókos azonosításhoz folytassa a belépést.</p><Link href="/portal/login" className="mt-6 inline-flex rounded-full bg-stone-950 px-5 py-3 text-white">Belépés Microsoft-fiókkal</Link></Card> : null}
         {state.status === 'select' ? <PortalWorkspaceSelector workspaces={state.context.workspaces} onSelect={(reference) => { setState({ status: 'loading' }); setSelectedReference(reference); }} /> : null}
-        {state.status === 'disabled' ? <Card>A client portal olvasási hozzáférése ebben a környezetben még nincs bekapcsolva.</Card> : null}
+        {state.status === 'no-workspace' ? <Card><h1 className="text-3xl font-semibold">Nincs aktív ügyfélfelülete</h1><p className="mt-3 text-stone-700">Ehhez a felhasználói fiókhoz jelenleg nem tartozik aktív, az ügyvédi iroda által jóváhagyott ügyfélfelület.</p></Card> : null}
+        {state.status === 'pending' ? <Card><h1 className="text-3xl font-semibold">Jóváhagyásra vár</h1><p className="mt-3 text-stone-700">Az ügyfélfelülethez benyújtott kérelme az ügyvédi iroda jóváhagyására vár.</p></Card> : null}
+        {state.status === 'suspended' ? <Card><h1 className="text-3xl font-semibold">A hozzáférés szünetel</h1><p className="mt-3 text-stone-700">Az ügyfélfelülethez való hozzáférés jelenleg szünetel. Kérjük, vegye fel a kapcsolatot az irodával.</p></Card> : null}
+        {state.status === 'workspace-empty' ? <Card><h1 className="text-3xl font-semibold">{state.context.selectedWorkspace?.name}</h1><p className="mt-3 text-stone-700">Az ügyfélfelülethez való hozzáférése aktív, de ezen a felületen jelenleg nincs elérhető tartalom.</p></Card> : null}
+        {state.status === 'service-error' ? <Card><h1 className="text-3xl font-semibold">A portál jelenleg nem érhető el</h1><p className="mt-3 text-stone-700">Kérjük, próbálja újra később.</p></Card> : null}
         {state.status === 'denied' ? <Card>{state.message}</Card> : null}
         {state.status === 'ready' && view === 'home' ? <HomeView home={state.home} workspace={state.workspace} /> : null}
         {state.status === 'ready' && (view === 'matters' || view === 'tasks' || view === 'documents' || view === 'messages') ? <ListView view={view} home={state.home} workspace={state.workspace} /> : null}
