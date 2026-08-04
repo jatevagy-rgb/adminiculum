@@ -12,7 +12,14 @@ const backendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const runnerPath = path.join(backendRoot, 'App_Data', 'jobs', 'triggered', 'adminiculum-db-migrate', 'runner.cjs');
 const prismaBin = path.join(backendRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'prisma.cmd' : 'prisma');
 const baselineName = '20260726000000_current_schema_baseline';
-const migrationName = '20260803190000_client_portal_workspace_foundation';
+// Derive the latest migration dynamically so this harness never drifts out of
+// sync with the runner's retargeting (the previous hardcoded name silently broke
+// verification when the runner advanced to a newer migration).
+const allMigrationDirs = (await fs.readdir(path.join(backendRoot, 'prisma', 'migrations'), { withFileTypes: true }))
+  .filter((entry) => entry.isDirectory() && /^\d{14}_/.test(entry.name))
+  .map((entry) => entry.name)
+  .sort();
+const migrationName = allMigrationDirs[allMigrationDirs.length - 1];
 const databaseName = `adminiculum_webjob_${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}`;
 const databaseUrl = `${adminUrl.replace(/\/[^/]*$/, '')}/${databaseName}`;
 
@@ -105,7 +112,9 @@ try {
   if (second.status !== 0 || !second.stdout.includes('"state":"ALREADY_APPLIED"')) throw new Error(`second runner execution failed: ${second.stdout}${second.stderr}`);
   const broken = new Client({ connectionString: databaseUrl });
   await broken.connect();
-  await broken.query('DROP TABLE client_portal_workspace_memberships CASCADE');
+  // Break a table the CP1 runner verifies (grants.participantRole + intake +
+  // summary), so the intentional verification-failure path is exercised.
+  await broken.query('DROP TABLE client_portal_intake_requests CASCADE');
   await broken.end();
   const failed = runRunner(common);
   if (failed.status === 0 || !failed.stdout.includes('"state":"FAILED"')) throw new Error('intentional verification failure did not fail');
