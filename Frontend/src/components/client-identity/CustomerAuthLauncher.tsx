@@ -63,7 +63,7 @@ const COPY: Record<AuthVariant, VariantCopy> = {
 
 export function CustomerAuthLauncher({ variant }: { variant: AuthVariant }) {
   const copy = COPY[variant];
-  const { configured, interactionInProgress, isAuthenticated, beginCustomerLogin, beginCustomerRegistration, beginPasswordReset } =
+  const { configured, interactionInProgress, beginCustomerLogin, beginCustomerRegistration, beginPasswordReset } =
     useCustomerAuth();
   const [error, setError] = useState<string | null>(null);
   const [switchingAccount, setSwitchingAccount] = useState(false);
@@ -76,12 +76,6 @@ export function CustomerAuthLauncher({ variant }: { variant: AuthVariant }) {
       sessionStorage.setItem('adminiculum:client-portal-login-intent', String(mode));
     }
   }, []);
-
-  useEffect(() => {
-    if (variant === 'login' && isAuthenticated && !interactionInProgress) {
-      window.location.replace('/portal');
-    }
-  }, [interactionInProgress, isAuthenticated, variant]);
 
   const start = async () => {
     setError(null);
