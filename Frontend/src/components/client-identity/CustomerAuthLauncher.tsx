@@ -96,7 +96,7 @@ export function CustomerAuthLauncher({ variant }: { variant: AuthVariant }) {
     setError(null);
     setSwitchingAccount(true);
     try {
-      await beginCustomerLogin('select-account');
+      await beginCustomerLogin('reauthenticate');
     } catch (err) {
       setSwitchingAccount(false);
       setError(sanitizeAuthError(err));

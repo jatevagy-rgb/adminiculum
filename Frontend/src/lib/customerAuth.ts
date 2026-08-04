@@ -41,7 +41,7 @@ export interface CustomerAuth {
   configured: boolean;
   interactionInProgress: boolean;
   isAuthenticated: boolean;
-  beginCustomerLogin: (mode?: 'normal' | 'select-account') => Promise<void>;
+  beginCustomerLogin: (mode?: 'normal' | 'reauthenticate') => Promise<void>;
   beginCustomerRegistration: () => Promise<void>;
   beginPasswordReset: () => Promise<void>;
   logoutCustomer: () => Promise<void>;
@@ -54,9 +54,9 @@ export function useCustomerAuth(): CustomerAuth {
   const configured = isCustomerProviderConfigured();
   const interactionInProgress = inProgress !== InteractionStatus.None;
 
-  const beginCustomerLogin = useCallback(async (mode: 'normal' | 'select-account' = 'normal') => {
+  const beginCustomerLogin = useCallback(async (mode: 'normal' | 'reauthenticate' = 'normal') => {
     if (!configured || interactionInProgress) return;
-    await instance.loginRedirect(mode === 'select-account' ? { ...customerLoginRequest, prompt: 'select_account' } : customerLoginRequest);
+    await instance.loginRedirect(mode === 'reauthenticate' ? { ...customerLoginRequest, prompt: 'login' } : customerLoginRequest);
   }, [configured, interactionInProgress, instance]);
 
   const beginCustomerRegistration = useCallback(async () => {

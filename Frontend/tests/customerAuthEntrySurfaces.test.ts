@@ -48,7 +48,8 @@ describe('customer auth entry surfaces are truthful hosted-flow launchers', () =
   it('provides an explicit customer account-switch path', () => {
     assert.match(launcher(), /Másik fiókkal jelentkezem be/);
     assert.match(launcher(), /switchAccount/);
-    assert.match(hook(), /prompt: 'select_account'/);
+    assert.match(hook(), /prompt: 'login'/);
+    assert.match(hook(), /mode === 'reauthenticate'/);
   });
 
   it('does not redirect away from login solely because an account is cached', () => {
