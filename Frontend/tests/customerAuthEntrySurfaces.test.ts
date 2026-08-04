@@ -51,6 +51,12 @@ describe('customer auth entry surfaces are truthful hosted-flow launchers', () =
     assert.match(hook(), /prompt: 'select_account'/);
   });
 
+  it('does not redirect away from login solely because an account is cached', () => {
+    const src = launcher();
+    assert.doesNotMatch(src, /window\.location\.replace\(['"]\/portal['"]\)/);
+    assert.doesNotMatch(src, /isAuthenticated\s*&&/);
+  });
+
   it('duplicate clicks cannot start duplicate redirects (guarded by interaction state)', () => {
     const h = hook();
     assert.match(h, /interactionInProgress/);
