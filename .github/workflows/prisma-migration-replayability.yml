@@ -134,3 +134,9 @@ jobs:
         env:
           CLIENT_WORKSPACE_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
         run: npm run test:client-workspace:db
+
+      - name: Run CP1 organizational access PostgreSQL integration tests
+        working-directory: Backend
+        env:
+          CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: npm run test:org-access:db

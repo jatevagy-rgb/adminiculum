@@ -37,8 +37,19 @@ import {
   resolvePortalWorkspace,
   ResolvedPortalWorkspace,
 } from '../modules/client-workspace/workspaceService';
+import { resolveMemberUnits } from '../modules/client-workspace/organizationUnitService';
+import { getOrganizationalCaseDetail, listOrganizationalCases, OrganizationalCaseListParams } from '../modules/client-workspace/organizationalCaseService';
+import { organizationSummary, unitSummary } from '../modules/client-workspace/leadershipSummaryService';
+import { RelationshipToCase } from '../modules/client-workspace/organizationalAccessPolicy';
 
 const router = Router();
+
+/** Identity + selected workspace id after portalRead has resolved the workspace. */
+function orgContext(req: Request): { identityId: string; workspaceId: string } {
+  const base = actor(req);
+  if (!base.workspaceId) throw Object.assign(new Error('Select an authorized workspace.'), { status: 409, code: 'CLIENT_WORKSPACE_SELECTION_REQUIRED' });
+  return { identityId: base.clientPortalIdentityId, workspaceId: base.workspaceId };
+}
 
 function actor(req: Request) {
   const session = requireActiveClientPortalSession(req);
@@ -319,6 +330,65 @@ router.get('/updates/:updateId', async (req, res) => {
   try {
     if (!(await portalRead(req, res))) return;
     res.json(await getPortalSafeUpdate(actor(req), String(req.params.updateId)));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+// --- CP1 organizational customer surfaces (workspace + participant scoped) ---
+
+router.get('/org/units', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json({ items: await resolveMemberUnits(identityId, workspaceId) });
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/cases', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    const relationshipRaw = String(req.query.relationship || '').toUpperCase();
+    const params: OrganizationalCaseListParams = {
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
+      offset: req.query.offset ? Number(req.query.offset) : undefined,
+      relationship: relationshipRaw === 'OWN' || relationshipRaw === 'SHARED' ? relationshipRaw as RelationshipToCase : null,
+      unitId: req.query.unitId ? String(req.query.unitId) : null,
+    };
+    res.json(await listOrganizationalCases(identityId, workspaceId, params));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/cases/:caseReference', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await getOrganizationalCaseDetail(identityId, workspaceId, String(req.params.caseReference)));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/summary/unit/:groupId', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await unitSummary(identityId, workspaceId, String(req.params.groupId)));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/summary/organization', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await organizationSummary(identityId, workspaceId));
   } catch (error) {
     fail(res, error);
   }
