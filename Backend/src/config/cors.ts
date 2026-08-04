@@ -8,6 +8,7 @@ export const CORS_ALLOWED_HEADERS = [
   'Origin',
   'Idempotency-Key',
   'If-Match',
+  'X-Client-Portal-Workspace',
 ];
 
 interface CorsOptionsInput {
