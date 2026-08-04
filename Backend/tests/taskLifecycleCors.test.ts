@@ -134,6 +134,25 @@ describe('task lifecycle CORS middleware', () => {
     expect(mutationCount()).toBe(0);
   });
 
+  it('permits the server-authoritative client portal workspace selector header', async () => {
+    const { app, mutationCount } = createApp(true);
+    const response = await request(
+      app,
+      'OPTIONS',
+      '/api/v1/client-portal/me',
+      {
+        origin: 'https://adminiculum.example.invalid',
+        'access-control-request-method': 'GET',
+        'access-control-request-headers': 'authorization,x-client-portal-workspace',
+      },
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers['access-control-allow-origin']).toBe('https://adminiculum.example.invalid');
+    expect(response.headers['access-control-allow-headers']).toContain('X-Client-Portal-Workspace');
+    expect(mutationCount()).toBe(0);
+  });
+
   it('keeps CORS permission separate from route authorization', async () => {
     const { app, mutationCount } = createApp();
     const unauthenticated = await request(
