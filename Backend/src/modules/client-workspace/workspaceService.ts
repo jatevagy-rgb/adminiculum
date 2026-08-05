@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { ClientPortalSession } from '../../middleware/clientPortalAuth';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
+import { isCapabilityEnabled } from '../client-interaction/gates';
 
 type Prisma = typeof defaultPrisma;
 type InternalActor = { userId: string; role?: string | null };
@@ -24,6 +25,7 @@ export type PortalWorkspaceCapabilities = {
   tasks: boolean;
   documents: boolean;
   messages: boolean;
+  intakes: boolean;
 };
 
 export type ResolvedPortalWorkspace = {
@@ -64,6 +66,7 @@ function capabilitiesFor(mode: string, permissions: string[]): PortalWorkspaceCa
     tasks: mode !== 'CASE_RELAY' && set.has('ACTION_REQUEST_READ'),
     documents: mode !== 'CASE_RELAY' && set.has('DOCUMENT_READ'),
     messages: mode !== 'CASE_RELAY' && (set.has('ACTION_REQUEST_READ') || set.has('ACTION_REQUEST_COMPLETE')),
+    intakes: mode === 'ORGANIZATION' && isCapabilityEnabled('ORGANIZATIONAL_INTAKE'),
   };
 }
 

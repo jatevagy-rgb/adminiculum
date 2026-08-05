@@ -77,6 +77,62 @@ function toInternalRequest(row: any) {
   return { ...row };
 }
 
+function requireCaseRequest(row: { caseId: string | null }): string {
+  if (!row.caseId) throw new InteractionError(409, 'REQUEST_IS_INTAKE_SCOPED', 'This request is managed through intake triage.');
+  return row.caseId;
+}
+
+export async function createPublishedIntakeInformationRequestInTransaction(
+  actor: InternalActor,
+  input: {
+    intakeRequestId: string;
+    workspaceId: string;
+    requesterMembershipId: string;
+    clientId: string;
+    title: unknown;
+    instructions: unknown;
+    dueAt?: unknown;
+    fields?: unknown;
+  },
+  tx: any,
+) {
+  requireInternal(actor);
+  requireCapability('DATA_REQUESTS');
+  const fields = normalizeFields(input.fields || [{ type: 'LONG_TEXT', label: 'Válasz', required: true, maxLength: 6000 }]);
+  return tx.clientRequest.create({
+    data: {
+      clientId: input.clientId,
+      caseId: null,
+      intakeRequestId: input.intakeRequestId,
+      createdById: actor.userId,
+      type: 'INFORMATION_REQUEST',
+      status: 'PUBLISHED',
+      clientSafeTitle: safeText(input.title, 'clientSafeTitle', 200, true)!,
+      clientSafeInstructions: safeText(input.instructions, 'clientSafeInstructions', 4000, true)!,
+      dueAt: input.dueAt ? new Date(String(input.dueAt)) : null,
+      required: true,
+      audienceSnapshot: {
+        intakeRequestId: input.intakeRequestId,
+        workspaceId: input.workspaceId,
+        requesterMembershipId: input.requesterMembershipId,
+        capturedAt: new Date().toISOString(),
+      },
+      publishedAt: new Date(),
+      fields: fields.length ? { create: fields.map((field: any, index: number) => ({
+        clientSafeLabel: field.label,
+        helpTextSafe: field.helpText,
+        type: field.type,
+        required: field.required,
+        maxLength: field.maxLength,
+        options: field.options ?? undefined,
+        dataCategory: null,
+        displayOrder: index,
+      })) } : undefined,
+    },
+    include: { fields: true },
+  });
+}
+
 export async function createRequestDraft(actor: InternalActor, input: any, prisma: Prisma = defaultPrisma) {
   requireInternal(actor);
   const type = String(input.type || '');
@@ -120,7 +176,7 @@ export async function updateRequestDraft(actor: InternalActor, requestId: string
   requireInternal(actor);
   const row = await prisma.clientRequest.findUnique({ where: { id: requestId } });
   if (!row) throw new InteractionError(404, 'REQUEST_NOT_FOUND', 'Request not found.');
-  await assertInternalCaseAccess(actor, row.caseId, prisma);
+  await assertInternalCaseAccess(actor, requireCaseRequest(row), prisma);
   if (row.status !== 'DRAFT' && row.status !== 'READY_TO_PUBLISH') throw new InteractionError(409, 'REQUEST_NOT_EDITABLE', 'Only draft requests can be edited.');
   requireExpected(row, patch.expectedRevision);
   const data: any = { revision: { increment: 1 } };
@@ -137,14 +193,15 @@ export async function publishRequest(actor: InternalActor, requestId: string, ex
   requireInternal(actor);
   const row = await prisma.clientRequest.findUnique({ where: { id: requestId } });
   if (!row) throw new InteractionError(404, 'REQUEST_NOT_FOUND', 'Request not found.');
-  await assertInternalCaseAccess(actor, row.caseId, prisma);
+  await assertInternalCaseAccess(actor, requireCaseRequest(row), prisma);
   requireCapability(capabilityForType(row.type));
   if (row.status !== 'DRAFT' && row.status !== 'READY_TO_PUBLISH') throw new InteractionError(409, 'REQUEST_NOT_PUBLISHABLE', 'Request cannot be published from its current state.');
   requireExpected(row, expectedRevision);
   // Snapshot the active audience (grant) at publish time so a later revocation
   // does not retroactively rewrite the published record.
-  const grant = await prisma.clientPortalGrant.findFirst({ where: { clientId: row.clientId, caseId: row.caseId, status: 'ACTIVE' }, select: { id: true } });
-  const snapshot = audienceSnapshot({ clientId: row.clientId, caseId: row.caseId, grantId: grant?.id || 'none' });
+  const caseId = requireCaseRequest(row);
+  const grant = await prisma.clientPortalGrant.findFirst({ where: { clientId: row.clientId, caseId, status: 'ACTIVE' }, select: { id: true } });
+  const snapshot = audienceSnapshot({ clientId: row.clientId, caseId, grantId: grant?.id || 'none' });
   return prisma.clientRequest.update({ where: { id: requestId }, data: { status: 'PUBLISHED', publishedAt: new Date(), audienceSnapshot: snapshot as any, revision: { increment: 1 } }, include: { fields: true } });
 }
 
@@ -152,7 +209,7 @@ export async function cancelRequest(actor: InternalActor, requestId: string, exp
   requireInternal(actor);
   const row = await prisma.clientRequest.findUnique({ where: { id: requestId } });
   if (!row) throw new InteractionError(404, 'REQUEST_NOT_FOUND', 'Request not found.');
-  await assertInternalCaseAccess(actor, row.caseId, prisma);
+  await assertInternalCaseAccess(actor, requireCaseRequest(row), prisma);
   if (row.status === 'COMPLETED' || row.status === 'CANCELLED') throw new InteractionError(409, 'REQUEST_NOT_CANCELLABLE', 'Request cannot be cancelled.');
   requireExpected(row, expectedRevision);
   return prisma.clientRequest.update({ where: { id: requestId }, data: { status: 'CANCELLED', cancelledAt: new Date(), revision: { increment: 1 } } });
@@ -163,7 +220,7 @@ export async function completeRequest(actor: InternalActor, requestId: string, e
   requireInternal(actor);
   const row = await prisma.clientRequest.findUnique({ where: { id: requestId } });
   if (!row) throw new InteractionError(404, 'REQUEST_NOT_FOUND', 'Request not found.');
-  await assertInternalCaseAccess(actor, row.caseId, prisma);
+  await assertInternalCaseAccess(actor, requireCaseRequest(row), prisma);
   if (row.status === 'COMPLETED' || row.status === 'CANCELLED') throw new InteractionError(409, 'REQUEST_NOT_COMPLETABLE', 'Request cannot be completed.');
   requireExpected(row, expectedRevision);
   return prisma.clientRequest.update({ where: { id: requestId }, data: { status: 'COMPLETED', completedAt: new Date(), revision: { increment: 1 } } });

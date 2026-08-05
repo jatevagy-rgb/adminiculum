@@ -18,7 +18,8 @@ const MAX_ATTEMPTS = 6;
 export interface EnqueueInput {
   eventType: string;
   clientId: string;
-  caseId: string;
+  caseId?: string | null;
+  intakeRequestId?: string | null;
   recipientEmail: string;
   recipientName?: string | null;
   subjectSafe: string;
@@ -42,7 +43,8 @@ export async function enqueueNotification(input: EnqueueInput, tx: Tx = defaultP
     data: {
       eventType: input.eventType,
       clientId: input.clientId,
-      caseId: input.caseId,
+      caseId: input.caseId || null,
+      intakeRequestId: input.intakeRequestId || null,
       recipientSnapshot: { email: input.recipientEmail, name: input.recipientName || null },
       // Safe default subject/body unless an explicit bounded override is given.
       subjectSafe: input.subjectSafe,

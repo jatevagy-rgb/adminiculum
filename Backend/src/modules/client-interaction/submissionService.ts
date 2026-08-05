@@ -92,6 +92,56 @@ export function validateStructuredAnswer(field: any, rawValue: unknown): string 
   return value;
 }
 
+export async function submitIntakeInformationResponseInTransaction(
+  input: {
+    clientPortalIdentityId: string;
+    membershipId: string;
+    workspaceId: string;
+    intakeId: string;
+    requestId: string;
+    answers: Array<Record<string, unknown>>;
+  },
+  tx: any,
+) {
+  const intake = await tx.clientPortalIntakeRequest.findFirst({
+    where: { id: input.intakeId, workspaceId: input.workspaceId, requesterMembershipId: input.membershipId, status: 'MORE_INFORMATION_REQUIRED' },
+    select: { id: true },
+  });
+  if (!intake) throw new InteractionError(404, 'INTAKE_NOT_FOUND', 'Intake is not available.');
+  const request = await tx.clientRequest.findFirst({
+    where: { id: input.requestId, intakeRequestId: input.intakeId, status: 'PUBLISHED' },
+    include: { fields: { orderBy: { displayOrder: 'asc' } } },
+  });
+  if (!request) throw new InteractionError(404, 'REQUEST_NOT_FOUND', 'Information request is not available.');
+  const byField = new Map(input.answers.map((answer) => [String(answer.fieldId || ''), answer.value]));
+  const rows = request.fields.map((field: any) => {
+    const raw = byField.get(field.id);
+    if (field.required && (raw == null || String(raw).trim() === '')) throw new InteractionError(400, 'REQUIRED_FIELD_MISSING', `${field.clientSafeLabel} is required.`);
+    return {
+      fieldId: field.id,
+      labelSnapshot: field.clientSafeLabel,
+      valueSafe: raw == null ? null : validateStructuredAnswer(field, raw),
+      dataCategory: null,
+    };
+  });
+  const workspace = await tx.clientPortalWorkspace.findUnique({ where: { id: input.workspaceId }, select: { clientId: true } });
+  if (!workspace) throw new InteractionError(404, 'INTAKE_NOT_FOUND', 'Intake is not available.');
+  const submission = await tx.clientSubmission.create({
+    data: {
+      clientRequestId: request.id,
+      clientId: workspace.clientId,
+      caseId: null,
+      clientPortalIdentityId: input.clientPortalIdentityId,
+      status: 'SUBMITTED',
+      submittedAt: new Date(),
+      fields: rows.length ? { create: rows } : undefined,
+    },
+    include: { fields: true, files: true },
+  });
+  await tx.clientRequest.update({ where: { id: request.id }, data: { status: 'SUBMITTED', revision: { increment: 1 } } });
+  return toClientSafeSubmission(submission);
+}
+
 // ---- Customer side
 export async function createDraftSubmission(ctx: CustomerContext, requestId: string, prisma: Prisma = defaultPrisma) {
   const req = await loadPublishedRequest(ctx, requestId, prisma);
@@ -230,6 +280,11 @@ export async function getCustomerSubmission(ctx: CustomerContext, submissionId: 
 }
 
 // ---- Internal side
+function requireCaseSubmission(row: { caseId: string | null }): string {
+  if (!row.caseId) throw new InteractionError(409, 'SUBMISSION_IS_INTAKE_SCOPED', 'This submission is managed through intake triage.');
+  return row.caseId;
+}
+
 export async function listSubmissionsInternal(actor: InternalActor, filter: { caseId?: string; requestId?: string; status?: string; limit?: number; offset?: number }, prisma: Prisma = defaultPrisma) {
   requireInternal(actor);
   const where: any = {};
@@ -250,7 +305,7 @@ export async function getSubmissionInternal(actor: InternalActor, submissionId: 
   requireInternal(actor);
   const row = await prisma.clientSubmission.findUnique({ where: { id: submissionId }, include: { files: true, fields: true } });
   if (!row) throw new InteractionError(404, 'SUBMISSION_NOT_FOUND', 'Submission not found.');
-  await assertInternalCaseAccess(actor, row.caseId, prisma);
+  await assertInternalCaseAccess(actor, requireCaseSubmission(row), prisma);
   return row;
 }
 
@@ -258,7 +313,7 @@ export async function requestCorrection(actor: InternalActor, submissionId: stri
   requireInternal(actor);
   const row = await prisma.clientSubmission.findUnique({ where: { id: submissionId } });
   if (!row) throw new InteractionError(404, 'SUBMISSION_NOT_FOUND', 'Submission not found.');
-  await assertInternalCaseAccess(actor, row.caseId, prisma);
+  await assertInternalCaseAccess(actor, requireCaseSubmission(row), prisma);
   requireExpected(row, input.expectedRevision);
   return prisma.clientSubmission.update({ where: { id: submissionId }, data: { status: 'CORRECTION_REQUESTED', reviewedById: actor.userId, reviewedAt: new Date(), correctionReasonSafe: safeText(input.reasonSafe, 'reasonSafe', 1000), revision: { increment: 1 } } });
 }
@@ -267,7 +322,7 @@ export async function rejectSubmission(actor: InternalActor, submissionId: strin
   requireInternal(actor);
   const row = await prisma.clientSubmission.findUnique({ where: { id: submissionId } });
   if (!row) throw new InteractionError(404, 'SUBMISSION_NOT_FOUND', 'Submission not found.');
-  await assertInternalCaseAccess(actor, row.caseId, prisma);
+  await assertInternalCaseAccess(actor, requireCaseSubmission(row), prisma);
   requireExpected(row, input.expectedRevision);
   return prisma.clientSubmission.update({ where: { id: submissionId }, data: { status: 'REJECTED', reviewedById: actor.userId, reviewedAt: new Date(), rejectionReasonSafe: safeText(input.reasonSafe, 'reasonSafe', 1000), revision: { increment: 1 } } });
 }
@@ -281,7 +336,8 @@ export async function acceptFileIntoMatter(actor: InternalActor, submissionId: s
   requireInternal(actor);
   const submission = await prisma.clientSubmission.findUnique({ where: { id: submissionId } });
   if (!submission) throw new InteractionError(404, 'SUBMISSION_NOT_FOUND', 'Submission not found.');
-  const { clientId } = await assertInternalCaseAccess(actor, submission.caseId, prisma);
+  const caseId = requireCaseSubmission(submission);
+  const { clientId } = await assertInternalCaseAccess(actor, caseId, prisma);
   requireExpected(submission, input.expectedRevision);
   const file = await prisma.clientSubmissionFile.findFirst({ where: { id: fileId, submissionId } });
   if (!file) throw new InteractionError(404, 'FILE_NOT_FOUND', 'File not found.');
@@ -291,12 +347,12 @@ export async function acceptFileIntoMatter(actor: InternalActor, submissionId: s
   const result = await prisma.$transaction(async (tx) => {
     let documentId = input.documentId || null;
     if (documentId) {
-      const doc = await tx.document.findFirst({ where: { id: documentId, caseId: submission.caseId } });
+      const doc = await tx.document.findFirst({ where: { id: documentId, caseId } });
       if (!doc) throw new InteractionError(404, 'DOCUMENT_NOT_FOUND', 'Destination document not found.');
     } else {
       const doc = await tx.document.create({
         data: {
-          caseId: submission.caseId,
+          caseId,
           clientId,
           name: safeText(input.documentName, 'documentName', 200) || file.originalFileNameSafe,
           fileName: file.originalFileNameSafe,
