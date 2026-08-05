@@ -24,6 +24,8 @@ on:
       - 'Backend/tests/**Interaction**'
       - 'Backend/tests/**interaction**'
       - 'Backend/tests/**workspace**'
+      - 'Backend/tests/**Intake**'
+      - 'Backend/tests/**intake**'
       - 'Backend/package.json'
       - 'Backend/package-lock.json'
       - '.github/workflows/prisma-migration-replayability.yml'
@@ -52,6 +54,8 @@ on:
       - 'Backend/tests/**Interaction**'
       - 'Backend/tests/**interaction**'
       - 'Backend/tests/**workspace**'
+      - 'Backend/tests/**Intake**'
+      - 'Backend/tests/**intake**'
       - 'Backend/package.json'
       - 'Backend/package-lock.json'
       - '.github/workflows/prisma-migration-replayability.yml'
@@ -140,3 +144,13 @@ jobs:
         env:
           CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
         run: npm run test:org-access:db
+
+      - name: Run CP1 intake and triage PostgreSQL integration tests
+        working-directory: Backend
+        env:
+          CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+          CLIENT_PORTAL_ACTIONS_ENABLED: 'true'
+          CLIENT_PORTAL_ORGANIZATIONAL_INTAKE_ENABLED: 'true'
+          CLIENT_PORTAL_DATA_REQUESTS_ENABLED: 'true'
+          CLIENT_PORTAL_DOCUMENT_UPLOADS_ENABLED: 'true'
+        run: npm run test:intake:db
