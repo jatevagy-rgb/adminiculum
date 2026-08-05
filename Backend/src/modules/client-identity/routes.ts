@@ -36,6 +36,20 @@ import {
   unlinkUnitFromWorkspace,
   updateParticipant,
 } from '../client-workspace/organizationAdminService';
+import {
+  approveIntakeRequesterAccess,
+  closeIntake,
+  convertIntakeToNewCase,
+  declineIntake,
+  getIntakeTriageDetail,
+  linkIntakeToExistingCase,
+  listIntakeHistory,
+  listIntakeQueue,
+  performApprovedConversion,
+  publishIntakeSnapshot,
+  requestMoreInformation,
+  startIntakeTriage,
+} from '../client-workspace/intakeTriageService';
 
 export const clientIdentityRouter = Router();
 
@@ -156,6 +170,55 @@ clientIdentityRouter.post('/admin/grants', async (req, res) => {
 });
 
 // --- CP1 organizational administration (ADMIN/PARTNER, guarded by /admin use) ---
+
+clientIdentityRouter.get('/admin/intakes', async (req, res) => {
+  try { res.json(await listIntakeQueue(internalActor(req), req.query as Record<string, unknown>)); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.get('/admin/intakes/:intakeId', async (req, res) => {
+  try { res.json(await getIntakeTriageDetail(internalActor(req), String(req.params.intakeId))); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.get('/admin/intakes/:intakeId/history', async (req, res) => {
+  try { res.json(await listIntakeHistory(internalActor(req), String(req.params.intakeId))); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/start-triage', async (req, res) => {
+  try { res.json(await startIntakeTriage(internalActor(req), String(req.params.intakeId), req.body?.expectedRevision)); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/request-more-information', async (req, res) => {
+  try { res.status(201).json(await requestMoreInformation(internalActor(req), String(req.params.intakeId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/decline', async (req, res) => {
+  try { res.json(await declineIntake(internalActor(req), String(req.params.intakeId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/link-existing-case', async (req, res) => {
+  try { res.json(await linkIntakeToExistingCase(internalActor(req), String(req.params.intakeId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/convert-new-case', async (req, res) => {
+  try { res.status(201).json(await convertIntakeToNewCase(internalActor(req), String(req.params.intakeId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/approve-requester-access', async (req, res) => {
+  try { res.json(await approveIntakeRequesterAccess(internalActor(req), String(req.params.intakeId), Array.isArray(req.body?.permissions) ? req.body.permissions : [])); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/publish-initial-snapshot', async (req, res) => {
+  try { res.status(201).json(await publishIntakeSnapshot(internalActor(req), String(req.params.intakeId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/approved-conversion', async (req, res) => {
+  try { res.status(201).json(await performApprovedConversion(internalActor(req), String(req.params.intakeId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/close', async (req, res) => {
+  try { res.json(await closeIntake(internalActor(req), String(req.params.intakeId), req.body?.expectedRevision)); }
+  catch (error) { fail(res, error); }
+});
 
 clientIdentityRouter.get('/admin/workspaces/:workspaceId/units', async (req, res) => {
   try { res.json(await listWorkspaceUnits(internalActor(req), String(req.params.workspaceId))); }

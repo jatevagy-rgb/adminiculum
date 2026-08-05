@@ -429,3 +429,68 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
     })),
   };
 }
+
+export interface PortalIntakeCaseInput {
+  clientId: string;
+  title: string;
+  description?: string | null;
+  matterType?: string | null;
+  assignedLawyerId?: string | null;
+  deadline?: Date | null;
+}
+
+/**
+ * Transaction-scoped canonical Case shell for CP1 intake conversion. It keeps
+ * Case numbering, Client assignment and creation audit in the existing intake
+ * creation module, but deliberately performs no external provider call.
+ */
+export async function createCaseFromPortalIntakeInTransaction(actorId: string, input: PortalIntakeCaseInput, tx: any) {
+  if (!actorId) throw new CaseIntakeError('NOT_AUTHENTICATED', 'Authenticated user is required.', 401);
+  const clientId = str(input.clientId, 64, 'clientId', true) as string;
+  const title = str(input.title, MAX_TITLE, 'title', true) as string;
+  const description = str(input.description, 6000, 'description');
+  const matterType = str(input.matterType, 64, 'matterType') || 'OTHER';
+  const assignedLawyerId = str(input.assignedLawyerId, 64, 'assignedLawyerId');
+  const [client, actor, assigned] = await Promise.all([
+    tx.client.findUnique({ where: { id: clientId }, select: { id: true, name: true } }),
+    tx.user.findUnique({ where: { id: actorId }, select: { id: true, status: true, isActive: true } }),
+    assignedLawyerId ? tx.user.findUnique({ where: { id: assignedLawyerId }, select: { id: true, status: true, isActive: true } }) : Promise.resolve(null),
+  ]);
+  if (!client) throw new CaseIntakeError('CLIENT_NOT_FOUND', 'Client not found.', 404);
+  if (!actor || actor.status !== 'ACTIVE' || actor.isActive === false) throw new CaseIntakeError('USER_NOT_FOUND', 'Authenticated user is inactive.', 403);
+  if (assignedLawyerId && (!assigned || assigned.status !== 'ACTIVE' || assigned.isActive === false)) throw new CaseIntakeError('USER_NOT_FOUND', 'Assigned user is inactive.', 400);
+
+  const year = new Date().getFullYear();
+  const countThisYear = await tx.case.count({ where: { caseNumber: { startsWith: `CASE-${year}-` } } });
+  const caseNumber = `CASE-${year}-${String(countThisYear + 1).padStart(3, '0')}`;
+  const caseTypes = new Set(['CONTRACT_REVIEW', 'CONTRACT_DRAFTING', 'LITIGATION', 'CORPORATE', 'IP', 'EMPLOYMENT', 'REAL_ESTATE', 'MERGERS_ACQUISITIONS', 'OTHER']);
+  const caseType = caseTypes.has(matterType) ? matterType : 'OTHER';
+  const row = await tx.case.create({
+    data: {
+      caseNumber,
+      title,
+      description,
+      caseType,
+      clientId,
+      clientName: client.name,
+      matterType,
+      createdById: actorId,
+      assignedLawyerId: assignedLawyerId || null,
+      deadline: input.deadline || null,
+      status: 'CLIENT_INPUT',
+      priority: 'MEDIUM',
+    },
+    select: { id: true, caseNumber: true, clientId: true, title: true, status: true, createdAt: true },
+  });
+  await tx.timelineEvent.create({
+    data: {
+      caseId: row.id,
+      userId: actorId,
+      eventType: 'CASE_CREATED',
+      type: 'CASE_CREATED',
+      description: `Portal intake conversion: ${row.caseNumber}`,
+      payload: { source: 'client_portal_intake', caseNumber: row.caseNumber },
+    },
+  });
+  return row;
+}

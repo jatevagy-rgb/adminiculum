@@ -56,6 +56,79 @@ function sanitizePermissions(input: unknown): string[] {
   return cleaned;
 }
 
+function samePermissions(left: unknown, right: unknown): boolean {
+  const a = [...new Set((Array.isArray(left) ? left : []).map(String))].sort();
+  const b = [...new Set((Array.isArray(right) ? right : []).map(String))].sort();
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+export async function createOrReactivateParticipantInTransaction(actor: InternalActor, input: Record<string, unknown>, tx: any) {
+  requireAdmin(actor);
+  const workspaceId = String(input.workspaceId || '');
+  const caseId = String(input.caseId || '');
+  const participantRole = enumValue(input.participantRole, PARTICIPANT_ROLES, 'INVALID_PARTICIPANT_ROLE');
+  const permissions = sanitizePermissions(input.permissions);
+  if (!permissions.length) throw new OrganizationAdminError(400, 'PARTICIPANT_PERMISSIONS_REQUIRED', 'Participant permissions must be explicit.');
+  const workspace = await tx.clientPortalWorkspace.findFirst({ where: { id: workspaceId, mode: 'ORGANIZATION', status: 'ACTIVE' }, select: { id: true, clientId: true } });
+  if (!workspace) throw new OrganizationAdminError(409, 'WORKSPACE_NOT_ACTIVE', 'An active ORGANIZATION workspace is required.');
+  const caseRow = await tx.case.findUnique({ where: { id: caseId }, select: { id: true, clientId: true, status: true } });
+  if (!caseRow) throw new OrganizationAdminError(404, 'CASE_NOT_FOUND', 'Case not found.');
+  if (caseRow.clientId !== workspace.clientId) throw new OrganizationAdminError(400, 'CASE_CLIENT_MISMATCH', 'Case is outside the workspace Client.');
+  if (['ARCHIVED', 'CANCELLED'].includes(String(caseRow.status))) throw new OrganizationAdminError(409, 'CASE_NOT_ELIGIBLE', 'Case is not eligible for participant access.');
+  const identity = input.clientPortalIdentityId
+    ? await tx.clientPortalIdentity.findFirst({ where: { id: String(input.clientPortalIdentityId), status: 'ACTIVE' }, select: { id: true } })
+    : await tx.clientPortalIdentity.findFirst({ where: { normalizedEmail: String(input.email || '').trim().toLowerCase(), status: 'ACTIVE' }, select: { id: true } });
+  if (!identity) throw new OrganizationAdminError(404, 'IDENTITY_NOT_FOUND', 'Active portal identity not found.');
+  const membership = await tx.clientPortalWorkspaceMembership.findFirst({
+    where: { clientPortalIdentityId: identity.id, workspaceId, status: 'ACTIVE', OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+    select: { id: true },
+  });
+  if (!membership) throw new OrganizationAdminError(409, 'IDENTITY_NOT_WORKSPACE_MEMBER', 'Identity must be an active workspace member first.');
+  const existing = await tx.clientPortalGrant.findFirst({
+    where: { clientPortalIdentityId: identity.id, clientId: workspace.clientId, caseId },
+    orderBy: { updatedAt: 'desc' },
+  });
+  if (existing?.status === 'ACTIVE') {
+    if (existing.workspaceId !== workspaceId || String(existing.participantRole || '') !== participantRole || !samePermissions(existing.permissions, permissions)) {
+      throw new OrganizationAdminError(409, 'PARTICIPANT_GRANT_CONFLICT', 'An incompatible active participant grant already exists.');
+    }
+    return { row: existing, idempotent: true, reactivated: false };
+  }
+  if (existing) {
+    if (existing.workspaceId && existing.workspaceId !== workspaceId) throw new OrganizationAdminError(409, 'PARTICIPANT_GRANT_CONFLICT', 'The previous grant belongs to another workspace.');
+    const row = await tx.clientPortalGrant.update({ where: { id: existing.id }, data: {
+      workspaceId,
+      participantRole: participantRole as never,
+      isRequester: participantRole === 'REQUESTER',
+      permissions: permissions as never,
+      status: 'ACTIVE',
+      activatedAt: new Date(),
+      suspendedAt: null,
+      suspendedById: null,
+      revokedAt: null,
+      revokedById: null,
+      revocationReasonSafe: null,
+      revision: { increment: 1 },
+    } });
+    await tx.clientPublicationEvent.create({ data: { action: 'GRANT_ACTIVATED', actorId: actor.userId, caseId, clientId: workspace.clientId, grantId: row.id, fromStatus: String(existing.status), toStatus: 'ACTIVE', metadataSafe: { participantRole } } });
+    return { row, idempotent: false, reactivated: true };
+  }
+  const row = await tx.clientPortalGrant.create({ data: {
+    clientPortalIdentityId: identity.id,
+    workspaceId,
+    clientId: workspace.clientId,
+    caseId,
+    participantRole: participantRole as never,
+    isRequester: participantRole === 'REQUESTER',
+    permissions: permissions as never,
+    status: 'ACTIVE',
+    invitedById: actor.userId,
+    activatedAt: new Date(),
+  } });
+  await tx.clientPublicationEvent.create({ data: { action: 'GRANT_ACTIVATED', actorId: actor.userId, caseId, clientId: workspace.clientId, grantId: row.id, toStatus: 'ACTIVE', metadataSafe: { participantRole } } });
+  return { row, idempotent: false, reactivated: false };
+}
+
 // ---------------------------------------------------------------------------
 // Organizational units <-> workspace linkage
 // ---------------------------------------------------------------------------
@@ -101,38 +174,8 @@ export async function listWorkspaceUnits(actor: InternalActor, workspaceId: stri
 // ---------------------------------------------------------------------------
 
 export async function createParticipant(actor: InternalActor, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
-  requireAdmin(actor);
-  const workspaceId = String(input.workspaceId || '');
-  const caseId = String(input.caseId || '');
-  const workspace = await requireOrgWorkspace(workspaceId, prisma);
-  const participantRole = enumValue(input.participantRole, PARTICIPANT_ROLES, 'INVALID_PARTICIPANT_ROLE');
-  const permissions = sanitizePermissions(input.permissions);
-  const caseRow = await prisma.case.findUnique({ where: { id: caseId }, select: { id: true, clientId: true } });
-  if (!caseRow) throw new OrganizationAdminError(404, 'CASE_NOT_FOUND', 'Case not found.');
-  if (caseRow.clientId !== workspace.clientId) throw new OrganizationAdminError(400, 'CASE_CLIENT_MISMATCH', 'Case is outside the workspace Client.');
-  const identity = input.clientPortalIdentityId
-    ? await prisma.clientPortalIdentity.findUnique({ where: { id: String(input.clientPortalIdentityId) }, select: { id: true } })
-    : await prisma.clientPortalIdentity.findUnique({ where: { normalizedEmail: String(input.email || '').trim().toLowerCase() }, select: { id: true } });
-  if (!identity) throw new OrganizationAdminError(404, 'IDENTITY_NOT_FOUND', 'Portal identity not found.');
-  const membership = await prisma.clientPortalWorkspaceMembership.findFirst({ where: { clientPortalIdentityId: identity.id, workspaceId, status: 'ACTIVE' }, select: { id: true } });
-  if (!membership) throw new OrganizationAdminError(409, 'IDENTITY_NOT_WORKSPACE_MEMBER', 'Identity must be an active workspace member first.');
-  const grant = await prisma.$transaction(async (tx) => {
-    const created = await tx.clientPortalGrant.create({ data: {
-      clientPortalIdentityId: identity.id,
-      workspaceId,
-      clientId: workspace.clientId,
-      caseId,
-      participantRole: participantRole as never,
-      isRequester: participantRole === 'REQUESTER',
-      permissions: permissions as never,
-      status: 'ACTIVE',
-      invitedById: actor.userId,
-      activatedAt: new Date(),
-    } });
-    await tx.clientPublicationEvent.create({ data: { action: 'GRANT_ACTIVATED', actorId: actor.userId, caseId, clientId: workspace.clientId, grantId: created.id, toStatus: 'ACTIVE', metadataSafe: { participantRole } } });
-    return created;
-  });
-  return { id: grant.id, participantRole, permissions, status: 'ACTIVE' };
+  const result = await prisma.$transaction((tx) => createOrReactivateParticipantInTransaction(actor, input, tx));
+  return { id: result.row.id, participantRole: String(result.row.participantRole), permissions: result.row.permissions, status: 'ACTIVE', idempotent: result.idempotent, reactivated: result.reactivated };
 }
 
 export async function updateParticipant(actor: InternalActor, grantId: string, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {

@@ -66,7 +66,7 @@ async function unitNamesByCase(workspaceId: string, caseIds: string[], prisma: P
 
 function toRow(
   publicReference: string,
-  revision: { clientSafeTitle: string; clientSafeStatus: string; clientSafeNextStep: string | null; publishedDeadlinesSnapshot: unknown },
+  revision: { clientSafeTitle: string; clientSafeStatus: string; clientSafeNextStep: string | null; clientSafeWaitingOn?: string | null; publicTargetDate?: Date | null; publishedDeadlinesSnapshot: unknown },
   relationshipToCase: RelationshipToCase,
   unitName: string | null,
   customerActionRequired: boolean,
@@ -80,9 +80,9 @@ function toRow(
     organizationUnitName: unitName,
     relationshipToCase,
     publicStatus: revision.clientSafeStatus,
-    waitingOn: customerActionRequired ? 'Ügyfél válasza szükséges' : 'Irodai feldolgozás',
+    waitingOn: revision.clientSafeWaitingOn || (customerActionRequired ? 'Ügyfél válasza szükséges' : 'Irodai feldolgozás'),
     nextStep: revision.clientSafeNextStep,
-    publicTargetDate: nextDeadline ? String(nextDeadline) : null,
+    publicTargetDate: revision.publicTargetDate ? revision.publicTargetDate.toISOString() : nextDeadline ? String(nextDeadline) : null,
     customerActionRequired,
     lastPublishedUpdateAt: lastPublishedUpdateAt ? lastPublishedUpdateAt.toISOString() : null,
   };
@@ -119,14 +119,15 @@ export async function listOrganizationalCases(
   if (!caseIds.length) return { items: [], total: 0, limit: boundLimit(params.limit), offset: params.offset || 0 };
 
   const publications = await prisma.clientMatterPublication.findMany({
-    where: { caseId: { in: caseIds }, status: 'PUBLISHED', currentRevisionId: { not: null } },
-    select: { caseId: true, currentRevisionId: true, publishedAt: true },
+    where: { caseId: { in: caseIds }, status: 'PUBLISHED', currentRevisionId: { not: null }, OR: [{ workspaceId }, { workspaceId: null }] },
+    select: { caseId: true, workspaceId: true, currentRevisionId: true, publishedAt: true },
     orderBy: { publishedAt: 'desc' },
   });
-  const revisionIds = publications.map((publication) => publication.currentRevisionId).filter((id): id is string => Boolean(id));
+  const preferredPublications = [...new Map(publications.sort((left, right) => Number(right.workspaceId === workspaceId) - Number(left.workspaceId === workspaceId)).map((publication) => [publication.caseId, publication])).values()];
+  const revisionIds = preferredPublications.map((publication) => publication.currentRevisionId).filter((id): id is string => Boolean(id));
   const revisions = await prisma.clientMatterPublicationRevision.findMany({
     where: { id: { in: revisionIds } },
-    select: { id: true, clientSafeTitle: true, clientSafeStatus: true, clientSafeNextStep: true, responsibleLawyerDisplay: true, publishedDeadlinesSnapshot: true },
+    select: { id: true, clientSafeTitle: true, clientSafeStatus: true, clientSafeNextStep: true, clientSafeCurrentPosition: true, clientSafeWaitingOn: true, publicTargetDate: true, responsibleLawyerDisplay: true, publishedDeadlinesSnapshot: true },
   });
   const revisionById = new Map(revisions.map((revision) => [revision.id, revision]));
   const unitNames = await unitNamesByCase(workspace.id, caseIds, prisma);
@@ -142,7 +143,7 @@ export async function listOrganizationalCases(
   const actionByCase = new Map(actionCounts.map((row) => [row.caseId, row._count._all]));
 
   let rows: OrganizationalCaseRow[] = [];
-  for (const publication of publications) {
+  for (const publication of preferredPublications) {
     const grant = grantByCase.get(publication.caseId);
     const revision = publication.currentRevisionId ? revisionById.get(publication.currentRevisionId) : undefined;
     if (!grant || !revision) continue;
@@ -217,15 +218,16 @@ export async function getOrganizationalCaseDetail(
   const access = await resolveParticipantAccess(clientPortalIdentityId, caseRow.id, workspaceId, prisma);
   if (!access.canViewSummary) throw new InteractionError(403, 'CLIENT_PORTAL_SUMMARY_FORBIDDEN', 'Case summary is not available for your access.');
 
-  const publication = await prisma.clientMatterPublication.findFirst({
-    where: { caseId: caseRow.id, status: 'PUBLISHED', currentRevisionId: { not: null } },
-    select: { currentRevisionId: true, publishedAt: true },
+  const publicationCandidates = await prisma.clientMatterPublication.findMany({
+    where: { caseId: caseRow.id, status: 'PUBLISHED', currentRevisionId: { not: null }, OR: [{ workspaceId }, { workspaceId: null }] },
+    select: { workspaceId: true, currentRevisionId: true, publishedAt: true },
     orderBy: { publishedAt: 'desc' },
   });
+  const publication = publicationCandidates.find((candidate) => candidate.workspaceId === workspaceId) || publicationCandidates[0];
   if (!publication?.currentRevisionId) throw new InteractionError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Case is not available.');
   const revision = await prisma.clientMatterPublicationRevision.findUnique({
     where: { id: publication.currentRevisionId },
-    select: { clientSafeTitle: true, clientSafeStatus: true, clientSafeNextStep: true, responsibleLawyerDisplay: true, publishedDeadlinesSnapshot: true, safeUpdatesSnapshot: true, actionRequestsSnapshot: true },
+    select: { clientSafeTitle: true, clientSafeStatus: true, clientSafeNextStep: true, clientSafeCurrentPosition: true, clientSafeWaitingOn: true, publicTargetDate: true, responsibleLawyerDisplay: true, publishedDeadlinesSnapshot: true, safeUpdatesSnapshot: true, actionRequestsSnapshot: true },
   });
   if (!revision) throw new InteractionError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Case is not available.');
 
@@ -239,7 +241,7 @@ export async function getOrganizationalCaseDetail(
     // avoid leaking a colleague's identity to observers; a policy-scoped requester
     // projection is a later CP1 stage.
     requesterDisplayName: null,
-    currentStatusText: revision.clientSafeStatus,
+    currentStatusText: revision.clientSafeCurrentPosition || revision.clientSafeStatus,
     safeMilestones: Array.isArray(revision.publishedDeadlinesSnapshot) ? revision.publishedDeadlinesSnapshot as unknown[] : [],
     safeUpdates: Array.isArray(revision.safeUpdatesSnapshot) ? revision.safeUpdatesSnapshot as unknown[] : [],
     capabilities: capabilitiesFrom(access),
