@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { Client } = require('pg');
 
-const migrationName = '20260804173000_client_portal_cp1_intake_triage';
+const migrationName = '20260805120000_client_portal_membership_onboarding';
 const jobDirectory = __dirname;
 const appRoot = process.env.MIGRATION_WEBJOB_ROOT || path.resolve(jobDirectory, '../../../..');
 const schemaPath = process.env.MIGRATION_WEBJOB_SCHEMA_PATH || path.join(appRoot, 'prisma', 'schema.prisma');
@@ -52,7 +52,9 @@ async function readState(client) {
        FROM "_prisma_migrations"
       WHERE finished_at IS NULL AND rolled_back_at IS NULL`,
   );
-    // Verify the concrete latest CP1 effect rather than trusting migration metadata alone.
+    // Verify the concrete latest effect rather than trusting migration metadata
+    // alone. Keeps the CP1 checks (so an earlier regression still fails) and adds
+    // the membership-onboarding migration's concrete effects.
   const schemaCheck = await client.query(
     `SELECT
        to_regclass('public.client_portal_intake_requests') IS NOT NULL AS intake_table,
@@ -69,7 +71,16 @@ async function readState(client) {
              SELECT 1 FROM information_schema.columns
               WHERE table_schema = 'public' AND table_name = 'client_matter_publications' AND column_name = 'workspaceId'
            ) AS workspace_publication,
-           to_regclass('public.client_matter_one_published_workspace_idx') IS NOT NULL AS workspace_publication_index`,
+           to_regclass('public.client_matter_one_published_workspace_idx') IS NOT NULL AS workspace_publication_index,
+           EXISTS(
+             SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'client_organization_membership_requests' AND column_name = 'requestedMode'
+           ) AS membership_request_mode,
+           EXISTS(
+             SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'client_organization_membership_requests' AND column_name = 'internalDecisionNote'
+           ) AS membership_internal_note,
+           to_regclass('public.client_org_membership_request_one_pending_idx') IS NOT NULL AS membership_pending_index`,
   );
   const row = migration.rows[0] || null;
   const schemaPresent = schemaCheck.rows[0]?.intake_table === true
@@ -77,7 +88,10 @@ async function readState(client) {
       && schemaCheck.rows[0]?.grant_participant_column === true
       && schemaCheck.rows[0]?.intake_request_link === true
       && schemaCheck.rows[0]?.workspace_publication === true
-      && schemaCheck.rows[0]?.workspace_publication_index === true;
+      && schemaCheck.rows[0]?.workspace_publication_index === true
+      && schemaCheck.rows[0]?.membership_request_mode === true
+      && schemaCheck.rows[0]?.membership_internal_note === true
+      && schemaCheck.rows[0]?.membership_pending_index === true;
   const verified = Boolean(
     row && row.finished_at && !row.rolled_back_at && failed.rows[0].count === 0 && schemaPresent,
   );
