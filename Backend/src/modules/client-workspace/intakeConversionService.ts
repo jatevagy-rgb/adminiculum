@@ -35,6 +35,12 @@ function fingerprint(value: unknown): string {
   return crypto.createHash('sha256').update(stable(value)).digest('hex');
 }
 
+function isRetryableSerializationFailure(error: any): boolean {
+  if (error?.code === 'P2034') return true;
+  if (error?.code === 'P2010' && String(error?.meta?.code || '') === '40001') return true;
+  return String(error?.meta?.message || error?.message || '').includes('could not serialize access');
+}
+
 function optionalDate(value: unknown, field: string): Date | null {
   if (value == null || value === '') return null;
   const date = new Date(String(value));
@@ -185,7 +191,7 @@ export async function approveIntakeAndExposeCase(actor: IntakeActor, input: Inta
         const intake = await prisma.clientPortalIntakeRequest.findUnique({ where: { id: input.intakeId }, select: { id: true, workspaceId: true, requesterMembershipId: true, status: true } });
         if (intake) await prisma.clientPortalWorkspaceEvent.create({ data: { workspaceId: intake.workspaceId, membershipId: intake.requesterMembershipId, actorId: actor.userId, action: 'INTAKE_CONVERSION_CONFLICT', fromStatus: intake.status, toStatus: intake.status, metadataSafe: { intakeId: intake.id } } });
       }
-      if (error?.code !== 'P2034' || attempt === 2) throw error;
+      if (!isRetryableSerializationFailure(error) || attempt === 2) throw error;
     }
   }
   throw new IntakeConversionError(409, 'INTAKE_CONVERSION_CONFLICT', 'Concurrent conversion conflict. Reload and retry.');
