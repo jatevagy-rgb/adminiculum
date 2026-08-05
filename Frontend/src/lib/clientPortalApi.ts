@@ -124,11 +124,43 @@ export type PortalWorkspaceSummary = {
   capabilities: { home: boolean; matters: boolean; tasks: boolean; documents: boolean; messages: boolean };
 };
 
+export type OnboardingRequestView = {
+  id: string;
+  status: string;
+  requestedMode: string | null;
+  claimedOrganizationName: string | null;
+  claimedUnitName: string | null;
+  claimedJobTitle: string | null;
+  submittedAt: string | null;
+  decisionMessage: string | null;
+  revision: number;
+};
+
+export type OnboardingInvitationView = {
+  invitationId: string;
+  organizationName: string | null;
+  workspaceName: string | null;
+  mode: string | null;
+  expiresAt: string;
+};
+
+export type PortalOnboarding = {
+  latestRequest: OnboardingRequestView | null;
+  invitation: OnboardingInvitationView | null;
+  allowedNextAction: string;
+};
+
 export type PortalIdentityContext = {
   identity: { displayName: string; email: string; accountType: string };
-  state: 'NO_ACCESS' | 'PENDING_APPROVAL' | 'ACCESS_SUSPENDED' | 'READY' | 'SELECTION_REQUIRED';
+  state:
+    | 'READY' | 'SELECTION_REQUIRED'
+    | 'ONBOARDING_REQUIRED' | 'REQUEST_PENDING' | 'REQUEST_REJECTED'
+    | 'INVITATION_PENDING' | 'PENDING_APPROVAL' | 'ACCESS_SUSPENDED'
+    // Retained for backward-compatibility; the resolver no longer emits it.
+    | 'NO_ACCESS';
   workspaces: PortalWorkspaceSummary[];
   selectedWorkspace: PortalWorkspaceSummary | null;
+  onboarding?: PortalOnboarding | null;
 };
 
 export function setSelectedPortalWorkspace(publicReference: string | null): void {

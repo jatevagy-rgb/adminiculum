@@ -26,6 +26,8 @@ on:
       - 'Backend/tests/**workspace**'
       - 'Backend/tests/**Intake**'
       - 'Backend/tests/**intake**'
+      - 'Backend/tests/**Onboarding**'
+      - 'Backend/tests/**onboarding**'
       - 'Backend/package.json'
       - 'Backend/package-lock.json'
       - '.github/workflows/prisma-migration-replayability.yml'
@@ -56,6 +58,8 @@ on:
       - 'Backend/tests/**workspace**'
       - 'Backend/tests/**Intake**'
       - 'Backend/tests/**intake**'
+      - 'Backend/tests/**Onboarding**'
+      - 'Backend/tests/**onboarding**'
       - 'Backend/package.json'
       - 'Backend/package-lock.json'
       - '.github/workflows/prisma-migration-replayability.yml'
@@ -154,3 +158,9 @@ jobs:
           CLIENT_PORTAL_DATA_REQUESTS_ENABLED: 'true'
           CLIENT_PORTAL_DOCUMENT_UPLOADS_ENABLED: 'true'
         run: npm run test:intake:db
+
+      - name: Run client portal membership onboarding PostgreSQL integration tests
+        working-directory: Backend
+        env:
+          CLIENT_IDENTITY_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: npm run test:membership-onboarding:db

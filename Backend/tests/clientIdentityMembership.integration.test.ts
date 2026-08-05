@@ -8,7 +8,7 @@ import {
   submitMembershipRequest,
   validateInvitation,
 } from '../src/modules/client-identity/identityService';
-import { createWorkspace, inviteWorkspaceMember, transitionWorkspaceMembership } from '../src/modules/client-workspace/workspaceService';
+import { createWorkspace } from '../src/modules/client-workspace/workspaceService';
 
 const databaseUrl = process.env.CLIENT_IDENTITY_TEST_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -58,22 +58,35 @@ describeWithDatabase('Client identity membership PostgreSQL boundary', () => {
 
   afterAll(async () => { await db?.$disconnect(); });
 
-  it('keeps organization membership pending until internal approval and grant creation', async () => {
+  it('keeps membership pending until approval provisions an active workspace membership (no auto grant)', async () => {
     const group = await createOrganizationGroup(admin, { clientId: ids.client, name: 'Jogi osztály' });
-    await expect(submitMembershipRequest(session, { requestedClientId: ids.otherClient, requestedGroupId: group.id, requestedOrganizationName: 'Identity Client' })).rejects.toMatchObject({ code: 'CROSS_CLIENT_GROUP_REJECTED' });
-    const request = await submitMembershipRequest(session, { requestedClientId: ids.client, requestedGroupId: group.id, requestedOrganizationName: 'Identity Client', corporateEmail: session.normalizedEmail });
+    const workspace = await createWorkspace(admin, { clientId: ids.client, name: 'Identity workspace', mode: 'ORGANIZATION', communicationMode: 'PORTAL_PRIMARY' });
+    // The customer may never supply an authoritative client/workspace id — only
+    // claimed labels and the requested mode.
+    const request = await submitMembershipRequest(session, { requestedMode: 'ORGANIZATION', claimedOrganizationName: 'Identity Client', claimedUnitName: 'Jogi', claimedJobTitle: 'Vezető jogtanácsos' });
     expect(request.status).toBe('PENDING_REVIEW');
     expect(await db.clientOrganizationMembership.count({ where: { clientPortalIdentityId: ids.identity } })).toBe(0);
+    expect(await db.clientPortalWorkspaceMembership.count({ where: { clientPortalIdentityId: ids.identity, workspaceId: workspace.id } })).toBe(0);
     expect(await db.clientPortalGrant.count({ where: { clientPortalIdentityId: ids.identity } })).toBe(0);
     const pending = await db.clientOrganizationMembershipRequest.findUniqueOrThrow({ where: { id: request.id } });
-    const approved = await approveMembershipRequest(admin, request.id, { clientId: ids.client, groupId: group.id, revision: pending.revision });
+    // Compatibility guards: a workspace belonging to another client is rejected,
+    // and a cross-client group is rejected.
+    await expect(approveMembershipRequest(admin, request.id, { clientId: ids.otherClient, workspaceId: workspace.id, revision: pending.revision })).rejects.toMatchObject({ code: 'WORKSPACE_CLIENT_MISMATCH' });
+    const approved = await approveMembershipRequest(admin, request.id, { clientId: ids.client, workspaceId: workspace.id, groupId: group.id, role: 'REPRESENTATIVE', revision: pending.revision });
     expect(approved.grantRequired).toBe(true);
+    // Approval provisioned an ACTIVE workspace membership with the chosen role...
+    const activeWorkspaceMembership = await db.clientPortalWorkspaceMembership.findFirstOrThrow({ where: { clientPortalIdentityId: ids.identity, workspaceId: workspace.id } });
+    expect(activeWorkspaceMembership.status).toBe('ACTIVE');
+    expect(activeWorkspaceMembership.role).toBe('REPRESENTATIVE');
+    // ...recorded the linkage on the request...
+    const approvedRequest = await db.clientOrganizationMembershipRequest.findUniqueOrThrow({ where: { id: request.id } });
+    expect(approvedRequest.status).toBe('APPROVED');
+    expect(approvedRequest.approvedWorkspaceId).toBe(workspace.id);
+    expect(approvedRequest.approvedMembershipId).toBe(activeWorkspaceMembership.id);
+    // ...promoted the identity to ACTIVE, and created NO automatic case grant.
+    expect((await db.clientPortalIdentity.findUniqueOrThrow({ where: { id: ids.identity } })).status).toBe('ACTIVE');
     expect(await db.clientPortalGrant.count({ where: { clientPortalIdentityId: ids.identity } })).toBe(0);
-    await expect(createGrantForApprovedMembership(admin, { membershipId: approved.membership.id, caseId: ids.case, permissions: ['MATTER_READ', 'DOCUMENT_READ'] })).rejects.toMatchObject({ code: 'ACTIVE_WORKSPACE_MEMBERSHIP_REQUIRED' });
-    const workspace = await createWorkspace(admin, { clientId: ids.client, name: 'Identity workspace', mode: 'ORGANIZATION', communicationMode: 'PORTAL_PRIMARY' });
-    const invited = await inviteWorkspaceMember(admin, workspace.id, { email: session.normalizedEmail, role: 'REPRESENTATIVE' });
-    const pendingWorkspaceMembership = await db.clientPortalWorkspaceMembership.findUniqueOrThrow({ where: { id: invited.membershipId! } });
-    const activeWorkspaceMembership = await transitionWorkspaceMembership(admin, pendingWorkspaceMembership.id, 'approve', pendingWorkspaceMembership.revision);
+    // An explicit grant against the provisioned workspace membership still works.
     const grant = await createGrantForApprovedMembership(admin, { workspaceMembershipId: activeWorkspaceMembership.id, caseId: ids.case, permissions: ['MATTER_READ', 'DOCUMENT_READ'] });
     expect(grant.clientPortalIdentityId).toBe(ids.identity);
     expect(grant.clientId).toBe(ids.client);
@@ -100,9 +113,15 @@ describeWithDatabase('Client identity membership PostgreSQL boundary', () => {
 
   it('uses non-enumerating invitation validation and prevents double review', async () => {
     expect(await validateInvitation('missing-token')).toEqual({ valid: false, status: 'UNAVAILABLE' });
-    const request = await submitMembershipRequest(session, { requestedOrganizationName: 'No enumeration org', corporateEmail: session.normalizedEmail });
+    const workspace = await createWorkspace(admin, { clientId: ids.client, name: 'Review workspace', mode: 'ORGANIZATION', communicationMode: 'PORTAL_PRIMARY' });
+    const request = await submitMembershipRequest(session, { requestedMode: 'ORGANIZATION', claimedOrganizationName: 'No enumeration org' });
     const pending = await db.clientOrganizationMembershipRequest.findUniqueOrThrow({ where: { id: request.id } });
-    await rejectMembershipRequest(admin, request.id, { revision: pending.revision, rejectionReasonSafe: 'Nem ellenőrizhető kapcsolat.' });
-    await expect(approveMembershipRequest(admin, request.id, { clientId: ids.client, revision: pending.revision + 1 })).rejects.toMatchObject({ code: 'REQUEST_NOT_PENDING' });
+    // Split decision surfaces: the customer-safe message is stored separately
+    // from the internal note, which must never reach a customer DTO.
+    await rejectMembershipRequest(admin, request.id, { revision: pending.revision, clientSafeDecisionMessage: 'Nem ellenőrizhető kapcsolat.', internalDecisionNote: 'belső: hiányos azonosítás' });
+    const rejected = await db.clientOrganizationMembershipRequest.findUniqueOrThrow({ where: { id: request.id } });
+    expect(rejected.clientSafeDecisionMessage).toBe('Nem ellenőrizhető kapcsolat.');
+    expect(rejected.internalDecisionNote).toBe('belső: hiányos azonosítás');
+    await expect(approveMembershipRequest(admin, request.id, { clientId: ids.client, workspaceId: workspace.id, revision: pending.revision + 1 })).rejects.toMatchObject({ code: 'REQUEST_NOT_PENDING' });
   });
 });

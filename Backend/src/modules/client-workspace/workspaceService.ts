@@ -166,6 +166,163 @@ export async function getPortalIdentityContext(session: ClientPortalSession, req
   };
 }
 
+// --- Post-login onboarding resolver -----------------------------------------
+//
+// Distinguishes the states a membership-less (or not-yet-active) identity can be
+// in so the portal never dead-ends: active workspace(s), a pending workspace
+// invitation, a pending/rejected membership request, or nothing yet (needs the
+// onboarding form). Works for a REGISTERED-or-ACTIVE identity — it must, because
+// an onboarding user is typically REGISTERED, not ACTIVE, and only becomes ACTIVE
+// once an admin approves a membership.
+
+export type OnboardingRequestView = {
+  id: string;
+  status: string;
+  requestedMode: string | null;
+  claimedOrganizationName: string | null;
+  claimedUnitName: string | null;
+  claimedJobTitle: string | null;
+  submittedAt: Date | null;
+  decisionMessage: string | null;
+  revision: number;
+};
+
+export type OnboardingInvitationView = {
+  invitationId: string;
+  organizationName: string | null;
+  workspaceName: string | null;
+  mode: string | null;
+  expiresAt: Date;
+};
+
+type OnboardingRequestRow = {
+  id: string;
+  status: string;
+  requestedMode: string | null;
+  requestedOrganizationName: string | null;
+  requestedGroupName: string | null;
+  claimedJobTitle: string | null;
+  submittedAt: Date | null;
+  clientSafeDecisionMessage: string | null;
+  rejectionReasonSafe: string | null;
+  revision: number;
+};
+
+/** Customer-safe projection of a membership request — never exposes internal
+ *  note, requested/approved client or workspace ids, or Prisma relations. */
+function toOnboardingRequestView(request: OnboardingRequestRow): OnboardingRequestView {
+  const status = String(request.status);
+  return {
+    id: request.id,
+    status,
+    requestedMode: request.requestedMode ? String(request.requestedMode) : null,
+    claimedOrganizationName: request.requestedOrganizationName || null,
+    claimedUnitName: request.requestedGroupName || null,
+    claimedJobTitle: request.claimedJobTitle || null,
+    submittedAt: request.submittedAt,
+    decisionMessage: request.clientSafeDecisionMessage || (status === 'REJECTED' ? request.rejectionReasonSafe : null) || null,
+    revision: request.revision,
+  };
+}
+
+type OnboardingState =
+  | 'ACCESS_SUSPENDED' | 'PENDING_APPROVAL' | 'INVITATION_PENDING'
+  | 'REQUEST_PENDING' | 'REQUEST_REJECTED' | 'ONBOARDING_REQUIRED';
+
+type OnboardingPayload = {
+  latestRequest: OnboardingRequestView | null;
+  invitation: OnboardingInvitationView | null;
+  allowedNextAction: string;
+};
+
+async function resolveOnboardingState(session: ClientPortalSession, db: Prisma = defaultPrisma): Promise<{ state: OnboardingState; payload: OnboardingPayload }> {
+  const identityId = session.clientPortalIdentityId;
+  const now = new Date();
+  const empty = (allowedNextAction: string): OnboardingPayload => ({ latestRequest: null, invitation: null, allowedNextAction });
+
+  const memberships = await db.clientPortalWorkspaceMembership.findMany({ where: { clientPortalIdentityId: identityId }, orderBy: { updatedAt: 'desc' } });
+  if (memberships.length) {
+    const workspaces = await db.clientPortalWorkspace.findMany({ where: { id: { in: memberships.map((membership) => membership.workspaceId) } }, select: { id: true, status: true } });
+    const workspaceStatus = new Map(workspaces.map((workspace) => [workspace.id, String(workspace.status)]));
+    if (memberships.some((membership) => membership.status === 'SUSPENDED' || workspaceStatus.get(membership.workspaceId) === 'SUSPENDED')) {
+      return { state: 'ACCESS_SUSPENDED', payload: empty('CONTACT_OFFICE') };
+    }
+    if (memberships.some((membership) => ['INVITED', 'PENDING_APPROVAL'].includes(String(membership.status)))) {
+      return { state: 'PENDING_APPROVAL', payload: empty('AWAIT_APPROVAL') };
+    }
+  }
+
+  // A direct invitation addressed to this verified e-mail takes precedence over
+  // the onboarding form — never force a request on an invited user.
+  const invitation = await db.clientPortalInvitation.findFirst({
+    where: { status: 'ACTIVE', expiresAt: { gt: now }, intendedEmail: session.normalizedEmail },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const request = await db.clientOrganizationMembershipRequest.findFirst({
+    where: { clientPortalIdentityId: identityId },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, status: true, requestedMode: true, requestedOrganizationName: true, requestedGroupName: true, claimedJobTitle: true, submittedAt: true, clientSafeDecisionMessage: true, rejectionReasonSafe: true, revision: true },
+  });
+  const latestRequest = request ? toOnboardingRequestView(request) : null;
+
+  if (invitation) {
+    const [client, workspace] = await Promise.all([
+      db.client.findUnique({ where: { id: invitation.clientId }, select: { name: true } }),
+      invitation.workspaceId ? db.clientPortalWorkspace.findUnique({ where: { id: invitation.workspaceId }, select: { name: true, mode: true } }) : Promise.resolve(null),
+    ]);
+    return {
+      state: 'INVITATION_PENDING',
+      payload: {
+        latestRequest,
+        invitation: { invitationId: invitation.id, organizationName: client?.name || null, workspaceName: workspace?.name || null, mode: workspace ? String(workspace.mode) : null, expiresAt: invitation.expiresAt },
+        allowedNextAction: 'ACCEPT_INVITATION',
+      },
+    };
+  }
+  if (request && String(request.status) === 'PENDING_REVIEW') {
+    return { state: 'REQUEST_PENDING', payload: { latestRequest, invitation: null, allowedNextAction: 'VIEW_PENDING_REQUEST' } };
+  }
+  if (request && String(request.status) === 'REJECTED') {
+    return { state: 'REQUEST_REJECTED', payload: { latestRequest, invitation: null, allowedNextAction: 'RESUBMIT_REQUEST' } };
+  }
+  return { state: 'ONBOARDING_REQUIRED', payload: { latestRequest, invitation: null, allowedNextAction: 'SUBMIT_REQUEST' } };
+}
+
+function selectionView(workspaces: Awaited<ReturnType<typeof activeWorkspaceRows>>, requestedReference?: string | null) {
+  const requested = String(requestedReference || '').trim();
+  const selected = requested
+    ? workspaces.find((workspace) => workspace.publicReference === requested)
+    : workspaces.length === 1 ? workspaces[0] : undefined;
+  if (requested && !selected) throw new ClientWorkspaceError(403, 'CLIENT_WORKSPACE_FORBIDDEN', 'The requested workspace is not available.');
+  const strip = ({ id: _id, clientId: _clientId, membershipId: _membershipId, ...rest }: (typeof workspaces)[number]) => rest;
+  return {
+    state: (selected ? 'READY' : 'SELECTION_REQUIRED') as 'READY' | 'SELECTION_REQUIRED',
+    workspaces: workspaces.map(strip),
+    selectedWorkspace: selected ? strip(selected) : null,
+  };
+}
+
+/**
+ * Single post-login resolver used by the portal shell. Unlike
+ * getPortalIdentityContext it never throws for a not-yet-active identity: such a
+ * user is exactly who needs onboarding. Returns active-workspace routing when the
+ * identity is ACTIVE with memberships, otherwise the onboarding state + a
+ * customer-safe onboarding payload.
+ */
+export async function getOnboardingContext(session: ClientPortalSession, requestedReference?: string | null, db: Prisma = defaultPrisma) {
+  const identity = { displayName: session.displayName, email: session.normalizedEmail, accountType: session.accountType };
+  const workspaces = session.status === 'ACTIVE' && session.emailVerified
+    ? await activeWorkspaceRows(session.clientPortalIdentityId, db)
+    : [];
+  if (workspaces.length > 0) {
+    const view = selectionView(workspaces, requestedReference);
+    return { identity, ...view, onboarding: null as OnboardingPayload | null };
+  }
+  const onboarding = await resolveOnboardingState(session, db);
+  return { identity, state: onboarding.state as string, workspaces: [] as ReturnType<typeof selectionView>['workspaces'], selectedWorkspace: null as ReturnType<typeof selectionView>['selectedWorkspace'], onboarding: onboarding.payload as OnboardingPayload | null };
+}
+
 export async function resolvePortalWorkspace(session: ClientPortalSession, requestedReference: unknown, db: Prisma = defaultPrisma): Promise<ResolvedPortalWorkspace> {
   const workspaces = await listAuthorizedPortalWorkspaces(session, db);
   const requested = String(requestedReference || '').trim();
