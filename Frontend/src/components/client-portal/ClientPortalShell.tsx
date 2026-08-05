@@ -10,6 +10,7 @@ import { useCustomerAuth } from '@/lib/customerAuth';
 import { clientSafeError, customerInteractionApi, localizedInteractionStatus, type ClientRequestFieldDTO, type CustomerQuestionThreadDTO, type CustomerRequestDTO, type CustomerSubmissionDTO } from '@/lib/clientInteractionApi';
 import { humanFileSize, makeUploadItem, PAGE_SIDE_LABELS, uploadReducer, uploadStateMessage, uploadSummary, type UploadItem } from '@/lib/customerUpload';
 import { PortalEntryLanding } from './PortalEntryLanding';
+import { PortalOnboarding } from './PortalOnboarding';
 import { PortalWorkspaceSelector } from './PortalWorkspaceSelector';
 import {
   getPortalActionRequest,
@@ -40,6 +41,7 @@ type LoadState =
   | { status: 'loading' }
   | { status: 'login' }
   | { status: 'select'; context: PortalIdentityContext }
+  | { status: 'onboarding'; context: PortalIdentityContext }
   | { status: 'no-workspace' | 'pending' | 'suspended'; context: PortalIdentityContext }
   | { status: 'workspace-empty'; context: PortalIdentityContext }
   | { status: 'denied'; message: string }
@@ -534,6 +536,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
   const account = pickAccountByTenant(accounts, customerTenantId);
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [selectedReference, setSelectedReference] = useState<string | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
   // Canonical customer-auth layer: single MSAL instance, one logout config.
   const { logoutCustomer } = useCustomerAuth();
 
@@ -549,14 +552,11 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         const token = await instance.acquireTokenSilent({ account, scopes: customerApiScopes });
         setAuthToken(token.accessToken, 'customer');
         const context = await getPortalIdentityContext(selectedReference || undefined);
-        if (context.state === 'NO_ACCESS') {
+        // Onboarding states: never dead-end. Route to the onboarding surface
+        // (form / pending / rejected / invitation) instead of a terminal card.
+        if (['NO_ACCESS', 'ONBOARDING_REQUIRED', 'REQUEST_PENDING', 'REQUEST_REJECTED', 'INVITATION_PENDING', 'PENDING_APPROVAL'].includes(context.state)) {
           setSelectedPortalWorkspace(null);
-          if (!cancelled) setState({ status: 'no-workspace', context });
-          return;
-        }
-        if (context.state === 'PENDING_APPROVAL') {
-          setSelectedPortalWorkspace(null);
-          if (!cancelled) setState({ status: 'pending', context });
+          if (!cancelled) setState({ status: 'onboarding', context });
           return;
         }
         if (context.state === 'ACCESS_SUSPENDED') {
@@ -595,7 +595,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
     }
     load();
     return () => { cancelled = true; };
-  }, [account, inProgress, instance, resourceId, selectedReference, view]);
+  }, [account, inProgress, instance, resourceId, selectedReference, view, reloadNonce]);
 
   const nav = useMemo(() => {
     if (state.status !== 'ready' || !state.context.selectedWorkspace) return [];
@@ -617,13 +617,14 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <Link href="/portal" className="font-serif text-2xl font-semibold tracking-tight text-stone-950 focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">Adminiculum</Link>
           {state.status === 'ready' ? <nav className="flex flex-wrap gap-2 text-sm" aria-label="Ügyfélportál navigáció">{nav.map(([label, href]) => <Link className="rounded-full px-3 py-2 text-stone-700 hover:bg-stone-100 focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" key={label} href={href}>{label}</Link>)}</nav> : null}
-          {['ready', 'select', 'no-workspace', 'pending', 'suspended', 'workspace-empty', 'service-error'].includes(state.status) ? <div className="flex gap-2">{(state.status === 'ready' || state.status === 'workspace-empty') && state.context.workspaces.length > 1 ? <button className="rounded-full border border-stone-300 px-3 py-2 text-sm" onClick={() => { setSelectedPortalWorkspace(null); setSelectedReference(null); setState({ status: 'select', context: { ...state.context, state: 'SELECTION_REQUIRED', selectedWorkspace: null } }); }}>Munkatérváltás</button> : null}<button className="rounded-full border border-stone-300 px-3 py-2 text-sm" onClick={logoutCustomer}>Kijelentkezés</button></div> : null}
+          {['ready', 'select', 'onboarding', 'no-workspace', 'pending', 'suspended', 'workspace-empty', 'service-error'].includes(state.status) ? <div className="flex gap-2">{(state.status === 'ready' || state.status === 'workspace-empty') && state.context.workspaces.length > 1 ? <button className="rounded-full border border-stone-300 px-3 py-2 text-sm" onClick={() => { setSelectedPortalWorkspace(null); setSelectedReference(null); setState({ status: 'select', context: { ...state.context, state: 'SELECTION_REQUIRED', selectedWorkspace: null } }); }}>Munkatérváltás</button> : null}<button className="rounded-full border border-stone-300 px-3 py-2 text-sm" onClick={logoutCustomer}>Kijelentkezés</button></div> : null}
         </div>
       </header>
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         {state.status === 'loading' ? <Card>Betöltés...</Card> : null}
         {state.status === 'login' ? <Card><h1 className="text-3xl font-semibold">Ügyfélportál belépés</h1><p className="mt-3 text-stone-700">A biztonságos Microsoft ügyfélfiókos azonosításhoz folytassa a belépést.</p><Link href="/portal/login" className="mt-6 inline-flex rounded-full bg-stone-950 px-5 py-3 text-white">Belépés Microsoft-fiókkal</Link></Card> : null}
         {state.status === 'select' ? <PortalWorkspaceSelector workspaces={state.context.workspaces} onSelect={(reference) => { setState({ status: 'loading' }); setSelectedReference(reference); }} /> : null}
+        {state.status === 'onboarding' ? <PortalOnboarding context={state.context} onReload={() => { setState({ status: 'loading' }); setReloadNonce((value) => value + 1); }} onEnterWorkspace={(reference) => { setState({ status: 'loading' }); setSelectedPortalWorkspace(reference); setSelectedReference(reference); setReloadNonce((value) => value + 1); }} /> : null}
         {state.status === 'no-workspace' ? <Card><h1 className="text-3xl font-semibold">Nincs aktív ügyfélfelülete</h1><p className="mt-3 text-stone-700">Ehhez a felhasználói fiókhoz jelenleg nem tartozik aktív, az ügyvédi iroda által jóváhagyott ügyfélfelület.</p></Card> : null}
         {state.status === 'pending' ? <Card><h1 className="text-3xl font-semibold">Jóváhagyásra vár</h1><p className="mt-3 text-stone-700">Az ügyfélfelülethez benyújtott kérelme az ügyvédi iroda jóváhagyására vár.</p></Card> : null}
         {state.status === 'suspended' ? <Card><h1 className="text-3xl font-semibold">A hozzáférés szünetel</h1><p className="mt-3 text-stone-700">Az ügyfélfelülethez való hozzáférés jelenleg szünetel. Kérjük, vegye fel a kapcsolatot az irodával.</p></Card> : null}

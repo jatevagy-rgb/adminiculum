@@ -32,17 +32,31 @@ function formatGrantDate(value: string | null) {
   return value ? new Date(value).toLocaleString("hu-HU") : "—";
 }
 
-function ApproveForm({ request, clients, busy, onApprove, onReject, onCreateClient }: {
+const MODE_LABELS: Record<string, string> = { INDIVIDUAL: "Magánügyfél", ORGANIZATION: "Szervezeti ügyfél", CASE_RELAY: "Ügyátvezető" };
+
+function ApproveForm({ request, clients, workspaces, busy, onApprove, onReject, onCreateClient }: {
   request: MembershipRequestDTO;
   clients: Client[];
+  workspaces: AdminWorkspaceDTO[];
   busy: boolean;
-  onApprove: (clientId: string) => void;
-  onReject: (reason: string) => void;
+  onApprove: (payload: { clientId: string; workspaceId: string; role: 'MEMBER' | 'REPRESENTATIVE' | 'APPROVER'; clientSafeDecisionMessage: string; internalDecisionNote: string }) => void;
+  onReject: (payload: { clientSafeDecisionMessage: string; internalDecisionNote: string }) => void;
   onCreateClient: (payload: CreateClientData) => Promise<Client>;
 }) {
   const [clientId, setClientId] = useState<string>(request.requestedClientId || "");
+  const [workspaceId, setWorkspaceId] = useState<string>("");
+  const [role, setRole] = useState<'MEMBER' | 'REPRESENTATIVE' | 'APPROVER'>("MEMBER");
+  const [decisionMessage, setDecisionMessage] = useState("");
+  const [internalNote, setInternalNote] = useState("");
   const [reason, setReason] = useState("");
   const [creating, setCreating] = useState(false);
+  // Only active workspaces for the selected client, and — when the customer
+  // requested a specific mode — only mode-compatible ones (matches the backend
+  // WORKSPACE_MODE_MISMATCH guard so the admin cannot pick an invalid target).
+  const eligibleWorkspaces = useMemo(
+    () => workspaces.filter((workspace) => workspace.clientId === clientId && workspace.status === "ACTIVE" && (!request.requestedMode || workspace.mode === request.requestedMode)),
+    [workspaces, clientId, request.requestedMode],
+  );
   const [newClient, setNewClient] = useState<CreateClientData>({
     name: request.requestedOrganizationName || request.corporateEmail || "",
     email: request.corporateEmail || undefined,
@@ -64,23 +78,53 @@ function ApproveForm({ request, clients, busy, onApprove, onReject, onCreateClie
         <select
           data-testid="approve-client-select"
           value={clientId}
-          onChange={(e) => setClientId(e.target.value)}
+          onChange={(e) => { setClientId(e.target.value); setWorkspaceId(""); }}
           className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]"
         >
           <option value="">— Válasszon ügyfelet —</option>
           {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </label>
+      <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
+        <span>Munkatér (workspace) hozzárendelése *</span>
+        <select
+          data-testid="approve-workspace-select"
+          value={workspaceId}
+          onChange={(e) => setWorkspaceId(e.target.value)}
+          disabled={!clientId}
+          className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)] disabled:opacity-50"
+        >
+          <option value="">{clientId ? "— Válasszon munkateret —" : "Előbb válasszon ügyfelet"}</option>
+          {eligibleWorkspaces.map((w) => <option key={w.id} value={w.id}>{w.name} · {MODE_LABELS[w.mode] || w.mode}</option>)}
+        </select>
+        {clientId && eligibleWorkspaces.length === 0 ? <span className="text-[11px] text-amber-700">Nincs a kért móddal kompatibilis aktív munkatér. Hozzon létre egyet a fenti Ügyfélmunkaterek szakaszban.</span> : null}
+      </label>
+      <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
+        <span>Tagsági szerep</span>
+        <select value={role} onChange={(e) => setRole(e.target.value as 'MEMBER' | 'REPRESENTATIVE' | 'APPROVER')} className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]">
+          <option value="MEMBER">Tag</option>
+          <option value="REPRESENTATIVE">Képviselő</option>
+          <option value="APPROVER">Jóváhagyó</option>
+        </select>
+      </label>
       <div className="flex items-end">
         <AdminButton
           data-testid="approve-membership-btn"
           variant="gold"
-          disabled={busy || !clientId}
-          onClick={() => onApprove(clientId)}
+          disabled={busy || !clientId || !workspaceId}
+          onClick={() => onApprove({ clientId, workspaceId, role, clientSafeDecisionMessage: decisionMessage.trim(), internalDecisionNote: internalNote.trim() })}
         >
           Tagság jóváhagyása
         </AdminButton>
       </div>
+      <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)] sm:col-span-2">
+        <span>Ügyfélnek szánt döntési üzenet (opcionális)</span>
+        <input value={decisionMessage} onChange={(e) => setDecisionMessage(e.target.value)} className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]" placeholder="Az ügyfél ezt látja a jóváhagyásról/elutasításról" />
+      </label>
+      <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)] sm:col-span-2">
+        <span>Belső megjegyzés (nem látja az ügyfél)</span>
+        <input value={internalNote} onChange={(e) => setInternalNote(e.target.value)} className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]" placeholder="Csak belső használatra" />
+      </label>
       <div className="sm:col-span-2">
         <AdminButton type="button" variant="neutral" disabled={busy} onClick={() => setCreating((value) => !value)}>
           Új ügyfél létrehozása
@@ -109,15 +153,15 @@ function ApproveForm({ request, clients, busy, onApprove, onReject, onCreateClie
         </div>
       ) : null}
       <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)] sm:col-span-2">
-        <span>Elutasítás indoka (client-safe)</span>
+        <span>Elutasítás ügyfélnek szánt indoka (client-safe)</span>
         <div className="flex gap-2">
           <input
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             className="min-w-0 flex-1 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]"
-            placeholder="Opcionális indok"
+            placeholder="Opcionális indok — ez az üzenet és a fenti belső megjegyzés külön kezelt"
           />
-          <AdminButton data-testid="reject-membership-btn" variant="muted" disabled={busy} onClick={() => onReject(reason)}>
+          <AdminButton data-testid="reject-membership-btn" variant="muted" disabled={busy} onClick={() => onReject({ clientSafeDecisionMessage: reason.trim(), internalDecisionNote: internalNote.trim() })}>
             Elutasítás
           </AdminButton>
         </div>
@@ -356,8 +400,10 @@ function PageBody() {
             <div key={r.id} data-testid="membership-request-row" className="rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="font-semibold text-[var(--adm-text)]">{r.requestedOrganizationName || "(nincs megadva)"}</p>
-                  <p className="text-xs text-[var(--adm-text-muted)]">{r.corporateEmail || "—"} · kért csoport: {r.requestedGroupName || "—"}</p>
+                  <p className="font-semibold text-[var(--adm-text)]">{r.displayNameSnapshot || r.requestedOrganizationName || "(nincs megadva)"}</p>
+                  <p className="text-xs text-[var(--adm-text-muted)]">{r.verifiedEmailSnapshot || r.corporateEmail || "—"} · mód: {r.requestedMode ? MODE_LABELS[r.requestedMode] || r.requestedMode : "—"}</p>
+                  <p className="text-xs text-[var(--adm-text-muted)]">cég: {r.requestedOrganizationName || "—"} · egység: {r.requestedGroupName || "—"} · munkakör: {r.claimedJobTitle || "—"}</p>
+                  {r.noteSafe ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">megjegyzés: {r.noteSafe}</p> : null}
                   <p className="mt-1 font-mono text-[11px] text-[var(--adm-text-soft)]">identity: {r.clientPortalIdentityId}</p>
                 </div>
                 <AdminBadge tone="gold">{r.status}</AdminBadge>
@@ -365,9 +411,10 @@ function PageBody() {
               <ApproveForm
                 request={r}
                 clients={clients}
+                workspaces={workspaces}
                 busy={busy}
-                onApprove={(clientId) => run(() => approveMembershipRequest(r.id, { clientId, revision: r.revision }).then(() => undefined), "Tagság jóváhagyva. Most adjon ügyhozzáférést (grant).")}
-                onReject={(reason) => run(() => rejectMembershipRequest(r.id, { revision: r.revision, rejectionReasonSafe: reason }).then(() => undefined), "Tagsági kérelem elutasítva.")}
+                onApprove={(payload) => run(() => approveMembershipRequest(r.id, { ...payload, revision: r.revision }).then(() => undefined), "Tagság jóváhagyva és aktív munkatér-tagság létrehozva. Ügyanyaghoz külön ügyhozzáférés (grant) szükséges.")}
+                onReject={(payload) => run(() => rejectMembershipRequest(r.id, { ...payload, revision: r.revision }).then(() => undefined), "Tagsági kérelem elutasítva.")}
                 onCreateClient={(payload) => createClient(payload)}
               />
             </div>

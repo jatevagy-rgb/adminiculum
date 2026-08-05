@@ -6,16 +6,30 @@ import { fetchApi } from "./api";
 export interface MembershipRequestDTO {
   id: string;
   clientPortalIdentityId: string;
+  requestedMode: 'INDIVIDUAL' | 'ORGANIZATION' | 'CASE_RELAY' | null;
   requestedClientId: string | null;
   requestedOrganizationName: string | null;
   requestedGroupId: string | null;
   requestedGroupName: string | null;
   corporateEmail: string | null;
+  verifiedEmailSnapshot: string | null;
+  displayNameSnapshot: string | null;
+  phoneSafe: string | null;
+  claimedJobTitle: string | null;
+  noteSafe: string | null;
   status: string;
   submittedAt: string | null;
   reviewedAt: string | null;
   rejectionReasonSafe: string | null;
+  clientSafeDecisionMessage: string | null;
+  approvedWorkspaceId: string | null;
+  approvedMembershipId: string | null;
   revision: number;
+}
+
+export interface MembershipRequestDetail {
+  request: MembershipRequestDTO & { internalDecisionNote: string | null; invitationId: string | null };
+  identity: { normalizedEmail: string | null; displayName: string | null; status: string | null; accountType: string | null } | null;
 }
 
 export interface ActiveGrantSummary {
@@ -108,10 +122,14 @@ export async function listActiveMemberships(): Promise<{ items: ActiveMembership
   return fetchApi<{ items: ActiveMembershipDTO[] }>("/client-identity/admin/memberships");
 }
 
+export async function getMembershipRequestDetail(requestId: string): Promise<MembershipRequestDetail> {
+  return fetchApi(`/client-identity/admin/membership-requests/${encodeURIComponent(requestId)}`);
+}
+
 export async function approveMembershipRequest(
   requestId: string,
-  payload: { clientId: string; groupId?: string; revision: number },
-): Promise<{ membership: { id: string }; grantRequired: boolean; nextAction: string }> {
+  payload: { clientId: string; workspaceId: string; groupId?: string; role?: 'MEMBER' | 'REPRESENTATIVE' | 'APPROVER'; clientSafeDecisionMessage?: string; internalDecisionNote?: string; revision: number },
+): Promise<{ membership: { id: string }; workspaceMembership: { id: string }; grantRequired: boolean; nextAction: string }> {
   return fetchApi(`/client-identity/admin/membership-requests/${encodeURIComponent(requestId)}/approve`, {
     method: "POST",
     body: JSON.stringify(payload),
@@ -120,7 +138,7 @@ export async function approveMembershipRequest(
 
 export async function rejectMembershipRequest(
   requestId: string,
-  payload: { revision: number; rejectionReasonSafe?: string },
+  payload: { revision: number; clientSafeDecisionMessage?: string; internalDecisionNote?: string; rejectionReasonSafe?: string },
 ): Promise<MembershipRequestDTO> {
   return fetchApi(`/client-identity/admin/membership-requests/${encodeURIComponent(requestId)}/reject`, {
     method: "POST",
