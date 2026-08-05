@@ -2,6 +2,7 @@ import { Request, Response, Router } from 'express';
 import { authenticate, requireRole } from '../../middleware/auth';
 import { authenticateClientPortal, requireRegisteredClientPortalSession } from '../../middleware/clientPortalAuth';
 import {
+  acceptPortalInvitation,
   approveMembershipRequest,
   cancelMembershipRequest,
   createGrantForApprovedMembership,
@@ -9,6 +10,7 @@ import {
   ClientIdentityError,
   getClientProfile,
   getCurrentMembershipRequests,
+  getMembershipRequestDetail,
   listActiveMemberships,
   listMembershipQueue,
   rejectMembershipRequest,
@@ -108,10 +110,18 @@ clientIdentityRouter.post('/me/membership-requests/:requestId/cancel', async (re
   try { res.json(await cancelMembershipRequest(requireRegisteredClientPortalSession(req), String(req.params.requestId), Number(req.body?.revision))); }
   catch (error) { fail(res, error); }
 });
+clientIdentityRouter.post('/me/invitations/accept', async (req, res) => {
+  try { res.json(await acceptPortalInvitation(requireRegisteredClientPortalSession(req), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
 
 clientIdentityRouter.use('/admin', authenticate, requireRole('ADMIN', 'PARTNER'));
 clientIdentityRouter.get('/admin/membership-requests', async (req, res) => {
   try { res.json(await listMembershipQueue(internalActor(req))); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.get('/admin/membership-requests/:requestId', async (req, res) => {
+  try { res.json(await getMembershipRequestDetail(internalActor(req), String(req.params.requestId))); }
   catch (error) { fail(res, error); }
 });
 clientIdentityRouter.get('/admin/memberships', async (req, res) => {

@@ -12,7 +12,7 @@
  */
 
 import { Request, Response, Router } from 'express';
-import { authenticateClientPortal, requireActiveClientPortalSession } from '../middleware/clientPortalAuth';
+import { authenticateClientPortal, requireActiveClientPortalSession, requireRegisteredClientPortalSession } from '../middleware/clientPortalAuth';
 import documentsService from '../modules/documents/services';
 import {
   authorizePortalDocumentDownload,
@@ -33,6 +33,7 @@ import { listCustomerRequests } from '../modules/client-interaction/requestServi
 import { listCustomerSubmissions } from '../modules/client-interaction/submissionService';
 import { listCustomerThreads } from '../modules/client-interaction/questionService';
 import {
+  getOnboardingContext,
   getPortalIdentityContext,
   resolvePortalWorkspace,
   ResolvedPortalWorkspace,
@@ -216,12 +217,18 @@ async function portalWorkspace(req: Request) {
   };
 }
 
+// Post-login resolver. Guarded by the *registered* session (verified e-mail,
+// not suspended/revoked) rather than the *active* session, because a user who
+// still needs onboarding is REGISTERED, not ACTIVE — gating this on ACTIVE is
+// what produced the "Nincs aktív ügyfélfelülete" dead-end. getOnboardingContext
+// returns active-workspace routing when applicable, otherwise the onboarding
+// state + a customer-safe onboarding payload.
 router.get('/me', async (req, res) => {
   try {
     await new Promise<void>((resolve, reject) => authenticateClientPortal(req, res, (error?: unknown) => error ? reject(error) : resolve()));
     if (res.headersSent) return;
-    const session = requireActiveClientPortalSession(req);
-    res.json(await getPortalIdentityContext(session, req.header('x-client-portal-workspace')));
+    const session = requireRegisteredClientPortalSession(req);
+    res.json(await getOnboardingContext(session, req.header('x-client-portal-workspace')));
   } catch (error) {
     fail(res, error);
   }

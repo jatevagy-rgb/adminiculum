@@ -25,6 +25,48 @@ function requireReviewer(actor: Actor): void {
   if (!actor.userId || !INTERNAL_REVIEW_ROLES.has(actor.role)) throw new ClientIdentityError(403, 'CLIENT_MEMBERSHIP_REVIEW_FORBIDDEN', 'Membership review requires an internal administrator.');
 }
 
+const REQUESTED_MODES = new Set(['INDIVIDUAL', 'ORGANIZATION', 'CASE_RELAY']);
+const WORKSPACE_MEMBERSHIP_ROLES = new Set(['MEMBER', 'REPRESENTATIVE', 'APPROVER']);
+
+function normalizeRequestedMode(value: unknown): 'INDIVIDUAL' | 'ORGANIZATION' | 'CASE_RELAY' | null {
+  const mode = String(value || '').trim().toUpperCase();
+  return REQUESTED_MODES.has(mode) ? (mode as 'INDIVIDUAL' | 'ORGANIZATION' | 'CASE_RELAY') : null;
+}
+
+function normalizeMembershipRole(value: unknown): 'MEMBER' | 'REPRESENTATIVE' | 'APPROVER' {
+  const role = String(value || 'MEMBER').trim().toUpperCase();
+  return WORKSPACE_MEMBERSHIP_ROLES.has(role) ? (role as 'MEMBER' | 'REPRESENTATIVE' | 'APPROVER') : 'MEMBER';
+}
+
+/** Customer-safe projection of a membership request. Never exposes the internal
+ *  decision note, requested/approved client or workspace ids, or Prisma
+ *  relations — only what the requesting customer may see about their own request. */
+export function toCustomerMembershipRequest(request: {
+  id: string; status: string; requestedMode: string | null; requestedOrganizationName: string | null;
+  requestedGroupName: string | null; claimedJobTitle: string | null; submittedAt: Date | null;
+  reviewedAt: Date | null; clientSafeDecisionMessage: string | null; rejectionReasonSafe: string | null; revision: number;
+}) {
+  const status = String(request.status);
+  return {
+    id: request.id,
+    status,
+    requestedMode: request.requestedMode ? String(request.requestedMode) : null,
+    claimedOrganizationName: request.requestedOrganizationName || null,
+    claimedUnitName: request.requestedGroupName || null,
+    claimedJobTitle: request.claimedJobTitle || null,
+    submittedAt: request.submittedAt,
+    reviewedAt: request.reviewedAt,
+    decisionMessage: request.clientSafeDecisionMessage || (status === 'REJECTED' ? request.rejectionReasonSafe : null) || null,
+    revision: request.revision,
+  };
+}
+
+const CUSTOMER_REQUEST_SELECT = {
+  id: true, status: true, requestedMode: true, requestedOrganizationName: true,
+  requestedGroupName: true, claimedJobTitle: true, submittedAt: true, reviewedAt: true,
+  clientSafeDecisionMessage: true, rejectionReasonSafe: true, revision: true,
+} as const;
+
 function requireGrantActor(actor: Actor): void {
   if (!actor.userId || !GRANT_ROLES.has(actor.role)) throw new ClientIdentityError(403, 'CLIENT_GRANT_FORBIDDEN', 'Case access grants require an authorized internal actor.');
 }
@@ -53,52 +95,110 @@ export async function getClientProfile(session: ClientPortalSession) {
 }
 
 export async function submitMembershipRequest(session: ClientPortalSession, input: Record<string, unknown>) {
-  if (!session.emailVerified) throw new ClientIdentityError(403, 'CLIENT_EMAIL_NOT_VERIFIED', 'Verify e-mail before requesting organization membership.');
+  if (!session.emailVerified) throw new ClientIdentityError(403, 'CLIENT_EMAIL_NOT_VERIFIED', 'Verify e-mail before requesting portal access.');
   if (session.status === 'SUSPENDED' || session.status === 'REVOKED') throw new ClientIdentityError(403, `CLIENT_IDENTITY_${session.status}`, 'Client identity is not active.');
-  let requestedOrganizationName = safeString(input.requestedOrganizationName, 180);
-  let requestedClientId = safeString(input.requestedClientId, 80);
-  const requestedGroupId = safeString(input.requestedGroupId, 80);
-  const requestedGroupName = safeString(input.requestedGroupName, 120);
-  const corporateEmail = normalizeEmail(input.corporateEmail) || session.normalizedEmail;
-  const invitationId = safeString(input.invitationId, 80);
-  if (invitationId) {
-    const invitation = await prisma.clientPortalInvitation.findFirst({ where: { id: invitationId, status: 'ACTIVE', expiresAt: { gt: new Date() } } });
-    if (!invitation || (invitation.intendedEmail && invitation.intendedEmail.toLowerCase() !== session.normalizedEmail)) throw new ClientIdentityError(400, 'INVITATION_UNAVAILABLE', 'Invitation is not available.');
-    requestedClientId = invitation.clientId;
-    if (!requestedOrganizationName) requestedOrganizationName = (await prisma.client.findUnique({ where: { id: invitation.clientId }, select: { name: true } }))?.name || null;
-  }
-  if (!requestedOrganizationName && !requestedClientId) throw new ClientIdentityError(400, 'ORGANIZATION_CONTEXT_REQUIRED', 'Organization context is required.');
 
-  if (requestedGroupId && requestedClientId) {
-    const group = await prisma.clientOrganizationGroup.findFirst({ where: { id: requestedGroupId, clientId: requestedClientId, status: 'ACTIVE' } });
-    if (!group) throw new ClientIdentityError(400, 'CROSS_CLIENT_GROUP_REJECTED', 'Requested group is not available for that organization.');
-  }
-
-  const request = await prisma.clientOrganizationMembershipRequest.create({
-    data: {
-      clientPortalIdentityId: session.clientPortalIdentityId,
-      requestedClientId,
-      requestedOrganizationName,
-      requestedGroupId,
-      requestedGroupName,
-      corporateEmail,
-      roleDescriptionSafe: safeString(input.roleDescriptionSafe, 200),
-      invitationId,
-      status: 'PENDING_REVIEW',
-      submittedAt: new Date(),
-    },
+  // Idempotency: one identity may hold only one request still under review.
+  // A repeated submit (double-click, second tab) returns the existing pending
+  // request instead of creating a duplicate.
+  const alreadyPending = await prisma.clientOrganizationMembershipRequest.findFirst({
+    where: { clientPortalIdentityId: session.clientPortalIdentityId, status: 'PENDING_REVIEW' },
+    orderBy: { createdAt: 'desc' },
   });
-  await prisma.clientPortalIdentity.update({ where: { id: session.clientPortalIdentityId }, data: { status: 'MEMBERSHIP_PENDING', revision: { increment: 1 } } });
-  return { id: request.id, status: request.status, message: 'Regisztrációját megkaptuk. A szervezeti hozzáférést az iroda ellenőrzi.' };
+  if (alreadyPending) {
+    return { id: alreadyPending.id, status: alreadyPending.status, duplicate: true, message: 'Hozzáférési kérelme már elbírálásra vár.' };
+  }
+
+  const requestedMode = normalizeRequestedMode(input.requestedMode);
+  // Claimed (customer-asserted) organization context. The customer may NEVER
+  // supply an authoritative client/workspace id — those are assigned by the
+  // reviewing admin. Only the claimed names/labels are accepted here.
+  const requestedOrganizationName = safeString(input.claimedOrganizationName ?? input.requestedOrganizationName, 180);
+  const requestedGroupName = safeString(input.claimedUnitName ?? input.requestedGroupName, 120);
+  const claimedJobTitle = safeString(input.claimedJobTitle, 160);
+  const phoneSafe = safeString(input.phone, 60);
+  const noteSafe = safeString(input.note ?? input.roleDescriptionSafe, 600);
+  // Claimed corporate contact e-mail is informational only; the authoritative
+  // verified e-mail is always taken from the server-side session snapshot.
+  const corporateEmail = normalizeEmail(input.corporateEmail);
+
+  if ((requestedMode === 'ORGANIZATION' || requestedMode === 'CASE_RELAY') && !requestedOrganizationName) {
+    throw new ClientIdentityError(400, 'ORGANIZATION_CONTEXT_REQUIRED', 'Organization name is required for this access mode.');
+  }
+
+  try {
+    const request = await prisma.clientOrganizationMembershipRequest.create({
+      data: {
+        clientPortalIdentityId: session.clientPortalIdentityId,
+        requestedMode: requestedMode || undefined,
+        requestedOrganizationName,
+        requestedGroupName,
+        corporateEmail,
+        roleDescriptionSafe: noteSafe,
+        verifiedEmailSnapshot: session.normalizedEmail,
+        displayNameSnapshot: session.displayName,
+        phoneSafe,
+        claimedJobTitle,
+        noteSafe,
+        status: 'PENDING_REVIEW',
+        submittedAt: new Date(),
+      },
+    });
+    // Do not downgrade an already-ACTIVE identity; only move a freshly
+    // registered identity into the pending-review state.
+    if (session.status === 'REGISTERED') {
+      await prisma.clientPortalIdentity.update({ where: { id: session.clientPortalIdentityId }, data: { status: 'MEMBERSHIP_PENDING', revision: { increment: 1 } } });
+    }
+    return { id: request.id, status: request.status, duplicate: false, message: 'Hozzáférési kérelmét megkaptuk. Az ügyvédi iroda ellenőrzi és hagyja jóvá.' };
+  } catch (error) {
+    // Concurrent double-submit races the partial unique index; collapse onto
+    // the winning pending request rather than surfacing a raw conflict.
+    if ((error as { code?: string })?.code === 'P2002') {
+      const winner = await prisma.clientOrganizationMembershipRequest.findFirst({
+        where: { clientPortalIdentityId: session.clientPortalIdentityId, status: 'PENDING_REVIEW' },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (winner) return { id: winner.id, status: winner.status, duplicate: true, message: 'Hozzáférési kérelme már elbírálásra vár.' };
+    }
+    throw error;
+  }
+}
+
+/** Accept a portal invitation addressed to the authenticated verified identity.
+ *  Grants only the workspace membership recorded on the invitation — no case
+ *  access, no elevated role. */
+export async function acceptPortalInvitation(session: ClientPortalSession, input: Record<string, unknown>) {
+  if (!session.emailVerified) throw new ClientIdentityError(403, 'CLIENT_EMAIL_NOT_VERIFIED', 'Verify e-mail before accepting an invitation.');
+  if (session.status === 'SUSPENDED' || session.status === 'REVOKED') throw new ClientIdentityError(403, `CLIENT_IDENTITY_${session.status}`, 'Client identity is not active.');
+  const invitationId = safeString(input.invitationId, 80);
+  if (!invitationId) throw new ClientIdentityError(400, 'INVITATION_ID_REQUIRED', 'Invitation identifier is required.');
+  const invitation = await prisma.clientPortalInvitation.findFirst({ where: { id: invitationId, status: 'ACTIVE', expiresAt: { gt: new Date() } } });
+  if (!invitation) throw new ClientIdentityError(409, 'INVITATION_UNAVAILABLE', 'Invitation is not available.');
+  if (invitation.intendedEmail && invitation.intendedEmail.toLowerCase() !== session.normalizedEmail) throw new ClientIdentityError(403, 'INVITATION_EMAIL_MISMATCH', 'Invitation does not match the authenticated e-mail.');
+  if (!invitation.workspaceId) throw new ClientIdentityError(409, 'INVITATION_WORKSPACE_MISSING', 'Invitation is not bound to a workspace.');
+  const workspace = await prisma.clientPortalWorkspace.findFirst({ where: { id: invitation.workspaceId, status: 'ACTIVE' } });
+  if (!workspace) throw new ClientIdentityError(409, 'WORKSPACE_NOT_ACTIVE', 'The invited workspace is not active.');
+  const now = new Date();
+  return prisma.$transaction(async (tx) => {
+    const membership = await tx.clientPortalWorkspaceMembership.upsert({
+      where: { clientPortalIdentityId_workspaceId: { clientPortalIdentityId: session.clientPortalIdentityId, workspaceId: invitation.workspaceId! } },
+      create: { clientPortalIdentityId: session.clientPortalIdentityId, workspaceId: invitation.workspaceId!, status: 'ACTIVE', role: 'MEMBER', invitedAt: invitation.createdAt, invitedById: invitation.createdById, approvedAt: now, approvedById: invitation.createdById },
+      update: { status: 'ACTIVE', approvedAt: now, approvedById: invitation.createdById, revokedAt: null, revokedById: null, suspendedAt: null, suspendedById: null, revision: { increment: 1 } },
+    });
+    await tx.clientPortalInvitation.update({ where: { id: invitation.id }, data: { status: 'USED', usedByIdentityId: session.clientPortalIdentityId, usedAt: now } });
+    await tx.clientPortalIdentity.update({ where: { id: session.clientPortalIdentityId }, data: { status: 'ACTIVE', revision: { increment: 1 } } });
+    await tx.clientPortalWorkspaceEvent.create({ data: { workspaceId: invitation.workspaceId!, membershipId: membership.id, actorId: session.clientPortalIdentityId, action: 'MEMBERSHIP_APPROVED', toStatus: 'ACTIVE', metadataSafe: { source: 'invitation-acceptance' } } });
+    return { workspaceReference: workspace.publicReference, membershipId: membership.id };
+  });
 }
 
 export async function getCurrentMembershipRequests(session: ClientPortalSession) {
   const items = await prisma.clientOrganizationMembershipRequest.findMany({
     where: { clientPortalIdentityId: session.clientPortalIdentityId },
-    select: { id: true, requestedOrganizationName: true, requestedGroupName: true, status: true, submittedAt: true, reviewedAt: true, rejectionReasonSafe: true, revision: true },
+    select: CUSTOMER_REQUEST_SELECT,
     orderBy: { createdAt: 'desc' },
   });
-  return { items };
+  return { items: items.map(toCustomerMembershipRequest) };
 }
 
 export async function cancelMembershipRequest(session: ClientPortalSession, requestId: string, revision: number) {
@@ -118,14 +218,42 @@ export async function validateInvitation(rawToken: string, session?: ClientPorta
   return { valid: true, invitationId: invitation.id, intendedEmailMatchRequired: Boolean(invitation.intendedEmail), expiresAt: invitation.expiresAt };
 }
 
+/** Internal (admin) membership-request row. This DTO is internal-only and may
+ *  carry data the customer DTO never does (identity id, claimed contact,
+ *  verified snapshot). It still excludes the internal decision note by default;
+ *  the note is surfaced only on the single-request detail view. */
+const ADMIN_REQUEST_SELECT = {
+  id: true, clientPortalIdentityId: true, requestedMode: true, requestedClientId: true,
+  requestedOrganizationName: true, requestedGroupId: true, requestedGroupName: true,
+  corporateEmail: true, verifiedEmailSnapshot: true, displayNameSnapshot: true,
+  phoneSafe: true, claimedJobTitle: true, noteSafe: true, status: true, submittedAt: true,
+  reviewedAt: true, rejectionReasonSafe: true, clientSafeDecisionMessage: true,
+  approvedWorkspaceId: true, approvedMembershipId: true, revision: true,
+} as const;
+
 export async function listMembershipQueue(actor: Actor) {
   requireReviewer(actor);
   const items = await prisma.clientOrganizationMembershipRequest.findMany({
     where: { status: { in: ['PENDING_REVIEW', 'REJECTED'] } },
-    select: { id: true, clientPortalIdentityId: true, requestedClientId: true, requestedOrganizationName: true, requestedGroupId: true, requestedGroupName: true, corporateEmail: true, status: true, submittedAt: true, reviewedAt: true, rejectionReasonSafe: true, revision: true },
+    select: ADMIN_REQUEST_SELECT,
     orderBy: [{ status: 'asc' }, { submittedAt: 'asc' }],
   });
   return { items };
+}
+
+/** Full internal detail for one request, including the internal decision note. */
+export async function getMembershipRequestDetail(actor: Actor, requestId: string) {
+  requireReviewer(actor);
+  const request = await prisma.clientOrganizationMembershipRequest.findUnique({
+    where: { id: requestId },
+    select: { ...ADMIN_REQUEST_SELECT, internalDecisionNote: true, invitationId: true, reviewedById: true, createdAt: true, updatedAt: true },
+  });
+  if (!request) throw new ClientIdentityError(404, 'REQUEST_NOT_FOUND', 'Membership request is not available.');
+  const identity = await prisma.clientPortalIdentity.findUnique({
+    where: { id: request.clientPortalIdentityId },
+    select: { normalizedEmail: true, displayName: true, status: true, accountType: true },
+  });
+  return { request, identity };
 }
 
 export async function createOrganizationGroup(actor: Actor, input: Record<string, unknown>) {
@@ -136,40 +264,89 @@ export async function createOrganizationGroup(actor: Actor, input: Record<string
   return prisma.clientOrganizationGroup.create({ data: { clientId, name, descriptionSafe: safeString(input.descriptionSafe, 300), createdById: actor.userId } });
 }
 
+/**
+ * Approve a membership request. Transactional and content-light. On success it
+ * provisions an ACTIVE ClientPortalWorkspaceMembership in the admin-assigned,
+ * mode-compatible workspace — that membership is exactly what the post-login
+ * resolver reads to admit the customer. Approval grants ONLY workspace
+ * membership: no case grant, document, communication, summary, or billing
+ * access is created here (those remain separate, explicit decisions).
+ *
+ * Partial-failure safety: the request only reaches APPROVED inside the same
+ * transaction that creates the memberships, so there can be no APPROVED request
+ * without a membership and no orphaned membership on a still-pending request.
+ */
 export async function approveMembershipRequest(actor: Actor, requestId: string, input: Record<string, unknown>) {
   requireReviewer(actor);
   const revision = Number(input.revision);
   const clientId = safeString(input.clientId, 80);
+  const workspaceId = safeString(input.workspaceId, 80);
   const groupId = safeString(input.groupId, 80);
-  if (!clientId || !Number.isInteger(revision)) throw new ClientIdentityError(400, 'APPROVAL_INPUT_REQUIRED', 'Client and revision are required.');
+  const role = normalizeMembershipRole(input.role);
+  const clientSafeDecisionMessage = safeString(input.clientSafeDecisionMessage, 500);
+  const internalDecisionNote = safeString(input.internalDecisionNote, 1000);
+  if (!clientId || !workspaceId || !Number.isInteger(revision)) throw new ClientIdentityError(400, 'APPROVAL_INPUT_REQUIRED', 'Client, workspace and revision are required.');
+
   const request = await prisma.clientOrganizationMembershipRequest.findUnique({ where: { id: requestId } });
   if (!request) throw new ClientIdentityError(404, 'REQUEST_NOT_FOUND', 'Membership request is not available.');
   if (request.status !== 'PENDING_REVIEW') throw new ClientIdentityError(409, 'REQUEST_NOT_PENDING', 'Membership request is not pending review.');
   if (request.revision !== revision) throw new ClientIdentityError(409, 'REVISION_CONFLICT', 'Membership request changed.');
+
+  const identity = await prisma.clientPortalIdentity.findUnique({ where: { id: request.clientPortalIdentityId }, select: { id: true, status: true } });
+  if (!identity || identity.status === 'SUSPENDED' || identity.status === 'REVOKED') throw new ClientIdentityError(409, 'IDENTITY_NOT_ELIGIBLE', 'The requesting identity is not eligible for approval.');
+
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true } });
+  if (!client) throw new ClientIdentityError(400, 'CLIENT_NOT_FOUND', 'Selected client was not found.');
+
+  const workspace = await prisma.clientPortalWorkspace.findUnique({ where: { id: workspaceId }, select: { id: true, clientId: true, status: true, mode: true } });
+  if (!workspace || workspace.status !== 'ACTIVE') throw new ClientIdentityError(409, 'WORKSPACE_NOT_ACTIVE', 'The selected workspace is not active.');
+  if (workspace.clientId !== clientId) throw new ClientIdentityError(409, 'WORKSPACE_CLIENT_MISMATCH', 'The workspace does not belong to the selected client.');
+  if (request.requestedMode && String(workspace.mode) !== String(request.requestedMode)) {
+    throw new ClientIdentityError(409, 'WORKSPACE_MODE_MISMATCH', 'The workspace mode is not compatible with the requested access mode.');
+  }
   if (groupId) {
     const group = await prisma.clientOrganizationGroup.findFirst({ where: { id: groupId, clientId, status: 'ACTIVE' } });
     if (!group) throw new ClientIdentityError(400, 'CROSS_CLIENT_GROUP_REJECTED', 'Requested group is not available for that organization.');
   }
-  const invitation = request.invitationId
-    ? await prisma.clientPortalInvitation.findFirst({ where: { id: request.invitationId, status: 'ACTIVE', expiresAt: { gt: new Date() } } })
-    : null;
-  if (request.invitationId && (!invitation || invitation.clientId !== clientId || !invitation.workspaceId)) throw new ClientIdentityError(409, 'INVITATION_WORKSPACE_MISMATCH', 'The invitation does not match the selected workspace.');
-  return prisma.$transaction(async (tx) => {
-    const membership = await tx.clientOrganizationMembership.create({ data: { clientPortalIdentityId: request.clientPortalIdentityId, clientId, groupId, approvedFromRequestId: request.id, approvedById: actor.userId, approvedAt: new Date() } });
-    await tx.clientOrganizationMembershipRequest.update({ where: { id: request.id }, data: { requestedClientId: clientId, requestedGroupId: groupId, status: 'APPROVED', reviewedById: actor.userId, reviewedAt: new Date(), revision: { increment: 1 } } });
-    await tx.clientPortalIdentity.update({ where: { id: request.clientPortalIdentityId }, data: { status: 'ACTIVE', revision: { increment: 1 } } });
-    let workspaceMembership = null;
-    if (invitation?.workspaceId) {
-      workspaceMembership = await tx.clientPortalWorkspaceMembership.upsert({
-        where: { clientPortalIdentityId_workspaceId: { clientPortalIdentityId: request.clientPortalIdentityId, workspaceId: invitation.workspaceId } },
-        create: { clientPortalIdentityId: request.clientPortalIdentityId, workspaceId: invitation.workspaceId, status: 'ACTIVE', role: 'MEMBER', invitedAt: invitation.createdAt, invitedById: invitation.createdById, approvedAt: new Date(), approvedById: actor.userId },
-        update: { status: 'ACTIVE', approvedAt: new Date(), approvedById: actor.userId, revokedAt: null, revokedById: null, suspendedAt: null, suspendedById: null, revision: { increment: 1 } },
+
+  const now = new Date();
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const membership = await tx.clientOrganizationMembership.create({ data: { clientPortalIdentityId: request.clientPortalIdentityId, clientId, groupId, approvedFromRequestId: request.id, approvedById: actor.userId, approvedAt: now } });
+      const workspaceMembership = await tx.clientPortalWorkspaceMembership.upsert({
+        where: { clientPortalIdentityId_workspaceId: { clientPortalIdentityId: request.clientPortalIdentityId, workspaceId } },
+        create: { clientPortalIdentityId: request.clientPortalIdentityId, workspaceId, status: 'ACTIVE', role, invitedAt: now, invitedById: actor.userId, approvedAt: now, approvedById: actor.userId },
+        update: { status: 'ACTIVE', role, approvedAt: now, approvedById: actor.userId, revokedAt: null, revokedById: null, suspendedAt: null, suspendedById: null, revision: { increment: 1 } },
       });
-      await tx.clientPortalInvitation.update({ where: { id: invitation.id }, data: { status: 'USED', usedByIdentityId: request.clientPortalIdentityId, usedAt: new Date() } });
-      await tx.clientPortalWorkspaceEvent.create({ data: { workspaceId: invitation.workspaceId, membershipId: workspaceMembership.id, actorId: actor.userId, action: 'MEMBERSHIP_APPROVED', toStatus: 'ACTIVE', metadataSafe: { source: 'approved-invitation' } } });
-    }
-    return { membership, workspaceMembership, grantRequired: true, nextAction: 'Hozzáférés adása ügyhöz' };
-  });
+      await tx.clientOrganizationMembershipRequest.update({
+        where: { id: request.id },
+        data: {
+          requestedClientId: clientId,
+          requestedGroupId: groupId,
+          status: 'APPROVED',
+          reviewedById: actor.userId,
+          reviewedAt: now,
+          approvedWorkspaceId: workspaceId,
+          approvedMembershipId: workspaceMembership.id,
+          clientSafeDecisionMessage,
+          internalDecisionNote,
+          revision: { increment: 1 },
+        },
+      });
+      await tx.clientPortalIdentity.update({ where: { id: request.clientPortalIdentityId }, data: { status: 'ACTIVE', revision: { increment: 1 } } });
+      // If the request originated from a matching invitation, consume it too.
+      if (request.invitationId) {
+        const invitation = await tx.clientPortalInvitation.findFirst({ where: { id: request.invitationId, status: 'ACTIVE', workspaceId } });
+        if (invitation) await tx.clientPortalInvitation.update({ where: { id: invitation.id }, data: { status: 'USED', usedByIdentityId: request.clientPortalIdentityId, usedAt: now } });
+      }
+      await tx.clientPortalWorkspaceEvent.create({ data: { workspaceId, membershipId: workspaceMembership.id, actorId: actor.userId, action: 'MEMBERSHIP_APPROVED', toStatus: 'ACTIVE', metadataSafe: { source: 'membership-request-approval', requestId: request.id } } });
+      return { membership, workspaceMembership, grantRequired: true, nextAction: 'Hozzáférés adása ügyhöz' };
+    });
+  } catch (error) {
+    if (error instanceof ClientIdentityError) throw error;
+    if (['P2002', 'P2034'].includes((error as { code?: string })?.code || '')) throw new ClientIdentityError(409, 'MEMBERSHIP_APPROVAL_CONFLICT', 'The membership changed concurrently. Reload and retry.');
+    throw error;
+  }
 }
 
 export async function rejectMembershipRequest(actor: Actor, requestId: string, input: Record<string, unknown>) {
@@ -179,7 +356,22 @@ export async function rejectMembershipRequest(actor: Actor, requestId: string, i
   if (!request) throw new ClientIdentityError(404, 'REQUEST_NOT_FOUND', 'Membership request is not available.');
   if (request.status !== 'PENDING_REVIEW') throw new ClientIdentityError(409, 'REQUEST_NOT_PENDING', 'Membership request is not pending review.');
   if (request.revision !== revision) throw new ClientIdentityError(409, 'REVISION_CONFLICT', 'Membership request changed.');
-  return prisma.clientOrganizationMembershipRequest.update({ where: { id: requestId }, data: { status: 'REJECTED', reviewedById: actor.userId, reviewedAt: new Date(), rejectionReasonSafe: safeString(input.rejectionReasonSafe, 300), revision: { increment: 1 } } });
+  // Split decision surfaces: the client-safe message is what the customer sees;
+  // the internal note is never returned in a customer DTO.
+  const clientSafeDecisionMessage = safeString(input.clientSafeDecisionMessage ?? input.rejectionReasonSafe, 500);
+  const internalDecisionNote = safeString(input.internalDecisionNote, 1000);
+  return prisma.clientOrganizationMembershipRequest.update({
+    where: { id: requestId },
+    data: {
+      status: 'REJECTED',
+      reviewedById: actor.userId,
+      reviewedAt: new Date(),
+      rejectionReasonSafe: clientSafeDecisionMessage,
+      clientSafeDecisionMessage,
+      internalDecisionNote,
+      revision: { increment: 1 },
+    },
+  });
 }
 
 export async function transitionMembership(actor: Actor, membershipId: string, action: 'suspend' | 'revoke') {
