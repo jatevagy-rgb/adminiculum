@@ -126,7 +126,7 @@ d('Client portal membership onboarding (PostgreSQL)', () => {
     await expect(approveMembershipRequest(reviewer, submitted.id, { clientId: client, workspaceId: indivWorkspace.id, revision: pending.revision })).rejects.toMatchObject({ code: 'WORKSPACE_MODE_MISMATCH' });
     await expect(approveMembershipRequest(reviewer, submitted.id, { clientId: otherClient, workspaceId: workspace.id, revision: pending.revision })).rejects.toMatchObject({ code: 'WORKSPACE_CLIENT_MISMATCH' });
 
-    await approveMembershipRequest(reviewer, submitted.id, { clientId: client, workspaceId: workspace.id, role: 'MEMBER', clientSafeDecisionMessage: 'Üdvözöljük!', internalDecisionNote: 'belső: rendben' });
+    await approveMembershipRequest(reviewer, submitted.id, { clientId: client, workspaceId: workspace.id, role: 'MEMBER', revision: pending.revision, clientSafeDecisionMessage: 'Üdvözöljük!', internalDecisionNote: 'belső: rendben' });
 
     const wsMembership = await db.clientPortalWorkspaceMembership.findFirstOrThrow({ where: { clientPortalIdentityId: id, workspaceId: workspace.id } });
     expect(wsMembership.status).toBe('ACTIVE');
@@ -159,11 +159,13 @@ d('Client portal membership onboarding (PostgreSQL)', () => {
 
   it('surfaces a matching invitation (case-insensitive e-mail) and accepts it into an active membership', async () => {
     const email = `invite-${crypto.randomUUID()}@t.io`;
-    const id = await makeIdentity(email);
     const workspace = await createWorkspace(reviewer, { clientId: client, name: 'Meghívott munkatér', mode: 'ORGANIZATION', communicationMode: 'PORTAL_PRIMARY' });
-    // Admin invites the UPPER-CASE form of the address; the identity's verified
-    // e-mail is the lower-case form. They must still match.
+    // Invite the address BEFORE any identity exists (the real invited-user flow):
+    // inviteWorkspaceMember then records an invitation row rather than a pending
+    // membership. The admin invites the UPPER-CASE form; the identity's verified
+    // e-mail is the lower-case form — they must still match.
     await inviteWorkspaceMember(reviewer, workspace.id, { email: email.toUpperCase(), role: 'MEMBER' });
+    const id = await makeIdentity(email);
 
     const session = sessionFor(id, email);
     const context = await getOnboardingContext(session, undefined, db);
