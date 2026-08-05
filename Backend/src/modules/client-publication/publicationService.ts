@@ -124,8 +124,8 @@ export function toClientPortalGrantSummaryDTO(row: Row): Row {
 
 export function toClientMatterPublicationDTO(row: Row, revision?: Row | null): Row {
   const dto = {
-    ...pick(row, ['id', 'caseId', 'clientId', 'status', 'currentRevisionId', 'preparedById', 'approvedById', 'publishedById', 'approvedAt', 'publishedAt', 'revokedAt', 'supersededAt', 'revision']),
-    snapshot: revision ? pick(revision, ['id', 'revisionNumber', 'clientSafeTitle', 'clientSafeStatus', 'clientSafeNextStep', 'responsibleLawyerDisplay', 'publishedDeadlinesSnapshot', 'safeUpdatesSnapshot', 'actionRequestsSnapshot', 'sourceFingerprint', 'audienceSnapshot', 'createdAt']) : null,
+    ...pick(row, ['id', 'caseId', 'clientId', 'workspaceId', 'status', 'currentRevisionId', 'preparedById', 'approvedById', 'publishedById', 'approvedAt', 'publishedAt', 'revokedAt', 'supersededAt', 'revision']),
+    snapshot: revision ? pick(revision, ['id', 'revisionNumber', 'clientSafeTitle', 'clientSafeStatus', 'clientSafeNextStep', 'clientSafeCurrentPosition', 'clientSafeWaitingOn', 'publicTargetDate', 'responsibleLawyerDisplay', 'publishedDeadlinesSnapshot', 'safeUpdatesSnapshot', 'actionRequestsSnapshot', 'sourceFingerprint', 'audienceSnapshot', 'createdAt']) : null,
   };
   assertNoForbiddenPortalFields(dto);
   return dto;
@@ -217,11 +217,64 @@ async function createMatterRevision(tx: Db, publication: Row, actor: Actor, inpu
   return revision!;
 }
 
+export async function createAndPublishInitialMatterPublicationInTransaction(
+  actor: Actor,
+  input: Row,
+  tx: Prisma.TransactionClient,
+): Promise<Row> {
+  requireFoundation(); requireInternal(actor);
+  const workspaceId = String(input.workspaceId || '');
+  const caseId = String(input.caseId || '');
+  const grantId = String(input.grantId || '');
+  const caseRow = await getCase(tx, caseId);
+  const workspace = await one(tx, 'SELECT id, "clientId", mode::text, status::text FROM client_portal_workspaces WHERE id=$1', workspaceId);
+  if (!workspace || workspace.status !== 'ACTIVE' || workspace.mode !== 'ORGANIZATION') throw new ClientPublicationError(409, 'WORKSPACE_NOT_ACTIVE', 'An active organizational workspace is required.');
+  if (workspace.clientId !== caseRow.clientId) throw new ClientPublicationError(400, 'CASE_CLIENT_MISMATCH', 'Case is outside the workspace Client.');
+  const grant = await one(tx, 'SELECT id, "clientPortalIdentityId", "workspaceId", "caseId", "clientId", "participantRole"::text, status::text, permissions::text[] FROM client_portal_grants WHERE id=$1', grantId);
+  if (!grant || grant.status !== 'ACTIVE' || grant.workspaceId !== workspaceId || grant.caseId !== caseId || grant.clientId !== caseRow.clientId || grant.participantRole !== 'REQUESTER') {
+    throw new ClientPublicationError(409, 'ACTIVE_REQUESTER_GRANT_REQUIRED', 'An active requester grant is required before publication.');
+  }
+  const existing = await one(tx, 'SELECT *, status::text FROM client_matter_publications WHERE "caseId"=$1 AND "workspaceId"=$2 AND status=$3::"ClientPublicationStatus" FOR UPDATE', caseId, workspaceId, 'PUBLISHED');
+  if (existing) return toClientMatterPublicationDTO(existing, await latestMatterRevision(tx, existing.id));
+  const now = new Date();
+  const publication = await one(tx, 'INSERT INTO client_matter_publications (id,"caseId","clientId","workspaceId",status,"preparedById","approvedById","publishedById","approvedAt","publishedAt") VALUES ($1,$2,$3,$4,$5::"ClientPublicationStatus",$6,$6,$6,$7,$7) RETURNING *, status::text', newId(), caseId, caseRow.clientId, workspaceId, 'PUBLISHED', actor.userId, now);
+  const audience = { grants: [{ id: grant.id, clientPortalIdentityId: grant.clientPortalIdentityId, participantRole: grant.participantRole, permissions: grant.permissions }] };
+  const publicTargetDate = input.publicTargetDate ? new Date(String(input.publicTargetDate)) : null;
+  if (publicTargetDate && Number.isNaN(publicTargetDate.getTime())) throw new ClientPublicationError(400, 'INVALID_PUBLIC_TARGET_DATE', 'publicTargetDate is invalid.');
+  const revision = await one(tx, 'INSERT INTO client_matter_publication_revisions (id,"publicationId","revisionNumber","clientSafeTitle","clientSafeStatus","clientSafeNextStep","clientSafeCurrentPosition","clientSafeWaitingOn","publicTargetDate","responsibleLawyerDisplay","publishedDeadlinesSnapshot","safeUpdatesSnapshot","actionRequestsSnapshot","sourceCaseRevision","sourceFingerprint","audienceSnapshot","createdById") VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12::jsonb,$13,$14,$15::jsonb,$16) RETURNING *',
+    newId(), publication!.id,
+    text(input.publicTitle, 'publicTitle', 240, true),
+    text(input.publicStatus, 'publicStatus', 240, true),
+    text(input.nextStep, 'nextStep', 1000),
+    text(input.currentPosition, 'currentPosition', 1500),
+    text(input.waitingOn, 'waitingOn', 1000),
+    publicTargetDate,
+    text(input.responsibleLawyerDisplay, 'responsibleLawyerDisplay', 160),
+    JSON.stringify(json(input.safeMilestones || [], 'safeMilestones')),
+    JSON.stringify(json(input.safeUpdate ? [input.safeUpdate] : [], 'safeUpdatesSnapshot')),
+    JSON.stringify([]),
+    Number(caseRow.revision || 0),
+    hash({ caseId, workspaceId, grantId, input }),
+    JSON.stringify(audience),
+    actor.userId,
+  );
+  await exec(tx, 'UPDATE client_matter_publications SET "currentRevisionId"=$2, revision=revision+1, "updatedAt"=now() WHERE id=$1', publication!.id, revision!.id);
+  await audit(tx, { action: 'DRAFT_CREATED', actorId: actor.userId, caseId, clientId: caseRow.clientId, matterPublicationId: publication!.id, metadataSafe: { source: 'portal-intake' } });
+  await audit(tx, { action: 'PUBLISHED', actorId: actor.userId, caseId, clientId: caseRow.clientId, matterPublicationId: publication!.id, fromStatus: 'DRAFT', toStatus: 'PUBLISHED', metadataSafe: { source: 'portal-intake' } });
+  const updated = await one(tx, 'SELECT *, status::text FROM client_matter_publications WHERE id=$1', publication!.id);
+  return toClientMatterPublicationDTO(updated!, revision);
+}
+
 export async function createMatterPublication(actor: Actor, input: Row, db: PrismaClient = defaultPrisma): Promise<Row> {
   requireFoundation(); requireInternal(actor);
   return db.$transaction(async (tx) => {
     const caseRow = await getCase(tx, String(input.caseId)); await assertCaseAccess(tx, actor, caseRow.id);
-    const pub = await one(tx, 'INSERT INTO client_matter_publications (id,"caseId","clientId",status,"preparedById") VALUES ($1,$2,$3,$4::"ClientPublicationStatus",$5) RETURNING *, status::text', newId(), caseRow.id, caseRow.clientId, 'DRAFT', actor.userId);
+    const workspaceId = input.workspaceId ? String(input.workspaceId) : null;
+    if (workspaceId) {
+      const workspace = await one(tx, 'SELECT id, "clientId" FROM client_portal_workspaces WHERE id=$1 AND status=$2::"ClientPortalWorkspaceStatus"', workspaceId, 'ACTIVE');
+      if (!workspace || workspace.clientId !== caseRow.clientId) throw new ClientPublicationError(400, 'WORKSPACE_CLIENT_MISMATCH', 'Workspace must be active and match the Case Client.');
+    }
+    const pub = await one(tx, 'INSERT INTO client_matter_publications (id,"caseId","clientId","workspaceId",status,"preparedById") VALUES ($1,$2,$3,$4,$5::"ClientPublicationStatus",$6) RETURNING *, status::text', newId(), caseRow.id, caseRow.clientId, workspaceId, 'DRAFT', actor.userId);
     const revision = await createMatterRevision(tx, pub!, actor, input);
     const updated = await one(tx, 'SELECT *, status::text FROM client_matter_publications WHERE id=$1', pub!.id);
     await audit(tx, { action: 'DRAFT_CREATED', actorId: actor.userId, caseId: caseRow.id, clientId: caseRow.clientId, matterPublicationId: pub!.id });
@@ -542,7 +595,7 @@ function portalDate(value: unknown): string | null {
 }
 
 function toPortalMatter(row: Row, revision: Row | null, counts: Row = {}): Row {
-  const statusText = revision?.clientSafeStatus || 'Az ügyvédi iroda által közzétett ügyfélbiztos státusz.';
+  const statusText = revision?.clientSafeCurrentPosition || revision?.clientSafeStatus || 'Az ügyvédi iroda által közzétett ügyfélbiztos státusz.';
   const nextStepText = revision?.clientSafeNextStep || null;
   const latestVisibleAt = portalDate(counts.latestUpdateAt) || portalDate(row.publishedAt) || portalDate(row.updatedAt);
   const dto = {
@@ -551,12 +604,12 @@ function toPortalMatter(row: Row, revision: Row | null, counts: Row = {}): Row {
     title: revision?.clientSafeTitle || 'Közzétett ügy',
     statusLabel: 'Folyamatban',
     currentSummary: statusText,
-    waitingOnLabel: counts.attentionCount ? 'Ügyfél válasza szükséges' : 'Irodai feldolgozás',
+    waitingOnLabel: revision?.clientSafeWaitingOn || (counts.attentionCount ? 'Ügyfél válasza szükséges' : 'Irodai feldolgozás'),
     waitingDescription: counts.attentionCount ? 'Közzétett teendő vár teljesítésre az ügyfélportálon.' : 'Jelenleg nincs közzétett ügyféloldali teendő.',
     nextStepLabel: nextStepText,
     nextStepTitle: nextStepText ? 'Következő lépés' : null,
     nextStepDescription: nextStepText,
-    estimatedTiming: null,
+    estimatedTiming: portalDate(revision?.publicTargetDate),
     responsibleLawyerDisplay: revision?.responsibleLawyerDisplay || null,
     responsibleLawyerContactSafe: null,
     publicDeadlines: revision?.publishedDeadlinesSnapshot || [],
@@ -663,7 +716,7 @@ async function resolvePortalContext(actor: Actor, db: Db = defaultPrisma): Promi
 
 async function matterRowsForContext(db: Db, context: PortalContext): Promise<Row[]> {
   if (!context.caseIds.length) return [];
-  const rows = await many(db, `SELECT p.*, p.status::text, r.id AS "revisionId", r."clientSafeTitle", r."clientSafeStatus", r."clientSafeNextStep", r."responsibleLawyerDisplay", r."publishedDeadlinesSnapshot"
+  const rows = await many(db, `SELECT p.*, p.status::text, r.id AS "revisionId", r."clientSafeTitle", r."clientSafeStatus", r."clientSafeNextStep", r."clientSafeCurrentPosition", r."clientSafeWaitingOn", r."publicTargetDate", r."responsibleLawyerDisplay", r."publishedDeadlinesSnapshot"
     FROM client_matter_publications p
     JOIN client_matter_publication_revisions r ON r.id=p."currentRevisionId"
     WHERE p.status=$1::"ClientPublicationStatus" AND p."caseId"=ANY($2::text[])

@@ -37,8 +37,29 @@ import {
   resolvePortalWorkspace,
   ResolvedPortalWorkspace,
 } from '../modules/client-workspace/workspaceService';
+import { resolveMemberUnits } from '../modules/client-workspace/organizationUnitService';
+import { getOrganizationalCaseDetail, listOrganizationalCases, OrganizationalCaseListParams } from '../modules/client-workspace/organizationalCaseService';
+import { organizationSummary, unitSummary } from '../modules/client-workspace/leadershipSummaryService';
+import { RelationshipToCase } from '../modules/client-workspace/organizationalAccessPolicy';
+import {
+  createIntakeDraft,
+  getOwnIntake,
+  listOwnIntakes,
+  respondToMoreInformation,
+  submitIntake,
+  updateIntakeDraft,
+  withdrawIntake,
+} from '../modules/client-workspace/intakeService';
+import { addIntakeAttachment } from '../modules/client-workspace/intakeAttachmentService';
 
 const router = Router();
+
+/** Identity + selected workspace id after portalRead has resolved the workspace. */
+function orgContext(req: Request): { identityId: string; workspaceId: string } {
+  const base = actor(req);
+  if (!base.workspaceId) throw Object.assign(new Error('Select an authorized workspace.'), { status: 409, code: 'CLIENT_WORKSPACE_SELECTION_REQUIRED' });
+  return { identityId: base.clientPortalIdentityId, workspaceId: base.workspaceId };
+}
 
 function actor(req: Request) {
   const session = requireActiveClientPortalSession(req);
@@ -69,6 +90,14 @@ async function portalRead(req: Request, res: Response): Promise<boolean> {
   const session = requireActiveClientPortalSession(req);
   (req as Request & { clientPortalWorkspace?: ResolvedPortalWorkspace }).clientPortalWorkspace = await resolvePortalWorkspace(session, req.header('x-client-portal-workspace'));
   return !res.headersSent;
+}
+
+async function portalIntake(req: Request, res: Response): Promise<boolean> {
+  await new Promise<void>((resolve, reject) => authenticateClientPortal(req, res, (error?: unknown) => error ? reject(error) : resolve()));
+  if (res.headersSent) return false;
+  const session = requireActiveClientPortalSession(req);
+  (req as Request & { clientPortalWorkspace?: ResolvedPortalWorkspace }).clientPortalWorkspace = await resolvePortalWorkspace(session, req.header('x-client-portal-workspace'));
+  return true;
 }
 
 const COMPLETED_REQUEST_STATUSES = new Set(['COMPLETED', 'CANCELLED', 'EXPIRED']);
@@ -319,6 +348,105 @@ router.get('/updates/:updateId', async (req, res) => {
   try {
     if (!(await portalRead(req, res))) return;
     res.json(await getPortalSafeUpdate(actor(req), String(req.params.updateId)));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+// --- CP1 organizational customer surfaces (workspace + participant scoped) ---
+
+router.post('/org/intakes', async (req, res) => {
+  try { if (!(await portalIntake(req, res))) return; const context = orgContext(req); res.status(201).json(await createIntakeDraft(context.identityId, context.workspaceId, req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+
+router.get('/org/intakes', async (req, res) => {
+  try { if (!(await portalIntake(req, res))) return; const context = orgContext(req); res.json(await listOwnIntakes(context.identityId, context.workspaceId, { limit: Number(req.query.limit) || undefined, offset: Number(req.query.offset) || undefined })); }
+  catch (error) { fail(res, error); }
+});
+
+router.get('/org/intakes/:intakeId', async (req, res) => {
+  try { if (!(await portalIntake(req, res))) return; const context = orgContext(req); res.json(await getOwnIntake(context.identityId, context.workspaceId, String(req.params.intakeId))); }
+  catch (error) { fail(res, error); }
+});
+
+router.patch('/org/intakes/:intakeId', async (req, res) => {
+  try { if (!(await portalIntake(req, res))) return; const context = orgContext(req); res.json(await updateIntakeDraft(context.identityId, context.workspaceId, String(req.params.intakeId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+
+router.post('/org/intakes/:intakeId/submit', async (req, res) => {
+  try { if (!(await portalIntake(req, res))) return; const context = orgContext(req); res.json(await submitIntake(context.identityId, context.workspaceId, String(req.params.intakeId), req.body?.expectedRevision)); }
+  catch (error) { fail(res, error); }
+});
+
+router.post('/org/intakes/:intakeId/withdraw', async (req, res) => {
+  try { if (!(await portalIntake(req, res))) return; const context = orgContext(req); res.json(await withdrawIntake(context.identityId, context.workspaceId, String(req.params.intakeId), req.body?.expectedRevision)); }
+  catch (error) { fail(res, error); }
+});
+
+router.post('/org/intakes/:intakeId/responses', async (req, res) => {
+  try { if (!(await portalIntake(req, res))) return; const context = orgContext(req); res.status(201).json(await respondToMoreInformation(context.identityId, context.workspaceId, String(req.params.intakeId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+
+router.post('/org/intakes/:intakeId/attachments', async (req, res) => {
+  try { if (!(await portalIntake(req, res))) return; const context = orgContext(req); res.status(201).json(await addIntakeAttachment(context.identityId, context.workspaceId, String(req.params.intakeId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+
+router.get('/org/units', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json({ items: await resolveMemberUnits(identityId, workspaceId) });
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/cases', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    const relationshipRaw = String(req.query.relationship || '').toUpperCase();
+    const params: OrganizationalCaseListParams = {
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
+      offset: req.query.offset ? Number(req.query.offset) : undefined,
+      relationship: relationshipRaw === 'OWN' || relationshipRaw === 'SHARED' ? relationshipRaw as RelationshipToCase : null,
+      unitId: req.query.unitId ? String(req.query.unitId) : null,
+    };
+    res.json(await listOrganizationalCases(identityId, workspaceId, params));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/cases/:caseReference', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await getOrganizationalCaseDetail(identityId, workspaceId, String(req.params.caseReference)));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/summary/unit/:groupId', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await unitSummary(identityId, workspaceId, String(req.params.groupId)));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/summary/organization', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await organizationSummary(identityId, workspaceId));
   } catch (error) {
     fail(res, error);
   }

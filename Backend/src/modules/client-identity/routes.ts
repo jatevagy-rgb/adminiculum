@@ -24,6 +24,32 @@ import {
   transitionWorkspaceMembership,
   updateWorkspace,
 } from '../client-workspace/workspaceService';
+import {
+  createParticipant,
+  createSummaryScope,
+  linkUnitToWorkspace,
+  listParticipants,
+  listSummaryScopes,
+  listWorkspaceUnits,
+  revokeParticipant,
+  transitionSummaryScope,
+  unlinkUnitFromWorkspace,
+  updateParticipant,
+} from '../client-workspace/organizationAdminService';
+import {
+  approveIntakeRequesterAccess,
+  closeIntake,
+  convertIntakeToNewCase,
+  declineIntake,
+  getIntakeTriageDetail,
+  linkIntakeToExistingCase,
+  listIntakeHistory,
+  listIntakeQueue,
+  performApprovedConversion,
+  publishIntakeSnapshot,
+  requestMoreInformation,
+  startIntakeTriage,
+} from '../client-workspace/intakeTriageService';
 
 export const clientIdentityRouter = Router();
 
@@ -142,3 +168,99 @@ clientIdentityRouter.post('/admin/grants', async (req, res) => {
   try { res.status(201).json(await createGrantForApprovedMembership(internalActor(req), req.body || {})); }
   catch (error) { fail(res, error); }
 });
+
+// --- CP1 organizational administration (ADMIN/PARTNER, guarded by /admin use) ---
+
+clientIdentityRouter.get('/admin/intakes', async (req, res) => {
+  try { res.json(await listIntakeQueue(internalActor(req), req.query as Record<string, unknown>)); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.get('/admin/intakes/:intakeId', async (req, res) => {
+  try { res.json(await getIntakeTriageDetail(internalActor(req), String(req.params.intakeId))); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.get('/admin/intakes/:intakeId/history', async (req, res) => {
+  try { res.json(await listIntakeHistory(internalActor(req), String(req.params.intakeId))); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/start-triage', async (req, res) => {
+  try { res.json(await startIntakeTriage(internalActor(req), String(req.params.intakeId), req.body?.expectedRevision)); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/request-more-information', async (req, res) => {
+  try { res.status(201).json(await requestMoreInformation(internalActor(req), String(req.params.intakeId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/decline', async (req, res) => {
+  try { res.json(await declineIntake(internalActor(req), String(req.params.intakeId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/link-existing-case', async (req, res) => {
+  try { res.json(await linkIntakeToExistingCase(internalActor(req), String(req.params.intakeId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/convert-new-case', async (req, res) => {
+  try { res.status(201).json(await convertIntakeToNewCase(internalActor(req), String(req.params.intakeId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/approve-requester-access', async (req, res) => {
+  try { res.json(await approveIntakeRequesterAccess(internalActor(req), String(req.params.intakeId), Array.isArray(req.body?.permissions) ? req.body.permissions : [])); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/publish-initial-snapshot', async (req, res) => {
+  try { res.status(201).json(await publishIntakeSnapshot(internalActor(req), String(req.params.intakeId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/approved-conversion', async (req, res) => {
+  try { res.status(201).json(await performApprovedConversion(internalActor(req), String(req.params.intakeId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/intakes/:intakeId/close', async (req, res) => {
+  try { res.json(await closeIntake(internalActor(req), String(req.params.intakeId), req.body?.expectedRevision)); }
+  catch (error) { fail(res, error); }
+});
+
+clientIdentityRouter.get('/admin/workspaces/:workspaceId/units', async (req, res) => {
+  try { res.json(await listWorkspaceUnits(internalActor(req), String(req.params.workspaceId))); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/workspaces/:workspaceId/units/:groupId/link', async (req, res) => {
+  try { res.json(await linkUnitToWorkspace(internalActor(req), String(req.params.groupId), String(req.params.workspaceId))); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/units/:groupId/unlink', async (req, res) => {
+  try { res.json(await unlinkUnitFromWorkspace(internalActor(req), String(req.params.groupId))); }
+  catch (error) { fail(res, error); }
+});
+
+clientIdentityRouter.get('/admin/workspaces/:workspaceId/cases/:caseId/participants', async (req, res) => {
+  try { res.json(await listParticipants(internalActor(req), String(req.params.workspaceId), String(req.params.caseId))); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/participants', async (req, res) => {
+  try { res.status(201).json(await createParticipant(internalActor(req), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.patch('/admin/participants/:grantId', async (req, res) => {
+  try { res.json(await updateParticipant(internalActor(req), String(req.params.grantId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/participants/:grantId/revoke', async (req, res) => {
+  try { res.json(await revokeParticipant(internalActor(req), String(req.params.grantId))); }
+  catch (error) { fail(res, error); }
+});
+
+clientIdentityRouter.get('/admin/workspaces/:workspaceId/summary-scopes', async (req, res) => {
+  try { res.json(await listSummaryScopes(internalActor(req), String(req.params.workspaceId))); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/summary-scopes', async (req, res) => {
+  try { res.status(201).json(await createSummaryScope(internalActor(req), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+for (const action of ['suspend', 'revoke'] as const) {
+  clientIdentityRouter.post(`/admin/summary-scopes/:scopeId/${action}`, async (req, res) => {
+    try { res.json(await transitionSummaryScope(internalActor(req), String(req.params.scopeId), action)); }
+    catch (error) { fail(res, error); }
+  });
+}

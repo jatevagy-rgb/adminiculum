@@ -1963,6 +1963,14 @@ enum ClientPortalPermission {
   ACTION_REQUEST_READ
   ACTION_REQUEST_COMPLETE
   UPDATE_READ
+  // CP1 organizational-core additions. Additive only; existing grants keep the
+  // legacy set. Message/hours/billing/timeline gates are enforced server-side.
+  MESSAGE_READ
+  MESSAGE_SEND
+  DOCUMENT_UPLOAD
+  CLIENT_TIMELINE_READ
+  HOURS_READ
+  BILLING_STATEMENT_READ
 }
 
 enum ClientPortalIdentityProvider {
@@ -2051,6 +2059,66 @@ enum ClientPortalWorkspaceMembershipRole {
   APPROVER
 }
 
+// ============================================================================
+// CP1 ORGANIZATIONAL CUSTOMER CORE
+// Additive, gate-guarded organizational domain: case participants, leadership
+// summary scopes, customer-initiated intake, external communication
+// participants/read-state/attachments, participant-scoped document recipients.
+// Soft references (plain columns) keep the migration purely additive.
+// ============================================================================
+
+enum ClientPortalParticipantRole {
+  REQUESTER
+  CLIENT_OWNER
+  PARTICIPANT
+  OBSERVER
+}
+
+enum ClientPortalSummaryScopeType {
+  UNIT
+  ORGANIZATION
+}
+
+enum ClientPortalSummaryScopeStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+enum ClientPortalIntakeUrgency {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum ClientPortalIntakeStatus {
+  DRAFT
+  SUBMITTED
+  TRIAGE_IN_PROGRESS
+  MORE_INFORMATION_REQUIRED
+  LINKED_TO_EXISTING_CASE
+  CONVERTED_TO_CASE
+  DECLINED
+  CLOSED
+  WITHDRAWN
+}
+
+enum ClientPortalCommunicationCategory {
+  GENERAL
+  DOCUMENT_REQUEST
+  QUESTION
+  DECISION_REQUIRED
+  FEEDBACK_REQUIRED
+  DELIVERY
+  BILLING_QUESTION
+}
+
+enum ClientDocumentPublicationVisibility {
+  WORKSPACE
+  SELECTED_PARTICIPANTS
+}
+
 enum ClientPublicationStatus {
   DRAFT
   READY_FOR_APPROVAL
@@ -2116,16 +2184,20 @@ enum ClientPublicationEventAction {
 }
 
 model ClientPortalGrant {
-  id                     String                   @id @default(uuid())
+  id                     String                       @id @default(uuid())
   clientUserId           String?
   clientPortalIdentityId String?
   workspaceId            String?
   clientId               String
   caseId                 String
-  role                   ClientPortalGrantRole    @default(VIEWER)
-  status                 ClientPortalGrantStatus  @default(INVITED)
+  role                   ClientPortalGrantRole        @default(VIEWER)
+  // CP1: typed participant dimension layered on the existing grant. Legacy grants
+  // are backfilled to PARTICIPANT; REQUESTER/CLIENT_OWNER are never inferred.
+  participantRole        ClientPortalParticipantRole?
+  isRequester            Boolean                      @default(false)
+  status                 ClientPortalGrantStatus      @default(INVITED)
   permissions            ClientPortalPermission[]
-  validFrom              DateTime                 @default(now())
+  validFrom              DateTime                     @default(now())
   validUntil             DateTime?
   invitedById            String
   activatedAt            DateTime?
@@ -2134,9 +2206,9 @@ model ClientPortalGrant {
   revokedAt              DateTime?
   revokedById            String?
   revocationReasonSafe   String?
-  createdAt              DateTime                 @default(now())
-  updatedAt              DateTime                 @updatedAt
-  revision               Int                      @default(0)
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+  revision               Int                          @default(0)
 
   @@index([clientId, caseId, status])
   @@index([clientUserId, status])
@@ -2229,9 +2301,108 @@ model ClientPortalWorkspaceEvent {
   @@map("client_portal_workspace_events")
 }
 
+// CP1: leadership visibility, modelled separately from case grants. A summary
+// scope grants content-free aggregate visibility only — it never creates a case
+// grant and never implies message/document access.
+model ClientPortalSummaryScope {
+  id                    String                         @id @default(uuid())
+  workspaceMembershipId String
+  workspaceId           String
+  organizationGroupId   String?
+  scopeType             ClientPortalSummaryScopeType
+  status                ClientPortalSummaryScopeStatus @default(ACTIVE)
+  // Safe aggregate permissions. Hours remain false in CP1 (published only, CP4).
+  canViewCaseCounts     Boolean                        @default(true)
+  canViewStageCounts    Boolean                        @default(true)
+  canViewDeadlineCounts Boolean                        @default(true)
+  canViewPublishedHours Boolean                        @default(false)
+  approvedById          String
+  approvedAt            DateTime                       @default(now())
+  suspendedAt           DateTime?
+  suspendedById         String?
+  revokedAt             DateTime?
+  revokedById           String?
+  createdAt             DateTime                       @default(now())
+  updatedAt             DateTime                       @updatedAt
+  revision              Int                            @default(0)
+
+  @@unique([workspaceMembershipId, scopeType, organizationGroupId])
+  @@index([workspaceId, status])
+  @@index([organizationGroupId, status])
+  @@map("client_portal_summary_scopes")
+}
+
+// CP1: customer-initiated intake — a distinct domain from workforce->customer
+// requests, questions and submissions. Submitting intake never creates a Case,
+// grant or publication; access begins only after explicit workforce triage.
+model ClientPortalIntakeRequest {
+  id                      String                    @id @default(uuid())
+  workspaceId             String
+  requesterMembershipId   String
+  organizationGroupId     String?
+  subject                 String
+  descriptionSafe         String
+  urgency                 ClientPortalIntakeUrgency @default(NORMAL)
+  requestedDeadline       DateTime?
+  status                  ClientPortalIntakeStatus  @default(DRAFT)
+  linkedCaseId            String?
+  // Internal-only triage fields. These MUST never appear in a customer DTO.
+  internalTriageNote      String?
+  triagedByInternalUserId String?
+  // Customer-safe office response (e.g. more-information request / decline reason).
+  customerResponseSafe    String?
+  submittedSnapshot       Json?
+  conversionFingerprint   String?
+  submittedAt             DateTime?
+  triagedAt               DateTime?
+  linkedAt                DateTime?
+  convertedAt             DateTime?
+  closedAt                DateTime?
+  revision                Int                       @default(0)
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+
+  attachments        ClientPortalIntakeAttachment[]
+  informationRequests ClientRequest[]
+
+  @@index([workspaceId, status])
+  @@index([requesterMembershipId, status])
+  @@index([organizationGroupId, status])
+  @@index([linkedCaseId])
+  @@map("client_portal_intake_requests")
+}
+
+// CP1: intake attachment — its own quarantine lifecycle mirroring submission
+// files. No uploaded file becomes an accepted Document without a CLEAN scan and
+// explicit workforce acceptance during triage. No raw storage path is exposed.
+model ClientPortalIntakeAttachment {
+  id                         String                     @id @default(uuid())
+  intakeRequestId            String
+  intakeRequest              ClientPortalIntakeRequest  @relation(fields: [intakeRequestId], references: [id], onDelete: Cascade)
+  originalFileNameSafe       String
+  declaredMimeType           String?
+  detectedMimeType           String?
+  sizeBytes                  Int?
+  checksum                   String?
+  storageProvider            String?
+  quarantineStorageReference String?
+  status                     ClientSubmissionFileStatus @default(UPLOADING)
+  scanProvider               String?
+  scanCodeSafe               String?
+  uploadedAt                 DateTime?
+  scannedAt                  DateTime?
+  createdAt                  DateTime                   @default(now())
+
+  @@index([intakeRequestId, status])
+  @@map("client_portal_intake_attachments")
+}
+
 model ClientOrganizationGroup {
   id              String                        @id @default(uuid())
   clientId        String
+  // CP1: an organizational unit may be attached to exactly one ORGANIZATION
+  // workspace (same Client). Legacy/internal groups keep workspaceId NULL.
+  workspaceId     String?
   name            String
   descriptionSafe String?
   status          ClientOrganizationGroupStatus @default(ACTIVE)
@@ -2242,6 +2413,7 @@ model ClientOrganizationGroup {
 
   @@unique([clientId, name])
   @@index([clientId, status])
+  @@index([workspaceId, status])
   @@map("client_organization_groups")
 }
 
@@ -2321,6 +2493,7 @@ model ClientMatterPublication {
   id                String                  @id @default(uuid())
   caseId            String
   clientId          String
+  workspaceId       String?
   status            ClientPublicationStatus @default(DRAFT)
   currentRevisionId String?
   preparedById      String
@@ -2339,6 +2512,7 @@ model ClientMatterPublication {
 
   @@index([caseId, status])
   @@index([clientId, status])
+  @@index([workspaceId, status])
   @@map("client_matter_publications")
 }
 
@@ -2349,6 +2523,9 @@ model ClientMatterPublicationRevision {
   clientSafeTitle            String
   clientSafeStatus           String
   clientSafeNextStep         String?
+  clientSafeCurrentPosition  String?
+  clientSafeWaitingOn        String?
+  publicTargetDate           DateTime?
   responsibleLawyerDisplay   String?
   publishedDeadlinesSnapshot Json
   safeUpdatesSnapshot        Json
@@ -2365,12 +2542,16 @@ model ClientMatterPublicationRevision {
 }
 
 model ClientDocumentPublication {
-  id                      String                  @id @default(uuid())
+  id                      String                              @id @default(uuid())
   caseId                  String
   clientId                String
+  // CP1: optional workspace targeting + recipient visibility. Default WORKSPACE
+  // preserves existing behaviour; SELECTED_PARTICIPANTS restricts to recipients.
+  workspaceId             String?
+  visibility              ClientDocumentPublicationVisibility @default(WORKSPACE)
   documentId              String
   documentVersionId       String
-  status                  ClientPublicationStatus @default(DRAFT)
+  status                  ClientPublicationStatus             @default(DRAFT)
   clientFacingTitle       String
   clientFacingExplanation String?
   preparedById            String
@@ -2387,14 +2568,32 @@ model ClientDocumentPublication {
   audienceSnapshot        Json
   sourceFingerprint       String
   approvalReviewId        String?
-  createdAt               DateTime                @default(now())
-  updatedAt               DateTime                @updatedAt
-  revision                Int                     @default(0)
+  createdAt               DateTime                            @default(now())
+  updatedAt               DateTime                            @updatedAt
+  revision                Int                                 @default(0)
+
+  recipients ClientDocumentPublicationRecipient[]
 
   @@index([caseId, status])
   @@index([documentId, status])
   @@index([documentVersionId])
+  @@index([workspaceId, status])
   @@map("client_document_publications")
+}
+
+// CP1: explicit recipient list for SELECTED_PARTICIPANTS document publications.
+// A recipient is a workspace membership; absence of a row for WORKSPACE-visible
+// publications means the whole workspace membership can see it.
+model ClientDocumentPublicationRecipient {
+  id                    String                    @id @default(uuid())
+  documentPublicationId String
+  publication           ClientDocumentPublication @relation(fields: [documentPublicationId], references: [id], onDelete: Cascade)
+  workspaceMembershipId String
+  createdAt             DateTime                  @default(now())
+
+  @@unique([documentPublicationId, workspaceMembershipId])
+  @@index([workspaceMembershipId])
+  @@map("client_document_publication_recipients")
 }
 
 model ClientActionRequest {
@@ -3274,7 +3473,9 @@ enum ClientRequestStatus {
 model ClientRequest {
   id                     String              @id @default(uuid())
   clientId               String
-  caseId                 String
+  caseId                 String?
+  intakeRequestId        String?
+  intakeRequest          ClientPortalIntakeRequest? @relation(fields: [intakeRequestId], references: [id], onDelete: Cascade)
   createdById            String
   assignedInternalUserId String?
   type                   ClientRequestType
@@ -3297,6 +3498,7 @@ model ClientRequest {
   submissions ClientSubmission[]
 
   @@index([caseId, status])
+  @@index([intakeRequestId, status])
   @@index([clientId, status])
   @@index([status, dueAt])
   @@map("client_requests")
@@ -3341,22 +3543,67 @@ enum ClientQuestionThreadStatus {
 }
 
 model ClientQuestionThread {
-  id                     String                     @id @default(uuid())
+  id                     String                            @id @default(uuid())
   clientId               String
   caseId                 String
   clientPortalIdentityId String
+  // CP1: workspace context + category + lifecycle + creator membership. Additive;
+  // existing threads default to category QUESTION and keep working under current
+  // permissions.
+  workspaceId            String?
+  category               ClientPortalCommunicationCategory @default(QUESTION)
+  createdByMembershipId  String?
+  lastMessageAt          DateTime?
+  archivedAt             DateTime?
   subject                String
-  status                 ClientQuestionThreadStatus @default(OPEN)
+  status                 ClientQuestionThreadStatus        @default(OPEN)
   assignedInternalUserId String?
-  revision               Int                        @default(0)
-  createdAt              DateTime                   @default(now())
-  updatedAt              DateTime                   @updatedAt
+  revision               Int                               @default(0)
+  createdAt              DateTime                          @default(now())
+  updatedAt              DateTime                          @updatedAt
 
-  messages ClientQuestionMessage[]
+  messages     ClientQuestionMessage[]
+  participants ClientQuestionThreadParticipant[]
+  readStates   ClientQuestionThreadReadState[]
 
   @@index([caseId, status])
   @@index([clientPortalIdentityId, status])
+  @@index([workspaceId, status])
   @@map("client_question_threads")
+}
+
+// CP1: explicit external-communication participants (workspace memberships) with
+// per-thread read/write flags. A thread is only visible to its participants.
+model ClientQuestionThreadParticipant {
+  id                    String                      @id @default(uuid())
+  threadId              String
+  thread                ClientQuestionThread        @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  workspaceMembershipId String
+  participantRole       ClientPortalParticipantRole @default(PARTICIPANT)
+  canRead               Boolean                     @default(true)
+  canWrite              Boolean                     @default(false)
+  joinedAt              DateTime                    @default(now())
+  removedAt             DateTime?
+  createdAt             DateTime                    @default(now())
+
+  @@unique([threadId, workspaceMembershipId])
+  @@index([workspaceMembershipId])
+  @@map("client_question_thread_participants")
+}
+
+// CP1: per-participant read state for safe unread-count derivation.
+model ClientQuestionThreadReadState {
+  id                    String               @id @default(uuid())
+  threadId              String
+  thread                ClientQuestionThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  workspaceMembershipId String
+  lastReadMessageId     String?
+  lastReadAt            DateTime?
+  updatedAt             DateTime             @updatedAt
+
+  @@unique([threadId, workspaceMembershipId])
+  @@index([workspaceMembershipId])
+  @@map("client_question_thread_read_states")
 }
 
 enum ClientQuestionAuthorType {
@@ -3377,8 +3624,24 @@ model ClientQuestionMessage {
   revision               Int                      @default(0)
   createdAt              DateTime                 @default(now())
 
+  attachments ClientQuestionMessageAttachment[]
+
   @@index([threadId, createdAt])
   @@map("client_question_messages")
+}
+
+// CP1: safe attachment reference on an external message. Points at an existing
+// clean submission file (soft reference); never stores a raw storage path.
+model ClientQuestionMessageAttachment {
+  id                String                @id @default(uuid())
+  messageId         String
+  message           ClientQuestionMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  submissionFileId  String?
+  clientFacingTitle String
+  createdAt         DateTime              @default(now())
+
+  @@index([messageId])
+  @@map("client_question_message_attachments")
 }
 
 enum ClientSubmissionStatus {
@@ -3399,7 +3662,7 @@ model ClientSubmission {
   clientRequestId           String
   request                   ClientRequest          @relation(fields: [clientRequestId], references: [id], onDelete: Cascade)
   clientId                  String
-  caseId                    String
+  caseId                    String?
   clientPortalIdentityId    String
   status                    ClientSubmissionStatus @default(DRAFT)
   customerNote              String?
@@ -3487,7 +3750,8 @@ model ClientNotificationDelivery {
   id                String                           @id @default(uuid())
   eventType         String
   clientId          String
-  caseId            String
+  caseId            String?
+  intakeRequestId   String?
   recipientSnapshot Json
   subjectSafe       String
   templateId        String?
@@ -3504,6 +3768,7 @@ model ClientNotificationDelivery {
 
   @@index([status, nextAttemptAt])
   @@index([caseId])
+  @@index([intakeRequestId])
   @@index([clientId])
   @@map("client_notification_deliveries")
 }

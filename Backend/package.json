@@ -34,7 +34,9 @@
     "connector:regen:runtime": "node scripts/regenerate-powerapps-canonical-from-runtime.js",
     "test:client-identity:db": "jest --runInBand tests/clientIdentityMembership.integration.test.ts",
     "test:client-interaction:db": "jest --runInBand tests/clientInteraction.integration.test.ts",
-    "test:client-workspace:db": "jest --runInBand tests/clientPortalWorkspace.integration.test.ts"
+    "test:client-workspace:db": "jest --runInBand tests/clientPortalWorkspace.integration.test.ts",
+    "test:org-access:db": "jest --runInBand tests/clientPortalOrganizationalAccess.integration.test.ts",
+    "test:intake:db": "jest --runInBand tests/clientPortalIntakeTriage.integration.test.ts"
   },
   "dependencies": {
     "@azure/identity": "^4.13.1",
