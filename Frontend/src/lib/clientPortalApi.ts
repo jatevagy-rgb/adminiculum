@@ -191,8 +191,18 @@ export async function getPortalMatters() {
   return fetchApi<{ items: PortalMatter[] }>('/client-portal/matters', { suppressErrorStatuses: [401, 403, 503], suppressErrorLogging: true });
 }
 
+export type PortalMilestone = {
+  reference: string;
+  title: string;
+  description: string | null;
+  state: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | string;
+  displayOrder: number;
+  weight: number | null;
+  completedAt: string | null;
+};
+
 export async function getPortalMatter(publicationId: string) {
-  return fetchApi<PortalMatter & { documents: PortalDocument[]; actionRequests: PortalActionRequest[]; updates: PortalSafeUpdate[] }>(`/client-portal/matters/${encodeURIComponent(publicationId)}`, { suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
+  return fetchApi<PortalMatter & { documents: PortalDocument[]; actionRequests: PortalActionRequest[]; updates: PortalSafeUpdate[]; milestones?: PortalMilestone[]; progressPercentage?: number | null }>(`/client-portal/matters/${encodeURIComponent(publicationId)}`, { suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
 }
 
 export async function getPortalDocument(publicationId: string) {

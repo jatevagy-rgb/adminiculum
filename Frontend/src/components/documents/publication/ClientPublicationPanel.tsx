@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminBadge, AdminButton } from "@/components/adminiculum/ui";
 import { CasePortalIdentityGrant } from "@/components/documents/publication/CasePortalIdentityGrant";
+import { MilestonePublicationPanel } from "@/components/documents/publication/MilestonePublicationPanel";
 import { ClientRequestComposer } from "@/components/client-portal/ClientRequestComposer";
 import { ClientInteractionInternalActions } from "@/components/client-portal/ClientInteractionInternalActions";
 import {
@@ -213,6 +214,7 @@ export function ClientPublicationPanel({
           </div>
         </aside>
       </div>
+      <MilestonePublicationPanel caseId={caseId} />
       <section className="rounded-[14px] border border-[rgba(22,32,26,0.12)] p-3 sm:p-4" data-testid="case-client-interaction-workflow">
         <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Case szintű ügyfélworkflow</p><h4 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Kérések, válaszok és elbírálás</h4><p className="mt-1 text-xs text-[var(--adm-text-muted)]">A tervezet rejtve marad; minden ügyfél felé látható művelet explicit közzétételhez kötött.</p></div><ClientRequestComposer initialCaseId={caseId} onChanged={load} /></div>
         <div className="mt-4"><ClientInteractionInternalActions questions={questions} submissions={submissions} notifications={notifications} onDone={load} /></div>

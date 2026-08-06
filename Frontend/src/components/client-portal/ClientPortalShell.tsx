@@ -25,6 +25,7 @@ import {
   type PortalDocument,
   type PortalHome,
   type PortalMatter,
+  type PortalMilestone,
   type PortalSafeUpdate,
   type PortalWorkspace,
   type PortalWorkspaceAction,
@@ -178,7 +179,57 @@ function ListView({ view, home, workspace }: { view: 'matters' | 'tasks' | 'docu
   return <div className="space-y-5"><div><p className="text-sm font-semibold uppercase tracking-[.18em] text-[#b95e4b]">Üzenetek</p><h1 className="mt-2 text-3xl font-semibold text-stone-950">Kérdések és válaszok</h1></div><Card><p className="text-stone-700">Itt csak az Ön kérdései és az iroda kifejezetten elküldött válaszai jelennek meg.</p><div className="mt-4 grid gap-3">{workspace.messages.length ? workspace.messages.map((message) => <WorkspaceMessageCard key={message.id} message={message} />) : <p className="text-stone-600">Nincs kérdés vagy megválaszolt üzenet.</p>}</div></Card></div>;
 }
 
-function MatterView({ matter }: { matter: PortalMatter & { documents: PortalDocument[]; actionRequests: PortalActionRequest[]; updates: PortalSafeUpdate[] } }) {
+function milestoneStateLabel(state: string): string {
+  switch (state) {
+    case 'COMPLETED':
+      return 'Kész';
+    case 'IN_PROGRESS':
+      return 'Folyamatban';
+    case 'NOT_STARTED':
+      return 'Előttünk áll';
+    default:
+      return 'Folyamatban';
+  }
+}
+
+function MatterProgressSection({ milestones, progressPercentage }: { milestones?: PortalMilestone[]; progressPercentage?: number | null }) {
+  const ordered = (milestones ?? []).slice().sort((a, b) => a.displayOrder - b.displayOrder);
+  const hasProgress = typeof progressPercentage === 'number' && Number.isFinite(progressPercentage);
+  if (!ordered.length && !hasProgress) return null;
+  return (
+    <Card>
+      <h2 className="text-2xl font-semibold">Az ügy előrehaladása</h2>
+      {hasProgress ? (
+        <div className="mt-4">
+          <div className="flex items-baseline justify-between">
+            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Előrehaladás</span>
+            <span className="text-lg font-semibold text-stone-900">{progressPercentage}%</span>
+          </div>
+          <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-stone-100">
+            <div className="h-full rounded-full bg-[#7a5f18] transition-all" style={{ width: `${Math.max(0, Math.min(100, progressPercentage as number))}%` }} />
+          </div>
+        </div>
+      ) : null}
+      {ordered.length ? (
+        <ol className="mt-5 space-y-3">
+          {ordered.map((milestone) => (
+            <li key={milestone.reference} className="rounded-2xl bg-stone-50 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <p className="break-words font-semibold text-stone-900">{milestone.title}</p>
+                <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${milestone.state === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' : milestone.state === 'IN_PROGRESS' ? 'bg-amber-100 text-amber-800' : 'bg-stone-200 text-stone-600'}`}>{milestoneStateLabel(milestone.state)}</span>
+              </div>
+              {milestone.description ? <p className="mt-2 break-words text-sm text-stone-700">{milestone.description}</p> : null}
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="mt-4 text-sm text-stone-600">Az iroda hamarosan közzéteszi az ügy mérföldköveit.</p>
+      )}
+    </Card>
+  );
+}
+
+function MatterView({ matter }: { matter: PortalMatter & { documents: PortalDocument[]; actionRequests: PortalActionRequest[]; updates: PortalSafeUpdate[]; milestones?: PortalMilestone[]; progressPercentage?: number | null } }) {
   return (
     <div className="space-y-6">
       <Card>
@@ -211,6 +262,7 @@ function MatterView({ matter }: { matter: PortalMatter & { documents: PortalDocu
         </div>
         {matter.publicDeadlines?.length ? <ul className="mt-4 list-disc space-y-1 pl-5 text-stone-700">{matter.publicDeadlines.map((deadline, index) => <li key={index}>{deadlineText(deadline)}</li>)}</ul> : null}
       </Card>
+      <MatterProgressSection milestones={matter.milestones} progressPercentage={matter.progressPercentage} />
       <Card><h2 className="text-2xl font-semibold">Dokumentumok</h2><div className="mt-4 grid gap-3">{matter.documents.map((doc) => <DocumentCard key={doc.id} document={doc} />)}</div></Card>
       <Card><h2 className="text-2xl font-semibold">Teendők</h2><div className="mt-4 grid gap-3">{matter.actionRequests.map((action) => <ActionCard key={action.id} action={action} />)}</div></Card>
       <CustomerInteractionCard caseId={matter.caseId} />
