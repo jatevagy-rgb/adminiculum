@@ -37,9 +37,19 @@ describe('internal portal-admin UI', () => {
     assert.match(src, /approveMembershipRequest/);
     assert.match(src, /rejectMembershipRequest/);
     assert.match(src, /createIdentityGrant/);
-    assert.match(src, /createClient/);
-    assert.match(src, /Új ügyfél létrehozása/);
-    assert.match(src, /Lehetséges egyezés/);
+    // Guided assignment flow: choose existing-vs-new client, no dead-end.
+    assert.match(src, /Meglévő ügyfélhez rendelem/);
+    assert.match(src, /Új ügyfelet hozok létre/);
+    assert.match(src, /assignmentMode/);
+    assert.match(src, /newClientInput/);
+    // Customer surface is auto-selected or created inline (no forced pre-created workspace).
+    assert.match(src, /createWorkspaceInput/);
+    assert.match(src, /surface-auto|surface-create/);
+    // Portal role and organizational-unit role are presented separately.
+    assert.match(src, /Portálon belüli szerep/);
+    assert.match(src, /Szervezeti egységen belüli szerep/);
+    // Confirmation summary states no automatic case access.
+    assert.match(src, /Ügyhozzáférés nem kerül automatikusan létrehozásra/);
     assert.match(src, /membership-request-row/);
     assert.match(src, /active-membership-row/);
     assert.match(src, /create-grant-btn/);
@@ -47,6 +57,8 @@ describe('internal portal-admin UI', () => {
     assert.match(src, /revision: r\.revision/);
     // no legacy clientUserId grant path in the admin surface.
     assert.doesNotMatch(src, /clientUserId/);
+    // no raw status enum in the primary card.
+    assert.match(src, /Jóváhagyásra vár/);
   });
 
   it('defines explicit customer and workforce interaction API boundaries', () => {

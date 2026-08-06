@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { Client } = require('pg');
 
-const migrationName = '20260805120000_client_portal_membership_onboarding';
+const migrationName = '20260805170000_client_org_unit_role';
 const jobDirectory = __dirname;
 const appRoot = process.env.MIGRATION_WEBJOB_ROOT || path.resolve(jobDirectory, '../../../..');
 const schemaPath = process.env.MIGRATION_WEBJOB_SCHEMA_PATH || path.join(appRoot, 'prisma', 'schema.prisma');
@@ -80,7 +80,11 @@ async function readState(client) {
              SELECT 1 FROM information_schema.columns
               WHERE table_schema = 'public' AND table_name = 'client_organization_membership_requests' AND column_name = 'internalDecisionNote'
            ) AS membership_internal_note,
-           to_regclass('public.client_org_membership_request_one_pending_idx') IS NOT NULL AS membership_pending_index`,
+           to_regclass('public.client_org_membership_request_one_pending_idx') IS NOT NULL AS membership_pending_index,
+           EXISTS(
+             SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'client_organization_memberships' AND column_name = 'unitRole'
+           ) AS membership_unit_role`,
   );
   const row = migration.rows[0] || null;
   const schemaPresent = schemaCheck.rows[0]?.intake_table === true
