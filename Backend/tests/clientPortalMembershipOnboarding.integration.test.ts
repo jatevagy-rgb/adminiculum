@@ -214,30 +214,34 @@ d('Client portal membership onboarding (PostgreSQL)', () => {
   });
 
   it('EXISTING_CLIENT with no compatible surface creates one inline; a second approval auto-selects it', async () => {
+    // Dedicated client so the auto-select sees exactly one compatible surface
+    // (the shared client accumulates surfaces across tests).
+    const isolatedClient = crypto.randomUUID();
+    await db.client.create({ data: { id: isolatedClient, name: 'Inline Surface Client Kft.' } });
     const emailA = `exista-${crypto.randomUUID()}@t.io`;
     const idA = await makeIdentity(emailA);
-    const submittedA = await submitMembershipRequest(sessionFor(idA, emailA), { requestedMode: 'ORGANIZATION', claimedOrganizationName: 'Onboarding Client Kft.' });
+    const submittedA = await submitMembershipRequest(sessionFor(idA, emailA), { requestedMode: 'ORGANIZATION', claimedOrganizationName: 'Inline Surface Client Kft.' });
     const pendingA = await db.clientOrganizationMembershipRequest.findUniqueOrThrow({ where: { id: submittedA.id } });
-    // No ORGANIZATION surface yet for `client` -> inline create.
+    // No ORGANIZATION surface yet for the isolated client -> inline create.
     const resA = await approveMembershipRequest(reviewer, submittedA.id, {
-      assignmentMode: 'EXISTING_CLIENT', existingClientId: client, actualMode: 'ORGANIZATION',
-      createWorkspaceInput: { name: 'Onboarding – Szervezeti', mode: 'ORGANIZATION' },
+      assignmentMode: 'EXISTING_CLIENT', existingClientId: isolatedClient, actualMode: 'ORGANIZATION',
+      createWorkspaceInput: { name: 'Inline – Szervezeti', mode: 'ORGANIZATION' },
       portalMembershipRole: 'REPRESENTATIVE',
       newOrganizationGroupName: 'HR', unitRole: 'MANAGER',
       revision: pendingA.revision,
     });
     expect(resA.createdWorkspace).toBe(true);
-    const group = await db.clientOrganizationGroup.findFirstOrThrow({ where: { clientId: client, name: 'HR', workspaceId: resA.workspaceId } });
+    const group = await db.clientOrganizationGroup.findFirstOrThrow({ where: { clientId: isolatedClient, name: 'HR', workspaceId: resA.workspaceId } });
     const orgMembershipA = await db.clientOrganizationMembership.findFirstOrThrow({ where: { clientPortalIdentityId: idA, groupId: group.id } });
     expect(orgMembershipA.unitRole).toBe('MANAGER');
 
-    // Second applicant, same client + mode -> the surface auto-selects (no createWorkspaceInput).
+    // Second applicant, same client + mode -> the single surface auto-selects.
     const emailB = `existb-${crypto.randomUUID()}@t.io`;
     const idB = await makeIdentity(emailB);
-    const submittedB = await submitMembershipRequest(sessionFor(idB, emailB), { requestedMode: 'ORGANIZATION', claimedOrganizationName: 'Onboarding Client Kft.' });
+    const submittedB = await submitMembershipRequest(sessionFor(idB, emailB), { requestedMode: 'ORGANIZATION', claimedOrganizationName: 'Inline Surface Client Kft.' });
     const pendingB = await db.clientOrganizationMembershipRequest.findUniqueOrThrow({ where: { id: submittedB.id } });
     const resB = await approveMembershipRequest(reviewer, submittedB.id, {
-      assignmentMode: 'EXISTING_CLIENT', existingClientId: client, actualMode: 'ORGANIZATION', portalMembershipRole: 'MEMBER', revision: pendingB.revision,
+      assignmentMode: 'EXISTING_CLIENT', existingClientId: isolatedClient, actualMode: 'ORGANIZATION', portalMembershipRole: 'MEMBER', revision: pendingB.revision,
     });
     expect(resB.createdWorkspace).toBe(false);
     expect(resB.workspaceId).toBe(resA.workspaceId); // auto-selected the single compatible surface
