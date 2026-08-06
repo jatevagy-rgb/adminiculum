@@ -534,3 +534,51 @@ export async function transitionWorkspaceMembership(actor: InternalActor, member
     return membership;
   });
 }
+
+// --- Invitation revocation + notification cancellation --------------------
+// Cleanly retire a pending/failed invitation and stop its notification retries.
+// Never returns the raw token; never revokes an already-created membership; an
+// already-accepted (USED) invitation cannot be revoked as though still pending.
+
+const CANCELLABLE_DELIVERY = new Set(['PENDING', 'SENDING', 'FAILED_RETRYABLE']);
+
+async function cancelDeliveryTx(tx: any, deliveryId: string | null, _actorId: string): Promise<boolean> {
+  if (!deliveryId) return false;
+  const delivery = await tx.clientNotificationDelivery.findUnique({ where: { id: deliveryId }, select: { id: true, status: true } });
+  if (!delivery || !CANCELLABLE_DELIVERY.has(String(delivery.status))) return false;
+  await tx.clientNotificationDelivery.update({ where: { id: deliveryId }, data: { status: 'CANCELLED', nextAttemptAt: null, lastErrorCodeSafe: 'CANCELLED_BY_WORKFORCE' } });
+  return true;
+}
+
+export async function revokeInvitation(actor: InternalActor, invitationId: string, db: Prisma = defaultPrisma) {
+  requireInternal(actor);
+  const invitation = await db.clientPortalInvitation.findUnique({ where: { id: invitationId } });
+  if (!invitation) throw new ClientWorkspaceError(404, 'INVITATION_NOT_FOUND', 'Invitation not found.');
+  if (invitation.status === 'USED') throw new ClientWorkspaceError(409, 'INVITATION_ALREADY_ACCEPTED', 'An accepted invitation cannot be revoked; manage the membership instead.');
+  if (invitation.status === 'REVOKED') {
+    // Idempotent: ensure the delivery is also cancelled, then return.
+    const cancelled = await db.$transaction((tx) => cancelDeliveryTx(tx, invitation.deliveryId, actor.userId));
+    return { id: invitation.id, status: 'REVOKED', notificationCancelled: cancelled, idempotent: true };
+  }
+  return db.$transaction(async (tx) => {
+    await tx.clientPortalInvitation.update({ where: { id: invitationId }, data: { status: 'REVOKED' } });
+    const notificationCancelled = await cancelDeliveryTx(tx, invitation.deliveryId, actor.userId);
+    if (invitation.workspaceId) {
+      await tx.clientPortalWorkspaceEvent.create({ data: { workspaceId: invitation.workspaceId, actorId: actor.userId, action: 'INVITATION_REVOKED', toStatus: 'REVOKED', metadataSafe: { invitationId, notificationCancelled } } });
+    }
+    return { id: invitationId, status: 'REVOKED', notificationCancelled, idempotent: false };
+  });
+}
+
+export async function cancelInvitationNotificationRetry(actor: InternalActor, invitationId: string, db: Prisma = defaultPrisma) {
+  requireInternal(actor);
+  const invitation = await db.clientPortalInvitation.findUnique({ where: { id: invitationId }, select: { id: true, deliveryId: true, workspaceId: true } });
+  if (!invitation) throw new ClientWorkspaceError(404, 'INVITATION_NOT_FOUND', 'Invitation not found.');
+  if (!invitation.deliveryId) return { invitationId, cancelled: false, reason: 'NO_DELIVERY' };
+  const cancelled = await db.$transaction(async (tx) => {
+    const c = await cancelDeliveryTx(tx, invitation.deliveryId, actor.userId);
+    if (c) await tx.clientPortalInvitation.update({ where: { id: invitationId }, data: { deliveryStatus: 'CANCELLED', deliveryCodeSafe: 'CANCELLED_BY_WORKFORCE' } });
+    return c;
+  });
+  return { invitationId, deliveryId: invitation.deliveryId, cancelled };
+}

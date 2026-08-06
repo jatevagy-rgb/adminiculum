@@ -9,8 +9,13 @@ import {
   createMatterPublication,
   createSafeUpdate,
   ClientPublicationError,
+  getMilestoneDraft,
   getPublicationOverview,
+  listEligibleMilestoneSteps,
   listGrants,
+  previewMilestonePublication,
+  publishMilestoneRevision,
+  saveMilestoneDraft,
   publishDocumentPublication,
   publishMatterPublication,
   revokeDocumentPublication,
@@ -92,6 +97,28 @@ for (const [action, handler] of Object.entries(matterActions)) {
     catch (error) { fail(res, error); }
   });
 }
+
+// Customer-safe milestone publication (workforce).
+clientPublicationRouter.get('/cases/:caseId/milestones/eligible', async (req, res) => {
+  try { res.json(await listEligibleMilestoneSteps(actor(req), String(req.params.caseId))); }
+  catch (error) { fail(res, error); }
+});
+clientPublicationRouter.get('/cases/:caseId/milestones/draft', async (req, res) => {
+  try { res.json(await getMilestoneDraft(actor(req), String(req.params.caseId))); }
+  catch (error) { fail(res, error); }
+});
+clientPublicationRouter.put('/cases/:caseId/milestones/draft', async (req, res) => {
+  try { res.json(await saveMilestoneDraft(actor(req), String(req.params.caseId), req.body?.milestones)); }
+  catch (error) { fail(res, error); }
+});
+clientPublicationRouter.get('/cases/:caseId/milestones/preview', async (req, res) => {
+  try { res.json(await previewMilestonePublication(actor(req), String(req.params.caseId))); }
+  catch (error) { fail(res, error); }
+});
+clientPublicationRouter.post('/cases/:caseId/milestones/publish', async (req, res) => {
+  try { res.status(201).json(await publishMilestoneRevision(actor(req), String(req.params.caseId))); }
+  catch (error) { fail(res, error); }
+});
 
 clientPublicationRouter.post('/documents', async (req, res) => {
   try { res.status(201).json(await createDocumentPublication(actor(req), payload(req))); }

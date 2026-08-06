@@ -168,3 +168,10 @@ jobs:
         env:
           CLIENT_IDENTITY_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
         run: npm run test:membership-onboarding:db
+
+      - name: Run customer-safe milestone publication PostgreSQL integration tests
+        working-directory: Backend
+        env:
+          PUBLICATION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+          CLIENT_PORTAL_READ_ENABLED: 'true'
+        run: npm run test:milestone:db

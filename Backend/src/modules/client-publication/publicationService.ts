@@ -296,6 +296,169 @@ export async function updateMatterPublication(actor: Actor, publicationId: strin
   });
 }
 
+// ---------------------------------------------------------------------------
+// Customer-safe milestone publication
+//
+// A workforce draft (mutable, on the publication) is snapshotted into an
+// immutable publication revision on publish. Customer progress is derived only
+// from published milestone weights; internal task completion after publish never
+// mutates a published revision. The customer never sees the source task id,
+// assignee, dependencies or internal task title.
+// ---------------------------------------------------------------------------
+
+const MILESTONE_STATES = new Set(['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED']);
+
+type StoredMilestone = { publicKey: string; sourceTaskId: string | null; safeTitle: string; safeDescription: string | null; displayOrder: number; weight: number | null; completionState: string; completedAt: string | null };
+
+function normalizeMilestones(input: unknown, caseTaskIds: Set<string>): StoredMilestone[] {
+  const list = Array.isArray(input) ? input : [];
+  const keys = new Set<string>();
+  const out = list.map((raw: Row, index: number): StoredMilestone => {
+    const publicKey = text(raw.publicKey ?? raw.reference, 'publicKey', 80, true)!;
+    if (keys.has(publicKey)) throw new ClientPublicationError(400, 'MILESTONE_KEY_DUPLICATE', 'Duplicate milestone key.');
+    keys.add(publicKey);
+    const safeTitle = text(raw.safeTitle ?? raw.title, 'safeTitle', 200, true)!;
+    const safeDescription = text(raw.safeDescription ?? raw.description, 'safeDescription', 1000, false);
+    const completionState = String(raw.completionState ?? raw.state ?? 'NOT_STARTED').toUpperCase();
+    if (!MILESTONE_STATES.has(completionState)) throw new ClientPublicationError(400, 'MILESTONE_STATE_INVALID', 'Invalid milestone state.');
+    let weight: number | null = null;
+    if (raw.weight != null && String(raw.weight).trim() !== '') {
+      weight = Number(raw.weight);
+      if (!Number.isFinite(weight) || weight <= 0) throw new ClientPublicationError(400, 'MILESTONE_WEIGHT_INVALID', 'Milestone weight must be greater than zero.');
+    }
+    const displayOrder = Number.isFinite(Number(raw.displayOrder)) ? Number(raw.displayOrder) : index;
+    const sourceTaskId = raw.sourceTaskId ? String(raw.sourceTaskId) : null;
+    if (sourceTaskId && !caseTaskIds.has(sourceTaskId)) throw new ClientPublicationError(400, 'MILESTONE_SOURCE_STEP_INVALID', 'Milestone source step is not a candidate task on this Case.');
+    const completedAt = completionState === 'COMPLETED' && raw.completedAt ? new Date(String(raw.completedAt)).toISOString() : null;
+    return { publicKey, sourceTaskId, safeTitle, safeDescription, displayOrder, weight, completionState, completedAt };
+  });
+  out.sort((a, b) => a.displayOrder - b.displayOrder || a.publicKey.localeCompare(b.publicKey));
+  return out;
+}
+
+/** Progress from published weights only. Null when no weights are supplied
+ *  (never silently counts milestones equally). Clamped and deterministically
+ *  rounded to 0..100. */
+export function computeMilestoneProgress(milestones: Array<{ weight?: number | null; completionState?: string }>): number | null {
+  const weighted = milestones.filter((m) => m.weight != null && Number(m.weight) > 0);
+  if (!weighted.length) return null;
+  const total = weighted.reduce((sum, m) => sum + Number(m.weight), 0);
+  if (total <= 0) return null;
+  const done = weighted.filter((m) => String(m.completionState) === 'COMPLETED').reduce((sum, m) => sum + Number(m.weight), 0);
+  return Math.max(0, Math.min(100, Math.round((done / total) * 100)));
+}
+
+/** Customer-safe projection — strips sourceTaskId and every internal field.
+ *  Shared by the workforce preview and the customer portal read. */
+export function toCustomerMilestones(snapshot: unknown): Row[] {
+  const list = Array.isArray(snapshot) ? snapshot : [];
+  return list
+    .map((m: Row) => ({
+      reference: String(m.publicKey),
+      title: String(m.safeTitle),
+      description: m.safeDescription ?? null,
+      state: String(m.completionState),
+      displayOrder: Number(m.displayOrder ?? 0),
+      weight: m.weight != null ? Number(m.weight) : null,
+      completedAt: m.completedAt ?? null,
+    }))
+    .sort((a, b) => a.displayOrder - b.displayOrder);
+}
+
+async function caseCandidateTaskIds(db: Db, caseId: string): Promise<Set<string>> {
+  const rows = await many(db, 'SELECT id FROM tasks WHERE "caseId"=$1 AND "workflowPublicMilestoneCandidate"=true', caseId);
+  return new Set(rows.map((row) => String(row.id)));
+}
+
+async function latestCasePublication(db: Db, caseId: string, forUpdate = false): Promise<Row | null> {
+  return one(db, `SELECT *, status::text FROM client_matter_publications WHERE "caseId"=$1 ORDER BY "createdAt" DESC LIMIT 1${forUpdate ? ' FOR UPDATE' : ''}`, caseId);
+}
+
+/** Workforce: list the internal workflow steps eligible to become milestones.
+ *  Internal-only view (task title/status) — never returned to the customer. */
+export async function listEligibleMilestoneSteps(actor: Actor, caseId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
+  requireFoundation(); requireInternal(actor);
+  await assertCaseAccess(db, actor, caseId);
+  const rows = await many(db, 'SELECT id, title, status::text AS status, "workflowStepKey", "workflowActivatedAt" FROM tasks WHERE "caseId"=$1 AND "workflowPublicMilestoneCandidate"=true ORDER BY "createdAt" ASC', caseId);
+  return { items: rows.map((row) => ({ taskId: row.id, stepKey: row.workflowStepKey ?? null, internalTitle: row.title, internalStatus: row.status, suggestedState: row.status === 'DONE' || row.status === 'COMPLETED' ? 'COMPLETED' : row.workflowActivatedAt ? 'IN_PROGRESS' : 'NOT_STARTED' })) };
+}
+
+/** Workforce: read the mutable milestone draft (never customer-visible). */
+export async function getMilestoneDraft(actor: Actor, caseId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
+  requireFoundation(); requireInternal(actor);
+  await assertCaseAccess(db, actor, caseId);
+  const pub = await latestCasePublication(db, caseId);
+  const current = pub?.currentRevisionId ? await one(db, 'SELECT "milestonesSnapshot", "progressPercentage" FROM client_matter_publication_revisions WHERE id=$1', pub.currentRevisionId) : null;
+  return {
+    publicationId: pub?.id ?? null,
+    publicationStatus: pub?.status ?? null,
+    draft: pub?.milestoneDraftSnapshot ?? (current?.milestonesSnapshot ?? []),
+    publishedMilestones: current?.milestonesSnapshot ? toCustomerMilestones(current.milestonesSnapshot) : [],
+    publishedProgress: current?.progressPercentage ?? null,
+  };
+}
+
+/** Workforce: save the milestone draft. Never affects the customer portal. */
+export async function saveMilestoneDraft(actor: Actor, caseId: string, milestones: unknown, db: PrismaClient = defaultPrisma): Promise<Row> {
+  requireFoundation(); requireInternal(actor);
+  return db.$transaction(async (tx) => {
+    await assertCaseAccess(tx, actor, caseId);
+    const caseRow = await getCase(tx, caseId);
+    const pub = await latestCasePublication(tx, caseId, true);
+    if (!pub) throw new ClientPublicationError(409, 'MATTER_PUBLICATION_REQUIRED', 'Publish the matter first, then add customer milestones.');
+    const normalized = normalizeMilestones(milestones, await caseCandidateTaskIds(tx, caseId));
+    const stored = JSON.stringify(normalized);
+    if (forbidden(normalized)) throw new ClientPublicationError(400, 'FORBIDDEN_CLIENT_FIELD', 'Milestone draft contains internal-only data.');
+    await exec(tx, 'UPDATE client_matter_publications SET "milestoneDraftSnapshot"=$1::jsonb, "updatedAt"=now() WHERE id=$2', stored, pub.id);
+    await audit(tx, { action: 'DRAFT_UPDATED', actorId: actor.userId, caseId, clientId: caseRow.clientId, matterPublicationId: pub.id, metadataSafe: { milestoneDraft: true, count: normalized.length } });
+    return { publicationId: pub.id, draft: normalized, preview: { milestones: toCustomerMilestones(normalized), progressPercentage: computeMilestoneProgress(normalized) } };
+  });
+}
+
+/** Workforce preview — uses the SAME customer-safe projection as the portal
+ *  read, so preview and the customer DTO are identical for the same content. */
+export async function previewMilestonePublication(actor: Actor, caseId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
+  requireFoundation(); requireInternal(actor);
+  await assertCaseAccess(db, actor, caseId);
+  const pub = await latestCasePublication(db, caseId);
+  const draft = pub?.milestoneDraftSnapshot ?? [];
+  const normalized = normalizeMilestones(draft, await caseCandidateTaskIds(db, caseId));
+  const dto = { milestones: toCustomerMilestones(normalized), progressPercentage: computeMilestoneProgress(normalized) };
+  assertNoForbiddenPortalFields(dto);
+  return dto;
+}
+
+/** Workforce: publish the draft into a new immutable revision. Copies the
+ *  current revision's client-safe matter content and adds the milestone
+ *  snapshot + derived progress; supersedes the prior active revision. Internal
+ *  task completion afterwards never mutates this published revision. */
+export async function publishMilestoneRevision(actor: Actor, caseId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
+  requireFoundation();
+  if (!actor.userId || !PUBLISHER_ROLES.has(String(actor.role || ''))) throw new ClientPublicationError(403, 'PUBLICATION_NOT_AUTHORIZED', 'Actor is not authorized to publish.');
+  return db.$transaction(async (tx) => {
+    await assertCaseAccess(tx, actor, caseId);
+    const caseRow = await getCase(tx, caseId);
+    const pub = await latestCasePublication(tx, caseId, true);
+    if (!pub || !pub.currentRevisionId) throw new ClientPublicationError(409, 'MATTER_PUBLICATION_REQUIRED', 'Publish the matter first, then publish customer milestones.');
+    const current = await one(tx, 'SELECT * FROM client_matter_publication_revisions WHERE id=$1', pub.currentRevisionId);
+    if (!current) throw new ClientPublicationError(409, 'MATTER_REVISION_MISSING', 'Current matter revision is missing.');
+    const normalized = normalizeMilestones(pub.milestoneDraftSnapshot ?? [], await caseCandidateTaskIds(tx, caseId));
+    const progress = computeMilestoneProgress(normalized);
+    const nextNumber = Number(current.revisionNumber) + 1;
+    const revisionId = newId();
+    await exec(tx,
+      `INSERT INTO client_matter_publication_revisions (id,"publicationId","revisionNumber","clientSafeTitle","clientSafeStatus","clientSafeNextStep","clientSafeCurrentPosition","clientSafeWaitingOn","publicTargetDate","responsibleLawyerDisplay","publishedDeadlinesSnapshot","safeUpdatesSnapshot","actionRequestsSnapshot","sourceCaseRevision","sourceFingerprint","audienceSnapshot","milestonesSnapshot","progressPercentage","createdById")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12::jsonb,$13::jsonb,$14,$15,$16::jsonb,$17::jsonb,$18,$19)`,
+      revisionId, pub.id, nextNumber, current.clientSafeTitle, current.clientSafeStatus, current.clientSafeNextStep ?? null, current.clientSafeCurrentPosition ?? null, current.clientSafeWaitingOn ?? null, current.publicTargetDate ?? null, current.responsibleLawyerDisplay ?? null,
+      JSON.stringify(current.publishedDeadlinesSnapshot ?? []), JSON.stringify(current.safeUpdatesSnapshot ?? []), JSON.stringify(current.actionRequestsSnapshot ?? []), current.sourceCaseRevision ?? null,
+      hash({ base: current.sourceFingerprint, milestones: normalized }), JSON.stringify(current.audienceSnapshot ?? {}), JSON.stringify(normalized), progress, actor.userId,
+    );
+    await exec(tx, 'UPDATE client_matter_publications SET "currentRevisionId"=$1, status=$2::"ClientPublicationStatus", "publishedAt"=now(), "publishedById"=$3, "supersededAt"=CASE WHEN status=$2::"ClientPublicationStatus" THEN "supersededAt" ELSE NULL END, revision=revision+1, "updatedAt"=now() WHERE id=$4', revisionId, 'PUBLISHED', actor.userId, pub.id);
+    await audit(tx, { action: 'PUBLISHED', actorId: actor.userId, caseId, clientId: caseRow.clientId, matterPublicationId: pub.id, fromStatus: pub.status, toStatus: 'PUBLISHED', metadataSafe: { milestoneRevision: nextNumber, milestoneCount: normalized.length, progressPercentage: progress } });
+    return { publicationId: pub.id, revisionId, revisionNumber: nextNumber, milestones: toCustomerMilestones(normalized), progressPercentage: progress };
+  });
+}
+
 async function documentSource(db: Db, documentId: string, versionId: string): Promise<Row> {
   const row = await one(db, 'SELECT d.id AS "documentId", d."caseId", d."clientId", coalesce(d.title,d.name,d."fileName") AS "documentTitle", v.id AS "versionId", v.version, v.name AS "versionName", v."originalFileName", v."mimeType", v.size, v."storageReference", v."spItemId", v."createdAt" FROM documents d JOIN document_versions v ON v."documentId"=d.id WHERE d.id=$1 AND v.id=$2', documentId, versionId);
   if (!row) throw new ClientPublicationError(404, 'DOCUMENT_VERSION_NOT_FOUND', 'Document version not found for document.');
@@ -745,7 +908,7 @@ export async function listPortalMatters(actor: Actor, db: PrismaClient = default
 
 export async function getPortalMatter(actor: Actor, publicationId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
   const context = await resolvePortalContext(actor, db);
-  const row = await one(db, `SELECT p.*, p.status::text, r.id AS "revisionId", r."clientSafeTitle", r."clientSafeStatus", r."clientSafeNextStep", r."responsibleLawyerDisplay", r."publishedDeadlinesSnapshot"
+  const row = await one(db, `SELECT p.*, p.status::text, r.id AS "revisionId", r."clientSafeTitle", r."clientSafeStatus", r."clientSafeNextStep", r."responsibleLawyerDisplay", r."publishedDeadlinesSnapshot", r."milestonesSnapshot", r."progressPercentage"
     FROM client_matter_publications p JOIN client_matter_publication_revisions r ON r.id=p."currentRevisionId"
     WHERE p.id=$1 AND p.status='PUBLISHED'::"ClientPublicationStatus"`, publicationId);
   if (!row || !context.caseIds.includes(String(row.caseId)) || !audienceAllows(row, context.grants, 'MATTER_READ')) throw new ClientPublicationError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Portal content is not available.');
@@ -755,7 +918,10 @@ export async function getPortalMatter(actor: Actor, publicationId: string, db: P
     listPortalActionRequests(actor, row.id, db),
     listPortalSafeUpdates(actor, row.id, db),
   ]);
-  const dto = { ...matter, documents: documents.items, actionRequests: actions.items, updates: updates.items };
+  // Published milestones + derived progress come only from the immutable current
+  // revision; the customer-safe projection strips every internal field.
+  const milestones = toCustomerMilestones(row.milestonesSnapshot);
+  const dto = { ...matter, documents: documents.items, actionRequests: actions.items, updates: updates.items, milestones, progressPercentage: row.progressPercentage != null ? Number(row.progressPercentage) : null };
   assertNoForbiddenPortalFields(dto);
   return dto;
 }
