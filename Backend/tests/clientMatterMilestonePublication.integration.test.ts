@@ -51,15 +51,15 @@ d('Customer-safe milestone publication (PostgreSQL)', () => {
       { id: taskA, title: 'INTERNAL Szerződés első jogi átnézése (Gyula)', taskType: 'REVIEW_CONTRACT', status: 'IN_PROGRESS', priority: 'MEDIUM', caseId, assignedToId: lawyer, assignedById: admin, requiredSkills: [], workflowInstanceId: 'wfi-1', workflowStepKey: 'A', workflowPublicMilestoneCandidate: true },
       { id: taskB, title: 'INTERNAL Végső partneri review (Csanád)', taskType: 'REVIEW_CONTRACT', status: 'PENDING', priority: 'MEDIUM', caseId, assignedToId: lawyer, assignedById: admin, requiredSkills: [], workflowInstanceId: 'wfi-1', workflowStepKey: 'B', workflowDependsOnKeys: ['A'], workflowPublicMilestoneCandidate: true },
     ] as never });
+    // Portal grant first: creating a matter revision requires an active audience grant.
+    const grant = await createGrant(actor, { caseId, clientId: client, clientUserId: portalUser, permissions: ['MATTER_READ', 'DOCUMENT_READ', 'UPDATE_READ'] }, db);
+    await transitionGrant(actor, grant.id, 'activate', { expectedRevision: grant.revision }, db);
     // A published matter publication (milestones augment an already-published matter).
     const draft = await createMatterPublication(actor, { caseId, clientSafeTitle: 'Ügy', clientSafeStatus: 'Folyamatban' }, db);
     publicationId = draft.id;
     const submitted = await submitMatterPublication(actor, draft.id, { expectedRevision: draft.revision }, db);
     const approved = await approveMatterPublication(actor, draft.id, { expectedRevision: submitted.revision }, db);
     await publishMatterPublication(actor, draft.id, { expectedRevision: approved.revision }, db);
-    // Portal grant so the customer can read the matter.
-    const grant = await createGrant(actor, { caseId, clientId: client, clientUserId: portalUser, permissions: ['MATTER_READ', 'DOCUMENT_READ', 'UPDATE_READ'] }, db);
-    await transitionGrant(actor, grant.id, 'activate', { expectedRevision: grant.revision }, db);
   });
 
   afterAll(async () => { await db?.$disconnect(); });
