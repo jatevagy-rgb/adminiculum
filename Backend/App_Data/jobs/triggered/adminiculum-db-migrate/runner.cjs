@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { Client } = require('pg');
 
-const migrationName = '20260805170000_client_org_unit_role';
+const migrationName = '20260806110000_client_portal_invitation_delivery_state';
 const jobDirectory = __dirname;
 const appRoot = process.env.MIGRATION_WEBJOB_ROOT || path.resolve(jobDirectory, '../../../..');
 const schemaPath = process.env.MIGRATION_WEBJOB_SCHEMA_PATH || path.join(appRoot, 'prisma', 'schema.prisma');
@@ -54,7 +54,7 @@ async function readState(client) {
   );
     // Verify the concrete latest effect rather than trusting migration metadata
     // alone. Keeps the CP1 checks (so an earlier regression still fails) and adds
-    // the membership-onboarding migration's concrete effects.
+    // the invitation delivery/workflow migration's concrete effects.
   const schemaCheck = await client.query(
     `SELECT
        to_regclass('public.client_portal_intake_requests') IS NOT NULL AS intake_table,
@@ -84,7 +84,19 @@ async function readState(client) {
            EXISTS(
              SELECT 1 FROM information_schema.columns
               WHERE table_schema = 'public' AND table_name = 'client_organization_memberships' AND column_name = 'unitRole'
-           ) AS membership_unit_role`,
+           ) AS membership_unit_role,
+           EXISTS(
+             SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'client_portal_invitations' AND column_name = 'deliveryStatus'
+           ) AS invitation_delivery_status,
+           EXISTS(
+             SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'tasks' AND column_name = 'workflowInstanceId'
+           ) AS task_workflow_instance,
+           EXISTS(
+             SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'tasks' AND column_name = 'workflowDependsOnKeys'
+           ) AS task_workflow_dependencies`,
   );
   const row = migration.rows[0] || null;
   const schemaPresent = schemaCheck.rows[0]?.intake_table === true
@@ -95,7 +107,11 @@ async function readState(client) {
       && schemaCheck.rows[0]?.workspace_publication_index === true
       && schemaCheck.rows[0]?.membership_request_mode === true
       && schemaCheck.rows[0]?.membership_internal_note === true
-      && schemaCheck.rows[0]?.membership_pending_index === true;
+      && schemaCheck.rows[0]?.membership_pending_index === true
+      && schemaCheck.rows[0]?.membership_unit_role === true
+      && schemaCheck.rows[0]?.invitation_delivery_status === true
+      && schemaCheck.rows[0]?.task_workflow_instance === true
+      && schemaCheck.rows[0]?.task_workflow_dependencies === true;
   const verified = Boolean(
     row && row.finished_at && !row.rolled_back_at && failed.rows[0].count === 0 && schemaPresent,
   );

@@ -9,6 +9,7 @@ import {
   createCase,
   updateClient,
   getCaseDocuments,
+  uploadCaseDocument,
   getCommunications,
   getUsers,
   addCaseCollaborator,
@@ -24,6 +25,38 @@ import { ClientColorSelector } from "@/components/clients/ClientColorSelector";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 
 type DossierDocument = DocumentItem & { caseNumber: string; caseId: string };
+
+type InitialDocumentState = {
+  id: string;
+  file: File;
+  status: "QUEUED" | "UPLOADING" | "UPLOADED" | "FAILED";
+  message?: string;
+};
+
+const WORKFLOW_TEMPLATES = [
+  {
+    key: "SIMPLE",
+    label: "Egyszerű ügyintézés",
+    description: "Egy induló feladat a felelős ügyvédnek.",
+    steps: ["Ügyindító áttekintés"],
+  },
+  {
+    key: "CONTRACT_REVIEW_TRIAD",
+    label: "Szerződés-review",
+    description: "Gyula és Amanda párhuzamosan dolgozik, Csanád csak mindkettő után kapja meg a review-t.",
+    steps: ["Gyula: szerződés első jogi átnézése", "Amanda: ügyfél- és compliance-ellenőrzés", "Csanád: végső partneri review"],
+  },
+] as const;
+
+const fileToBase64 = (file: File) => new Promise<string>((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const result = typeof reader.result === "string" ? reader.result : "";
+    resolve(result.includes(",") ? result.split(",").pop() || "" : result);
+  };
+  reader.onerror = () => reject(reader.error || new Error("File read failed"));
+  reader.readAsDataURL(file);
+});
 
 const formatDate = (value?: string) => {
   if (!value) return "—";
@@ -86,7 +119,10 @@ function ClientDetailContent() {
     priority: "MEDIUM",
     description: "",
     deadline: "",
+    workflowTemplateKey: "SIMPLE",
   });
+  const [workflowAssignees, setWorkflowAssignees] = useState<Record<string, string>>({});
+  const [initialDocuments, setInitialDocuments] = useState<InitialDocumentState[]>([]);
   const [selectedCollaboratorIds, setSelectedCollaboratorIds] = useState<string[]>([]);
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [isSavingCase, setIsSavingCase] = useState(false);
@@ -182,7 +218,26 @@ function ClientDetailContent() {
         priority: caseFormData.priority,
         description: caseFormData.description,
         deadline: caseFormData.deadline || undefined,
+        workflowTemplateKey: caseFormData.workflowTemplateKey || "SIMPLE",
+        workflowAssignees,
       });
+      for (const queued of initialDocuments) {
+        setInitialDocuments((current) => current.map((item) => item.id === queued.id ? { ...item, status: "UPLOADING", message: "Feltöltés folyamatban..." } : item));
+        try {
+          const fileContentBase64 = await fileToBase64(queued.file);
+          await uploadCaseDocument({
+            caseId: created.id,
+            fileName: queued.file.name,
+            fileContentBase64,
+            mimeType: queued.file.type || undefined,
+            documentType: "OTHER",
+          });
+          setInitialDocuments((current) => current.map((item) => item.id === queued.id ? { ...item, status: "UPLOADED", message: "Feltöltve és rögzítve." } : item));
+        } catch (uploadError) {
+          setInitialDocuments((current) => current.map((item) => item.id === queued.id ? { ...item, status: "FAILED", message: uploadError instanceof Error ? uploadError.message : "A dokumentum feltöltése nem sikerült." } : item));
+          throw new Error("Az ügy létrejött, de legalább egy induló dokumentum feltöltése nem sikerült. Próbálja újra az ügy dokumentumai között.");
+        }
+      }
       // Attach selected collaborators after case is created
       for (const userId of selectedCollaboratorIds) {
         try {
@@ -194,6 +249,8 @@ function ClientDetailContent() {
       setShowNewCaseModal(false);
       setCaseFormData((prev) => ({ ...prev, deadline: "" }));
       setSelectedCollaboratorIds([]);
+      setWorkflowAssignees({});
+      setInitialDocuments([]);
       await loadClientData();
       router.push(`/cases/${created.id}/documents`);
     } catch (err) {
@@ -294,8 +351,15 @@ function ClientDetailContent() {
               </div>
               <section className="mt-5 rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Client Portal control plane</p><h2 className="mt-1 font-serif text-xl text-[var(--adm-text)]">Ügyfélkapcsolati működés</h2></div><span className="rounded-full bg-[var(--adm-gold-soft,#f3ead2)] px-3 py-1 text-xs font-semibold">{client.portalAccessEnabled ? 'Portál előkészítve' : 'Portál hozzáférés kikapcsolva'}</span></div>
-                <div className="mt-3 grid gap-3 md:grid-cols-3"><label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]"><span>Működési mód</span><select value={client.relationshipMode || 'PORTAL_CENTRIC'} disabled={savingPortal} onChange={(event) => void savePortalSettings({ relationshipMode: event.target.value as Client['relationshipMode'] })} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-sm text-[var(--adm-text)]"><option value="PORTAL_CENTRIC">Portálközpontú</option><option value="EMAIL_CENTRIC">E-mail központú</option><option value="CONNECTED_SYSTEM">Kapcsolt rendszer</option></select></label><label className="flex items-end gap-2 text-sm"><input type="checkbox" checked={Boolean(client.portalAccessEnabled)} disabled={savingPortal} onChange={(event) => void savePortalSettings({ portalAccessEnabled: event.target.checked })} />Portál elérhetőségének előkészítése</label><label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]"><span>Kapcsolt rendszer állapota</span><input value={client.connectedSystemState || ''} disabled={savingPortal} onChange={(event) => setClient((current) => current ? { ...current, connectedSystemState: event.target.value } : current)} onBlur={(event) => void savePortalSettings({ connectedSystemState: event.target.value })} placeholder="Nincs konfigurálva" className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-sm text-[var(--adm-text)]" /></label></div>
-                <p className="mt-3 text-xs text-[var(--adm-text-muted)]">A kapcsolt rendszer ebben a slice-ban csak konfigurációs állapot; külső rendszer felé nem indít automatikus szinkronizációt.</p>
+                <div className="mt-3 grid gap-3 md:grid-cols-2"><label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]"><span>Működési mód</span><select value={client.relationshipMode || 'PORTAL_CENTRIC'} disabled={savingPortal} onChange={(event) => void savePortalSettings({ relationshipMode: event.target.value as Client['relationshipMode'] })} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-sm text-[var(--adm-text)]"><option value="PORTAL_CENTRIC">Portálközpontú</option><option value="EMAIL_CENTRIC">E-mail központú</option><option value="CONNECTED_SYSTEM">Kapcsolt rendszer</option></select></label><label className="flex items-end gap-2 text-sm"><input type="checkbox" checked={Boolean(client.portalAccessEnabled)} disabled={savingPortal} onChange={(event) => void savePortalSettings({ portalAccessEnabled: event.target.checked })} />Portál elérhetőségének előkészítése</label></div>
+                {client.relationshipMode === 'CONNECTED_SYSTEM' ? (
+                  <div className="mt-3 rounded border border-[var(--adm-border)] bg-white/70 p-3">
+                    <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]"><span>Kapcsolt rendszer állapota</span><input value={client.connectedSystemState || ''} disabled={savingPortal} onChange={(event) => setClient((current) => current ? { ...current, connectedSystemState: event.target.value } : current)} onBlur={(event) => void savePortalSettings({ connectedSystemState: event.target.value })} placeholder="Nincs konfigurálva" className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-sm text-[var(--adm-text)]" /></label>
+                    <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Ez az állapot a külső ügykezelő rendszer kapcsolatának konfigurációját jelzi. Nem jelent automatikus szinkronizációt.</p>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Normál ügyfélfelületnél nincs kapcsolt-rendszer állapot a fő adminisztrációban.</p>
+                )}
               </section>
 
               <div className="flex gap-2">
@@ -453,7 +517,7 @@ function ClientDetailContent() {
 
       {showNewCaseModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="adm-wizard-modal w-full max-w-md mx-4">
+          <div className="adm-wizard-modal w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
             <div className="adm-wizard-header p-6 border-b"><h2 className="text-lg font-serif text-[var(--adm-text)]">Új ügy</h2></div>
             <div className="adm-wizard-body p-6 space-y-4">
               <div>
@@ -518,6 +582,74 @@ function ClientDetailContent() {
                   </div>
                 )}
               </div>
+              <section className="rounded border border-[var(--adm-border)] bg-white/70 p-3">
+                <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Munkafolyamat</label>
+                <select
+                  value={caseFormData.workflowTemplateKey || "SIMPLE"}
+                  onChange={(event) => {
+                    setCaseFormData({ ...caseFormData, workflowTemplateKey: event.target.value });
+                    setWorkflowAssignees({});
+                  }}
+                  className="adm-modal-field mt-2 w-full px-3 py-2 text-sm"
+                >
+                  {WORKFLOW_TEMPLATES.map((template) => <option key={template.key} value={template.key}>{template.label}</option>)}
+                </select>
+                {WORKFLOW_TEMPLATES.filter((template) => template.key === (caseFormData.workflowTemplateKey || "SIMPLE")).map((template) => (
+                  <div key={template.key} className="mt-3 space-y-2 text-xs text-[var(--adm-text-muted)]">
+                    <p>{template.description}</p>
+                    <ol className="space-y-1">
+                      {template.steps.map((step, index) => <li key={step}>{index + 1}. {step}</li>)}
+                    </ol>
+                    {template.key === "CONTRACT_REVIEW_TRIAD" ? (
+                      <div className="grid gap-2 md:grid-cols-3">
+                        {[
+                          ["legal-review", "Gyula"],
+                          ["compliance-check", "Amanda"],
+                          ["partner-final-review", "Csanád"],
+                        ].map(([stepKey, label]) => (
+                          <label key={stepKey} className="grid gap-1">
+                            <span>{label} felelőse</span>
+                            <select value={workflowAssignees[stepKey] || ""} onChange={(event) => setWorkflowAssignees((current) => ({ ...current, [stepKey]: event.target.value }))} className="adm-modal-field px-2 py-2 text-xs">
+                              <option value="">Alapértelmezett felelős</option>
+                              {availableUsers.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
+                            </select>
+                          </label>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </section>
+              <section className="rounded border border-[var(--adm-border)] bg-white/70 p-3">
+                <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Induló dokumentumok</label>
+                <p className="mt-1 text-xs text-[var(--adm-text-muted)]">A fájlok az ügy létrejötte után a kanonikus ügy-dokumentum feltöltésen mennek át; hiba esetén nincs hamis sikerüzenet.</p>
+                <input
+                  type="file"
+                  multiple
+                  onChange={(event) => {
+                    const selectedFiles = Array.from(event.target.files || []);
+                    setInitialDocuments((current) => [
+                      ...current,
+                      ...selectedFiles.map((file) => ({ id: `${file.name}-${file.size}-${file.lastModified}`, file, status: "QUEUED" as const, message: "Feltöltésre vár." })),
+                    ]);
+                    event.target.value = "";
+                  }}
+                  className="mt-3 block w-full text-xs text-[var(--adm-text-muted)]"
+                />
+                {initialDocuments.length ? (
+                  <div className="mt-3 space-y-2">
+                    {initialDocuments.map((item) => (
+                      <div key={item.id} className="flex items-center justify-between gap-3 rounded border border-[var(--adm-border)] px-3 py-2 text-xs">
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-[var(--adm-text)]">{item.file.name}</p>
+                          <p className="text-[var(--adm-text-muted)]">{Math.ceil(item.file.size / 1024)} KB · {item.message || item.status}</p>
+                        </div>
+                        {item.status === "QUEUED" || item.status === "FAILED" ? <button type="button" onClick={() => setInitialDocuments((current) => current.filter((doc) => doc.id !== item.id))} className="text-[var(--adm-terracotta-700)]">Eltávolítás</button> : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
               <div>
                 <label className="block text-xs text-[var(--adm-text-muted)] mb-1">Leírás</label>
                 <textarea value={caseFormData.description} onChange={(e) => setCaseFormData({ ...caseFormData, description: e.target.value })} rows={3} className="adm-modal-field w-full px-3 py-2 text-sm" />

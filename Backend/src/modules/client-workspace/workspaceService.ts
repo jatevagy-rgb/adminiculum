@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { ClientPortalSession } from '../../middleware/clientPortalAuth';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { isCapabilityEnabled } from '../client-interaction/gates';
+import { enqueueNotification, processDelivery } from '../client-interaction/notificationService';
 
 type Prisma = typeof defaultPrisma;
 type InternalActor = { userId: string; role?: string | null };
@@ -11,6 +12,7 @@ const WORKSPACE_MODES = new Set(['INDIVIDUAL', 'ORGANIZATION', 'CASE_RELAY']);
 const COMMUNICATION_MODES = new Set(['PORTAL_PRIMARY', 'EMAIL_LINKED', 'EXTERNAL_ONLY']);
 const CONNECTED_STATES = new Set(['NOT_CONFIGURED', 'CONFIGURATION_REQUIRED', 'READY', 'DISABLED']);
 const MEMBERSHIP_ROLES = new Set(['MEMBER', 'REPRESENTATIVE', 'APPROVER']);
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 export class ClientWorkspaceError extends Error {
   constructor(public status: number, public code: string, message: string) {
@@ -55,6 +57,21 @@ function enumValue(value: unknown, values: Set<string>, field: string): string {
   const output = String(value || '').trim().toUpperCase();
   if (!values.has(output)) throw new ClientWorkspaceError(400, 'WORKSPACE_INPUT_INVALID', `${field} is invalid.`);
   return output;
+}
+
+function optionalSafeText(value: unknown, max: number): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ');
+  return normalized ? normalized.slice(0, max) : null;
+}
+
+function parseInvitationExpiry(value: unknown): Date {
+  if (value == null || value === '') return new Date(Date.now() + 7 * ONE_DAY_MS);
+  const parsed = new Date(String(value));
+  if (Number.isNaN(parsed.getTime()) || parsed.getTime() <= Date.now()) {
+    throw new ClientWorkspaceError(400, 'INVITATION_EXPIRY_INVALID', 'Invitation expiry must be a future date.');
+  }
+  return parsed;
 }
 
 function capabilitiesFor(mode: string, permissions: string[]): PortalWorkspaceCapabilities {
@@ -353,6 +370,15 @@ export async function listAdminWorkspaces(actor: InternalActor, clientId?: strin
     activeMembershipCount: memberships.filter((membership) => membership.workspaceId === workspace.id && membership.status === 'ACTIVE').length,
     pendingInvitationCount: invitations.filter((invitation) => invitation.workspaceId === workspace.id).length,
     pendingApprovalCount: memberships.filter((membership) => membership.workspaceId === workspace.id && membership.status === 'PENDING_APPROVAL').length,
+    invitations: invitations.filter((invitation) => invitation.workspaceId === workspace.id).map((invitation) => ({
+      id: invitation.id,
+      intendedEmail: invitation.intendedEmail,
+      status: invitation.status,
+      deliveryStatus: invitation.deliveryStatus,
+      deliveryCodeSafe: invitation.deliveryCodeSafe,
+      expiresAt: invitation.expiresAt,
+      createdAt: invitation.createdAt,
+    })),
     memberships: memberships.filter((membership) => membership.workspaceId === workspace.id),
     events: events.filter((event) => event.workspaceId === workspace.id),
   })) };
@@ -414,6 +440,9 @@ export async function inviteWorkspaceMember(actor: InternalActor, workspaceId: s
   if (!workspace || workspace.status === 'ARCHIVED') throw new ClientWorkspaceError(404, 'WORKSPACE_NOT_FOUND', 'Workspace not found.');
   const normalizedEmail = safeText(input.email, 'email', 320).toLowerCase();
   const role = enumValue(input.role || 'MEMBER', MEMBERSHIP_ROLES, 'role') as 'MEMBER' | 'REPRESENTATIVE' | 'APPROVER';
+  const displayName = optionalSafeText(input.displayName ?? input.name, 180);
+  const messageSafe = optionalSafeText(input.messageSafe ?? input.message, 800);
+  const expiresAt = parseInvitationExpiry(input.expiresAt);
   const identity = await db.clientPortalIdentity.findUnique({ where: { normalizedEmail } });
   if (identity) {
     const membership = await db.clientPortalWorkspaceMembership.upsert({
@@ -422,19 +451,65 @@ export async function inviteWorkspaceMember(actor: InternalActor, workspaceId: s
       update: { status: 'PENDING_APPROVAL', role, invitedAt: new Date(), invitedById: actor.userId, approvedAt: null, approvedById: null, revokedAt: null, revokedById: null, suspendedAt: null, suspendedById: null, revision: { increment: 1 } },
     });
     await db.clientPortalWorkspaceEvent.create({ data: { workspaceId, membershipId: membership.id, actorId: actor.userId, action: 'MEMBERSHIP_INVITED', toStatus: 'PENDING_APPROVAL' } });
-    return { state: 'PENDING_APPROVAL', membershipId: membership.id };
+    return { state: 'PENDING_APPROVAL', membershipId: membership.id, deliveryStatus: 'NOT_REQUIRED', message: 'A meglévő azonosító tagsági jóváhagyásra vár; ügyhozzáférés nem jött létre.' };
   }
   const rawToken = crypto.randomBytes(32).toString('base64url');
-  const invitation = await db.clientPortalInvitation.create({ data: {
-    clientId: workspace.clientId,
-    workspaceId,
-    intendedEmail: normalizedEmail,
-    tokenHash: crypto.createHash('sha256').update(rawToken).digest('hex'),
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    createdById: actor.userId,
-  } });
-  await db.clientPortalWorkspaceEvent.create({ data: { workspaceId, actorId: actor.userId, action: 'INVITATION_CREATED', metadataSafe: { invitationId: invitation.id } } });
-  return { state: 'INVITED', invitationId: invitation.id, invitationToken: rawToken, expiresAt: invitation.expiresAt };
+  const idempotencyKey = `workspace-invitation:${workspaceId}:${normalizedEmail}`;
+  const invitation = await db.$transaction(async (tx) => {
+    const existing = await tx.clientPortalInvitation.findFirst({
+      where: { workspaceId, intendedEmail: normalizedEmail, status: 'ACTIVE', expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (existing) return { row: existing, deduped: true };
+
+    const row = await tx.clientPortalInvitation.create({ data: {
+      clientId: workspace.clientId,
+      workspaceId,
+      intendedEmail: normalizedEmail,
+      tokenHash: crypto.createHash('sha256').update(rawToken).digest('hex'),
+      expiresAt,
+      createdById: actor.userId,
+    } });
+    const delivery = await enqueueNotification({
+      eventType: 'CLIENT_PORTAL_INVITATION',
+      clientId: workspace.clientId,
+      recipientEmail: normalizedEmail,
+      recipientName: displayName,
+      subjectSafe: 'Adminiculum ügyfélportál meghívás',
+      bodyOverrideSafe: messageSafe,
+      createdById: actor.userId,
+      idempotencyKey,
+    }, tx);
+    await tx.clientPortalInvitation.update({ where: { id: row.id }, data: { deliveryId: delivery.id, deliveryStatus: 'PENDING' } });
+    await tx.clientPortalWorkspaceEvent.create({ data: { workspaceId, actorId: actor.userId, action: 'INVITATION_CREATED', metadataSafe: { invitationId: row.id, deliveryId: delivery.id, deliveryStatus: 'PENDING' } } });
+    return { row: { ...row, deliveryId: delivery.id, deliveryStatus: 'PENDING' as const }, deduped: false };
+  });
+
+  let deliveryStatus = invitation.row.deliveryStatus ? String(invitation.row.deliveryStatus) : 'PENDING';
+  let deliveryCodeSafe: string | undefined;
+  if (invitation.row.deliveryId && !invitation.deduped) {
+    const delivery = await processDelivery(invitation.row.deliveryId, db);
+    deliveryStatus = delivery.status;
+    deliveryCodeSafe = delivery.codeSafe;
+    await db.clientPortalInvitation.update({
+      where: { id: invitation.row.id },
+      data: { deliveryStatus: delivery.status as any, deliveryCodeSafe: delivery.codeSafe || null, deliveryAttemptedAt: new Date() },
+    });
+  }
+  const providerUnavailable = deliveryCodeSafe === 'MAIL_PROVIDER_NOT_CONFIGURED' || deliveryStatus === 'FAILED_RETRYABLE';
+  return {
+    state: 'INVITED',
+    invitationId: invitation.row.id,
+    expiresAt: invitation.row.expiresAt,
+    deliveryStatus,
+    deliveryCodeSafe: deliveryCodeSafe || invitation.row.deliveryCodeSafe || null,
+    emailSent: deliveryStatus === 'SENT',
+    message: providerUnavailable
+      ? 'A meghívás rögzítésre került, de e-mail nem került kiküldésre, mert az értesítési szolgáltatás nincs beállítva.'
+      : deliveryStatus === 'SENT'
+        ? 'A meghívás rögzítésre került, és az e-mail-küldés sikeres volt.'
+        : 'A meghívás rögzítésre került; a kézbesítés feldolgozás alatt áll.',
+  };
 }
 
 export async function transitionWorkspaceMembership(actor: InternalActor, membershipId: string, action: 'approve' | 'suspend' | 'revoke', revision: unknown, db: Prisma = defaultPrisma) {

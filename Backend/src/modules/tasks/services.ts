@@ -12,6 +12,7 @@ import {
   validateTaskTransition,
   WorkflowTransitionError,
 } from '../cases/workItems';
+import { activateReadyWorkflowSuccessors } from '../cases/caseWorkflowOrchestration';
 import {
   AttentionCategory,
   isAttentionCategory,
@@ -796,7 +797,13 @@ export async function submitTask(taskId: string, userId: string, notes?: string)
  * Complete a task (IN_REVIEW -> DONE)
  */
 export async function completeTask(taskId: string, userId: string, approved: boolean, notes?: string) {
-  return transitionTask(taskId, userId, approved ? 'APPROVE' : 'RETURN_FOR_CORRECTION', notes ? { lastProgressAt: new Date() } : {});
+  const task = await transitionTask(taskId, userId, approved ? 'APPROVE' : 'RETURN_FOR_CORRECTION', notes ? { lastProgressAt: new Date() } : {});
+  if (approved && String((task as any)?.status || '').toUpperCase() === 'DONE') {
+    await activateReadyWorkflowSuccessors(taskId, { userId }).catch((error) => {
+      console.warn('[TASK_COMPLETE] Workflow successor activation failed:', error);
+    });
+  }
+  return task;
 }
 
 export async function blockTask(taskId: string, userId: string, reason: string) {

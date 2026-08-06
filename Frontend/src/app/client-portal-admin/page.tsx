@@ -37,11 +37,19 @@ function formatGrantDate(value: string | null) {
 }
 
 const MODE_LABELS: Record<string, string> = { INDIVIDUAL: "Magánügyfél", ORGANIZATION: "Szervezeti ügyfél", CASE_RELAY: "Ügyátvezető" };
+const COMMUNICATION_LABELS: Record<string, string> = { PORTAL_PRIMARY: "Portál elsődleges", EMAIL_LINKED: "E-mailhez kapcsolt", EXTERNAL_ONLY: "Külső rendszer" };
+const CONNECTED_STATE_LABELS: Record<string, string> = { NOT_CONFIGURED: "Nincs konfigurálva", CONFIGURATION_REQUIRED: "Konfiguráció szükséges", READY: "Kész", DISABLED: "Kikapcsolva" };
+const DELIVERY_LABELS: Record<string, string> = { PENDING: "Kézbesítés folyamatban", SENDING: "Küldés alatt", SENT: "E-mail elküldve", FAILED_RETRYABLE: "E-mail-küldés jelenleg nem érhető el", FAILED_FINAL: "E-mail-küldés sikertelen", CANCELLED: "Kézbesítés visszavonva", NOT_REQUIRED: "Meglévő azonosítóhoz rögzítve" };
 const PORTAL_ROLE_LABELS: Record<PortalMembershipRole, string> = { MEMBER: "Portálfelhasználó", REPRESENTATIVE: "Szervezeti kapcsolattartó", APPROVER: "Hozzáférés-jóváhagyó" };
 const UNIT_ROLE_LABELS: Record<OrganizationUnitRole, string> = { MEMBER: "Tag", CONTACT: "Kapcsolattartó", APPROVER: "Jóváhagyó", MANAGER: "Egységvezető" };
 
 const inputCls = "rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]";
 const labelCls = "grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]";
+
+function deliverySummary(deliveryStatus?: string | null, codeSafe?: string | null) {
+  if (codeSafe === "MAIL_PROVIDER_NOT_CONFIGURED") return "Meghívás rögzítve – e-mail-küldés jelenleg nem érhető el.";
+  return DELIVERY_LABELS[String(deliveryStatus || "")] || "Meghívás rögzítve; kézbesítés állapota ellenőrizhető.";
+}
 
 function ApproveForm({ request, clients, workspaces, busy, onApprove, onReject }: {
   request: MembershipRequestDTO;
@@ -326,12 +334,70 @@ function WorkspaceGrantForm({ workspace, membership, cases, busy, onGrant }: { w
 
 function WorkspaceSettings({ workspace, busy, run }: { workspace: AdminWorkspaceDTO; busy: boolean; run: (fn: () => Promise<void>, okText: string) => Promise<void> }) {
   const [value, setValue] = useState({ name: workspace.name, communicationMode: workspace.communicationMode, connectedSystemState: workspace.connectedSystemState });
-  return <div className="mt-3 grid gap-2 rounded-lg border border-[var(--adm-border)] p-3 sm:grid-cols-4"><input aria-label="Munkatér neve" value={value.name} onChange={(event) => setValue((current) => ({ ...current, name: event.target.value }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm" /><select aria-label="Kommunikációs mód" value={value.communicationMode} onChange={(event) => setValue((current) => ({ ...current, communicationMode: event.target.value as AdminWorkspaceDTO['communicationMode'] }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm"><option value="PORTAL_PRIMARY">Portál az elsődleges</option><option value="EMAIL_LINKED">E-mailhez kapcsolt</option><option value="EXTERNAL_ONLY">Külső rendszer</option></select><select aria-label="Kapcsolt rendszer állapota" value={value.connectedSystemState} onChange={(event) => setValue((current) => ({ ...current, connectedSystemState: event.target.value as AdminWorkspaceDTO['connectedSystemState'] }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm"><option value="NOT_CONFIGURED">Nincs konfigurálva</option><option value="CONFIGURATION_REQUIRED">Konfiguráció szükséges</option><option value="READY">Kész</option><option value="DISABLED">Kikapcsolva</option></select><AdminButton size="sm" variant="neutral" disabled={busy || !value.name.trim()} onClick={() => run(() => updateAdminWorkspace(workspace.id, { ...value, revision: workspace.revision }).then(() => undefined), 'Munkatér beállításai frissítve.')}>Beállítások mentése</AdminButton></div>;
+  return (
+    <div className="mt-3 grid gap-2 rounded-lg border border-[var(--adm-border)] p-3 sm:grid-cols-3">
+      <input aria-label="Munkatér neve" value={value.name} onChange={(event) => setValue((current) => ({ ...current, name: event.target.value }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm" />
+      <select aria-label="Kommunikációs mód" value={value.communicationMode} onChange={(event) => setValue((current) => ({ ...current, communicationMode: event.target.value as AdminWorkspaceDTO['communicationMode'] }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm">
+        <option value="PORTAL_PRIMARY">Portál elsődleges</option>
+        <option value="EMAIL_LINKED">E-mailhez kapcsolt</option>
+        <option value="EXTERNAL_ONLY">Külső rendszer</option>
+      </select>
+      {workspace.mode === "CASE_RELAY" ? (
+        <select aria-label="Kapcsolt rendszer állapota" value={value.connectedSystemState} onChange={(event) => setValue((current) => ({ ...current, connectedSystemState: event.target.value as AdminWorkspaceDTO['connectedSystemState'] }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm">
+          <option value="NOT_CONFIGURED">Nincs konfigurálva</option>
+          <option value="CONFIGURATION_REQUIRED">Konfiguráció szükséges</option>
+          <option value="READY">Kész</option>
+          <option value="DISABLED">Kikapcsolva</option>
+        </select>
+      ) : null}
+      <AdminButton size="sm" variant="neutral" disabled={busy || !value.name.trim()} onClick={() => run(() => updateAdminWorkspace(workspace.id, { ...value, connectedSystemState: workspace.mode === "CASE_RELAY" ? value.connectedSystemState : workspace.connectedSystemState, revision: workspace.revision }).then(() => undefined), "Munkatér beállításai frissítve.")}>Beállítások mentése</AdminButton>
+      {workspace.mode === "CASE_RELAY" ? <p className="text-xs text-[var(--adm-text-muted)] sm:col-span-3">Ez az állapot a külső ügykezelő rendszer kapcsolatának konfigurációját jelzi. Nem jelent automatikus szinkronizációt.</p> : null}
+    </div>
+  );
+}
+
+function InvitationForm({ workspace, busy, run }: { workspace: AdminWorkspaceDTO; busy: boolean; run: (fn: () => Promise<void>, okText: string) => Promise<void> }) {
+  const [draft, setDraft] = useState({ email: "", displayName: "", role: "MEMBER" as AdminWorkspaceDTO["memberships"][number]["role"], messageSafe: "", expiresAt: "" });
+  const submit = async () => {
+    const result = await inviteAdminWorkspaceMember(workspace.id, {
+      email: draft.email,
+      displayName: draft.displayName || undefined,
+      role: draft.role,
+      messageSafe: draft.messageSafe || undefined,
+      expiresAt: draft.expiresAt || undefined,
+    });
+    setDraft((current) => ({ ...current, email: "", displayName: "", messageSafe: "" }));
+    void result;
+  };
+  return (
+    <div className="mt-4 rounded-xl border border-[var(--adm-border)] bg-[var(--adm-bg,#faf8f3)] p-3">
+      <p className="font-semibold text-[var(--adm-text)]">Ügyfélfelhasználó meghívása</p>
+      <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Meghívás létrehozható tagsági kérelem nélkül. Elfogadáskor csak munkatér-tagság jön létre, ügyhozzáférés nem.</p>
+      <div className="mt-3 grid gap-2 lg:grid-cols-5">
+        <input type="email" value={draft.email} onChange={(event) => setDraft((value) => ({ ...value, email: event.target.value }))} placeholder="E-mail" className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm" />
+        <input value={draft.displayName} onChange={(event) => setDraft((value) => ({ ...value, displayName: event.target.value }))} placeholder="Név" className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm" />
+        <select value={draft.role} onChange={(event) => setDraft((value) => ({ ...value, role: event.target.value as typeof draft.role }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm">
+          {(Object.keys(PORTAL_ROLE_LABELS) as Array<typeof draft.role>).map((role) => <option key={role} value={role}>{PORTAL_ROLE_LABELS[role]}</option>)}
+        </select>
+        <input type="date" value={draft.expiresAt} onChange={(event) => setDraft((value) => ({ ...value, expiresAt: event.target.value }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm" />
+        <AdminButton size="sm" variant="neutral" disabled={busy || !draft.email.trim()} onClick={() => run(submit, "Meghívás rögzítve; ügyhozzáférés nem jött létre.")}>Meghívás küldése</AdminButton>
+        <textarea value={draft.messageSafe} onChange={(event) => setDraft((value) => ({ ...value, messageSafe: event.target.value }))} placeholder="Ügyfélnek szánt rövid üzenet (opcionális)" className="min-h-20 rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm lg:col-span-5" />
+      </div>
+      <div className="mt-3 grid gap-2">
+        {workspace.invitations.length ? workspace.invitations.map((invitation) => (
+          <div key={invitation.id} className="rounded-lg bg-white p-2 text-xs text-[var(--adm-text-muted)]">
+            <span className="font-semibold text-[var(--adm-text)]">{invitation.intendedEmail || "—"}</span>
+            <span> · {deliverySummary(invitation.deliveryStatus, invitation.deliveryCodeSafe)} · lejár: {formatGrantDate(invitation.expiresAt)}</span>
+            <details className="mt-1"><summary className="cursor-pointer">Technikai részletek</summary><p className="font-mono">invitation: {invitation.id} · status: {invitation.status} · delivery: {invitation.deliveryStatus || "—"}</p></details>
+          </div>
+        )) : <p className="text-xs text-[var(--adm-text-muted)]">Nincs aktív meghívás.</p>}
+      </div>
+    </div>
+  );
 }
 
 function WorkspaceAdministration({ workspaces, clients, cases, busy, run }: { workspaces: AdminWorkspaceDTO[]; clients: Client[]; cases: CaseListItem[]; busy: boolean; run: (fn: () => Promise<void>, okText: string) => Promise<void> }) {
   const [draft, setDraft] = useState({ clientId: '', name: '', mode: 'INDIVIDUAL' as AdminWorkspaceDTO['mode'], communicationMode: 'PORTAL_PRIMARY' as AdminWorkspaceDTO['communicationMode'], connectedSystemState: 'NOT_CONFIGURED' as AdminWorkspaceDTO['connectedSystemState'] });
-  const [invites, setInvites] = useState<Record<string, string>>({});
   return <AdminPanel className="p-5" data-testid="workspace-administration">
     <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Ügyfélmunkaterek</h2>
     <p className="mt-1 text-xs text-[var(--adm-text-muted)]">A munkatér-tagság nem tesz automatikusan láthatóvá ügyet. Az ügyhozzáférés, publikáció, dokumentum-, üzenet- és számlázási hozzáférés külön döntés.</p>
@@ -340,14 +406,14 @@ function WorkspaceAdministration({ workspaces, clients, cases, busy, run }: { wo
       <input value={draft.name} onChange={(event) => setDraft((value) => ({ ...value, name: event.target.value }))} placeholder="Munkatér neve" className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm" />
       <select value={draft.mode} onChange={(event) => setDraft((value) => ({ ...value, mode: event.target.value as AdminWorkspaceDTO['mode'] }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm"><option value="INDIVIDUAL">Magánügyfél</option><option value="ORGANIZATION">Szervezeti ügyfél</option><option value="CASE_RELAY">Ügyátvezető</option></select>
       <select value={draft.communicationMode} onChange={(event) => setDraft((value) => ({ ...value, communicationMode: event.target.value as AdminWorkspaceDTO['communicationMode'] }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm"><option value="PORTAL_PRIMARY">Portál az elsődleges</option><option value="EMAIL_LINKED">E-mailhez kapcsolt</option><option value="EXTERNAL_ONLY">Külső rendszer</option></select>
-      <select value={draft.connectedSystemState} onChange={(event) => setDraft((value) => ({ ...value, connectedSystemState: event.target.value as AdminWorkspaceDTO['connectedSystemState'] }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm"><option value="NOT_CONFIGURED">Nincs konfigurálva</option><option value="CONFIGURATION_REQUIRED">Konfiguráció szükséges</option><option value="READY">Kész</option><option value="DISABLED">Kikapcsolva</option></select>
+      {draft.mode === 'CASE_RELAY' ? <select value={draft.connectedSystemState} onChange={(event) => setDraft((value) => ({ ...value, connectedSystemState: event.target.value as AdminWorkspaceDTO['connectedSystemState'] }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm"><option value="NOT_CONFIGURED">Nincs konfigurálva</option><option value="CONFIGURATION_REQUIRED">Konfiguráció szükséges</option><option value="READY">Kész</option><option value="DISABLED">Kikapcsolva</option></select> : <span className="rounded-lg bg-[var(--adm-bg,#faf8f3)] px-3 py-2 text-xs text-[var(--adm-text-muted)]">Kapcsolt rendszer állapota csak ügyátvezető felületnél releváns.</span>}
       <AdminButton variant="gold" disabled={busy || !draft.clientId || !draft.name.trim()} onClick={() => run(() => createAdminWorkspace(draft).then(() => undefined), 'Munkatér létrehozva. Nincs automatikus tagság vagy ügyhozzáférés.')}>Munkatér létrehozása</AdminButton>
     </div>
     <div className="mt-4 grid gap-4">{workspaces.map((workspace) => <article key={workspace.id} className="rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
-      <div className="flex flex-wrap justify-between gap-3"><div><p className="font-semibold">{workspace.name}</p><p className="text-xs text-[var(--adm-text-muted)]">{workspace.clientName} · {workspace.mode} · {workspace.communicationMode} · {workspace.connectedSystemState}</p><p className="mt-1 text-xs text-[var(--adm-text-muted)]">Aktív tagság: {workspace.activeMembershipCount} · Meghívás: {workspace.pendingInvitationCount} · Jóváhagyásra vár: {workspace.pendingApprovalCount}</p></div><div className="flex flex-wrap gap-2"><AdminBadge tone={workspace.status === 'ACTIVE' ? 'green' : 'neutral'}>{workspace.status}</AdminBadge>{workspace.status !== 'ACTIVE' ? <AdminButton size="sm" variant="neutral" disabled={busy || workspace.status === 'ARCHIVED'} onClick={() => run(() => transitionAdminWorkspace(workspace.id, 'activate', workspace.revision).then(() => undefined), 'Munkatér aktiválva.')}>Aktiválás</AdminButton> : <AdminButton size="sm" variant="muted" disabled={busy} onClick={() => run(() => transitionAdminWorkspace(workspace.id, 'suspend', workspace.revision).then(() => undefined), 'Munkatér felfüggesztve.')}>Felfüggesztés</AdminButton>}<AdminButton size="sm" variant="muted" disabled={busy || workspace.status === 'ARCHIVED'} onClick={() => run(() => transitionAdminWorkspace(workspace.id, 'archive', workspace.revision).then(() => undefined), 'Munkatér archiválva.')}>Archiválás</AdminButton></div></div>
+      <div className="flex flex-wrap justify-between gap-3"><div><p className="font-semibold">{workspace.name}</p><p className="text-xs text-[var(--adm-text-muted)]">{workspace.clientName} · {MODE_LABELS[workspace.mode]} · {COMMUNICATION_LABELS[workspace.communicationMode]}{workspace.mode === 'CASE_RELAY' ? ` · ${CONNECTED_STATE_LABELS[workspace.connectedSystemState]}` : ''}</p><p className="mt-1 text-xs text-[var(--adm-text-muted)]">Aktív tagság: {workspace.activeMembershipCount} · Meghívás: {workspace.pendingInvitationCount} · Jóváhagyásra vár: {workspace.pendingApprovalCount}</p></div><div className="flex flex-wrap gap-2"><AdminBadge tone={workspace.status === 'ACTIVE' ? 'green' : 'neutral'}>{workspace.status === 'ACTIVE' ? 'Aktív' : workspace.status === 'SUSPENDED' ? 'Felfüggesztve' : 'Archiválva'}</AdminBadge>{workspace.status !== 'ACTIVE' ? <AdminButton size="sm" variant="neutral" disabled={busy || workspace.status === 'ARCHIVED'} onClick={() => run(() => transitionAdminWorkspace(workspace.id, 'activate', workspace.revision).then(() => undefined), 'Munkatér aktiválva.')}>Aktiválás</AdminButton> : <AdminButton size="sm" variant="muted" disabled={busy} onClick={() => run(() => transitionAdminWorkspace(workspace.id, 'suspend', workspace.revision).then(() => undefined), 'Munkatér felfüggesztve.')}>Felfüggesztés</AdminButton>}<AdminButton size="sm" variant="muted" disabled={busy || workspace.status === 'ARCHIVED'} onClick={() => run(() => transitionAdminWorkspace(workspace.id, 'archive', workspace.revision).then(() => undefined), 'Munkatér archiválva.')}>Archiválás</AdminButton></div></div>
       {workspace.mode === 'CASE_RELAY' && workspace.connectedSystemState !== 'READY' ? <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Nincs automatikus szinkronizáció. A kapcsolt rendszer konfigurációja még nem kész.</p> : null}
       <WorkspaceSettings workspace={workspace} busy={busy} run={run} />
-      <div className="mt-4 flex flex-wrap gap-2"><input type="email" value={invites[workspace.id] || ''} onChange={(event) => setInvites((value) => ({ ...value, [workspace.id]: event.target.value }))} placeholder="Külső felhasználó e-mail-címe" className="min-w-72 rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm" /><AdminButton size="sm" variant="neutral" disabled={busy || !(invites[workspace.id] || '').trim()} onClick={() => run(() => inviteAdminWorkspaceMember(workspace.id, { email: invites[workspace.id], role: 'MEMBER' }).then(() => undefined), 'Meghívás rögzítve; ügyhozzáférés nem jött létre.')}>Meghívás</AdminButton></div>
+      <InvitationForm workspace={workspace} busy={busy} run={run} />
       <div className="mt-3 grid gap-2">{workspace.memberships.map((membership) => <div key={membership.id} className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><span>Identity: {membership.clientPortalIdentityId.slice(0, 8)} · {membership.role}</span><div className="flex gap-2"><AdminBadge tone={membership.status === 'ACTIVE' ? 'green' : 'neutral'}>{membership.status}</AdminBadge>{membership.status === 'PENDING_APPROVAL' ? <AdminButton size="sm" variant="gold" disabled={busy} onClick={() => run(() => transitionAdminWorkspaceMembership(membership.id, 'approve', membership.revision).then(() => undefined), 'Munkatér-tagság jóváhagyva; grant nem jött létre.')}>Jóváhagyás</AdminButton> : null}{membership.status === 'ACTIVE' ? <AdminButton size="sm" variant="muted" disabled={busy} onClick={() => run(() => transitionAdminWorkspaceMembership(membership.id, 'suspend', membership.revision).then(() => undefined), 'Munkatér-tagság felfüggesztve.')}>Felfüggesztés</AdminButton> : null}<AdminButton size="sm" variant="muted" disabled={busy || membership.status === 'REVOKED'} onClick={() => run(() => transitionAdminWorkspaceMembership(membership.id, 'revoke', membership.revision).then(() => undefined), 'Munkatér-tagság visszavonva.')}>Visszavonás</AdminButton></div></div>{membership.status === 'ACTIVE' ? <WorkspaceGrantForm workspace={workspace} membership={membership} cases={cases} busy={busy} onGrant={(caseId) => run(() => createIdentityGrant({ workspaceMembershipId: membership.id, caseId, permissions: DEFAULT_PERMISSIONS }).then(() => undefined), 'Explicit ügyhozzáférés létrehozva.')}/> : null}</div>)}</div>
       <details className="mt-3 text-xs"><summary className="cursor-pointer font-semibold">Lifecycle / audit</summary><div className="mt-2 space-y-1">{workspace.events.length ? workspace.events.map((event) => <p key={event.id}>{formatGrantDate(event.createdAt)} · {event.action} · {event.fromStatus || '—'} → {event.toStatus || '—'}</p>) : <p>Nincs esemény.</p>}</div></details>
     </article>)}</div>

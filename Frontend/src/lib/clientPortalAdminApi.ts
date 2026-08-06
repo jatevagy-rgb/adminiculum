@@ -102,6 +102,15 @@ export interface AdminWorkspaceDTO {
   activeMembershipCount: number;
   pendingInvitationCount: number;
   pendingApprovalCount: number;
+  invitations: Array<{
+    id: string;
+    intendedEmail: string | null;
+    status: string;
+    deliveryStatus: string | null;
+    deliveryCodeSafe: string | null;
+    expiresAt: string;
+    createdAt: string;
+  }>;
   memberships: WorkspaceMembershipDTO[];
   events: Array<{ id: string; action: string; fromStatus: string | null; toStatus: string | null; createdAt: string }>;
 }
@@ -210,8 +219,8 @@ export async function updateAdminWorkspace(workspaceId: string, payload: { name:
   return fetchApi(`/client-identity/admin/workspaces/${encodeURIComponent(workspaceId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
 }
 
-export async function inviteAdminWorkspaceMember(workspaceId: string, payload: { email: string; role: WorkspaceMembershipDTO['role'] }) {
-  return fetchApi<{ state: string; membershipId?: string; invitationId?: string }>(`/client-identity/admin/workspaces/${encodeURIComponent(workspaceId)}/invitations`, { method: 'POST', body: JSON.stringify(payload) });
+export async function inviteAdminWorkspaceMember(workspaceId: string, payload: { email: string; displayName?: string; role: WorkspaceMembershipDTO['role']; messageSafe?: string; expiresAt?: string }) {
+  return fetchApi<{ state: string; membershipId?: string; invitationId?: string; deliveryStatus?: string; deliveryCodeSafe?: string | null; emailSent?: boolean; message?: string }>(`/client-identity/admin/workspaces/${encodeURIComponent(workspaceId)}/invitations`, { method: 'POST', body: JSON.stringify(payload) });
 }
 
 export async function transitionAdminWorkspaceMembership(membershipId: string, action: 'approve' | 'suspend' | 'revoke', revision: number): Promise<WorkspaceMembershipDTO> {

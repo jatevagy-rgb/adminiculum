@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
+import { setMailSender } from '../src/modules/client-interaction/mailAdapter';
 import {
   acceptPortalInvitation,
   approveMembershipRequest,
@@ -164,7 +165,13 @@ d('Client portal membership onboarding (PostgreSQL)', () => {
     // inviteWorkspaceMember then records an invitation row rather than a pending
     // membership. The admin invites the UPPER-CASE form; the identity's verified
     // e-mail is the lower-case form — they must still match.
-    await inviteWorkspaceMember(reviewer, workspace.id, { email: email.toUpperCase(), role: 'MEMBER' });
+    setMailSender(null);
+    const invitationResult = await inviteWorkspaceMember(reviewer, workspace.id, { email: email.toUpperCase(), role: 'MEMBER' });
+    expect(invitationResult).not.toHaveProperty('invitationToken');
+    expect(invitationResult.emailSent).toBe(false);
+    expect(invitationResult.deliveryStatus).toBe('FAILED_RETRYABLE');
+    expect(invitationResult.deliveryCodeSafe).toBe('MAIL_PROVIDER_NOT_CONFIGURED');
+    expect(invitationResult.message).toContain('e-mail nem került kiküldésre');
     const id = await makeIdentity(email);
 
     const session = sessionFor(id, email);
@@ -176,6 +183,7 @@ d('Client portal membership onboarding (PostgreSQL)', () => {
     expect(accepted.workspaceReference).toBe(workspace.publicReference);
     const membership = await db.clientPortalWorkspaceMembership.findFirstOrThrow({ where: { clientPortalIdentityId: id, workspaceId: workspace.id } });
     expect(membership.status).toBe('ACTIVE');
+    expect(await db.clientPortalGrant.count({ where: { clientPortalIdentityId: id } })).toBe(0);
 
     const readyContext = await getOnboardingContext(sessionFor(id, email, 'ACTIVE'), undefined, db);
     expect(readyContext.state).toBe('READY');

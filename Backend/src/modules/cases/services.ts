@@ -6,6 +6,7 @@
 import { prisma } from '../../prisma/prisma.service';
 import { driveService } from '../sharepoint';
 import { workflowService } from '../workflow';
+import { instantiateCaseWorkflow } from './caseWorkflowOrchestration';
 
 // Prisma schema enum values
 const VALID_MATTER_TYPES = ['REAL_ESTATE_SALE', 'LEASE', 'EMPLOYMENT', 'CORPORATE', 'LITIGATION', 'OTHER'];
@@ -108,6 +109,8 @@ interface CreateCaseInput {
   clientRole?: string | null;
   createdById?: string;
   deadline?: string | null;
+  workflowTemplateKey?: string | null;
+  workflowAssignees?: Record<string, string | null | undefined>;
 }
 
 type ActiveUserRecord = {
@@ -535,6 +538,14 @@ return {
           matterType: matterType
         }
       } as any
+    });
+
+    await instantiateCaseWorkflow({
+      caseId: newCase.id,
+      templateKey: params.workflowTemplateKey || 'SIMPLE',
+      actor: { userId: resolvedCreatedById },
+      assigneesByStepKey: params.workflowAssignees,
+      fallbackAssigneeId: newCase.assignedLawyerId || resolvedCreatedById,
     });
 
     return {

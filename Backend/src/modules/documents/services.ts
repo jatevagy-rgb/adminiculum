@@ -269,6 +269,9 @@ class DocumentsService {
             },
           });
         } else {
+          if (sharePointItemId) {
+            await driveService.deleteDocument(sharePointItemId).catch(() => false);
+          }
           throw error;
         }
       }

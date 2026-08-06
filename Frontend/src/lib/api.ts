@@ -1296,6 +1296,8 @@ export interface CreateCaseData {
   description?: string;
   clientRole?: string;
   deadline?: string;
+  workflowTemplateKey?: string;
+  workflowAssignees?: Record<string, string | null | undefined>;
 }
 
 export interface CreateCaseResponse {
@@ -1306,12 +1308,14 @@ export interface CreateCaseResponse {
 }
 
 export async function createCase(data: CreateCaseData): Promise<CreateCaseResponse> {
-  const { clientName, clientId, matterType, description, clientRole, deadline } = data;
+  const { clientName, clientId, matterType, description, clientRole, deadline, workflowTemplateKey, workflowAssignees } = data;
   const payload: Record<string, unknown> = { clientName, matterType };
   if (clientId) payload.clientId = clientId;
   if (description) payload.description = description;
   if (clientRole) payload.clientRole = clientRole;
   if (deadline) payload.deadline = deadline;
+  if (workflowTemplateKey) payload.workflowTemplateKey = workflowTemplateKey;
+  if (workflowAssignees && Object.keys(workflowAssignees).length > 0) payload.workflowAssignees = workflowAssignees;
   return fetchApi<CreateCaseResponse>('/cases', {
     method: 'POST',
     body: JSON.stringify(payload),
