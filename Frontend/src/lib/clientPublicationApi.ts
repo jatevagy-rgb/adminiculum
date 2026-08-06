@@ -146,3 +146,61 @@ export async function createClientSafeUpdateDraft(payload: { caseId: string; tit
 export async function transitionClientSafeUpdate(updateId: string, action: "approve" | "publish" | "revoke", expectedRevision: number) {
   return fetchApi<ClientSafeUpdateDTO>(`/client-publications/safe-updates/${encodeURIComponent(updateId)}/${action}`, { method: "POST", body: JSON.stringify({ expectedRevision }) });
 }
+
+// --- Customer-safe milestone publication (workforce) -----------------------
+
+export type MilestoneCompletionState = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
+
+export interface MilestoneDraftItem {
+  publicKey: string;
+  sourceTaskId?: string | null;
+  safeTitle: string;
+  safeDescription?: string | null;
+  displayOrder: number;
+  weight?: number | null;
+  completionState: MilestoneCompletionState;
+  completedAt?: string | null;
+}
+
+export interface CustomerMilestone {
+  reference: string;
+  title: string;
+  description: string | null;
+  state: MilestoneCompletionState | string;
+  displayOrder: number;
+  weight: number | null;
+  completedAt: string | null;
+}
+
+export interface EligibleMilestoneStep {
+  taskId: string;
+  stepKey: string | null;
+  internalTitle: string;
+  internalStatus: string;
+  suggestedState: MilestoneCompletionState;
+}
+
+export interface MilestonePreview {
+  milestones: CustomerMilestone[];
+  progressPercentage: number | null;
+}
+
+export async function listEligibleMilestoneSteps(caseId: string): Promise<{ items: EligibleMilestoneStep[] }> {
+  return fetchApi(`/client-publications/cases/${encodeURIComponent(caseId)}/milestones/eligible`, { cache: "no-store" });
+}
+
+export async function getMilestoneDraft(caseId: string): Promise<{ publicationId: string | null; publicationStatus: string | null; draft: MilestoneDraftItem[]; publishedMilestones: CustomerMilestone[]; publishedProgress: number | null }> {
+  return fetchApi(`/client-publications/cases/${encodeURIComponent(caseId)}/milestones/draft`, { cache: "no-store" });
+}
+
+export async function saveMilestoneDraft(caseId: string, milestones: MilestoneDraftItem[]): Promise<{ publicationId: string; draft: MilestoneDraftItem[]; preview: MilestonePreview }> {
+  return fetchApi(`/client-publications/cases/${encodeURIComponent(caseId)}/milestones/draft`, { method: "PUT", body: JSON.stringify({ milestones }) });
+}
+
+export async function previewMilestonePublication(caseId: string): Promise<MilestonePreview> {
+  return fetchApi(`/client-publications/cases/${encodeURIComponent(caseId)}/milestones/preview`, { cache: "no-store" });
+}
+
+export async function publishMilestoneRevision(caseId: string): Promise<{ publicationId: string; revisionId: string; revisionNumber: number; milestones: CustomerMilestone[]; progressPercentage: number | null }> {
+  return fetchApi(`/client-publications/cases/${encodeURIComponent(caseId)}/milestones/publish`, { method: "POST", body: JSON.stringify({}) });
+}

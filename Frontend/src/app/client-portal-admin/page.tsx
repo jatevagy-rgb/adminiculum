@@ -9,10 +9,12 @@ import { ClientInteractionInternalActions } from "@/components/client-portal/Cli
 import { ClientRequestComposer } from "@/components/client-portal/ClientRequestComposer";
 import {
   approveMembershipRequest,
+  cancelAdminInvitationNotification,
   createAdminWorkspace,
   createIdentityGrant,
   GRANT_PERMISSIONS,
   inviteAdminWorkspaceMember,
+  revokeAdminInvitation,
   listAdminWorkspaces,
   listActiveMemberships,
   listMembershipQueue,
@@ -384,13 +386,25 @@ function InvitationForm({ workspace, busy, run }: { workspace: AdminWorkspaceDTO
         <textarea value={draft.messageSafe} onChange={(event) => setDraft((value) => ({ ...value, messageSafe: event.target.value }))} placeholder="Ügyfélnek szánt rövid üzenet (opcionális)" className="min-h-20 rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm lg:col-span-5" />
       </div>
       <div className="mt-3 grid gap-2">
-        {workspace.invitations.length ? workspace.invitations.map((invitation) => (
-          <div key={invitation.id} className="rounded-lg bg-white p-2 text-xs text-[var(--adm-text-muted)]">
-            <span className="font-semibold text-[var(--adm-text)]">{invitation.intendedEmail || "—"}</span>
-            <span> · {deliverySummary(invitation.deliveryStatus, invitation.deliveryCodeSafe)} · lejár: {formatGrantDate(invitation.expiresAt)}</span>
-            <details className="mt-1"><summary className="cursor-pointer">Technikai részletek</summary><p className="font-mono">invitation: {invitation.id} · status: {invitation.status} · delivery: {invitation.deliveryStatus || "—"}</p></details>
-          </div>
-        )) : <p className="text-xs text-[var(--adm-text-muted)]">Nincs aktív meghívás.</p>}
+        {workspace.invitations.length ? workspace.invitations.map((invitation) => {
+          const revocable = invitation.status !== "USED" && invitation.status !== "REVOKED";
+          const notificationRetrying = (invitation.deliveryStatus || "").toUpperCase().includes("FAILED") || (invitation.deliveryStatus || "").toUpperCase().includes("RETRY") || (invitation.deliveryStatus || "").toUpperCase() === "PENDING";
+          return (
+            <div key={invitation.id} className="rounded-lg bg-white p-2 text-xs text-[var(--adm-text-muted)]">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span className="font-semibold text-[var(--adm-text)]">{invitation.intendedEmail || "—"}</span>
+                  <span> · {deliverySummary(invitation.deliveryStatus, invitation.deliveryCodeSafe)} · lejár: {formatGrantDate(invitation.expiresAt)}</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {notificationRetrying ? <AdminButton size="sm" variant="muted" disabled={busy} onClick={() => run(() => cancelAdminInvitationNotification(invitation.id).then(() => undefined), "Az értesítés újraküldése leállítva.")}>Értesítés leállítása</AdminButton> : null}
+                  {revocable ? <AdminButton size="sm" variant="muted" disabled={busy} onClick={() => run(() => revokeAdminInvitation(invitation.id).then(() => undefined), "Meghívás visszavonva; a tagságot nem érinti.")}>Meghívás visszavonása</AdminButton> : null}
+                </div>
+              </div>
+              <details className="mt-1"><summary className="cursor-pointer">Technikai részletek</summary><p className="font-mono">invitation: {invitation.id} · status: {invitation.status} · delivery: {invitation.deliveryStatus || "—"}</p></details>
+            </div>
+          );
+        }) : <p className="text-xs text-[var(--adm-text-muted)]">Nincs aktív meghívás.</p>}
       </div>
     </div>
   );

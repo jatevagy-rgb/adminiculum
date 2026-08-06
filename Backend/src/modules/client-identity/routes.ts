@@ -19,9 +19,11 @@ import {
   validateInvitation,
 } from './identityService';
 import {
+  cancelInvitationNotificationRetry,
   createWorkspace,
   inviteWorkspaceMember,
   listAdminWorkspaces,
+  revokeInvitation,
   transitionWorkspace,
   transitionWorkspaceMembership,
   updateWorkspace,
@@ -148,6 +150,14 @@ for (const action of ['activate', 'suspend', 'archive'] as const) {
 }
 clientIdentityRouter.post('/admin/workspaces/:workspaceId/invitations', async (req, res) => {
   try { res.status(201).json(await inviteWorkspaceMember(internalActor(req), String(req.params.workspaceId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/invitations/:invitationId/revoke', async (req, res) => {
+  try { res.json(await revokeInvitation(internalActor(req), String(req.params.invitationId))); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/invitations/:invitationId/cancel-notification', async (req, res) => {
+  try { res.json(await cancelInvitationNotificationRetry(internalActor(req), String(req.params.invitationId))); }
   catch (error) { fail(res, error); }
 });
 for (const action of ['approve', 'suspend', 'revoke'] as const) {

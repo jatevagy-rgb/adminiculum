@@ -2545,6 +2545,10 @@ model ClientMatterPublication {
   supersededAt      DateTime?
   supersededById    String?
   supersedesId      String?
+  // Mutable workforce draft of customer-safe milestones (never customer-visible).
+  // Publishing snapshots this into an immutable revision; drafting never affects
+  // the customer portal.
+  milestoneDraftSnapshot Json?
   revision          Int                     @default(0)
   createdAt         DateTime                @default(now())
   updatedAt         DateTime                @updatedAt
@@ -2572,6 +2576,11 @@ model ClientMatterPublicationRevision {
   sourceCaseRevision         Int?
   sourceFingerprint          String
   audienceSnapshot           Json
+  // Immutable published customer-safe milestone snapshot + derived progress.
+  // Customer progress is computed only from these published milestone weights;
+  // internal task completion after publish never mutates a published revision.
+  milestonesSnapshot         Json?
+  progressPercentage         Int?
   createdById                String
   createdAt                  DateTime @default(now())
 

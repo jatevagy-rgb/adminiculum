@@ -219,6 +219,14 @@ export async function updateAdminWorkspace(workspaceId: string, payload: { name:
   return fetchApi(`/client-identity/admin/workspaces/${encodeURIComponent(workspaceId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
 }
 
+export async function revokeAdminInvitation(invitationId: string) {
+  return fetchApi<{ id: string; status: string; notificationCancelled: boolean }>(`/client-identity/admin/invitations/${encodeURIComponent(invitationId)}/revoke`, { method: 'POST', body: JSON.stringify({}) });
+}
+
+export async function cancelAdminInvitationNotification(invitationId: string) {
+  return fetchApi<{ invitationId: string; cancelled: boolean }>(`/client-identity/admin/invitations/${encodeURIComponent(invitationId)}/cancel-notification`, { method: 'POST', body: JSON.stringify({}) });
+}
+
 export async function inviteAdminWorkspaceMember(workspaceId: string, payload: { email: string; displayName?: string; role: WorkspaceMembershipDTO['role']; messageSafe?: string; expiresAt?: string }) {
   return fetchApi<{ state: string; membershipId?: string; invitationId?: string; deliveryStatus?: string; deliveryCodeSafe?: string | null; emailSent?: boolean; message?: string }>(`/client-identity/admin/workspaces/${encodeURIComponent(workspaceId)}/invitations`, { method: 'POST', body: JSON.stringify(payload) });
 }
