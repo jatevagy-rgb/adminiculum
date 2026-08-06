@@ -59,6 +59,12 @@ describe('internal portal-admin UI', () => {
     assert.doesNotMatch(src, /clientUserId/);
     // no raw status enum in the primary card.
     assert.match(src, /Jóváhagyásra vár/);
+    // caseId is guarded before .slice — invitation notifications and other rows
+    // can have a null caseId and must not crash the interaction/grant render.
+    assert.doesNotMatch(src, /ügy: \{item\.caseId\.slice/);
+    assert.doesNotMatch(src, /font-mono">\{g\.caseId\.slice/);
+    assert.match(src, /item\.caseId \? /);
+    assert.match(src, /g\.caseId \? /);
   });
 
   it('defines explicit customer and workforce interaction API boundaries', () => {

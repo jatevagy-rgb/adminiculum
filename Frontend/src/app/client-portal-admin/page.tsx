@@ -595,7 +595,7 @@ function PageBody() {
                   {m.activeGrants.map((g) => (
                     <div key={g.id} data-testid="active-grant-row" className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3 text-xs text-[var(--adm-text-muted)]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span>Ügy: <span className="font-mono">{g.caseId.slice(0, 8)}</span></span>
+                        <span>Ügy: <span className="font-mono">{g.caseId ? g.caseId.slice(0, 8) : "—"}</span></span>
                         <AdminBadge tone={g.status === "ACTIVE" ? "green" : "neutral"}>{g.status}</AdminBadge>
                       </div>
                       <dl data-testid="grant-technical-details" className="mt-2 grid gap-x-3 gap-y-1 sm:grid-cols-2">
@@ -643,7 +643,7 @@ function InteractionQueueCard({ title, items, empty, onRequestAction }: { title:
         {items.length ? items.map((item) => (
           <div key={item.id} className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-2 text-xs">
             <p className="font-semibold text-[var(--adm-text)]">{item.clientSafeTitle || item.subject || item.type || "Ügyfélportál elem"}</p>
-            <p className="mt-1 text-[var(--adm-text-muted)]">{localizedInteractionStatus(item.status)} · ügy: {item.caseId.slice(0, 8)}</p>
+            <p className="mt-1 text-[var(--adm-text-muted)]">{localizedInteractionStatus(item.status)}{item.caseId ? ` · ügy: ${item.caseId.slice(0, 8)}` : ""}</p>
             {onRequestAction && (item.status === "DRAFT" || item.status === "READY_TO_PUBLISH" || item.status === "PUBLISHED" || item.status === "SUBMITTED" || item.status === "CORRECTION_REQUESTED" || item.status === "UNDER_INTERNAL_REVIEW") ? <div className="mt-2 flex flex-wrap gap-1"><AdminButton size="sm" variant="muted" disabled={item.revision == null || item.status === "PUBLISHED"} onClick={() => onRequestAction(item, "publish")}>Közzététel</AdminButton><AdminButton size="sm" variant="muted" disabled={item.revision == null || item.status === "SUBMITTED" || item.status === "CORRECTION_REQUESTED" || item.status === "UNDER_INTERNAL_REVIEW"} onClick={() => onRequestAction(item, "cancel")}>Visszavonás</AdminButton><AdminButton size="sm" variant="gold" disabled={item.revision == null || item.status === "DRAFT" || item.status === "READY_TO_PUBLISH"} onClick={() => onRequestAction(item, "complete")}>Lezárás</AdminButton></div> : null}
           </div>
         )) : <p className="text-xs text-[var(--adm-text-muted)]">{empty}</p>}
