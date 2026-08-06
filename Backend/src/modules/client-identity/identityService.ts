@@ -276,16 +276,50 @@ export async function createOrganizationGroup(actor: Actor, input: Record<string
  * transaction that creates the memberships, so there can be no APPROVED request
  * without a membership and no orphaned membership on a still-pending request.
  */
+const WORKSPACE_MODES = new Set(['INDIVIDUAL', 'ORGANIZATION', 'CASE_RELAY']);
+const UNIT_ROLES = new Set(['MEMBER', 'CONTACT', 'APPROVER', 'MANAGER']);
+const MODE_LABELS: Record<string, string> = { INDIVIDUAL: 'Magánügyfél', ORGANIZATION: 'Szervezeti ügyfél', CASE_RELAY: 'Ügyátvezető' };
+
+function normalizeWorkspaceMode(value: unknown, fallback?: string | null): 'INDIVIDUAL' | 'ORGANIZATION' | 'CASE_RELAY' {
+  const mode = String(value || fallback || '').trim().toUpperCase();
+  if (!WORKSPACE_MODES.has(mode)) throw new ClientIdentityError(400, 'WORKSPACE_MODE_INVALID', 'A valid customer-surface mode is required.');
+  return mode as 'INDIVIDUAL' | 'ORGANIZATION' | 'CASE_RELAY';
+}
+
+function normalizeUnitRole(value: unknown): 'MEMBER' | 'CONTACT' | 'APPROVER' | 'MANAGER' {
+  const role = String(value || 'MEMBER').trim().toUpperCase();
+  return UNIT_ROLES.has(role) ? (role as 'MEMBER' | 'CONTACT' | 'APPROVER' | 'MANAGER') : 'MEMBER';
+}
+
+function workspaceReference(): string {
+  return crypto.randomBytes(18).toString('base64url');
+}
+
+/**
+ * Approve a membership request through a single transactional orchestration.
+ *
+ * The operator chooses how to assign the applicant:
+ *   - EXISTING_CLIENT: link to an existing Client; the compatible active customer
+ *     surface is auto-selected, or created inline (createWorkspace) when none
+ *     exists — the operator is never dead-ended by a missing surface.
+ *   - NEW_CLIENT: create the Client and its first customer surface in the same
+ *     transaction.
+ *
+ * The customer's requested mode is intent, not authority: the operator's chosen
+ * actual mode wins (the UI warns on divergence). Approval provisions at most one
+ * Client, one customer surface and one ACTIVE portal membership, optionally one
+ * organizational-unit assignment with a unit role. It creates NO case grant,
+ * publication, document or message access, and exposes no existing Client case.
+ * Partial failure rolls back everything (single $transaction).
+ */
 export async function approveMembershipRequest(actor: Actor, requestId: string, input: Record<string, unknown>) {
   requireReviewer(actor);
   const revision = Number(input.revision);
-  const clientId = safeString(input.clientId, 80);
-  const workspaceId = safeString(input.workspaceId, 80);
-  const groupId = safeString(input.groupId, 80);
-  const role = normalizeMembershipRole(input.role);
+  if (!Number.isInteger(revision)) throw new ClientIdentityError(400, 'APPROVAL_INPUT_REQUIRED', 'Revision is required.');
+
+  const portalRole = normalizeMembershipRole(input.portalMembershipRole ?? input.role);
   const clientSafeDecisionMessage = safeString(input.clientSafeDecisionMessage, 500);
   const internalDecisionNote = safeString(input.internalDecisionNote, 1000);
-  if (!clientId || !workspaceId || !Number.isInteger(revision)) throw new ClientIdentityError(400, 'APPROVAL_INPUT_REQUIRED', 'Client, workspace and revision are required.');
 
   const request = await prisma.clientOrganizationMembershipRequest.findUnique({ where: { id: requestId } });
   if (!request) throw new ClientIdentityError(404, 'REQUEST_NOT_FOUND', 'Membership request is not available.');
@@ -295,28 +329,106 @@ export async function approveMembershipRequest(actor: Actor, requestId: string, 
   const identity = await prisma.clientPortalIdentity.findUnique({ where: { id: request.clientPortalIdentityId }, select: { id: true, status: true } });
   if (!identity || identity.status === 'SUSPENDED' || identity.status === 'REVOKED') throw new ClientIdentityError(409, 'IDENTITY_NOT_ELIGIBLE', 'The requesting identity is not eligible for approval.');
 
-  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true } });
-  if (!client) throw new ClientIdentityError(400, 'CLIENT_NOT_FOUND', 'Selected client was not found.');
+  // Assignment mode: explicit, else inferred (new-client input present => NEW_CLIENT).
+  const newClientInput = (input.newClientInput && typeof input.newClientInput === 'object') ? input.newClientInput as Record<string, unknown> : null;
+  const existingClientId = safeString(input.existingClientId ?? input.clientId, 80);
+  const assignmentMode = String(input.assignmentMode || (newClientInput ? 'NEW_CLIENT' : 'EXISTING_CLIENT')).trim().toUpperCase();
+  if (assignmentMode !== 'EXISTING_CLIENT' && assignmentMode !== 'NEW_CLIENT') throw new ClientIdentityError(400, 'ASSIGNMENT_MODE_INVALID', 'Assignment mode is invalid.');
 
-  const workspace = await prisma.clientPortalWorkspace.findUnique({ where: { id: workspaceId }, select: { id: true, clientId: true, status: true, mode: true } });
-  if (!workspace || workspace.status !== 'ACTIVE') throw new ClientIdentityError(409, 'WORKSPACE_NOT_ACTIVE', 'The selected workspace is not active.');
-  if (workspace.clientId !== clientId) throw new ClientIdentityError(409, 'WORKSPACE_CLIENT_MISMATCH', 'The workspace does not belong to the selected client.');
-  if (request.requestedMode && String(workspace.mode) !== String(request.requestedMode)) {
-    throw new ClientIdentityError(409, 'WORKSPACE_MODE_MISMATCH', 'The workspace mode is not compatible with the requested access mode.');
-  }
-  if (groupId) {
-    const group = await prisma.clientOrganizationGroup.findFirst({ where: { id: groupId, clientId, status: 'ACTIVE' } });
-    if (!group) throw new ClientIdentityError(400, 'CROSS_CLIENT_GROUP_REJECTED', 'Requested group is not available for that organization.');
-  }
+  // Actual customer-surface mode (operator authority; request mode is a default).
+  const createWorkspaceInput = (input.createWorkspaceInput && typeof input.createWorkspaceInput === 'object') ? input.createWorkspaceInput as Record<string, unknown> : null;
+  const actualMode = normalizeWorkspaceMode(input.actualMode ?? createWorkspaceInput?.mode, request.requestedMode);
+  const existingWorkspaceId = safeString(input.existingWorkspaceId ?? input.workspaceId, 80);
+
+  // Optional organizational-unit assignment (ORGANIZATION only).
+  const organizationGroupId = safeString(input.organizationGroupId, 80);
+  const newOrganizationGroupName = safeString(input.newOrganizationGroupName, 120);
+  const unitRole = normalizeUnitRole(input.unitRole);
 
   const now = new Date();
   try {
     return await prisma.$transaction(async (tx) => {
-      const membership = await tx.clientOrganizationMembership.create({ data: { clientPortalIdentityId: request.clientPortalIdentityId, clientId, groupId, approvedFromRequestId: request.id, approvedById: actor.userId, approvedAt: now } });
+      // 1. Resolve the Client (existing or newly created).
+      let clientId: string;
+      let clientName: string;
+      let createdClient = false;
+      if (assignmentMode === 'NEW_CLIENT') {
+        const name = safeString(newClientInput?.name ?? request.requestedOrganizationName ?? request.displayNameSnapshot, 180);
+        if (!name) throw new ClientIdentityError(400, 'NEW_CLIENT_NAME_REQUIRED', 'A name is required to create a new client.');
+        const created = await tx.client.create({ data: {
+          name,
+          email: normalizeEmail(newClientInput?.email) || request.verifiedEmailSnapshot || undefined,
+          phone: safeString(newClientInput?.phone, 60) || request.phoneSafe || undefined,
+          companyRegistrationNumber: safeString(newClientInput?.companyRegistrationNumber, 60) || undefined,
+          taxNumber: safeString(newClientInput?.taxNumber, 60) || undefined,
+          contactPerson: safeString(newClientInput?.contactPerson, 180) || request.displayNameSnapshot || undefined,
+          portalAccessEnabled: true,
+        } });
+        clientId = created.id;
+        clientName = created.name;
+        createdClient = true;
+      } else {
+        if (!existingClientId) throw new ClientIdentityError(400, 'EXISTING_CLIENT_REQUIRED', 'An existing client must be selected.');
+        const existing = await tx.client.findUnique({ where: { id: existingClientId }, select: { id: true, name: true } });
+        if (!existing) throw new ClientIdentityError(400, 'CLIENT_NOT_FOUND', 'Selected client was not found.');
+        clientId = existing.id;
+        clientName = existing.name;
+      }
+
+      // 2. Resolve the customer surface (given, auto-selected, or created inline).
+      let workspaceRow: { id: string; clientId: string; status: string; mode: string } | null = null;
+      let createdWorkspace = false;
+      if (existingWorkspaceId && !createWorkspaceInput) {
+        const w = await tx.clientPortalWorkspace.findUnique({ where: { id: existingWorkspaceId }, select: { id: true, clientId: true, status: true, mode: true } });
+        if (!w || w.status !== 'ACTIVE') throw new ClientIdentityError(409, 'WORKSPACE_NOT_ACTIVE', 'The selected customer surface is not active.');
+        if (w.clientId !== clientId) throw new ClientIdentityError(409, 'WORKSPACE_CLIENT_MISMATCH', 'The customer surface does not belong to the selected client.');
+        if (String(w.mode) !== actualMode) throw new ClientIdentityError(409, 'WORKSPACE_MODE_MISMATCH', 'The customer surface mode is not compatible with the chosen access mode.');
+        workspaceRow = { id: w.id, clientId: w.clientId, status: String(w.status), mode: String(w.mode) };
+      } else if (createWorkspaceInput || assignmentMode === 'NEW_CLIENT') {
+        const name = safeString(createWorkspaceInput?.name, 180) || `${clientName} – ${MODE_LABELS[actualMode]}`;
+        const created = await tx.clientPortalWorkspace.create({ data: {
+          clientId,
+          name,
+          mode: actualMode,
+          communicationMode: 'PORTAL_PRIMARY',
+          connectedSystemState: actualMode === 'CASE_RELAY' ? 'CONFIGURATION_REQUIRED' : 'NOT_CONFIGURED',
+          publicReference: workspaceReference(),
+          createdById: actor.userId,
+        } });
+        await tx.clientPortalWorkspaceEvent.create({ data: { workspaceId: created.id, actorId: actor.userId, action: 'WORKSPACE_CREATED', toStatus: created.status, metadataSafe: { source: 'membership-approval' } } });
+        workspaceRow = { id: created.id, clientId: created.clientId, status: String(created.status), mode: String(created.mode) };
+        createdWorkspace = true;
+      } else {
+        // EXISTING_CLIENT with no chosen/created surface: auto-select the single
+        // compatible active surface, or require a decision.
+        const candidates = await tx.clientPortalWorkspace.findMany({ where: { clientId, mode: actualMode, status: 'ACTIVE' }, select: { id: true, clientId: true, status: true, mode: true } });
+        if (candidates.length === 1) workspaceRow = { id: candidates[0].id, clientId: candidates[0].clientId, status: String(candidates[0].status), mode: String(candidates[0].mode) };
+        else if (candidates.length > 1) throw new ClientIdentityError(409, 'WORKSPACE_SELECTION_REQUIRED', 'Select which customer surface to assign.');
+        else throw new ClientIdentityError(409, 'WORKSPACE_CREATION_REQUIRED', 'No compatible customer surface exists; create one to continue.');
+      }
+      const workspaceId = workspaceRow.id;
+
+      // 3. Optional organizational unit (ORGANIZATION surfaces only).
+      let groupId: string | null = null;
+      if (actualMode === 'ORGANIZATION') {
+        if (organizationGroupId) {
+          const group = await tx.clientOrganizationGroup.findFirst({ where: { id: organizationGroupId, clientId, status: 'ACTIVE' }, select: { id: true, workspaceId: true } });
+          if (!group) throw new ClientIdentityError(400, 'CROSS_CLIENT_GROUP_REJECTED', 'The organizational unit is not available for that client.');
+          if (group.workspaceId && group.workspaceId !== workspaceId) throw new ClientIdentityError(409, 'GROUP_WORKSPACE_MISMATCH', 'The organizational unit belongs to another customer surface.');
+          if (!group.workspaceId) await tx.clientOrganizationGroup.update({ where: { id: group.id }, data: { workspaceId, revision: { increment: 1 } } });
+          groupId = group.id;
+        } else if (newOrganizationGroupName) {
+          const created = await tx.clientOrganizationGroup.create({ data: { clientId, workspaceId, name: newOrganizationGroupName, createdById: actor.userId } });
+          groupId = created.id;
+        }
+      }
+
+      // 4. Portal + organization membership (single transaction, no case grant).
+      const membership = await tx.clientOrganizationMembership.create({ data: { clientPortalIdentityId: request.clientPortalIdentityId, clientId, groupId, unitRole: groupId ? unitRole : 'MEMBER', approvedFromRequestId: request.id, approvedById: actor.userId, approvedAt: now } });
       const workspaceMembership = await tx.clientPortalWorkspaceMembership.upsert({
         where: { clientPortalIdentityId_workspaceId: { clientPortalIdentityId: request.clientPortalIdentityId, workspaceId } },
-        create: { clientPortalIdentityId: request.clientPortalIdentityId, workspaceId, status: 'ACTIVE', role, invitedAt: now, invitedById: actor.userId, approvedAt: now, approvedById: actor.userId },
-        update: { status: 'ACTIVE', role, approvedAt: now, approvedById: actor.userId, revokedAt: null, revokedById: null, suspendedAt: null, suspendedById: null, revision: { increment: 1 } },
+        create: { clientPortalIdentityId: request.clientPortalIdentityId, workspaceId, status: 'ACTIVE', role: portalRole, invitedAt: now, invitedById: actor.userId, approvedAt: now, approvedById: actor.userId },
+        update: { status: 'ACTIVE', role: portalRole, approvedAt: now, approvedById: actor.userId, revokedAt: null, revokedById: null, suspendedAt: null, suspendedById: null, revision: { increment: 1 } },
       });
       await tx.clientOrganizationMembershipRequest.update({
         where: { id: request.id },
@@ -334,13 +446,12 @@ export async function approveMembershipRequest(actor: Actor, requestId: string, 
         },
       });
       await tx.clientPortalIdentity.update({ where: { id: request.clientPortalIdentityId }, data: { status: 'ACTIVE', revision: { increment: 1 } } });
-      // If the request originated from a matching invitation, consume it too.
       if (request.invitationId) {
         const invitation = await tx.clientPortalInvitation.findFirst({ where: { id: request.invitationId, status: 'ACTIVE', workspaceId } });
         if (invitation) await tx.clientPortalInvitation.update({ where: { id: invitation.id }, data: { status: 'USED', usedByIdentityId: request.clientPortalIdentityId, usedAt: now } });
       }
-      await tx.clientPortalWorkspaceEvent.create({ data: { workspaceId, membershipId: workspaceMembership.id, actorId: actor.userId, action: 'MEMBERSHIP_APPROVED', toStatus: 'ACTIVE', metadataSafe: { source: 'membership-request-approval', requestId: request.id } } });
-      return { membership, workspaceMembership, grantRequired: true, nextAction: 'Hozzáférés adása ügyhöz' };
+      await tx.clientPortalWorkspaceEvent.create({ data: { workspaceId, membershipId: workspaceMembership.id, actorId: actor.userId, action: 'MEMBERSHIP_APPROVED', toStatus: 'ACTIVE', metadataSafe: { source: 'membership-request-approval', requestId: request.id, assignmentMode, createdClient, createdWorkspace } } });
+      return { membership, workspaceMembership, clientId, workspaceId, createdClient, createdWorkspace, actualMode, grantRequired: true, nextAction: 'Hozzáférés adása ügyhöz' };
     });
   } catch (error) {
     if (error instanceof ClientIdentityError) throw error;

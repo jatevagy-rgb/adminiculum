@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminBadge, AdminButton, AdminPanel, AdminSectionHeader } from "@/components/adminiculum/ui";
-import { createClient, getCases, getClients, type CaseListItem, type Client, type CreateClientData } from "@/lib/api";
+import { getCases, getClients, type CaseListItem, type Client } from "@/lib/api";
 import { localizedInteractionStatus, workforceInteractionApi, type InternalInteractionRow } from "@/lib/clientInteractionApi";
 import { ClientInteractionInternalActions } from "@/components/client-portal/ClientInteractionInternalActions";
 import { ClientRequestComposer } from "@/components/client-portal/ClientRequestComposer";
@@ -23,7 +23,11 @@ import {
   updateAdminWorkspace,
   type ActiveMembershipDTO,
   type AdminWorkspaceDTO,
+  type ApproveMembershipPayload,
+  type CustomerSurfaceMode,
   type MembershipRequestDTO,
+  type OrganizationUnitRole,
+  type PortalMembershipRole,
 } from "@/lib/clientPortalAdminApi";
 
 const DEFAULT_PERMISSIONS = ["MATTER_READ", "DOCUMENT_READ", "DOCUMENT_DOWNLOAD", "UPDATE_READ"];
@@ -33,137 +37,218 @@ function formatGrantDate(value: string | null) {
 }
 
 const MODE_LABELS: Record<string, string> = { INDIVIDUAL: "Magánügyfél", ORGANIZATION: "Szervezeti ügyfél", CASE_RELAY: "Ügyátvezető" };
+const PORTAL_ROLE_LABELS: Record<PortalMembershipRole, string> = { MEMBER: "Portálfelhasználó", REPRESENTATIVE: "Szervezeti kapcsolattartó", APPROVER: "Hozzáférés-jóváhagyó" };
+const UNIT_ROLE_LABELS: Record<OrganizationUnitRole, string> = { MEMBER: "Tag", CONTACT: "Kapcsolattartó", APPROVER: "Jóváhagyó", MANAGER: "Egységvezető" };
 
-function ApproveForm({ request, clients, workspaces, busy, onApprove, onReject, onCreateClient }: {
+const inputCls = "rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]";
+const labelCls = "grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]";
+
+function ApproveForm({ request, clients, workspaces, busy, onApprove, onReject }: {
   request: MembershipRequestDTO;
   clients: Client[];
   workspaces: AdminWorkspaceDTO[];
   busy: boolean;
-  onApprove: (payload: { clientId: string; workspaceId: string; role: 'MEMBER' | 'REPRESENTATIVE' | 'APPROVER'; clientSafeDecisionMessage: string; internalDecisionNote: string }) => void;
+  onApprove: (payload: Omit<ApproveMembershipPayload, "revision">) => void;
   onReject: (payload: { clientSafeDecisionMessage: string; internalDecisionNote: string }) => void;
-  onCreateClient: (payload: CreateClientData) => Promise<Client>;
 }) {
-  const [clientId, setClientId] = useState<string>(request.requestedClientId || "");
-  const [workspaceId, setWorkspaceId] = useState<string>("");
-  const [role, setRole] = useState<'MEMBER' | 'REPRESENTATIVE' | 'APPROVER'>("MEMBER");
+  const [assignmentMode, setAssignmentMode] = useState<"" | "EXISTING_CLIENT" | "NEW_CLIENT">("");
+  const [actualMode, setActualMode] = useState<CustomerSurfaceMode>((request.requestedMode as CustomerSurfaceMode) || "INDIVIDUAL");
+  const [existingClientId, setExistingClientId] = useState<string>(request.requestedClientId || "");
+  const [existingWorkspaceId, setExistingWorkspaceId] = useState<string>("");
+  const [createWorkspaceName, setCreateWorkspaceName] = useState<string>("");
+  const [newClient, setNewClient] = useState({ name: request.requestedOrganizationName || request.displayNameSnapshot || "", email: "", phone: "", companyRegistrationNumber: "", taxNumber: "", contactPerson: request.displayNameSnapshot || "" });
+  const [portalRole, setPortalRole] = useState<PortalMembershipRole>("MEMBER");
+  const [orgGroupId, setOrgGroupId] = useState<string>("");
+  const [newGroupName, setNewGroupName] = useState<string>("");
+  const [unitRole, setUnitRole] = useState<OrganizationUnitRole>("MEMBER");
   const [decisionMessage, setDecisionMessage] = useState("");
   const [internalNote, setInternalNote] = useState("");
   const [reason, setReason] = useState("");
-  const [creating, setCreating] = useState(false);
-  // Only active workspaces for the selected client, and — when the customer
-  // requested a specific mode — only mode-compatible ones (matches the backend
-  // WORKSPACE_MODE_MISMATCH guard so the admin cannot pick an invalid target).
+  const [confirming, setConfirming] = useState(false);
+
+  const isOrg = actualMode === "ORGANIZATION";
+  const existingClient = clients.find((c) => c.id === existingClientId) || null;
   const eligibleWorkspaces = useMemo(
-    () => workspaces.filter((workspace) => workspace.clientId === clientId && workspace.status === "ACTIVE" && (!request.requestedMode || workspace.mode === request.requestedMode)),
-    [workspaces, clientId, request.requestedMode],
+    () => workspaces.filter((w) => w.clientId === existingClientId && w.status === "ACTIVE" && w.mode === actualMode),
+    [workspaces, existingClientId, actualMode],
   );
-  const [newClient, setNewClient] = useState<CreateClientData>({
-    name: request.requestedOrganizationName || request.corporateEmail || "",
-    email: request.corporateEmail || undefined,
-    contactPerson: request.requestedGroupName || undefined,
-  });
-  const possibleMatches = useMemo(() => {
-    const needle = String(newClient.name || request.requestedOrganizationName || "").trim().toLowerCase();
-    return needle ? clients.filter((client) => client.name.toLowerCase().includes(needle) || needle.includes(client.name.toLowerCase())).slice(0, 3) : [];
-  }, [clients, newClient.name, request.requestedOrganizationName]);
-  const createAndSelect = async () => {
-    const created = await onCreateClient(newClient);
-    setClientId(created.id);
-    setCreating(false);
-  };
+  // Auto-select the single compatible surface for an existing client.
+  const surfaceState: "auto" | "select" | "create" =
+    eligibleWorkspaces.length === 1 ? "auto" : eligibleWorkspaces.length > 1 ? "select" : "create";
+  const modeDiverges = Boolean(request.requestedMode && request.requestedMode !== actualMode);
+  const defaultWorkspaceName = `${assignmentMode === "NEW_CLIENT" ? (newClient.name || "Ügyfél") : (existingClient?.name || "Ügyfél")} – ${MODE_LABELS[actualMode]}`;
+
+  const canApprove = assignmentMode === "NEW_CLIENT"
+    ? newClient.name.trim().length > 0
+    : Boolean(existingClientId) && (surfaceState === "auto" || (surfaceState === "select" && existingWorkspaceId) || surfaceState === "create");
+
+  function buildPayload(): Omit<ApproveMembershipPayload, "revision"> {
+    const base: Omit<ApproveMembershipPayload, "revision"> = {
+      assignmentMode: assignmentMode === "NEW_CLIENT" ? "NEW_CLIENT" : "EXISTING_CLIENT",
+      actualMode,
+      portalMembershipRole: portalRole,
+      clientSafeDecisionMessage: decisionMessage.trim() || undefined,
+      internalDecisionNote: internalNote.trim() || undefined,
+    };
+    if (assignmentMode === "NEW_CLIENT") {
+      base.newClientInput = { name: newClient.name.trim(), email: newClient.email.trim() || undefined, phone: newClient.phone.trim() || undefined, companyRegistrationNumber: newClient.companyRegistrationNumber.trim() || undefined, taxNumber: newClient.taxNumber.trim() || undefined, contactPerson: newClient.contactPerson.trim() || undefined };
+      base.createWorkspaceInput = { name: createWorkspaceName.trim() || defaultWorkspaceName, mode: actualMode };
+    } else {
+      base.existingClientId = existingClientId;
+      if (surfaceState === "auto") base.existingWorkspaceId = eligibleWorkspaces[0].id;
+      else if (surfaceState === "select") base.existingWorkspaceId = existingWorkspaceId;
+      else base.createWorkspaceInput = { name: createWorkspaceName.trim() || defaultWorkspaceName, mode: actualMode };
+    }
+    if (isOrg) {
+      if (orgGroupId) base.organizationGroupId = orgGroupId;
+      else if (newGroupName.trim()) base.newOrganizationGroupName = newGroupName.trim();
+      if (base.organizationGroupId || base.newOrganizationGroupName) base.unitRole = unitRole;
+    }
+    return base;
+  }
+
+  const surfaceSummary = assignmentMode === "NEW_CLIENT" || surfaceState === "create"
+    ? `Új ügyfélfelület: ${createWorkspaceName.trim() || defaultWorkspaceName}`
+    : surfaceState === "auto"
+      ? `${eligibleWorkspaces[0].name} (automatikusan kiválasztva)`
+      : (workspaces.find((w) => w.id === existingWorkspaceId)?.name || "—");
+  const approveLabel = assignmentMode === "NEW_CLIENT"
+    ? `Új ${MODE_LABELS[actualMode].toLowerCase()} létrehozása és hozzáférés jóváhagyása`
+    : `Hozzárendelés a(z) ${existingClient?.name || "kiválasztott"} ügyfélhez`;
+
   return (
-    <div className="mt-3 grid gap-3 border-t border-[var(--adm-border)] pt-3 sm:grid-cols-2">
-      <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
-        <span>Szervezet (Client) hozzárendelése *</span>
-        <select
-          data-testid="approve-client-select"
-          value={clientId}
-          onChange={(e) => { setClientId(e.target.value); setWorkspaceId(""); }}
-          className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]"
-        >
-          <option value="">— Válasszon ügyfelet —</option>
-          {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-      </label>
-      <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
-        <span>Munkatér (workspace) hozzárendelése *</span>
-        <select
-          data-testid="approve-workspace-select"
-          value={workspaceId}
-          onChange={(e) => setWorkspaceId(e.target.value)}
-          disabled={!clientId}
-          className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)] disabled:opacity-50"
-        >
-          <option value="">{clientId ? "— Válasszon munkateret —" : "Előbb válasszon ügyfelet"}</option>
-          {eligibleWorkspaces.map((w) => <option key={w.id} value={w.id}>{w.name} · {MODE_LABELS[w.mode] || w.mode}</option>)}
-        </select>
-        {clientId && eligibleWorkspaces.length === 0 ? <span className="text-[11px] text-amber-700">Nincs a kért móddal kompatibilis aktív munkatér. Hozzon létre egyet a fenti Ügyfélmunkaterek szakaszban.</span> : null}
-      </label>
-      <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
-        <span>Tagsági szerep</span>
-        <select value={role} onChange={(e) => setRole(e.target.value as 'MEMBER' | 'REPRESENTATIVE' | 'APPROVER')} className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]">
-          <option value="MEMBER">Tag</option>
-          <option value="REPRESENTATIVE">Képviselő</option>
-          <option value="APPROVER">Jóváhagyó</option>
-        </select>
-      </label>
-      <div className="flex items-end">
-        <AdminButton
-          data-testid="approve-membership-btn"
-          variant="gold"
-          disabled={busy || !clientId || !workspaceId}
-          onClick={() => onApprove({ clientId, workspaceId, role, clientSafeDecisionMessage: decisionMessage.trim(), internalDecisionNote: internalNote.trim() })}
-        >
-          Tagság jóváhagyása
-        </AdminButton>
-      </div>
-      <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)] sm:col-span-2">
-        <span>Ügyfélnek szánt döntési üzenet (opcionális)</span>
-        <input value={decisionMessage} onChange={(e) => setDecisionMessage(e.target.value)} className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]" placeholder="Az ügyfél ezt látja a jóváhagyásról/elutasításról" />
-      </label>
-      <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)] sm:col-span-2">
-        <span>Belső megjegyzés (nem látja az ügyfél)</span>
-        <input value={internalNote} onChange={(e) => setInternalNote(e.target.value)} className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]" placeholder="Csak belső használatra" />
-      </label>
-      <div className="sm:col-span-2">
-        <AdminButton type="button" variant="neutral" disabled={busy} onClick={() => setCreating((value) => !value)}>
-          Új ügyfél létrehozása
-        </AdminButton>
-      </div>
-      {creating ? (
-        <div className="grid gap-3 rounded-xl border border-[var(--adm-border)] bg-[var(--adm-bg,#faf8f3)] p-3 sm:col-span-2 sm:grid-cols-2">
-          <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
-            <span>Hivatalos név *</span>
-            <input value={newClient.name} onChange={(event) => setNewClient((prev) => ({ ...prev, name: event.target.value }))} className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]" />
-          </label>
-          <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
-            <span>Elsődleges e-mail</span>
-            <input value={newClient.email || ""} onChange={(event) => setNewClient((prev) => ({ ...prev, email: event.target.value }))} className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]" />
-          </label>
-          <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
-            <span>Cégjegyzékszám</span>
-            <input value={newClient.companyRegistrationNumber || ""} onChange={(event) => setNewClient((prev) => ({ ...prev, companyRegistrationNumber: event.target.value }))} className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]" />
-          </label>
-          <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
-            <span>Adószám</span>
-            <input value={newClient.taxNumber || ""} onChange={(event) => setNewClient((prev) => ({ ...prev, taxNumber: event.target.value }))} className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]" />
-          </label>
-          {possibleMatches.length ? <p className="text-xs text-amber-700 sm:col-span-2">Lehetséges egyezés: {possibleMatches.map((client) => client.name).join(", ")}. Nincs automatikus összevonás.</p> : null}
-          <AdminButton variant="gold" disabled={busy || !newClient.name.trim()} onClick={createAndSelect}>Ügyfél létrehozása és kiválasztása</AdminButton>
+    <div className="mt-3 grid gap-4 border-t border-[var(--adm-border)] pt-3" data-testid="approve-form">
+      {/* Section: Hozzárendelés módja */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--adm-text-muted)]">Hozzárendelés</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button type="button" data-testid="assign-existing" onClick={() => setAssignmentMode("EXISTING_CLIENT")} className={`rounded-full border px-3 py-1.5 text-sm ${assignmentMode === "EXISTING_CLIENT" ? "border-[var(--adm-gold)] bg-[var(--adm-gold-soft,#f3ead2)] text-[var(--adm-text)]" : "border-[var(--adm-border)] text-[var(--adm-text-muted)]"}`}>Meglévő ügyfélhez rendelem</button>
+          <button type="button" data-testid="assign-new" onClick={() => setAssignmentMode("NEW_CLIENT")} className={`rounded-full border px-3 py-1.5 text-sm ${assignmentMode === "NEW_CLIENT" ? "border-[var(--adm-gold)] bg-[var(--adm-gold-soft,#f3ead2)] text-[var(--adm-text)]" : "border-[var(--adm-border)] text-[var(--adm-text-muted)]"}`}>Új ügyfelet hozok létre</button>
         </div>
-      ) : null}
-      <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)] sm:col-span-2">
-        <span>Elutasítás ügyfélnek szánt indoka (client-safe)</span>
+      </div>
+
+      {assignmentMode && (
+        <label className={labelCls}>
+          <span>Ügyfélfelület módja</span>
+          <select value={actualMode} onChange={(e) => { setActualMode(e.target.value as CustomerSurfaceMode); setExistingWorkspaceId(""); }} className={inputCls}>
+            <option value="INDIVIDUAL">Magánügyfél</option>
+            <option value="ORGANIZATION">Szervezeti ügyfél</option>
+            <option value="CASE_RELAY">Ügyátvezető</option>
+          </select>
+          {modeDiverges ? <span className="text-[11px] text-amber-700">A kérelmező {MODE_LABELS[request.requestedMode as string] || request.requestedMode} felületet választott, de Ön {MODE_LABELS[actualMode]} felülethez rendeli. A hozzáférést az adminisztrátori döntés határozza meg.</span> : null}
+        </label>
+      )}
+
+      {/* EXISTING CLIENT FLOW */}
+      {assignmentMode === "EXISTING_CLIENT" && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className={labelCls}>
+            <span>Meglévő ügyfél *</span>
+            <select data-testid="approve-client-select" value={existingClientId} onChange={(e) => { setExistingClientId(e.target.value); setExistingWorkspaceId(""); }} className={inputCls}>
+              <option value="">— Válasszon ügyfelet —</option>
+              {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </label>
+          {existingClientId && (
+            <label className={labelCls}>
+              <span>Ügyfélfelület</span>
+              {surfaceState === "auto" ? (
+                <span className="rounded-lg bg-[var(--adm-bg,#faf8f3)] px-3 py-2 text-sm text-[var(--adm-text)]" data-testid="surface-auto">{eligibleWorkspaces[0].name} · automatikusan kiválasztva</span>
+              ) : surfaceState === "select" ? (
+                <select data-testid="approve-workspace-select" value={existingWorkspaceId} onChange={(e) => setExistingWorkspaceId(e.target.value)} className={inputCls}>
+                  <option value="">— Válasszon ügyfélfelületet —</option>
+                  {eligibleWorkspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+              ) : (
+                <div className="grid gap-1" data-testid="surface-create">
+                  <span className="text-[11px] text-amber-700">Nincs megfelelő aktív ügyfélfelület. A jóváhagyással létrejön egy új.</span>
+                  <input value={createWorkspaceName} onChange={(e) => setCreateWorkspaceName(e.target.value)} placeholder={defaultWorkspaceName} className={inputCls} />
+                </div>
+              )}
+            </label>
+          )}
+        </div>
+      )}
+
+      {/* NEW CLIENT FLOW */}
+      {assignmentMode === "NEW_CLIENT" && (
+        <div className="grid gap-3 rounded-xl border border-[var(--adm-border)] bg-[var(--adm-bg,#faf8f3)] p-3 sm:grid-cols-2" data-testid="new-client-form">
+          <label className={labelCls}><span>Ügyfél neve *</span><input value={newClient.name} onChange={(e) => setNewClient((p) => ({ ...p, name: e.target.value }))} className={inputCls} /></label>
+          <label className={labelCls}><span>Kapcsolattartó neve</span><input value={newClient.contactPerson} onChange={(e) => setNewClient((p) => ({ ...p, contactPerson: e.target.value }))} className={inputCls} /></label>
+          <label className={labelCls}><span>Hitelesített e-mail</span><input value={request.verifiedEmailSnapshot || "—"} readOnly aria-readonly="true" className={`${inputCls} cursor-not-allowed opacity-70`} /></label>
+          <label className={labelCls}><span>Telefonszám</span><input value={newClient.phone} onChange={(e) => setNewClient((p) => ({ ...p, phone: e.target.value }))} className={inputCls} /></label>
+          {isOrg ? <>
+            <label className={labelCls}><span>Cégjegyzékszám</span><input value={newClient.companyRegistrationNumber} onChange={(e) => setNewClient((p) => ({ ...p, companyRegistrationNumber: e.target.value }))} className={inputCls} /></label>
+            <label className={labelCls}><span>Adószám</span><input value={newClient.taxNumber} onChange={(e) => setNewClient((p) => ({ ...p, taxNumber: e.target.value }))} className={inputCls} /></label>
+          </> : null}
+          <label className={`${labelCls} sm:col-span-2`}><span>Ügyfélfelület neve</span><input value={createWorkspaceName} onChange={(e) => setCreateWorkspaceName(e.target.value)} placeholder={defaultWorkspaceName} className={inputCls} /></label>
+        </div>
+      )}
+
+      {/* Roles + organizational unit */}
+      {assignmentMode && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className={labelCls}>
+            <span>Portálon belüli szerep</span>
+            <select value={portalRole} onChange={(e) => setPortalRole(e.target.value as PortalMembershipRole)} className={inputCls}>
+              {(Object.keys(PORTAL_ROLE_LABELS) as PortalMembershipRole[]).map((r) => <option key={r} value={r}>{PORTAL_ROLE_LABELS[r]}</option>)}
+            </select>
+            <span className="text-[11px] text-[var(--adm-text-muted)]">A portálon belüli általános szerep. Ügyhozzáférést önmagában nem ad.</span>
+          </label>
+          {isOrg && (
+            <div className="grid gap-2 rounded-lg border border-[var(--adm-border)] p-2 sm:col-span-2 sm:grid-cols-2" data-testid="org-unit-fields">
+              <label className={labelCls}>
+                <span>Szervezeti egység</span>
+                <input value={newGroupName} onChange={(e) => { setNewGroupName(e.target.value); setOrgGroupId(""); }} placeholder="pl. HR, Sales, Finance — üresen hagyható" className={inputCls} />
+                <span className="text-[11px] text-[var(--adm-text-muted)]">A HR/Sales/Finance szervezeti egység, nem szerepkör. Üresen is jóváhagyható.</span>
+              </label>
+              <label className={labelCls}>
+                <span>Szervezeti egységen belüli szerep</span>
+                <select value={unitRole} onChange={(e) => setUnitRole(e.target.value as OrganizationUnitRole)} className={inputCls}>
+                  {(Object.keys(UNIT_ROLE_LABELS) as OrganizationUnitRole[]).map((r) => <option key={r} value={r}>{UNIT_ROLE_LABELS[r]}</option>)}
+                </select>
+                <span className="text-[11px] text-amber-700">Ez a szerep önmagában nem biztosít hozzáférést az egység ügyeihez, üzeneteihez vagy dokumentumaihoz.</span>
+              </label>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Decision message */}
+      {assignmentMode && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className={labelCls}><span>Ügyfélnek szánt döntési üzenet (opcionális)</span><input value={decisionMessage} onChange={(e) => setDecisionMessage(e.target.value)} placeholder="Az ügyfél ezt látja" className={inputCls} /></label>
+          <label className={labelCls}><span>Belső megjegyzés (nem látja az ügyfél)</span><input value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="Csak belső használatra" className={inputCls} /></label>
+        </div>
+      )}
+
+      {/* Approve with confirmation summary */}
+      {assignmentMode && !confirming && (
+        <div><AdminButton data-testid="approve-membership-btn" variant="gold" disabled={busy || !canApprove} onClick={() => setConfirming(true)}>{approveLabel}</AdminButton></div>
+      )}
+      {assignmentMode && confirming && (
+        <div className="grid gap-2 rounded-xl border border-[var(--adm-gold)] bg-[var(--adm-gold-soft,#f3ead2)]/40 p-3 text-sm" data-testid="approve-confirm">
+          <p className="font-semibold text-[var(--adm-text)]">Összegzés a jóváhagyás előtt</p>
+          <ul className="grid gap-0.5 text-[var(--adm-text-muted)]">
+            <li>Ügyfél: {assignmentMode === "NEW_CLIENT" ? `${newClient.name || "—"} (új)` : existingClient?.name || "—"}</li>
+            <li>Ügyfélfelület: {surfaceSummary} · {MODE_LABELS[actualMode]}</li>
+            <li>Portál szerep: {PORTAL_ROLE_LABELS[portalRole]}</li>
+            {isOrg ? <li>Szervezeti egység: {orgGroupId || newGroupName.trim() || "—"} · {UNIT_ROLE_LABELS[unitRole]}</li> : null}
+          </ul>
+          <p className="font-semibold text-[var(--adm-text)]">Ügyhozzáférés nem kerül automatikusan létrehozásra.</p>
+          <div className="flex gap-2">
+            <AdminButton data-testid="approve-confirm-btn" variant="gold" disabled={busy} onClick={() => onApprove(buildPayload())}>Jóváhagyás megerősítése</AdminButton>
+            <AdminButton variant="neutral" disabled={busy} onClick={() => setConfirming(false)}>Vissza</AdminButton>
+          </div>
+        </div>
+      )}
+
+      {/* Rejection */}
+      <label className={`${labelCls} border-t border-[var(--adm-border)] pt-3`}>
+        <span>Elutasítás ügyfélnek szánt indoka (opcionális)</span>
         <div className="flex gap-2">
-          <input
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            className="min-w-0 flex-1 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]"
-            placeholder="Opcionális indok — ez az üzenet és a fenti belső megjegyzés külön kezelt"
-          />
-          <AdminButton data-testid="reject-membership-btn" variant="muted" disabled={busy} onClick={() => onReject({ clientSafeDecisionMessage: reason.trim(), internalDecisionNote: internalNote.trim() })}>
-            Elutasítás
-          </AdminButton>
+          <input value={reason} onChange={(e) => setReason(e.target.value)} className={`min-w-0 flex-1 ${inputCls}`} placeholder="Az ügyfél ezt látja; a belső megjegyzés külön kezelt" />
+          <AdminButton data-testid="reject-membership-btn" variant="muted" disabled={busy} onClick={() => onReject({ clientSafeDecisionMessage: reason.trim(), internalDecisionNote: internalNote.trim() })}>Elutasítás</AdminButton>
         </div>
       </label>
     </div>
@@ -398,24 +483,24 @@ function PageBody() {
         <div className="mt-3 grid gap-3">
           {pending.map((r) => (
             <div key={r.id} data-testid="membership-request-row" className="rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                {/* Kérelem adatai */}
                 <div className="min-w-0">
                   <p className="font-semibold text-[var(--adm-text)]">{r.displayNameSnapshot || r.requestedOrganizationName || "(nincs megadva)"}</p>
-                  <p className="text-xs text-[var(--adm-text-muted)]">{r.verifiedEmailSnapshot || r.corporateEmail || "—"} · mód: {r.requestedMode ? MODE_LABELS[r.requestedMode] || r.requestedMode : "—"}</p>
+                  <p className="text-xs text-[var(--adm-text-muted)]">{r.verifiedEmailSnapshot || r.corporateEmail || "—"} · kért felület: {r.requestedMode ? MODE_LABELS[r.requestedMode] || r.requestedMode : "—"}</p>
                   <p className="text-xs text-[var(--adm-text-muted)]">cég: {r.requestedOrganizationName || "—"} · egység: {r.requestedGroupName || "—"} · munkakör: {r.claimedJobTitle || "—"}</p>
                   {r.noteSafe ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">megjegyzés: {r.noteSafe}</p> : null}
-                  <p className="mt-1 font-mono text-[11px] text-[var(--adm-text-soft)]">identity: {r.clientPortalIdentityId}</p>
+                  <details className="mt-1 text-[11px] text-[var(--adm-text-soft)]"><summary className="cursor-pointer">Technikai adatok</summary><p className="mt-1 font-mono">identity: {r.clientPortalIdentityId}</p></details>
                 </div>
-                <AdminBadge tone="gold">{r.status}</AdminBadge>
+                <AdminBadge tone="gold">{r.status === "PENDING_REVIEW" ? "Jóváhagyásra vár" : r.status === "REJECTED" ? "Elutasítva" : r.status}</AdminBadge>
               </div>
               <ApproveForm
                 request={r}
                 clients={clients}
                 workspaces={workspaces}
                 busy={busy}
-                onApprove={(payload) => run(() => approveMembershipRequest(r.id, { ...payload, revision: r.revision }).then(() => undefined), "Tagság jóváhagyva és aktív munkatér-tagság létrehozva. Ügyanyaghoz külön ügyhozzáférés (grant) szükséges.")}
+                onApprove={(payload) => run(() => approveMembershipRequest(r.id, { ...payload, revision: r.revision }).then(() => undefined), "Jóváhagyva. Aktív ügyfélfelület-tagság létrejött; ügyanyaghoz külön, kifejezett ügyhozzáférés szükséges.")}
                 onReject={(payload) => run(() => rejectMembershipRequest(r.id, { ...payload, revision: r.revision }).then(() => undefined), "Tagsági kérelem elutasítva.")}
-                onCreateClient={(payload) => createClient(payload)}
               />
             </div>
           ))}

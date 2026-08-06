@@ -126,10 +126,34 @@ export async function getMembershipRequestDetail(requestId: string): Promise<Mem
   return fetchApi(`/client-identity/admin/membership-requests/${encodeURIComponent(requestId)}`);
 }
 
+export type PortalMembershipRole = 'MEMBER' | 'REPRESENTATIVE' | 'APPROVER';
+export type OrganizationUnitRole = 'MEMBER' | 'CONTACT' | 'APPROVER' | 'MANAGER';
+export type CustomerSurfaceMode = 'INDIVIDUAL' | 'ORGANIZATION' | 'CASE_RELAY';
+
+export interface ApproveMembershipPayload {
+  assignmentMode: 'EXISTING_CLIENT' | 'NEW_CLIENT';
+  actualMode: CustomerSurfaceMode;
+  portalMembershipRole: PortalMembershipRole;
+  revision: number;
+  // Existing client
+  existingClientId?: string;
+  existingWorkspaceId?: string;
+  // New client / inline surface
+  newClientInput?: { name: string; email?: string; phone?: string; companyRegistrationNumber?: string; taxNumber?: string; contactPerson?: string };
+  createWorkspaceInput?: { name?: string; mode: CustomerSurfaceMode };
+  // Organization unit (ORGANIZATION only)
+  organizationGroupId?: string;
+  newOrganizationGroupName?: string;
+  unitRole?: OrganizationUnitRole;
+  // Decision surfaces
+  clientSafeDecisionMessage?: string;
+  internalDecisionNote?: string;
+}
+
 export async function approveMembershipRequest(
   requestId: string,
-  payload: { clientId: string; workspaceId: string; groupId?: string; role?: 'MEMBER' | 'REPRESENTATIVE' | 'APPROVER'; clientSafeDecisionMessage?: string; internalDecisionNote?: string; revision: number },
-): Promise<{ membership: { id: string }; workspaceMembership: { id: string }; grantRequired: boolean; nextAction: string }> {
+  payload: ApproveMembershipPayload,
+): Promise<{ membership: { id: string }; workspaceMembership: { id: string }; clientId: string; workspaceId: string; createdClient: boolean; createdWorkspace: boolean; actualMode: string; grantRequired: boolean; nextAction: string }> {
   return fetchApi(`/client-identity/admin/membership-requests/${encodeURIComponent(requestId)}/approve`, {
     method: "POST",
     body: JSON.stringify(payload),

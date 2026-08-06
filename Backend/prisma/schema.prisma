@@ -2012,6 +2012,17 @@ enum ClientOrganizationMembershipStatus {
   REVOKED
 }
 
+// A person's responsibility WITHIN an organizational unit. Distinct from the
+// portal membership role (ClientPortalWorkspaceMembershipRole) and from any case
+// access — none of these values grant access to a unit's cases, messages or
+// documents on their own.
+enum ClientOrganizationUnitRole {
+  MEMBER
+  CONTACT
+  APPROVER
+  MANAGER
+}
+
 enum ClientPortalInvitationStatus {
   ACTIVE
   USED
@@ -2461,6 +2472,7 @@ model ClientOrganizationMembership {
   clientPortalIdentityId String
   clientId               String
   groupId                String?
+  unitRole               ClientOrganizationUnitRole         @default(MEMBER)
   status                 ClientOrganizationMembershipStatus @default(ACTIVE)
   approvedFromRequestId  String
   approvedById           String
