@@ -38,14 +38,19 @@ export function ClientPublicationPanel({
   caseId,
   clientId,
   documentId,
-  selectedVersionId,
-  versions,
+  selectedVersionId = null,
+  versions = [],
 }: {
   caseId: string;
   clientId: string | null;
-  documentId: string;
-  selectedVersionId: string | null;
-  versions: VersionOption[];
+  // Document publication is an optional module. When no document is provided the
+  // panel renders as a Case-level customer-portal surface (matter status,
+  // milestones, requests, updates) and simply omits the exact-version document
+  // publication section. Customer-safe Case progress is a Case concept, not a
+  // Document concept, so it must be usable with zero documents.
+  documentId?: string;
+  selectedVersionId?: string | null;
+  versions?: VersionOption[];
 }) {
   const [overview, setOverview] = useState<ClientPublicationOverviewDTO | null>(null);
   const [clientUserId, setClientUserId] = useState("");
@@ -66,6 +71,9 @@ export function ClientPublicationPanel({
   const documentPublication = overview?.documentPublications[0] || null;
   const matterPublication = overview?.matterPublications[0] || null;
   const activeGrant = overview?.grants.find((grant) => grant.status === "ACTIVE") || null;
+  // clientId may arrive as a prop (document workspace) or be derived from the
+  // Case publication overview (Case-level surface with no document context).
+  const effectiveClientId = clientId ?? overview?.clientId ?? null;
   const historicalWarning = Boolean(selectedVersion && latestVersion && selectedVersion.versionNumber < latestVersion.versionNumber);
 
   const load = useCallback(async () => {
@@ -150,26 +158,32 @@ export function ClientPublicationPanel({
             <ActionRow disabled={busy || !activeGrant} createLabel="Matter draft" onCreate={() => run(() => createMatterPublicationDraft({ caseId, clientSafeTitle: matterTitle, clientSafeStatus: matterStatus, clientSafeNextStep: "Következő ügyvédi lépés megosztása.", responsibleLawyerDisplay: "Felelős ügyvéd" }))} current={matterPublication} nextAction={nextMatterAction} onTransition={(action) => matterPublication ? run(() => transitionMatterPublication(matterPublication.id, action, matterPublication.revision)) : undefined} />
           </div>
 
-          <div className="min-w-0 rounded-[14px] border border-[rgba(22,32,26,0.12)] p-3 sm:p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h4 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Document exact-version preview</h4>
-              <AdminBadge tone={documentPublication?.status === "PUBLISHED" ? "green" : "neutral"}>{STATUS_LABELS[documentPublication?.status || "DRAFT"]}</AdminBadge>
+          {documentId ? (
+            <div className="min-w-0 rounded-[14px] border border-[rgba(22,32,26,0.12)] p-3 sm:p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Document exact-version preview</h4>
+                <AdminBadge tone={documentPublication?.status === "PUBLISHED" ? "green" : "neutral"}>{STATUS_LABELS[documentPublication?.status || "DRAFT"]}</AdminBadge>
+              </div>
+              <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Kiválasztott immutable verzió: {selectedVersion ? `v${selectedVersion.versionNumber} · ${selectedVersion.originalFileName || selectedVersion.id.slice(0, 8)}` : "nincs"}</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <input value={documentTitle} onChange={(event) => setDocumentTitle(event.target.value)} className="min-w-0 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="Client-facing cím" />
+                <input value={documentExplanation} onChange={(event) => setDocumentExplanation(event.target.value)} className="min-w-0 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="Client-facing magyarázat" />
+              </div>
+              <p className="mt-3 rounded-[12px] bg-[var(--adm-surface)] p-3 text-sm text-[#3D4842]">{documentPublication?.clientFacingExplanation || documentExplanation}</p>
+              <ActionRow disabled={busy || !activeGrant || !selectedVersion} createLabel="Document draft" onCreate={() => selectedVersion ? run(() => createDocumentPublicationDraft({ documentId, documentVersionId: selectedVersion.id, clientFacingTitle: documentTitle, clientFacingExplanation: documentExplanation })) : undefined} current={documentPublication} nextAction={nextDocumentAction} onTransition={(action) => documentPublication ? run(() => transitionDocumentPublication(documentPublication.id, action, documentPublication.revision)) : undefined} />
             </div>
-            <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Kiválasztott immutable verzió: {selectedVersion ? `v${selectedVersion.versionNumber} · ${selectedVersion.originalFileName || selectedVersion.id.slice(0, 8)}` : "nincs"}</p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <input value={documentTitle} onChange={(event) => setDocumentTitle(event.target.value)} className="min-w-0 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="Client-facing cím" />
-              <input value={documentExplanation} onChange={(event) => setDocumentExplanation(event.target.value)} className="min-w-0 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="Client-facing magyarázat" />
+          ) : (
+            <div className="min-w-0 rounded-[14px] border border-dashed border-[rgba(22,32,26,0.18)] p-3 text-xs text-[var(--adm-text-muted)] sm:p-4" data-testid="publication-documents-module-hint">
+              A megosztott dokumentumok külön modul. Dokumentum publikálásához nyisd meg a Dokumentumok felületet; az ügyfélbiztos ügyállapot és mérföldkövek dokumentum nélkül is publikálhatók.
             </div>
-            <p className="mt-3 rounded-[12px] bg-[var(--adm-surface)] p-3 text-sm text-[#3D4842]">{documentPublication?.clientFacingExplanation || documentExplanation}</p>
-            <ActionRow disabled={busy || !activeGrant || !selectedVersion} createLabel="Document draft" onCreate={() => selectedVersion ? run(() => createDocumentPublicationDraft({ documentId, documentVersionId: selectedVersion.id, clientFacingTitle: documentTitle, clientFacingExplanation: documentExplanation })) : undefined} current={documentPublication} nextAction={nextDocumentAction} onTransition={(action) => documentPublication ? run(() => transitionDocumentPublication(documentPublication.id, action, documentPublication.revision)) : undefined} />
-          </div>
+          )}
         </div>
 
         <aside className="min-w-0 space-y-4">
           <div data-testid="publication-audience" className="min-w-0 rounded-[14px] border border-[rgba(22,32,26,0.12)] p-3 sm:p-4">
             <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Audience / grant</h4>
             <input value={clientUserId} onChange={(event) => setClientUserId(event.target.value)} className="mt-3 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="CLIENT felhasználó ID" />
-            <AdminButton className="mt-2 w-full min-w-0 justify-start whitespace-normal text-left" variant="neutral" disabled={busy || !clientId || !clientUserId.trim()} onClick={() => run(() => createClientPortalGrant({ caseId, clientId: clientId!, clientUserId: clientUserId.trim() }))}>Grant létrehozása</AdminButton>
+            <AdminButton className="mt-2 w-full min-w-0 justify-start whitespace-normal text-left" variant="neutral" disabled={busy || !effectiveClientId || !clientUserId.trim()} onClick={() => run(() => createClientPortalGrant({ caseId, clientId: effectiveClientId!, clientUserId: clientUserId.trim() }))}>Grant létrehozása</AdminButton>
             <div className="mt-3 space-y-2">
               {overview?.grants.map((grant) => (
                 <div key={grant.id} data-testid={`grant-row-${grant.id}`} className="rounded-[10px] bg-[var(--adm-surface)] p-2 text-xs">
@@ -196,7 +210,7 @@ export function ClientPublicationPanel({
             </div>
           </div>
 
-          <CasePortalIdentityGrant caseId={caseId} clientId={clientId} />
+          <CasePortalIdentityGrant caseId={caseId} clientId={effectiveClientId} />
 
           <div className="min-w-0 rounded-[14px] border border-[rgba(22,32,26,0.12)] p-3 sm:p-4">
             <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Action request & safe update</h4>

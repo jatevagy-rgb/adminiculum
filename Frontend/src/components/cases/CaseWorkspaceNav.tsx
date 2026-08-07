@@ -4,7 +4,7 @@ import Link from "next/link";
 import { AdminStatusPill } from "@/components/adminiculum/ui";
 import { getCaseDisplayTitle, getCaseStatusLabel } from "@/lib/caseLabels";
 
-export type CaseWorkspaceNavTab = "overview" | "documents" | "tasks" | "communications" | "deadlines" | "time";
+export type CaseWorkspaceNavTab = "overview" | "documents" | "tasks" | "communications" | "deadlines" | "time" | "clientPortal";
 
 type CaseWorkspaceNavProps = {
   caseId: string;
@@ -49,6 +49,7 @@ export function CaseWorkspaceNav({
   const tabs = [
     { id: "overview" as const, label: "Áttekintés", href: `/cases/${caseId}` },
     { id: "communications" as const, label: "Kommunikáció", href: `/cases/${caseId}/communications` },
+    { id: "clientPortal" as const, label: "Ügyfélportál", href: `/cases/${caseId}/client-portal` },
   ];
   const visibleDeadline = formatDeadline(deadline);
 

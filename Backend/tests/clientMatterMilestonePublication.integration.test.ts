@@ -89,6 +89,12 @@ d('Customer-safe milestone publication (PostgreSQL)', () => {
   });
 
   it('publishes an immutable revision; preview == customer DTO; task completion does not mutate it', async () => {
+    // Fix A regression: customer-safe Case progress is a Case concept, not a
+    // Document concept. This whole suite creates ZERO documents/document
+    // publications; milestone draft, preview and publish must all work anyway.
+    const documentCount = await db.document.count({ where: { caseId } });
+    expect(documentCount).toBe(0);
+
     const published = await publishMilestoneRevision(actor, caseId, db);
     expect(published.progressPercentage).toBe(50);
     const firstRevisionId = published.revisionId;
