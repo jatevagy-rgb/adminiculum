@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { Client } = require('pg');
 
-const migrationName = '20260806160000_client_matter_milestone_publication';
+const migrationName = '20260807120000_workflow_templates';
 const jobDirectory = __dirname;
 const appRoot = process.env.MIGRATION_WEBJOB_ROOT || path.resolve(jobDirectory, '../../../..');
 const schemaPath = process.env.MIGRATION_WEBJOB_SCHEMA_PATH || path.join(appRoot, 'prisma', 'schema.prisma');
@@ -104,7 +104,8 @@ async function readState(client) {
            EXISTS(
              SELECT 1 FROM information_schema.columns
               WHERE table_schema = 'public' AND table_name = 'client_matter_publications' AND column_name = 'milestoneDraftSnapshot'
-           ) AS publication_milestone_draft`,
+           ) AS publication_milestone_draft,
+           to_regclass('public.workflow_templates') IS NOT NULL AS workflow_templates_table`,
   );
   const row = migration.rows[0] || null;
   const schemaPresent = schemaCheck.rows[0]?.intake_table === true
@@ -121,7 +122,8 @@ async function readState(client) {
       && schemaCheck.rows[0]?.task_workflow_instance === true
       && schemaCheck.rows[0]?.task_workflow_dependencies === true
       && schemaCheck.rows[0]?.revision_milestones_snapshot === true
-      && schemaCheck.rows[0]?.publication_milestone_draft === true;
+      && schemaCheck.rows[0]?.publication_milestone_draft === true
+      && schemaCheck.rows[0]?.workflow_templates_table === true;
   const verified = Boolean(
     row && row.finished_at && !row.rolled_back_at && failed.rows[0].count === 0 && schemaPresent,
   );

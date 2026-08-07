@@ -23,6 +23,7 @@ on:
       - 'Backend/tests/**publication**'
       - 'Backend/tests/**Publication**'
       - 'Backend/tests/**[Mm]ilestone**'
+      - 'Backend/tests/**[Ww]orkflow**'
       - 'Backend/tests/**identity**'
       - 'Backend/tests/clientIdentityMembership.integration.test.ts'
       - 'Backend/tests/**Interaction**'
@@ -59,6 +60,7 @@ on:
       - 'Backend/tests/**publication**'
       - 'Backend/tests/**Publication**'
       - 'Backend/tests/**[Mm]ilestone**'
+      - 'Backend/tests/**[Ww]orkflow**'
       - 'Backend/tests/**identity**'
       - 'Backend/tests/clientIdentityMembership.integration.test.ts'
       - 'Backend/tests/**Interaction**'
@@ -179,3 +181,10 @@ jobs:
           PUBLICATION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
           CLIENT_PORTAL_READ_ENABLED: 'true'
         run: npm run test:milestone:db
+
+      - name: Run workflow template + DAG PostgreSQL integration tests
+        working-directory: Backend
+        env:
+          WORKFLOW_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: npm run test:workflow:db

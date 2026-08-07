@@ -2768,6 +2768,34 @@ enum TemplateCategory {
   EGYEB
 }
 
+// Workforce-administered, DB-backed workflow templates (Beállítások →
+// Munkafolyamatok). A (key, version) pair is immutable once ACTIVE / used:
+// edits to a used version create a new version. Instantiated Cases snapshot the
+// template key + version onto their tasks, so later template edits never mutate
+// an existing Case. `steps` is a JSON array of
+// { key, title, dependsOn[], publicMilestoneCandidate, defaultAssigneeId?,
+//   suggestedMilestoneTitle?, suggestedMilestoneDescription?, suggestedWeight?,
+//   dueOffsetDays? }.
+model WorkflowTemplate {
+  id          String   @id @default(cuid())
+  key         String
+  name        String
+  description String?
+  version     Int      @default(1)
+  status      String   @default("DRAFT") // DRAFT | ACTIVE | ARCHIVED
+  caseTypes   String[] @default([])
+  steps       Json     @default("[]")
+  usageCount  Int      @default(0)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([key, version])
+  @@index([key])
+  @@index([status])
+  @@map("workflow_templates")
+}
+
 // ============================================================================
 // OPTIONAL PACK: Contract Generation
 // ============================================================================

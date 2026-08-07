@@ -61,6 +61,32 @@ export function validateWorkflowDag(steps: WorkflowStep[]): void {
   for (const key of keys) visit(key);
 }
 
+export type WorkflowTemplateSummary = {
+  key: string;
+  name: string;
+  version: number;
+  source: 'builtin' | 'custom';
+  steps: Array<{ key: string; title: string; dependsOn: string[]; publicMilestoneCandidate: boolean }>;
+};
+
+// Built-in templates surfaced to the New Case UI. Fix C's DB-backed admin merges
+// custom templates on top of these; instantiation resolves DB templates first,
+// then falls back to these built-ins.
+export function listBuiltinWorkflowTemplates(): WorkflowTemplateSummary[] {
+  return Object.values(WORKFLOW_TEMPLATES).map((t) => ({
+    key: t.key,
+    name: t.name,
+    version: t.version,
+    source: 'builtin' as const,
+    steps: t.steps.map((s) => ({
+      key: s.key,
+      title: s.title,
+      dependsOn: s.dependsOn || [],
+      publicMilestoneCandidate: Boolean(s.publicMilestoneCandidate),
+    })),
+  }));
+}
+
 export async function instantiateCaseWorkflow(input: {
   caseId: string;
   templateKey?: string | null;
@@ -68,7 +94,30 @@ export async function instantiateCaseWorkflow(input: {
   assigneesByStepKey?: Record<string, string | null | undefined>;
   fallbackAssigneeId?: string | null;
 }, db: Prisma = defaultPrisma) {
-  const template = WORKFLOW_TEMPLATES[input.templateKey || 'SIMPLE'] || WORKFLOW_TEMPLATES.SIMPLE;
+  const templateKey = input.templateKey || 'SIMPLE';
+  // DB-backed active template wins (latest ACTIVE version); otherwise the
+  // built-in template. Resolved inline (no service import) to avoid a cycle.
+  const dbRow = await (db as any).workflowTemplate.findFirst({
+    where: { key: templateKey, status: 'ACTIVE' },
+    orderBy: { version: 'desc' },
+  }).catch(() => null);
+  const template: { key: string; version: number; steps: WorkflowStep[]; templateId: string | null } = dbRow
+    ? {
+        key: dbRow.key,
+        version: dbRow.version,
+        templateId: dbRow.id,
+        steps: ((dbRow.steps ?? []) as any[]).map((s) => ({
+          key: s.key,
+          title: s.title,
+          dependsOn: Array.isArray(s.dependsOn) ? s.dependsOn : [],
+          publicMilestoneCandidate: Boolean(s.publicMilestoneCandidate),
+          assigneeId: s.defaultAssigneeId ?? null,
+        })),
+      }
+    : (() => {
+        const b = WORKFLOW_TEMPLATES[templateKey] || WORKFLOW_TEMPLATES.SIMPLE;
+        return { key: b.key, version: b.version, templateId: null, steps: b.steps };
+      })();
   validateWorkflowDag(template.steps);
   const workflowInstanceId = randomUUID();
   const now = new Date();
@@ -106,6 +155,10 @@ export async function instantiateCaseWorkflow(input: {
       payload: { action: 'CASE_WORKFLOW_INSTANTIATED', workflowInstanceId, templateKey: template.key, templateVersion: template.version },
     } as any,
   });
+  // Usage counter for the DB-backed template version that was instantiated.
+  if (template.templateId) {
+    await (db as any).workflowTemplate.update({ where: { id: template.templateId }, data: { usageCount: { increment: 1 } } }).catch(() => undefined);
+  }
   return { workflowInstanceId, templateKey: template.key, templateVersion: template.version, tasks };
 }
 
