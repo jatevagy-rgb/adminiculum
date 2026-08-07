@@ -403,7 +403,7 @@ export interface CaseWorkspace {
     openTaskCount: number; documentCount: number; openDeadlineCount: number;
     communicationCount: number; reviewCount: number | null; loggedMinutes: number | null;
   };
-  tasks: Array<{ id: string; title: string; status: string; priority: string; attentionCategory: string | null; estimatedMinutes: number | null; dueDate: string | null; assignee: { id: string; name: string } | null; documentId: string | null }>;
+  tasks: Array<{ id: string; title: string; status: string; priority: string; attentionCategory: string | null; estimatedMinutes: number | null; dueDate: string | null; assignee: { id: string; name: string } | null; documentId: string | null; workflowStepKey: string | null; blockedPredecessors: { total: number; done: number } | null }>;
   documents: Array<{ id: string; fileName: string; mimeType: string | null; type: string | null; category: string | null; version: string | null; uploadedAt: string | null; uploadedBy: { id: string; name: string } | null; summary: string | null; commentCount: number | null }>;
   deadlines: Array<{ id: string; title: string; dueAt: string | null; status: string; assignee: { id: string; name: string } | null; taskId: string | null; documentId: string | null }>;
   time: { available: true; loggedMinutes: number; billableMinutes: number | null } | { available: false; reason: string };
@@ -5340,7 +5340,80 @@ export interface CaseIntakePayload {
   communicationThreadIds?: string[];
   primaryCommunicationThreadId?: string | null;
   initialTasks?: Array<{ title: string; description?: string | null; assignedToId?: string | null; dueDate?: string | null; priority?: string }>;
+  workflowTemplateKey?: string;
+  workflowAssignees?: Record<string, string>;
 }
+
+export interface WorkflowTemplateStepSummary {
+  key: string;
+  title: string;
+  dependsOn: string[];
+  publicMilestoneCandidate: boolean;
+}
+export interface WorkflowTemplateSummary {
+  key: string;
+  name: string;
+  version: number;
+  source: 'builtin' | 'custom';
+  steps: WorkflowTemplateStepSummary[];
+}
+
+// Templates available to select in New Case (active DB templates + built-ins).
+export async function getWorkflowTemplates(): Promise<{ items: WorkflowTemplateSummary[] }> {
+  return fetchApi<{ items: WorkflowTemplateSummary[] }>(`/cases/workflow-templates`, { cache: 'no-store' });
+}
+
+// ---- Workflow template administration (Beállítások → Munkafolyamatok) ----
+export interface WorkflowTemplateAdminStep {
+  key: string;
+  title: string;
+  dependsOn: string[];
+  publicMilestoneCandidate: boolean;
+  defaultAssigneeId: string | null;
+  suggestedMilestoneTitle: string | null;
+  suggestedMilestoneDescription: string | null;
+  suggestedWeight: number | null;
+  dueOffsetDays: number | null;
+}
+export interface WorkflowTemplateAdminDto {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  version: number;
+  status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
+  caseTypes: string[];
+  steps: WorkflowTemplateAdminStep[];
+  usageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function listWorkflowTemplatesAdmin(): Promise<{ items: WorkflowTemplateAdminDto[] }> {
+  return fetchApi(`/cases/workflow-templates/admin`, { cache: 'no-store' });
+}
+export async function getWorkflowTemplateAdmin(id: string): Promise<WorkflowTemplateAdminDto> {
+  return fetchApi(`/cases/workflow-templates/admin/${encodeURIComponent(id)}`, { cache: 'no-store' });
+}
+export async function createWorkflowTemplate(payload: { name: string; key?: string; description?: string | null; caseTypes?: string[]; steps: Array<Partial<WorkflowTemplateAdminStep> & { title: string }> }): Promise<WorkflowTemplateAdminDto> {
+  return fetchApi(`/cases/workflow-templates`, { method: 'POST', body: JSON.stringify(payload) });
+}
+export async function updateWorkflowTemplateDraft(id: string, payload: Partial<{ name: string; description: string | null; caseTypes: string[]; steps: Array<Partial<WorkflowTemplateAdminStep> & { title: string }> }>): Promise<WorkflowTemplateAdminDto> {
+  return fetchApi(`/cases/workflow-templates/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+}
+export async function createWorkflowTemplateVersion(id: string, payload: Partial<{ name: string; description: string | null; steps: Array<Partial<WorkflowTemplateAdminStep> & { title: string }> }> = {}): Promise<WorkflowTemplateAdminDto> {
+  return fetchApi(`/cases/workflow-templates/${encodeURIComponent(id)}/version`, { method: 'POST', body: JSON.stringify(payload) });
+}
+export async function duplicateWorkflowTemplate(id: string, payload: { name?: string; key?: string } = {}): Promise<WorkflowTemplateAdminDto> {
+  return fetchApi(`/cases/workflow-templates/${encodeURIComponent(id)}/duplicate`, { method: 'POST', body: JSON.stringify(payload) });
+}
+export async function activateWorkflowTemplate(id: string): Promise<WorkflowTemplateAdminDto> {
+  return fetchApi(`/cases/workflow-templates/${encodeURIComponent(id)}/activate`, { method: 'POST', body: JSON.stringify({}) });
+}
+export async function archiveWorkflowTemplate(id: string): Promise<WorkflowTemplateAdminDto> {
+  return fetchApi(`/cases/workflow-templates/${encodeURIComponent(id)}/archive`, { method: 'POST', body: JSON.stringify({}) });
+}
+
 export interface CaseIntakeResult {
   case: {
     id: string; caseNumber: string; title: string; status: string; priority: string;

@@ -9,7 +9,7 @@
  * old per-field explanatory paragraphs are gone.
  */
 import { useEffect, useMemo, useState } from "react";
-import { type Client, type User } from "@/lib/api";
+import { type Client, type User, type WorkflowTemplateSummary } from "@/lib/api";
 import { AdminButton } from "@/components/adminiculum/ui";
 import { intake, ACCENT_BG, ACCENT_TEXT } from "./intakeStyles";
 import {
@@ -350,6 +350,72 @@ export const TASK_PRESETS = [
 ];
 
 /** Presets create ordinary editable rows — never hard-coded records. */
+// Workflow template selection for New Case. Reuses the existing DAG engine on
+// the server. Deliberately lawyer-friendly: a template dropdown, then per-step
+// responsible + a plain-language predecessor explanation — no graph editor.
+export function CaseWorkflowSection({
+  templates, templatesLoading, state, users, onSelectTemplate, onSetAssignee,
+}: {
+  templates: WorkflowTemplateSummary[];
+  templatesLoading: boolean;
+  state: IntakeState;
+  users: User[];
+  onSelectTemplate: (key: string) => void;
+  onSetAssignee: (stepKey: string, userId: string) => void;
+}) {
+  const selected = templates.find((t) => t.key === state.workflowTemplateKey) || null;
+  const titleByKey = new Map((selected?.steps || []).map((s) => [s.key, s.title]));
+  return (
+    <div data-testid="intake-workflow">
+      <label className={label} htmlFor="ci-workflow">Sablon kiválasztása</label>
+      <select
+        id="ci-workflow"
+        data-testid="intake-workflow-select"
+        className={field}
+        value={state.workflowTemplateKey}
+        onChange={(e) => onSelectTemplate(e.target.value)}
+        disabled={templatesLoading}
+      >
+        <option value="">Nincs sablon / egyszerű ügy</option>
+        {templates.map((t) => (
+          <option key={t.key} value={t.key}>{t.name}{t.source === 'custom' ? ` (v${t.version})` : ''}</option>
+        ))}
+      </select>
+      {selected ? (
+        <ul className="mt-2 space-y-2" data-testid="intake-workflow-steps">
+          {selected.steps.map((step) => (
+            <li key={step.key} data-testid="workflow-step-row" className="rounded-md border border-[var(--adm-border)] p-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="min-w-0 break-words text-[12.5px] font-semibold text-[var(--adm-text)]">{step.title}</span>
+                {step.publicMilestoneCandidate ? (
+                  <span className="shrink-0 rounded-full bg-[#EEF3EE] px-2 py-0.5 text-[10px] font-semibold text-[var(--adm-green-800)]">Ügyfél-mérföldkő jelölt</span>
+                ) : null}
+              </div>
+              <select
+                className={`${field} mt-1`}
+                aria-label={`Felelős — ${step.title}`}
+                data-testid={`workflow-assignee-${step.key}`}
+                value={state.workflowAssignees[step.key] || ''}
+                onChange={(e) => onSetAssignee(step.key, e.target.value)}
+              >
+                <option value="">Felelős kiválasztása…</option>
+                {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+              <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">
+                {step.dependsOn.length === 0
+                  ? 'Azonnal indul.'
+                  : `Ez a lépés akkor induljon, ha elkészült: ${step.dependsOn.map((k) => titleByKey.get(k) || k).join(', ')}`}
+              </p>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-[11.5px] text-[var(--adm-text-muted)]">Sablon nélkül az ügy egyszerű feladatlistával indul.</p>
+      )}
+    </div>
+  );
+}
+
 export function CaseInitialTasksSection({
   state, errors, users, onAdd, onUpdate, onRemove,
 }: {
@@ -387,6 +453,74 @@ export function CaseInitialTasksSection({
                 <FieldError message={errors[`task-${t.key}`]} />
                 <button type="button" data-testid="task-remove" onClick={() => onRemove(t.key)} className="text-[10.5px] font-semibold text-[#A8442A] hover:underline">Eltávolítás</button>
               </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+export type StagedDoc = {
+  key: string;
+  file: File;
+  name: string;
+  size: number;
+  type: string;
+  status: "staged" | "uploading" | "done" | "error";
+  error?: string;
+  documentId?: string;
+};
+
+function humanSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} kB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const STAGED_STATUS_LABEL: Record<StagedDoc["status"], string> = {
+  staged: "Előkészítve", uploading: "Feltöltés…", done: "Feltöltve", error: "Sikertelen",
+};
+
+// Fix G — staged initial documents. Files are uploaded through the canonical
+// document service after the case exists; each file shows its own state and a
+// failed file can be retried without re-creating the case.
+export function CaseInitialDocumentsSection({
+  docs, onStage, onRemove, uploading,
+}: {
+  docs: StagedDoc[];
+  onStage: (files: FileList | null) => void;
+  onRemove: (key: string) => void;
+  uploading: boolean;
+}) {
+  return (
+    <div data-testid="intake-initial-documents">
+      <label className={`${label} inline-flex cursor-pointer items-center gap-2`}>
+        <span className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1.5 text-[11.5px] font-semibold text-[var(--adm-text)] hover:border-[var(--adm-ochre-500)]">Fájlok kiválasztása</span>
+        <input
+          type="file"
+          multiple
+          className="sr-only"
+          data-testid="intake-doc-input"
+          disabled={uploading}
+          onChange={(e) => { onStage(e.target.files); e.currentTarget.value = ""; }}
+        />
+      </label>
+      {docs.length === 0 ? (
+        <p className="mt-2 text-[11.5px] text-[var(--adm-text-muted)]">Nincs induló dokumentum. A fájlok az ügy létrejötte után, a kanonikus dokumentumszolgáltatáson keresztül töltődnek fel.</p>
+      ) : (
+        <ul className="mt-2 space-y-1.5" data-testid="intake-doc-list">
+          {docs.map((d) => (
+            <li key={d.key} data-testid="intake-doc-row" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--adm-border)] px-2 py-1.5 text-[11.5px]">
+              <span className="min-w-0 break-words font-semibold text-[var(--adm-text)]">{d.name}</span>
+              <span className="flex items-center gap-2 text-[var(--adm-text-muted)]">
+                <span>{humanSize(d.size)}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${d.status === "done" ? "bg-[#EDF6EF] text-[#2E5B3C]" : d.status === "error" ? "bg-[#FBEBE7] text-[#A8442A]" : d.status === "uploading" ? "bg-[#FBF3E0] text-[#8A6A2A]" : "bg-[var(--adm-surface)] text-[var(--adm-text-muted)]"}`}>{STAGED_STATUS_LABEL[d.status]}</span>
+                {d.status !== "done" && d.status !== "uploading" ? (
+                  <button type="button" data-testid="intake-doc-remove" onClick={() => onRemove(d.key)} className="font-semibold text-[#A8442A] hover:underline">Eltávolítás</button>
+                ) : null}
+              </span>
+              {d.status === "error" && d.error ? <span className="w-full text-[10.5px] text-[#A8442A]">{d.error}</span> : null}
             </li>
           ))}
         </ul>

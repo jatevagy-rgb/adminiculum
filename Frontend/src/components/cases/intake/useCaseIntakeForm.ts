@@ -94,6 +94,11 @@ export interface IntakeState {
   communicationLater: boolean;
   participants: ParticipantRow[];
   tasks: TaskRow[];
+  // Optional workflow: empty key = no template (flat/simple case). When set, the
+  // backend instantiates the selected workflow DAG (steps, dependencies,
+  // BLOCKED/TODO, successor activation). workflowAssignees maps step key -> user.
+  workflowTemplateKey: string;
+  workflowAssignees: Record<string, string>;
 }
 
 const newKey = () => Math.random().toString(36).slice(2, 10);
@@ -109,6 +114,7 @@ export const emptyIntakeState = (): IntakeState => ({
   },
   communicationThreadIds: [], primaryCommunicationThreadId: "", communicationLater: false,
   participants: [], tasks: [],
+  workflowTemplateKey: "", workflowAssignees: {},
 });
 
 /** Resolve the deadline to an absolute moment for display. Mirrors the server. */
@@ -125,7 +131,13 @@ export function computeAbsoluteDeadline(d: IntakeState["deadline"], now: Date = 
 
 export type IntakeErrors = Partial<Record<string, string>>;
 
-export function useCaseIntakeForm(onCreated: (result: CaseIntakeResult) => void) {
+export function useCaseIntakeForm(
+  onCreated: (result: CaseIntakeResult) => void,
+  // Optional post-create step (e.g. staged initial-document upload). The case is
+  // already durably created when this runs. Returning false keeps the dialog
+  // open (partial failure / retry) instead of completing.
+  onAfterCreate?: (result: CaseIntakeResult) => Promise<boolean>,
+) {
   const [state, setState] = useState<IntakeState>(emptyIntakeState);
   const [detailedOpen, setDetailedOpen] = useState(false);
   const [errors, setErrors] = useState<IntakeErrors>({});
@@ -168,6 +180,19 @@ export function useCaseIntakeForm(onCreated: (result: CaseIntakeResult) => void)
   }, []);
   const removeTask = useCallback((key: string) => {
     setState((s) => ({ ...s, tasks: s.tasks.filter((r) => r.key !== key) }));
+  }, []);
+
+  // ---- workflow ---------------------------------------------------------
+  // Selecting a template clears any per-step assignees chosen for a prior one.
+  const setWorkflowTemplate = useCallback((templateKey: string) => {
+    setState((s) => ({ ...s, workflowTemplateKey: templateKey, workflowAssignees: {} }));
+  }, []);
+  const setWorkflowAssignee = useCallback((stepKey: string, userId: string) => {
+    setState((s) => {
+      const next = { ...s.workflowAssignees };
+      if (userId) next[stepKey] = userId; else delete next[stepKey];
+      return { ...s, workflowAssignees: next };
+    });
   }, []);
 
   // ---- communication ----------------------------------------------------
@@ -298,6 +323,12 @@ export function useCaseIntakeForm(onCreated: (result: CaseIntakeResult) => void)
         priority: t.priority || "MEDIUM",
       }));
     }
+
+    if (state.workflowTemplateKey) {
+      payload.workflowTemplateKey = state.workflowTemplateKey;
+      const assignees = Object.fromEntries(Object.entries(state.workflowAssignees).filter(([, v]) => v));
+      if (Object.keys(assignees).length) payload.workflowAssignees = assignees;
+    }
     return payload;
   }, [state]);
 
@@ -317,13 +348,22 @@ export function useCaseIntakeForm(onCreated: (result: CaseIntakeResult) => void)
     setSubmitting(true);
     try {
       const result = await createCaseIntake(buildPayload());
-      onCreated(result);
+      // The case now exists durably. An optional post-create step (initial
+      // document upload) may report partial failure, in which case we keep the
+      // dialog open for retry instead of completing.
+      const complete = onAfterCreate ? await onAfterCreate(result) : true;
+      if (complete) {
+        onCreated(result);
+      } else {
+        inFlight.current = false;
+        setSubmitting(false);
+      }
     } catch (err) {
       setServerError(caseIntakeErrorMessage(err));
       inFlight.current = false;
       setSubmitting(false);
     }
-  }, [validate, buildPayload, onCreated]);
+  }, [validate, buildPayload, onCreated, onAfterCreate]);
 
   return {
     state, setState, patch, patchContext, patchDeadline,
@@ -332,6 +372,7 @@ export function useCaseIntakeForm(onCreated: (result: CaseIntakeResult) => void)
     absoluteDeadline,
     addParticipant, updateParticipant, removeParticipant,
     addTask, updateTask, removeTask,
+    setWorkflowTemplate, setWorkflowAssignee,
     toggleThread, setPrimaryThread, setCommunicationLater, setCommunicationSelection,
     submit, validate, buildPayload,
   };
