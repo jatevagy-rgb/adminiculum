@@ -122,8 +122,15 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
         attentionLabel={isAttention(t.attentionCategory) ? attentionPresentation(t.attentionCategory).label : null}
         onEdit={() => setModal({ type: "task-edit", task: t })}
       />
-      <div className="flex flex-wrap gap-2 px-3 pb-2 pl-[26px]">
-        {t.status.toUpperCase() === "TODO" || t.status.toUpperCase() === "PENDING" ? (
+      <div className="flex flex-wrap items-center gap-2 px-3 pb-2 pl-[26px]">
+        {t.status.toUpperCase() === "BLOCKED" ? (
+          <span data-testid="task-blocked-hint" className="inline-flex items-center gap-1.5 rounded-full bg-[#FBF3E0] px-2 py-0.5 text-[10.5px] font-semibold text-[#8A6A2A]">
+            Várakozik
+            {t.blockedPredecessors ? (
+              <span className="font-normal text-[#7B776D]">· {t.blockedPredecessors.total} előfeltételből {t.blockedPredecessors.done} készült el</span>
+            ) : null}
+          </span>
+        ) : t.status.toUpperCase() === "TODO" || t.status.toUpperCase() === "PENDING" ? (
           <AdminButton variant="neutral" size="xs" disabled={rowBusy === t.id} onClick={() => void quickStatus(t, "start")}>
             {rowBusy === t.id ? "…" : "Indítás"}
           </AdminButton>

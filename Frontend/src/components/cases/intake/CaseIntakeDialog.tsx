@@ -12,15 +12,29 @@
  * surfaces follow the tonal ladder in intakeStyles rather than stacking
  * near-identical white cards.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { getClientList, getUsers, type Client, type User, type CaseIntakeResult } from "@/lib/api";
+import { getClientList, getUsers, getWorkflowTemplates, uploadCaseDocument, type Client, type User, type CaseIntakeResult, type WorkflowTemplateSummary } from "@/lib/api";
 import { useCaseIntakeForm } from "./useCaseIntakeForm";
 import {
   Section, CaseBasicsSection, CaseStartingContextSection, CaseDeadlineSection,
-  CaseCommunicationSummary, CaseParticipantsSection, CaseInitialTasksSection,
+  CaseCommunicationSummary, CaseParticipantsSection, CaseInitialTasksSection, CaseWorkflowSection,
+  CaseInitialDocumentsSection, type StagedDoc,
   field, label, FieldError,
 } from "./CaseIntakeSections";
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error || new Error("Fájl beolvasása sikertelen."));
+    reader.readAsDataURL(file);
+  });
+}
 import { CaseCommunicationPickerDrawer } from "./CaseCommunicationPickerDrawer";
 import { intake, ACCENT_BG, ACCENT_TEXT } from "./intakeStyles";
 
@@ -36,7 +50,51 @@ export function CaseIntakeDialog({
   const [clientsLoading, setClientsLoading] = useState(true);
   const [clientsError, setClientsError] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplateSummary[]>([]);
+  const [workflowTemplatesLoading, setWorkflowTemplatesLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Fix G — staged initial documents. Files are uploaded through the canonical
+  // document service AFTER the case exists; a durable per-file result drives
+  // success/failure + retry. The case is created once; retry only re-uploads.
+  const [stagedDocs, setStagedDocs] = useState<StagedDoc[]>([]);
+  const [createdResult, setCreatedResult] = useState<CaseIntakeResult | null>(null);
+  const [docPhase, setDocPhase] = useState<"idle" | "creating" | "uploading" | "partial">("idle");
+  const stageDocs = useCallback((files: FileList | null) => {
+    if (!files) return;
+    const additions: StagedDoc[] = Array.from(files).map((file) => ({
+      key: Math.random().toString(36).slice(2, 10),
+      file, name: file.name, size: file.size, type: file.type || "application/octet-stream", status: "staged",
+    }));
+    setStagedDocs((prev) => [...prev, ...additions]);
+  }, []);
+  const removeStagedDoc = useCallback((key: string) => setStagedDocs((prev) => prev.filter((d) => d.key !== key)), []);
+  // Upload every not-yet-done staged doc. Returns true when all are durable.
+  const uploadStaged = useCallback(async (caseId: string): Promise<boolean> => {
+    const targets = stagedDocs.filter((d) => d.status !== "done");
+    let allOk = true;
+    for (const doc of targets) {
+      setStagedDocs((prev) => prev.map((d) => (d.key === doc.key ? { ...d, status: "uploading", error: undefined } : d)));
+      try {
+        const base64 = await fileToBase64(doc.file);
+        const uploaded = await uploadCaseDocument({ caseId, fileName: doc.name, fileContentBase64: base64, mimeType: doc.type });
+        setStagedDocs((prev) => prev.map((d) => (d.key === doc.key ? { ...d, status: "done", documentId: uploaded.id } : d)));
+      } catch (err) {
+        allOk = false;
+        setStagedDocs((prev) => prev.map((d) => (d.key === doc.key ? { ...d, status: "error", error: err instanceof Error ? err.message : "Feltöltés sikertelen." } : d)));
+      }
+    }
+    return allOk;
+  }, [stagedDocs]);
+  // Post-create hook: upload staged docs after the case exists. false keeps the
+  // dialog open (partial failure) so the user can retry only the failed files.
+  const onAfterCreate = useCallback(async (result: CaseIntakeResult): Promise<boolean> => {
+    setCreatedResult(result);
+    if (stagedDocs.length === 0) return true;
+    setDocPhase("uploading");
+    const ok = await uploadStaged(result.case.id);
+    setDocPhase(ok ? "idle" : "partial");
+    return ok;
+  }, [stagedDocs, uploadStaged]);
   // Portal target: the app shell's content column sets `backdrop-filter`, which
   // makes it a containing block for `position: fixed`. Rendering into <body>
   // lets the overlay cover the true viewport instead of just the content pane —
@@ -53,7 +111,14 @@ export function CaseIntakeDialog({
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = prev; };
   }, [open]);
-  const form = useCaseIntakeForm(onCreated);
+  const form = useCaseIntakeForm(onCreated, onAfterCreate);
+  // Retry only the failed uploads; the case is already created (createdResult).
+  const retryFailedUploads = useCallback(async () => {
+    if (!createdResult) return;
+    setDocPhase("uploading");
+    const ok = await uploadStaged(createdResult.case.id);
+    if (ok) { setDocPhase("idle"); onCreated(createdResult); } else { setDocPhase("partial"); }
+  }, [createdResult, uploadStaged, onCreated]);
   const { state, patch, patchContext, patchDeadline, errors, serverError, submitting, absoluteDeadline } = form;
 
   useEffect(() => {
@@ -74,6 +139,11 @@ export function CaseIntakeDialog({
       })
       .finally(() => { if (active) setClientsLoading(false); });
     getUsers().then((u) => { if (active) setUsers(u); }).catch(() => { if (active) setUsers([]); });
+    setWorkflowTemplatesLoading(true);
+    getWorkflowTemplates()
+      .then((res) => { if (active) setWorkflowTemplates(res.items || []); })
+      .catch(() => { if (active) setWorkflowTemplates([]); })
+      .finally(() => { if (active) setWorkflowTemplatesLoading(false); });
     return () => { active = false; };
   }, [open]);
 
@@ -115,7 +185,7 @@ export function CaseIntakeDialog({
                   onClick={() => void form.submit()}
                   disabled={submitting}
                 >
-                  {submitting ? "Létrehozás…" : "Ügy létrehozása"}
+                  {submitting ? (docPhase === "uploading" ? "Dokumentumok feltöltése…" : "Létrehozás…") : "Ügy létrehozása"}
                 </button>
               </div>
             </header>
@@ -125,6 +195,16 @@ export function CaseIntakeDialog({
               {serverError ? (
                 <div role="alert" data-testid="intake-server-error" className="mb-3 rounded-md border border-[rgba(168,68,42,0.35)] bg-[#FBEBE7] px-3 py-2 text-[12.5px] font-semibold text-[#A8442A]">
                   {serverError}
+                </div>
+              ) : null}
+
+              {docPhase === "partial" ? (
+                <div role="alert" data-testid="intake-doc-partial" className="mb-3 rounded-md border border-[#E7D7A0] bg-[#FFF8E1] px-3 py-2 text-[12.5px] text-[#7a5f18]">
+                  Az ügy létrejött, de {stagedDocs.filter((d) => d.status === "error").length} induló dokumentum feltöltése nem sikerült.
+                  <div className="mt-2 flex gap-2">
+                    <button type="button" data-testid="intake-doc-retry" className={intake.secondaryAction} disabled={submitting} onClick={() => void retryFailedUploads()}>Újrapróbálkozás</button>
+                    <button type="button" className={intake.secondaryAction} disabled={submitting} onClick={() => { if (createdResult) onCreated(createdResult); }}>Folytatás dokumentum nélkül</button>
+                  </div>
                 </div>
               ) : null}
 
@@ -197,10 +277,23 @@ export function CaseIntakeDialog({
                           onAdd={form.addParticipant} onUpdate={form.updateParticipant} onRemove={form.removeParticipant}
                         />
                       </Section>
+                      <Section title="Munkafolyamat" accent="petrol">
+                        <CaseWorkflowSection
+                          templates={workflowTemplates} templatesLoading={workflowTemplatesLoading}
+                          state={state} users={users}
+                          onSelectTemplate={form.setWorkflowTemplate} onSetAssignee={form.setWorkflowAssignee}
+                        />
+                      </Section>
                       <Section title="Induló feladatok" accent="ochre">
                         <CaseInitialTasksSection
                           state={state} errors={errors} users={users}
                           onAdd={form.addTask} onUpdate={form.updateTask} onRemove={form.removeTask}
+                        />
+                      </Section>
+                      <Section title="Induló dokumentumok" accent="petrol">
+                        <CaseInitialDocumentsSection
+                          docs={stagedDocs} onStage={stageDocs} onRemove={removeStagedDoc}
+                          uploading={docPhase === "uploading"}
                         />
                       </Section>
                     </div>

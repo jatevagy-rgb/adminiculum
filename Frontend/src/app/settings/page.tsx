@@ -61,6 +61,9 @@ function SettingsPageContent() {
                 {label}
               </a>
             ))}
+            <Link href="/settings/workflows" data-testid="settings-workflows-link" className={`block rounded border ${p.borderLight} ${p.bgSection} px-3 py-2 ${p.text} hover:border-[var(--adm-ochre-500)]`}>
+              Munkafolyamatok
+            </Link>
           </nav>
           <div className={`mt-4 rounded border ${p.borderLight} ${p.bgSection} p-3`}>
             <p className={`text-[11px] font-semibold ${p.textDark}`}>Aktív UI pack</p>
