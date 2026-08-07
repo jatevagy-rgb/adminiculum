@@ -86,6 +86,8 @@ export interface CaseWorkspaceDto {
     dueDate: string | null;
     assignee: { id: string; name: string } | null;
     documentId: string | null;
+    workflowStepKey: string | null;
+    blockedPredecessors: { total: number; done: number } | null;
   }>;
   documents: Array<{
     id: string;
@@ -196,6 +198,7 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
           id: true, title: true, status: true, priority: true,
           attentionCategory: true, estimatedMinutes: true, dueDate: true,
           documentId: true, createdAt: true,
+          workflowStepKey: true, workflowDependsOnKeys: true, workflowInstanceId: true,
           assignedTo: { select: { id: true, name: true } },
           assignedBy: { select: { id: true, name: true } },
         },
@@ -305,17 +308,36 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
   warnings.push({ section: 'time', code: 'CASE_TIME_NOT_ATTRIBUTABLE', message: 'A munkaidő nem köthető megbízhatóan az ügyhöz (TimeEntry nincs Case-hez kapcsolva).' });
 
   // ---- tasks projection ----
-  const tasks = openTasks.slice(0, TASK_LIMIT).map((t) => ({
-    id: t.id,
-    title: t.title,
-    status: String(t.status),
-    priority: String(t.priority),
-    attentionCategory: t.attentionCategory ? String(t.attentionCategory) : null,
-    estimatedMinutes: t.estimatedMinutes ?? null,
-    dueDate: iso(t.dueDate),
-    assignee: t.assignedTo ? { id: t.assignedTo.id, name: t.assignedTo.name } : null,
-    documentId: t.documentId ?? null,
-  }));
+  // Completed workflow step keys per instance, for the "X/Y előfeltétel kész"
+  // explanation on BLOCKED workflow steps.
+  const doneStepKeysByInstance = new Map<string, Set<string>>();
+  for (const t of allTasks as any[]) {
+    if (!t.workflowInstanceId || !t.workflowStepKey) continue;
+    if (String(t.status).toUpperCase() !== 'DONE') continue;
+    if (!doneStepKeysByInstance.has(t.workflowInstanceId)) doneStepKeysByInstance.set(t.workflowInstanceId, new Set());
+    doneStepKeysByInstance.get(t.workflowInstanceId)!.add(t.workflowStepKey);
+  }
+  const tasks = openTasks.slice(0, TASK_LIMIT).map((t) => {
+    const deps: string[] = (t as any).workflowDependsOnKeys || [];
+    const isBlocked = String(t.status).toUpperCase() === 'BLOCKED';
+    const doneSet = doneStepKeysByInstance.get((t as any).workflowInstanceId) || new Set<string>();
+    const blockedPredecessors = isBlocked && deps.length
+      ? { total: deps.length, done: deps.filter((k) => doneSet.has(k)).length }
+      : null;
+    return {
+      id: t.id,
+      title: t.title,
+      status: String(t.status),
+      priority: String(t.priority),
+      attentionCategory: t.attentionCategory ? String(t.attentionCategory) : null,
+      estimatedMinutes: t.estimatedMinutes ?? null,
+      dueDate: iso(t.dueDate),
+      assignee: t.assignedTo ? { id: t.assignedTo.id, name: t.assignedTo.name } : null,
+      documentId: t.documentId ?? null,
+      workflowStepKey: (t as any).workflowStepKey ?? null,
+      blockedPredecessors,
+    };
+  });
 
   // ---- documents projection. Uploader/summary have no persisted relation in the
   // current model → honest nulls + a warning (not fabricated). commentCount is now
