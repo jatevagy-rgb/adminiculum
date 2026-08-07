@@ -11,6 +11,7 @@
  */
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../prisma/prisma.service';
+import { instantiateCaseWorkflow, WORKFLOW_TEMPLATES } from './caseWorkflowOrchestration';
 
 export class CaseIntakeError extends Error {
   constructor(public readonly code: string, message: string, public readonly status = 400) {
@@ -50,6 +51,23 @@ export interface CaseIntakeInput {
   communicationThreadIds?: unknown;
   primaryCommunicationThreadId?: unknown;
   initialTasks?: unknown;
+  // Optional workflow: when a template is chosen the case is instantiated from
+  // the existing workflow DAG engine (BLOCKED/TODO by dependency + successor
+  // auto-activation), instead of / in addition to flat initial tasks.
+  workflowTemplateKey?: unknown;
+  workflowAssignees?: unknown;
+}
+
+// Maps step keys -> assignee user id. Unknown shapes collapse to an empty map
+// so a malformed payload never throws here; existence is validated below.
+function normalizeWorkflowAssignees(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof key !== 'string' || !key.trim()) continue;
+    if (typeof raw === 'string' && raw.trim()) out[key.trim()] = raw.trim();
+  }
+  return out;
 }
 
 // ---- scalar helpers -----------------------------------------------------
@@ -241,6 +259,12 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
     .map((t, i) => str(t, 64, `communicationThreadIds[${i}]`, true) as string);
   const primaryThreadId = str(input.primaryCommunicationThreadId, 64, 'primaryCommunicationThreadId');
 
+  const workflowTemplateKey = str(input.workflowTemplateKey, 64, 'workflowTemplateKey');
+  const workflowAssignees = normalizeWorkflowAssignees(input.workflowAssignees);
+  if (workflowTemplateKey && !WORKFLOW_TEMPLATES[workflowTemplateKey]) {
+    throw new CaseIntakeError('WORKFLOW_TEMPLATE_NOT_FOUND', 'Ismeretlen munkafolyamat-sablon.', 400);
+  }
+
   // A duplicate id in the request must not create two links.
   const uniqueThreadIds = [...new Set(threadIds)];
   if (primaryThreadId && !uniqueThreadIds.includes(primaryThreadId)) {
@@ -256,6 +280,7 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
     ...participants.map((p) => p.userId),
     ...deadlines.map((d) => d.responsibleId).filter(Boolean) as string[],
     ...tasks.map((t) => t.assignedToId).filter(Boolean) as string[],
+    ...Object.values(workflowAssignees),
   ])];
   if (referencedUserIds.length > 0) {
     const found = await prisma.user.findMany({ where: { id: { in: referencedUserIds } }, select: { id: true } });
@@ -396,6 +421,27 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
     return { caseRow, participantRows, externalRows, deadlineRows, taskRows, linkRows };
   });
 
+  // Optional workflow instantiation using the EXISTING DAG engine. Runs after the
+  // intake transaction commits (mirrors the legacy POST /cases path). Steps with
+  // predecessors are created BLOCKED and auto-activate as their predecessors are
+  // completed; milestone-candidate steps become eligible for Case-level milestone
+  // publication.
+  let responseTaskRows = created.taskRows;
+  if (workflowTemplateKey) {
+    await instantiateCaseWorkflow({
+      caseId: created.caseRow.id,
+      templateKey: workflowTemplateKey,
+      actor: { userId: actorId },
+      assigneesByStepKey: workflowAssignees,
+      fallbackAssigneeId: assignedLawyerId || actorId,
+    });
+    responseTaskRows = await prisma.task.findMany({
+      where: { caseId: created.caseRow.id },
+      select: { id: true, title: true, status: true, priority: true, dueDate: true, assignedToId: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   const c = created.caseRow as Record<string, any>;
   return {
     case: {
@@ -422,7 +468,7 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
       reminderMinutesBefore: d.reminderMinutesBefore ?? null, responsibleId: d.responsibleId ?? null,
     })),
     communicationLinks: created.linkRows.map((l: any) => ({ id: l.id, subject: l.subject, isPrimary: Boolean(l.isPrimaryForCase) })),
-    tasks: created.taskRows.map((t: any) => ({
+    tasks: responseTaskRows.map((t: any) => ({
       id: t.id, title: t.title, status: String(t.status), priority: String(t.priority),
       dueDate: t.dueDate ? new Date(t.dueDate).toISOString() : null,
       assignedToId: t.assignedToId ?? null,

@@ -14,6 +14,18 @@ import { getCaseActivity } from './activity';
 import { getCaseWorkspace } from './workspace';
 import { createCaseComment, listCaseComments, resolveCaseComment, reopenCaseComment, sendCaseCommentError } from './caseComments.service';
 import { createCaseIntake, CaseIntakeError } from './intakeCreate.service';
+import {
+  listWorkflowTemplatesForSelection,
+  listWorkflowTemplatesAdmin,
+  getWorkflowTemplateAdmin,
+  createWorkflowTemplate,
+  updateWorkflowTemplateDraft,
+  createWorkflowTemplateVersion,
+  duplicateWorkflowTemplate,
+  activateWorkflowTemplate,
+  archiveWorkflowTemplate,
+  WorkflowTemplateError,
+} from './workflowTemplateService';
 import { AgendaRequestError, getCaseDeadlines } from '../agenda/service';
 import { getCaseResponsibility } from '../responsibility/service';
 import { getCaseLifecycle, closeCase, reopenCase, archiveCase, LifecycleServiceError } from './lifecycleService';
@@ -62,6 +74,76 @@ async function handleLifecycleMutation(
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 }
+
+// ============================================================================
+// Workflow templates (Beállítások → Munkafolyamatok) + New Case selection.
+// Registered BEFORE /:caseId routes so the literal path is not captured by the
+// caseId param.
+// ============================================================================
+function handleWorkflowTemplateError(res: Response, error: unknown): void {
+  if (error instanceof WorkflowTemplateError) {
+    res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
+    return;
+  }
+  console.error('Workflow template error:', error);
+  res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+}
+
+// Selection list for New Case: active DB templates merged with built-ins.
+router.get('/workflow-templates', authenticate, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    res.json({ items: await listWorkflowTemplatesForSelection() });
+  } catch (error) { handleWorkflowTemplateError(res, error); }
+});
+
+// Admin surfaces (workforce-only; server also enforces role in the service).
+router.get('/workflow-templates/admin', authenticate, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    res.json({ items: await listWorkflowTemplatesAdmin() });
+  } catch (error) { handleWorkflowTemplateError(res, error); }
+});
+
+router.get('/workflow-templates/admin/:id', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    res.json(await getWorkflowTemplateAdmin(String(req.params.id)));
+  } catch (error) { handleWorkflowTemplateError(res, error); }
+});
+
+router.post('/workflow-templates', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    res.status(201).json(await createWorkflowTemplate(req.user!.userId, req.body || {}));
+  } catch (error) { handleWorkflowTemplateError(res, error); }
+});
+
+router.patch('/workflow-templates/:id', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    res.json(await updateWorkflowTemplateDraft(req.user!.userId, String(req.params.id), req.body || {}));
+  } catch (error) { handleWorkflowTemplateError(res, error); }
+});
+
+router.post('/workflow-templates/:id/version', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    res.status(201).json(await createWorkflowTemplateVersion(req.user!.userId, String(req.params.id), req.body || {}));
+  } catch (error) { handleWorkflowTemplateError(res, error); }
+});
+
+router.post('/workflow-templates/:id/duplicate', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    res.status(201).json(await duplicateWorkflowTemplate(req.user!.userId, String(req.params.id), req.body || {}));
+  } catch (error) { handleWorkflowTemplateError(res, error); }
+});
+
+router.post('/workflow-templates/:id/activate', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    res.json(await activateWorkflowTemplate(req.user!.userId, String(req.params.id)));
+  } catch (error) { handleWorkflowTemplateError(res, error); }
+});
+
+router.post('/workflow-templates/:id/archive', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    res.json(await archiveWorkflowTemplate(req.user!.userId, String(req.params.id)));
+  } catch (error) { handleWorkflowTemplateError(res, error); }
+});
 
 // ============================================================================
 // GET /cases
