@@ -36,6 +36,7 @@
     "test:client-interaction:db": "jest --runInBand tests/clientInteraction.integration.test.ts",
     "test:client-workspace:db": "jest --runInBand tests/clientPortalWorkspace.integration.test.ts",
     "test:org-access:db": "jest --runInBand tests/clientPortalOrganizationalAccess.integration.test.ts",
+    "test:cp1-external-communication-docs:db": "jest --runInBand tests/clientPortalExternalCommunicationDocumentAccess.integration.test.ts",
     "test:intake:db": "jest --runInBand tests/clientPortalIntakeTriage.integration.test.ts",
     "test:membership-onboarding:db": "jest --runInBand tests/clientPortalMembershipOnboarding.integration.test.ts",
     "test:milestone:db": "jest --runInBand tests/clientMatterMilestonePublication.integration.test.ts",

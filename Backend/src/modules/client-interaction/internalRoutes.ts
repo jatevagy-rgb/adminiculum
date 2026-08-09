@@ -52,8 +52,17 @@ clientInteractionInternalRouter.post('/requests/:id/complete', async (req, res) 
 clientInteractionInternalRouter.get('/questions', async (req, res) => {
   try { res.json(await questions.listThreadsInternal(actor(req), { caseId: req.query.caseId as string, status: req.query.status as string, limit: Number(req.query.limit) || undefined, offset: Number(req.query.offset) || undefined })); } catch (e) { fail(res, e); }
 });
+clientInteractionInternalRouter.post('/questions', async (req, res) => {
+  try { res.status(201).json(await questions.createThreadInternal(actor(req), req.body || {})); } catch (e) { fail(res, e); }
+});
 clientInteractionInternalRouter.get('/questions/:threadId', async (req, res) => {
   try { res.json(await questions.getThreadInternal(actor(req), String(req.params.threadId))); } catch (e) { fail(res, e); }
+});
+clientInteractionInternalRouter.post('/questions/:threadId/participants', async (req, res) => {
+  try { res.status(201).json(await questions.addThreadParticipant(actor(req), String(req.params.threadId), req.body || {})); } catch (e) { fail(res, e); }
+});
+clientInteractionInternalRouter.delete('/questions/:threadId/participants/:membershipId', async (req, res) => {
+  try { res.json(await questions.removeThreadParticipant(actor(req), String(req.params.threadId), String(req.params.membershipId))); } catch (e) { fail(res, e); }
 });
 clientInteractionInternalRouter.post('/questions/:threadId/answer', async (req, res) => {
   try { res.status(201).json(await questions.draftAnswer(actor(req), String(req.params.threadId), req.body || {})); } catch (e) { fail(res, e); }
@@ -63,6 +72,9 @@ clientInteractionInternalRouter.post('/questions/:threadId/answer/:messageId/sen
 });
 clientInteractionInternalRouter.post('/questions/:threadId/close', async (req, res) => {
   try { res.json(await questions.closeThread(actor(req), String(req.params.threadId))); } catch (e) { fail(res, e); }
+});
+clientInteractionInternalRouter.post('/questions/:threadId/archive', async (req, res) => {
+  try { res.json(await questions.archiveThread(actor(req), String(req.params.threadId))); } catch (e) { fail(res, e); }
 });
 
 // Submissions

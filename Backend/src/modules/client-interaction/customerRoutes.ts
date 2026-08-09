@@ -69,3 +69,12 @@ clientInteractionCustomerRouter.get('/cases/:caseId/questions', async (req, res)
 clientInteractionCustomerRouter.get('/cases/:caseId/questions/:threadId', async (req, res) => {
   try { res.json(await questions.getCustomerThread(await ctxFor(req), String(req.params.threadId))); } catch (e) { fail(res, e); }
 });
+clientInteractionCustomerRouter.post('/cases/:caseId/questions/:threadId/messages', async (req, res) => {
+  try { res.status(201).json(await questions.sendCustomerMessage(await ctxFor(req), String(req.params.threadId), req.body || {})); } catch (e) { fail(res, e); }
+});
+clientInteractionCustomerRouter.post('/cases/:caseId/questions/:threadId/read', async (req, res) => {
+  try { res.json(await questions.markCustomerThreadRead(await ctxFor(req), String(req.params.threadId))); } catch (e) { fail(res, e); }
+});
+clientInteractionCustomerRouter.get('/cases/:caseId/questions/:threadId/attachments/:attachmentId', async (req, res) => {
+  try { res.json(await questions.authorizeCustomerMessageAttachment(await ctxFor(req), String(req.params.threadId), String(req.params.attachmentId))); } catch (e) { fail(res, e); }
+});
