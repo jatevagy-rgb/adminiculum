@@ -832,8 +832,8 @@ export async function getCaseLifecycle(caseId: string): Promise<CaseLifecycleRes
   return fetchApi<CaseLifecycleResponse>(`/cases/${caseId}/lifecycle`);
 }
 
-export async function closeCaseLifecycle(caseId: string): Promise<CaseLifecycleResponse> {
-  return fetchApi<CaseLifecycleResponse>(`/cases/${caseId}/close`, { method: 'POST' });
+export async function closeCaseLifecycle(caseId: string, force = false): Promise<CaseLifecycleResponse> {
+  return fetchApi<CaseLifecycleResponse>(`/cases/${caseId}/close`, { method: 'POST', body: JSON.stringify({ force }) });
 }
 
 export async function reopenCaseLifecycle(caseId: string): Promise<CaseLifecycleResponse> {

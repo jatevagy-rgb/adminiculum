@@ -39,7 +39,8 @@
     "test:intake:db": "jest --runInBand tests/clientPortalIntakeTriage.integration.test.ts",
     "test:membership-onboarding:db": "jest --runInBand tests/clientPortalMembershipOnboarding.integration.test.ts",
     "test:milestone:db": "jest --runInBand tests/clientMatterMilestonePublication.integration.test.ts",
-    "test:workflow:db": "jest --runInBand tests/caseWorkflowTemplates.integration.test.ts"
+    "test:workflow:db": "jest --runInBand tests/caseWorkflowTemplates.integration.test.ts",
+    "test:lifecycle:db": "jest --runInBand tests/caseLifecycleWorkflowCompletion.integration.test.ts"
   },
   "dependencies": {
     "@azure/identity": "^4.13.1",

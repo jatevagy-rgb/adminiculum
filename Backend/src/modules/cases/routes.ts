@@ -570,7 +570,8 @@ router.post('/:caseId/decline-intake', authenticate, requireCaseManageAccess, as
 // POST /cases/:caseId/close | /reopen | /archive  (lifecycle transitions)
 // ============================================================================
 router.post('/:caseId/close', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
-  await handleLifecycleMutation(req, res, (caseId, actor) => closeCase(caseId, actor));
+  const force = Boolean((req.body as any)?.force);
+  await handleLifecycleMutation(req, res, (caseId, actor) => closeCase(caseId, actor, { force }));
 });
 
 router.post('/:caseId/reopen', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {

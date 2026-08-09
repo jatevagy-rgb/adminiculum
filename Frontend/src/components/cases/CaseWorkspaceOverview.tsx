@@ -12,7 +12,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getCaseWorkspace, startTask, submitTask, type CaseWorkspace } from "@/lib/api";
+import { getCaseWorkspace, startTask, submitTask, completeTask, type CaseWorkspace } from "@/lib/api";
 import { getCaseStatusLabel } from "@/lib/caseLabels";
 import { taskStatusLabel } from "@/lib/taskWorkflowPresentation";
 import { attentionPresentation, type AttentionCategory } from "@/lib/attentionCategory";
@@ -88,6 +88,20 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
     } finally { setRowBusy(null); }
   }, [rowBusy, refresh]);
 
+  // Ordinary workflow-step review/completion (independent of any document
+  // submission). Approve -> DONE (dependency engine activates successors);
+  // return -> IN_PROGRESS.
+  const quickComplete = useCallback(async (task: WorkspaceTask, approved: boolean) => {
+    if (rowBusy) return;
+    setRowBusy(task.id); setActionError(null);
+    try {
+      await completeTask(task.id, approved);
+      await refresh();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "A feladat lezárása nem sikerült.");
+    } finally { setRowBusy(null); }
+  }, [rowBusy, refresh]);
+
   const tasksById = useMemo(() => new Map((ws?.tasks || []).map((t) => [t.id, t])), [ws?.tasks]);
 
   if (loading) {
@@ -138,6 +152,15 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
           <AdminButton variant="neutral" size="xs" disabled={rowBusy === t.id} onClick={() => void quickStatus(t, "submit")}>
             {rowBusy === t.id ? "…" : "Beküldés review-ra"}
           </AdminButton>
+        ) : t.status.toUpperCase() === "IN_REVIEW" && t.workflowStepKey ? (
+          <>
+            <AdminButton variant="primary" size="xs" disabled={rowBusy === t.id} onClick={() => void quickComplete(t, true)} data-testid="task-approve">
+              {rowBusy === t.id ? "…" : "Jóváhagyás"}
+            </AdminButton>
+            <AdminButton variant="muted" size="xs" disabled={rowBusy === t.id} onClick={() => void quickComplete(t, false)} data-testid="task-return">
+              Visszaküldés
+            </AdminButton>
+          </>
         ) : null}
       </div>
     </div>

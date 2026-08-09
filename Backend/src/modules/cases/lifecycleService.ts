@@ -172,7 +172,8 @@ async function applyLifecycleAction(
   caseId: string,
   action: CaseLifecycleAction,
   actor: LifecycleActor,
-  now: Date
+  now: Date,
+  opts: { force?: boolean } = {}
 ): Promise<CaseLifecycleDto> {
   const caseRow = await loadCaseRow(caseId);
   if (!caseRow) {
@@ -183,11 +184,14 @@ async function applyLifecycleAction(
   const category = deriveLifecycleCategory(caseRow.status);
   const blockers = action === 'CLOSE' ? await collectBlockers(caseRow, now) : [];
 
+  // A forced close is an explicit, authorized decision to finalize a case whose
+  // pending workflow tasks will be cancelled. The blockers are still surfaced to
+  // the caller (and recorded), but they do not deny the transition.
   const decision = validateCaseLifecycleTransition({
     action,
     currentCategory: category,
     isCaseManager: manager,
-    blockers,
+    blockers: action === 'CLOSE' && opts.force ? [] : blockers,
   });
 
   if (!decision.allowed) {
@@ -204,6 +208,29 @@ async function applyLifecycleAction(
   const fromStatus = caseRow.status;
 
   await prisma.$transaction(async (tx) => {
+    // Forced close: cancel every still-open task (including workflow steps) so it
+    // leaves the responsible lawyers' queues. No workflow successor is activated
+    // (we set CANCELLED directly, never DONE), and history is preserved.
+    let cancelledTaskCount = 0;
+    if (action === 'CLOSE' && opts.force) {
+      const result = await tx.task.updateMany({
+        where: { caseId, status: { notIn: CLOSED_TASK_STATUSES } },
+        data: { status: 'CANCELLED' as any, completedAt: now },
+      });
+      cancelledTaskCount = result.count;
+      if (cancelledTaskCount > 0) {
+        await tx.timelineEvent.create({
+          data: {
+            caseId,
+            userId: actor.userId,
+            eventType: 'CASE_STATUS_CHANGED',
+            description: 'Nyitott feladatok lezárása (kihagyása) ügyarchiváláskor',
+            metadata: { lifecycleAction: 'FORCE_CLOSE_CANCEL_TASKS', cancelledTaskCount },
+          },
+        });
+      }
+    }
+
     await tx.case.update({
       where: { id: caseId },
       data: {
@@ -237,8 +264,8 @@ async function applyLifecycleAction(
   return buildDto(finalRow, postBlockers, isCaseManager(finalRow, actor), now);
 }
 
-export function closeCase(caseId: string, actor: LifecycleActor, now = new Date()): Promise<CaseLifecycleDto> {
-  return applyLifecycleAction(caseId, 'CLOSE', actor, now);
+export function closeCase(caseId: string, actor: LifecycleActor, opts: { force?: boolean } = {}, now = new Date()): Promise<CaseLifecycleDto> {
+  return applyLifecycleAction(caseId, 'CLOSE', actor, now, opts);
 }
 
 export function reopenCase(caseId: string, actor: LifecycleActor, now = new Date()): Promise<CaseLifecycleDto> {

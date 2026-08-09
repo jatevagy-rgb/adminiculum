@@ -24,6 +24,9 @@ on:
       - 'Backend/tests/**Publication**'
       - 'Backend/tests/**[Mm]ilestone**'
       - 'Backend/tests/**[Ww]orkflow**'
+      - 'Backend/tests/**[Ll]ifecycle**'
+      - 'Backend/src/modules/cases/**'
+      - 'Backend/src/modules/tasks/**'
       - 'Backend/tests/**identity**'
       - 'Backend/tests/clientIdentityMembership.integration.test.ts'
       - 'Backend/tests/**Interaction**'
@@ -61,6 +64,9 @@ on:
       - 'Backend/tests/**Publication**'
       - 'Backend/tests/**[Mm]ilestone**'
       - 'Backend/tests/**[Ww]orkflow**'
+      - 'Backend/tests/**[Ll]ifecycle**'
+      - 'Backend/src/modules/cases/**'
+      - 'Backend/src/modules/tasks/**'
       - 'Backend/tests/**identity**'
       - 'Backend/tests/clientIdentityMembership.integration.test.ts'
       - 'Backend/tests/**Interaction**'
@@ -188,3 +194,10 @@ jobs:
           WORKFLOW_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
         run: npm run test:workflow:db
+
+      - name: Run workflow completion + forced case-close PostgreSQL integration tests
+        working-directory: Backend
+        env:
+          WORKFLOW_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: npm run test:lifecycle:db
