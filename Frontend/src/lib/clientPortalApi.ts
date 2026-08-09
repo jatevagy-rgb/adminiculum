@@ -124,6 +124,82 @@ export type PortalWorkspaceSummary = {
   capabilities: { home: boolean; matters: boolean; tasks: boolean; documents: boolean; messages: boolean };
 };
 
+export type PortalOrganizationUnit = {
+  id: string;
+  name: string;
+  descriptionSafe: string | null;
+};
+
+export type PortalOrganizationCaseRelationship = 'OWN' | 'SHARED';
+
+export type PortalOrganizationCase = {
+  publicReference: string;
+  publicTitle: string;
+  organizationUnitName: string | null;
+  relationshipToCase: PortalOrganizationCaseRelationship;
+  publicStatus: string;
+  waitingOn: string;
+  nextStep: string | null;
+  publicTargetDate: string | null;
+  customerActionRequired: boolean;
+  lastPublishedUpdateAt: string | null;
+};
+
+export type PortalOrganizationCaseDetail = PortalOrganizationCase & {
+  requesterDisplayName: string | null;
+  currentStatusText: string;
+  safeMilestones: Array<{ label?: string; title?: string; state?: string; dueAt?: string; completedAt?: string; description?: string }>;
+  safeUpdates: Array<{ id?: string; title?: string; body?: string; categoryLabel?: string; publishedAt?: string }>;
+  capabilities: {
+    showTimeline: boolean;
+    showDocuments: boolean;
+    allowUploads: boolean;
+    showMessages: boolean;
+    allowMessages: boolean;
+    showHours: boolean;
+    showBillingStatement: boolean;
+  };
+};
+
+export type PortalOrganizationIntakeStatus =
+  | 'DRAFT'
+  | 'SUBMITTED'
+  | 'TRIAGE_IN_PROGRESS'
+  | 'MORE_INFORMATION_REQUIRED'
+  | 'LINKED_TO_EXISTING_CASE'
+  | 'CONVERTED_TO_CASE'
+  | 'DECLINED'
+  | 'WITHDRAWN'
+  | 'CLOSED'
+  | string;
+
+export type PortalOrganizationIntake = {
+  id: string;
+  subject: string;
+  descriptionSafe?: string | null;
+  organizationGroupId: string | null;
+  organizationGroupName?: string | null;
+  urgency: string | null;
+  requestedDeadline: string | null;
+  status: PortalOrganizationIntakeStatus;
+  submittedAt: string | null;
+  customerResponseSafe?: string | null;
+  linkedCaseId?: string | null;
+  linkedCaseReference?: string | null;
+  revision: number;
+  updatedAt?: string | null;
+};
+
+export type PortalLeadershipUnitAggregate = {
+  organizationUnitName: string | null;
+  activeCaseCount: number;
+  closedCaseCount: number;
+  waitingOnCustomerCount: number;
+  waitingOnOfficeCount: number;
+  approachingDeadlineCount: number;
+  publicStageCounts: Record<string, number>;
+};
+
 export type OnboardingRequestView = {
   id: string;
   status: string;
@@ -221,4 +297,54 @@ export function portalDownloadUrl(publicationId: string) {
   const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || '';
   const root = backendBaseUrl.replace(/\/+$/, '').replace(/\/api\/v1$/i, '');
   return `${root}/api/v1/client-portal/documents/${encodeURIComponent(publicationId)}/download`;
+}
+
+export async function getPortalOrganizationUnits() {
+  return fetchApi<{ items: PortalOrganizationUnit[] }>('/client-portal/org/units', { authContext: 'customer', suppressErrorStatuses: [401, 403, 503], suppressErrorLogging: true });
+}
+
+export async function getPortalOrganizationCases(params: { relationship?: PortalOrganizationCaseRelationship | 'ALL'; unitId?: string; limit?: number; offset?: number } = {}) {
+  const search = new URLSearchParams();
+  if (params.relationship && params.relationship !== 'ALL') search.set('relationship', params.relationship);
+  if (params.unitId) search.set('unitId', params.unitId);
+  if (params.limit) search.set('limit', String(params.limit));
+  if (params.offset) search.set('offset', String(params.offset));
+  const query = search.toString();
+  return fetchApi<{ items: PortalOrganizationCase[]; total: number; limit: number; offset: number }>(`/client-portal/org/cases${query ? `?${query}` : ''}`, { authContext: 'customer', suppressErrorStatuses: [401, 403, 503], suppressErrorLogging: true });
+}
+
+export async function getPortalOrganizationCase(caseReference: string) {
+  return fetchApi<PortalOrganizationCaseDetail>(`/client-portal/org/cases/${encodeURIComponent(caseReference)}`, { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
+}
+
+export async function getPortalOrganizationIntakes(params: { limit?: number; offset?: number } = {}) {
+  const search = new URLSearchParams();
+  if (params.limit) search.set('limit', String(params.limit));
+  if (params.offset) search.set('offset', String(params.offset));
+  const query = search.toString();
+  return fetchApi<{ items: PortalOrganizationIntake[]; total?: number; limit?: number; offset?: number }>(`/client-portal/org/intakes${query ? `?${query}` : ''}`, { authContext: 'customer', suppressErrorStatuses: [401, 403, 503], suppressErrorLogging: true });
+}
+
+export async function createPortalOrganizationIntake(payload: { subject: string; organizationGroupId?: string; descriptionSafe?: string; urgency?: string; requestedDeadline?: string | null }) {
+  return fetchApi<PortalOrganizationIntake>('/client-portal/org/intakes', { method: 'POST', body: JSON.stringify(payload), authContext: 'customer' });
+}
+
+export async function updatePortalOrganizationIntake(intakeId: string, payload: Partial<{ subject: string; organizationGroupId: string; descriptionSafe: string; urgency: string; requestedDeadline: string | null; expectedRevision: number }>) {
+  return fetchApi<PortalOrganizationIntake>(`/client-portal/org/intakes/${encodeURIComponent(intakeId)}`, { method: 'PATCH', body: JSON.stringify(payload), authContext: 'customer' });
+}
+
+export async function submitPortalOrganizationIntake(intakeId: string, expectedRevision: number) {
+  return fetchApi<PortalOrganizationIntake>(`/client-portal/org/intakes/${encodeURIComponent(intakeId)}/submit`, { method: 'POST', body: JSON.stringify({ expectedRevision }), authContext: 'customer' });
+}
+
+export async function withdrawPortalOrganizationIntake(intakeId: string, expectedRevision: number) {
+  return fetchApi<PortalOrganizationIntake>(`/client-portal/org/intakes/${encodeURIComponent(intakeId)}/withdraw`, { method: 'POST', body: JSON.stringify({ expectedRevision }), authContext: 'customer' });
+}
+
+export async function getPortalOrganizationSummary() {
+  return fetchApi<{ units: PortalLeadershipUnitAggregate[] }>('/client-portal/org/summary/organization', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
+}
+
+export async function getPortalUnitSummary(groupId: string) {
+  return fetchApi<PortalLeadershipUnitAggregate>(`/client-portal/org/summary/unit/${encodeURIComponent(groupId)}`, { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
 }

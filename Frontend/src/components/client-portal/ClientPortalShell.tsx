@@ -12,6 +12,7 @@ import { humanFileSize, makeUploadItem, PAGE_SIDE_LABELS, uploadReducer, uploadS
 import { PortalEntryLanding } from './PortalEntryLanding';
 import { PortalOnboarding } from './PortalOnboarding';
 import { PortalWorkspaceSelector } from './PortalWorkspaceSelector';
+import { OrganizationPortalViews, type OrganizationPortalView } from './OrganizationPortalViews';
 import {
   getPortalActionRequest,
   getPortalDocument,
@@ -34,7 +35,7 @@ import {
   type PortalIdentityContext,
 } from '@/lib/clientPortalApi';
 
-type PortalView = 'home' | 'matters' | 'tasks' | 'documents' | 'messages' | 'matter' | 'document' | 'action';
+type PortalView = 'home' | 'matters' | 'tasks' | 'documents' | 'messages' | 'matter' | 'document' | 'action' | 'intakes' | 'new-intake' | 'leadership';
 
 type Props = { view: PortalView; resourceId?: string };
 
@@ -629,7 +630,8 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         }
         const [home, workspace] = await Promise.all([getPortalHome(), getPortalWorkspace()]);
         let detail = {};
-        if (view === 'matter' && resourceId) detail = { matter: await getPortalMatter(resourceId) };
+        const isOrganization = context.selectedWorkspace.mode === 'ORGANIZATION';
+        if (view === 'matter' && resourceId && !isOrganization) detail = { matter: await getPortalMatter(resourceId) };
         if (view === 'document' && resourceId) detail = { document: await getPortalDocument(resourceId) };
         if (view === 'action' && resourceId) detail = { action: await getPortalActionRequest(resourceId) };
         if (!cancelled) setState({ status: 'ready', context, home, workspace, ...detail });
@@ -652,12 +654,17 @@ export function ClientPortalShell({ view, resourceId }: Props) {
   const nav = useMemo(() => {
     if (state.status !== 'ready' || !state.context.selectedWorkspace) return [];
     const capabilities = state.context.selectedWorkspace.capabilities;
+    const workspace = state.context.selectedWorkspace;
+    const communicationEnabled = workspace.communicationMode !== 'EXTERNAL_ONLY';
     return [
       capabilities.home ? ['Főoldal', '/portal'] : null,
       capabilities.matters ? ['Ügyeim', '/portal/ugyeim'] : null,
-      capabilities.tasks ? ['Teendőim', '/portal/teendoim'] : null,
+      workspace.mode === 'ORGANIZATION' ? ['Új megkeresés', '/portal/megkeresesek/uj'] : null,
+      workspace.mode === 'ORGANIZATION' ? ['Megkereséseim', '/portal/megkeresesek'] : null,
+      capabilities.tasks && workspace.mode !== 'ORGANIZATION' ? ['Teendőim', '/portal/teendoim'] : null,
       capabilities.documents ? ['Dokumentumok', '/portal/dokumentumok'] : null,
-      capabilities.messages ? ['Üzenetek', '/portal/uzenetek'] : null,
+      capabilities.messages && communicationEnabled ? ['Kommunikáció', '/portal/uzenetek'] : null,
+      workspace.mode === 'ORGANIZATION' ? ['Szervezeti áttekintés', '/portal/szervezeti-attekintes'] : null,
     ].filter(Boolean) as string[][];
   }, [state]);
 
@@ -683,9 +690,17 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         {state.status === 'workspace-empty' ? <Card><h1 className="text-3xl font-semibold">{state.context.selectedWorkspace?.name}</h1><p className="mt-3 text-stone-700">Az ügyfélfelülethez való hozzáférése aktív, de ezen a felületen jelenleg nincs elérhető tartalom.</p></Card> : null}
         {state.status === 'service-error' ? <Card><h1 className="text-3xl font-semibold">A portál jelenleg nem érhető el</h1><p className="mt-3 text-stone-700">Kérjük, próbálja újra később.</p></Card> : null}
         {state.status === 'denied' ? <Card>{state.message}</Card> : null}
-        {state.status === 'ready' && view === 'home' ? <HomeView home={state.home} workspace={state.workspace} /> : null}
-        {state.status === 'ready' && (view === 'matters' || view === 'tasks' || view === 'documents' || view === 'messages') ? <ListView view={view} home={state.home} workspace={state.workspace} /> : null}
-        {state.status === 'ready' && view === 'matter' && state.matter ? <MatterView matter={state.matter} /> : null}
+        {state.status === 'ready' && state.context.selectedWorkspace?.mode === 'ORGANIZATION' ? (
+          <OrganizationPortalViews
+            view={view as OrganizationPortalView}
+            resourceId={resourceId}
+            context={state.context}
+            workspace={state.workspace}
+          />
+        ) : null}
+        {state.status === 'ready' && state.context.selectedWorkspace?.mode !== 'ORGANIZATION' && view === 'home' ? <HomeView home={state.home} workspace={state.workspace} /> : null}
+        {state.status === 'ready' && state.context.selectedWorkspace?.mode !== 'ORGANIZATION' && (view === 'matters' || view === 'tasks' || view === 'documents' || view === 'messages') ? <ListView view={view} home={state.home} workspace={state.workspace} /> : null}
+        {state.status === 'ready' && state.context.selectedWorkspace?.mode !== 'ORGANIZATION' && view === 'matter' && state.matter ? <MatterView matter={state.matter} /> : null}
         {state.status === 'ready' && view === 'document' && state.document ? <DocumentView document={state.document} /> : null}
         {state.status === 'ready' && view === 'action' && state.action ? <ActionView action={state.action} /> : null}
 
