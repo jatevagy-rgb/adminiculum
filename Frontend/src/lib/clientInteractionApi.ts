@@ -50,9 +50,19 @@ export interface CustomerRequestDTO {
 export interface CustomerQuestionThreadDTO {
   id: string;
   subject: string;
+  category?: string | null;
   status: string;
+  unreadCount?: number;
+  canSendMessages?: boolean;
   updatedAt?: string;
-  messages?: Array<{ id: string; authorType: "CLIENT" | "INTERNAL"; body: string; sentAt: string }>;
+  participants?: Array<{ id: string; displayName: string | null; role: string | null }>;
+  messages?: Array<{
+    id: string;
+    authorType: "CLIENT" | "INTERNAL";
+    body: string;
+    sentAt: string;
+    attachments?: Array<{ id: string; fileName: string; sizeBytes: number | null }>;
+  }>;
 }
 
 export interface CustomerSubmissionDTO {
@@ -161,6 +171,10 @@ export const customerInteractionApi = {
     fetchApi<CustomerQuestionThreadDTO>(`/client-interaction/cases/${encodeURIComponent(caseId)}/questions/${encodeURIComponent(threadId)}`, { authContext: "customer" }),
   createQuestion: (caseId: string, payload: { subject: string; bodySafe: string }) =>
     fetchApi<CustomerQuestionThreadDTO>(`/client-interaction/cases/${encodeURIComponent(caseId)}/questions`, { method: "POST", body: JSON.stringify(payload), authContext: "customer" }),
+  sendMessage: (caseId: string, threadId: string, payload: { bodySafe: string; attachments?: Array<{ fileName: string; base64: string; declaredMimeType?: string }> }) =>
+    fetchApi<CustomerQuestionThreadDTO>(`/client-interaction/cases/${encodeURIComponent(caseId)}/questions/${encodeURIComponent(threadId)}/messages`, { method: "POST", body: JSON.stringify(payload), authContext: "customer" }),
+  markThreadRead: (caseId: string, threadId: string) =>
+    fetchApi<{ id: string; unreadCount?: number }>(`/client-interaction/cases/${encodeURIComponent(caseId)}/questions/${encodeURIComponent(threadId)}/read`, { method: "POST", body: JSON.stringify({}), authContext: "customer" }),
   createSubmission: (caseId: string, requestId: string) =>
     fetchApi<CustomerSubmissionDTO>(`/client-interaction/cases/${encodeURIComponent(caseId)}/requests/${encodeURIComponent(requestId)}/submissions`, { method: "POST", body: JSON.stringify({}), authContext: "customer" }),
   submitAnswers: (caseId: string, submissionId: string, answers: Array<{ label: string; value: string }>) =>
@@ -188,6 +202,8 @@ export const workforceInteractionApi = {
     fetchApi<InternalClientRequestDTO>(`/internal/client-interaction/requests/${encodeURIComponent(requestId)}/complete`, { method: "POST", body: JSON.stringify({ expectedRevision }), authContext: "workforce" }),
   listQuestions: (params: { caseId?: string; status?: string; limit?: number; offset?: number } = {}) =>
     fetchApi<Page<InternalInteractionRow>>(`/internal/client-interaction/questions${qs(params)}`, { authContext: "workforce" }),
+  createQuestionThread: (payload: { caseId: string; subjectSafe: string; category?: string; participantMembershipIds?: string[] }) =>
+    fetchApi<InternalQuestionThreadDTO>("/internal/client-interaction/questions", { method: "POST", body: JSON.stringify(payload), authContext: "workforce" }),
   listSubmissions: (params: { caseId?: string; requestId?: string; status?: string; limit?: number; offset?: number } = {}) =>
     fetchApi<Page<InternalInteractionRow>>(`/internal/client-interaction/submissions${qs(params)}`, { authContext: "workforce" }),
   listNotifications: (params: { caseId?: string; status?: string; limit?: number; offset?: number } = {}) =>
@@ -198,12 +214,18 @@ export const workforceInteractionApi = {
   // --- internal question workflow (draft hidden until explicit send) ---
   getQuestion: (threadId: string) =>
     fetchApi<InternalQuestionThreadDTO>(`/internal/client-interaction/questions/${encodeURIComponent(threadId)}`, { authContext: "workforce" }),
+  addQuestionParticipant: (threadId: string, payload: { workspaceMembershipId: string; role?: string }) =>
+    fetchApi<{ id: string }>(`/internal/client-interaction/questions/${encodeURIComponent(threadId)}/participants`, { method: "POST", body: JSON.stringify(payload), authContext: "workforce" }),
+  removeQuestionParticipant: (threadId: string, membershipId: string) =>
+    fetchApi<{ id: string }>(`/internal/client-interaction/questions/${encodeURIComponent(threadId)}/participants/${encodeURIComponent(membershipId)}`, { method: "DELETE", authContext: "workforce" }),
   draftAnswer: (threadId: string, bodySafe: string) =>
     fetchApi<{ id: string }>(`/internal/client-interaction/questions/${encodeURIComponent(threadId)}/answer`, { method: "POST", body: JSON.stringify({ bodySafe }), authContext: "workforce" }),
   sendAnswer: (threadId: string, messageId: string, sendNotification: boolean) =>
     fetchApi<{ status: string }>(`/internal/client-interaction/questions/${encodeURIComponent(threadId)}/answer/${encodeURIComponent(messageId)}/send`, { method: "POST", body: JSON.stringify({ sendNotification }), authContext: "workforce" }),
   closeQuestion: (threadId: string) =>
     fetchApi<{ status: string }>(`/internal/client-interaction/questions/${encodeURIComponent(threadId)}/close`, { method: "POST", body: JSON.stringify({}), authContext: "workforce" }),
+  archiveQuestion: (threadId: string) =>
+    fetchApi<{ status: string }>(`/internal/client-interaction/questions/${encodeURIComponent(threadId)}/archive`, { method: "POST", body: JSON.stringify({}), authContext: "workforce" }),
 
   // --- internal submission review (accept gated on CLEAN server-side) ---
   getSubmission: (submissionId: string) =>
@@ -226,7 +248,8 @@ export interface InternalQuestionMessageDTO {
 }
 
 export interface InternalQuestionThreadDTO {
-  thread: { id: string; subjectSafe?: string; subject?: string; status: string; caseId: string };
+  thread: { id: string; subjectSafe?: string; subject?: string; category?: string | null; status: string; caseId: string };
+  participants?: Array<{ id: string; workspaceMembershipId: string; role: string; displayName?: string | null }>;
   messages: InternalQuestionMessageDTO[];
 }
 

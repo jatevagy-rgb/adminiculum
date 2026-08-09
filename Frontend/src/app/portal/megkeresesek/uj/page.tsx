@@ -1,5 +1,5 @@
-import { CustomerIntakeCreate } from '@/components/client-portal/CustomerIntake';
+import { ClientPortalShell } from '@/components/client-portal/ClientPortalShell';
 
 export default function PortalIntakeCreatePage() {
-  return <CustomerIntakeCreate />;
+  return <ClientPortalShell view="new-intake" />;
 }

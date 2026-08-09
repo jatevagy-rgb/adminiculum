@@ -48,7 +48,7 @@ d('client portal interaction foundation (PostgreSQL)', () => {
     await db.clientPortalIdentity.create({ data: { id: ids.identity, provider: 'ENTRA_EXTERNAL_ID', issuer: 'iss', subject: `sub-${ids.identity}`, normalizedEmail: `c-${ids.identity}@t.io`, emailVerifiedAt: new Date(), displayName: 'Customer', accountType: 'INDIVIDUAL', status: 'ACTIVE' } });
     await db.clientPortalWorkspace.create({ data: { id: ids.workspace, clientId: ids.client, name: 'Interaction workspace', mode: 'INDIVIDUAL', publicReference: `interaction-${ids.workspace}`, createdById: ids.admin } });
     await db.clientPortalWorkspaceMembership.create({ data: { id: ids.workspaceMembership, clientPortalIdentityId: ids.identity, workspaceId: ids.workspace, status: 'ACTIVE', approvedAt: new Date(), approvedById: ids.admin } });
-    await db.clientPortalGrant.create({ data: { id: ids.grant, clientPortalIdentityId: ids.identity, workspaceId: ids.workspace, clientId: ids.client, caseId: ids.case, status: 'ACTIVE', permissions: ['MATTER_READ', 'DOCUMENT_READ'], invitedById: ids.admin, activatedAt: new Date() } as any });
+    await db.clientPortalGrant.create({ data: { id: ids.grant, clientPortalIdentityId: ids.identity, workspaceId: ids.workspace, clientId: ids.client, caseId: ids.case, status: 'ACTIVE', permissions: ['MATTER_READ', 'DOCUMENT_READ', 'MESSAGE_READ', 'MESSAGE_SEND'], invitedById: ids.admin, activatedAt: new Date() } as any });
   });
 
   afterAll(async () => { setScanner(null); setMailSender(null); setQuarantineStore(null); await db.$disconnect(); });
