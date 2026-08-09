@@ -117,11 +117,44 @@ export interface AdminWorkspaceDTO {
 
 export const GRANT_PERMISSIONS = [
   "MATTER_READ",
+  "CLIENT_TIMELINE_READ",
   "DOCUMENT_READ",
   "DOCUMENT_DOWNLOAD",
+  "DOCUMENT_UPLOAD",
+  "MESSAGE_READ",
+  "MESSAGE_SEND",
   "ACTION_REQUEST_READ",
   "UPDATE_READ",
 ] as const;
+
+export type ParticipantRole = "REQUESTER" | "CLIENT_OWNER" | "PARTICIPANT" | "OBSERVER";
+export type SummaryScopeType = "UNIT" | "ORGANIZATION";
+
+export interface OrganizationUnitAdminDTO {
+  id: string;
+  name: string;
+  status: string;
+  descriptionSafe: string | null;
+}
+
+export interface CaseParticipantDTO {
+  id: string;
+  clientPortalIdentityId: string | null;
+  participantRole: ParticipantRole | string | null;
+  isRequester: boolean;
+  permissions: string[];
+  status: string;
+  revision: number;
+}
+
+export interface SummaryScopeDTO {
+  id: string;
+  workspaceMembershipId: string;
+  scopeType: SummaryScopeType | string;
+  organizationGroupId: string | null;
+  status: string;
+  revision: number;
+}
 
 export async function listMembershipQueue(): Promise<{ items: MembershipRequestDTO[] }> {
   return fetchApi<{ items: MembershipRequestDTO[] }>("/client-identity/admin/membership-requests");
@@ -233,4 +266,48 @@ export async function inviteAdminWorkspaceMember(workspaceId: string, payload: {
 
 export async function transitionAdminWorkspaceMembership(membershipId: string, action: 'approve' | 'suspend' | 'revoke', revision: number): Promise<WorkspaceMembershipDTO> {
   return fetchApi(`/client-identity/admin/workspace-memberships/${encodeURIComponent(membershipId)}/${action}`, { method: 'POST', body: JSON.stringify({ revision }) });
+}
+
+export async function createOrganizationGroup(payload: { clientId: string; name: string; descriptionSafe?: string }) {
+  return fetchApi<OrganizationUnitAdminDTO>('/client-identity/admin/groups', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function listWorkspaceUnits(workspaceId: string) {
+  return fetchApi<{ items: OrganizationUnitAdminDTO[] }>(`/client-identity/admin/workspaces/${encodeURIComponent(workspaceId)}/units`);
+}
+
+export async function linkWorkspaceUnit(workspaceId: string, groupId: string) {
+  return fetchApi<{ id: string; workspaceId: string | null }>(`/client-identity/admin/workspaces/${encodeURIComponent(workspaceId)}/units/${encodeURIComponent(groupId)}/link`, { method: 'POST', body: JSON.stringify({}) });
+}
+
+export async function unlinkWorkspaceUnit(groupId: string) {
+  return fetchApi<{ id: string; workspaceId: string | null }>(`/client-identity/admin/units/${encodeURIComponent(groupId)}/unlink`, { method: 'POST', body: JSON.stringify({}) });
+}
+
+export async function listCaseParticipants(workspaceId: string, caseId: string) {
+  return fetchApi<{ items: CaseParticipantDTO[] }>(`/client-identity/admin/workspaces/${encodeURIComponent(workspaceId)}/cases/${encodeURIComponent(caseId)}/participants`);
+}
+
+export async function createCaseParticipant(payload: { workspaceId: string; caseId: string; clientPortalIdentityId?: string; email?: string; participantRole: ParticipantRole; permissions: string[] }) {
+  return fetchApi<CaseParticipantDTO & { idempotent: boolean; reactivated: boolean }>('/client-identity/admin/participants', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function updateCaseParticipant(grantId: string, payload: { revision: number; participantRole?: ParticipantRole; permissions?: string[] }) {
+  return fetchApi<{ id: string; revision: number }>(`/client-identity/admin/participants/${encodeURIComponent(grantId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+}
+
+export async function revokeCaseParticipant(grantId: string) {
+  return fetchApi<{ id: string; status: string }>(`/client-identity/admin/participants/${encodeURIComponent(grantId)}/revoke`, { method: 'POST', body: JSON.stringify({}) });
+}
+
+export async function listSummaryScopes(workspaceId: string) {
+  return fetchApi<{ items: SummaryScopeDTO[] }>(`/client-identity/admin/workspaces/${encodeURIComponent(workspaceId)}/summary-scopes`);
+}
+
+export async function createSummaryScope(payload: { workspaceId: string; clientPortalIdentityId?: string; email?: string; scopeType: SummaryScopeType; organizationGroupId?: string }) {
+  return fetchApi<SummaryScopeDTO>('/client-identity/admin/summary-scopes', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function transitionSummaryScope(scopeId: string, action: 'suspend' | 'revoke') {
+  return fetchApi<{ id: string; status: string }>(`/client-identity/admin/summary-scopes/${encodeURIComponent(scopeId)}/${action}`, { method: 'POST', body: JSON.stringify({}) });
 }

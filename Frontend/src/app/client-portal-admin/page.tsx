@@ -7,6 +7,7 @@ import { getCases, getClients, type CaseListItem, type Client } from "@/lib/api"
 import { localizedInteractionStatus, workforceInteractionApi, type InternalInteractionRow } from "@/lib/clientInteractionApi";
 import { ClientInteractionInternalActions } from "@/components/client-portal/ClientInteractionInternalActions";
 import { ClientRequestComposer } from "@/components/client-portal/ClientRequestComposer";
+import { OrganizationAdminControlPlane } from "@/components/client-portal/OrganizationAdminControlPlane";
 import {
   approveMembershipRequest,
   cancelAdminInvitationNotification,
@@ -527,6 +528,16 @@ function PageBody() {
       )}
 
       <WorkspaceAdministration workspaces={workspaces} clients={clients} cases={cases} busy={busy} run={run} />
+
+      <OrganizationAdminControlPlane
+        clients={clients}
+        cases={cases}
+        memberships={memberships}
+        workspaces={workspaces}
+        questions={interactionQueues.questions}
+        busy={busy}
+        run={run}
+      />
 
       <AdminPanel className="p-5">
         <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Operatív ügyfélportál sorok</h2>

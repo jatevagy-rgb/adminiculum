@@ -1,0 +1,47 @@
+{
+  "repository": "C:\\Users\\hubay\\Documents\\Adminiculum-release-integration",
+  "branch": "codex/cp1-organizational-customer-ui",
+  "baseFeatureSha": "83894a2795d3391bbcfa63bdd713d1c977e5e6f6",
+  "releaseOriginShaAtStart": "0cc0d4ba0c129d1c18fac20e9bea039dd6770d06",
+  "remote": "https://github.com/jatevagy-rgb/adminiculum.git",
+  "backendContracts": {
+    "customerOrganizationRoutes": [
+      "GET /api/v1/client-portal/org/units",
+      "GET /api/v1/client-portal/org/cases",
+      "GET /api/v1/client-portal/org/cases/:caseReference",
+      "POST /api/v1/client-portal/org/intakes",
+      "GET /api/v1/client-portal/org/intakes",
+      "PATCH /api/v1/client-portal/org/intakes/:intakeId",
+      "POST /api/v1/client-portal/org/intakes/:intakeId/submit",
+      "POST /api/v1/client-portal/org/intakes/:intakeId/withdraw",
+      "GET /api/v1/client-portal/org/summary/unit/:groupId",
+      "GET /api/v1/client-portal/org/summary/organization"
+    ],
+    "workforceOrganizationRoutes": [
+      "GET /api/v1/client-identity/admin/workspaces/:workspaceId/units",
+      "POST /api/v1/client-identity/admin/groups",
+      "POST /api/v1/client-identity/admin/workspaces/:workspaceId/units/:groupId/link",
+      "GET /api/v1/client-identity/admin/workspaces/:workspaceId/cases/:caseId/participants",
+      "POST /api/v1/client-identity/admin/participants",
+      "PATCH /api/v1/client-identity/admin/participants/:grantId",
+      "POST /api/v1/client-identity/admin/participants/:grantId/revoke",
+      "GET /api/v1/client-identity/admin/workspaces/:workspaceId/summary-scopes",
+      "POST /api/v1/client-identity/admin/summary-scopes"
+    ],
+    "communicationRoutes": [
+      "POST /api/v1/client-interaction/cases/:caseId/questions/:threadId/messages",
+      "POST /api/v1/client-interaction/cases/:caseId/questions/:threadId/read",
+      "POST /api/v1/internal/client-interaction/questions",
+      "POST /api/v1/internal/client-interaction/questions/:threadId/participants",
+      "DELETE /api/v1/internal/client-interaction/questions/:threadId/participants/:membershipId",
+      "POST /api/v1/internal/client-interaction/questions/:threadId/archive"
+    ]
+  },
+  "migrationPlan": "No migration planned. The completed CP1 backend branch already provides persistence and PostgreSQL replay coverage.",
+  "frontendImplementationPlan": [
+    "Extend typed customer-safe organization DTO wrappers.",
+    "Render ORGANIZATION mode through the canonical ClientPortalShell.",
+    "Add workforce organization, participant, communication, document-recipient and leadership controls.",
+    "Add static/frontend contract tests for endpoint wiring and UI boundaries."
+  ]
+}
