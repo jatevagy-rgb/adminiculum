@@ -132,7 +132,7 @@ export function toClientMatterPublicationDTO(row: Row, revision?: Row | null): R
 }
 
 export function toClientDocumentPublicationDTO(row: Row): Row {
-  const dto = pick(row, ['id', 'caseId', 'clientId', 'documentId', 'documentVersionId', 'status', 'clientFacingTitle', 'clientFacingExplanation', 'approvedById', 'publishedById', 'approvedAt', 'publishedAt', 'revokedAt', 'revocationReasonSafe', 'supersededById', 'supersedesId', 'audienceSnapshot', 'sourceFingerprint', 'approvalReviewId', 'revision']);
+  const dto = pick(row, ['id', 'caseId', 'clientId', 'workspaceId', 'visibility', 'documentId', 'documentVersionId', 'status', 'clientFacingTitle', 'clientFacingExplanation', 'approvedById', 'publishedById', 'approvedAt', 'publishedAt', 'revokedAt', 'revocationReasonSafe', 'supersededById', 'supersedesId', 'audienceSnapshot', 'sourceFingerprint', 'approvalReviewId', 'revision']);
   assertNoForbiddenPortalFields(dto);
   return dto;
 }
@@ -465,15 +465,65 @@ async function documentSource(db: Db, documentId: string, versionId: string): Pr
   return row;
 }
 
+function normalizeDocumentVisibility(value: unknown): 'WORKSPACE' | 'SELECTED_PARTICIPANTS' {
+  const output = String(value || 'WORKSPACE').trim().toUpperCase();
+  if (output !== 'WORKSPACE' && output !== 'SELECTED_PARTICIPANTS') throw new ClientPublicationError(400, 'DOCUMENT_VISIBILITY_INVALID', 'Document visibility is not supported.');
+  return output as 'WORKSPACE' | 'SELECTED_PARTICIPANTS';
+}
+
+function normalizedIds(value: unknown): string[] {
+  return Array.isArray(value) ? [...new Set(value.map((item) => String(item).trim()).filter(Boolean))] : [];
+}
+
+async function validateDocumentWorkspace(db: Db, clientId: string, workspaceId: string | null): Promise<string | null> {
+  if (!workspaceId) return null;
+  const workspace = await one(db, 'SELECT id FROM client_portal_workspaces WHERE id=$1 AND "clientId"=$2 AND status=$3::"ClientPortalWorkspaceStatus"', workspaceId, clientId, 'ACTIVE');
+  if (!workspace) throw new ClientPublicationError(409, 'DOCUMENT_WORKSPACE_NOT_ACTIVE', 'Document publication workspace is not active for this client.');
+  return workspace.id;
+}
+
+async function validateDocumentRecipients(db: Db, caseId: string, workspaceId: string, membershipIds: string[]): Promise<void> {
+  if (!membershipIds.length) throw new ClientPublicationError(400, 'DOCUMENT_RECIPIENT_REQUIRED', 'Select at least one document recipient.');
+  const rows = await many(db, `SELECT m.id
+    FROM client_portal_workspace_memberships m
+    JOIN client_portal_grants g ON g."clientPortalIdentityId"=m."clientPortalIdentityId"
+      AND g."workspaceId"=m."workspaceId"
+      AND g."caseId"=$2
+      AND g.status='ACTIVE'::"ClientPortalGrantStatus"
+      AND (g."validFrom" IS NULL OR g."validFrom" <= now())
+      AND (g."validUntil" IS NULL OR g."validUntil" > now())
+      AND g.permissions::text[] @> ARRAY['DOCUMENT_READ']::text[]
+    WHERE m.id=ANY($1::text[])
+      AND m."workspaceId"=$3
+      AND m.status='ACTIVE'::"ClientPortalWorkspaceMembershipStatus"
+      AND (m."expiresAt" IS NULL OR m."expiresAt" > now())`, membershipIds, caseId, workspaceId);
+  if (rows.length !== membershipIds.length) throw new ClientPublicationError(400, 'DOCUMENT_RECIPIENT_INVALID', 'Each selected recipient must be an active workspace participant with exact Case document access.');
+}
+
+async function replaceDocumentRecipients(db: Db, publicationId: string, membershipIds: string[]): Promise<void> {
+  await exec(db, 'DELETE FROM client_document_publication_recipients WHERE "documentPublicationId"=$1', publicationId);
+  for (const membershipId of membershipIds) {
+    await exec(db, 'INSERT INTO client_document_publication_recipients (id,"documentPublicationId","workspaceMembershipId") VALUES ($1,$2,$3) ON CONFLICT ("documentPublicationId","workspaceMembershipId") DO NOTHING', newId(), publicationId, membershipId);
+  }
+}
+
 export async function createDocumentPublication(actor: Actor, input: Row, db: PrismaClient = defaultPrisma): Promise<Row> {
   requireFoundation(); requireInternal(actor);
   return db.$transaction(async (tx) => {
     const source = await documentSource(tx, String(input.documentId), String(input.documentVersionId));
     await assertCaseAccess(tx, actor, source.caseId);
+    const visibility = normalizeDocumentVisibility(input.visibility);
+    const workspaceId = await validateDocumentWorkspace(tx, source.clientId, input.workspaceId ? String(input.workspaceId) : null);
+    const recipientMembershipIds = normalizedIds(input.recipientMembershipIds);
+    if (visibility === 'SELECTED_PARTICIPANTS') {
+      if (!workspaceId) throw new ClientPublicationError(400, 'DOCUMENT_WORKSPACE_REQUIRED', 'Selected participant publications require a workspace.');
+      await validateDocumentRecipients(tx, source.caseId, workspaceId, recipientMembershipIds);
+    }
     const audience = input.audienceSnapshot ? json(input.audienceSnapshot, 'audienceSnapshot') : await activeAudience(tx, source.caseId, source.clientId);
     const sourceFingerprint = hash(pick(source, ['documentId', 'versionId', 'version', 'size', 'storageReference', 'spItemId', 'createdAt']));
     const review = await one(tx, 'SELECT id FROM document_reviews WHERE "documentId"=$1 AND "approvedVersionId"=$2 AND status IN ($3::"DocumentReviewStatus",$4::"DocumentReviewStatus") ORDER BY "completedAt" DESC NULLS LAST LIMIT 1', source.documentId, source.versionId, 'APPROVED', 'CLOSED');
-    const row = await one(tx, 'INSERT INTO client_document_publications (id,"caseId","clientId","documentId","documentVersionId",status,"clientFacingTitle","clientFacingExplanation","preparedById","audienceSnapshot","sourceFingerprint","approvalReviewId") VALUES ($1,$2,$3,$4,$5,$6::"ClientPublicationStatus",$7,$8,$9,$10::jsonb,$11,$12) RETURNING *, status::text', newId(), source.caseId, source.clientId, source.documentId, source.versionId, 'DRAFT', text(input.clientFacingTitle || source.documentTitle, 'clientFacingTitle', 240, true), text(input.clientFacingExplanation, 'clientFacingExplanation', 2000), actor.userId, JSON.stringify(audience), sourceFingerprint, review?.id ?? null);
+    const row = await one(tx, 'INSERT INTO client_document_publications (id,"caseId","clientId","workspaceId",visibility,"documentId","documentVersionId",status,"clientFacingTitle","clientFacingExplanation","preparedById","audienceSnapshot","sourceFingerprint","approvalReviewId") VALUES ($1,$2,$3,$4,$5::"ClientDocumentPublicationVisibility",$6,$7,$8::"ClientPublicationStatus",$9,$10,$11,$12::jsonb,$13,$14) RETURNING *, status::text, visibility::text', newId(), source.caseId, source.clientId, workspaceId, visibility, source.documentId, source.versionId, 'DRAFT', text(input.clientFacingTitle || source.documentTitle, 'clientFacingTitle', 240, true), text(input.clientFacingExplanation, 'clientFacingExplanation', 2000), actor.userId, JSON.stringify(audience), sourceFingerprint, review?.id ?? null);
+    if (visibility === 'SELECTED_PARTICIPANTS') await replaceDocumentRecipients(tx, row!.id, recipientMembershipIds);
     await audit(tx, { action: 'DRAFT_CREATED', actorId: actor.userId, caseId: source.caseId, clientId: source.clientId, documentPublicationId: row!.id, documentVersionId: source.versionId });
     return toClientDocumentPublicationDTO(row!);
   });
@@ -486,7 +536,15 @@ export async function updateDocumentPublication(actor: Actor, publicationId: str
     if (!pub) throw new ClientPublicationError(404, 'DOCUMENT_PUBLICATION_NOT_FOUND', 'Document publication not found.');
     await assertCaseAccess(tx, actor, pub.caseId); requireExpected(pub, input.expectedRevision);
     if (pub.status !== 'DRAFT') throw new ClientPublicationError(409, 'PUBLICATION_NOT_EDITABLE', 'Only draft publication can be edited.');
-    const row = await one(tx, 'UPDATE client_document_publications SET "clientFacingTitle"=$2, "clientFacingExplanation"=$3, "audienceSnapshot"=$4::jsonb, "updatedAt"=now(), revision=revision+1 WHERE id=$1 RETURNING *, status::text', publicationId, text(input.clientFacingTitle || pub.clientFacingTitle, 'clientFacingTitle', 240, true), text(input.clientFacingExplanation, 'clientFacingExplanation', 2000), JSON.stringify(input.audienceSnapshot ? json(input.audienceSnapshot, 'audienceSnapshot') : pub.audienceSnapshot));
+    const visibility = input.visibility == null ? String(pub.visibility || 'WORKSPACE') as 'WORKSPACE' | 'SELECTED_PARTICIPANTS' : normalizeDocumentVisibility(input.visibility);
+    const workspaceId = input.workspaceId === undefined ? pub.workspaceId : await validateDocumentWorkspace(tx, pub.clientId, input.workspaceId ? String(input.workspaceId) : null);
+    const recipientMembershipIds = input.recipientMembershipIds === undefined ? null : normalizedIds(input.recipientMembershipIds);
+    if (visibility === 'SELECTED_PARTICIPANTS') {
+      if (!workspaceId) throw new ClientPublicationError(400, 'DOCUMENT_WORKSPACE_REQUIRED', 'Selected participant publications require a workspace.');
+      await validateDocumentRecipients(tx, pub.caseId, workspaceId, recipientMembershipIds ?? (await many(tx, 'SELECT "workspaceMembershipId" AS id FROM client_document_publication_recipients WHERE "documentPublicationId"=$1', publicationId)).map((row) => row.id));
+    }
+    const row = await one(tx, 'UPDATE client_document_publications SET "workspaceId"=$2, visibility=$3::"ClientDocumentPublicationVisibility", "clientFacingTitle"=$4, "clientFacingExplanation"=$5, "audienceSnapshot"=$6::jsonb, "updatedAt"=now(), revision=revision+1 WHERE id=$1 RETURNING *, status::text, visibility::text', publicationId, workspaceId, visibility, text(input.clientFacingTitle || pub.clientFacingTitle, 'clientFacingTitle', 240, true), text(input.clientFacingExplanation, 'clientFacingExplanation', 2000), JSON.stringify(input.audienceSnapshot ? json(input.audienceSnapshot, 'audienceSnapshot') : pub.audienceSnapshot));
+    if (recipientMembershipIds) await replaceDocumentRecipients(tx, publicationId, visibility === 'SELECTED_PARTICIPANTS' ? recipientMembershipIds : []);
     await audit(tx, { action: 'DRAFT_UPDATED', actorId: actor.userId, caseId: pub.caseId, clientId: pub.clientId, documentPublicationId: publicationId, documentVersionId: pub.documentVersionId });
     return toClientDocumentPublicationDTO(row!);
   });
@@ -511,7 +569,18 @@ async function transitionPublication(actor: Actor, table: string, idValue: strin
     let next: string | null = null;
     if (action === 'submit' && pub.status === 'DRAFT') next = 'READY_FOR_APPROVAL';
     if (action === 'approve' && pub.status === 'READY_FOR_APPROVAL') { if (!APPROVER_ROLES.has(String(actor.role || ''))) throw new ClientPublicationError(403, 'APPROVER_NOT_AUTHORIZED', 'Actor cannot approve publication.'); next = 'APPROVED'; }
-    if (action === 'publish' && pub.status === 'APPROVED') { if (!PUBLISHER_ROLES.has(String(actor.role || ''))) throw new ClientPublicationError(403, 'PUBLISHER_NOT_AUTHORIZED', 'Actor cannot publish publication.'); await activeAudience(tx, pub.caseId, pub.clientId); if (table.includes('document')) await assertDocumentEligibility(tx, pub, input); next = 'PUBLISHED'; }
+    if (action === 'publish' && pub.status === 'APPROVED') {
+      if (!PUBLISHER_ROLES.has(String(actor.role || ''))) throw new ClientPublicationError(403, 'PUBLISHER_NOT_AUTHORIZED', 'Actor cannot publish publication.');
+      await activeAudience(tx, pub.caseId, pub.clientId);
+      if (table.includes('document')) {
+        await assertDocumentEligibility(tx, pub, input);
+        if (String(pub.visibility || 'WORKSPACE') === 'SELECTED_PARTICIPANTS') {
+          const recipients = await many(tx, 'SELECT id FROM client_document_publication_recipients WHERE "documentPublicationId"=$1 LIMIT 1', idValue);
+          if (!recipients.length) throw new ClientPublicationError(409, 'DOCUMENT_RECIPIENT_REQUIRED', 'Selected participant publications require at least one recipient.');
+        }
+      }
+      next = 'PUBLISHED';
+    }
     if (action === 'revoke' && pub.status === 'PUBLISHED') next = 'REVOKED';
     if (action === 'supersede' && ['PUBLISHED', 'REVOKED'].includes(pub.status)) next = 'SUPERSEDED';
     if (!next) throw new ClientPublicationError(409, 'INVALID_PUBLICATION_TRANSITION', `Cannot ${action} publication in ${pub.status}.`);
@@ -676,6 +745,7 @@ type PortalContext = {
   grants: Row[];
   caseIds: string[];
   clientIds: string[];
+  workspaceMembershipIds: string[];
 };
 
 const PORTAL_ACTION_LABELS: Record<string, string> = {
@@ -751,6 +821,37 @@ function firstAuthorizedGrant(row: Row, grants: Row[], permission: string): Row 
     if (!permissions.includes(permission)) return false;
     return allowedGrantIds.size === 0 || allowedGrantIds.has(String(grant.id));
   }) || null;
+}
+
+function publicationRecipientIds(row: Row): string[] {
+  const value = row.recipientMembershipIds ?? row.recipientmembershipids;
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value === 'string' && value.startsWith('{') && value.endsWith('}')) return value.slice(1, -1).split(',').map((item) => item.trim()).filter(Boolean);
+  return [];
+}
+
+function documentGrantAllows(row: Row, grant: Row, permission: string): boolean {
+  const permissions = Array.isArray(grant.permissions) ? grant.permissions.map(String) : [];
+  if (!permissions.includes(permission)) return false;
+  if (row.workspaceId && String(grant.workspaceId || '') !== String(row.workspaceId)) return false;
+  const allowedGrantIds = new Set(audienceGrants(row).map((audienceGrant) => String(audienceGrant.id || '')).filter(Boolean));
+  return allowedGrantIds.size === 0 || allowedGrantIds.has(String(grant.id));
+}
+
+function documentVisibleForContext(row: Row, context: PortalContext, permission = 'DOCUMENT_READ'): boolean {
+  const grantAllows = context.grants.some((grant) => documentGrantAllows(row, grant, permission));
+  if (!grantAllows) return false;
+  if (String(row.visibility || 'WORKSPACE') !== 'SELECTED_PARTICIPANTS') return true;
+  const recipientIds = new Set(publicationRecipientIds(row));
+  return context.workspaceMembershipIds.some((membershipId) => recipientIds.has(String(membershipId)));
+}
+
+function firstDocumentGrant(row: Row, context: PortalContext, permission: string): Row | null {
+  if (String(row.visibility || 'WORKSPACE') === 'SELECTED_PARTICIPANTS') {
+    const recipientIds = new Set(publicationRecipientIds(row));
+    if (!context.workspaceMembershipIds.some((membershipId) => recipientIds.has(String(membershipId)))) return null;
+  }
+  return context.grants.find((grant) => documentGrantAllows(row, grant, permission)) || null;
 }
 
 function portalDate(value: unknown): string | null {
@@ -844,10 +945,11 @@ async function resolvePortalContext(actor: Actor, db: Db = defaultPrisma): Promi
     ? await one(db, 'SELECT id, "normalizedEmail" AS email, "displayName" AS name, status::text, "emailVerifiedAt" FROM client_portal_identities WHERE id=$1', actor.userId)
     : await one(db, 'SELECT id, email, name, role::text, status::text, "isActive" FROM users WHERE id=$1', actor.userId);
   if (!user) throw new ClientPublicationError(403, 'PORTAL_ACCESS_DENIED', 'Portal access is not active.');
+  let activeMemberships: Row[] = [];
   if (isCustomerIdentity) {
     if (user.status !== 'ACTIVE' || !user.emailVerifiedAt) throw new ClientPublicationError(403, user.emailVerifiedAt ? 'CLIENT_IDENTITY_NOT_ACTIVE' : 'CLIENT_EMAIL_NOT_VERIFIED', 'Portal access is not active.');
     if (!actor.workspaceId) throw new ClientPublicationError(409, 'CLIENT_WORKSPACE_SELECTION_REQUIRED', 'Select an authorized workspace.');
-    const activeMemberships = await many(db, `SELECT m.id, m."workspaceId", m.status::text
+    activeMemberships = await many(db, `SELECT m.id, m."workspaceId", m.status::text
       FROM client_portal_workspace_memberships m
       JOIN client_portal_workspaces w ON w.id=m."workspaceId"
       WHERE m."clientPortalIdentityId"=$1 AND m."workspaceId"=$2
@@ -874,6 +976,7 @@ async function resolvePortalContext(actor: Actor, db: Db = defaultPrisma): Promi
     grants: active,
     caseIds: Array.from(new Set(active.map((grant) => String(grant.caseId)))),
     clientIds: Array.from(new Set(active.map((grant) => String(grant.clientId)))),
+    workspaceMembershipIds: activeMemberships.map((membership) => String(membership.id)),
   };
 }
 
@@ -933,12 +1036,15 @@ export async function listPortalDocuments(actor: Actor, matterPublicationId?: st
     ? Array.from(matterMap.entries()).filter(([, matter]) => matter.id === matterPublicationId).map(([caseId]) => caseId)
     : context.caseIds;
   if (!caseIds.length) return { items: [] };
-  const rows = await many(db, `SELECT p.*, p.status::text, v.version AS "versionNumber", v."mimeType", v.size
+  const rows = await many(db, `SELECT p.*, p.status::text, p.visibility::text, v.version AS "versionNumber", v."mimeType", v.size,
+      coalesce(array_agg(r."workspaceMembershipId") FILTER (WHERE r."workspaceMembershipId" IS NOT NULL), ARRAY[]::text[]) AS "recipientMembershipIds"
     FROM client_document_publications p
     JOIN document_versions v ON v.id=p."documentVersionId"
+    LEFT JOIN client_document_publication_recipients r ON r."documentPublicationId"=p.id
     WHERE p.status='PUBLISHED'::"ClientPublicationStatus" AND p."caseId"=ANY($1::text[])
+    GROUP BY p.id, v.id
     ORDER BY p."publishedAt" DESC, p.id ASC`, caseIds);
-  const dto = { items: rows.filter((row) => audienceAllows(row, context.grants, 'DOCUMENT_READ')).map((row) => toPortalDocument(row, matterMap.get(String(row.caseId)))) };
+  const dto = { items: rows.filter((row) => documentVisibleForContext(row, context, 'DOCUMENT_READ')).map((row) => toPortalDocument(row, matterMap.get(String(row.caseId)))) };
   assertNoForbiddenPortalFields(dto);
   return dto;
 }
@@ -946,20 +1052,28 @@ export async function listPortalDocuments(actor: Actor, matterPublicationId?: st
 export async function getPortalDocument(actor: Actor, publicationId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
   const context = await resolvePortalContext(actor, db);
   const matterMap = await portalMatterMap(db, context);
-  const row = await one(db, `SELECT p.*, p.status::text, v.version AS "versionNumber", v."mimeType", v.size
-    FROM client_document_publications p JOIN document_versions v ON v.id=p."documentVersionId"
-    WHERE p.id=$1 AND p.status='PUBLISHED'::"ClientPublicationStatus"`, publicationId);
-  if (!row || !context.caseIds.includes(String(row.caseId)) || !audienceAllows(row, context.grants, 'DOCUMENT_READ')) throw new ClientPublicationError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Portal content is not available.');
+  const row = await one(db, `SELECT p.*, p.status::text, p.visibility::text, v.version AS "versionNumber", v."mimeType", v.size,
+      coalesce(array_agg(r."workspaceMembershipId") FILTER (WHERE r."workspaceMembershipId" IS NOT NULL), ARRAY[]::text[]) AS "recipientMembershipIds"
+    FROM client_document_publications p
+    JOIN document_versions v ON v.id=p."documentVersionId"
+    LEFT JOIN client_document_publication_recipients r ON r."documentPublicationId"=p.id
+    WHERE p.id=$1 AND p.status='PUBLISHED'::"ClientPublicationStatus"
+    GROUP BY p.id, v.id`, publicationId);
+  if (!row || !context.caseIds.includes(String(row.caseId)) || !documentVisibleForContext(row, context, 'DOCUMENT_READ')) throw new ClientPublicationError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Portal content is not available.');
   return toPortalDocument(row, matterMap.get(String(row.caseId)));
 }
 
 export async function authorizePortalDocumentDownload(actor: Actor, publicationId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
   const context = await resolvePortalContext(actor, db);
-  const row = await one(db, `SELECT p.*, p.status::text, v.version AS "versionNumber", v."originalFileName", v."mimeType", v.size
-    FROM client_document_publications p JOIN document_versions v ON v.id=p."documentVersionId"
-    WHERE p.id=$1 AND p.status='PUBLISHED'::"ClientPublicationStatus"`, publicationId);
-  if (!row || !context.caseIds.includes(String(row.caseId)) || !audienceAllows(row, context.grants, 'DOCUMENT_READ')) throw new ClientPublicationError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Portal content is not available.');
-  const grant = firstAuthorizedGrant(row, context.grants, 'DOCUMENT_DOWNLOAD');
+  const row = await one(db, `SELECT p.*, p.status::text, p.visibility::text, v.version AS "versionNumber", v."originalFileName", v."mimeType", v.size,
+      coalesce(array_agg(r."workspaceMembershipId") FILTER (WHERE r."workspaceMembershipId" IS NOT NULL), ARRAY[]::text[]) AS "recipientMembershipIds"
+    FROM client_document_publications p
+    JOIN document_versions v ON v.id=p."documentVersionId"
+    LEFT JOIN client_document_publication_recipients r ON r."documentPublicationId"=p.id
+    WHERE p.id=$1 AND p.status='PUBLISHED'::"ClientPublicationStatus"
+    GROUP BY p.id, v.id`, publicationId);
+  if (!row || !context.caseIds.includes(String(row.caseId)) || !documentVisibleForContext(row, context, 'DOCUMENT_READ')) throw new ClientPublicationError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Portal content is not available.');
+  const grant = firstDocumentGrant(row, context, 'DOCUMENT_DOWNLOAD');
   if (!grant) throw new ClientPublicationError(403, 'PORTAL_DOWNLOAD_FORBIDDEN', 'Document download is not available for this grant.');
   return {
     grantId: grant.id,

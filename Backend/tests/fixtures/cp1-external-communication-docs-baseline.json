@@ -1,0 +1,31 @@
+{
+  "slice": "CP1 external communication + participant-scoped document access",
+  "branch": "codex/cp1-external-communication-document-access",
+  "database": "isolated PostgreSQL only",
+  "scope": {
+    "implemented": [
+      "explicit ClientQuestionThreadParticipant membership authorization",
+      "participant-scoped sent message visibility and per-participant read state",
+      "portal communicationMode enforcement for EXTERNAL_ONLY workspaces",
+      "safe message attachment authorization for CLEAN client submission files",
+      "ClientDocumentPublication visibility WORKSPACE versus SELECTED_PARTICIPANTS",
+      "recipient membership validation against active workspace membership and exact active Case grant",
+      "portal document list/detail/download authorization by active grant, workspace and recipient",
+      "exact documentVersionId publication and revocation denial"
+    ],
+    "notImplemented": [
+      "full frontend interaction UI",
+      "Outlook/provider delivery integration"
+    ]
+  },
+  "negativeAuthorizationProof": [
+    "non-participant cannot read a thread",
+    "read-only participant cannot send a customer message",
+    "removed participant loses thread access",
+    "EXTERNAL_ONLY workspace blocks portal message creation",
+    "recipient from a different exact Case is rejected at document-publication draft creation",
+    "unselected active participant cannot read selected-participant document publication",
+    "revoked document publication disappears from portal list/detail/download"
+  ],
+  "ciScript": "npm run test:cp1-external-communication-docs:db"
+}
