@@ -11,8 +11,8 @@ const cards = [
   {
     mode: 'organization',
     title: 'Szervezeti ügyfél',
-    body: 'Céges ügyek, ügyenkénti kommunikáció, dokumentumok, szervezeti egységek és részletes munkakimutatások.',
-    points: ['saját és megosztott céges ügyek', 'ügyenkénti kommunikáció', 'dokumentumkezelés', 'havi munkakimutatás'],
+    body: 'Céges ügyek, ügyenkénti kommunikáció, publikált dokumentumok, szervezeti egységek és jogosultság szerinti vezetői összesítés.',
+    points: ['saját és megosztott céges ügyek', 'új megkeresések', 'ügyenkénti kommunikáció', 'publikált dokumentumok', 'szervezeti egységek', 'vezetői összesítés jogosultság szerint'],
     cta: 'Belépés szervezeti ügyfélként',
   },
   {
