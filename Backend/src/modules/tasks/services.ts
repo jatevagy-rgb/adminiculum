@@ -141,6 +141,7 @@ async function getTaskForTransition(taskId: string) {
       assignedById: true,
       stuckReason: true,
       stuckSince: true,
+      workflowInstanceId: true,
     },
   });
 }

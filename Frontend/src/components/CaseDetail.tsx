@@ -3,6 +3,7 @@
 import { useState, use, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, deleteDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, blockTask, unblockTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, getCaseWorkItems, getCaseActivity, getWorkflowAgenda, getCaseResponsibility, createDocumentSourceTask, createCommunicationSourceTask, ApiError, type DocumentItem, type CaseWorkflowSummary, type CaseWorkItemsResponse, type CaseWorkItem, type CaseActivityResponse, type CaseActivityItem, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator, type WorkflowAgendaResponse, type WorkflowDeadlineItem, type CaseResponsibilityResponse } from "@/lib/api";
+import { closeCaseLifecycle, archiveCaseLifecycle } from "@/lib/api";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
@@ -440,16 +441,27 @@ export function CaseDetail({ params }: CaseDetailProps) {
     setClientRoleInput('');
   };
 
-  // Handle case completion/archive
-  const handleCompleteCase = async () => {
+  // Handle case completion/archive via the case LIFECYCLE service (not the
+  // document/matter status machine). Close (-> FINAL) then archive (-> ARCHIVED).
+  // If open workflow tasks block the close, surface it and offer a forced close
+  // that cancels those pending tasks. Never fail silently.
+  const handleCompleteCase = async (force = false) => {
     if (!caseRecord?.id) return;
     setIsCompleting(true);
+    setCompleteError(null);
+    setCompleteBlocked(false);
     try {
-      await updateCaseStatus(caseRecord.id, 'ARCHIVED', 'Case completed and archived');
+      await closeCaseLifecycle(caseRecord.id, force);
+      await archiveCaseLifecycle(caseRecord.id);
       setCaseRecord(prev => prev ? { ...prev, status: 'ARCHIVED' } : null);
       setShowCompleteConfirm(false);
     } catch (err) {
-      console.error('Failed to complete case:', err);
+      if (err instanceof ApiError && err.status === 409 && err.code === 'CLOSURE_BLOCKED') {
+        setCompleteBlocked(true);
+        setCompleteError(err.message || 'Az ügyhöz még nyitott belső feladatok tartoznak.');
+      } else {
+        setCompleteError(err instanceof Error ? err.message : 'Az ügy archiválása nem sikerült.');
+      }
     } finally {
       setIsCompleting(false);
     }
@@ -507,6 +519,8 @@ export function CaseDetail({ params }: CaseDetailProps) {
   // Case completion state
   const [isCompleting, setIsCompleting] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+  const [completeError, setCompleteError] = useState<string | null>(null);
+  const [completeBlocked, setCompleteBlocked] = useState(false);
   const canonicalCaseId = caseRecord?.id || resolvedParams.caseId;
   const workplanTasks = tasks.filter((task) => String(task.description || '').includes('Munkaterv / review-útvonal'));
 
@@ -2502,20 +2516,39 @@ export function CaseDetail({ params }: CaseDetailProps) {
                   <strong>Megjegyzés:</strong> Ez az ügy státuszát ARCHIVÁLT-ra állítja. A dokumentumok és az ügy adatai továbbra is elérhetők.
                 </p>
               </div>
-              <div className="flex justify-end gap-3">
+              {completeError ? (
+                <div role="alert" data-testid="case-complete-error" className="mb-4 border border-[#FCA5A5] bg-[#FEF2F2] p-3">
+                  <p className="text-xs font-semibold text-[#B91C1C]">{completeError}</p>
+                  {completeBlocked ? (
+                    <p className="mt-1 text-[11px] text-[#7F1D1D]">A nyitott belső feladatok lezárásával (kihagyásával) az ügy archiválható. A folyamat-utódok nem aktiválódnak.</p>
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="flex flex-wrap justify-end gap-3">
                 <button
-                  onClick={() => setShowCompleteConfirm(false)}
+                  onClick={() => { setShowCompleteConfirm(false); setCompleteError(null); setCompleteBlocked(false); }}
                   className="px-4 py-2 text-xs font-bold uppercase tracking-widest border border-[var(--adm-border)]/20 text-[var(--adm-text)] hover:bg-[var(--adm-surface)]"
                 >
                   Mégse
                 </button>
-                <button
-                  onClick={handleCompleteCase}
-                  disabled={isCompleting}
-                  className="px-6 py-2 text-xs font-bold uppercase tracking-widest bg-[#059669] text-white hover:opacity-90 disabled:opacity-50"
-                >
-                  {isCompleting ? 'Archiválás...' : 'Ügy archiválása'}
-                </button>
+                {completeBlocked ? (
+                  <button
+                    onClick={() => void handleCompleteCase(true)}
+                    disabled={isCompleting}
+                    data-testid="case-force-archive"
+                    className="px-6 py-2 text-xs font-bold uppercase tracking-widest bg-[#B45309] text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    {isCompleting ? 'Archiválás...' : 'Feladatok lezárása és ügy archiválása'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => void handleCompleteCase(false)}
+                    disabled={isCompleting}
+                    className="px-6 py-2 text-xs font-bold uppercase tracking-widest bg-[#059669] text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    {isCompleting ? 'Archiválás...' : 'Ügy archiválása'}
+                  </button>
+                )}
               </div>
             </div>
           </div>

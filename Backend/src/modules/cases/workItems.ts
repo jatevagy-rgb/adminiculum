@@ -156,7 +156,7 @@ function isManagerRole(role?: string | null): boolean {
 }
 
 export function deriveTaskCapabilities(
-  task: { status?: string | null; assignedToId?: string | null; assignedById?: string | null; stuckReason?: string | null },
+  task: { status?: string | null; assignedToId?: string | null; assignedById?: string | null; stuckReason?: string | null; workflowInstanceId?: string | null },
   currentUserId: string,
   currentUserRole?: string | null
 ): WorkItemCapabilities {
@@ -165,12 +165,20 @@ export function deriveTaskCapabilities(
   const role = String(currentUserRole || '').toUpperCase();
   const assignedWorker = Boolean(task.assignedToId) && task.assignedToId === currentUserId;
   const taskSupervisor = Boolean(task.assignedById) && task.assignedById === currentUserId;
+  // Document-submission review requires an INDEPENDENT reviewer (not the author).
   const reviewer = task.assignedToId !== currentUserId && (taskSupervisor || REVIEWER_ROLES.has(role));
+  // A workflow ORCHESTRATION step is not a document submission: the responsible
+  // (assignee), the supervisor who assigned it, or any reviewer-role user may
+  // complete/return it directly. This gives workflow steps a full ordinary
+  // lifecycle (TODO -> IN_PROGRESS -> IN_REVIEW -> DONE) without needing a
+  // DocumentVersion / submission.
+  const isWorkflowStep = Boolean(task.workflowInstanceId);
+  const workflowReviewer = isWorkflowStep && (assignedWorker || taskSupervisor || REVIEWER_ROLES.has(role));
 
   capabilities.canStart = assignedWorker && OPEN_TASK_STATUSES.has(status);
   capabilities.canSubmitForReview = assignedWorker && status === 'IN_PROGRESS';
-  capabilities.canApprove = reviewer && REVIEW_TASK_STATUSES.has(status);
-  capabilities.canReturnForCorrection = reviewer && REVIEW_TASK_STATUSES.has(status);
+  capabilities.canApprove = (reviewer || workflowReviewer) && REVIEW_TASK_STATUSES.has(status);
+  capabilities.canReturnForCorrection = (reviewer || workflowReviewer) && REVIEW_TASK_STATUSES.has(status);
   capabilities.canComplete = capabilities.canApprove;
   capabilities.canBlock = assignedWorker && ['PENDING', 'TODO', 'IN_PROGRESS'].includes(status);
   capabilities.canUnblock = assignedWorker && status === 'BLOCKED';
@@ -179,7 +187,7 @@ export function deriveTaskCapabilities(
 }
 
 export function validateTaskTransition(
-  task: { status?: string | null; assignedToId?: string | null; assignedById?: string | null },
+  task: { status?: string | null; assignedToId?: string | null; assignedById?: string | null; workflowInstanceId?: string | null },
   action: SupportedTaskAction,
   currentUserId: string,
   currentUserRole?: string | null
