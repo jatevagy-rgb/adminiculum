@@ -624,13 +624,17 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         }
         setSelectedPortalWorkspace(context.selectedWorkspace.publicReference);
         const capabilities = context.selectedWorkspace.capabilities;
-        if (![capabilities.matters, capabilities.tasks, capabilities.documents, capabilities.messages].some(Boolean)) {
+        const isOrganization = context.selectedWorkspace.mode === 'ORGANIZATION';
+        // Organization customers surface their content via explicit Case grants and
+        // the organization home (fetched by OrganizationPortalViews), not via the
+        // workspace-level capability flags — so they must never dead-end on the
+        // empty-capabilities guard, which is only meaningful for individual surfaces.
+        if (!isOrganization && ![capabilities.matters, capabilities.tasks, capabilities.documents, capabilities.messages].some(Boolean)) {
           if (!cancelled) setState({ status: 'workspace-empty', context });
           return;
         }
         const [home, workspace] = await Promise.all([getPortalHome(), getPortalWorkspace()]);
         let detail = {};
-        const isOrganization = context.selectedWorkspace.mode === 'ORGANIZATION';
         if (view === 'matter' && resourceId && !isOrganization) detail = { matter: await getPortalMatter(resourceId) };
         if (view === 'document' && resourceId) detail = { document: await getPortalDocument(resourceId) };
         if (view === 'action' && resourceId) detail = { action: await getPortalActionRequest(resourceId) };

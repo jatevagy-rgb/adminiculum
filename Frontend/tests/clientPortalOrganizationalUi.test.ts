@@ -100,6 +100,22 @@ describe("CP1 organizational client portal UI", () => {
     assert.match(ui, /createSummaryScope/);
   });
 
+  it("never dead-ends an organization surface on the empty workspace-capability guard", () => {
+    // Regression: organization customers surface content via explicit Case grants
+    // + org home (OrganizationPortalViews), not workspace-level capability flags.
+    // The workspace-empty short-circuit must be gated on !isOrganization, otherwise
+    // a granted org customer sees only "nincs elérhető tartalom" and no cases.
+    const src = shell();
+    assert.match(
+      src,
+      /if \(!isOrganization && !\[capabilities\.matters, capabilities\.tasks, capabilities\.documents, capabilities\.messages\]\.some\(Boolean\)\)/,
+    );
+    // isOrganization must be computed before the guard, not only after it.
+    const guardIdx = src.indexOf("setState({ status: 'workspace-empty'");
+    const isOrgIdx = src.indexOf("const isOrganization = context.selectedWorkspace.mode === 'ORGANIZATION'");
+    assert.ok(isOrgIdx !== -1 && guardIdx !== -1 && isOrgIdx < guardIdx, "isOrganization must be declared before the workspace-empty guard");
+  });
+
   it("adds customer/workforce thread participant API wrappers", () => {
     const src = interactionApi();
     assert.match(src, /sendMessage/);
