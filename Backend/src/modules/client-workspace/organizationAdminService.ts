@@ -135,6 +135,33 @@ export async function createOrReactivateParticipantInTransaction(actor: Internal
 // Organizational units <-> workspace linkage
 // ---------------------------------------------------------------------------
 
+function text(value: unknown, field: string, max = 120): string {
+  const output = String(value || '').trim();
+  if (!output) throw new OrganizationAdminError(400, `${field.toUpperCase()}_REQUIRED`, `${field} is required.`);
+  if (output.length > max) throw new OrganizationAdminError(400, `${field.toUpperCase()}_TOO_LONG`, `${field} is too long.`);
+  return output;
+}
+
+export async function createWorkspaceUnit(actor: InternalActor, workspaceId: string, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
+  requireAdmin(actor);
+  const workspace = await requireOrgWorkspace(workspaceId, prisma);
+  const name = text(input.name, 'name');
+  const descriptionSafe = input.descriptionSafe == null ? null : String(input.descriptionSafe).trim().slice(0, 300) || null;
+  const existing = await prisma.clientOrganizationGroup.findFirst({
+    where: { clientId: workspace.clientId, workspaceId, name },
+    select: { id: true, name: true, status: true, descriptionSafe: true },
+  });
+  if (existing) return existing;
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.clientOrganizationGroup.create({
+      data: { clientId: workspace.clientId, workspaceId, name, descriptionSafe, createdById: actor.userId },
+      select: { id: true, name: true, status: true, descriptionSafe: true },
+    });
+    await tx.clientPortalWorkspaceEvent.create({ data: { workspaceId, actorId: actor.userId, action: 'UNIT_CREATED', metadataSafe: { groupId: row.id, name } } });
+    return row;
+  });
+}
+
 export async function linkUnitToWorkspace(actor: InternalActor, groupId: string, workspaceId: string, prisma: Prisma = defaultPrisma) {
   requireAdmin(actor);
   const workspace = await requireOrgWorkspace(workspaceId, prisma);

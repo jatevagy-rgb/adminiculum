@@ -32,6 +32,7 @@ import {
   assignUnitMembership,
   createParticipant,
   createSummaryScope,
+  createWorkspaceUnit,
   linkUnitToWorkspace,
   listParticipants,
   listSummaryScopes,
@@ -245,6 +246,10 @@ clientIdentityRouter.post('/admin/intakes/:intakeId/close', async (req, res) => 
 
 clientIdentityRouter.get('/admin/workspaces/:workspaceId/units', async (req, res) => {
   try { res.json(await listWorkspaceUnits(internalActor(req), String(req.params.workspaceId))); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/workspaces/:workspaceId/units', async (req, res) => {
+  try { res.status(201).json(await createWorkspaceUnit(internalActor(req), String(req.params.workspaceId), req.body || {})); }
   catch (error) { fail(res, error); }
 });
 clientIdentityRouter.post('/admin/workspaces/:workspaceId/units/:groupId/link', async (req, res) => {

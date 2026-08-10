@@ -6,10 +6,9 @@ import { type CaseListItem, type Client } from "@/lib/api";
 import {
   assignUnitMembership,
   createCaseParticipant,
-  createOrganizationGroup,
+  createWorkspaceUnit,
   createSummaryScope,
   GRANT_PERMISSIONS,
-  linkWorkspaceUnit,
   listCaseParticipants,
   listSummaryScopes,
   listUnitMemberships,
@@ -177,8 +176,7 @@ export function OrganizationAdminControlPlane({ clients, cases, memberships, wor
           <input className={input} value={newUnitName} onChange={(event) => setNewUnitName(event.target.value)} placeholder="pl. HR, Compliance" />
           <AdminButton variant="gold" disabled={busy || !workspace || !newUnitName.trim()} onClick={() => run(async () => {
             if (!workspace) return;
-            const created = await createOrganizationGroup({ clientId: workspace.clientId, name: newUnitName.trim() });
-            await linkWorkspaceUnit(workspace.id, created.id);
+            await createWorkspaceUnit(workspace.id, { name: newUnitName.trim() });
             setNewUnitName("");
             await reloadOrgData();
           }, "Szervezeti egység létrehozva és ügyfélfelülethez kapcsolva.")}>Egység létrehozása</AdminButton>

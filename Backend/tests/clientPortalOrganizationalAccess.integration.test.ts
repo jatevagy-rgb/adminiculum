@@ -4,7 +4,7 @@ import { listOrganizationalCases, getOrganizationalCaseDetail } from '../src/mod
 import { resolveParticipantAccess } from '../src/modules/client-workspace/organizationalAccessPolicy';
 import { resolveMemberUnits } from '../src/modules/client-workspace/organizationUnitService';
 import { unitSummary, organizationSummary, mayViewCaseContent } from '../src/modules/client-workspace/leadershipSummaryService';
-import { assignUnitMembership, createParticipant, revokeParticipant, createSummaryScope, revokeUnitMembership } from '../src/modules/client-workspace/organizationAdminService';
+import { assignUnitMembership, createParticipant, revokeParticipant, createSummaryScope, revokeUnitMembership, createWorkspaceUnit } from '../src/modules/client-workspace/organizationAdminService';
 
 const databaseUrl = process.env.CLIENT_INTERACTION_TEST_DATABASE_URL || process.env.CLIENT_IDENTITY_TEST_DATABASE_URL;
 const d = databaseUrl ? describe : describe.skip;
@@ -147,6 +147,18 @@ d('CP1 organizational access core (PostgreSQL)', () => {
     await revokeUnitMembership(internalActor, created.id, db);
     const afterRemoval = await resolveMemberUnits(identity.ferenc, orgWs, db);
     expect(afterRemoval.map((unit) => unit.name)).toEqual(['Finance']);
+  });
+
+  it('workforce can create same-named units independently per organization workspace', async () => {
+    const secondWorkspace = crypto.randomUUID();
+    await db.clientPortalWorkspace.create({ data: { id: secondWorkspace, clientId: client, name: 'CP1 second organization surface', mode: 'ORGANIZATION', publicReference: `org-${secondWorkspace}`, createdById: admin } });
+    const duplicateHr = await createWorkspaceUnit(internalActor, secondWorkspace, { name: 'HR' }, db);
+    expect(duplicateHr.name).toBe('HR');
+    expect(duplicateHr.id).not.toBe(hrGroup);
+    const sameWorkspaceRetry = await createWorkspaceUnit(internalActor, secondWorkspace, { name: 'HR' }, db);
+    expect(sameWorkspaceRetry.id).toBe(duplicateHr.id);
+    const units = await db.clientOrganizationGroup.findMany({ where: { clientId: client, name: 'HR' }, select: { workspaceId: true } });
+    expect(units.map((unit) => unit.workspaceId).sort()).toEqual([orgWs, secondWorkspace].sort());
   });
 
   it('unit assignment rejects wrong workspace, wrong Client, archived unit and suspended workspace membership', async () => {

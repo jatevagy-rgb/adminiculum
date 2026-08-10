@@ -2431,7 +2431,7 @@ model ClientOrganizationGroup {
   updatedAt       DateTime                      @updatedAt
   revision        Int                           @default(0)
 
-  @@unique([clientId, name])
+  @@unique([clientId, workspaceId, name])
   @@index([clientId, status])
   @@index([workspaceId, status])
   @@map("client_organization_groups")

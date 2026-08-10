@@ -287,6 +287,10 @@ export async function createOrganizationGroup(payload: { clientId: string; name:
   return fetchApi<OrganizationUnitAdminDTO>('/client-identity/admin/groups', { method: 'POST', body: JSON.stringify(payload) });
 }
 
+export async function createWorkspaceUnit(workspaceId: string, payload: { name: string; descriptionSafe?: string }) {
+  return fetchApi<OrganizationUnitAdminDTO>(`/client-identity/admin/workspaces/${encodeURIComponent(workspaceId)}/units`, { method: 'POST', body: JSON.stringify(payload) });
+}
+
 export async function listWorkspaceUnits(workspaceId: string) {
   return fetchApi<{ items: OrganizationUnitAdminDTO[] }>(`/client-identity/admin/workspaces/${encodeURIComponent(workspaceId)}/units`);
 }
