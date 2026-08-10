@@ -5,11 +5,15 @@ const os = require('node:os');
 const path = require('node:path');
 const { Client } = require('pg');
 
-const migrationName = '20260807120000_workflow_templates';
 const jobDirectory = __dirname;
 const appRoot = process.env.MIGRATION_WEBJOB_ROOT || path.resolve(jobDirectory, '../../../..');
 const schemaPath = process.env.MIGRATION_WEBJOB_SCHEMA_PATH || path.join(appRoot, 'prisma', 'schema.prisma');
 const prismaBin = process.env.MIGRATION_WEBJOB_PRISMA_BIN || path.join(appRoot, 'node_modules', '.bin', 'prisma');
+const migrationName = process.env.MIGRATION_WEBJOB_TARGET_MIGRATION || fs.readdirSync(path.join(appRoot, 'prisma', 'migrations'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && /^\d{14}_/.test(entry.name))
+  .map((entry) => entry.name)
+  .sort()
+  .at(-1);
 const expectedSite = process.env.MIGRATION_WEBJOB_EXPECTED_SITE || 'adminiculumbackend-b1-01';
 const lockDirectory = process.env.WEBJOBS_DATA_PATH || process.env.HOME || os.tmpdir();
 const lockPath = process.env.MIGRATION_WEBJOB_LOCK_PATH || path.join(lockDirectory, 'adminiculum-db-migrate.lock');
@@ -105,7 +109,9 @@ async function readState(client) {
              SELECT 1 FROM information_schema.columns
               WHERE table_schema = 'public' AND table_name = 'client_matter_publications' AND column_name = 'milestoneDraftSnapshot'
            ) AS publication_milestone_draft,
-           to_regclass('public.workflow_templates') IS NOT NULL AS workflow_templates_table`,
+           to_regclass('public.workflow_templates') IS NOT NULL AS workflow_templates_table,
+           to_regclass('public."client_organization_groups_clientId_workspaceId_name_key"') IS NOT NULL AS workspace_scoped_org_unit_index,
+           to_regclass('public."client_organization_groups_clientId_name_key"') IS NULL AS legacy_org_unit_index_removed`,
   );
   const row = migration.rows[0] || null;
   const schemaPresent = schemaCheck.rows[0]?.intake_table === true
@@ -123,7 +129,9 @@ async function readState(client) {
       && schemaCheck.rows[0]?.task_workflow_dependencies === true
       && schemaCheck.rows[0]?.revision_milestones_snapshot === true
       && schemaCheck.rows[0]?.publication_milestone_draft === true
-      && schemaCheck.rows[0]?.workflow_templates_table === true;
+      && schemaCheck.rows[0]?.workflow_templates_table === true
+      && schemaCheck.rows[0]?.workspace_scoped_org_unit_index === true
+      && schemaCheck.rows[0]?.legacy_org_unit_index_removed === true;
   const verified = Boolean(
     row && row.finished_at && !row.rolled_back_at && failed.rows[0].count === 0 && schemaPresent,
   );
