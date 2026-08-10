@@ -146,11 +146,15 @@ export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}):
     console.log(`[API] ${fetchOptions.method || 'GET'} ${url}`);
   }
 
+  const method = (fetchOptions.method || 'GET').toUpperCase();
+  const cacheMode: RequestCache | undefined = method === 'GET' ? 'no-store' : undefined;
+
   let response: Response;
   try {
     response = await fetch(url, {
       ...fetchOptions,
       headers,
+      cache: cacheMode,
     });
   } catch (networkError) {
     console.error(`[API] Network error calling ${url}:`, networkError);
@@ -199,7 +203,7 @@ export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}):
   }
 
   // Some endpoints legitimately return empty body (e.g. 204 No Content)
-  if (response.status === 204 || response.status === 205 || (fetchOptions.method || 'GET').toUpperCase() === 'HEAD') {
+  if (response.status === 204 || response.status === 205 || method === 'HEAD') {
     return undefined as T;
   }
 
