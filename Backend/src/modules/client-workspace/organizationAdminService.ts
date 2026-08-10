@@ -8,6 +8,7 @@
  * automatically publishes a Case or documents or grants broader access than
  * requested. Workforce authorization is ADMIN/PARTNER only.
  */
+import crypto from 'crypto';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 
 type Prisma = typeof defaultPrisma;
@@ -15,6 +16,7 @@ type InternalActor = { userId: string; role?: string | null };
 
 const ADMIN_ROLES = new Set(['ADMIN', 'PARTNER']);
 const PARTICIPANT_ROLES = new Set(['REQUESTER', 'CLIENT_OWNER', 'PARTICIPANT', 'OBSERVER']);
+const UNIT_ROLES = new Set(['MEMBER', 'CONTACT', 'APPROVER', 'MANAGER']);
 const ALLOWED_PERMISSIONS = new Set([
   'MATTER_READ', 'DOCUMENT_READ', 'DOCUMENT_DOWNLOAD', 'ACTION_REQUEST_READ', 'ACTION_REQUEST_COMPLETE', 'UPDATE_READ',
   'MESSAGE_READ', 'MESSAGE_SEND', 'DOCUMENT_UPLOAD', 'CLIENT_TIMELINE_READ', 'HOURS_READ', 'BILLING_STATEMENT_READ',
@@ -167,6 +169,125 @@ export async function listWorkspaceUnits(actor: InternalActor, workspaceId: stri
   await requireOrgWorkspace(workspaceId, prisma);
   const groups = await prisma.clientOrganizationGroup.findMany({ where: { workspaceId }, orderBy: { name: 'asc' }, select: { id: true, name: true, status: true, descriptionSafe: true } });
   return { items: groups };
+}
+
+// ---------------------------------------------------------------------------
+// Organization-unit memberships
+// ---------------------------------------------------------------------------
+
+function toUnitMembershipDto(row: any, unitNames: Map<string, string>, identity: any) {
+  return {
+    id: row.id,
+    clientPortalIdentityId: row.clientPortalIdentityId,
+    groupId: row.groupId,
+    organizationGroupName: row.groupId ? unitNames.get(row.groupId) || null : null,
+    unitRole: String(row.unitRole || 'MEMBER'),
+    status: String(row.status || 'ACTIVE'),
+    revision: row.revision,
+    identityEmail: identity?.normalizedEmail || null,
+    identityDisplayName: identity?.displayName || null,
+    approvedAt: row.approvedAt,
+    suspendedAt: row.suspendedAt,
+    revokedAt: row.revokedAt,
+  };
+}
+
+async function requireWorkspaceMembership(workspaceId: string, workspaceClientId: string, workspaceMembershipId: string, prisma: Prisma) {
+  const membership = await prisma.clientPortalWorkspaceMembership.findUnique({
+    where: { id: workspaceMembershipId },
+    select: { id: true, clientPortalIdentityId: true, workspaceId: true, status: true, expiresAt: true },
+  });
+  if (!membership) throw new OrganizationAdminError(404, 'WORKSPACE_MEMBERSHIP_NOT_FOUND', 'Workspace membership not found.');
+  if (membership.workspaceId !== workspaceId) throw new OrganizationAdminError(400, 'WORKSPACE_MEMBERSHIP_MISMATCH', 'Member belongs to another customer surface.');
+  if (String(membership.status) !== 'ACTIVE' || (membership.expiresAt && membership.expiresAt <= new Date())) {
+    throw new OrganizationAdminError(409, 'WORKSPACE_MEMBERSHIP_NOT_ACTIVE', 'Only an active workspace member can be assigned to an organizational unit.');
+  }
+  const identity = await prisma.clientPortalIdentity.findUnique({
+    where: { id: membership.clientPortalIdentityId },
+    select: { id: true, normalizedEmail: true, displayName: true, status: true },
+  });
+  if (!identity || String(identity.status) !== 'ACTIVE') throw new OrganizationAdminError(409, 'IDENTITY_NOT_ACTIVE', 'Only an active portal identity can be assigned to an organizational unit.');
+  const orgMembership = await prisma.clientOrganizationMembership.findFirst({
+    where: { clientPortalIdentityId: identity.id, clientId: workspaceClientId },
+    select: { id: true },
+  });
+  if (!orgMembership) throw new OrganizationAdminError(409, 'CLIENT_ORG_MEMBERSHIP_REQUIRED', 'The user must belong to this Client before unit assignment.');
+  return { membership, identity };
+}
+
+export async function listUnitMemberships(actor: InternalActor, workspaceId: string, workspaceMembershipId: string, prisma: Prisma = defaultPrisma) {
+  requireAdmin(actor);
+  const workspace = await requireOrgWorkspace(workspaceId, prisma);
+  const { membership, identity } = await requireWorkspaceMembership(workspaceId, workspace.clientId, workspaceMembershipId, prisma);
+  const rows = await prisma.clientOrganizationMembership.findMany({
+    where: { clientPortalIdentityId: membership.clientPortalIdentityId, clientId: workspace.clientId, groupId: { not: null } },
+    orderBy: { updatedAt: 'desc' },
+  });
+  const groupIds = rows.map((row) => row.groupId).filter((value): value is string => Boolean(value));
+  const groups = await prisma.clientOrganizationGroup.findMany({ where: { id: { in: groupIds }, workspaceId, clientId: workspace.clientId }, select: { id: true, name: true } });
+  const unitNames = new Map(groups.map((group) => [group.id, group.name]));
+  return { items: rows.filter((row) => row.groupId && unitNames.has(row.groupId)).map((row) => toUnitMembershipDto(row, unitNames, identity)) };
+}
+
+export async function assignUnitMembership(actor: InternalActor, workspaceId: string, workspaceMembershipId: string, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
+  requireAdmin(actor);
+  const workspace = await requireOrgWorkspace(workspaceId, prisma);
+  const { membership, identity } = await requireWorkspaceMembership(workspaceId, workspace.clientId, workspaceMembershipId, prisma);
+  const groupId = String(input.groupId || '').trim();
+  const unitRole = enumValue(input.unitRole || 'MEMBER', UNIT_ROLES, 'INVALID_UNIT_ROLE');
+  if (!groupId) throw new OrganizationAdminError(400, 'UNIT_REQUIRED', 'Organization unit is required.');
+  const group = await prisma.clientOrganizationGroup.findFirst({ where: { id: groupId, workspaceId, clientId: workspace.clientId }, select: { id: true, name: true, status: true } });
+  if (!group) throw new OrganizationAdminError(404, 'UNIT_NOT_FOUND', 'Organization unit is not available for this customer surface.');
+  if (String(group.status) !== 'ACTIVE') throw new OrganizationAdminError(409, 'UNIT_ARCHIVED_OR_INACTIVE', 'Inactive organization units cannot receive members.');
+
+  const row = await prisma.$transaction(async (tx) => {
+    const existing = await tx.clientOrganizationMembership.findFirst({
+      where: { clientPortalIdentityId: membership.clientPortalIdentityId, clientId: workspace.clientId, groupId },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (existing) {
+      const updated = await tx.clientOrganizationMembership.update({ where: { id: existing.id }, data: {
+        unitRole: unitRole as never,
+        status: 'ACTIVE',
+        suspendedAt: null,
+        suspendedById: null,
+        revokedAt: null,
+        revokedById: null,
+        revision: { increment: 1 },
+      } });
+      await tx.clientPortalWorkspaceEvent.create({ data: { workspaceId, membershipId: membership.id, actorId: actor.userId, action: 'UNIT_MEMBERSHIP_ACTIVATED', fromStatus: String(existing.status), toStatus: 'ACTIVE', metadataSafe: { groupId, unitRole } } });
+      return updated;
+    }
+    const created = await tx.clientOrganizationMembership.create({ data: {
+      clientPortalIdentityId: membership.clientPortalIdentityId,
+      clientId: workspace.clientId,
+      groupId,
+      unitRole: unitRole as never,
+      status: 'ACTIVE',
+      approvedFromRequestId: `admin-unit-${crypto.randomUUID()}`,
+      approvedById: actor.userId,
+      approvedAt: new Date(),
+    } });
+    await tx.clientPortalWorkspaceEvent.create({ data: { workspaceId, membershipId: membership.id, actorId: actor.userId, action: 'UNIT_MEMBERSHIP_CREATED', toStatus: 'ACTIVE', metadataSafe: { groupId, unitRole } } });
+    return created;
+  });
+  return toUnitMembershipDto(row, new Map([[group.id, group.name]]), identity);
+}
+
+export async function revokeUnitMembership(actor: InternalActor, unitMembershipId: string, prisma: Prisma = defaultPrisma) {
+  requireAdmin(actor);
+  const existing = await prisma.clientOrganizationMembership.findUnique({ where: { id: unitMembershipId } });
+  if (!existing) throw new OrganizationAdminError(404, 'UNIT_MEMBERSHIP_NOT_FOUND', 'Unit membership not found.');
+  if (existing.status === 'REVOKED') return { id: existing.id, status: 'REVOKED', revision: existing.revision };
+  const group = existing.groupId ? await prisma.clientOrganizationGroup.findUnique({ where: { id: existing.groupId }, select: { workspaceId: true } }) : null;
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.clientOrganizationMembership.update({ where: { id: unitMembershipId }, data: { status: 'REVOKED', revokedAt: new Date(), revokedById: actor.userId, revision: { increment: 1 } } });
+    if (group?.workspaceId) {
+      await tx.clientPortalWorkspaceEvent.create({ data: { workspaceId: group.workspaceId, actorId: actor.userId, action: 'UNIT_MEMBERSHIP_REVOKED', fromStatus: String(existing.status), toStatus: 'REVOKED', metadataSafe: { groupId: existing.groupId, unitMembershipId } } });
+    }
+    return row;
+  });
+  return { id: updated.id, status: 'REVOKED', revision: updated.revision };
 }
 
 // ---------------------------------------------------------------------------

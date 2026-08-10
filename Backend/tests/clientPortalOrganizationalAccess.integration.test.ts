@@ -4,7 +4,7 @@ import { listOrganizationalCases, getOrganizationalCaseDetail } from '../src/mod
 import { resolveParticipantAccess } from '../src/modules/client-workspace/organizationalAccessPolicy';
 import { resolveMemberUnits } from '../src/modules/client-workspace/organizationUnitService';
 import { unitSummary, organizationSummary, mayViewCaseContent } from '../src/modules/client-workspace/leadershipSummaryService';
-import { createParticipant, revokeParticipant, createSummaryScope } from '../src/modules/client-workspace/organizationAdminService';
+import { assignUnitMembership, createParticipant, revokeParticipant, createSummaryScope, revokeUnitMembership } from '../src/modules/client-workspace/organizationAdminService';
 
 const databaseUrl = process.env.CLIENT_INTERACTION_TEST_DATABASE_URL || process.env.CLIENT_IDENTITY_TEST_DATABASE_URL;
 const d = databaseUrl ? describe : describe.skip;
@@ -65,6 +65,7 @@ d('CP1 organizational access core (PostgreSQL)', () => {
     await db.clientOrganizationGroup.create({ data: { id: finGroup, clientId: client, workspaceId: orgWs, name: 'Finance', createdById: admin } });
 
     for (const key of ['alexandra', 'bela', 'ferenc', 'manager', 'exec']) await makeIdentity(key);
+    await makeIdentity('suspended', true);
     await addUnitMembership('alexandra', hrGroup);
     await addUnitMembership('bela', hrGroup);
     await addUnitMembership('ferenc', finGroup);
@@ -129,6 +130,38 @@ d('CP1 organizational access core (PostgreSQL)', () => {
     expect(units.map((u) => u.name)).toEqual(['Finance']);
     const alexUnits = await resolveMemberUnits(identity.alexandra, orgWs, db);
     expect(alexUnits.map((u) => u.name)).toEqual(['HR']);
+  });
+
+  it('workforce can assign and remove multiple organization-unit memberships without granting Case access', async () => {
+    const before = await listOrganizationalCases(identity.ferenc, orgWs, {}, db);
+    expect(before.items.map((row) => row.publicTitle)).toEqual(['Ügy C']);
+    const created = await assignUnitMembership(internalActor, orgWs, membership.ferenc, { groupId: hrGroup, unitRole: 'MANAGER' }, db);
+    expect(created.organizationGroupName).toBe('HR');
+    expect(created.unitRole).toBe('MANAGER');
+    expect(created.status).toBe('ACTIVE');
+    const units = await resolveMemberUnits(identity.ferenc, orgWs, db);
+    expect(units.map((unit) => unit.name).sort()).toEqual(['Finance', 'HR']);
+    const stillOnlyGranted = await listOrganizationalCases(identity.ferenc, orgWs, {}, db);
+    expect(stillOnlyGranted.items.map((row) => row.publicTitle)).toEqual(['Ügy C']);
+    await expect(resolveParticipantAccess(identity.ferenc, kase.A, orgWs, db)).rejects.toMatchObject({ code: 'CLIENT_PORTAL_NO_ACTIVE_GRANT' });
+    await revokeUnitMembership(internalActor, created.id, db);
+    const afterRemoval = await resolveMemberUnits(identity.ferenc, orgWs, db);
+    expect(afterRemoval.map((unit) => unit.name)).toEqual(['Finance']);
+  });
+
+  it('unit assignment rejects wrong workspace, wrong Client, archived unit and suspended workspace membership', async () => {
+    const otherClient = crypto.randomUUID();
+    const otherWorkspace = crypto.randomUUID();
+    const otherGroup = crypto.randomUUID();
+    await db.client.create({ data: { id: otherClient, name: 'Other Client' } });
+    await db.clientPortalWorkspace.create({ data: { id: otherWorkspace, clientId: otherClient, name: 'Other org', mode: 'ORGANIZATION', publicReference: `org-${otherWorkspace}`, createdById: admin } });
+    await db.clientOrganizationGroup.create({ data: { id: otherGroup, clientId: otherClient, workspaceId: otherWorkspace, name: 'Other HR', createdById: admin } });
+    await expect(assignUnitMembership(internalActor, orgWs, membership.alexandra, { groupId: otherGroup, unitRole: 'MEMBER' }, db)).rejects.toMatchObject({ code: 'UNIT_NOT_FOUND' });
+    await expect(assignUnitMembership(internalActor, otherWorkspace, membership.alexandra, { groupId: otherGroup, unitRole: 'MEMBER' }, db)).rejects.toMatchObject({ code: 'WORKSPACE_MEMBERSHIP_MISMATCH' });
+    await db.clientOrganizationGroup.update({ where: { id: finGroup }, data: { status: 'INACTIVE' } });
+    await expect(assignUnitMembership(internalActor, orgWs, membership.alexandra, { groupId: finGroup, unitRole: 'MEMBER' }, db)).rejects.toMatchObject({ code: 'UNIT_ARCHIVED_OR_INACTIVE' });
+    await db.clientOrganizationGroup.update({ where: { id: finGroup }, data: { status: 'ACTIVE' } });
+    await expect(assignUnitMembership(internalActor, orgWs, membership.suspended, { groupId: hrGroup, unitRole: 'MEMBER' }, db)).rejects.toMatchObject({ code: 'WORKSPACE_MEMBERSHIP_NOT_ACTIVE' });
   });
 
   it('17-19: HR manager gets aggregate counts but no case content', async () => {

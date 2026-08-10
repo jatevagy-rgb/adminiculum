@@ -29,13 +29,16 @@ import {
   updateWorkspace,
 } from '../client-workspace/workspaceService';
 import {
+  assignUnitMembership,
   createParticipant,
   createSummaryScope,
   linkUnitToWorkspace,
   listParticipants,
   listSummaryScopes,
+  listUnitMemberships,
   listWorkspaceUnits,
   revokeParticipant,
+  revokeUnitMembership,
   transitionSummaryScope,
   unlinkUnitFromWorkspace,
   updateParticipant,
@@ -250,6 +253,18 @@ clientIdentityRouter.post('/admin/workspaces/:workspaceId/units/:groupId/link', 
 });
 clientIdentityRouter.post('/admin/units/:groupId/unlink', async (req, res) => {
   try { res.json(await unlinkUnitFromWorkspace(internalActor(req), String(req.params.groupId))); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.get('/admin/workspaces/:workspaceId/members/:workspaceMembershipId/unit-memberships', async (req, res) => {
+  try { res.json(await listUnitMemberships(internalActor(req), String(req.params.workspaceId), String(req.params.workspaceMembershipId))); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/workspaces/:workspaceId/members/:workspaceMembershipId/unit-memberships', async (req, res) => {
+  try { res.status(201).json(await assignUnitMembership(internalActor(req), String(req.params.workspaceId), String(req.params.workspaceMembershipId), req.body || {})); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.post('/admin/unit-memberships/:unitMembershipId/revoke', async (req, res) => {
+  try { res.json(await revokeUnitMembership(internalActor(req), String(req.params.unitMembershipId))); }
   catch (error) { fail(res, error); }
 });
 

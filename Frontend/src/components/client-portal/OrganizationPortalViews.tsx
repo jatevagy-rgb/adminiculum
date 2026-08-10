@@ -248,7 +248,20 @@ function NewIntake({ units, onCreated }: { units: PortalOrganizationUnit[]; onCr
   const [requestedDeadline, setRequestedDeadline] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const activeUnits = useMemo(() => units, [units]);
+  useEffect(() => {
+    if (activeUnits.length === 1 && groupId !== activeUnits[0].id) setGroupId(activeUnits[0].id);
+    if (activeUnits.length === 0 && groupId) setGroupId("");
+  }, [activeUnits, groupId]);
   const submit = async () => {
+    if (!activeUnits.length) {
+      setMessage("Ehhez a művelethez még nincs szervezeti egységhez rendelve. A megkeresés elküldéséhez előbb szervezeti egységhez kell tartoznia. Kérjük, jelezze kapcsolattartójának.");
+      return;
+    }
+    if (!groupId) {
+      setMessage("Válassza ki, melyik szervezeti egység nevében küldi be a megkeresést.");
+      return;
+    }
     setBusy(true);
     setMessage(null);
     try {
@@ -270,9 +283,14 @@ function NewIntake({ units, onCreated }: { units: PortalOrganizationUnit[]; onCr
       <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#b95e4b]">Új megkeresés</p>
       <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950">Szervezeti megkeresés indítása</h1>
       <p className="mt-2 text-sm text-stone-600">A megkeresés elküldése még nem hoz létre új ügyet. Az iroda először áttekinti, majd visszajelez.</p>
+      {!activeUnits.length ? (
+        <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950" role="status">
+          Ehhez a művelethez még nincs szervezeti egységhez rendelve. A megkeresés elküldéséhez előbb szervezeti egységhez kell tartoznia. Kérjük, jelezze kapcsolattartójának.
+        </div>
+      ) : null}
       <div className="mt-5 grid gap-3">
         <label className="grid gap-1 text-sm font-semibold">Tárgy<input className={input} value={subject} onChange={(event) => setSubject(event.target.value)} /></label>
-        <label className="grid gap-1 text-sm font-semibold">Szervezeti egység<select className={input} value={groupId} onChange={(event) => setGroupId(event.target.value)}><option value="">Nincs megadva</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
+        <label className="grid gap-1 text-sm font-semibold">Szervezeti egység<select className={input} value={groupId} onChange={(event) => setGroupId(event.target.value)} disabled={activeUnits.length <= 1}>{activeUnits.length === 1 ? null : <option value="">— válasszon szervezeti egységet —</option>}{activeUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
         <label className="grid gap-1 text-sm font-semibold">Leírás<textarea className={input} value={descriptionSafe} onChange={(event) => setDescriptionSafe(event.target.value)} rows={5} /></label>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="grid gap-1 text-sm font-semibold">Sürgősség<select className={input} value={urgency} onChange={(event) => setUrgency(event.target.value)}><option value="NORMAL">Normál</option><option value="URGENT">Sürgős</option></select></label>
@@ -280,7 +298,7 @@ function NewIntake({ units, onCreated }: { units: PortalOrganizationUnit[]; onCr
         </div>
       </div>
       {message ? <p className="mt-4 rounded-2xl bg-stone-100 p-3 text-sm text-stone-700" role="status">{message}</p> : null}
-      <button className="mt-4 rounded-full bg-stone-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50" disabled={busy || !subject.trim() || !descriptionSafe.trim()} onClick={() => void submit()}>Megkeresés beküldése</button>
+      <button className="mt-4 rounded-full bg-stone-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50" disabled={busy || !activeUnits.length || !subject.trim() || !descriptionSafe.trim()} onClick={() => void submit()}>Megkeresés beküldése</button>
     </section>
   );
 }
