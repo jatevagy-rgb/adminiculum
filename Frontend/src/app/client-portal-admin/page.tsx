@@ -329,10 +329,59 @@ function GrantForm({ membership, cases, busy, onGrant }: {
   );
 }
 
-function WorkspaceGrantForm({ workspace, membership, cases, busy, onGrant }: { workspace: AdminWorkspaceDTO; membership: AdminWorkspaceDTO['memberships'][number]; cases: CaseListItem[]; busy: boolean; onGrant: (caseId: string) => void }) {
+function WorkspaceGrantForm({ workspace, membership, cases, busy, onGrant }: {
+  workspace: AdminWorkspaceDTO;
+  membership: AdminWorkspaceDTO['memberships'][number];
+  cases: CaseListItem[];
+  busy: boolean;
+  onGrant: (payload: { caseId: string; permissions: string[]; validUntil: string | null }) => void;
+}) {
   const [caseId, setCaseId] = useState('');
+  const [permissions, setPermissions] = useState<string[]>(DEFAULT_PERMISSIONS);
+  const [validUntil, setValidUntil] = useState('');
   const available = cases.filter((item) => item.clientId === workspace.clientId);
-  return <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-[var(--adm-border)] pt-3"><label className="grid min-w-64 gap-1 text-xs font-semibold text-[var(--adm-text-muted)]"><span>Explicit ügyhozzáférés</span><select value={caseId} onChange={(event) => setCaseId(event.target.value)} className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm"><option value="">— Válasszon ügyet —</option>{available.map((item) => <option key={item.id} value={item.id}>{item.caseNumber} · {item.title}</option>)}</select></label><AdminButton size="sm" variant="gold" disabled={busy || !caseId || membership.status !== 'ACTIVE'} onClick={() => onGrant(caseId)}>Grant létrehozása</AdminButton></div>;
+  const togglePermission = (permission: string) => {
+    setPermissions((current) => current.includes(permission)
+      ? current.filter((item) => item !== permission)
+      : [...current, permission]);
+  };
+  return (
+    <div className="mt-3 grid gap-3 border-t border-[var(--adm-border)] pt-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="grid min-w-64 gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
+          <span>Explicit ügyhozzáférés</span>
+          <select value={caseId} onChange={(event) => setCaseId(event.target.value)} className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm">
+            <option value="">— Válasszon ügyet —</option>
+            {available.map((item) => <option key={item.id} value={item.id}>{item.caseNumber} · {item.title}</option>)}
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
+          <span>Érvényesség vége (opcionális)</span>
+          <input type="date" value={validUntil} onChange={(event) => setValidUntil(event.target.value)} className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm" />
+        </label>
+      </div>
+      <div className="flex flex-wrap gap-2 text-xs" aria-label="Grant jogosultságok">
+        {GRANT_PERMISSIONS.map((permission) => (
+          <button
+            type="button"
+            key={permission}
+            onClick={() => togglePermission(permission)}
+            className={`rounded-full border px-3 py-1 ${permissions.includes(permission) ? "border-[var(--adm-gold)] bg-[var(--adm-gold-soft,#f3ead2)] text-[var(--adm-text)]" : "border-[var(--adm-border)] text-[var(--adm-text-muted)]"}`}
+          >
+            {permission}
+          </button>
+        ))}
+      </div>
+      <AdminButton
+        size="sm"
+        variant="gold"
+        disabled={busy || !caseId || !permissions.length || membership.status !== 'ACTIVE'}
+        onClick={() => onGrant({ caseId, permissions, validUntil: validUntil || null })}
+      >
+        Grant létrehozása
+      </AdminButton>
+    </div>
+  );
 }
 
 function WorkspaceSettings({ workspace, busy, run }: { workspace: AdminWorkspaceDTO; busy: boolean; run: (fn: () => Promise<void>, okText: string) => Promise<void> }) {
@@ -429,7 +478,7 @@ function WorkspaceAdministration({ workspaces, clients, cases, busy, run }: { wo
       {workspace.mode === 'CASE_RELAY' && workspace.connectedSystemState !== 'READY' ? <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Nincs automatikus szinkronizáció. A kapcsolt rendszer konfigurációja még nem kész.</p> : null}
       <WorkspaceSettings workspace={workspace} busy={busy} run={run} />
       <InvitationForm workspace={workspace} busy={busy} run={run} />
-      <div className="mt-3 grid gap-2">{workspace.memberships.map((membership) => <div key={membership.id} className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><span>Identity: {membership.clientPortalIdentityId.slice(0, 8)} · {membership.role}</span><div className="flex gap-2"><AdminBadge tone={membership.status === 'ACTIVE' ? 'green' : 'neutral'}>{membership.status}</AdminBadge>{membership.status === 'PENDING_APPROVAL' ? <AdminButton size="sm" variant="gold" disabled={busy} onClick={() => run(() => transitionAdminWorkspaceMembership(membership.id, 'approve', membership.revision).then(() => undefined), 'Munkatér-tagság jóváhagyva; grant nem jött létre.')}>Jóváhagyás</AdminButton> : null}{membership.status === 'ACTIVE' ? <AdminButton size="sm" variant="muted" disabled={busy} onClick={() => run(() => transitionAdminWorkspaceMembership(membership.id, 'suspend', membership.revision).then(() => undefined), 'Munkatér-tagság felfüggesztve.')}>Felfüggesztés</AdminButton> : null}<AdminButton size="sm" variant="muted" disabled={busy || membership.status === 'REVOKED'} onClick={() => run(() => transitionAdminWorkspaceMembership(membership.id, 'revoke', membership.revision).then(() => undefined), 'Munkatér-tagság visszavonva.')}>Visszavonás</AdminButton></div></div>{membership.status === 'ACTIVE' ? <WorkspaceGrantForm workspace={workspace} membership={membership} cases={cases} busy={busy} onGrant={(caseId) => run(() => createIdentityGrant({ workspaceMembershipId: membership.id, caseId, permissions: DEFAULT_PERMISSIONS }).then(() => undefined), 'Explicit ügyhozzáférés létrehozva.')}/> : null}</div>)}</div>
+      <div className="mt-3 grid gap-2">{workspace.memberships.map((membership) => <div key={membership.id} className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><span>Identity: {membership.clientPortalIdentityId.slice(0, 8)} · {membership.role}</span><div className="flex gap-2"><AdminBadge tone={membership.status === 'ACTIVE' ? 'green' : 'neutral'}>{membership.status}</AdminBadge>{membership.status === 'PENDING_APPROVAL' ? <AdminButton size="sm" variant="gold" disabled={busy} onClick={() => run(() => transitionAdminWorkspaceMembership(membership.id, 'approve', membership.revision).then(() => undefined), 'Munkatér-tagság jóváhagyva; grant nem jött létre.')}>Jóváhagyás</AdminButton> : null}{membership.status === 'ACTIVE' ? <AdminButton size="sm" variant="muted" disabled={busy} onClick={() => run(() => transitionAdminWorkspaceMembership(membership.id, 'suspend', membership.revision).then(() => undefined), 'Munkatér-tagság felfüggesztve.')}>Felfüggesztés</AdminButton> : null}<AdminButton size="sm" variant="muted" disabled={busy || membership.status === 'REVOKED'} onClick={() => run(() => transitionAdminWorkspaceMembership(membership.id, 'revoke', membership.revision).then(() => undefined), 'Munkatér-tagság visszavonva.')}>Visszavonás</AdminButton></div></div>{membership.status === 'ACTIVE' ? <WorkspaceGrantForm workspace={workspace} membership={membership} cases={cases} busy={busy} onGrant={({ caseId, permissions, validUntil }) => run(() => createIdentityGrant({ workspaceMembershipId: membership.id, caseId, permissions, validUntil }).then(() => undefined), 'Explicit ügyhozzáférés létrehozva.')}/> : null}</div>)}</div>
       <details className="mt-3 text-xs"><summary className="cursor-pointer font-semibold">Lifecycle / audit</summary><div className="mt-2 space-y-1">{workspace.events.length ? workspace.events.map((event) => <p key={event.id}>{formatGrantDate(event.createdAt)} · {event.action} · {event.fromStatus || '—'} → {event.toStatus || '—'}</p>) : <p>Nincs esemény.</p>}</div></details>
     </article>)}</div>
   </AdminPanel>;
