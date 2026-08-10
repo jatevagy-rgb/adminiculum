@@ -136,14 +136,28 @@ async function portalWorkspace(req: Request) {
   const matters = home.matters as Array<{ id: string; caseId: string; title: string }>;
   const byCase = new Map(matters.map((matter) => [matter.caseId, matter]));
   const identityId = portalActor.clientPortalIdentityId;
+  // A customer-safe matter-read grant need not include message / document /
+  // request permissions, and the corresponding capability gates may be off.
+  // When a per-matter interaction lookup is denied (403 — permission missing or
+  // capability disabled), that section must simply be empty for the matter
+  // instead of failing the whole workspace response. Any non-403 error still
+  // propagates so genuine faults are not masked.
+  const emptyOnDenied = async <T>(load: () => Promise<{ items: T[] }>): Promise<T[]> => {
+    try {
+      return (await load()).items;
+    } catch (error) {
+      if ((error as { status?: number } | null)?.status === 403) return [];
+      throw error;
+    }
+  };
   const interactionRows = await Promise.all(matters.map(async (matter) => {
     const context = await resolveActiveCustomerGrant(identityId, matter.caseId, portalActor.workspaceId || '');
     const [requests, submissions, questions] = await Promise.all([
-      listCustomerRequests(context),
-      listCustomerSubmissions(context, undefined),
-      listCustomerThreads(context),
+      emptyOnDenied(() => listCustomerRequests(context)),
+      emptyOnDenied(() => listCustomerSubmissions(context, undefined)),
+      emptyOnDenied(() => listCustomerThreads(context)),
     ]);
-    return { matter, requests: requests.items, submissions: submissions.items, questions: questions.items };
+    return { matter, requests, submissions, questions };
   }));
 
   const requests = interactionRows.flatMap(({ matter, requests: items }) => items.map((item: any) => ({

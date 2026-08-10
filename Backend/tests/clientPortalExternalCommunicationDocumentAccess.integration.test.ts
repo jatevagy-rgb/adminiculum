@@ -1,6 +1,23 @@
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import { resolveActiveCustomerGrant } from '../src/modules/client-interaction/base';
+
+// Regression (no DB): the portal /workspace aggregation must not fail wholesale
+// when a matter-read grant lacks message/document permissions. Per-matter
+// interaction lookups are wrapped so a 403 (permission missing / capability
+// disabled) degrades to an empty section instead of denying the whole workspace.
+describe('portalWorkspace degrades per-matter interaction denials (regression)', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'clientPortal.ts'), 'utf8');
+  it('wraps per-matter interaction lookups so a 403 yields an empty section', () => {
+    expect(source).toMatch(/const emptyOnDenied = async <T>\(load: \(\) => Promise<\{ items: T\[\] \}>\)/);
+    expect(source).toMatch(/if \(\(error as \{ status\?: number \} \| null\)\?\.status === 403\) return \[\];/);
+    expect(source).toMatch(/emptyOnDenied\(\(\) => listCustomerThreads\(context\)\)/);
+    expect(source).toMatch(/emptyOnDenied\(\(\) => listCustomerRequests\(context\)\)/);
+    expect(source).toMatch(/emptyOnDenied\(\(\) => listCustomerSubmissions\(context, undefined\)\)/);
+  });
+});
 import {
   addThreadParticipant,
   createCustomerQuestion,
