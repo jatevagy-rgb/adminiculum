@@ -172,6 +172,21 @@ export type PortalMembershipRole = 'MEMBER' | 'REPRESENTATIVE' | 'APPROVER';
 export type OrganizationUnitRole = 'MEMBER' | 'CONTACT' | 'APPROVER' | 'MANAGER';
 export type CustomerSurfaceMode = 'INDIVIDUAL' | 'ORGANIZATION' | 'CASE_RELAY';
 
+export interface UnitMembershipDTO {
+  id: string;
+  clientPortalIdentityId: string;
+  groupId: string | null;
+  organizationGroupName: string | null;
+  unitRole: OrganizationUnitRole;
+  status: 'ACTIVE' | 'SUSPENDED' | 'REVOKED';
+  revision: number;
+  identityEmail: string | null;
+  identityDisplayName: string | null;
+  approvedAt: string | null;
+  suspendedAt: string | null;
+  revokedAt: string | null;
+}
+
 export interface ApproveMembershipPayload {
   assignmentMode: 'EXISTING_CLIENT' | 'NEW_CLIENT';
   actualMode: CustomerSurfaceMode;
@@ -282,6 +297,18 @@ export async function linkWorkspaceUnit(workspaceId: string, groupId: string) {
 
 export async function unlinkWorkspaceUnit(groupId: string) {
   return fetchApi<{ id: string; workspaceId: string | null }>(`/client-identity/admin/units/${encodeURIComponent(groupId)}/unlink`, { method: 'POST', body: JSON.stringify({}) });
+}
+
+export async function listUnitMemberships(workspaceId: string, workspaceMembershipId: string) {
+  return fetchApi<{ items: UnitMembershipDTO[] }>(`/client-identity/admin/workspaces/${encodeURIComponent(workspaceId)}/members/${encodeURIComponent(workspaceMembershipId)}/unit-memberships`);
+}
+
+export async function assignUnitMembership(workspaceId: string, workspaceMembershipId: string, payload: { groupId: string; unitRole: OrganizationUnitRole }) {
+  return fetchApi<UnitMembershipDTO>(`/client-identity/admin/workspaces/${encodeURIComponent(workspaceId)}/members/${encodeURIComponent(workspaceMembershipId)}/unit-memberships`, { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function revokeUnitMembership(unitMembershipId: string) {
+  return fetchApi<{ id: string; status: string; revision: number }>(`/client-identity/admin/unit-memberships/${encodeURIComponent(unitMembershipId)}/revoke`, { method: 'POST', body: JSON.stringify({}) });
 }
 
 export async function listCaseParticipants(workspaceId: string, caseId: string) {

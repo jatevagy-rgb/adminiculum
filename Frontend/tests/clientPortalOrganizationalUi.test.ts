@@ -87,6 +87,11 @@ describe("CP1 organizational client portal UI", () => {
     ]) assert.match(api, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     for (const label of [
       "Szervezeti felépítés",
+      "Céges felhasználók",
+      "Portálszerep és szervezeti egységen belüli szerep külön jogosultság",
+      "Egységhez rendelés",
+      "Egység eltávolítása",
+      "Case-hozzáférés nem jött létre",
       "Ügyféloldali résztvevők",
       "Ügyfélkommunikáció",
       "Belső tervezet",
@@ -95,9 +100,19 @@ describe("CP1 organizational client portal UI", () => {
       "Kiválasztott résztvevők",
     ]) assert.match(ui, new RegExp(label));
     assert.match(ui, /createCaseParticipant/);
+    assert.match(ui, /assignUnitMembership/);
+    assert.match(ui, /revokeUnitMembership/);
     assert.match(ui, /updateCaseParticipant/);
     assert.match(ui, /revokeCaseParticipant/);
     assert.match(ui, /createSummaryScope/);
+  });
+
+  it("keeps customer intake unit selection safe and deterministic", () => {
+    const src = orgViews();
+    assert.match(src, /activeUnits\.length === 1/);
+    assert.match(src, /Ehhez a művelethez még nincs szervezeti egységhez rendelve/);
+    assert.match(src, /Válassza ki, melyik szervezeti egység nevében küldi be/);
+    assert.doesNotMatch(src, /<option value="">Nincs megadva<\/option>/);
   });
 
   it("never dead-ends an organization surface on the empty workspace-capability guard", () => {

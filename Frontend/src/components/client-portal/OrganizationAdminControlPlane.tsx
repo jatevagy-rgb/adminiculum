@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminBadge, AdminButton, AdminPanel } from "@/components/adminiculum/ui";
 import { type CaseListItem, type Client } from "@/lib/api";
 import {
+  assignUnitMembership,
   createCaseParticipant,
   createOrganizationGroup,
   createSummaryScope,
@@ -11,7 +12,9 @@ import {
   linkWorkspaceUnit,
   listCaseParticipants,
   listSummaryScopes,
+  listUnitMemberships,
   listWorkspaceUnits,
+  revokeUnitMembership,
   revokeCaseParticipant,
   transitionSummaryScope,
   unlinkWorkspaceUnit,
@@ -20,8 +23,10 @@ import {
   type AdminWorkspaceDTO,
   type CaseParticipantDTO,
   type OrganizationUnitAdminDTO,
+  type OrganizationUnitRole,
   type ParticipantRole,
   type SummaryScopeDTO,
+  type UnitMembershipDTO,
 } from "@/lib/clientPortalAdminApi";
 import { workforceInteractionApi, type InternalInteractionRow } from "@/lib/clientInteractionApi";
 
@@ -38,12 +43,20 @@ type Props = {
 const input = "rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]";
 const label = "grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]";
 const PARTICIPANT_ROLES: ParticipantRole[] = ["REQUESTER", "CLIENT_OWNER", "PARTICIPANT", "OBSERVER"];
+const UNIT_ROLES: OrganizationUnitRole[] = ["MEMBER", "CONTACT", "APPROVER", "MANAGER"];
 
 const PARTICIPANT_LABELS: Record<ParticipantRole, string> = {
   REQUESTER: "Kérelmező",
   CLIENT_OWNER: "Ügyféloldali felelős",
   PARTICIPANT: "Résztvevő",
   OBSERVER: "Megfigyelő",
+};
+
+const UNIT_ROLE_LABELS: Record<OrganizationUnitRole, string> = {
+  MEMBER: "Tag",
+  CONTACT: "Kapcsolattartó",
+  APPROVER: "Jóváhagyó",
+  MANAGER: "Egységvezető",
 };
 
 const PERMISSION_LABELS: Record<string, string> = {
@@ -75,7 +88,11 @@ export function OrganizationAdminControlPlane({ clients, cases, memberships, wor
   const [threadSubject, setThreadSubject] = useState("");
   const [selectedThreadId, setSelectedThreadId] = useState("");
   const [draftBody, setDraftBody] = useState("");
+  const [selectedWorkspaceMemberId, setSelectedWorkspaceMemberId] = useState("");
+  const [unitMembershipGroupId, setUnitMembershipGroupId] = useState("");
+  const [unitMembershipRole, setUnitMembershipRole] = useState<OrganizationUnitRole>("MEMBER");
   const [units, setUnits] = useState<OrganizationUnitAdminDTO[]>([]);
+  const [unitMemberships, setUnitMemberships] = useState<UnitMembershipDTO[]>([]);
   const [participants, setParticipants] = useState<CaseParticipantDTO[]>([]);
   const [scopes, setScopes] = useState<SummaryScopeDTO[]>([]);
 
@@ -84,24 +101,38 @@ export function OrganizationAdminControlPlane({ clients, cases, memberships, wor
   const workspaceCases = useMemo(() => cases.filter((item) => !workspace || item.clientId === workspace.clientId), [cases, workspace]);
   const selectedCase = workspaceCases.find((item) => item.id === caseId) || null;
   const workspaceMembers = memberships.filter((membership) => !workspace || membership.clientId === workspace.clientId);
+  const activeMemberByIdentity = useMemo(() => new Map(workspaceMembers.map((membership) => [membership.clientPortalIdentityId, membership])), [workspaceMembers]);
+  const workspaceMemberOptions = useMemo(
+    () => (workspace?.memberships || [])
+      .filter((membership) => membership.status === "ACTIVE")
+      .map((membership) => ({ ...membership, profile: activeMemberByIdentity.get(membership.clientPortalIdentityId) || null })),
+    [activeMemberByIdentity, workspace?.memberships],
+  );
 
   const reloadOrgData = useCallback(async () => {
     if (!workspaceId) {
       setUnits([]);
       setScopes([]);
       setParticipants([]);
+      setUnitMemberships([]);
       return;
     }
     const [unitPage, scopePage] = await Promise.all([listWorkspaceUnits(workspaceId), listSummaryScopes(workspaceId)]);
     setUnits(unitPage.items || []);
     setScopes(scopePage.items || []);
+    if (selectedWorkspaceMemberId) {
+      const unitMembershipPage = await listUnitMemberships(workspaceId, selectedWorkspaceMemberId);
+      setUnitMemberships(unitMembershipPage.items || []);
+    } else {
+      setUnitMemberships([]);
+    }
     if (caseId) {
       const participantPage = await listCaseParticipants(workspaceId, caseId);
       setParticipants(participantPage.items || []);
     } else {
       setParticipants([]);
     }
-  }, [caseId, workspaceId]);
+  }, [caseId, selectedWorkspaceMemberId, workspaceId]);
 
   useEffect(() => { void reloadOrgData().catch(() => undefined); }, [reloadOrgData]);
 
@@ -122,7 +153,7 @@ export function OrganizationAdminControlPlane({ clients, cases, memberships, wor
       <div className="grid gap-3 lg:grid-cols-3">
         <label className={label}>
           <span>Ügyfélfelület</span>
-          <select className={input} value={workspaceId} onChange={(event) => { setWorkspaceId(event.target.value); setCaseId(""); }}>
+          <select className={input} value={workspaceId} onChange={(event) => { setWorkspaceId(event.target.value); setCaseId(""); setSelectedWorkspaceMemberId(""); setUnitMembershipGroupId(""); }}>
             <option value="">— Szervezeti felület —</option>
             {orgWorkspaces.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.clientName}</option>)}
           </select>
@@ -161,6 +192,61 @@ export function OrganizationAdminControlPlane({ clients, cases, memberships, wor
             <AdminButton className="mt-2" size="sm" variant="muted" disabled={busy} onClick={() => run(() => unlinkWorkspaceUnit(unit.id).then(reloadOrgData), "Szervezeti egység leválasztva az ügyfélfelületről.")}>Leválasztás</AdminButton>
           </div>)}
           {!units.length ? <p className="text-xs text-[var(--adm-text-muted)]">Nincs kapcsolt szervezeti egység.</p> : null}
+        </div>
+      </section>
+
+      <section className="grid gap-3 rounded-xl border border-[var(--adm-border)] p-4" data-testid="organization-unit-membership-admin">
+        <div>
+          <h3 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Céges felhasználók → Szervezeti egységek</h3>
+          <p className="text-xs text-[var(--adm-text-muted)]">
+            Portálszerep és szervezeti egységen belüli szerep külön jogosultság. A HR-tagság nem ad automatikusan HR-ügyet; Case-hozzáférés csak explicit résztvevő/grant után jön létre.
+          </p>
+        </div>
+        <div className="grid gap-2 xl:grid-cols-4">
+          <label className={label}>
+            <span>Céges felhasználó</span>
+            <select className={input} value={selectedWorkspaceMemberId} onChange={(event) => setSelectedWorkspaceMemberId(event.target.value)} disabled={!workspaceId}>
+              <option value="">— aktív portáltag —</option>
+              {workspaceMemberOptions.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.profile?.identityDisplayName || member.profile?.identityEmail || member.clientPortalIdentityId} · Portálszerep: {member.role === "REPRESENTATIVE" ? "Szervezeti kapcsolattartó" : member.role === "APPROVER" ? "Portál jóváhagyó" : "Portálfelhasználó"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={label}>
+            <span>Szervezeti egység</span>
+            <select className={input} value={unitMembershipGroupId} onChange={(event) => setUnitMembershipGroupId(event.target.value)} disabled={!selectedWorkspaceMemberId}>
+              <option value="">— egység —</option>
+              {units.filter((unit) => unit.status === "ACTIVE").map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+            </select>
+          </label>
+          <label className={label}>
+            <span>Egységen belüli szerep</span>
+            <select className={input} value={unitMembershipRole} onChange={(event) => setUnitMembershipRole(event.target.value as OrganizationUnitRole)} disabled={!selectedWorkspaceMemberId}>
+              {UNIT_ROLES.map((role) => <option key={role} value={role}>{UNIT_ROLE_LABELS[role]}</option>)}
+            </select>
+          </label>
+          <div className="flex items-end">
+            <AdminButton className="w-full" variant="gold" disabled={busy || !workspaceId || !selectedWorkspaceMemberId || !unitMembershipGroupId} onClick={() => run(async () => {
+              await assignUnitMembership(workspaceId, selectedWorkspaceMemberId, { groupId: unitMembershipGroupId, unitRole: unitMembershipRole });
+              setUnitMembershipGroupId("");
+              await reloadOrgData();
+            }, "Szervezeti egység-tagság rögzítve; Case-hozzáférés nem jött létre.")}>Egységhez rendelés</AdminButton>
+          </div>
+        </div>
+        <div className="grid gap-2 md:grid-cols-2">
+          {unitMemberships.map((membership) => (
+            <div key={membership.id} className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span><b>{membership.organizationGroupName || "Szervezeti egység"}</b> · {UNIT_ROLE_LABELS[membership.unitRole] || membership.unitRole}</span>
+                <AdminBadge tone={membership.status === "ACTIVE" ? "green" : "neutral"}>{membership.status === "ACTIVE" ? "Aktív" : membership.status === "SUSPENDED" ? "Felfüggesztve" : "Visszavonva"}</AdminBadge>
+              </div>
+              <p className="mt-1 text-[var(--adm-text-muted)]">{membership.identityDisplayName || membership.identityEmail || "Portáltag"} · Ez nem ügyhozzáférés.</p>
+              <AdminButton className="mt-2" size="sm" variant="muted" disabled={busy || membership.status === "REVOKED"} onClick={() => run(() => revokeUnitMembership(membership.id).then(reloadOrgData), "Szervezeti egység-tagság visszavonva.")}>Egység eltávolítása</AdminButton>
+            </div>
+          ))}
+          {selectedWorkspaceMemberId && !unitMemberships.length ? <p className="text-xs text-[var(--adm-text-muted)]">A kiválasztott felhasználó még nincs szervezeti egységhez rendelve.</p> : null}
         </div>
       </section>
 
