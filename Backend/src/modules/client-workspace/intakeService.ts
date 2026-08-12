@@ -42,6 +42,10 @@ function requestedDeadline(value: unknown): Date | null {
   return output;
 }
 
+function descriptionInput(input: Record<string, unknown>): unknown {
+  return input.description !== undefined ? input.description : input.descriptionSafe;
+}
+
 async function audit(tx: any, workspaceId: string, membershipId: string, actorId: string, intakeId: string, action: string, fromStatus?: string | null, toStatus?: string | null) {
   await tx.clientPortalWorkspaceEvent.create({
     data: { workspaceId, membershipId, actorId, action, fromStatus: fromStatus || null, toStatus: toStatus || null, metadataSafe: { intakeId } },
@@ -126,7 +130,7 @@ export async function createIntakeDraft(identityId: string, workspaceId: string,
         requesterMembershipId: context.membershipId,
         organizationGroupId: context.organizationGroupId,
         subject: safeText(input.subject, 'subject', 240, true)!,
-        descriptionSafe: safeText(input.description, 'description', 6000, true)!,
+        descriptionSafe: safeText(descriptionInput(input), 'description', 6000, true)!,
         urgency: urgency(input.urgency) as never,
         requestedDeadline: requestedDeadline(input.requestedDeadline),
         status: 'DRAFT',
@@ -151,7 +155,7 @@ export async function updateIntakeDraft(identityId: string, workspaceId: string,
   }
   const data: any = { revision: { increment: 1 }, organizationGroupId };
   if (input.subject !== undefined) data.subject = safeText(input.subject, 'subject', 240, true)!;
-  if (input.description !== undefined) data.descriptionSafe = safeText(input.description, 'description', 6000, true)!;
+  if (input.description !== undefined || input.descriptionSafe !== undefined) data.descriptionSafe = safeText(descriptionInput(input), 'description', 6000, true)!;
   if (input.urgency !== undefined) data.urgency = urgency(input.urgency);
   if (input.requestedDeadline !== undefined) data.requestedDeadline = requestedDeadline(input.requestedDeadline);
   const row = await prisma.$transaction(async (tx) => {

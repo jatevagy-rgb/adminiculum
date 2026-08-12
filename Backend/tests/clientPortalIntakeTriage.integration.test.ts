@@ -92,6 +92,10 @@ d('CP1 intake and triage backend (PostgreSQL)', () => {
   it('customer draft, update, submit, pagination and allowlisted detail create no Case/grant/publication', async () => {
     const before = { cases: await db.case.count(), grants: await db.clientPortalGrant.count(), publications: await db.clientMatterPublication.count() };
     const created: any = await draft();
+    const browserPayloadDraft: any = await createIntakeDraft(alexandraId, workspaceId, { organizationGroupId: hrGroupId, subject: 'Browser payload draft', descriptionSafe: 'A deployed UI descriptionSafe payloadja.', urgency: 'NORMAL' }, db as any);
+    expect(browserPayloadDraft.description).toBe('A deployed UI descriptionSafe payloadja.');
+    const browserPayloadUpdated: any = await updateIntakeDraft(alexandraId, workspaceId, browserPayloadDraft.reference, { descriptionSafe: 'Frissített descriptionSafe payload.', expectedRevision: 0 }, db as any);
+    expect(browserPayloadUpdated.description).toBe('Frissített descriptionSafe payload.');
     const updated: any = await updateIntakeDraft(alexandraId, workspaceId, created.reference, { subject: 'Frissített HR kérdés', expectedRevision: 0 }, db as any);
     expect(updated.subject).toBe('Frissített HR kérdés');
     const sent: any = await submitIntake(alexandraId, workspaceId, created.reference, undefined, db as any);
