@@ -115,6 +115,13 @@ describe("CP1 organizational client portal UI", () => {
     assert.doesNotMatch(src, /<option value="">Nincs megadva<\/option>/);
   });
 
+  it("submits a new intake using the backend reference, not a missing id", () => {
+    const src = orgViews() + portalApi();
+    assert.match(src, /createPortalOrganizationIntake\(/);
+    assert.match(src, /submitPortalOrganizationIntake\(draft\.reference, draft\.revision\)/);
+    assert.doesNotMatch(src, /submitPortalOrganizationIntake\(draft\.id,/);
+  });
+
   it("never dead-ends an organization surface on the empty workspace-capability guard", () => {
     // Regression: organization customers surface content via explicit Case grants
     // + org home (OrganizationPortalViews), not workspace-level capability flags.

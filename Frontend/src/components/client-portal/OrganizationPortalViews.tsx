@@ -145,7 +145,7 @@ function OrganizationHome({ state, workspace }: { state: OrgState; workspace: Po
       {attention.length ? <Section title="Figyelmet igényel">{attention.slice(0, 6).map((item) => <Link key={item.id} href={item.actionUrl} className="rounded-2xl border border-[#eadfbf] bg-[#fffaf0] p-4 text-sm"><b>{item.title}</b><span className="mt-1 block text-stone-700">{item.matterTitle} · {item.status}</span></Link>)}</Section> : null}
       <Section title="Saját aktív ügyeim" empty={!own.length}>{own.slice(0, 4).map((item) => <OrgCaseCard key={item.publicReference} item={item} />)}</Section>
       {shared.length ? <Section title="Nekem megosztott ügyek">{shared.slice(0, 4).map((item) => <OrgCaseCard key={item.publicReference} item={item} />)}</Section> : null}
-      <Section title="Általam indított megkeresések" empty={!state.intakes.length}>{state.intakes.slice(0, 5).map((item) => <IntakeRow key={item.id} item={item} />)}</Section>
+      <Section title="Általam indított megkeresések" empty={!state.intakes.length}>{state.intakes.slice(0, 5).map((item) => <IntakeRow key={item.reference} item={item} />)}</Section>
       {workspace.messages.length ? <Section title="Olvasatlan kommunikáció">{workspace.messages.slice(0, 5).map((item) => <Link key={item.id} href={item.actionUrl} className="rounded-2xl bg-stone-50 p-4"><b>{item.matterTitle}</b><span className="block text-sm text-stone-700">{item.subject} · {item.status}</span></Link>)}</Section> : null}
       <Section title="Dokumentumok és feltöltések" empty={!workspace.documents.length}>{workspace.documents.slice(0, 6).map((item) => <Link key={`${item.kind}-${item.id}`} href={item.actionUrl} className="rounded-2xl bg-stone-50 p-4"><b>{item.title}</b><span className="block text-sm text-stone-700">{item.matterTitle || "Szervezeti ügy"} · {item.status || "Elérhető"}</span></Link>)}</Section>
       <Section title="Közelgő határidők" empty={!workspace.upcomingDeadlines.length}>{workspace.upcomingDeadlines.map((item) => <Link key={item.id} href={item.actionUrl} className="rounded-2xl bg-stone-50 p-4"><b>{item.title}</b><span className="block text-sm text-stone-700">{formatDate(item.dueAt)}</span></Link>)}</Section>
@@ -266,7 +266,7 @@ function NewIntake({ units, onCreated }: { units: PortalOrganizationUnit[]; onCr
     setMessage(null);
     try {
       const draft = await createPortalOrganizationIntake({ subject, organizationGroupId: groupId || undefined, descriptionSafe, urgency, requestedDeadline: requestedDeadline || null });
-      await submitPortalOrganizationIntake(draft.id, draft.revision);
+      await submitPortalOrganizationIntake(draft.reference, draft.revision);
       setSubject("");
       setDescriptionSafe("");
       setRequestedDeadline("");
@@ -359,7 +359,7 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
       {view === "matter" ? <OrganizationMatterDetail detail={state.detail} /> : null}
       {view === "documents" ? <OrganizationDocuments workspace={workspace} /> : null}
       {view === "messages" ? <OrganizationMessages workspace={workspace} cases={state.cases} /> : null}
-      {view === "intakes" ? <Section title="Megkereséseim" empty={!state.intakes.length}>{state.intakes.map((item) => <IntakeRow key={item.id} item={item} />)}</Section> : null}
+      {view === "intakes" ? <Section title="Megkereséseim" empty={!state.intakes.length}>{state.intakes.map((item) => <IntakeRow key={item.reference} item={item} />)}</Section> : null}
       {view === "new-intake" ? <NewIntake units={state.units} onCreated={load} /> : null}
       {view === "leadership" ? <LeadershipSummary units={state.leadership} /> : null}
       {!hasLeadership && view !== "leadership" ? null : null}

@@ -174,7 +174,7 @@ export type PortalOrganizationIntakeStatus =
   | string;
 
 export type PortalOrganizationIntake = {
-  id: string;
+  reference: string;
   subject: string;
   descriptionSafe?: string | null;
   organizationGroupId: string | null;
