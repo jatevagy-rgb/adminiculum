@@ -92,4 +92,12 @@ describe('CP1 internal triage UI contract (structural)', () => {
   it('shows the exact requester permission list before granting', () => {
     assert.ok(src.includes('PermissionPicker'));
   });
+  it('publishes initial snapshot with the backend publication field names', () => {
+    assert.ok(src.includes('publicTitle:'));
+    assert.ok(src.includes('publicStatus:'));
+    assert.ok(src.includes('nextStep:'));
+    assert.ok(!src.includes('clientSafeTitle:'));
+    assert.ok(!src.includes('clientSafeStatus:'));
+    assert.ok(!src.includes('clientSafeNextStep:'));
+  });
 });

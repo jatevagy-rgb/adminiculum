@@ -251,10 +251,10 @@ function GrantPanel({ busy, onCancel, onSubmit }: { busy: boolean; onCancel: () 
   return <Panel title="Kérelmezői hozzáférés (REQUESTER)"><p className="text-sm text-stone-700">A kérelmező pontosan az alábbi jogosultságokat kapja:</p><PermissionPicker selected={permissions} onChange={setPermissions} /><Actions busy={busy} disabled={permissions.length === 0} onCancel={onCancel} onConfirm={() => onSubmit(permissions)} label="Hozzáférés létrehozása" /></Panel>;
 }
 function PublishPanel({ busy, onCancel, onSubmit }: { busy: boolean; onCancel: () => void; onSubmit: (b: Record<string, unknown>) => void }) {
-  const [clientSafeTitle, setTitle] = useState('');
-  const [clientSafeStatus, setStatus] = useState('Folyamatban');
-  const [clientSafeNextStep, setNextStep] = useState('');
-  return <Panel title="Első közzététel (immutábilis)"><p className="text-sm text-stone-700">Csak ügyfélbiztos tartalom. A közzététel verziózott és nem módosítható utólag.</p><label className="block text-sm"><span className="font-medium">Publikus cím *</span><input value={clientSafeTitle} onChange={(e) => setTitle(e.target.value)} className={input} /></label><label className="block text-sm"><span className="font-medium">Publikus állapot</span><input value={clientSafeStatus} onChange={(e) => setStatus(e.target.value)} className={input} /></label><label className="block text-sm"><span className="font-medium">Következő lépés</span><input value={clientSafeNextStep} onChange={(e) => setNextStep(e.target.value)} className={input} /></label><Actions busy={busy} disabled={!clientSafeTitle.trim()} onCancel={onCancel} onConfirm={() => onSubmit({ clientSafeTitle: clientSafeTitle.trim(), clientSafeStatus: clientSafeStatus.trim(), clientSafeNextStep: clientSafeNextStep.trim() || undefined })} label="Közzététel" /></Panel>;
+  const [publicTitle, setTitle] = useState('');
+  const [publicStatus, setStatus] = useState('Folyamatban');
+  const [nextStep, setNextStep] = useState('');
+  return <Panel title="Első közzététel (immutábilis)"><p className="text-sm text-stone-700">Csak ügyfélbiztos tartalom. A közzététel verziózott és nem módosítható utólag.</p><label className="block text-sm"><span className="font-medium">Publikus cím *</span><input value={publicTitle} onChange={(e) => setTitle(e.target.value)} className={input} /></label><label className="block text-sm"><span className="font-medium">Publikus állapot</span><input value={publicStatus} onChange={(e) => setStatus(e.target.value)} className={input} /></label><label className="block text-sm"><span className="font-medium">Következő lépés</span><input value={nextStep} onChange={(e) => setNextStep(e.target.value)} className={input} /></label><Actions busy={busy} disabled={!publicTitle.trim()} onCancel={onCancel} onConfirm={() => onSubmit({ publicTitle: publicTitle.trim(), publicStatus: publicStatus.trim(), nextStep: nextStep.trim() || undefined })} label="Közzététel" /></Panel>;
 }
 function CombinedPanel({ busy, onCancel, onSubmit }: { busy: boolean; onCancel: () => void; onSubmit: (b: Record<string, unknown>) => void }) {
   const [title, setTitle] = useState('');
@@ -275,7 +275,7 @@ function CombinedPanel({ busy, onCancel, onSubmit }: { busy: boolean; onCancel: 
         participantRole: 'REQUESTER',
         permissions,
         publishInitialSnapshot: true,
-        publication: { clientSafeTitle: publicTitle.trim(), clientSafeStatus: 'Folyamatban' },
+        publication: { publicTitle: publicTitle.trim(), publicStatus: 'Folyamatban' },
       })} label="Együttes művelet végrehajtása" />
   </Panel>;
 }
