@@ -946,10 +946,11 @@ async function resolvePortalContext(actor: Actor, db: Db = defaultPrisma): Promi
     : await one(db, 'SELECT id, email, name, role::text, status::text, "isActive" FROM users WHERE id=$1', actor.userId);
   if (!user) throw new ClientPublicationError(403, 'PORTAL_ACCESS_DENIED', 'Portal access is not active.');
   let activeMemberships: Row[] = [];
+  let workspaceMode: string | null = null;
   if (isCustomerIdentity) {
     if (user.status !== 'ACTIVE' || !user.emailVerifiedAt) throw new ClientPublicationError(403, user.emailVerifiedAt ? 'CLIENT_IDENTITY_NOT_ACTIVE' : 'CLIENT_EMAIL_NOT_VERIFIED', 'Portal access is not active.');
     if (!actor.workspaceId) throw new ClientPublicationError(409, 'CLIENT_WORKSPACE_SELECTION_REQUIRED', 'Select an authorized workspace.');
-    activeMemberships = await many(db, `SELECT m.id, m."workspaceId", m.status::text
+    activeMemberships = await many(db, `SELECT m.id, m."workspaceId", m.status::text, w.mode::text AS mode
       FROM client_portal_workspace_memberships m
       JOIN client_portal_workspaces w ON w.id=m."workspaceId"
       WHERE m."clientPortalIdentityId"=$1 AND m."workspaceId"=$2
@@ -957,6 +958,7 @@ async function resolvePortalContext(actor: Actor, db: Db = defaultPrisma): Promi
         AND (m."expiresAt" IS NULL OR m."expiresAt" > now())
         AND w.status='ACTIVE'::"ClientPortalWorkspaceStatus"`, actor.userId, actor.workspaceId);
     if (activeMemberships.length === 0) throw new ClientPublicationError(403, 'CLIENT_WORKSPACE_MEMBERSHIP_REQUIRED', 'Active workspace membership is required.');
+    workspaceMode = activeMemberships[0]?.mode || null;
   } else if (user.role !== 'CLIENT' || user.status !== 'ACTIVE' || user.isActive === false) {
     throw new ClientPublicationError(403, 'PORTAL_ACCESS_DENIED', 'Portal access is not active.');
   }
@@ -964,7 +966,8 @@ async function resolvePortalContext(actor: Actor, db: Db = defaultPrisma): Promi
     ? await many(db, 'SELECT *, role::text, status::text, permissions::text[] FROM client_portal_grants WHERE "clientPortalIdentityId"=$1 AND "workspaceId"=$2 ORDER BY "updatedAt" DESC', actor.userId, actor.workspaceId)
     : await many(db, 'SELECT *, role::text, status::text, permissions::text[] FROM client_portal_grants WHERE "clientUserId"=$1 ORDER BY "updatedAt" DESC', actor.userId);
   const active = grants.filter((grant) => grant.status === 'ACTIVE' && (!grant.validUntil || new Date(grant.validUntil).getTime() > Date.now()) && (!grant.validFrom || new Date(grant.validFrom).getTime() <= Date.now()));
-  if (active.length === 0) {
+  const organizationWorkspaceAccess = isCustomerIdentity && workspaceMode === 'ORGANIZATION' && activeMemberships.length > 0;
+  if (active.length === 0 && !organizationWorkspaceAccess) {
     const latest = grants[0];
     const code = latest?.status === 'SUSPENDED' ? 'CLIENT_PORTAL_GRANT_SUSPENDED' : latest?.status === 'REVOKED' ? 'CLIENT_PORTAL_GRANT_REVOKED' : latest?.status === 'EXPIRED' || latest?.validUntil ? 'CLIENT_PORTAL_GRANT_EXPIRED' : 'CLIENT_PORTAL_NO_ACTIVE_GRANT';
     throw new ClientPublicationError(403, code, 'No active portal access is available.');
