@@ -47,15 +47,15 @@ test("workforce panel is wired into the case publication panel", () => {
 });
 
 test("customer portal renders progress from published milestones only, with humanized states", () => {
-  const shell = read("src/components/client-portal/ClientPortalShell.tsx");
-  assert.match(shell, /Az ügy előrehaladása/);
-  assert.match(shell, /MatterProgressSection/);
+  const workspace = read("src/components/client-portal/MatterWorkspace.tsx");
+  assert.match(workspace, /Az ügy előrehaladása/);
+  assert.match(workspace, /MatterProgressSection/);
   // Humanized, customer-facing state labels — never raw enum values.
-  for (const label of ["Kész", "Folyamatban", "Előttünk áll"]) assert.match(shell, rx(label));
+  for (const label of ["Kész", "Folyamatban", "Előttünk áll"]) assert.match(workspace, rx(label));
   // Progress bar only renders when a numeric percentage is available (no fake 0%).
-  assert.match(shell, /Number\.isFinite\(progressPercentage\)/);
+  assert.match(workspace, /Number\.isFinite\(progressPercentage\)/);
   // Safe empty state rather than an empty void.
-  assert.match(shell, /Az iroda hamarosan közzéteszi az ügy mérföldköveit/);
+  assert.match(workspace, /Az iroda hamarosan közzéteszi az ügy mérföldköveit/);
 });
 
 test("customer milestone DTO carries no internal task, assignee, or dependency fields", () => {

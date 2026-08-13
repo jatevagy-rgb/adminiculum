@@ -341,10 +341,10 @@ export function CustomerIntakeDetail({ intakeId }: { intakeId: string }) {
       {/* Result: Case link only when backend confirms grant+publication */}
       {['linked', 'converted', 'closed'].includes(intake.status.code) ? (
         <Card className="mb-4">
-          {intake.linkedPublicCaseReference ? (
+          {intake.linkedMatterPublicationId ? (
             <>
               <h2 className="text-lg font-semibold text-emerald-800">Az ügyfélfelületi hozzáférés közzétéve</h2>
-              <Link href={`/portal/megkeresesek/../org/${encodeURIComponent(intake.linkedPublicCaseReference)}`} className="mt-3 inline-flex rounded-full bg-emerald-700 px-5 py-3 font-semibold text-white">Ügy megnyitása</Link>
+              <Link href={`/portal/matters/${encodeURIComponent(intake.linkedMatterPublicationId)}`} className="mt-3 inline-flex rounded-full bg-emerald-700 px-5 py-3 font-semibold text-white">Ügy megnyitása</Link>
             </>
           ) : (
             <p className="text-stone-700">Az ügyet az iroda rögzítette. Az ügyfélfelületi hozzáférés még nincs közzétéve.</p>

@@ -178,6 +178,7 @@ d('CP1 intake and triage backend (PostgreSQL)', () => {
     expect(published.publication.status).toBe('PUBLISHED');
     const customer: any = await getOwnIntake(alexandraId, workspaceId, sent.reference, db as any);
     expect(customer.linkedPublicCaseReference).toBe(existingCase.caseNumber);
+    expect(customer.linkedMatterPublicationId).toBe(published.publication.id);
     await db.case.update({ where: { id: existingCase.id }, data: { title: 'Changed internal title' } });
     const revision = await db.clientMatterPublicationRevision.findUnique({ where: { id: published.publication.currentRevisionId } });
     expect(revision?.clientSafeTitle).toBe('Publikus ügy');

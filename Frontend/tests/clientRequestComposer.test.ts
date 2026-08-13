@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildClientRequestDraftPayload, validateRequestFields } from "../src/components/client-portal/ClientRequestComposer";
-import { requestAllowsDocumentUpload } from "../src/components/client-portal/ClientPortalShell";
+import { requestAllowsDocumentUpload } from "../src/components/client-portal/CustomerInteractionCard";
 
 test("request composer builds a client-safe DATA_FORM draft with stable field order", () => {
   const payload = buildClientRequestDraftPayload({

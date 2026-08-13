@@ -15,13 +15,6 @@ const cards = [
     points: ['saját és megosztott céges ügyek', 'új megkeresések', 'ügyenkénti kommunikáció', 'publikált dokumentumok', 'szervezeti egységek', 'vezetői összesítés jogosultság szerint'],
     cta: 'Belépés szervezeti ügyfélként',
   },
-  {
-    mode: 'case-relay',
-    title: 'Ügyátvezető',
-    body: 'Saját vállalati rendszer mellett kezelt ügyek regisztrációjának és aktuális állapotának követése.',
-    points: ['regisztrált ügyek', 'aktuális állapot', 'következő mérföldkő', 'vezetői összesítés'],
-    cta: 'Belépés az Ügyátvezetőbe',
-  },
 ] as const;
 
 export function PortalEntryLanding() {
@@ -36,7 +29,7 @@ export function PortalEntryLanding() {
           <h1 className="mt-4 font-serif text-4xl font-semibold leading-tight sm:text-5xl lg:text-6xl">Melyik ügyfélfelületre szeretne belépni?</h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-stone-650">Válassza ki, milyen együttműködési módon használja az Adminiculumot. A tényleges hozzáférést a meghívása és az ügyvédi iroda által beállított jogosultságai határozzák meg.</p>
         </div>
-        <div className="mt-10 grid gap-5 lg:grid-cols-3" role="list" aria-label="Ügyfélfelület kiválasztása">
+        <div className="mt-10 grid gap-5 lg:grid-cols-2" role="list" aria-label="Ügyfélfelület kiválasztása">
           {cards.map((card, index) => (
             <article key={card.mode} role="listitem" className="flex min-w-0 flex-col rounded-[1.75rem] border border-stone-200 bg-white p-6 shadow-[0_18px_50px_rgba(53,42,35,0.08)] sm:p-7">
               <span className="text-sm font-semibold text-[#b85f4b]">0{index + 1}</span>

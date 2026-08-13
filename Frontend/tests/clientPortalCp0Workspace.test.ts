@@ -7,15 +7,18 @@ const root = path.resolve(__dirname, '..');
 const read = (relative: string) => readFileSync(path.join(root, relative), 'utf8');
 
 describe('CP0 anonymous entry and authenticated workspace shell', () => {
-  it('renders the three exact Hungarian entry cards without authenticated navigation', () => {
+  it('renders the two exact Hungarian entry cards without authenticated navigation', () => {
     const landing = read('src/components/client-portal/PortalEntryLanding.tsx');
     assert.match(landing, /Melyik ügyfélfelületre szeretne belépni\?/);
-    for (const title of ['Magánügyfél', 'Szervezeti ügyfél', 'Ügyátvezető']) assert.match(landing, new RegExp(title));
-    for (const mode of ['individual', 'organization', 'case-relay']) assert.match(landing, new RegExp(`mode: '${mode}'`));
+    for (const title of ['Magánügyfél', 'Szervezeti ügyfél']) assert.match(landing, new RegExp(title));
+    assert.doesNotMatch(landing, /Ügyátvezető/);
+    for (const mode of ['individual', 'organization']) assert.match(landing, new RegExp(`mode: '${mode}'`));
+    assert.doesNotMatch(landing, /mode: 'case-relay'/);
     assert.match(landing, /href=\{`\/portal\/login\?mode=\$\{card\.mode\}`\}/);
     for (const label of ['Főoldal', 'Ügyeim', 'Teendőim', 'Dokumentumok', 'Üzenetek']) assert.doesNotMatch(landing, new RegExp(label));
     assert.match(landing, /focus:ring-4/);
-    assert.match(landing, /lg:grid-cols-3/);
+    assert.match(landing, /lg:grid-cols-2/);
+    assert.doesNotMatch(landing, /lg:grid-cols-3/);
   });
 
   it('loads server-authoritative context before portal data and rebuilds navigation from capabilities', () => {

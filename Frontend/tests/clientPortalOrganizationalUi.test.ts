@@ -9,6 +9,7 @@ const read = (relative: string) => readFileSync(path.join(root, relative), "utf8
 describe("CP1 organizational client portal UI", () => {
   const shell = () => read("src/components/client-portal/ClientPortalShell.tsx");
   const orgViews = () => read("src/components/client-portal/OrganizationPortalViews.tsx");
+  const matterWorkspace = () => read("src/components/client-portal/MatterWorkspace.tsx");
   const orgAdmin = () => read("src/components/client-portal/OrganizationAdminControlPlane.tsx");
   const portalApi = () => read("src/lib/clientPortalApi.ts");
   const adminApi = () => read("src/lib/clientPortalAdminApi.ts");
@@ -41,7 +42,7 @@ describe("CP1 organizational client portal UI", () => {
   });
 
   it("renders organization home, own/shared cases, intake, documents and leadership aggregate", () => {
-    const src = orgViews();
+    const src = orgViews() + matterWorkspace();
     for (const label of [
       "Szervezeti ügyfélfelület",
       "Szervezeti egységeim",

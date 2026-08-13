@@ -5,6 +5,8 @@ import { resolveParticipantAccess } from '../src/modules/client-workspace/organi
 import { resolveMemberUnits } from '../src/modules/client-workspace/organizationUnitService';
 import { unitSummary, organizationSummary, mayViewCaseContent } from '../src/modules/client-workspace/leadershipSummaryService';
 import { assignUnitMembership, createParticipant, revokeParticipant, createSummaryScope, revokeUnitMembership, createWorkspaceUnit } from '../src/modules/client-workspace/organizationAdminService';
+import { resolveActiveCustomerGrant } from '../src/modules/client-interaction/base';
+import { createCustomerQuestion, listCustomerThreads } from '../src/modules/client-interaction/questionService';
 
 const databaseUrl = process.env.CLIENT_INTERACTION_TEST_DATABASE_URL || process.env.CLIENT_IDENTITY_TEST_DATABASE_URL;
 const d = databaseUrl ? describe : describe.skip;
@@ -41,7 +43,22 @@ d('CP1 organizational access core (PostgreSQL)', () => {
     kase[key] = id;
     await db.case.create({ data: { id, caseNumber: `CP1-${key}-${id.slice(0, 6)}`, title: `internal ${key}`, caseType: 'CONTRACT_REVIEW', clientId: client, createdById: admin, assignedLawyerId: admin } as never });
     const pub = await db.clientMatterPublication.create({ data: { caseId: id, clientId: client, status: 'PUBLISHED', preparedById: admin, publishedAt: new Date() } });
-    const rev = await db.clientMatterPublicationRevision.create({ data: { publicationId: pub.id, revisionNumber: 1, clientSafeTitle: `Ügy ${key}`, clientSafeStatus: 'Folyamatban', clientSafeNextStep: 'Következő lépés', publishedDeadlinesSnapshot: [], safeUpdatesSnapshot: [], actionRequestsSnapshot: [], sourceFingerprint: `fp-${id}`, audienceSnapshot: {}, createdById: admin } });
+    const rev = await db.clientMatterPublicationRevision.create({
+      data: {
+        publicationId: pub.id,
+        revisionNumber: 1,
+        clientSafeTitle: `Ügy ${key}`,
+        clientSafeStatus: 'Folyamatban',
+        clientSafeNextStep: 'Következő lépés',
+        publishedDeadlinesSnapshot: [{ label: 'Teszt belső határidő', dueAt: '2026-12-31' }],
+        safeUpdatesSnapshot: [],
+        actionRequestsSnapshot: [],
+        milestonesSnapshot: [{ reference: `ms-${key}`, title: `Mérföldkő ${key}`, description: null, state: 'NOT_STARTED', displayOrder: 1, weight: null, completedAt: null }],
+        sourceFingerprint: `fp-${id}`,
+        audienceSnapshot: {},
+        createdById: admin,
+      },
+    });
     await db.clientMatterPublication.update({ where: { id: pub.id }, data: { currentRevisionId: rev.id } });
     if (unitGroupId) {
       await db.clientPortalIntakeRequest.create({ data: { workspaceId: orgWs, requesterMembershipId: membership.alexandra || membership.bela || admin, organizationGroupId: unitGroupId, subject: `intake ${key}`, descriptionSafe: 'x', status: 'LINKED_TO_EXISTING_CASE', linkedCaseId: id } });
@@ -56,6 +73,7 @@ d('CP1 organizational access core (PostgreSQL)', () => {
   beforeAll(async () => {
     process.env.DATABASE_URL = databaseUrl;
     process.env.CLIENT_PORTAL_READ_ENABLED = 'true';
+    process.env.CLIENT_PORTAL_QUESTIONS_ENABLED = 'true';
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
     await db.user.create({ data: { id: admin, email: `admin-${admin}@t.io`, name: 'Admin', role: 'ADMIN', status: 'ACTIVE' } as never });
     await db.client.create({ data: { id: client, name: 'CP1 Example Company Kft.' } });
@@ -79,7 +97,7 @@ d('CP1 organizational access core (PostgreSQL)', () => {
     await grant('alexandra', 'A', 'REQUESTER', ['MATTER_READ', 'DOCUMENT_READ']);
     await grant('alexandra', 'D', 'PARTICIPANT', ['MATTER_READ']);
     await grant('bela', 'B', 'REQUESTER', ['MATTER_READ', 'DOCUMENT_READ', 'MESSAGE_READ']);
-    await grant('ferenc', 'C', 'REQUESTER', ['MATTER_READ']);
+    await grant('ferenc', 'C', 'REQUESTER', ['MATTER_READ', 'MESSAGE_SEND', 'MESSAGE_READ']);
     // manager + exec deliberately receive NO case grant.
   });
 
@@ -87,10 +105,13 @@ d('CP1 organizational access core (PostgreSQL)', () => {
 
   it('1-2: Alexandra lists A as OWN and D as SHARED', async () => {
     const list = await listOrganizationalCases(identity.alexandra, orgWs, {}, db);
-    const byRef = new Map(list.items.map((row) => [row.publicTitle, row.relationshipToCase]));
-    expect(byRef.get('Ügy A')).toBe('OWN');
-    expect(byRef.get('Ügy D')).toBe('SHARED');
+    const byRef = new Map(list.items.map((row) => [row.publicTitle, row]));
+    expect(byRef.get('Ügy A')?.relationshipToCase).toBe('OWN');
+    expect(byRef.get('Ügy D')?.relationshipToCase).toBe('SHARED');
     expect(list.total).toBe(2);
+    for (const row of list.items) {
+      expect(row.matterPublicationId).toBeTruthy();
+    }
   });
 
   it('3-4: Alexandra cannot see B or C', async () => {
@@ -112,6 +133,15 @@ d('CP1 organizational access core (PostgreSQL)', () => {
     expect(detail.capabilities.allowMessages).toBe(false);
     const access = await resolveParticipantAccess(identity.alexandra, kase.A, orgWs, db);
     expect(access.canViewMessages).toBe(false);
+  });
+
+  it('detail exposes matterPublicationId and milestones come from milestonesSnapshot, not deadlines', async () => {
+    const detail = await getOrganizationalCaseDetail(identity.alexandra, orgWs, kase.A ? (await db.case.findUnique({ where: { id: kase.A }, select: { caseNumber: true } }))!.caseNumber : '', db);
+    expect(detail.matterPublicationId).toBeTruthy();
+    expect(detail.safeMilestones.length).toBe(1);
+    expect((detail.safeMilestones[0] as any).reference).toBe('ms-A');
+    expect((detail.safeMilestones[0] as any).title).toBe('Mérföldkő A');
+    expect((detail.safeMilestones[0] as any).sourceTaskId).toBeUndefined();
   });
 
   it('9-10: active membership without case grant is denied (manager)', async () => {
@@ -214,5 +244,19 @@ d('CP1 organizational access core (PostgreSQL)', () => {
     for (const forbidden of ['grantId', 'clientId', 'workspaceId', 'membershipId', 'storageKey', 'sharePoint', 'internalTriageNote', 'permissions']) {
       expect(serialized).not.toContain(forbidden);
     }
+  });
+
+  it('organization communication is case-grant scoped, not workspace-membership scoped', async () => {
+    const ferencContext = await resolveActiveCustomerGrant(identity.ferenc, kase.C, orgWs, db);
+    const thread = await createCustomerQuestion(ferencContext, { subject: 'Teszt kérdés', bodySafe: 'Szervezeti ügy kommunikációja.' }, db);
+    expect(thread.subject).toBe('Teszt kérdés');
+    const threads = await listCustomerThreads(ferencContext, db);
+    expect(threads.items.some((t) => t.id === thread.id)).toBe(true);
+
+    // No grant to another Case in the same Client.
+    await expect(resolveActiveCustomerGrant(identity.ferenc, kase.A, orgWs, db)).rejects.toMatchObject({ code: 'CLIENT_PORTAL_NO_ACTIVE_GRANT' });
+
+    // Workspace membership alone (manager) has no case communication grant.
+    await expect(resolveActiveCustomerGrant(identity.manager, kase.A, orgWs, db)).rejects.toMatchObject({ code: 'CLIENT_PORTAL_NO_ACTIVE_GRANT' });
   });
 });
