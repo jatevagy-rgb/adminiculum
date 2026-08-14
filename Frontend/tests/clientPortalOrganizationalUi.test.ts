@@ -9,6 +9,7 @@ const read = (relative: string) => readFileSync(path.join(root, relative), "utf8
 describe("CP1 organizational client portal UI", () => {
   const shell = () => read("src/components/client-portal/ClientPortalShell.tsx");
   const orgViews = () => read("src/components/client-portal/OrganizationPortalViews.tsx");
+  const matterWorkspace = () => read("src/components/client-portal/MatterWorkspace.tsx");
   const orgAdmin = () => read("src/components/client-portal/OrganizationAdminControlPlane.tsx");
   const portalApi = () => read("src/lib/clientPortalApi.ts");
   const adminApi = () => read("src/lib/clientPortalAdminApi.ts");
@@ -41,7 +42,7 @@ describe("CP1 organizational client portal UI", () => {
   });
 
   it("renders organization home, own/shared cases, intake, documents and leadership aggregate", () => {
-    const src = orgViews();
+    const src = orgViews() + matterWorkspace();
     for (const label of [
       "Szervezeti ügyfélfelület",
       "Szervezeti egységeim",
@@ -64,12 +65,42 @@ describe("CP1 organizational client portal UI", () => {
     assert.doesNotMatch(src, /raw enum|workspace ID|grant ID|SharePoint|SCAN_FAILED/);
   });
 
+  it("renders shared Matter workspace for organization matter detail", () => {
+    const views = orgViews();
+    const src = views + matterWorkspace();
+    assert.match(views, /getPortalMatter\(detail\.matterPublicationId\)/);
+    assert.match(views, /item\.matterPublicationId === resourceId \|\| item\.publicReference === resourceId/);
+    assert.match(views, /\/portal\/matters\/\$\{encodeURIComponent\(item\.matterPublicationId\)\}/);
+    assert.match(src, /MatterView/);
+    assert.match(src, /Dokumentumok/);
+    assert.match(src, /Teendők/);
+    assert.match(src, /Frissítések/);
+    assert.match(src, /Az ügy előrehaladása/);
+    assert.match(src, /Most itt tartunk/);
+    assert.match(src, /Mire várunk/);
+    assert.match(src, /Következő lépés/);
+    assert.match(src, /Publikus céldátum/);
+    assert.doesNotMatch(views, /dokumentumok megtekintéséhez|üzenetekhez|ügy részleteihez navigáljon|hagyja el az ügy oldalát/i);
+    for (const forbidden of ["sourceTaskId", "workflowStepKey", "grantId", "clientId", "workspaceId", "membershipId", "internalStatus", "raw enum"]) {
+      assert.doesNotMatch(src, new RegExp(forbidden, "i"));
+    }
+  });
+
+  it("converted organization intake links to the canonical published matter route", () => {
+    const src = orgViews();
+    assert.match(src, /linkedMatterPublicationId/);
+    assert.match(src, /\/portal\/matters\/\$\{encodeURIComponent\(item\.linkedMatterPublicationId\)\}/);
+    assert.doesNotMatch(src, /\/portal\/matters\/\$\{encodeURIComponent\(item\.linkedCaseReference\)\}/);
+  });
+
   it("respects communication mode and avoids fake integrations", () => {
     const src = orgViews() + shell();
     const orgSrc = orgViews();
     assert.match(src, /communicationMode !== 'EXTERNAL_ONLY'/);
     assert.match(src, /portálon belüli üzenetküldés nincs engedélyezve/);
     assert.match(src, /canSendMessages|allowMessages/);
+    assert.match(orgSrc, /showMessages=\{detail\.capabilities\.showMessages\}/);
+    assert.match(orgSrc, /allowAsk=\{detail\.capabilities\.allowMessages\}/);
     assert.doesNotMatch(orgSrc, /Outlook sync|automatikus szinkronizáció/);
   });
 

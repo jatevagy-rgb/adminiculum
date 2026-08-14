@@ -14,6 +14,9 @@ describe('internal portal-admin UI', () => {
   const publicationPanel = () => read('src/components/documents/publication/ClientPublicationPanel.tsx');
   const interactionApi = () => read('src/lib/clientInteractionApi.ts');
   const portalShell = () => read('src/components/client-portal/ClientPortalShell.tsx');
+  const matterWorkspace = () => read('src/components/client-portal/MatterWorkspace.tsx');
+  const customerCard = () => read('src/components/client-portal/CustomerInteractionCard.tsx');
+  const orgViews = () => read('src/components/client-portal/OrganizationPortalViews.tsx');
 
   it('defines the admin page route', () => {
     assert.equal(existsSync(path.join(root, 'src/app/client-portal-admin/page.tsx')), true);
@@ -80,16 +83,16 @@ describe('internal portal-admin UI', () => {
   });
 
   it('customer portal matter view renders client interaction foundation', () => {
-    const src = portalShell();
+    const src = portalShell() + matterWorkspace() + customerCard() + orgViews();
     assert.match(src, /CustomerInteractionCard/);
-    assert.match(src, /Kérdések és bekérések/);
+    assert.match(src, /Kommunikáció/);
     assert.match(src, /customerInteractionApi\.createQuestion/);
     assert.match(src, /customerInteractionApi\.submitAnswers/);
     assert.match(src, /customerInteractionApi\.uploadFile/);
     assert.match(src, /customerInteractionApi\.submitSubmission/);
     assert.match(src, /Mire várunk\?/);
     assert.match(src, /Most itt tartunk/);
-    assert.match(src, /caseId={matter\.caseId}/);
+    assert.match(src, /caseId=\{matter\.caseId\}/);
   });
 
   it('customer shell exposes coherent customer routes without workforce navigation', () => {

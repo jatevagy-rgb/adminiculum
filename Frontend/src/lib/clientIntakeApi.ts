@@ -44,6 +44,7 @@ export interface CustomerIntake {
   updatedAt: string | null;
   officeResponse: string | null;
   linkedPublicCaseReference: string | null;
+  linkedMatterPublicationId: string | null;
   allowedActions: { update: boolean; submit: boolean; withdraw: boolean; respond: boolean };
   informationRequest: CustomerIntakeInformationRequest | null;
   attachments: CustomerIntakeAttachment[];

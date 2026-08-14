@@ -128,16 +128,18 @@ describe('internal interaction actions (source contract)', () => {
 
 describe('customer portal interaction UI (source contract)', () => {
   const shell = () => read('src/components/client-portal/ClientPortalShell.tsx');
+  const matterWorkspace = () => read('src/components/client-portal/MatterWorkspace.tsx');
+  const customerCard = () => read('src/components/client-portal/CustomerInteractionCard.tsx');
 
   it('renders single- and multiple-choice fields instead of a free-text box', () => {
-    const src = shell();
+    const src = shell() + customerCard();
     assert.match(src, /field\.type === 'SINGLE_CHOICE'/);
     assert.match(src, /field\.type === 'MULTIPLE_CHOICE'/);
     assert.match(src, /fieldOptions\(field\.options\)/);
   });
 
   it('lets the customer open a thread and read explicitly sent internal answers', () => {
-    const src = shell();
+    const src = shell() + customerCard();
     assert.match(src, /QuestionThreadRow/);
     assert.match(src, /customerInteractionApi\.getThread/);
     assert.match(src, /authorType === 'INTERNAL'/);
@@ -145,7 +147,7 @@ describe('customer portal interaction UI (source contract)', () => {
   });
 
   it('provides a real mobile upload experience (preview/label/progress/retry)', () => {
-    const src = shell();
+    const src = shell() + customerCard();
     assert.match(src, /capture="environment"/);
     assert.match(src, /data-testid="upload-item"/);
     assert.match(src, /URL\.createObjectURL/); // previews
@@ -159,7 +161,7 @@ describe('customer portal interaction UI (source contract)', () => {
     const src = shell();
     assert.doesNotMatch(src, /APPROVAL_REQUEST|CONFIRMATION_REQUEST/);
     assert.doesNotMatch(src, /SCANNER_NOT_CONFIGURED|SCAN_FAILED|QUARANTINE_NOT_CONFIGURED/);
-    // customer-facing wait wording, not raw enums
-    assert.match(src, /Mire várunk\?/);
+    // customer-facing wait wording, not raw enums (now shared in MatterWorkspace)
+    assert.match(shell() + matterWorkspace(), /Mire várunk\?/);
   });
 });

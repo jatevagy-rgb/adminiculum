@@ -866,7 +866,7 @@ function toPortalMatter(row: Row, revision: Row | null, counts: Row = {}): Row {
     id: row.id,
     caseId: row.caseId,
     title: revision?.clientSafeTitle || 'Közzétett ügy',
-    statusLabel: 'Folyamatban',
+    statusLabel: revision?.clientSafeStatus || 'Folyamatban',
     currentSummary: statusText,
     waitingOnLabel: revision?.clientSafeWaitingOn || (counts.attentionCount ? 'Ügyfél válasza szükséges' : 'Irodai feldolgozás'),
     waitingDescription: counts.attentionCount ? 'Közzétett teendő vár teljesítésre az ügyfélportálon.' : 'Jelenleg nincs közzétett ügyféloldali teendő.',
@@ -1014,7 +1014,7 @@ export async function listPortalMatters(actor: Actor, db: PrismaClient = default
 
 export async function getPortalMatter(actor: Actor, publicationId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
   const context = await resolvePortalContext(actor, db);
-  const row = await one(db, `SELECT p.*, p.status::text, r.id AS "revisionId", r."clientSafeTitle", r."clientSafeStatus", r."clientSafeNextStep", r."responsibleLawyerDisplay", r."publishedDeadlinesSnapshot", r."milestonesSnapshot", r."progressPercentage"
+  const row = await one(db, `SELECT p.*, p.status::text, r.id AS "revisionId", r."clientSafeTitle", r."clientSafeStatus", r."clientSafeNextStep", r."clientSafeCurrentPosition", r."clientSafeWaitingOn", r."publicTargetDate", r."responsibleLawyerDisplay", r."publishedDeadlinesSnapshot", r."milestonesSnapshot", r."progressPercentage"
     FROM client_matter_publications p JOIN client_matter_publication_revisions r ON r.id=p."currentRevisionId"
     WHERE p.id=$1 AND p.status='PUBLISHED'::"ClientPublicationStatus"`, publicationId);
   if (!row || !context.caseIds.includes(String(row.caseId)) || !audienceAllows(row, context.grants, 'MATTER_READ')) throw new ClientPublicationError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Portal content is not available.');

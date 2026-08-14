@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createPortalOrganizationIntake,
+  getPortalMatter,
   getPortalOrganizationCase,
   getPortalOrganizationCases,
   getPortalOrganizationIntakes,
@@ -19,6 +20,8 @@ import {
   type PortalWorkspace,
 } from "@/lib/clientPortalApi";
 import { clientSafeError } from "@/lib/clientInteractionApi";
+import { CustomerInteractionCard } from "./CustomerInteractionCard";
+import { MatterView } from "./MatterWorkspace";
 
 export type OrganizationPortalView = "home" | "matters" | "documents" | "messages" | "matter" | "intakes" | "new-intake" | "leadership";
 
@@ -29,12 +32,17 @@ type Props = {
   workspace: PortalWorkspace;
 };
 
+type FullPortalMatter = Awaited<ReturnType<typeof getPortalMatter>>;
+
 type OrgState = {
   units: PortalOrganizationUnit[];
   cases: PortalOrganizationCase[];
   intakes: PortalOrganizationIntake[];
   leadership: PortalLeadershipUnitAggregate[] | null;
   detail: PortalOrganizationCaseDetail | null;
+  matter: FullPortalMatter | null;
+  matterLoading: boolean;
+  matterError: string | null;
   loading: boolean;
   message: string | null;
 };
@@ -66,19 +74,6 @@ function intakeStatusLabel(value: string) {
   return labels[value] || "Feldolgozás alatt";
 }
 
-function permissionLabel(permission: keyof PortalOrganizationCaseDetail["capabilities"]) {
-  const labels: Record<keyof PortalOrganizationCaseDetail["capabilities"], string> = {
-    showTimeline: "ügyfél-idővonal",
-    showDocuments: "dokumentumok",
-    allowUploads: "dokumentumfeltöltés",
-    showMessages: "kommunikáció megtekintése",
-    allowMessages: "kommunikáció küldése",
-    showHours: "munkaórák",
-    showBillingStatement: "elszámolás",
-  };
-  return labels[permission];
-}
-
 function OrganizationContextHeader({ context, units }: { context: PortalIdentityContext; units: PortalOrganizationUnit[] }) {
   const workspace = context.selectedWorkspace;
   if (!workspace) return null;
@@ -105,7 +100,7 @@ function OrganizationContextHeader({ context, units }: { context: PortalIdentity
 
 function OrgCaseCard({ item }: { item: PortalOrganizationCase }) {
   return (
-    <Link href={`/portal/matters/${encodeURIComponent(item.publicReference)}`} className="block rounded-2xl border border-stone-200 bg-white p-4 transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
+    <Link href={`/portal/matters/${encodeURIComponent(item.matterPublicationId)}`} className="block rounded-2xl border border-stone-200 bg-white p-4 transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">{item.publicReference} · {item.organizationUnitName || "Szervezet"}</p>
@@ -138,7 +133,7 @@ function OrganizationHome({ state, workspace }: { state: OrgState; workspace: Po
   const shared = state.cases.filter((item) => item.relationshipToCase === "SHARED");
   const attention = [
     ...workspace.actions.filter((item) => item.bucket === "now"),
-    ...state.cases.filter((item) => item.customerActionRequired).map((item) => ({ id: item.publicReference, title: item.publicTitle, matterTitle: item.organizationUnitName || "Szervezeti ügy", status: item.waitingOn, actionUrl: `/portal/matters/${encodeURIComponent(item.publicReference)}` })),
+    ...state.cases.filter((item) => item.customerActionRequired).map((item) => ({ id: item.matterPublicationId, title: item.publicTitle, matterTitle: item.organizationUnitName || "Szervezeti ügy", status: item.waitingOn, actionUrl: `/portal/matters/${encodeURIComponent(item.matterPublicationId)}` })),
   ];
   return (
     <div className="space-y-5">
@@ -161,7 +156,7 @@ function IntakeRow({ item }: { item: PortalOrganizationIntake }) {
         <span className="rounded-full bg-white px-3 py-1 text-xs text-stone-700">{intakeStatusLabel(item.status)}</span>
       </div>
       <p className="mt-2 text-stone-600">Egység: {item.organizationGroupName || item.organizationGroupId || "Nincs megadva"} · Beküldve: {formatDate(item.submittedAt)}</p>
-      {item.linkedCaseReference ? <Link className="mt-2 inline-flex text-[#7a5f18] underline" href={`/portal/matters/${encodeURIComponent(item.linkedCaseReference)}`}>Kapcsolt ügy megnyitása</Link> : null}
+      {item.linkedMatterPublicationId ? <Link className="mt-2 inline-flex text-[#7a5f18] underline" href={`/portal/matters/${encodeURIComponent(item.linkedMatterPublicationId)}`}>Kapcsolt ügy megnyitása</Link> : null}
     </div>
   );
 }
@@ -193,26 +188,30 @@ function OrganizationMatters({ cases, units }: { cases: PortalOrganizationCase[]
   );
 }
 
-function OrganizationMatterDetail({ detail }: { detail: PortalOrganizationCaseDetail | null }) {
+function OrganizationMatterDetail({
+  detail,
+  matter,
+  matterLoading,
+  matterError,
+}: {
+  detail: PortalOrganizationCaseDetail | null;
+  matter: FullPortalMatter | null;
+  matterLoading: boolean;
+  matterError: string | null;
+}) {
   if (!detail) return <section className={card}>Az ügy nem érhető el ezen az ügyfélfelületen.</section>;
-  const enabled = Object.entries(detail.capabilities).filter(([, value]) => value).map(([key]) => permissionLabel(key as keyof PortalOrganizationCaseDetail["capabilities"]));
+  if (matterLoading) return <section className={card}>Ügy részleteinek betöltése…</section>;
+  if (matterError) return <section className={card}>{matterError}</section>;
+  if (!matter) return <section className={card}>Az ügy részletei jelenleg nem érhetők el.</section>;
   return (
-    <div className="space-y-5">
-      <section className={card}>
-        <p className="text-sm font-semibold text-[#7a5f18]">{detail.publicReference} · {detail.organizationUnitName || "Szervezet"} · {relationshipLabel(detail.relationshipToCase)}</p>
-        <h1 className="mt-2 break-words font-serif text-3xl font-semibold text-stone-950">{detail.publicTitle}</h1>
-        <div className="mt-5 grid gap-3 lg:grid-cols-3">
-          <div className="rounded-2xl bg-stone-50 p-4"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Most itt tartunk</p><p className="mt-2 text-stone-800">{detail.currentStatusText}</p></div>
-          <div className="rounded-2xl bg-stone-50 p-4"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Mire várunk</p><p className="mt-2 text-stone-800">{detail.waitingOn}</p></div>
-          <div className="rounded-2xl bg-stone-50 p-4"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Következő lépés</p><p className="mt-2 text-stone-800">{detail.nextStep || "Nincs közzétett következő lépés"}</p></div>
-        </div>
-        <p className="mt-4 text-sm text-stone-600">Célidő: {formatDate(detail.publicTargetDate)} · Engedélyezett modulok: {enabled.join(", ") || "csak összefoglaló"}</p>
-      </section>
-      {detail.capabilities.showTimeline ? <Section title="Az ügy előrehaladása" empty={!detail.safeMilestones.length}>{detail.safeMilestones.map((item, index) => <div key={`${item.title || item.label || "milestone"}-${index}`} className="rounded-2xl bg-stone-50 p-4"><b>{item.title || item.label || "Közzétett mérföldkő"}</b><span className="block text-sm text-stone-600">{item.state || ""} {item.dueAt ? `· ${formatDate(item.dueAt)}` : ""}</span></div>)}</Section> : null}
-      {detail.capabilities.showDocuments ? <Section title="Dokumentumok"><p className="text-sm text-stone-600">A pontosan közzétett dokumentumverziók a Dokumentumok oldalon érhetők el; visszavont dokumentumhoz nem jelenik meg tárolási hivatkozás.</p></Section> : null}
-      {detail.capabilities.showMessages ? <Section title="Kommunikáció"><p className="text-sm text-stone-600">{detail.capabilities.allowMessages ? "Az ügyhöz kapcsolódó ügyfélkommunikáció az Üzenetek oldalon folytatható." : "Ehhez az ügyhöz az üzenetek olvashatók, új üzenet küldése nincs engedélyezve."}</p></Section> : null}
-      {detail.safeUpdates.length ? <Section title="Legutóbbi frissítések">{detail.safeUpdates.map((item, index) => <div key={`${item.title || "update"}-${index}`} className="rounded-2xl bg-stone-50 p-4"><b>{item.title || "Közzétett frissítés"}</b>{item.body ? <p className="mt-1 text-sm text-stone-700">{item.body}</p> : null}</div>)}</Section> : null}
-    </div>
+    <MatterView
+      matter={matter}
+      showDocuments={detail.capabilities.showDocuments}
+      showMessages={detail.capabilities.showMessages}
+      communicationSection={
+        <CustomerInteractionCard caseId={matter.caseId} allowAsk={detail.capabilities.allowMessages} />
+      }
+    />
   );
 }
 
@@ -307,7 +306,7 @@ function LeadershipSummary({ units }: { units: PortalLeadershipUnitAggregate[] |
   if (!units) return <section className={card}>Ehhez az ügyfélfelülethez nincs vezetői összesítő rálátás.</section>;
   return (
     <Section title="Szervezeti áttekintés" empty={!units.length}>
-      <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-900">Ez az oldal kizárólag összesített adatokat mutat, és nem ad hozzáférést egyedi ügyekhez, dokumentumokhoz vagy üzenetekhez.</p>
+      <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-900">Ez az oldal kizárólag összesített adatokat mutat, és nem ad hozzáférést egyedi ügyekhez, dokumentumokhoz vagy kommunikációhoz.</p>
       {units.map((unit) => <div key={unit.organizationUnitName || "organization"} className="rounded-2xl border border-stone-200 bg-white p-4">
         <h3 className="font-semibold text-stone-950">{unit.organizationUnitName || "Teljes szervezet"}</h3>
         <dl className="mt-3 grid gap-2 text-sm text-stone-700 sm:grid-cols-3">
@@ -324,11 +323,11 @@ function LeadershipSummary({ units }: { units: PortalLeadershipUnitAggregate[] |
 }
 
 export function OrganizationPortalViews({ view, resourceId, context, workspace }: Props) {
-  const [state, setState] = useState<OrgState>({ units: [], cases: [], intakes: [], leadership: null, detail: null, loading: true, message: null });
+  const [state, setState] = useState<OrgState>({ units: [], cases: [], intakes: [], leadership: null, detail: null, matter: null, matterLoading: false, matterError: null, loading: true, message: null });
   const communicationDisabled = context.selectedWorkspace?.communicationMode === "EXTERNAL_ONLY";
 
   const load = useCallback(async () => {
-    setState((current) => ({ ...current, loading: true, message: null, detail: null }));
+    setState((current) => ({ ...current, loading: true, message: null, detail: null, matter: null, matterError: null }));
     try {
       const [unitsPage, casesPage, intakesPage, leadership] = await Promise.all([
         getPortalOrganizationUnits(),
@@ -336,8 +335,20 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
         getPortalOrganizationIntakes({ limit: 20 }),
         getPortalOrganizationSummary().then((result) => result.units).catch(() => null),
       ]);
-      const detail = view === "matter" && resourceId ? await getPortalOrganizationCase(resourceId).catch(() => null) : null;
-      setState({ units: unitsPage.items || [], cases: casesPage.items || [], intakes: intakesPage.items || [], leadership, detail, loading: false, message: null });
+      const caseReference = view === "matter" && resourceId
+        ? (casesPage.items || []).find((item) => item.matterPublicationId === resourceId || item.publicReference === resourceId)?.publicReference || resourceId
+        : null;
+      const detail = caseReference ? await getPortalOrganizationCase(caseReference).catch(() => null) : null;
+      setState({ units: unitsPage.items || [], cases: casesPage.items || [], intakes: intakesPage.items || [], leadership, detail, matter: null, matterLoading: false, matterError: null, loading: false, message: null });
+      if (detail?.matterPublicationId) {
+        setState((current) => ({ ...current, matterLoading: true }));
+        try {
+          const matter = await getPortalMatter(detail.matterPublicationId);
+          setState((current) => ({ ...current, matter, matterLoading: false }));
+        } catch (error) {
+          setState((current) => ({ ...current, matterError: clientSafeError(error), matterLoading: false }));
+        }
+      }
     } catch (error) {
       setState((current) => ({ ...current, loading: false, message: clientSafeError(error) }));
     }
@@ -356,7 +367,7 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
       <OrganizationContextHeader context={context} units={state.units} />
       {view === "home" ? <OrganizationHome state={state} workspace={workspace} /> : null}
       {view === "matters" ? <OrganizationMatters cases={state.cases} units={state.units} /> : null}
-      {view === "matter" ? <OrganizationMatterDetail detail={state.detail} /> : null}
+      {view === "matter" ? <OrganizationMatterDetail detail={state.detail} matter={state.matter} matterLoading={state.matterLoading} matterError={state.matterError} /> : null}
       {view === "documents" ? <OrganizationDocuments workspace={workspace} /> : null}
       {view === "messages" ? <OrganizationMessages workspace={workspace} cases={state.cases} /> : null}
       {view === "intakes" ? <Section title="Megkereséseim" empty={!state.intakes.length}>{state.intakes.map((item) => <IntakeRow key={item.reference} item={item} />)}</Section> : null}

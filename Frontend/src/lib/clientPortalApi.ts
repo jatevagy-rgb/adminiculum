@@ -134,6 +134,7 @@ export type PortalOrganizationCaseRelationship = 'OWN' | 'SHARED';
 
 export type PortalOrganizationCase = {
   publicReference: string;
+  matterPublicationId: string;
   publicTitle: string;
   organizationUnitName: string | null;
   relationshipToCase: PortalOrganizationCaseRelationship;
@@ -148,8 +149,7 @@ export type PortalOrganizationCase = {
 export type PortalOrganizationCaseDetail = PortalOrganizationCase & {
   requesterDisplayName: string | null;
   currentStatusText: string;
-  safeMilestones: Array<{ label?: string; title?: string; state?: string; dueAt?: string; completedAt?: string; description?: string }>;
-  safeUpdates: Array<{ id?: string; title?: string; body?: string; categoryLabel?: string; publishedAt?: string }>;
+  safeMilestones: Array<{ reference?: string; title?: string; description?: string | null; state?: string; displayOrder?: number; completedAt?: string | null }>;
   capabilities: {
     showTimeline: boolean;
     showDocuments: boolean;
@@ -186,6 +186,7 @@ export type PortalOrganizationIntake = {
   customerResponseSafe?: string | null;
   linkedCaseId?: string | null;
   linkedCaseReference?: string | null;
+  linkedMatterPublicationId?: string | null;
   revision: number;
   updatedAt?: string | null;
 };

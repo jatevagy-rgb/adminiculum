@@ -7,6 +7,7 @@
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { assertClientSafe, InteractionError } from '../client-interaction/base';
+import { toCustomerMilestones } from '../client-publication/publicationService';
 import {
   CasePermissionDecision,
   classifyRelationship,
@@ -30,6 +31,7 @@ export interface OrganizationalCaseListParams {
 
 export interface OrganizationalCaseRow {
   publicReference: string;
+  matterPublicationId: string;
   publicTitle: string;
   organizationUnitName: string | null;
   relationshipToCase: RelationshipToCase;
@@ -66,6 +68,7 @@ async function unitNamesByCase(workspaceId: string, caseIds: string[], prisma: P
 
 function toRow(
   publicReference: string,
+  matterPublicationId: string,
   revision: { clientSafeTitle: string; clientSafeStatus: string; clientSafeNextStep: string | null; clientSafeWaitingOn?: string | null; publicTargetDate?: Date | null; publishedDeadlinesSnapshot: unknown },
   relationshipToCase: RelationshipToCase,
   unitName: string | null,
@@ -76,6 +79,7 @@ function toRow(
   const nextDeadline = deadlines.map((deadline) => deadline?.dueAt).filter(Boolean).sort()[0] || null;
   return {
     publicReference,
+    matterPublicationId,
     publicTitle: revision.clientSafeTitle,
     organizationUnitName: unitName,
     relationshipToCase,
@@ -120,7 +124,7 @@ export async function listOrganizationalCases(
 
   const publications = await prisma.clientMatterPublication.findMany({
     where: { caseId: { in: caseIds }, status: 'PUBLISHED', currentRevisionId: { not: null }, OR: [{ workspaceId }, { workspaceId: null }] },
-    select: { caseId: true, workspaceId: true, currentRevisionId: true, publishedAt: true },
+    select: { id: true, caseId: true, workspaceId: true, currentRevisionId: true, publishedAt: true },
     orderBy: { publishedAt: 'desc' },
   });
   const preferredPublications = [...new Map(publications.sort((left, right) => Number(right.workspaceId === workspaceId) - Number(left.workspaceId === workspaceId)).map((publication) => [publication.caseId, publication])).values()];
@@ -151,6 +155,7 @@ export async function listOrganizationalCases(
     const relationshipToCase = classifyRelationship(role, Boolean(grant.isRequester));
     rows.push(toRow(
       refByCase.get(publication.caseId) || publication.caseId,
+      publication.id,
       revision,
       relationshipToCase,
       unitNames.get(publication.caseId) ?? null,
@@ -177,7 +182,6 @@ export interface OrganizationalCaseDetail extends OrganizationalCaseRow {
   requesterDisplayName: string | null;
   currentStatusText: string;
   safeMilestones: unknown[];
-  safeUpdates: unknown[];
   capabilities: {
     showTimeline: boolean;
     showDocuments: boolean;
@@ -220,20 +224,20 @@ export async function getOrganizationalCaseDetail(
 
   const publicationCandidates = await prisma.clientMatterPublication.findMany({
     where: { caseId: caseRow.id, status: 'PUBLISHED', currentRevisionId: { not: null }, OR: [{ workspaceId }, { workspaceId: null }] },
-    select: { workspaceId: true, currentRevisionId: true, publishedAt: true },
+    select: { id: true, workspaceId: true, currentRevisionId: true, publishedAt: true },
     orderBy: { publishedAt: 'desc' },
   });
   const publication = publicationCandidates.find((candidate) => candidate.workspaceId === workspaceId) || publicationCandidates[0];
   if (!publication?.currentRevisionId) throw new InteractionError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Case is not available.');
   const revision = await prisma.clientMatterPublicationRevision.findUnique({
     where: { id: publication.currentRevisionId },
-    select: { clientSafeTitle: true, clientSafeStatus: true, clientSafeNextStep: true, clientSafeCurrentPosition: true, clientSafeWaitingOn: true, publicTargetDate: true, responsibleLawyerDisplay: true, publishedDeadlinesSnapshot: true, safeUpdatesSnapshot: true, actionRequestsSnapshot: true },
+    select: { clientSafeTitle: true, clientSafeStatus: true, clientSafeNextStep: true, clientSafeCurrentPosition: true, clientSafeWaitingOn: true, publicTargetDate: true, responsibleLawyerDisplay: true, publishedDeadlinesSnapshot: true, milestonesSnapshot: true },
   });
   if (!revision) throw new InteractionError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Case is not available.');
 
   const actionCount = await prisma.clientActionRequest.count({ where: { caseId: caseRow.id, status: 'PUBLISHED' } });
   const unitName = (await unitNamesByCase(workspace.id, [caseRow.id], prisma)).get(caseRow.id) ?? null;
-  const base = toRow(caseRow.caseNumber, revision, access.relationshipToCase, unitName, actionCount > 0, publication.publishedAt);
+  const base = toRow(caseRow.caseNumber, publication.id, revision, access.relationshipToCase, unitName, actionCount > 0, publication.publishedAt);
 
   const detail: OrganizationalCaseDetail = {
     ...base,
@@ -242,8 +246,7 @@ export async function getOrganizationalCaseDetail(
     // projection is a later CP1 stage.
     requesterDisplayName: null,
     currentStatusText: revision.clientSafeCurrentPosition || revision.clientSafeStatus,
-    safeMilestones: Array.isArray(revision.publishedDeadlinesSnapshot) ? revision.publishedDeadlinesSnapshot as unknown[] : [],
-    safeUpdates: Array.isArray(revision.safeUpdatesSnapshot) ? revision.safeUpdatesSnapshot as unknown[] : [],
+    safeMilestones: toCustomerMilestones(revision.milestonesSnapshot),
     capabilities: capabilitiesFrom(access),
   };
   assertClientSafe(detail);

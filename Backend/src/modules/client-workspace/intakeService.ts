@@ -58,14 +58,19 @@ function attachmentState(status: string): string {
   return 'processing-unavailable';
 }
 
-async function linkedPublicReference(intake: any, identityId: string, prisma: Prisma): Promise<string | null> {
-  if (!intake.linkedCaseId || !['LINKED_TO_EXISTING_CASE', 'CONVERTED_TO_CASE', 'CLOSED'].includes(String(intake.status))) return null;
+type LinkedCaseReference = { caseReference: string | null; matterPublicationId: string | null };
+
+async function linkedPublicCase(intake: any, identityId: string, prisma: Prisma): Promise<LinkedCaseReference> {
+  if (!intake.linkedCaseId || !['LINKED_TO_EXISTING_CASE', 'CONVERTED_TO_CASE', 'CLOSED'].includes(String(intake.status))) {
+    return { caseReference: null, matterPublicationId: null };
+  }
   const [grant, publication, caseRow] = await Promise.all([
     prisma.clientPortalGrant.findFirst({ where: { clientPortalIdentityId: identityId, workspaceId: intake.workspaceId, caseId: intake.linkedCaseId, status: 'ACTIVE', permissions: { has: 'MATTER_READ' } }, select: { id: true } }),
     prisma.clientMatterPublication.findFirst({ where: { workspaceId: intake.workspaceId, caseId: intake.linkedCaseId, status: 'PUBLISHED', currentRevisionId: { not: null } }, select: { id: true } }),
     prisma.case.findUnique({ where: { id: intake.linkedCaseId }, select: { caseNumber: true } }),
   ]);
-  return grant && publication ? caseRow?.caseNumber || null : null;
+  if (!grant || !publication) return { caseReference: null, matterPublicationId: null };
+  return { caseReference: caseRow?.caseNumber || null, matterPublicationId: publication.id };
 }
 
 async function toCustomerDto(intake: any, identityId: string, prisma: Prisma) {
@@ -74,6 +79,7 @@ async function toCustomerDto(intake: any, identityId: string, prisma: Prisma) {
     : null;
   const latestRequest = (intake.informationRequests || []).find((request: any) => request.status === 'PUBLISHED');
   const status = STATUS_LABELS[String(intake.status)] || { code: 'processing', label: 'Feldolgozás alatt' };
+  const linkedCase = await linkedPublicCase(intake, identityId, prisma);
   const dto = {
     reference: intake.id,
     subject: intake.subject,
@@ -85,7 +91,8 @@ async function toCustomerDto(intake: any, identityId: string, prisma: Prisma) {
     submittedAt: intake.submittedAt,
     updatedAt: intake.updatedAt,
     officeResponse: intake.customerResponseSafe,
-    linkedPublicCaseReference: await linkedPublicReference(intake, identityId, prisma),
+    linkedPublicCaseReference: linkedCase.caseReference,
+    linkedMatterPublicationId: linkedCase.matterPublicationId,
     allowedActions: {
       update: intake.status === 'DRAFT',
       submit: intake.status === 'DRAFT',
