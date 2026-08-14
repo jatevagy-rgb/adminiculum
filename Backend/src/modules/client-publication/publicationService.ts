@@ -805,21 +805,28 @@ function audienceGrants(row: Row): Row[] {
   return [];
 }
 
+function audienceGrantAllows(grant: Row, permission: string): boolean {
+  const permissions = Array.isArray(grant.permissions) ? grant.permissions.map(String) : [];
+  return permissions.length === 0 || permissions.includes(permission);
+}
+
 function audienceAllows(row: Row, grants: Row[], permission: string): boolean {
-  const allowedGrantIds = new Set(audienceGrants(row).map((grant) => String(grant.id || '')).filter(Boolean));
+  const scopedGrants = audienceGrants(row);
+  const allowedGrantIds = new Set(scopedGrants.filter((grant) => audienceGrantAllows(grant, permission)).map((grant) => String(grant.id || '')).filter(Boolean));
   return grants.some((grant) => {
     const permissions = Array.isArray(grant.permissions) ? grant.permissions.map(String) : [];
     if (!permissions.includes(permission)) return false;
-    return allowedGrantIds.size === 0 || allowedGrantIds.has(String(grant.id));
+    return scopedGrants.length === 0 || allowedGrantIds.has(String(grant.id));
   });
 }
 
 function firstAuthorizedGrant(row: Row, grants: Row[], permission: string): Row | null {
-  const allowedGrantIds = new Set(audienceGrants(row).map((grant) => String(grant.id || '')).filter(Boolean));
+  const scopedGrants = audienceGrants(row);
+  const allowedGrantIds = new Set(scopedGrants.filter((grant) => audienceGrantAllows(grant, permission)).map((grant) => String(grant.id || '')).filter(Boolean));
   return grants.find((grant) => {
     const permissions = Array.isArray(grant.permissions) ? grant.permissions.map(String) : [];
     if (!permissions.includes(permission)) return false;
-    return allowedGrantIds.size === 0 || allowedGrantIds.has(String(grant.id));
+    return scopedGrants.length === 0 || allowedGrantIds.has(String(grant.id));
   }) || null;
 }
 
