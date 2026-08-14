@@ -241,7 +241,10 @@ export async function createAndPublishInitialMatterPublicationInTransaction(
   const audience = { grants: [{ id: grant.id, clientPortalIdentityId: grant.clientPortalIdentityId, participantRole: grant.participantRole, permissions: grant.permissions }] };
   const publicTargetDate = input.publicTargetDate ? new Date(String(input.publicTargetDate)) : null;
   if (publicTargetDate && Number.isNaN(publicTargetDate.getTime())) throw new ClientPublicationError(400, 'INVALID_PUBLIC_TARGET_DATE', 'publicTargetDate is invalid.');
-  const revision = await one(tx, 'INSERT INTO client_matter_publication_revisions (id,"publicationId","revisionNumber","clientSafeTitle","clientSafeStatus","clientSafeNextStep","clientSafeCurrentPosition","clientSafeWaitingOn","publicTargetDate","responsibleLawyerDisplay","publishedDeadlinesSnapshot","safeUpdatesSnapshot","actionRequestsSnapshot","sourceCaseRevision","sourceFingerprint","audienceSnapshot","createdById") VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12::jsonb,$13,$14,$15::jsonb,$16) RETURNING *',
+  // milestonesSnapshot must be an explicit column; do NOT store safeMilestones in
+  // publishedDeadlinesSnapshot — they are separate concepts and the customer-facing
+  // read path (getPortalMatter, getOrganizationalCaseDetail) reads milestonesSnapshot.
+  const revision = await one(tx, 'INSERT INTO client_matter_publication_revisions (id,"publicationId","revisionNumber","clientSafeTitle","clientSafeStatus","clientSafeNextStep","clientSafeCurrentPosition","clientSafeWaitingOn","publicTargetDate","responsibleLawyerDisplay","publishedDeadlinesSnapshot","safeUpdatesSnapshot","actionRequestsSnapshot","sourceCaseRevision","sourceFingerprint","audienceSnapshot","milestonesSnapshot","createdById") VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12::jsonb,$13,$14,$15::jsonb,$16::jsonb,$17) RETURNING *',
     newId(), publication!.id,
     text(input.publicTitle, 'publicTitle', 240, true),
     text(input.publicStatus, 'publicStatus', 240, true),
@@ -250,12 +253,13 @@ export async function createAndPublishInitialMatterPublicationInTransaction(
     text(input.waitingOn, 'waitingOn', 1000),
     publicTargetDate,
     text(input.responsibleLawyerDisplay, 'responsibleLawyerDisplay', 160),
-    JSON.stringify(json(input.safeMilestones || [], 'safeMilestones')),
+    JSON.stringify([]),
     JSON.stringify(json(input.safeUpdate ? [input.safeUpdate] : [], 'safeUpdatesSnapshot')),
     JSON.stringify([]),
     Number(caseRow.revision || 0),
     hash({ caseId, workspaceId, grantId, input }),
     JSON.stringify(audience),
+    JSON.stringify(json(input.safeMilestones || [], 'safeMilestones')),
     actor.userId,
   );
   await exec(tx, 'UPDATE client_matter_publications SET "currentRevisionId"=$2, revision=revision+1, "updatedAt"=now() WHERE id=$1', publication!.id, revision!.id);

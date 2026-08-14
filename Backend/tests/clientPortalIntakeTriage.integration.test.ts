@@ -227,4 +227,40 @@ d('CP1 intake and triage backend (PostgreSQL)', () => {
     const two: any = await submitted('Archived');
     await expect(linkIntakeToExistingCase(admin, two.reference, { caseId: archivedCase.id, createRequesterAccess: false, publishInitialSnapshot: false }, db as any)).rejects.toMatchObject({ code: 'CASE_NOT_ELIGIBLE' });
   });
+
+  it('initial publication stores safeMilestones in milestonesSnapshot, not publishedDeadlinesSnapshot (regression: column mismatch fix)', async () => {
+    // Regression guard: createAndPublishInitialMatterPublicationInTransaction previously
+    // stored safeMilestones in publishedDeadlinesSnapshot (wrong column), leaving
+    // milestonesSnapshot NULL.  The customer-facing read path reads milestonesSnapshot,
+    // so any milestones provided at intake conversion time were silently discarded.
+    const sent: any = await submitted('Milestone column regression');
+    const milestones = [
+      { reference: 'M1', title: 'Első mérföldkő', description: 'Leírás', state: 'NOT_STARTED', displayOrder: 1, weight: null, completedAt: null },
+    ];
+    const result: any = await convertIntakeToNewCase(
+      admin, sent.reference,
+      {
+        newCase: { title: `CP1 milestone-col-${suffix}`, matterType: 'OTHER', assignedLawyerId: adminId },
+        createRequesterAccess: true, participantRole: 'REQUESTER', permissions: ['MATTER_READ'],
+        publishInitialSnapshot: true,
+        publication: { publicTitle: 'Milestone test pub', publicStatus: 'Indulás', safeMilestones: milestones },
+      },
+      db as any,
+    );
+    const revisionRow = await db.$queryRaw<any[]>`
+      SELECT "milestonesSnapshot", "publishedDeadlinesSnapshot"
+      FROM client_matter_publication_revisions
+      WHERE "publicationId" = ${result.publication.id}::text
+      ORDER BY "revisionNumber" ASC LIMIT 1
+    `;
+    expect(revisionRow).toHaveLength(1);
+    const rev = revisionRow[0];
+    // Milestones must be in milestonesSnapshot
+    const stored = Array.isArray(rev.milestonesSnapshot) ? rev.milestonesSnapshot : JSON.parse(rev.milestonesSnapshot ?? '[]');
+    expect(stored).toHaveLength(1);
+    expect(stored[0].reference).toBe('M1');
+    // publishedDeadlinesSnapshot must be empty (milestones are NOT deadlines)
+    const deadlines = Array.isArray(rev.publishedDeadlinesSnapshot) ? rev.publishedDeadlinesSnapshot : JSON.parse(rev.publishedDeadlinesSnapshot ?? '[]');
+    expect(deadlines).toHaveLength(0);
+  });
 });
