@@ -295,6 +295,15 @@ d('CP1 organizational access core (PostgreSQL)', () => {
     // Workspace membership alone is insufficient.
     await expect(getPortalMatter({ userId: identity.manager, role: 'CLIENT_PORTAL', workspaceId: orgWs }, pubA.id, db)).rejects.toMatchObject({ code: 'PORTAL_RESOURCE_NOT_FOUND' });
 
+    const restrictedCaseId = await makePublishedCase('E', null);
+    await grant('alexandra', 'E', 'PARTICIPANT', ['MATTER_READ']);
+    const restrictedPub = (await db.clientMatterPublication.findFirst({ where: { caseId: restrictedCaseId }, select: { id: true } }))!;
+    await db.clientMatterPublicationRevision.updateMany({
+      where: { publicationId: restrictedPub.id },
+      data: { audienceSnapshot: { grants: [{ id: crypto.randomUUID(), permissions: ['MATTER_READ'] }] } as never },
+    });
+    await expect(getPortalMatter({ userId: identity.alexandra, role: 'CLIENT_PORTAL', workspaceId: orgWs }, restrictedPub.id, db)).rejects.toMatchObject({ code: 'PORTAL_RESOURCE_NOT_FOUND' });
+
     // Wrong workspace is denied.
     await expect(getPortalMatter({ userId: identity.alexandra, role: 'CLIENT_PORTAL', workspaceId: indivWs }, pubA.id, db)).rejects.toMatchObject({ code: 'CLIENT_WORKSPACE_MEMBERSHIP_REQUIRED' });
   });
