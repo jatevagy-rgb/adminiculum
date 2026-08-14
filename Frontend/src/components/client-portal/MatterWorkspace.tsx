@@ -164,6 +164,7 @@ export function MatterView({
           </div>
         </div>
         <div className="mt-4 grid gap-2 text-sm text-stone-600 sm:grid-cols-2">
+          <span>Publikus céldátum: {formatDate(matter.estimatedTiming)}</span>
           <span>Közzétéve: {formatDate(matter.publishedAt)}</span>
           <span>Utolsó ügyféloldali frissítés: {formatDate(matter.lastClientVisibleUpdateAt || matter.latestUpdateAt)}</span>
         </div>

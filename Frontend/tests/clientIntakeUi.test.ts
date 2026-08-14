@@ -65,8 +65,10 @@ describe('CP1 intake shared helpers', () => {
 describe('CP1 customer intake UI contract (structural)', () => {
   const src = read('src/components/client-portal/CustomerIntake.tsx');
   it('gates the resulting Case link on the backend-confirmed reference', () => {
-    assert.ok(src.includes('linkedPublicCaseReference'));
+    assert.ok(src.includes('linkedMatterPublicationId'));
+    assert.ok(src.includes('/portal/matters/${encodeURIComponent(intake.linkedMatterPublicationId)}'));
     assert.ok(src.includes('még nincs közzétéve'));
+    assert.ok(!src.includes('linkedCaseReference'));
   });
   it('submit and withdraw are behind explicit confirmation', () => {
     assert.ok(src.includes('confirmSubmit'));

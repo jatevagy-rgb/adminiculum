@@ -186,6 +186,7 @@ export type PortalOrganizationIntake = {
   customerResponseSafe?: string | null;
   linkedCaseId?: string | null;
   linkedCaseReference?: string | null;
+  linkedMatterPublicationId?: string | null;
   revision: number;
   updatedAt?: string | null;
 };

@@ -100,7 +100,7 @@ function OrganizationContextHeader({ context, units }: { context: PortalIdentity
 
 function OrgCaseCard({ item }: { item: PortalOrganizationCase }) {
   return (
-    <Link href={`/portal/matters/${encodeURIComponent(item.publicReference)}`} className="block rounded-2xl border border-stone-200 bg-white p-4 transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
+    <Link href={`/portal/matters/${encodeURIComponent(item.matterPublicationId)}`} className="block rounded-2xl border border-stone-200 bg-white p-4 transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">{item.publicReference} · {item.organizationUnitName || "Szervezet"}</p>
@@ -133,7 +133,7 @@ function OrganizationHome({ state, workspace }: { state: OrgState; workspace: Po
   const shared = state.cases.filter((item) => item.relationshipToCase === "SHARED");
   const attention = [
     ...workspace.actions.filter((item) => item.bucket === "now"),
-    ...state.cases.filter((item) => item.customerActionRequired).map((item) => ({ id: item.publicReference, title: item.publicTitle, matterTitle: item.organizationUnitName || "Szervezeti ügy", status: item.waitingOn, actionUrl: `/portal/matters/${encodeURIComponent(item.publicReference)}` })),
+    ...state.cases.filter((item) => item.customerActionRequired).map((item) => ({ id: item.matterPublicationId, title: item.publicTitle, matterTitle: item.organizationUnitName || "Szervezeti ügy", status: item.waitingOn, actionUrl: `/portal/matters/${encodeURIComponent(item.matterPublicationId)}` })),
   ];
   return (
     <div className="space-y-5">
@@ -156,7 +156,7 @@ function IntakeRow({ item }: { item: PortalOrganizationIntake }) {
         <span className="rounded-full bg-white px-3 py-1 text-xs text-stone-700">{intakeStatusLabel(item.status)}</span>
       </div>
       <p className="mt-2 text-stone-600">Egység: {item.organizationGroupName || item.organizationGroupId || "Nincs megadva"} · Beküldve: {formatDate(item.submittedAt)}</p>
-      {item.linkedCaseReference ? <Link className="mt-2 inline-flex text-[#7a5f18] underline" href={`/portal/matters/${encodeURIComponent(item.linkedCaseReference)}`}>Kapcsolt ügy megnyitása</Link> : null}
+      {item.linkedMatterPublicationId ? <Link className="mt-2 inline-flex text-[#7a5f18] underline" href={`/portal/matters/${encodeURIComponent(item.linkedMatterPublicationId)}`}>Kapcsolt ügy megnyitása</Link> : null}
     </div>
   );
 }
@@ -306,7 +306,7 @@ function LeadershipSummary({ units }: { units: PortalLeadershipUnitAggregate[] |
   if (!units) return <section className={card}>Ehhez az ügyfélfelülethez nincs vezetői összesítő rálátás.</section>;
   return (
     <Section title="Szervezeti áttekintés" empty={!units.length}>
-      <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-900">Ez az oldal kizárólag összesített adatokat mutat, és nem ad hozzáférést egyedi ügyekhez, dokumentumokhoz vagy üzenetekhez.</p>
+      <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-900">Ez az oldal kizárólag összesített adatokat mutat, és nem ad hozzáférést egyedi ügyekhez, dokumentumokhoz vagy kommunikációhoz.</p>
       {units.map((unit) => <div key={unit.organizationUnitName || "organization"} className="rounded-2xl border border-stone-200 bg-white p-4">
         <h3 className="font-semibold text-stone-950">{unit.organizationUnitName || "Teljes szervezet"}</h3>
         <dl className="mt-3 grid gap-2 text-sm text-stone-700 sm:grid-cols-3">
@@ -335,7 +335,10 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
         getPortalOrganizationIntakes({ limit: 20 }),
         getPortalOrganizationSummary().then((result) => result.units).catch(() => null),
       ]);
-      const detail = view === "matter" && resourceId ? await getPortalOrganizationCase(resourceId).catch(() => null) : null;
+      const caseReference = view === "matter" && resourceId
+        ? (casesPage.items || []).find((item) => item.matterPublicationId === resourceId || item.publicReference === resourceId)?.publicReference || resourceId
+        : null;
+      const detail = caseReference ? await getPortalOrganizationCase(caseReference).catch(() => null) : null;
       setState({ units: unitsPage.items || [], cases: casesPage.items || [], intakes: intakesPage.items || [], leadership, detail, matter: null, matterLoading: false, matterError: null, loading: false, message: null });
       if (detail?.matterPublicationId) {
         setState((current) => ({ ...current, matterLoading: true }));

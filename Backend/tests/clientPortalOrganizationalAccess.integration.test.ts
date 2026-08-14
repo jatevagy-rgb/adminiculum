@@ -7,6 +7,7 @@ import { unitSummary, organizationSummary, mayViewCaseContent } from '../src/mod
 import { assignUnitMembership, createParticipant, revokeParticipant, createSummaryScope, revokeUnitMembership, createWorkspaceUnit } from '../src/modules/client-workspace/organizationAdminService';
 import { resolveActiveCustomerGrant } from '../src/modules/client-interaction/base';
 import { createCustomerQuestion, listCustomerThreads } from '../src/modules/client-interaction/questionService';
+import { getPortalMatter } from '../src/modules/client-publication/publicationService';
 
 const databaseUrl = process.env.CLIENT_INTERACTION_TEST_DATABASE_URL || process.env.CLIENT_IDENTITY_TEST_DATABASE_URL;
 const d = databaseUrl ? describe : describe.skip;
@@ -50,6 +51,9 @@ d('CP1 organizational access core (PostgreSQL)', () => {
         clientSafeTitle: `Ügy ${key}`,
         clientSafeStatus: 'Folyamatban',
         clientSafeNextStep: 'Következő lépés',
+        clientSafeCurrentPosition: `Most itt tartunk ${key}`,
+        clientSafeWaitingOn: `Mire várunk ${key}`,
+        publicTargetDate: new Date('2026-10-01T00:00:00.000Z'),
         publishedDeadlinesSnapshot: [{ label: 'Teszt belső határidő', dueAt: '2026-12-31' }],
         safeUpdatesSnapshot: [],
         actionRequestsSnapshot: [],
@@ -258,5 +262,40 @@ d('CP1 organizational access core (PostgreSQL)', () => {
 
     // Workspace membership alone (manager) has no case communication grant.
     await expect(resolveActiveCustomerGrant(identity.manager, kase.A, orgWs, db)).rejects.toMatchObject({ code: 'CLIENT_PORTAL_NO_ACTIVE_GRANT' });
+  });
+
+  it('MESSAGE_READ gates viewing messages and MESSAGE_SEND gates sending them', async () => {
+    const noMessage = await resolveParticipantAccess(identity.alexandra, kase.A, orgWs, db);
+    expect(noMessage.canViewMessages).toBe(false);
+    expect(noMessage.canSendMessages).toBe(false);
+
+    const viewOnly = await resolveParticipantAccess(identity.bela, kase.B, orgWs, db);
+    expect(viewOnly.canViewMessages).toBe(true);
+    expect(viewOnly.canSendMessages).toBe(false);
+
+    const full = await resolveParticipantAccess(identity.ferenc, kase.C, orgWs, db);
+    expect(full.canViewMessages).toBe(true);
+    expect(full.canSendMessages).toBe(true);
+  });
+
+  it('direct matter endpoint requires active MATTER_READ grant and audience', async () => {
+    const pubA = (await db.clientMatterPublication.findFirst({ where: { caseId: kase.A }, select: { id: true } }))!;
+    const pubB = (await db.clientMatterPublication.findFirst({ where: { caseId: kase.B }, select: { id: true } }))!;
+
+    const matterA = await getPortalMatter({ userId: identity.alexandra, role: 'CLIENT_PORTAL', workspaceId: orgWs }, pubA.id, db);
+    expect(matterA.caseId).toBe(kase.A);
+    expect(matterA.statusLabel).toBe('Folyamatban');
+    expect(matterA.currentSummary).toBe('Most itt tartunk A');
+    expect(matterA.waitingOnLabel).toBe('Mire várunk A');
+    expect(matterA.estimatedTiming).toBe('2026-10-01T00:00:00.000Z');
+
+    // Alexandra has no grant to Case B.
+    await expect(getPortalMatter({ userId: identity.alexandra, role: 'CLIENT_PORTAL', workspaceId: orgWs }, pubB.id, db)).rejects.toMatchObject({ code: 'PORTAL_RESOURCE_NOT_FOUND' });
+
+    // Workspace membership alone is insufficient.
+    await expect(getPortalMatter({ userId: identity.manager, role: 'CLIENT_PORTAL', workspaceId: orgWs }, pubA.id, db)).rejects.toMatchObject({ code: 'PORTAL_RESOURCE_NOT_FOUND' });
+
+    // Wrong workspace is denied.
+    await expect(getPortalMatter({ userId: identity.alexandra, role: 'CLIENT_PORTAL', workspaceId: indivWs }, pubA.id, db)).rejects.toMatchObject({ code: 'CLIENT_WORKSPACE_MEMBERSHIP_REQUIRED' });
   });
 });

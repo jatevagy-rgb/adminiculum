@@ -65,12 +65,42 @@ describe("CP1 organizational client portal UI", () => {
     assert.doesNotMatch(src, /raw enum|workspace ID|grant ID|SharePoint|SCAN_FAILED/);
   });
 
+  it("renders shared Matter workspace for organization matter detail", () => {
+    const views = orgViews();
+    const src = views + matterWorkspace();
+    assert.match(views, /getPortalMatter\(detail\.matterPublicationId\)/);
+    assert.match(views, /item\.matterPublicationId === resourceId \|\| item\.publicReference === resourceId/);
+    assert.match(views, /\/portal\/matters\/\$\{encodeURIComponent\(item\.matterPublicationId\)\}/);
+    assert.match(src, /MatterView/);
+    assert.match(src, /Dokumentumok/);
+    assert.match(src, /Teendők/);
+    assert.match(src, /Frissítések/);
+    assert.match(src, /Az ügy előrehaladása/);
+    assert.match(src, /Most itt tartunk/);
+    assert.match(src, /Mire várunk/);
+    assert.match(src, /Következő lépés/);
+    assert.match(src, /Publikus céldátum/);
+    assert.doesNotMatch(views, /dokumentumok megtekintéséhez|üzenetekhez|ügy részleteihez navigáljon|hagyja el az ügy oldalát/i);
+    for (const forbidden of ["sourceTaskId", "workflowStepKey", "grantId", "clientId", "workspaceId", "membershipId", "internalStatus", "raw enum"]) {
+      assert.doesNotMatch(src, new RegExp(forbidden, "i"));
+    }
+  });
+
+  it("converted organization intake links to the canonical published matter route", () => {
+    const src = orgViews();
+    assert.match(src, /linkedMatterPublicationId/);
+    assert.match(src, /\/portal\/matters\/\$\{encodeURIComponent\(item\.linkedMatterPublicationId\)\}/);
+    assert.doesNotMatch(src, /\/portal\/matters\/\$\{encodeURIComponent\(item\.linkedCaseReference\)\}/);
+  });
+
   it("respects communication mode and avoids fake integrations", () => {
     const src = orgViews() + shell();
     const orgSrc = orgViews();
     assert.match(src, /communicationMode !== 'EXTERNAL_ONLY'/);
     assert.match(src, /portálon belüli üzenetküldés nincs engedélyezve/);
     assert.match(src, /canSendMessages|allowMessages/);
+    assert.match(orgSrc, /showMessages=\{detail\.capabilities\.showMessages\}/);
+    assert.match(orgSrc, /allowAsk=\{detail\.capabilities\.allowMessages\}/);
     assert.doesNotMatch(orgSrc, /Outlook sync|automatikus szinkronizáció/);
   });
 
