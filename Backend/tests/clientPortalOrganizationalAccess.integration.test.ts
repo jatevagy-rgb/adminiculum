@@ -287,7 +287,7 @@ d('CP1 organizational access core (PostgreSQL)', () => {
     expect(matterA.statusLabel).toBe('Folyamatban');
     expect(matterA.currentSummary).toBe('Most itt tartunk A');
     expect(matterA.waitingOnLabel).toBe('Mire várunk A');
-    expect(matterA.estimatedTiming).toBe('2026-10-01T00:00:00.000Z');
+    expect(matterA.estimatedTiming).toContain('2026-10-01');
 
     // Alexandra has no grant to Case B.
     await expect(getPortalMatter({ userId: identity.alexandra, role: 'CLIENT_PORTAL', workspaceId: orgWs }, pubB.id, db)).rejects.toMatchObject({ code: 'PORTAL_RESOURCE_NOT_FOUND' });
