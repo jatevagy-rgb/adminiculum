@@ -39,7 +39,7 @@ d('CP1 organizational access core (PostgreSQL)', () => {
     await db.clientOrganizationMembership.create({ data: { clientPortalIdentityId: identity[key], clientId: client, groupId, status: status as never, approvedFromRequestId: crypto.randomUUID(), approvedById: admin, approvedAt: new Date() } });
   }
 
-  async function makePublishedCase(key: string, unitGroupId: string | null) {
+  async function makePublishedCase(key: string, unitGroupId: string | null, audienceSnapshot: Record<string, unknown> = {}) {
     const id = crypto.randomUUID();
     kase[key] = id;
     await db.case.create({ data: { id, caseNumber: `CP1-${key}-${id.slice(0, 6)}`, title: `internal ${key}`, caseType: 'CONTRACT_REVIEW', clientId: client, createdById: admin, assignedLawyerId: admin } as never });
@@ -57,9 +57,9 @@ d('CP1 organizational access core (PostgreSQL)', () => {
         publishedDeadlinesSnapshot: [{ label: 'Teszt belső határidő', dueAt: '2026-12-31' }],
         safeUpdatesSnapshot: [],
         actionRequestsSnapshot: [],
-        milestonesSnapshot: [{ reference: `ms-${key}`, title: `Mérföldkő ${key}`, description: null, state: 'NOT_STARTED', displayOrder: 1, weight: null, completedAt: null }],
+        milestonesSnapshot: [{ publicKey: `ms-${key}`, safeTitle: `Mérföldkő ${key}`, safeDescription: null, completionState: 'NOT_STARTED', displayOrder: 1, weight: null, completedAt: null }],
         sourceFingerprint: `fp-${id}`,
-        audienceSnapshot: {},
+        audienceSnapshot: audienceSnapshot as never,
         createdById: admin,
       },
     });
@@ -77,6 +77,7 @@ d('CP1 organizational access core (PostgreSQL)', () => {
   beforeAll(async () => {
     process.env.DATABASE_URL = databaseUrl;
     process.env.CLIENT_PORTAL_READ_ENABLED = 'true';
+    process.env.CLIENT_PORTAL_ACTIONS_ENABLED = 'true';
     process.env.CLIENT_PORTAL_QUESTIONS_ENABLED = 'true';
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
     await db.user.create({ data: { id: admin, email: `admin-${admin}@t.io`, name: 'Admin', role: 'ADMIN', status: 'ACTIVE' } as never });
@@ -295,13 +296,9 @@ d('CP1 organizational access core (PostgreSQL)', () => {
     // Workspace membership alone is insufficient.
     await expect(getPortalMatter({ userId: identity.manager, role: 'CLIENT_PORTAL', workspaceId: orgWs }, pubA.id, db)).rejects.toMatchObject({ code: 'PORTAL_RESOURCE_NOT_FOUND' });
 
-    const restrictedCaseId = await makePublishedCase('E', null);
+    const restrictedCaseId = await makePublishedCase('E', null, { grants: [{ id: crypto.randomUUID(), permissions: ['MATTER_READ'] }] });
     await grant('alexandra', 'E', 'PARTICIPANT', ['MATTER_READ']);
     const restrictedPub = (await db.clientMatterPublication.findFirst({ where: { caseId: restrictedCaseId }, select: { id: true } }))!;
-    await db.clientMatterPublicationRevision.updateMany({
-      where: { publicationId: restrictedPub.id },
-      data: { audienceSnapshot: { grants: [{ id: crypto.randomUUID(), permissions: ['MATTER_READ'] }] } as never },
-    });
     await expect(getPortalMatter({ userId: identity.alexandra, role: 'CLIENT_PORTAL', workspaceId: orgWs }, restrictedPub.id, db)).rejects.toMatchObject({ code: 'PORTAL_RESOURCE_NOT_FOUND' });
 
     // Wrong workspace is denied.
