@@ -70,6 +70,46 @@ describe('internal portal-admin UI', () => {
     assert.match(src, /g\.caseId \? /);
   });
 
+  it('productizes workspace administration as client-first portal activation', () => {
+    const src = page();
+    for (const marker of [
+      'activation-wizard',
+      'Ügyfélportál aktiválása',
+      'Ügyfél kiválasztása',
+      'Milyen ügyfél?',
+      'Hogyan dolgozunk együtt?',
+      'Portálon keresztül',
+      'Elsősorban e-mailben',
+      'Kapcsolt rendszer',
+      'Ügyhozzáférés nem jön létre automatikusan',
+      'client-centric-portal-list',
+      'Aktív ügyfélportálok',
+      'Archiváltak',
+      'client-portal-detail',
+      'Áttekintés',
+      'Felhasználók',
+      'Szervezeti egységek',
+      'Ügyhozzáférések',
+      'Vezetői rálátás',
+      'Beállítások',
+      'Audit',
+      'Technikai adatok / Audit',
+    ]) assert.match(src, new RegExp(marker));
+    assert.match(src, /modeFromActivation/);
+    assert.match(src, /relationship === "CONNECTED_SYSTEM" \? "CASE_RELAY" : "ORGANIZATION"/);
+    assert.match(src, /if \(relationship === "EMAIL_CENTRIC"\) return "EMAIL_LINKED"/);
+    assert.match(src, /updateClient\(client\.id,\s*\{\s*portalAccessEnabled: true/);
+    assert.match(src, /createAdminWorkspace/);
+    assert.match(src, /transitionAdminWorkspace\(workspace\.id, "activate"/);
+    assert.match(src, /createWorkspaceUnit/);
+    assert.match(src, /Haladó szervezeti adminisztráció \/ Audit/);
+    assert.match(src, /permissionLabel\(p\)/);
+    assert.match(src, /permissionLabel\(permission\)/);
+    assert.match(src, /permissionList\(g\.permissions\)/);
+    assert.doesNotMatch(src, />\{p\}<\/button>/);
+    assert.doesNotMatch(src, />\{permission\}<\/button>/);
+  });
+
   it('shows a bounded workforce admin loading error with retry', () => {
     const src = page();
     assert.match(src, /client-portal-admin-load-error/);
@@ -112,6 +152,8 @@ describe('internal portal-admin UI', () => {
     assert.match(shell, /'\/portal\/uzenetek'/);
     assert.match(shell, /Amit most érdemes elintézni/);
     assert.match(shell, /Kérdések és válaszok/);
+    assert.match(shell, /workspace\.mode === 'ORGANIZATION' && capabilities\.intakes \? \['Új megkeresés'/);
+    assert.match(read('src/lib/clientPortalApi.ts'), /intakes\?: boolean/);
     assert.doesNotMatch(shell, /Belső munkapad|Review sor|Munkaórák/);
   });
 

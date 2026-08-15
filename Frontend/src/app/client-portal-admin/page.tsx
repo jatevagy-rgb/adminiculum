@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminBadge, AdminButton, AdminPanel, AdminSectionHeader } from "@/components/adminiculum/ui";
-import { getCases, getClients, type CaseListItem, type Client } from "@/lib/api";
+import { getCases, getClients, updateClient, type CaseListItem, type Client } from "@/lib/api";
 import { localizedInteractionStatus, workforceInteractionApi, type InternalInteractionRow } from "@/lib/clientInteractionApi";
 import { ClientInteractionInternalActions } from "@/components/client-portal/ClientInteractionInternalActions";
 import { ClientRequestComposer } from "@/components/client-portal/ClientRequestComposer";
@@ -13,8 +13,11 @@ import {
   cancelAdminInvitationNotification,
   createAdminWorkspace,
   createIdentityGrant,
+  createWorkspaceUnit,
   GRANT_PERMISSIONS,
   inviteAdminWorkspaceMember,
+  listSummaryScopes,
+  listWorkspaceUnits,
   revokeAdminInvitation,
   listAdminWorkspaces,
   listActiveMemberships,
@@ -23,14 +26,17 @@ import {
   transitionAdminWorkspace,
   transitionAdminWorkspaceMembership,
   transitionMembership,
+  transitionSummaryScope,
   updateAdminWorkspace,
   type ActiveMembershipDTO,
   type AdminWorkspaceDTO,
   type ApproveMembershipPayload,
   type CustomerSurfaceMode,
   type MembershipRequestDTO,
+  type OrganizationUnitAdminDTO,
   type OrganizationUnitRole,
   type PortalMembershipRole,
+  type SummaryScopeDTO,
 } from "@/lib/clientPortalAdminApi";
 
 const DEFAULT_PERMISSIONS = ["MATTER_READ", "DOCUMENT_READ", "DOCUMENT_DOWNLOAD", "UPDATE_READ"];
@@ -39,15 +45,43 @@ function formatGrantDate(value: string | null) {
   return value ? new Date(value).toLocaleString("hu-HU") : "—";
 }
 
-const MODE_LABELS: Record<string, string> = { INDIVIDUAL: "Magánügyfél", ORGANIZATION: "Szervezeti ügyfél", CASE_RELAY: "Ügyátvezető" };
+const MODE_LABELS: Record<string, string> = { INDIVIDUAL: "Magánügyfél", ORGANIZATION: "Szervezeti ügyfél", CASE_RELAY: "Kapcsolt rendszer" };
 const COMMUNICATION_LABELS: Record<string, string> = { PORTAL_PRIMARY: "Portál elsődleges", EMAIL_LINKED: "E-mailhez kapcsolt", EXTERNAL_ONLY: "Külső rendszer" };
 const CONNECTED_STATE_LABELS: Record<string, string> = { NOT_CONFIGURED: "Nincs konfigurálva", CONFIGURATION_REQUIRED: "Konfiguráció szükséges", READY: "Kész", DISABLED: "Kikapcsolva" };
 const DELIVERY_LABELS: Record<string, string> = { PENDING: "Kézbesítés folyamatban", SENDING: "Küldés alatt", SENT: "E-mail elküldve", FAILED_RETRYABLE: "E-mail-küldés jelenleg nem érhető el", FAILED_FINAL: "E-mail-küldés sikertelen", CANCELLED: "Kézbesítés visszavonva", NOT_REQUIRED: "Meglévő azonosítóhoz rögzítve" };
 const PORTAL_ROLE_LABELS: Record<PortalMembershipRole, string> = { MEMBER: "Portálfelhasználó", REPRESENTATIVE: "Szervezeti kapcsolattartó", APPROVER: "Hozzáférés-jóváhagyó" };
 const UNIT_ROLE_LABELS: Record<OrganizationUnitRole, string> = { MEMBER: "Tag", CONTACT: "Kapcsolattartó", APPROVER: "Jóváhagyó", MANAGER: "Egységvezető" };
+const PERMISSION_LABELS: Record<string, string> = {
+  MATTER_READ: "Ügy megtekintése",
+  CLIENT_TIMELINE_READ: "Ügyfél-idővonal",
+  DOCUMENT_READ: "Dokumentumok megtekintése",
+  DOCUMENT_DOWNLOAD: "Dokumentum letöltése",
+  DOCUMENT_UPLOAD: "Dokumentum feltöltése",
+  MESSAGE_READ: "Kommunikáció megtekintése",
+  MESSAGE_SEND: "Üzenet küldése",
+  ACTION_REQUEST_READ: "Ügyfélteendők megtekintése",
+  ACTION_REQUEST_COMPLETE: "Ügyfélteendő lezárása",
+  UPDATE_READ: "Frissítések megtekintése",
+};
+const RELATIONSHIP_LABELS: Record<string, string> = { PORTAL_CENTRIC: "Portálon keresztül", EMAIL_CENTRIC: "Elsősorban e-mailben", CONNECTED_SYSTEM: "Kapcsolt rendszer" };
 
 const inputCls = "rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-sm text-[var(--adm-text)]";
 const labelCls = "grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]";
+
+function permissionLabel(permission: string): string {
+  return PERMISSION_LABELS[permission] || permission;
+}
+
+function permissionList(permissions: string[]): string {
+  return permissions.map(permissionLabel).join(", ") || "Nincs megadva";
+}
+
+function portalStatusLabel(status: string): string {
+  if (status === "ACTIVE") return "Portál aktív";
+  if (status === "SUSPENDED") return "Portál szünetel";
+  if (status === "ARCHIVED") return "Archivált";
+  return status;
+}
 
 function deliverySummary(deliveryStatus?: string | null, codeSafe?: string | null) {
   if (codeSafe === "MAIL_PROVIDER_NOT_CONFIGURED") return "Meghívás rögzítve – e-mail-küldés jelenleg nem érhető el.";
@@ -304,7 +338,7 @@ function GrantForm({ membership, cases, busy, onGrant }: {
             onClick={() => toggle(p)}
             className={`rounded-full border px-3 py-1 ${permissions.includes(p) ? "border-[var(--adm-gold)] bg-[var(--adm-gold-soft,#f3ead2)] text-[var(--adm-text)]" : "border-[var(--adm-border)] text-[var(--adm-text-muted)]"}`}
           >
-            {p}
+            {permissionLabel(p)}
           </button>
         ))}
       </div>
@@ -323,7 +357,7 @@ function GrantForm({ membership, cases, busy, onGrant }: {
         disabled={busy || !caseId || !permissions.length}
         onClick={() => onGrant({ caseId, permissions, validUntil: validUntil || null })}
       >
-        Ügyhozzáférés (grant) létrehozása
+        Ügyhozzáférés létrehozása
       </AdminButton>
     </div>
   );
@@ -368,7 +402,7 @@ function WorkspaceGrantForm({ workspace, membership, cases, busy, onGrant }: {
             onClick={() => togglePermission(permission)}
             className={`rounded-full border px-3 py-1 ${permissions.includes(permission) ? "border-[var(--adm-gold)] bg-[var(--adm-gold-soft,#f3ead2)] text-[var(--adm-text)]" : "border-[var(--adm-border)] text-[var(--adm-text-muted)]"}`}
           >
-            {permission}
+            {permissionLabel(permission)}
           </button>
         ))}
       </div>
@@ -378,7 +412,7 @@ function WorkspaceGrantForm({ workspace, membership, cases, busy, onGrant }: {
         disabled={busy || !caseId || !permissions.length || membership.status !== 'ACTIVE'}
         onClick={() => onGrant({ caseId, permissions, validUntil: validUntil || null })}
       >
-        Grant létrehozása
+        Ügyhozzáférés létrehozása
       </AdminButton>
     </div>
   );
@@ -460,28 +494,303 @@ function InvitationForm({ workspace, busy, run }: { workspace: AdminWorkspaceDTO
   );
 }
 
-function WorkspaceAdministration({ workspaces, clients, cases, busy, run }: { workspaces: AdminWorkspaceDTO[]; clients: Client[]; cases: CaseListItem[]; busy: boolean; run: (fn: () => Promise<void>, okText: string) => Promise<void> }) {
-  const [draft, setDraft] = useState({ clientId: '', name: '', mode: 'INDIVIDUAL' as AdminWorkspaceDTO['mode'], communicationMode: 'PORTAL_PRIMARY' as AdminWorkspaceDTO['communicationMode'], connectedSystemState: 'NOT_CONFIGURED' as AdminWorkspaceDTO['connectedSystemState'] });
-  return <AdminPanel className="p-5" data-testid="workspace-administration">
-    <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Ügyfélmunkaterek</h2>
-    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">A munkatér-tagság nem tesz automatikusan láthatóvá ügyet. Az ügyhozzáférés, publikáció, dokumentum-, üzenet- és számlázási hozzáférés külön döntés.</p>
-    <div className="mt-4 grid gap-3 rounded-xl border border-[var(--adm-border)] p-4 lg:grid-cols-6">
-      <select value={draft.clientId} onChange={(event) => setDraft((value) => ({ ...value, clientId: event.target.value }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm"><option value="">Ügyfél kiválasztása</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select>
-      <input value={draft.name} onChange={(event) => setDraft((value) => ({ ...value, name: event.target.value }))} placeholder="Munkatér neve" className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm" />
-      <select value={draft.mode} onChange={(event) => setDraft((value) => ({ ...value, mode: event.target.value as AdminWorkspaceDTO['mode'] }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm"><option value="INDIVIDUAL">Magánügyfél</option><option value="ORGANIZATION">Szervezeti ügyfél</option><option value="CASE_RELAY">Ügyátvezető</option></select>
-      <select value={draft.communicationMode} onChange={(event) => setDraft((value) => ({ ...value, communicationMode: event.target.value as AdminWorkspaceDTO['communicationMode'] }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm"><option value="PORTAL_PRIMARY">Portál az elsődleges</option><option value="EMAIL_LINKED">E-mailhez kapcsolt</option><option value="EXTERNAL_ONLY">Külső rendszer</option></select>
-      {draft.mode === 'CASE_RELAY' ? <select value={draft.connectedSystemState} onChange={(event) => setDraft((value) => ({ ...value, connectedSystemState: event.target.value as AdminWorkspaceDTO['connectedSystemState'] }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm"><option value="NOT_CONFIGURED">Nincs konfigurálva</option><option value="CONFIGURATION_REQUIRED">Konfiguráció szükséges</option><option value="READY">Kész</option><option value="DISABLED">Kikapcsolva</option></select> : <span className="rounded-lg bg-[var(--adm-bg,#faf8f3)] px-3 py-2 text-xs text-[var(--adm-text-muted)]">Kapcsolt rendszer állapota csak ügyátvezető felületnél releváns.</span>}
-      <AdminButton variant="gold" disabled={busy || !draft.clientId || !draft.name.trim()} onClick={() => run(() => createAdminWorkspace(draft).then(() => undefined), 'Munkatér létrehozva. Nincs automatikus tagság vagy ügyhozzáférés.')}>Munkatér létrehozása</AdminButton>
+function modeFromActivation(type: "INDIVIDUAL" | "ORGANIZATION", relationship: "PORTAL_CENTRIC" | "EMAIL_CENTRIC" | "CONNECTED_SYSTEM"): AdminWorkspaceDTO["mode"] {
+  if (type === "INDIVIDUAL") return "INDIVIDUAL";
+  return relationship === "CONNECTED_SYSTEM" ? "CASE_RELAY" : "ORGANIZATION";
+}
+
+function communicationFromRelationship(relationship: "PORTAL_CENTRIC" | "EMAIL_CENTRIC" | "CONNECTED_SYSTEM"): AdminWorkspaceDTO["communicationMode"] {
+  if (relationship === "EMAIL_CENTRIC") return "EMAIL_LINKED";
+  if (relationship === "CONNECTED_SYSTEM") return "EXTERNAL_ONLY";
+  return "PORTAL_PRIMARY";
+}
+
+function relationshipFromWorkspace(workspace: AdminWorkspaceDTO, client?: Client | null): "PORTAL_CENTRIC" | "EMAIL_CENTRIC" | "CONNECTED_SYSTEM" {
+  if (workspace.mode === "CASE_RELAY" || client?.relationshipMode === "CONNECTED_SYSTEM") return "CONNECTED_SYSTEM";
+  if (workspace.communicationMode === "EMAIL_LINKED" || client?.relationshipMode === "EMAIL_CENTRIC") return "EMAIL_CENTRIC";
+  return "PORTAL_CENTRIC";
+}
+
+function activeGrantCountForClient(clientId: string, memberships: ActiveMembershipDTO[]): number {
+  return memberships
+    .filter((membership) => membership.clientId === clientId)
+    .flatMap((membership) => membership.activeGrants)
+    .filter((grant) => grant.status === "ACTIVE").length;
+}
+
+function ActivationWizard({ clients, workspaces, busy, run, onActivated }: {
+  clients: Client[];
+  workspaces: AdminWorkspaceDTO[];
+  busy: boolean;
+  run: (fn: () => Promise<void>, okText: string) => Promise<void>;
+  onActivated: (workspaceId: string) => void;
+}) {
+  const [clientId, setClientId] = useState("");
+  const [customerType, setCustomerType] = useState<"INDIVIDUAL" | "ORGANIZATION">("INDIVIDUAL");
+  const [relationship, setRelationship] = useState<"PORTAL_CENTRIC" | "EMAIL_CENTRIC" | "CONNECTED_SYSTEM">("PORTAL_CENTRIC");
+  const [primaryEmail, setPrimaryEmail] = useState("");
+  const [primaryName, setPrimaryName] = useState("");
+  const [portalRole, setPortalRole] = useState<PortalMembershipRole>("REPRESENTATIVE");
+  const [unitName, setUnitName] = useState("");
+
+  const client = clients.find((item) => item.id === clientId) || null;
+  const mode = modeFromActivation(customerType, relationship);
+  const communicationMode = communicationFromRelationship(relationship);
+  const existing = workspaces.find((workspace) => workspace.clientId === clientId && workspace.mode === mode && workspace.status !== "ARCHIVED") || null;
+  const derivedName = client ? `${client.name} - ${MODE_LABELS[mode]}` : "Ügyfélportál";
+  const canActivate = Boolean(clientId);
+
+  const activate = async () => {
+    if (!client) return;
+    let workspace = existing;
+    await updateClient(client.id, {
+      portalAccessEnabled: true,
+      relationshipMode: relationship,
+      connectedSystemState: relationship === "CONNECTED_SYSTEM" ? "READY" : null,
+    });
+    if (!workspace) {
+      workspace = await createAdminWorkspace({
+        clientId: client.id,
+        name: derivedName,
+        mode,
+        communicationMode,
+        connectedSystemState: mode === "CASE_RELAY" ? "READY" : "NOT_CONFIGURED",
+      });
+    } else {
+      workspace = await updateAdminWorkspace(workspace.id, {
+        name: workspace.name || derivedName,
+        communicationMode,
+        connectedSystemState: mode === "CASE_RELAY" ? "READY" : workspace.connectedSystemState,
+        revision: workspace.revision,
+      });
+      if (workspace.status === "SUSPENDED") workspace = await transitionAdminWorkspace(workspace.id, "activate", workspace.revision);
+    }
+    if (primaryEmail.trim()) {
+      await inviteAdminWorkspaceMember(workspace.id, {
+        email: primaryEmail.trim(),
+        displayName: primaryName.trim() || undefined,
+        role: portalRole,
+      });
+    }
+    if (customerType === "ORGANIZATION" && unitName.trim()) {
+      await listWorkspaceUnits(workspace.id).then(async (page) => {
+        if (!page.items.some((unit) => unit.name.toLowerCase() === unitName.trim().toLowerCase())) {
+          await createWorkspaceUnit(workspace.id, { name: unitName.trim() });
+        }
+      });
+    }
+    onActivated(workspace.id);
+  };
+
+  return (
+    <AdminPanel className="p-5" data-testid="activation-wizard">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Ügyfélportál aktiválása</p>
+          <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Client-first aktiváció</h2>
+          <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Az aktiválás ügyfelet és portálfelületet készít elő. Ügyhozzáférés nem jön létre automatikusan.</p>
+        </div>
+        <AdminBadge tone="gold">Ügyfélportál aktív lesz</AdminBadge>
+      </div>
+      <div className="mt-5 grid gap-4">
+        <section className="grid gap-2">
+          <h3 className="text-sm font-semibold text-[var(--adm-text)]">1. Ügyfél kiválasztása</h3>
+          <select data-testid="activation-client-select" value={clientId} onChange={(event) => setClientId(event.target.value)} className={inputCls}>
+            <option value="">Válasszon meglévő ügyfelet</option>
+            {clients.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </section>
+        <section className="grid gap-2">
+          <h3 className="text-sm font-semibold text-[var(--adm-text)]">2. Milyen ügyfél?</h3>
+          <div className="flex flex-wrap gap-2">
+            {(["INDIVIDUAL", "ORGANIZATION"] as const).map((type) => <button key={type} type="button" data-testid={`activation-type-${type}`} onClick={() => setCustomerType(type)} className={`rounded-full border px-4 py-2 text-sm ${customerType === type ? "border-[var(--adm-gold)] bg-[var(--adm-gold-soft,#f3ead2)]" : "border-[var(--adm-border)]"}`}>{MODE_LABELS[type]}</button>)}
+          </div>
+        </section>
+        {customerType === "ORGANIZATION" ? (
+          <section className="grid gap-2">
+            <h3 className="text-sm font-semibold text-[var(--adm-text)]">3. Hogyan dolgozunk együtt?</h3>
+            <div className="grid gap-2 md:grid-cols-3">
+              {(["PORTAL_CENTRIC", "EMAIL_CENTRIC", "CONNECTED_SYSTEM"] as const).map((value) => <button key={value} type="button" data-testid={`relationship-${value}`} onClick={() => setRelationship(value)} className={`rounded-lg border p-3 text-left text-sm ${relationship === value ? "border-[var(--adm-gold)] bg-[var(--adm-gold-soft,#f3ead2)]" : "border-[var(--adm-border)]"}`}><b>{RELATIONSHIP_LABELS[value]}</b><span className="mt-1 block text-xs text-[var(--adm-text-muted)]">{value === "CONNECTED_SYSTEM" ? "Kapcsolt rendszer, CASE_RELAY áttekintés." : value === "EMAIL_CENTRIC" ? "E-mail az elsődleges, portál státuszhoz és dokumentumokhoz." : "Portál az elsődleges együttműködési felület."}</span></button>)}
+            </div>
+          </section>
+        ) : null}
+        <section className="grid gap-2">
+          <h3 className="text-sm font-semibold text-[var(--adm-text)]">4. Portál beállítása</h3>
+          <p className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3 text-sm text-[var(--adm-text-muted)]">{client ? `${derivedName} · ${MODE_LABELS[mode]} · ${COMMUNICATION_LABELS[communicationMode]}` : "A név és mód az ügyfél kiválasztása után automatikusan készül."}</p>
+        </section>
+        <section className="grid gap-2">
+          <h3 className="text-sm font-semibold text-[var(--adm-text)]">5. Felhasználók</h3>
+          <div className="grid gap-2 lg:grid-cols-4">
+            <input className={inputCls} value={primaryEmail} onChange={(event) => setPrimaryEmail(event.target.value)} placeholder="Elsődleges felhasználó e-mail" />
+            <input className={inputCls} value={primaryName} onChange={(event) => setPrimaryName(event.target.value)} placeholder="Név (opcionális)" />
+            <select className={inputCls} value={portalRole} onChange={(event) => setPortalRole(event.target.value as PortalMembershipRole)}>
+              <option value="REPRESENTATIVE">Szervezeti kapcsolattartó</option>
+              <option value="MEMBER">Portálfelhasználó</option>
+              <option value="APPROVER">Hozzáférés-jóváhagyó</option>
+            </select>
+          </div>
+        </section>
+        {customerType === "ORGANIZATION" ? (
+          <section className="grid gap-2">
+            <h3 className="text-sm font-semibold text-[var(--adm-text)]">6. Szervezeti egységek</h3>
+            <input className={inputCls} value={unitName} onChange={(event) => setUnitName(event.target.value)} placeholder="Első szervezeti egység (opcionális)" />
+          </section>
+        ) : null}
+        <section className="grid gap-2 rounded-xl border border-[var(--adm-border)] p-3">
+          <h3 className="text-sm font-semibold text-[var(--adm-text)]">7. Összegzés és aktiválás</h3>
+          <p className="text-sm text-[var(--adm-text-muted)]">{client?.name || "Nincs ügyfél kiválasztva"} · {MODE_LABELS[mode]} · {customerType === "ORGANIZATION" ? RELATIONSHIP_LABELS[relationship] : "Magánügyfél portál"} · ügyhozzáférés nem jön létre.</p>
+          <AdminButton data-testid="activate-client-portal" variant="gold" disabled={busy || !canActivate} onClick={() => run(activate, "Ügyfélportál aktív. Következő lépés: felhasználó meghívása, szervezeti egység vagy vezetői rálátás beállítása.")}>Ügyfélportál aktiválása</AdminButton>
+        </section>
+      </div>
+    </AdminPanel>
+  );
+}
+
+function ClientPortalDetail({ workspace, client, memberships, cases, units, scopes, busy, run, onBack }: {
+  workspace: AdminWorkspaceDTO;
+  client: Client | null;
+  memberships: ActiveMembershipDTO[];
+  cases: CaseListItem[];
+  units: OrganizationUnitAdminDTO[];
+  scopes: SummaryScopeDTO[];
+  busy: boolean;
+  run: (fn: () => Promise<void>, okText: string) => Promise<void>;
+  onBack: () => void;
+}) {
+  const [tab, setTab] = useState("overview");
+  const relationship = relationshipFromWorkspace(workspace, client);
+  const clientMemberships = memberships.filter((item) => item.clientId === workspace.clientId);
+  const activeGrants = clientMemberships.flatMap((item) => item.activeGrants);
+  const tabs = ["overview", "users", ...(workspace.mode !== "INDIVIDUAL" ? ["units"] : []), "access", ...(workspace.mode !== "INDIVIDUAL" ? ["leadership"] : []), "settings", "audit"];
+  const tabLabels: Record<string, string> = { overview: "Áttekintés", users: "Felhasználók", units: "Szervezeti egységek", access: "Ügyhozzáférések", leadership: "Vezetői rálátás", settings: "Beállítások", audit: "Audit" };
+  return (
+    <AdminPanel className="p-5" data-testid="client-portal-detail">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <button type="button" onClick={onBack} className="text-xs text-[var(--adm-text-muted)] hover:underline">← Vissza az ügyfélportálokhoz</button>
+          <h2 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">{client?.name || workspace.clientName || workspace.name}</h2>
+          <p className="text-sm text-[var(--adm-text-muted)]">{MODE_LABELS[workspace.mode]} · {portalStatusLabel(workspace.status)}</p>
+        </div>
+        <AdminBadge tone={workspace.status === "ACTIVE" ? "green" : "neutral"}>{portalStatusLabel(workspace.status)}</AdminBadge>
+      </div>
+      <div className="mt-5 flex flex-wrap gap-2">
+        {tabs.map((item) => <button key={item} type="button" onClick={() => setTab(item)} className={`rounded-full border px-3 py-1.5 text-sm ${tab === item ? "border-[var(--adm-gold)] bg-[var(--adm-gold-soft,#f3ead2)]" : "border-[var(--adm-border)]"}`}>{tabLabels[item]}</button>)}
+      </div>
+      {tab === "overview" ? <div className="mt-5 grid gap-3 md:grid-cols-3">
+        {[
+          ["Ügyféltípus", MODE_LABELS[workspace.mode]],
+          ["Együttműködés", RELATIONSHIP_LABELS[relationship]],
+          ["Portál státusza", portalStatusLabel(workspace.status)],
+          ["Aktív felhasználók", String(workspace.activeMembershipCount)],
+          ["Szervezeti egységek", String(units.length)],
+          ["Aktív ügyhozzáférések", String(activeGrants.length)],
+          ["Vezetői rálátások", String(scopes.filter((scope) => scope.status === "ACTIVE").length)],
+        ].map(([label, value]) => <div key={label} className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3"><p className="text-xs text-[var(--adm-text-muted)]">{label}</p><p className="mt-1 font-semibold">{value}</p></div>)}
+      </div> : null}
+      {tab === "users" ? <div className="mt-5 grid gap-3">
+        <InvitationForm workspace={workspace} busy={busy} run={run} />
+        {workspace.memberships.map((member) => {
+          const profile = clientMemberships.find((item) => item.clientPortalIdentityId === member.clientPortalIdentityId);
+          return <div key={member.id} className="rounded-lg border border-[var(--adm-border)] p-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><span><b>{profile?.identityDisplayName || profile?.identityEmail || "Ügyfélfelhasználó"}</b><span className="ml-2 text-[var(--adm-text-muted)]">{profile?.identityEmail || ""}</span></span><AdminBadge tone={member.status === "ACTIVE" ? "green" : "neutral"}>{member.status === "ACTIVE" ? "Aktív" : member.status}</AdminBadge></div><p className="mt-1 text-xs text-[var(--adm-text-muted)]">{PORTAL_ROLE_LABELS[member.role]} · meghívva: {formatGrantDate(member.invitedAt)}</p><div className="mt-2 flex gap-2">{member.status === "ACTIVE" ? <AdminButton size="sm" variant="muted" disabled={busy} onClick={() => run(() => transitionAdminWorkspaceMembership(member.id, "suspend", member.revision).then(() => undefined), "Portálfelhasználó felfüggesztve.")}>Felfüggesztés</AdminButton> : null}<AdminButton size="sm" variant="muted" disabled={busy || member.status === "REVOKED"} onClick={() => run(() => transitionAdminWorkspaceMembership(member.id, "revoke", member.revision).then(() => undefined), "Portálfelhasználó visszavonva.")}>Visszavonás</AdminButton></div></div>;
+        })}
+      </div> : null}
+      {tab === "units" ? <div className="mt-5"><p className="mb-3 text-sm text-[var(--adm-text-muted)]">Canonical ClientOrganizationGroup egységek.</p>{units.map((unit) => <div key={unit.id} className="mb-2 rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3 text-sm"><b>{unit.name}</b> · {unit.status}</div>)}</div> : null}
+      {tab === "access" ? <div className="mt-5 grid gap-3">
+        <p className="text-sm text-[var(--adm-text-muted)]">Áttekintés és visszavonás. Napi ügyhozzáférés létrehozása továbbra is a Case workflow felületén az elsődleges.</p>
+        {activeGrants.length ? activeGrants.map((grant) => {
+          const linkedCase = cases.find((item) => item.id === grant.caseId);
+          return <div key={grant.id} className="rounded-lg border border-[var(--adm-border)] p-3 text-sm"><b>{linkedCase ? `${linkedCase.caseNumber} · ${linkedCase.title}` : "Ügyhozzáférés"}</b><p className="mt-1 text-xs text-[var(--adm-text-muted)]">{permissionList(grant.permissions)} · érvényes: {formatGrantDate(grant.validUntil)}</p><details className="mt-2 text-xs"><summary className="cursor-pointer">Technikai adatok</summary><p className="font-mono">grant: {grant.id} · case: {grant.caseId} · revision: {grant.revision}</p></details></div>;
+        }) : <p className="text-sm text-[var(--adm-text-muted)]">Nincs aktív ügyhozzáférés.</p>}
+      </div> : null}
+      {tab === "leadership" ? <div className="mt-5 grid gap-2">{scopes.length ? scopes.map((scope) => <div key={scope.id} className="rounded-lg border border-[var(--adm-border)] p-3 text-sm"><b>{scope.scopeType === "UNIT" ? "Szervezeti egység rálátás" : "Teljes szervezeti rálátás"}</b><span className="ml-2 text-[var(--adm-text-muted)]">{scope.status}</span><p className="mt-1 text-xs text-[var(--adm-text-muted)]">Aggregate-only. Nem ad ügyhozzáférést.</p><AdminButton className="mt-2" size="sm" variant="muted" disabled={busy || scope.status === "REVOKED"} onClick={() => run(() => transitionSummaryScope(scope.id, "revoke").then(() => undefined), "Vezetői rálátás visszavonva.")}>Visszavonás</AdminButton></div>) : <p className="text-sm text-[var(--adm-text-muted)]">Nincs vezetői rálátás.</p>}</div> : null}
+      {tab === "settings" ? <div className="mt-5 grid gap-3"><WorkspaceSettings workspace={workspace} busy={busy} run={run} /><div className="flex gap-2">{workspace.status !== "ACTIVE" ? <AdminButton variant="neutral" disabled={busy || workspace.status === "ARCHIVED"} onClick={() => run(() => transitionAdminWorkspace(workspace.id, "activate", workspace.revision).then(() => undefined), "Ügyfélportál aktiválva.")}>Aktiválás</AdminButton> : <AdminButton variant="muted" disabled={busy} onClick={() => run(() => transitionAdminWorkspace(workspace.id, "suspend", workspace.revision).then(() => undefined), "Ügyfélportál felfüggesztve.")}>Felfüggesztés</AdminButton>}<AdminButton variant="muted" disabled={busy || workspace.status === "ARCHIVED"} onClick={() => run(() => transitionAdminWorkspace(workspace.id, "archive", workspace.revision).then(() => undefined), "Ügyfélportál archiválva.")}>Archiválás</AdminButton></div></div> : null}
+      {tab === "audit" ? <div className="mt-5 grid gap-3 text-xs"><details open><summary className="cursor-pointer font-semibold">Technikai adatok / Audit</summary><p className="mt-2 font-mono">workspace: {workspace.id} · client: {workspace.clientId} · mode: {workspace.mode} · communication: {workspace.communicationMode}</p><div className="mt-2 space-y-1">{workspace.events.length ? workspace.events.map((event) => <p key={event.id}>{formatGrantDate(event.createdAt)} · {event.action} · {event.fromStatus || "—"} → {event.toStatus || "—"}</p>) : <p>Nincs esemény.</p>}</div></details></div> : null}
+    </AdminPanel>
+  );
+}
+
+function WorkspaceAdministration({ workspaces, clients, memberships, cases, busy, run }: { workspaces: AdminWorkspaceDTO[]; clients: Client[]; memberships: ActiveMembershipDTO[]; cases: CaseListItem[]; busy: boolean; run: (fn: () => Promise<void>, okText: string) => Promise<void> }) {
+  const [view, setView] = useState<"active" | "archived">("active");
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("");
+  const [unitCounts, setUnitCounts] = useState<Record<string, number>>({});
+  const [scopeCounts, setScopeCounts] = useState<Record<string, number>>({});
+  const [detailUnits, setDetailUnits] = useState<OrganizationUnitAdminDTO[]>([]);
+  const [detailScopes, setDetailScopes] = useState<SummaryScopeDTO[]>([]);
+  const visible = workspaces.filter((workspace) => view === "active" ? workspace.status === "ACTIVE" : workspace.status === "ARCHIVED");
+  const selected = workspaces.find((workspace) => workspace.id === selectedWorkspaceId) || null;
+  const selectedClient = selected ? clients.find((client) => client.id === selected.clientId) || null : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCounts() {
+      const orgLike = workspaces.filter((workspace) => workspace.mode !== "INDIVIDUAL");
+      const pairs = await Promise.all(orgLike.map(async (workspace) => {
+        const [units, scopes] = await Promise.all([
+          listWorkspaceUnits(workspace.id).catch(() => ({ items: [] as OrganizationUnitAdminDTO[] })),
+          listSummaryScopes(workspace.id).catch(() => ({ items: [] as SummaryScopeDTO[] })),
+        ]);
+        return [workspace.id, units.items.length, scopes.items.filter((scope) => scope.status === "ACTIVE").length] as const;
+      }));
+      if (!cancelled) {
+        setUnitCounts(Object.fromEntries(pairs.map(([id, units]) => [id, units])));
+        setScopeCounts(Object.fromEntries(pairs.map(([id, _units, scopes]) => [id, scopes])));
+      }
+    }
+    void loadCounts();
+    return () => { cancelled = true; };
+  }, [workspaces]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadDetail() {
+      if (!selected || selected.mode === "INDIVIDUAL") {
+        setDetailUnits([]);
+        setDetailScopes([]);
+        return;
+      }
+      const [units, scopes] = await Promise.all([listWorkspaceUnits(selected.id), listSummaryScopes(selected.id)]);
+      if (!cancelled) {
+        setDetailUnits(units.items || []);
+        setDetailScopes(scopes.items || []);
+      }
+    }
+    void loadDetail().catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [selected]);
+
+  if (selected) {
+    return <ClientPortalDetail workspace={selected} client={selectedClient} memberships={memberships} cases={cases} units={detailUnits} scopes={detailScopes} busy={busy} run={run} onBack={() => setSelectedWorkspaceId("")} />;
+  }
+
+  return (
+    <div className="grid gap-5">
+      <ActivationWizard clients={clients} workspaces={workspaces} busy={busy} run={run} onActivated={setSelectedWorkspaceId} />
+      <AdminPanel className="p-5" data-testid="client-centric-portal-list">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Ügyfélportálok</h2>
+            <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Alapértelmezésben csak az aktív ügyfélportálok látszanak; acceptance/archív adatok az Archiváltak nézetben maradnak auditálhatók.</p>
+          </div>
+          <div className="flex gap-2">
+            <AdminButton size="sm" variant={view === "active" ? "gold" : "neutral"} onClick={() => setView("active")}>Aktív ügyfélportálok</AdminButton>
+            <AdminButton size="sm" variant={view === "archived" ? "gold" : "neutral"} onClick={() => setView("archived")}>Archiváltak</AdminButton>
+          </div>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[920px] border-separate border-spacing-y-2 text-left text-sm">
+            <thead className="text-xs uppercase tracking-[0.12em] text-[var(--adm-text-muted)]"><tr>{["Ügyfél", "Típus", "Együttműködés", "Portál státusza", "Aktív felhasználók", "Szervezeti egységek", "Aktív ügyhozzáférések", "Vezetői rálátások", "Utolsó változás", ""].map((head) => <th key={head} className="px-3 py-2">{head}</th>)}</tr></thead>
+            <tbody>
+              {visible.map((workspace) => {
+                const client = clients.find((item) => item.id === workspace.clientId);
+                return <tr key={workspace.id} className="bg-[var(--adm-surface)] shadow-sm"><td className="rounded-l-lg px-3 py-3 font-semibold">{workspace.clientName || client?.name || workspace.name}</td><td className="px-3 py-3">{MODE_LABELS[workspace.mode]}</td><td className="px-3 py-3">{RELATIONSHIP_LABELS[relationshipFromWorkspace(workspace, client)]}</td><td className="px-3 py-3"><AdminBadge tone={workspace.status === "ACTIVE" ? "green" : "neutral"}>{portalStatusLabel(workspace.status)}</AdminBadge></td><td className="px-3 py-3">{workspace.activeMembershipCount}</td><td className="px-3 py-3">{unitCounts[workspace.id] || 0}</td><td className="px-3 py-3">{activeGrantCountForClient(workspace.clientId, memberships)}</td><td className="px-3 py-3">{scopeCounts[workspace.id] || 0}</td><td className="px-3 py-3">{workspace.events[0]?.createdAt ? formatGrantDate(workspace.events[0].createdAt) : "—"}</td><td className="rounded-r-lg px-3 py-3 text-right"><AdminButton size="sm" variant="neutral" onClick={() => setSelectedWorkspaceId(workspace.id)}>Megnyitás</AdminButton></td></tr>;
+              })}
+            </tbody>
+          </table>
+          {!visible.length ? <p className="mt-4 text-sm text-[var(--adm-text-muted)]">{view === "active" ? "Nincs aktív ügyfélportál ebben a nézetben." : "Nincs archivált ügyfélportál."}</p> : null}
+        </div>
+      </AdminPanel>
     </div>
-    <div className="mt-4 grid gap-4">{workspaces.map((workspace) => <article key={workspace.id} className="rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
-      <div className="flex flex-wrap justify-between gap-3"><div><p className="font-semibold">{workspace.name}</p><p className="text-xs text-[var(--adm-text-muted)]">{workspace.clientName} · {MODE_LABELS[workspace.mode]} · {COMMUNICATION_LABELS[workspace.communicationMode]}{workspace.mode === 'CASE_RELAY' ? ` · ${CONNECTED_STATE_LABELS[workspace.connectedSystemState]}` : ''}</p><p className="mt-1 text-xs text-[var(--adm-text-muted)]">Aktív tagság: {workspace.activeMembershipCount} · Meghívás: {workspace.pendingInvitationCount} · Jóváhagyásra vár: {workspace.pendingApprovalCount}</p></div><div className="flex flex-wrap gap-2"><AdminBadge tone={workspace.status === 'ACTIVE' ? 'green' : 'neutral'}>{workspace.status === 'ACTIVE' ? 'Aktív' : workspace.status === 'SUSPENDED' ? 'Felfüggesztve' : 'Archiválva'}</AdminBadge>{workspace.status !== 'ACTIVE' ? <AdminButton size="sm" variant="neutral" disabled={busy || workspace.status === 'ARCHIVED'} onClick={() => run(() => transitionAdminWorkspace(workspace.id, 'activate', workspace.revision).then(() => undefined), 'Munkatér aktiválva.')}>Aktiválás</AdminButton> : <AdminButton size="sm" variant="muted" disabled={busy} onClick={() => run(() => transitionAdminWorkspace(workspace.id, 'suspend', workspace.revision).then(() => undefined), 'Munkatér felfüggesztve.')}>Felfüggesztés</AdminButton>}<AdminButton size="sm" variant="muted" disabled={busy || workspace.status === 'ARCHIVED'} onClick={() => run(() => transitionAdminWorkspace(workspace.id, 'archive', workspace.revision).then(() => undefined), 'Munkatér archiválva.')}>Archiválás</AdminButton></div></div>
-      {workspace.mode === 'CASE_RELAY' && workspace.connectedSystemState !== 'READY' ? <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Nincs automatikus szinkronizáció. A kapcsolt rendszer konfigurációja még nem kész.</p> : null}
-      <WorkspaceSettings workspace={workspace} busy={busy} run={run} />
-      <InvitationForm workspace={workspace} busy={busy} run={run} />
-      <div className="mt-3 grid gap-2">{workspace.memberships.map((membership) => <div key={membership.id} className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><span>Identity: {membership.clientPortalIdentityId.slice(0, 8)} · {membership.role}</span><div className="flex gap-2"><AdminBadge tone={membership.status === 'ACTIVE' ? 'green' : 'neutral'}>{membership.status}</AdminBadge>{membership.status === 'PENDING_APPROVAL' ? <AdminButton size="sm" variant="gold" disabled={busy} onClick={() => run(() => transitionAdminWorkspaceMembership(membership.id, 'approve', membership.revision).then(() => undefined), 'Munkatér-tagság jóváhagyva; grant nem jött létre.')}>Jóváhagyás</AdminButton> : null}{membership.status === 'ACTIVE' ? <AdminButton size="sm" variant="muted" disabled={busy} onClick={() => run(() => transitionAdminWorkspaceMembership(membership.id, 'suspend', membership.revision).then(() => undefined), 'Munkatér-tagság felfüggesztve.')}>Felfüggesztés</AdminButton> : null}<AdminButton size="sm" variant="muted" disabled={busy || membership.status === 'REVOKED'} onClick={() => run(() => transitionAdminWorkspaceMembership(membership.id, 'revoke', membership.revision).then(() => undefined), 'Munkatér-tagság visszavonva.')}>Visszavonás</AdminButton></div></div>{membership.status === 'ACTIVE' ? <WorkspaceGrantForm workspace={workspace} membership={membership} cases={cases} busy={busy} onGrant={({ caseId, permissions, validUntil }) => run(() => createIdentityGrant({ workspaceMembershipId: membership.id, caseId, permissions, validUntil }).then(() => undefined), 'Explicit ügyhozzáférés létrehozva.')}/> : null}</div>)}</div>
-      <details className="mt-3 text-xs"><summary className="cursor-pointer font-semibold">Lifecycle / audit</summary><div className="mt-2 space-y-1">{workspace.events.length ? workspace.events.map((event) => <p key={event.id}>{formatGrantDate(event.createdAt)} · {event.action} · {event.fromStatus || '—'} → {event.toStatus || '—'}</p>) : <p>Nincs esemény.</p>}</div></details>
-    </article>)}</div>
-  </AdminPanel>;
+  );
 }
 
 function PageBody() {
@@ -595,17 +904,22 @@ function PageBody() {
       {loadError ? null : (
       <>
 
-      <WorkspaceAdministration workspaces={workspaces} clients={clients} cases={cases} busy={busy} run={run} />
+      <WorkspaceAdministration workspaces={workspaces} clients={clients} memberships={memberships} cases={cases} busy={busy} run={run} />
 
-      <OrganizationAdminControlPlane
-        clients={clients}
-        cases={cases}
-        memberships={memberships}
-        workspaces={workspaces}
-        questions={interactionQueues.questions}
-        busy={busy}
-        run={run}
-      />
+      <details className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-5">
+        <summary className="cursor-pointer font-serif text-xl font-semibold text-[var(--adm-text)]">Haladó szervezeti adminisztráció / Audit</summary>
+        <div className="mt-4">
+          <OrganizationAdminControlPlane
+            clients={clients}
+            cases={cases}
+            memberships={memberships}
+            workspaces={workspaces}
+            questions={interactionQueues.questions}
+            busy={busy}
+            run={run}
+          />
+        </div>
+      </details>
 
       <AdminPanel className="p-5">
         <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Operatív ügyfélportál sorok</h2>
@@ -694,7 +1008,7 @@ function PageBody() {
                       <dl data-testid="grant-technical-details" className="mt-2 grid gap-x-3 gap-y-1 sm:grid-cols-2">
                         <div><dt className="font-semibold">Grant ID</dt><dd><code className="select-all break-all">{g.id}</code></dd></div>
                         <div><dt className="font-semibold">Revision</dt><dd>{g.revision}</dd></div>
-                        <div><dt className="font-semibold">Permissions</dt><dd>{g.permissions.join(", ") || "—"}</dd></div>
+                        <div><dt className="font-semibold">Jogosultságok</dt><dd>{permissionList(g.permissions)}</dd></div>
                         <div><dt className="font-semibold">Érvényes eddig</dt><dd>{formatGrantDate(g.validUntil)}</dd></div>
                         <div><dt className="font-semibold">Létrehozva</dt><dd>{formatGrantDate(g.createdAt)}</dd></div>
                         <div><dt className="font-semibold">Módosítva</dt><dd>{formatGrantDate(g.updatedAt)}</dd></div>

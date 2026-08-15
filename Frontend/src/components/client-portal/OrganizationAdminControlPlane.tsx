@@ -59,15 +59,16 @@ const UNIT_ROLE_LABELS: Record<OrganizationUnitRole, string> = {
 };
 
 const PERMISSION_LABELS: Record<string, string> = {
-  MATTER_READ: "ügyösszefoglaló",
-  CLIENT_TIMELINE_READ: "ügyfél-idővonal",
-  DOCUMENT_READ: "dokumentumok",
-  DOCUMENT_DOWNLOAD: "dokumentumletöltés",
-  DOCUMENT_UPLOAD: "dokumentumfeltöltés",
-  MESSAGE_READ: "kommunikáció megtekintése",
-  MESSAGE_SEND: "kommunikáció küldése",
-  ACTION_REQUEST_READ: "ügyfélteendők",
-  UPDATE_READ: "frissítések",
+  MATTER_READ: "Ügy megtekintése",
+  CLIENT_TIMELINE_READ: "Ügyfél-idővonal",
+  DOCUMENT_READ: "Dokumentumok megtekintése",
+  DOCUMENT_DOWNLOAD: "Dokumentum letöltése",
+  DOCUMENT_UPLOAD: "Dokumentum feltöltése",
+  MESSAGE_READ: "Kommunikáció megtekintése",
+  MESSAGE_SEND: "Üzenet küldése",
+  ACTION_REQUEST_READ: "Ügyfélteendők megtekintése",
+  ACTION_REQUEST_COMPLETE: "Ügyfélteendő lezárása",
+  UPDATE_READ: "Frissítések megtekintése",
 };
 
 function permissionSummary(permissions: string[]) {
@@ -268,10 +269,14 @@ export function OrganizationAdminControlPlane({ clients, cases, memberships, wor
         <div className="grid gap-2">
           {participants.map((participant) => <div key={participant.id} className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3 text-xs">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span><b>{PARTICIPANT_LABELS[participant.participantRole as ParticipantRole] || participant.participantRole || "Résztvevő"}</b> · {participant.clientPortalIdentityId || "identity e-mail alapján"}</span>
-              <AdminBadge tone={participant.status === "ACTIVE" ? "green" : "neutral"}>{participant.status}</AdminBadge>
+              <span><b>{PARTICIPANT_LABELS[participant.participantRole as ParticipantRole] || participant.participantRole || "Résztvevő"}</b> · Ügyféloldali résztvevő</span>
+              <AdminBadge tone={participant.status === "ACTIVE" ? "green" : "neutral"}>{participant.status === "ACTIVE" ? "Aktív" : participant.status}</AdminBadge>
             </div>
             <p className="mt-1 text-[var(--adm-text-muted)]">{permissionSummary(participant.permissions)}</p>
+            <details className="mt-1 text-[11px] text-[var(--adm-text-muted)]">
+              <summary className="cursor-pointer">Technikai adatok</summary>
+              <p className="font-mono">identity: {participant.clientPortalIdentityId || "e-mail alapján"} · revision: {participant.revision}</p>
+            </details>
             <div className="mt-2 flex flex-wrap gap-2">
               {PARTICIPANT_ROLES.map((role) => <AdminButton key={role} size="sm" variant="neutral" disabled={busy || participant.participantRole === role} onClick={() => run(() => updateCaseParticipant(participant.id, { revision: participant.revision, participantRole: role }).then(reloadOrgData), `${PARTICIPANT_LABELS[role]} szerep beállítva.`)}>{PARTICIPANT_LABELS[role]}</AdminButton>)}
               <AdminButton size="sm" variant="muted" disabled={busy || participant.status === "REVOKED"} onClick={() => run(() => revokeCaseParticipant(participant.id).then(reloadOrgData), "Ügyféloldali résztvevő visszavonva.")}>Visszavonás</AdminButton>

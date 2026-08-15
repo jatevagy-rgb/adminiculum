@@ -244,8 +244,8 @@ export function ClientPortalShell({ view, resourceId }: Props) {
     return [
       capabilities.home ? ['Főoldal', '/portal'] : null,
       capabilities.matters ? ['Ügyeim', '/portal/ugyeim'] : null,
-      workspace.mode === 'ORGANIZATION' ? ['Új megkeresés', '/portal/megkeresesek/uj'] : null,
-      workspace.mode === 'ORGANIZATION' ? ['Megkereséseim', '/portal/megkeresesek'] : null,
+      workspace.mode === 'ORGANIZATION' && capabilities.intakes ? ['Új megkeresés', '/portal/megkeresesek/uj'] : null,
+      workspace.mode === 'ORGANIZATION' && capabilities.intakes ? ['Megkereséseim', '/portal/megkeresesek'] : null,
       capabilities.tasks && workspace.mode !== 'ORGANIZATION' ? ['Teendőim', '/portal/teendoim'] : null,
       capabilities.documents ? ['Dokumentumok', '/portal/dokumentumok'] : null,
       capabilities.messages && communicationEnabled ? ['Kommunikáció', '/portal/uzenetek'] : null,

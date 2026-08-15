@@ -21,6 +21,7 @@ describe("CP1 organizational client portal UI", () => {
     assert.match(shell(), /OrganizationPortalViews/);
     assert.match(shell(), /Új megkeresés/);
     assert.match(shell(), /Megkereséseim/);
+    assert.match(shell(), /capabilities\.intakes/);
     assert.match(shell(), /Kommunikáció/);
     assert.match(shell(), /Vezetői áttekintés/);
     assert.match(shell(), /Együttműködési áttekintés/);

@@ -28,6 +28,7 @@ describe('CP0 anonymous entry and authenticated workspace shell', () => {
     assert.match(shell, /capabilities\.tasks/);
     assert.match(shell, /capabilities\.documents/);
     assert.match(shell, /capabilities\.messages/);
+    assert.match(shell, /capabilities\.intakes/);
     assert.match(shell, /setSelectedPortalWorkspace\(null\)/);
     assert.match(shell, /PortalWorkspaceSelector/);
     assert.match(shell, /Nincs aktív ügyfélfelülete/);
@@ -51,7 +52,7 @@ describe('CP0 anonymous entry and authenticated workspace shell', () => {
 
   it('exposes workforce create, lifecycle, invitation, approval and explicit grant controls', () => {
     const admin = read('src/app/client-portal-admin/page.tsx');
-    for (const marker of ['Munkatér létrehozása', 'Aktiválás', 'Felfüggesztés', 'Archiválás', 'Meghívás', 'Jóváhagyás', 'Visszavonás', 'Explicit ügyhozzáférés', 'Lifecycle / audit']) assert.match(admin, new RegExp(marker));
-    assert.match(admin, /nem tesz automatikusan láthatóvá ügyet/);
+    for (const marker of ['Ügyfélportál aktiválása', 'Aktiválás', 'Felfüggesztés', 'Archiválás', 'Meghívás', 'Jóváhagyás', 'Visszavonás', 'Explicit ügyhozzáférés', 'Technikai adatok / Audit']) assert.match(admin, new RegExp(marker));
+    assert.match(admin, /Ügyhozzáférés nem jön létre automatikusan/);
   });
 });
