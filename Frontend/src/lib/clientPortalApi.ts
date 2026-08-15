@@ -199,6 +199,8 @@ export type PortalLeadershipUnitAggregate = {
   waitingOnOfficeCount: number;
   approachingDeadlineCount: number;
   publicStageCounts: Record<string, number>;
+  legalAreaDistribution: Record<string, number>;
+  recentSafeActivity: Array<{ label: string; happenedAt: string }>;
 };
 
 export type OnboardingRequestView = {

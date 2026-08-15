@@ -82,7 +82,7 @@ export function decidePermissions(role: ParticipantRole, permissions: string[]):
   };
 }
 
-/** Assert the selected workspace is an ACTIVE ORGANIZATION workspace. */
+/** Assert the selected workspace is an ACTIVE organization-style customer workspace. */
 export async function requireOrganizationWorkspace(workspaceId: string, prisma: Prisma = defaultPrisma): Promise<{ id: string; clientId: string }> {
   if (!workspaceId) throw new InteractionError(409, 'CLIENT_WORKSPACE_SELECTION_REQUIRED', 'Select an authorized workspace.');
   const workspace = await prisma.clientPortalWorkspace.findFirst({
@@ -90,7 +90,7 @@ export async function requireOrganizationWorkspace(workspaceId: string, prisma: 
     select: { id: true, clientId: true, mode: true },
   });
   if (!workspace) throw new InteractionError(403, 'CLIENT_WORKSPACE_MEMBERSHIP_REQUIRED', 'Active workspace membership is required.');
-  if (String(workspace.mode) !== 'ORGANIZATION') {
+  if (!['ORGANIZATION', 'CASE_RELAY'].includes(String(workspace.mode))) {
     throw new InteractionError(403, 'CLIENT_WORKSPACE_NOT_ORGANIZATION', 'This surface is only available for organizational workspaces.');
   }
   return { id: workspace.id, clientId: workspace.clientId };

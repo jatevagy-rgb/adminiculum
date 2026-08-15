@@ -78,9 +78,10 @@ function OrganizationContextHeader({ context, units }: { context: PortalIdentity
   const workspace = context.selectedWorkspace;
   if (!workspace) return null;
   const roleLabel = workspace.membershipRole === "APPROVER" ? "Hozzáférés-jóváhagyó" : workspace.membershipRole === "REPRESENTATIVE" ? "Szervezeti kapcsolattartó" : "Szervezeti portálfelhasználó";
+  const isCaseRelay = workspace.mode === "CASE_RELAY";
   return (
     <section className={`${card} bg-gradient-to-br from-white to-[#f7f1e2]`}>
-      <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#9b7b25]">Szervezeti ügyfélfelület</p>
+      <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#9b7b25]">{isCaseRelay ? "Együttműködési ügyfélfelület" : "Szervezeti ügyfélfelület"}</p>
       <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_auto]">
         <div className="min-w-0">
           <h1 className="break-words font-serif text-3xl font-semibold text-stone-950 sm:text-4xl">{workspace.clientDisplayName}</h1>
@@ -88,7 +89,7 @@ function OrganizationContextHeader({ context, units }: { context: PortalIdentity
           <p className="mt-2 text-sm text-stone-600">Bejelentkezve: {context.identity.displayName || context.identity.email}</p>
         </div>
         <div className="rounded-2xl bg-white/70 p-4 text-sm text-stone-700">
-          <p className="font-semibold text-stone-950">Szervezeti egységeim</p>
+          <p className="font-semibold text-stone-950">{isCaseRelay ? "Áttekintési egységek" : "Szervezeti egységeim"}</p>
           <p className="mt-1">{units.length ? units.map((unit) => unit.name).join(" · ") : "Nincs egységhez kötött tagság"}</p>
           <p className="mt-3 font-semibold text-stone-950">Szerepkör</p>
           <p className="mt-1">{roleLabel}</p>
@@ -302,10 +303,12 @@ function NewIntake({ units, onCreated }: { units: PortalOrganizationUnit[]; onCr
   );
 }
 
-function LeadershipSummary({ units }: { units: PortalLeadershipUnitAggregate[] | null }) {
+function LeadershipSummary({ units, mode }: { units: PortalLeadershipUnitAggregate[] | null; mode?: string }) {
+  const isCaseRelay = mode === "CASE_RELAY";
+  const title = isCaseRelay ? "Együttműködési áttekintés" : "Vezetői áttekintés";
   if (!units) return <section className={card}>Ehhez az ügyfélfelülethez nincs vezetői összesítő rálátás.</section>;
   return (
-    <Section title="Szervezeti áttekintés" empty={!units.length}>
+    <Section title={title} empty={!units.length}>
       <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-900">Ez az oldal kizárólag összesített adatokat mutat, és nem ad hozzáférést egyedi ügyekhez, dokumentumokhoz vagy kommunikációhoz.</p>
       {units.map((unit) => <div key={unit.organizationUnitName || "organization"} className="rounded-2xl border border-stone-200 bg-white p-4">
         <h3 className="font-semibold text-stone-950">{unit.organizationUnitName || "Teljes szervezet"}</h3>
@@ -316,7 +319,20 @@ function LeadershipSummary({ units }: { units: PortalLeadershipUnitAggregate[] |
           <div><dt>Ügyfélre vár</dt><dd className="font-semibold">{unit.waitingOnCustomerCount}</dd></div>
           <div><dt>Irodára vár</dt><dd className="font-semibold">{unit.waitingOnOfficeCount}</dd></div>
         </dl>
-        <div className="mt-3 flex flex-wrap gap-2">{Object.entries(unit.publicStageCounts).map(([stage, count]) => <span key={stage} className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">{stage}: {count}</span>)}</div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Jogi terület szerinti megoszlás</p>
+            <div className="mt-2 flex flex-wrap gap-2">{Object.entries(unit.legalAreaDistribution || {}).map(([area, count]) => <span key={area} className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">{area}: {count}</span>)}</div>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Jelenlegi státuszok</p>
+            <div className="mt-2 flex flex-wrap gap-2">{Object.entries(unit.publicStageCounts).map(([stage, count]) => <span key={stage} className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">{stage}: {count}</span>)}</div>
+          </div>
+        </div>
+        <div className="mt-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Legutóbbi biztonságos aktivitás</p>
+          <div className="mt-2 grid gap-2">{(unit.recentSafeActivity || []).length ? unit.recentSafeActivity.map((activity) => <p key={`${activity.label}-${activity.happenedAt}`} className="rounded-xl bg-stone-50 p-3 text-xs text-stone-700">{activity.label} · {formatDate(activity.happenedAt)}</p>) : <p className="text-sm text-stone-600">Nincs friss összesített aktivitás.</p>}</div>
+        </div>
       </div>)}
     </Section>
   );
@@ -325,6 +341,7 @@ function LeadershipSummary({ units }: { units: PortalLeadershipUnitAggregate[] |
 export function OrganizationPortalViews({ view, resourceId, context, workspace }: Props) {
   const [state, setState] = useState<OrgState>({ units: [], cases: [], intakes: [], leadership: null, detail: null, matter: null, matterLoading: false, matterError: null, loading: true, message: null });
   const communicationDisabled = context.selectedWorkspace?.communicationMode === "EXTERNAL_ONLY";
+  const isCaseRelay = context.selectedWorkspace?.mode === "CASE_RELAY";
 
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, message: null, detail: null, matter: null, matterError: null }));
@@ -332,7 +349,7 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
       const [unitsPage, casesPage, intakesPage, leadership] = await Promise.all([
         getPortalOrganizationUnits(),
         getPortalOrganizationCases({ limit: 50 }),
-        getPortalOrganizationIntakes({ limit: 20 }),
+        isCaseRelay ? Promise.resolve({ items: [] }) : getPortalOrganizationIntakes({ limit: 20 }),
         getPortalOrganizationSummary().then((result) => result.units).catch(() => null),
       ]);
       const caseReference = view === "matter" && resourceId
@@ -352,7 +369,7 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
     } catch (error) {
       setState((current) => ({ ...current, loading: false, message: clientSafeError(error) }));
     }
-  }, [resourceId, view]);
+  }, [isCaseRelay, resourceId, view]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -365,14 +382,15 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
   return (
     <div className="space-y-6" data-testid="organization-client-portal">
       <OrganizationContextHeader context={context} units={state.units} />
-      {view === "home" ? <OrganizationHome state={state} workspace={workspace} /> : null}
+      {view === "home" && isCaseRelay ? <LeadershipSummary units={state.leadership} mode={context.selectedWorkspace?.mode} /> : null}
+      {view === "home" && !isCaseRelay ? <OrganizationHome state={state} workspace={workspace} /> : null}
       {view === "matters" ? <OrganizationMatters cases={state.cases} units={state.units} /> : null}
       {view === "matter" ? <OrganizationMatterDetail detail={state.detail} matter={state.matter} matterLoading={state.matterLoading} matterError={state.matterError} /> : null}
       {view === "documents" ? <OrganizationDocuments workspace={workspace} /> : null}
       {view === "messages" ? <OrganizationMessages workspace={workspace} cases={state.cases} /> : null}
-      {view === "intakes" ? <Section title="Megkereséseim" empty={!state.intakes.length}>{state.intakes.map((item) => <IntakeRow key={item.reference} item={item} />)}</Section> : null}
-      {view === "new-intake" ? <NewIntake units={state.units} onCreated={load} /> : null}
-      {view === "leadership" ? <LeadershipSummary units={state.leadership} /> : null}
+      {view === "intakes" && !isCaseRelay ? <Section title="Megkereséseim" empty={!state.intakes.length}>{state.intakes.map((item) => <IntakeRow key={item.reference} item={item} />)}</Section> : null}
+      {view === "new-intake" && !isCaseRelay ? <NewIntake units={state.units} onCreated={load} /> : null}
+      {view === "leadership" ? <LeadershipSummary units={state.leadership} mode={context.selectedWorkspace?.mode} /> : null}
       {!hasLeadership && view !== "leadership" ? null : null}
     </div>
   );

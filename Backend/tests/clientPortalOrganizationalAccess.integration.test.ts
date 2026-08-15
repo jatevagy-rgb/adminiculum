@@ -18,8 +18,10 @@ d('CP1 organizational access core (PostgreSQL)', () => {
   const client = crypto.randomUUID();
   const orgWs = crypto.randomUUID();
   const indivWs = crypto.randomUUID();
+  const relayWs = crypto.randomUUID();
   const hrGroup = crypto.randomUUID();
   const finGroup = crypto.randomUUID();
+  const relayGroup = crypto.randomUUID();
   const identity: Record<string, string> = {};
   const membership: Record<string, string> = {};
   const kase: Record<string, string> = {};
@@ -39,7 +41,7 @@ d('CP1 organizational access core (PostgreSQL)', () => {
     await db.clientOrganizationMembership.create({ data: { clientPortalIdentityId: identity[key], clientId: client, groupId, status: status as never, approvedFromRequestId: crypto.randomUUID(), approvedById: admin, approvedAt: new Date() } });
   }
 
-  async function makePublishedCase(key: string, unitGroupId: string | null, audienceSnapshot: Record<string, unknown> = {}) {
+  async function makePublishedCase(key: string, unitGroupId: string | null, audienceSnapshot: Record<string, unknown> = {}, workspaceId = orgWs) {
     const id = crypto.randomUUID();
     kase[key] = id;
     await db.case.create({ data: { id, caseNumber: `CP1-${key}-${id.slice(0, 6)}`, title: `internal ${key}`, caseType: 'CONTRACT_REVIEW', clientId: client, createdById: admin, assignedLawyerId: admin } as never });
@@ -65,7 +67,7 @@ d('CP1 organizational access core (PostgreSQL)', () => {
     });
     await db.clientMatterPublication.update({ where: { id: pub.id }, data: { currentRevisionId: rev.id } });
     if (unitGroupId) {
-      await db.clientPortalIntakeRequest.create({ data: { workspaceId: orgWs, requesterMembershipId: membership.alexandra || membership.bela || admin, organizationGroupId: unitGroupId, subject: `intake ${key}`, descriptionSafe: 'x', status: 'LINKED_TO_EXISTING_CASE', linkedCaseId: id } });
+      await db.clientPortalIntakeRequest.create({ data: { workspaceId, requesterMembershipId: membership.alexandra || membership.bela || admin, organizationGroupId: unitGroupId, subject: `intake ${key}`, descriptionSafe: 'x', status: 'LINKED_TO_EXISTING_CASE', linkedCaseId: id } });
     }
     return id;
   }
@@ -84,10 +86,13 @@ d('CP1 organizational access core (PostgreSQL)', () => {
     await db.client.create({ data: { id: client, name: 'CP1 Example Company Kft.' } });
     await db.clientPortalWorkspace.create({ data: { id: orgWs, clientId: client, name: 'CP1 Szervezeti ügyfél', mode: 'ORGANIZATION', publicReference: `org-${orgWs}`, createdById: admin } });
     await db.clientPortalWorkspace.create({ data: { id: indivWs, clientId: client, name: 'Privát', mode: 'INDIVIDUAL', publicReference: `ind-${indivWs}`, createdById: admin } });
+    await db.clientPortalWorkspace.create({ data: { id: relayWs, clientId: client, name: 'CP1 együttműködési áttekintés', mode: 'CASE_RELAY', communicationMode: 'EXTERNAL_ONLY', connectedSystemState: 'READY', publicReference: `relay-${relayWs}`, createdById: admin } });
     await db.clientOrganizationGroup.create({ data: { id: hrGroup, clientId: client, workspaceId: orgWs, name: 'HR', createdById: admin } });
     await db.clientOrganizationGroup.create({ data: { id: finGroup, clientId: client, workspaceId: orgWs, name: 'Finance', createdById: admin } });
+    await db.clientOrganizationGroup.create({ data: { id: relayGroup, clientId: client, workspaceId: relayWs, name: 'Vezetőség', createdById: admin } });
 
     for (const key of ['alexandra', 'bela', 'ferenc', 'manager', 'exec']) await makeIdentity(key);
+    await db.clientPortalWorkspaceMembership.create({ data: { clientPortalIdentityId: identity.exec, workspaceId: relayWs, status: 'ACTIVE', approvedAt: new Date(), approvedById: admin } });
     await makeIdentity('suspended', true);
     await addUnitMembership('alexandra', hrGroup);
     await addUnitMembership('bela', hrGroup);
@@ -98,6 +103,7 @@ d('CP1 organizational access core (PostgreSQL)', () => {
     await makePublishedCase('B', hrGroup);
     await makePublishedCase('C', finGroup);
     await makePublishedCase('D', hrGroup);
+    await makePublishedCase('R', relayGroup, {}, relayWs);
 
     await grant('alexandra', 'A', 'REQUESTER', ['MATTER_READ', 'DOCUMENT_READ']);
     await grant('alexandra', 'D', 'PARTICIPANT', ['MATTER_READ']);
@@ -227,6 +233,16 @@ d('CP1 organizational access core (PostgreSQL)', () => {
     const names = org.units.map((u) => u.organizationUnitName).sort();
     expect(names).toEqual(['Finance', 'HR']);
     await expect(resolveParticipantAccess(identity.exec, kase.C, orgWs, db)).rejects.toMatchObject({ code: 'CLIENT_PORTAL_NO_ACTIVE_GRANT' });
+  });
+
+  it('Tier-3 CASE_RELAY summary scope gets aggregate oversight but no case detail', async () => {
+    await createSummaryScope(internalActor, { workspaceId: relayWs, clientPortalIdentityId: identity.exec, scopeType: 'ORGANIZATION' }, db);
+    const org = await organizationSummary(identity.exec, relayWs, db);
+    expect(org.units.map((u) => u.organizationUnitName)).toEqual(['Vezetőség']);
+    expect(org.units[0].activeCaseCount).toBeGreaterThanOrEqual(1);
+    expect(org.units[0].legalAreaDistribution.CONTRACT_REVIEW).toBeGreaterThanOrEqual(1);
+    expect(org.units[0].recentSafeActivity.length).toBeGreaterThanOrEqual(1);
+    await expect(resolveParticipantAccess(identity.exec, kase.R, relayWs, db)).rejects.toMatchObject({ code: 'CLIENT_PORTAL_NO_ACTIVE_GRANT' });
   });
 
   it('summary scope holder is never a case participant (no own/shared rows)', async () => {

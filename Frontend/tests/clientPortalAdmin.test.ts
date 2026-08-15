@@ -70,6 +70,15 @@ describe('internal portal-admin UI', () => {
     assert.match(src, /g\.caseId \? /);
   });
 
+  it('shows a bounded workforce admin loading error with retry', () => {
+    const src = page();
+    assert.match(src, /client-portal-admin-load-error/);
+    assert.match(src, /Az ügyfélportál-kezelő adatai nem tölthetők be\./);
+    assert.match(src, /Újrapróbálás/);
+    assert.match(src, /loadError \? null :/);
+    assert.doesNotMatch(src, /Invalid token|Bearer|stack/i);
+  });
+
   it('defines explicit customer and workforce interaction API boundaries', () => {
     const src = interactionApi();
     assert.match(src, /customerInteractionApi/);

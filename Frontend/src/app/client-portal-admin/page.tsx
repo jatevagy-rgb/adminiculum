@@ -497,11 +497,13 @@ function PageBody() {
   const [clients, setClients] = useState<Client[]>([]);
   const [cases, setCases] = useState<CaseListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [q, m, ws, cl, cs, req, question, submission, notification] = await Promise.all([
         listMembershipQueue(),
@@ -526,7 +528,7 @@ function PageBody() {
         notifications: notification.items || [],
       });
     } catch {
-      setFeedback({ tone: "err", text: "A portál-adminisztráció betöltése nem sikerült." });
+      setLoadError("Az ügyfélportál-kezelő adatai nem tölthetők be.");
     } finally {
       setLoading(false);
     }
@@ -575,6 +577,23 @@ function PageBody() {
           {feedback.text}
         </div>
       )}
+
+      {loadError ? (
+        <AdminPanel className="p-5" data-testid="client-portal-admin-load-error">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">{loadError}</h2>
+              <p className="mt-1 text-sm text-[var(--adm-text-muted)]">A workforce vezérlőpult elérhető marad a portál ügyféloldali olvasási kapcsolójától függetlenül, de az adatok betöltése most nem sikerült.</p>
+            </div>
+            <AdminButton variant="gold" disabled={loading} onClick={() => void reload()}>
+              {loading ? "Újratöltés…" : "Újrapróbálás"}
+            </AdminButton>
+          </div>
+        </AdminPanel>
+      ) : null}
+
+      {loadError ? null : (
+      <>
 
       <WorkspaceAdministration workspaces={workspaces} clients={clients} cases={cases} busy={busy} run={run} />
 
@@ -702,6 +721,8 @@ function PageBody() {
           ))}
         </div>
       </AdminPanel>
+      </>
+      )}
     </div>
   );
 }

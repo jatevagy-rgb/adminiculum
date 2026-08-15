@@ -64,6 +64,8 @@ interface UnitAggregate {
   waitingOnOfficeCount: number;
   approachingDeadlineCount: number;
   publicStageCounts: Record<string, number>;
+  legalAreaDistribution: Record<string, number>;
+  recentSafeActivity: Array<{ label: string; happenedAt: string }>;
 }
 
 /** Case ids linked (via intake) to a set of organization groups. */
@@ -85,11 +87,14 @@ async function caseIdsForGroups(workspaceId: string, groupIds: string[], prisma:
 
 /** Aggregate content-free counts for a set of case ids. */
 async function aggregateForCases(unitName: string | null, caseIds: string[], prisma: Prisma): Promise<UnitAggregate> {
-  const empty: UnitAggregate = { organizationUnitName: unitName, activeCaseCount: 0, closedCaseCount: 0, waitingOnCustomerCount: 0, waitingOnOfficeCount: 0, approachingDeadlineCount: 0, publicStageCounts: {} };
+  const empty: UnitAggregate = { organizationUnitName: unitName, activeCaseCount: 0, closedCaseCount: 0, waitingOnCustomerCount: 0, waitingOnOfficeCount: 0, approachingDeadlineCount: 0, publicStageCounts: {}, legalAreaDistribution: {}, recentSafeActivity: [] };
   if (!caseIds.length) return empty;
+  const cases = await prisma.case.findMany({ where: { id: { in: caseIds } }, select: { id: true, caseType: true } });
+  const legalAreaDistribution: Record<string, number> = {};
+  for (const row of cases) legalAreaDistribution[String(row.caseType)] = (legalAreaDistribution[String(row.caseType)] || 0) + 1;
   const publications = await prisma.clientMatterPublication.findMany({
     where: { caseId: { in: caseIds } },
-    select: { caseId: true, status: true, currentRevisionId: true },
+    select: { caseId: true, status: true, currentRevisionId: true, publishedAt: true },
   });
   const activeCaseIds = publications.filter((publication) => String(publication.status) === 'PUBLISHED').map((publication) => publication.caseId);
   const closedCaseIds = publications.filter((publication) => ['REVOKED', 'SUPERSEDED'].includes(String(publication.status))).map((publication) => publication.caseId);
@@ -114,6 +119,15 @@ async function aggregateForCases(unitName: string | null, caseIds: string[], pri
     waitingOnOfficeCount: Math.max(0, new Set(activeCaseIds).size - waitingCustomer),
     approachingDeadlineCount: approaching,
     publicStageCounts: stageCounts,
+    legalAreaDistribution,
+    recentSafeActivity: publications
+      .filter((publication) => publication.publishedAt)
+      .sort((left, right) => (right.publishedAt?.getTime() || 0) - (left.publishedAt?.getTime() || 0))
+      .slice(0, 5)
+      .map((publication) => ({
+        label: String(publication.status) === 'PUBLISHED' ? 'Közzétett ügyállapot-frissítés' : 'Ügyfélportál publikáció változott',
+        happenedAt: publication.publishedAt!.toISOString(),
+      })),
   };
 }
 

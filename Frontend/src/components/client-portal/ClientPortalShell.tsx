@@ -205,18 +205,18 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         }
         setSelectedPortalWorkspace(context.selectedWorkspace.publicReference);
         const capabilities = context.selectedWorkspace.capabilities;
-        const isOrganization = context.selectedWorkspace.mode === 'ORGANIZATION';
-        // Organization customers surface their content via explicit Case grants and
-        // the organization home (fetched by OrganizationPortalViews), not via the
+        const isCollaborationWorkspace = context.selectedWorkspace.mode === 'ORGANIZATION' || context.selectedWorkspace.mode === 'CASE_RELAY';
+        // Organization and case-relay customers surface their content via explicit
+        // Case grants and the collaboration home (fetched by OrganizationPortalViews), not via the
         // workspace-level capability flags — so they must never dead-end on the
         // empty-capabilities guard, which is only meaningful for individual surfaces.
-        if (!isOrganization && ![capabilities.matters, capabilities.tasks, capabilities.documents, capabilities.messages].some(Boolean)) {
+        if (!isCollaborationWorkspace && ![capabilities.matters, capabilities.tasks, capabilities.documents, capabilities.messages].some(Boolean)) {
           if (!cancelled) setState({ status: 'workspace-empty', context });
           return;
         }
         const [home, workspace] = await Promise.all([getPortalHome(), getPortalWorkspace()]);
         let detail = {};
-        if (view === 'matter' && resourceId && !isOrganization) detail = { matter: await getPortalMatter(resourceId) };
+        if (view === 'matter' && resourceId && !isCollaborationWorkspace) detail = { matter: await getPortalMatter(resourceId) };
         if (view === 'document' && resourceId) detail = { document: await getPortalDocument(resourceId) };
         if (view === 'action' && resourceId) detail = { action: await getPortalActionRequest(resourceId) };
         if (!cancelled) setState({ status: 'ready', context, home, workspace, ...detail });
@@ -249,7 +249,8 @@ export function ClientPortalShell({ view, resourceId }: Props) {
       capabilities.tasks && workspace.mode !== 'ORGANIZATION' ? ['Teendőim', '/portal/teendoim'] : null,
       capabilities.documents ? ['Dokumentumok', '/portal/dokumentumok'] : null,
       capabilities.messages && communicationEnabled ? ['Kommunikáció', '/portal/uzenetek'] : null,
-      workspace.mode === 'ORGANIZATION' ? ['Szervezeti áttekintés', '/portal/szervezeti-attekintes'] : null,
+      workspace.mode === 'ORGANIZATION' ? ['Vezetői áttekintés', '/portal/szervezeti-attekintes'] : null,
+      workspace.mode === 'CASE_RELAY' ? ['Együttműködési áttekintés', '/portal/szervezeti-attekintes'] : null,
     ].filter(Boolean) as string[][];
   }, [state]);
 
@@ -275,7 +276,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         {state.status === 'workspace-empty' ? <Card><h1 className="text-3xl font-semibold">{state.context.selectedWorkspace?.name}</h1><p className="mt-3 text-stone-700">Az ügyfélfelülethez való hozzáférése aktív, de ezen a felületen jelenleg nincs elérhető tartalom.</p></Card> : null}
         {state.status === 'service-error' ? <Card><h1 className="text-3xl font-semibold">A portál jelenleg nem érhető el</h1><p className="mt-3 text-stone-700">Kérjük, próbálja újra később.</p></Card> : null}
         {state.status === 'denied' ? <Card>{state.message}</Card> : null}
-        {state.status === 'ready' && state.context.selectedWorkspace?.mode === 'ORGANIZATION' ? (
+        {state.status === 'ready' && (state.context.selectedWorkspace?.mode === 'ORGANIZATION' || state.context.selectedWorkspace?.mode === 'CASE_RELAY') ? (
           <OrganizationPortalViews
             view={view as OrganizationPortalView}
             resourceId={resourceId}
@@ -283,9 +284,9 @@ export function ClientPortalShell({ view, resourceId }: Props) {
             workspace={state.workspace}
           />
         ) : null}
-        {state.status === 'ready' && state.context.selectedWorkspace?.mode !== 'ORGANIZATION' && view === 'home' ? <HomeView home={state.home} workspace={state.workspace} /> : null}
-        {state.status === 'ready' && state.context.selectedWorkspace?.mode !== 'ORGANIZATION' && (view === 'matters' || view === 'tasks' || view === 'documents' || view === 'messages') ? <ListView view={view} home={state.home} workspace={state.workspace} /> : null}
-        {state.status === 'ready' && state.context.selectedWorkspace?.mode !== 'ORGANIZATION' && view === 'matter' && state.matter ? (
+        {state.status === 'ready' && state.context.selectedWorkspace?.mode !== 'ORGANIZATION' && state.context.selectedWorkspace?.mode !== 'CASE_RELAY' && view === 'home' ? <HomeView home={state.home} workspace={state.workspace} /> : null}
+        {state.status === 'ready' && state.context.selectedWorkspace?.mode !== 'ORGANIZATION' && state.context.selectedWorkspace?.mode !== 'CASE_RELAY' && (view === 'matters' || view === 'tasks' || view === 'documents' || view === 'messages') ? <ListView view={view} home={state.home} workspace={state.workspace} /> : null}
+        {state.status === 'ready' && state.context.selectedWorkspace?.mode !== 'ORGANIZATION' && state.context.selectedWorkspace?.mode !== 'CASE_RELAY' && view === 'matter' && state.matter ? (
           <MatterView
             matter={state.matter}
             communicationSection={<CustomerInteractionCard caseId={state.matter.caseId} />}

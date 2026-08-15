@@ -46,7 +46,6 @@ export function readSelectedModeIntent(): OnboardingMode | null {
   if (typeof window === 'undefined') return null;
   const raw = window.sessionStorage.getItem('adminiculum:client-portal-login-intent');
   if (raw === 'organization') return 'ORGANIZATION';
-  if (raw === 'case-relay') return 'CASE_RELAY';
   if (raw === 'individual') return 'INDIVIDUAL';
   return null;
 }

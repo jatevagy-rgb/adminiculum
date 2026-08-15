@@ -17,11 +17,13 @@ describe("CP1 organizational client portal UI", () => {
 
   it("registers organization routes in the canonical customer shell", () => {
     assert.match(shell(), /selectedWorkspace\?\.mode === 'ORGANIZATION'/);
+    assert.match(shell(), /selectedWorkspace\?\.mode === 'CASE_RELAY'/);
     assert.match(shell(), /OrganizationPortalViews/);
     assert.match(shell(), /Új megkeresés/);
     assert.match(shell(), /Megkereséseim/);
     assert.match(shell(), /Kommunikáció/);
-    assert.match(shell(), /Szervezeti áttekintés/);
+    assert.match(shell(), /Vezetői áttekintés/);
+    assert.match(shell(), /Együttműködési áttekintés/);
     assert.equal(existsSync(path.join(root, "src/app/portal/szervezeti-attekintes/page.tsx")), true);
     assert.match(read("src/app/portal/megkeresesek/uj/page.tsx"), /view="new-intake"/);
   });
@@ -57,7 +59,10 @@ describe("CP1 organizational client portal UI", () => {
       "Most itt tartunk",
       "Mire várunk",
       "Az ügy előrehaladása",
-      "Szervezeti áttekintés",
+      "Vezetői áttekintés",
+      "Együttműködési áttekintés",
+      "Jogi terület szerinti megoszlás",
+      "Legutóbbi biztonságos aktivitás",
       "nem ad hozzáférést egyedi ügyekhez",
     ]) assert.match(src, new RegExp(label));
     assert.match(src, /relationshipToCase === "OWN"/);
@@ -161,12 +166,24 @@ describe("CP1 organizational client portal UI", () => {
     const src = shell();
     assert.match(
       src,
-      /if \(!isOrganization && !\[capabilities\.matters, capabilities\.tasks, capabilities\.documents, capabilities\.messages\]\.some\(Boolean\)\)/,
+      /if \(!isCollaborationWorkspace && !\[capabilities\.matters, capabilities\.tasks, capabilities\.documents, capabilities\.messages\]\.some\(Boolean\)\)/,
     );
-    // isOrganization must be computed before the guard, not only after it.
+    // isCollaborationWorkspace must be computed before the guard, not only after it.
     const guardIdx = src.indexOf("setState({ status: 'workspace-empty'");
-    const isOrgIdx = src.indexOf("const isOrganization = context.selectedWorkspace.mode === 'ORGANIZATION'");
-    assert.ok(isOrgIdx !== -1 && guardIdx !== -1 && isOrgIdx < guardIdx, "isOrganization must be declared before the workspace-empty guard");
+    const isOrgIdx = src.indexOf("const isCollaborationWorkspace = context.selectedWorkspace.mode === 'ORGANIZATION' || context.selectedWorkspace.mode === 'CASE_RELAY'");
+    assert.ok(isOrgIdx !== -1 && guardIdx !== -1 && isOrgIdx < guardIdx, "isCollaborationWorkspace must be declared before the workspace-empty guard");
+  });
+
+  it("keeps case-relay as workforce-assigned oversight, not a public third login mode", () => {
+    const onboarding = read("src/components/client-portal/PortalOnboarding.tsx");
+    const onboardingApi = read("src/lib/clientOnboardingApi.ts");
+    const entry = read("src/components/client-portal/PortalEntryLanding.tsx");
+    const org = orgViews();
+    assert.match(org, /isCaseRelay \? <LeadershipSummary/);
+    assert.match(org, /isCaseRelay \? Promise\.resolve\(\{ items: \[\] \}\)/);
+    assert.doesNotMatch(onboarding, /PUBLIC_REQUEST_MODES[^\n]+CASE_RELAY/);
+    assert.doesNotMatch(onboardingApi, /case-relay/);
+    assert.doesNotMatch(entry, /Integrált ügyfél|case-relay/);
   });
 
   it("adds customer/workforce thread participant API wrappers", () => {

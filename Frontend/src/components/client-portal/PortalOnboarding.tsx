@@ -16,10 +16,10 @@ import {
 const MODE_LABELS: Record<OnboardingMode, string> = {
   INDIVIDUAL: 'Magánügyfél',
   ORGANIZATION: 'Szervezeti ügyfél',
-  CASE_RELAY: 'Ügyátvezető',
+  CASE_RELAY: 'Együttműködési áttekintés',
 };
 
-const MODES: OnboardingMode[] = ['INDIVIDUAL', 'ORGANIZATION', 'CASE_RELAY'];
+const PUBLIC_REQUEST_MODES: OnboardingMode[] = ['INDIVIDUAL', 'ORGANIZATION'];
 
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return <section className={`rounded-3xl border border-stone-200 bg-white p-6 shadow-sm sm:p-8 ${className}`}>{children}</section>;
@@ -56,19 +56,18 @@ function OnboardingForm({ context, initialMode, onDone }: { context: PortalIdent
   const [unit, setUnit] = useState('');
   const [jobTitle, setJobTitle] = useState('');
   const [corporateEmail, setCorporateEmail] = useState('');
-  const [externalSystem, setExternalSystem] = useState('');
   const [note, setNote] = useState('');
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const orgMode = mode === 'ORGANIZATION' || mode === 'CASE_RELAY';
+  const orgMode = mode === 'ORGANIZATION';
 
   const submit = async () => {
     setBusy(true);
     setMessage(null);
     try {
-      const combinedNote = [note.trim(), externalSystem.trim() ? `Külső rendszer: ${externalSystem.trim()}` : ''].filter(Boolean).join(' · ');
+      const combinedNote = note.trim();
       const payload = buildOnboardingPayload({
         requestedMode: mode,
         displayName,
@@ -111,7 +110,7 @@ function OnboardingForm({ context, initialMode, onDone }: { context: PortalIdent
         <label className="grid gap-1 text-sm font-medium text-stone-800">
           <span>Ügyfélfelületi mód</span>
           <select data-testid="onboarding-mode" value={mode} onChange={(event) => setMode(event.target.value as OnboardingMode)} className="rounded-2xl border border-stone-300 px-4 py-3">
-            {MODES.map((value) => <option key={value} value={value}>{MODE_LABELS[value]}</option>)}
+            {PUBLIC_REQUEST_MODES.map((value) => <option key={value} value={value}>{MODE_LABELS[value]}</option>)}
           </select>
         </label>
         <label className="grid gap-1 text-sm font-medium text-stone-800">
@@ -146,13 +145,6 @@ function OnboardingForm({ context, initialMode, onDone }: { context: PortalIdent
               <input value={corporateEmail} onChange={(event) => setCorporateEmail(event.target.value)} maxLength={254} className="rounded-2xl border border-stone-300 px-4 py-3" />
             </label>
           </>
-        ) : null}
-
-        {mode === 'CASE_RELAY' ? (
-          <label className="grid gap-1 text-sm font-medium text-stone-800 sm:col-span-2">
-            <span>Használt külső rendszer megnevezése / referencia (opcionális)</span>
-            <input value={externalSystem} onChange={(event) => setExternalSystem(event.target.value)} maxLength={200} className="rounded-2xl border border-stone-300 px-4 py-3" />
-          </label>
         ) : null}
 
         <label className="grid gap-1 text-sm font-medium text-stone-800 sm:col-span-2">
