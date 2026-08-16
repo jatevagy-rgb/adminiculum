@@ -43,6 +43,15 @@ async function requireOrgWorkspace(workspaceId: string, prisma: Prisma): Promise
   return { id: workspace.id, clientId: workspace.clientId };
 }
 
+async function requireSummaryWorkspace(workspaceId: string, prisma: Prisma): Promise<{ id: string; clientId: string; mode: string }> {
+  const workspace = await prisma.clientPortalWorkspace.findUnique({ where: { id: workspaceId }, select: { id: true, clientId: true, mode: true, status: true } });
+  if (!workspace) throw new OrganizationAdminError(404, 'WORKSPACE_NOT_FOUND', 'Workspace not found.');
+  const mode = String(workspace.mode);
+  if (mode !== 'ORGANIZATION' && mode !== 'CASE_RELAY') throw new OrganizationAdminError(400, 'WORKSPACE_NOT_SUMMARY_CAPABLE', 'Only organization and case-relay workspaces support leadership summary scopes.');
+  if (String(workspace.status) === 'ARCHIVED') throw new OrganizationAdminError(409, 'WORKSPACE_ARCHIVED', 'Workspace is archived.');
+  return { id: workspace.id, clientId: workspace.clientId, mode };
+}
+
 function enumValue(value: unknown, allowed: Set<string>, code: string): string {
   const output = String(value || '').trim().toUpperCase();
   if (!allowed.has(output)) throw new OrganizationAdminError(400, code, 'Invalid value.');
@@ -375,8 +384,9 @@ export async function listParticipants(actor: InternalActor, workspaceId: string
 export async function createSummaryScope(actor: InternalActor, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
   requireAdmin(actor);
   const workspaceId = String(input.workspaceId || '');
-  const workspace = await requireOrgWorkspace(workspaceId, prisma);
+  const workspace = await requireSummaryWorkspace(workspaceId, prisma);
   const scopeType = enumValue(input.scopeType, new Set(['UNIT', 'ORGANIZATION']), 'INVALID_SCOPE_TYPE');
+  if (workspace.mode === 'CASE_RELAY' && scopeType !== 'ORGANIZATION') throw new OrganizationAdminError(400, 'CASE_RELAY_REQUIRES_ORGANIZATION_SCOPE', 'Case-relay summary scopes cover the assigned organization oversight surface.');
   const identity = input.clientPortalIdentityId
     ? await prisma.clientPortalIdentity.findUnique({ where: { id: String(input.clientPortalIdentityId) }, select: { id: true } })
     : await prisma.clientPortalIdentity.findUnique({ where: { normalizedEmail: String(input.email || '').trim().toLowerCase() }, select: { id: true } });
@@ -427,7 +437,7 @@ export async function transitionSummaryScope(actor: InternalActor, scopeId: stri
 
 export async function listSummaryScopes(actor: InternalActor, workspaceId: string, prisma: Prisma = defaultPrisma) {
   requireAdmin(actor);
-  await requireOrgWorkspace(workspaceId, prisma);
+  await requireSummaryWorkspace(workspaceId, prisma);
   const scopes = await prisma.clientPortalSummaryScope.findMany({ where: { workspaceId }, orderBy: { updatedAt: 'desc' }, select: { id: true, workspaceMembershipId: true, scopeType: true, organizationGroupId: true, status: true, revision: true } });
   return { items: scopes };
 }
