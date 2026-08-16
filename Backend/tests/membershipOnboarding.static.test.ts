@@ -73,6 +73,16 @@ describe('membership onboarding static boundary', () => {
     expect(identityRoutes).toContain("clientIdentityRouter.get('/admin/membership-requests/:requestId'");
   });
 
+  it('keeps lawyer-sent invitations separate from customer-initiated membership requests', () => {
+    const accept = identity.slice(identity.indexOf('export async function acceptPortalInvitation'), identity.indexOf('export async function cancelMembershipRequest'));
+    expect(accept).toContain("status: 'ACTIVE'");
+    expect(accept).toContain('clientPortalWorkspaceMembership.upsert');
+    expect(accept).not.toContain("PENDING_REVIEW");
+    const submit = identity.slice(identity.indexOf('export async function submitMembershipRequest'), identity.indexOf('export async function acceptPortalInvitation'));
+    expect(submit).toContain("status: 'PENDING_REVIEW'");
+    expect(submit).not.toContain('clientPortalWorkspaceMembership.upsert');
+  });
+
   it('replaces the dead-end with an onboarding surface in the portal shell', () => {
     const shell = readFront('src/components/client-portal/ClientPortalShell.tsx');
     expect(shell).toContain('PortalOnboarding');

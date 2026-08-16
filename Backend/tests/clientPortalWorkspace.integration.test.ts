@@ -64,6 +64,10 @@ d('CP0 workspace authorization (PostgreSQL)', () => {
     const one = await getPortalIdentityContext(session, null, db);
     expect(one.state).toBe('READY');
     expect(one.selectedWorkspace?.mode).toBe('INDIVIDUAL');
+    expect(one.selectedWorkspace?.capabilities.leadership).toBe(false);
+    await db.clientPortalSummaryScope.create({ data: { workspaceMembershipId: membership.id, workspaceId: individual.id, scopeType: 'ORGANIZATION', approvedById: ids.admin } as any });
+    const oneWithSummary = await getPortalIdentityContext(session, null, db);
+    expect(oneWithSummary.selectedWorkspace?.capabilities.leadership).toBe(true);
     await expect(resolveActiveCustomerGrant(ids.identity, ids.case, individual.id, db)).rejects.toMatchObject({ code: 'CLIENT_PORTAL_NO_ACTIVE_GRANT' });
 
     const relay = await createWorkspace(actor, { clientId: ids.otherClient, name: 'Átvezető tér', mode: 'CASE_RELAY', communicationMode: 'EXTERNAL_ONLY', connectedSystemState: 'READY' }, db);

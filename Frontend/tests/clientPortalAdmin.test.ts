@@ -76,6 +76,7 @@ describe('internal portal-admin UI', () => {
       'activation-wizard',
       'Ügyfélportál aktiválása',
       'Ügyfél kiválasztása',
+      'activation-new-client-form',
       'Milyen ügyfél?',
       'Hogyan dolgozunk együtt?',
       'Portálon keresztül',
@@ -94,14 +95,25 @@ describe('internal portal-admin UI', () => {
       'Beállítások',
       'Audit',
       'Technikai adatok / Audit',
+      'Meghívás elküldve',
+      'Meghívás lejárt',
+      'Jóváhagyásra vár',
     ]) assert.match(src, new RegExp(marker));
+    assert.match(src, /\+ Új ügyfél létrehozása/);
     assert.match(src, /modeFromActivation/);
     assert.match(src, /relationship === "CONNECTED_SYSTEM" \? "CASE_RELAY" : "ORGANIZATION"/);
     assert.match(src, /if \(relationship === "EMAIL_CENTRIC"\) return "EMAIL_LINKED"/);
-    assert.match(src, /updateClient\(client\.id,\s*\{\s*portalAccessEnabled: true/);
+    assert.match(src, /createClient\(\{/);
+    assert.match(src, /updateClient\(targetClient\.id,\s*\{\s*portalAccessEnabled: true/);
     assert.match(src, /createAdminWorkspace/);
     assert.match(src, /transitionAdminWorkspace\(workspace\.id, "activate"/);
     assert.match(src, /createWorkspaceUnit/);
+    assert.match(src, /activationFromWorkspace/);
+    assert.match(src, /workspace\.mode === "INDIVIDUAL" \? "INDIVIDUAL" : "ORGANIZATION"/);
+    assert.match(src, /activation-role-\$\{customerType\}-\$\{option\.value\}/);
+    assert.match(src, /workspace\.mode === "INDIVIDUAL"[\s\S]*Meghatalmazott \/ kapcsolattartó/);
+    assert.match(src, /Szervezeti adminisztrátor \/ kapcsolattartó/);
+    assert.doesNotMatch(src, /<option value="APPROVER">/);
     assert.match(src, /Haladó szervezeti adminisztráció \/ Audit/);
     assert.match(src, /permissionLabel\(p\)/);
     assert.match(src, /permissionLabel\(permission\)/);
@@ -154,6 +166,7 @@ describe('internal portal-admin UI', () => {
     assert.match(shell, /Kérdések és válaszok/);
     assert.match(shell, /workspace\.mode === 'ORGANIZATION' && capabilities\.intakes \? \['Új megkeresés'/);
     assert.match(read('src/lib/clientPortalApi.ts'), /intakes\?: boolean/);
+    assert.match(read('src/lib/clientPortalApi.ts'), /leadership\?: boolean/);
     assert.doesNotMatch(shell, /Belső munkapad|Review sor|Munkaórák/);
   });
 
@@ -200,9 +213,10 @@ describe('internal portal-admin UI', () => {
     assert.match(api, /updatedAt: string/);
     assert.match(api, /revokedAt: string \| null/);
     assert.match(api, /grantId: string \| null/);
-    assert.match(panel, /Grant: \{grant\.id\}/);
+    assert.match(panel, /Ügyfélhozzáférés/);
+    assert.match(panel, /Grant ID/);
     assert.match(panel, /grant\.revision/);
-    assert.match(panel, /grant\.permissions\.join/);
+    assert.match(panel, /permissionList\(grant\.permissions\)/);
     assert.match(panel, /grant\.revokedAt/);
     assert.match(panel, /grant-lifecycle-history/);
     assert.match(panel, /transitionClientPortalGrant\(grant\.id/);

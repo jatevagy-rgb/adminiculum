@@ -21,6 +21,14 @@ const COMPLETION_STATE_LABELS: Record<MilestoneCompletionState, string> = {
 };
 
 const COMPLETION_STATES: MilestoneCompletionState[] = ["NOT_STARTED", "IN_PROGRESS", "COMPLETED"];
+const PUBLICATION_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Tervezet",
+  READY_FOR_APPROVAL: "Jóváhagyásra vár",
+  APPROVED: "Jóváhagyva",
+  PUBLISHED: "Közzétéve",
+  REVOKED: "Visszavonva",
+  SUPERSEDED: "Újabb verzió készült",
+};
 
 const PUBLISH_CONFIRMATION =
   "A közzététel új, változatlan ügyfélverziót hoz létre. A belső munkafolyamat későbbi módosításai ezt nem változtatják meg. Folytatja?";
@@ -41,7 +49,7 @@ function CustomerPreviewList({ milestones, progressPercentage }: { milestones: C
   return (
     <div data-testid="milestone-customer-preview">
       <div className="flex items-baseline justify-between">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Ügyfél DTO előnézet</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Ezt látja az ügyfél</p>
         {typeof progressPercentage === "number" ? (
           <span data-testid="milestone-preview-progress" className="text-sm font-semibold text-[var(--adm-text)]">{progressPercentage}%</span>
         ) : (
@@ -162,7 +170,7 @@ export function MilestonePublicationPanel({ caseId }: { caseId: string }) {
       const result = await saveMilestoneDraft(caseId, ordered);
       setDraft(result.draft);
       setPreview(result.preview);
-      setNotice("Tervezet mentve. Az előnézet a pontos ügyfél DTO-t mutatja.");
+      setNotice("Tervezet mentve. Az előnézet az ügyfélnek látható állapotot mutatja.");
     });
 
   const publish = () =>
@@ -183,7 +191,7 @@ export function MilestonePublicationPanel({ caseId }: { caseId: string }) {
           <h4 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Előrehaladás közzététele</h4>
           <p className="mt-1 max-w-2xl text-xs text-[var(--adm-text-muted)]">A tervezet nem látható az ügyfélnek. Csak explicit közzététel hoz létre változatlan ügyfélverziót; a belső feladatok későbbi módosítása nem írja felül.</p>
         </div>
-        <AdminBadge tone={publicationStatus === "PUBLISHED" ? "green" : "neutral"}>{publicationStatus ? `Publikáció: ${publicationStatus}` : "Nincs publikáció"}</AdminBadge>
+        <AdminBadge tone={publicationStatus === "PUBLISHED" ? "green" : "neutral"}>{publicationStatus ? `Állapot: ${PUBLICATION_STATUS_LABELS[publicationStatus] || publicationStatus}` : "Nincs közzététel"}</AdminBadge>
       </div>
 
       {error ? <p data-testid="milestone-error" className="rounded-[12px] border border-[#F2DAD6] bg-[var(--adm-terracotta-100)] p-3 text-sm font-semibold text-[var(--adm-terracotta-700)]">{error}</p> : null}

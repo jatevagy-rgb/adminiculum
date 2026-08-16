@@ -24,6 +24,7 @@ describe("CP1 organizational client portal UI", () => {
     assert.match(shell(), /capabilities\.intakes/);
     assert.match(shell(), /Kommunikáció/);
     assert.match(shell(), /Vezetői áttekintés/);
+    assert.match(shell(), /workspace\.mode === 'ORGANIZATION' && capabilities\.leadership/);
     assert.match(shell(), /Együttműködési áttekintés/);
     assert.equal(existsSync(path.join(root, "src/app/portal/szervezeti-attekintes/page.tsx")), true);
     assert.match(read("src/app/portal/megkeresesek/uj/page.tsx"), /view="new-intake"/);
@@ -180,7 +181,7 @@ describe("CP1 organizational client portal UI", () => {
     const onboardingApi = read("src/lib/clientOnboardingApi.ts");
     const entry = read("src/components/client-portal/PortalEntryLanding.tsx");
     const org = orgViews();
-    assert.match(org, /isCaseRelay \? <LeadershipSummary/);
+    assert.match(org, /isCaseRelay \? <><LeadershipSummary/);
     assert.match(org, /isCaseRelay \? Promise\.resolve\(\{ items: \[\] \}\)/);
     assert.doesNotMatch(onboarding, /PUBLIC_REQUEST_MODES[^\n]+CASE_RELAY/);
     assert.doesNotMatch(onboardingApi, /case-relay/);

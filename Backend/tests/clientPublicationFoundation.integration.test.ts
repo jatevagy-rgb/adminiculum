@@ -130,10 +130,15 @@ describeWithDatabase('Client publication foundation PostgreSQL boundary', () => 
   });
 
   it('publishes immutable matter snapshots and preserves history on supersede and revoke', async () => {
-    const draft = await createMatterPublication(actor, { caseId: ids.case, clientSafeTitle: 'Client safe matter', clientSafeStatus: 'We are reviewing the file.', clientSafeNextStep: 'We will send a final version.', responsibleLawyerDisplay: 'Publication Lawyer', publishedDeadlinesSnapshot: [{ title: 'Safe deadline', dueAt: '2026-08-01' }] }, db);
+    const draft = await createMatterPublication(actor, { caseId: ids.case, clientSafeTitle: 'Client safe matter', clientSafeStatus: 'We are reviewing the file.', clientSafeCurrentPosition: 'We are checking the client-safe file.', clientSafeWaitingOn: 'No customer action is needed.', clientSafeNextStep: 'We will send a final version.', publicTargetDate: '2026-08-01', responsibleLawyerDisplay: 'Publication Lawyer', publishedDeadlinesSnapshot: [{ title: 'Safe deadline', dueAt: '2026-08-01' }] }, db);
     matterPublicationId = draft.id;
-    const revised = await updateMatterPublication(actor, draft.id, { expectedRevision: draft.revision, clientSafeTitle: 'Client safe matter revision', clientSafeStatus: 'Review completed.', clientSafeNextStep: 'Approval follows.' }, db);
+    expect(draft.snapshot.clientSafeCurrentPosition).toBe('We are checking the client-safe file.');
+    expect(draft.snapshot.clientSafeWaitingOn).toBe('No customer action is needed.');
+    expect(new Date(draft.snapshot.publicTargetDate).toISOString().slice(0, 10)).toBe('2026-08-01');
+    const revised = await updateMatterPublication(actor, draft.id, { expectedRevision: draft.revision, clientSafeTitle: 'Client safe matter revision', clientSafeStatus: 'Review completed.', clientSafeCurrentPosition: 'Review is complete for the customer.', clientSafeWaitingOn: 'Office approval.', clientSafeNextStep: 'Approval follows.', publicTargetDate: '2026-08-05' }, db);
     expect(revised.snapshot.revisionNumber).toBe(2);
+    expect(revised.snapshot.clientSafeCurrentPosition).toBe('Review is complete for the customer.');
+    expect(revised.snapshot.clientSafeWaitingOn).toBe('Office approval.');
     const submitted = await submitMatterPublication(actor, draft.id, { expectedRevision: revised.revision }, db);
     const approved = await approveMatterPublication(actor, draft.id, { expectedRevision: submitted.revision }, db);
     const published = await publishMatterPublication(actor, draft.id, { expectedRevision: approved.revision }, db);

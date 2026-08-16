@@ -249,7 +249,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
       capabilities.tasks && workspace.mode !== 'ORGANIZATION' ? ['Teendőim', '/portal/teendoim'] : null,
       capabilities.documents ? ['Dokumentumok', '/portal/dokumentumok'] : null,
       capabilities.messages && communicationEnabled ? ['Kommunikáció', '/portal/uzenetek'] : null,
-      workspace.mode === 'ORGANIZATION' ? ['Vezetői áttekintés', '/portal/szervezeti-attekintes'] : null,
+      workspace.mode === 'ORGANIZATION' && capabilities.leadership ? ['Vezetői áttekintés', '/portal/szervezeti-attekintes'] : null,
       workspace.mode === 'CASE_RELAY' ? ['Együttműködési áttekintés', '/portal/szervezeti-attekintes'] : null,
     ].filter(Boolean) as string[][];
   }, [state]);

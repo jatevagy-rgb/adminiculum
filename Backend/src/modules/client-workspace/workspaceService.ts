@@ -28,6 +28,7 @@ export type PortalWorkspaceCapabilities = {
   documents: boolean;
   messages: boolean;
   intakes: boolean;
+  leadership: boolean;
 };
 
 export type ResolvedPortalWorkspace = {
@@ -74,7 +75,7 @@ function parseInvitationExpiry(value: unknown): Date {
   return parsed;
 }
 
-function capabilitiesFor(mode: string, permissions: string[]): PortalWorkspaceCapabilities {
+function capabilitiesFor(mode: string, permissions: string[], leadership: boolean): PortalWorkspaceCapabilities {
   const set = new Set(portalContentReadEnabled() ? permissions : []);
   const matters = set.has('MATTER_READ');
   return {
@@ -84,6 +85,7 @@ function capabilitiesFor(mode: string, permissions: string[]): PortalWorkspaceCa
     documents: mode !== 'CASE_RELAY' && set.has('DOCUMENT_READ'),
     messages: mode !== 'CASE_RELAY' && (set.has('ACTION_REQUEST_READ') || set.has('ACTION_REQUEST_COMPLETE')),
     intakes: mode === 'ORGANIZATION' && isCapabilityEnabled('ORGANIZATIONAL_INTAKE'),
+    leadership,
   };
 }
 
@@ -138,6 +140,15 @@ async function activeWorkspaceRows(identityId: string, db: Prisma = defaultPrism
     },
     select: { workspaceId: true, permissions: true },
   });
+  const summaryScopes = await db.clientPortalSummaryScope.findMany({
+    where: {
+      workspaceMembershipId: { in: memberships.map((membership) => membership.id) },
+      workspaceId: { in: workspaces.map((workspace) => workspace.id) },
+      status: 'ACTIVE',
+    },
+    select: { workspaceId: true },
+  });
+  const leadershipByWorkspace = new Set(summaryScopes.map((scope) => scope.workspaceId));
   const membershipByWorkspace = new Map(memberships.map((membership) => [membership.workspaceId, membership]));
   const clientById = new Map(clients.map((client) => [client.id, client.name]));
   return workspaces.map((workspace) => {
@@ -155,7 +166,7 @@ async function activeWorkspaceRows(identityId: string, db: Prisma = defaultPrism
       connectedSystemState: String(workspace.connectedSystemState),
       membershipId: membership.id,
       membershipRole: String(membership.role),
-      capabilities: capabilitiesFor(String(workspace.mode), permissions),
+      capabilities: capabilitiesFor(String(workspace.mode), permissions, leadershipByWorkspace.has(workspace.id)),
     };
   });
 }

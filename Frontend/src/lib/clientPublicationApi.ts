@@ -38,6 +38,9 @@ export interface ClientMatterPublicationDTO {
     clientSafeTitle: string;
     clientSafeStatus: string;
     clientSafeNextStep: string | null;
+    clientSafeCurrentPosition?: string | null;
+    clientSafeWaitingOn?: string | null;
+    publicTargetDate?: string | null;
     responsibleLawyerDisplay: string | null;
     publishedDeadlinesSnapshot: unknown[];
     sourceFingerprint: string;
@@ -115,7 +118,7 @@ export async function transitionClientPortalGrant(grantId: string, action: "acti
   return fetchApi<ClientPortalGrantSummaryDTO>(`/client-publications/grants/${encodeURIComponent(grantId)}/${action}`, { method: "POST", body: JSON.stringify({ expectedRevision }) });
 }
 
-export async function createMatterPublicationDraft(payload: { caseId: string; clientSafeTitle: string; clientSafeStatus: string; clientSafeNextStep?: string; responsibleLawyerDisplay?: string }) {
+export async function createMatterPublicationDraft(payload: { caseId: string; clientSafeTitle: string; clientSafeStatus: string; clientSafeNextStep?: string; clientSafeCurrentPosition?: string; clientSafeWaitingOn?: string; publicTargetDate?: string | null; responsibleLawyerDisplay?: string }) {
   return fetchApi<ClientMatterPublicationDTO>("/client-publications/matters", { method: "POST", body: JSON.stringify(payload) });
 }
 

@@ -121,7 +121,7 @@ export type PortalWorkspaceSummary = {
   communicationMode: 'PORTAL_PRIMARY' | 'EMAIL_LINKED' | 'EXTERNAL_ONLY';
   connectedSystemState: 'NOT_CONFIGURED' | 'CONFIGURATION_REQUIRED' | 'READY' | 'DISABLED';
   membershipRole: 'MEMBER' | 'REPRESENTATIVE' | 'APPROVER';
-  capabilities: { home: boolean; matters: boolean; tasks: boolean; documents: boolean; messages: boolean; intakes?: boolean };
+  capabilities: { home: boolean; matters: boolean; tasks: boolean; documents: boolean; messages: boolean; intakes?: boolean; leadership?: boolean };
 };
 
 export type PortalOrganizationUnit = {

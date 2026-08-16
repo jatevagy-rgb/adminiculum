@@ -14,7 +14,7 @@ test("workforce milestone panel exposes draft editor, preview, and explicit publ
     "Ügyfélbiztos cím (kötelező)",
     "Súly (előrehaladáshoz)",
     "Jelölt munkafolyamat-lépések",
-    "Ügyfél DTO előnézet",
+    "Ezt látja az ügyfél",
     "Ügyfélnek publikált előrehaladás",
     "Mentés és előnézet",
     "Új ügyfélverzió közzététele",

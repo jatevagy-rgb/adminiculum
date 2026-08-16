@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminBadge, AdminButton, AdminPanel, AdminSectionHeader } from "@/components/adminiculum/ui";
-import { getCases, getClients, updateClient, type CaseListItem, type Client } from "@/lib/api";
+import { createClient, getCases, getClients, updateClient, type CaseListItem, type Client } from "@/lib/api";
 import { localizedInteractionStatus, workforceInteractionApi, type InternalInteractionRow } from "@/lib/clientInteractionApi";
 import { ClientInteractionInternalActions } from "@/components/client-portal/ClientInteractionInternalActions";
 import { ClientRequestComposer } from "@/components/client-portal/ClientRequestComposer";
@@ -45,11 +45,11 @@ function formatGrantDate(value: string | null) {
   return value ? new Date(value).toLocaleString("hu-HU") : "—";
 }
 
-const MODE_LABELS: Record<string, string> = { INDIVIDUAL: "Magánügyfél", ORGANIZATION: "Szervezeti ügyfél", CASE_RELAY: "Kapcsolt rendszer" };
+const MODE_LABELS: Record<string, string> = { INDIVIDUAL: "Magánügyfél", ORGANIZATION: "Szervezeti ügyfél", CASE_RELAY: "Szervezeti ügyfél" };
 const COMMUNICATION_LABELS: Record<string, string> = { PORTAL_PRIMARY: "Portál elsődleges", EMAIL_LINKED: "E-mailhez kapcsolt", EXTERNAL_ONLY: "Külső rendszer" };
 const CONNECTED_STATE_LABELS: Record<string, string> = { NOT_CONFIGURED: "Nincs konfigurálva", CONFIGURATION_REQUIRED: "Konfiguráció szükséges", READY: "Kész", DISABLED: "Kikapcsolva" };
 const DELIVERY_LABELS: Record<string, string> = { PENDING: "Kézbesítés folyamatban", SENDING: "Küldés alatt", SENT: "E-mail elküldve", FAILED_RETRYABLE: "E-mail-küldés jelenleg nem érhető el", FAILED_FINAL: "E-mail-küldés sikertelen", CANCELLED: "Kézbesítés visszavonva", NOT_REQUIRED: "Meglévő azonosítóhoz rögzítve" };
-const PORTAL_ROLE_LABELS: Record<PortalMembershipRole, string> = { MEMBER: "Portálfelhasználó", REPRESENTATIVE: "Szervezeti kapcsolattartó", APPROVER: "Hozzáférés-jóváhagyó" };
+const PORTAL_ROLE_LABELS: Record<PortalMembershipRole, string> = { MEMBER: "Portálfelhasználó", REPRESENTATIVE: "Szervezeti kapcsolattartó", APPROVER: "Szervezeti kapcsolattartó" };
 const UNIT_ROLE_LABELS: Record<OrganizationUnitRole, string> = { MEMBER: "Tag", CONTACT: "Kapcsolattartó", APPROVER: "Jóváhagyó", MANAGER: "Egységvezető" };
 const PERMISSION_LABELS: Record<string, string> = {
   MATTER_READ: "Ügy megtekintése",
@@ -81,6 +81,19 @@ function portalStatusLabel(status: string): string {
   if (status === "SUSPENDED") return "Portál szünetel";
   if (status === "ARCHIVED") return "Archivált";
   return status;
+}
+
+function membershipStatusLabel(status: string | null | undefined): string {
+  const labels: Record<string, string> = {
+    ACTIVE: "Aktív",
+    INVITED: "Meghívás elküldve",
+    PENDING_REVIEW: "Jóváhagyásra vár",
+    SUSPENDED: "Felfüggesztve",
+    REVOKED: "Visszavonva",
+    EXPIRED: "Meghívás lejárt",
+    USED: "Felhasználva",
+  };
+  return status ? labels[status] || status : "Nincs állapot";
 }
 
 function deliverySummary(deliveryStatus?: string | null, codeSafe?: string | null) {
@@ -444,6 +457,9 @@ function WorkspaceSettings({ workspace, busy, run }: { workspace: AdminWorkspace
 
 function InvitationForm({ workspace, busy, run }: { workspace: AdminWorkspaceDTO; busy: boolean; run: (fn: () => Promise<void>, okText: string) => Promise<void> }) {
   const [draft, setDraft] = useState({ email: "", displayName: "", role: "MEMBER" as AdminWorkspaceDTO["memberships"][number]["role"], messageSafe: "", expiresAt: "" });
+  const roleOptions = workspace.mode === "INDIVIDUAL"
+    ? [{ value: "MEMBER", label: "Ügyfél" }, { value: "REPRESENTATIVE", label: "Meghatalmazott / kapcsolattartó" }]
+    : [{ value: "MEMBER", label: "Portálfelhasználó" }, { value: "REPRESENTATIVE", label: "Szervezeti adminisztrátor / kapcsolattartó" }];
   const submit = async () => {
     const result = await inviteAdminWorkspaceMember(workspace.id, {
       email: draft.email,
@@ -463,7 +479,7 @@ function InvitationForm({ workspace, busy, run }: { workspace: AdminWorkspaceDTO
         <input type="email" value={draft.email} onChange={(event) => setDraft((value) => ({ ...value, email: event.target.value }))} placeholder="E-mail" className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm" />
         <input value={draft.displayName} onChange={(event) => setDraft((value) => ({ ...value, displayName: event.target.value }))} placeholder="Név" className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm" />
         <select value={draft.role} onChange={(event) => setDraft((value) => ({ ...value, role: event.target.value as typeof draft.role }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm">
-          {(Object.keys(PORTAL_ROLE_LABELS) as Array<typeof draft.role>).map((role) => <option key={role} value={role}>{PORTAL_ROLE_LABELS[role]}</option>)}
+          {roleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
         </select>
         <input type="date" value={draft.expiresAt} onChange={(event) => setDraft((value) => ({ ...value, expiresAt: event.target.value }))} className="rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm" />
         <AdminButton size="sm" variant="neutral" disabled={busy || !draft.email.trim()} onClick={() => run(submit, "Meghívás rögzítve; ügyhozzáférés nem jött létre.")}>Meghívás küldése</AdminButton>
@@ -511,6 +527,13 @@ function relationshipFromWorkspace(workspace: AdminWorkspaceDTO, client?: Client
   return "PORTAL_CENTRIC";
 }
 
+function activationFromWorkspace(workspace: AdminWorkspaceDTO): { customerType: "INDIVIDUAL" | "ORGANIZATION"; relationship: "PORTAL_CENTRIC" | "EMAIL_CENTRIC" | "CONNECTED_SYSTEM" } {
+  return {
+    customerType: workspace.mode === "INDIVIDUAL" ? "INDIVIDUAL" : "ORGANIZATION",
+    relationship: relationshipFromWorkspace(workspace, null),
+  };
+}
+
 function activeGrantCountForClient(clientId: string, memberships: ActiveMembershipDTO[]): number {
   return memberships
     .filter((membership) => membership.clientId === clientId)
@@ -525,7 +548,9 @@ function ActivationWizard({ clients, workspaces, busy, run, onActivated }: {
   run: (fn: () => Promise<void>, okText: string) => Promise<void>;
   onActivated: (workspaceId: string) => void;
 }) {
+  const [clientSource, setClientSource] = useState<"existing" | "new">("existing");
   const [clientId, setClientId] = useState("");
+  const [newClient, setNewClient] = useState({ name: "", email: "", phone: "", companyRegistrationNumber: "", taxNumber: "", contactPerson: "" });
   const [customerType, setCustomerType] = useState<"INDIVIDUAL" | "ORGANIZATION">("INDIVIDUAL");
   const [relationship, setRelationship] = useState<"PORTAL_CENTRIC" | "EMAIL_CENTRIC" | "CONNECTED_SYSTEM">("PORTAL_CENTRIC");
   const [primaryEmail, setPrimaryEmail] = useState("");
@@ -536,21 +561,57 @@ function ActivationWizard({ clients, workspaces, busy, run, onActivated }: {
   const client = clients.find((item) => item.id === clientId) || null;
   const mode = modeFromActivation(customerType, relationship);
   const communicationMode = communicationFromRelationship(relationship);
-  const existing = workspaces.find((workspace) => workspace.clientId === clientId && workspace.mode === mode && workspace.status !== "ARCHIVED") || null;
-  const derivedName = client ? `${client.name} - ${MODE_LABELS[mode]}` : "Ügyfélportál";
-  const canActivate = Boolean(clientId);
+  const targetName = clientSource === "new" ? newClient.name.trim() : client?.name || "";
+  const existing = clientSource === "existing" ? workspaces.find((workspace) => workspace.clientId === clientId && workspace.mode === mode && workspace.status !== "ARCHIVED") || null : null;
+  const derivedName = targetName ? `${targetName} - ${MODE_LABELS[mode]}` : "Ügyfélportál";
+  const canActivate = clientSource === "new" ? Boolean(newClient.name.trim()) : Boolean(clientId);
+  const roleOptions = useMemo<Array<{ value: PortalMembershipRole; label: string }>>(() => customerType === "INDIVIDUAL"
+    ? [
+      { value: "MEMBER", label: "Ügyfél" },
+      { value: "REPRESENTATIVE", label: "Meghatalmazott / kapcsolattartó" },
+    ]
+    : [
+      { value: "MEMBER", label: "Portálfelhasználó" },
+      { value: "REPRESENTATIVE", label: "Szervezeti adminisztrátor / kapcsolattartó" },
+    ], [customerType]);
+
+  useEffect(() => {
+    if (customerType === "INDIVIDUAL" && relationship === "CONNECTED_SYSTEM") setRelationship("PORTAL_CENTRIC");
+    if (!roleOptions.some((option) => option.value === portalRole)) setPortalRole(roleOptions[0].value);
+  }, [customerType, portalRole, relationship, roleOptions]);
+
+  useEffect(() => {
+    if (clientSource !== "existing" || !clientId) return;
+    const activeSurfaces = workspaces.filter((workspace) => workspace.clientId === clientId && workspace.status === "ACTIVE");
+    if (activeSurfaces.length !== 1) return;
+    const derived = activationFromWorkspace(activeSurfaces[0]);
+    setCustomerType(derived.customerType);
+    setRelationship(derived.relationship);
+  }, [clientId, clientSource, workspaces]);
 
   const activate = async () => {
-    if (!client) return;
+    let targetClient = client;
+    if (clientSource === "new") {
+      if (!newClient.name.trim()) return;
+      targetClient = await createClient({
+        name: newClient.name.trim(),
+        email: newClient.email.trim() || primaryEmail.trim() || undefined,
+        phone: newClient.phone.trim() || undefined,
+        companyRegistrationNumber: customerType === "ORGANIZATION" ? newClient.companyRegistrationNumber.trim() || undefined : undefined,
+        taxNumber: customerType === "ORGANIZATION" ? newClient.taxNumber.trim() || undefined : undefined,
+        contactPerson: newClient.contactPerson.trim() || primaryName.trim() || undefined,
+      });
+    }
+    if (!targetClient) return;
     let workspace = existing;
-    await updateClient(client.id, {
+    await updateClient(targetClient.id, {
       portalAccessEnabled: true,
       relationshipMode: relationship,
       connectedSystemState: relationship === "CONNECTED_SYSTEM" ? "READY" : null,
     });
     if (!workspace) {
       workspace = await createAdminWorkspace({
-        clientId: client.id,
+        clientId: targetClient.id,
         name: derivedName,
         mode,
         communicationMode,
@@ -588,17 +649,34 @@ function ActivationWizard({ clients, workspaces, busy, run, onActivated }: {
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Ügyfélportál aktiválása</p>
           <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Client-first aktiváció</h2>
-          <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Az aktiválás ügyfelet és portálfelületet készít elő. Ügyhozzáférés nem jön létre automatikusan.</p>
+          <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Az aktiválás a kanonikus ügyfélből indul, vagy itt hoz létre új ügyfelet ugyanazon ügyfélkezelési folyamaton keresztül. Ügyhozzáférés nem jön létre automatikusan.</p>
         </div>
         <AdminBadge tone="gold">Ügyfélportál aktív lesz</AdminBadge>
       </div>
       <div className="mt-5 grid gap-4">
         <section className="grid gap-2">
           <h3 className="text-sm font-semibold text-[var(--adm-text)]">1. Ügyfél kiválasztása</h3>
-          <select data-testid="activation-client-select" value={clientId} onChange={(event) => setClientId(event.target.value)} className={inputCls}>
-            <option value="">Válasszon meglévő ügyfelet</option>
-            {clients.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" data-testid="activation-existing-client" onClick={() => setClientSource("existing")} className={`rounded-full border px-4 py-2 text-sm ${clientSource === "existing" ? "border-[var(--adm-gold)] bg-[var(--adm-gold-soft,#f3ead2)]" : "border-[var(--adm-border)]"}`}>Meglévő ügyfél</button>
+            <button type="button" data-testid="activation-new-client" onClick={() => setClientSource("new")} className={`rounded-full border px-4 py-2 text-sm ${clientSource === "new" ? "border-[var(--adm-gold)] bg-[var(--adm-gold-soft,#f3ead2)]" : "border-[var(--adm-border)]"}`}>+ Új ügyfél létrehozása</button>
+          </div>
+          {clientSource === "existing" ? (
+            <select data-testid="activation-client-select" value={clientId} onChange={(event) => setClientId(event.target.value)} className={inputCls}>
+              <option value="">Válasszon meglévő ügyfelet</option>
+              {clients.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          ) : (
+            <div className="grid gap-2 rounded-xl border border-[var(--adm-border)] bg-[var(--adm-bg,#faf8f3)] p-3 md:grid-cols-2" data-testid="activation-new-client-form">
+              <input className={inputCls} value={newClient.name} onChange={(event) => setNewClient((current) => ({ ...current, name: event.target.value }))} placeholder="Ügyfél neve *" />
+              <input className={inputCls} value={newClient.email} onChange={(event) => setNewClient((current) => ({ ...current, email: event.target.value }))} placeholder="Ügyfél e-mail" />
+              <input className={inputCls} value={newClient.phone} onChange={(event) => setNewClient((current) => ({ ...current, phone: event.target.value }))} placeholder="Telefonszám" />
+              <input className={inputCls} value={newClient.contactPerson} onChange={(event) => setNewClient((current) => ({ ...current, contactPerson: event.target.value }))} placeholder="Kapcsolattartó" />
+              {customerType === "ORGANIZATION" ? <>
+                <input className={inputCls} value={newClient.companyRegistrationNumber} onChange={(event) => setNewClient((current) => ({ ...current, companyRegistrationNumber: event.target.value }))} placeholder="Cégjegyzékszám" />
+                <input className={inputCls} value={newClient.taxNumber} onChange={(event) => setNewClient((current) => ({ ...current, taxNumber: event.target.value }))} placeholder="Adószám" />
+              </> : null}
+            </div>
+          )}
         </section>
         <section className="grid gap-2">
           <h3 className="text-sm font-semibold text-[var(--adm-text)]">2. Milyen ügyfél?</h3>
@@ -616,7 +694,7 @@ function ActivationWizard({ clients, workspaces, busy, run, onActivated }: {
         ) : null}
         <section className="grid gap-2">
           <h3 className="text-sm font-semibold text-[var(--adm-text)]">4. Portál beállítása</h3>
-          <p className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3 text-sm text-[var(--adm-text-muted)]">{client ? `${derivedName} · ${MODE_LABELS[mode]} · ${COMMUNICATION_LABELS[communicationMode]}` : "A név és mód az ügyfél kiválasztása után automatikusan készül."}</p>
+          <p className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3 text-sm text-[var(--adm-text-muted)]">{targetName ? `${derivedName} · ${MODE_LABELS[mode]} · ${COMMUNICATION_LABELS[communicationMode]}` : "A név és mód az ügyfél megadása után automatikusan készül."}</p>
         </section>
         <section className="grid gap-2">
           <h3 className="text-sm font-semibold text-[var(--adm-text)]">5. Felhasználók</h3>
@@ -624,9 +702,7 @@ function ActivationWizard({ clients, workspaces, busy, run, onActivated }: {
             <input className={inputCls} value={primaryEmail} onChange={(event) => setPrimaryEmail(event.target.value)} placeholder="Elsődleges felhasználó e-mail" />
             <input className={inputCls} value={primaryName} onChange={(event) => setPrimaryName(event.target.value)} placeholder="Név (opcionális)" />
             <select className={inputCls} value={portalRole} onChange={(event) => setPortalRole(event.target.value as PortalMembershipRole)}>
-              <option value="REPRESENTATIVE">Szervezeti kapcsolattartó</option>
-              <option value="MEMBER">Portálfelhasználó</option>
-              <option value="APPROVER">Hozzáférés-jóváhagyó</option>
+              {roleOptions.map((option) => <option key={option.value} value={option.value} data-testid={`activation-role-${customerType}-${option.value}`}>{option.label}</option>)}
             </select>
           </div>
         </section>
@@ -638,7 +714,7 @@ function ActivationWizard({ clients, workspaces, busy, run, onActivated }: {
         ) : null}
         <section className="grid gap-2 rounded-xl border border-[var(--adm-border)] p-3">
           <h3 className="text-sm font-semibold text-[var(--adm-text)]">7. Összegzés és aktiválás</h3>
-          <p className="text-sm text-[var(--adm-text-muted)]">{client?.name || "Nincs ügyfél kiválasztva"} · {MODE_LABELS[mode]} · {customerType === "ORGANIZATION" ? RELATIONSHIP_LABELS[relationship] : "Magánügyfél portál"} · ügyhozzáférés nem jön létre.</p>
+          <p className="text-sm text-[var(--adm-text-muted)]">{targetName || "Nincs ügyfél megadva"} · {MODE_LABELS[mode]} · {customerType === "ORGANIZATION" ? RELATIONSHIP_LABELS[relationship] : "Magánügyfél portál"} · ügyhozzáférés nem jön létre.</p>
           <AdminButton data-testid="activate-client-portal" variant="gold" disabled={busy || !canActivate} onClick={() => run(activate, "Ügyfélportál aktív. Következő lépés: felhasználó meghívása, szervezeti egység vagy vezetői rálátás beállítása.")}>Ügyfélportál aktiválása</AdminButton>
         </section>
       </div>
@@ -682,16 +758,15 @@ function ClientPortalDetail({ workspace, client, memberships, cases, units, scop
           ["Együttműködés", RELATIONSHIP_LABELS[relationship]],
           ["Portál státusza", portalStatusLabel(workspace.status)],
           ["Aktív felhasználók", String(workspace.activeMembershipCount)],
-          ["Szervezeti egységek", String(units.length)],
           ["Aktív ügyhozzáférések", String(activeGrants.length)],
-          ["Vezetői rálátások", String(scopes.filter((scope) => scope.status === "ACTIVE").length)],
+          ...(workspace.mode !== "INDIVIDUAL" ? [["Szervezeti egységek", String(units.length)], ["Vezetői rálátások", String(scopes.filter((scope) => scope.status === "ACTIVE").length)]] : []),
         ].map(([label, value]) => <div key={label} className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3"><p className="text-xs text-[var(--adm-text-muted)]">{label}</p><p className="mt-1 font-semibold">{value}</p></div>)}
       </div> : null}
       {tab === "users" ? <div className="mt-5 grid gap-3">
         <InvitationForm workspace={workspace} busy={busy} run={run} />
         {workspace.memberships.map((member) => {
           const profile = clientMemberships.find((item) => item.clientPortalIdentityId === member.clientPortalIdentityId);
-          return <div key={member.id} className="rounded-lg border border-[var(--adm-border)] p-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><span><b>{profile?.identityDisplayName || profile?.identityEmail || "Ügyfélfelhasználó"}</b><span className="ml-2 text-[var(--adm-text-muted)]">{profile?.identityEmail || ""}</span></span><AdminBadge tone={member.status === "ACTIVE" ? "green" : "neutral"}>{member.status === "ACTIVE" ? "Aktív" : member.status}</AdminBadge></div><p className="mt-1 text-xs text-[var(--adm-text-muted)]">{PORTAL_ROLE_LABELS[member.role]} · meghívva: {formatGrantDate(member.invitedAt)}</p><div className="mt-2 flex gap-2">{member.status === "ACTIVE" ? <AdminButton size="sm" variant="muted" disabled={busy} onClick={() => run(() => transitionAdminWorkspaceMembership(member.id, "suspend", member.revision).then(() => undefined), "Portálfelhasználó felfüggesztve.")}>Felfüggesztés</AdminButton> : null}<AdminButton size="sm" variant="muted" disabled={busy || member.status === "REVOKED"} onClick={() => run(() => transitionAdminWorkspaceMembership(member.id, "revoke", member.revision).then(() => undefined), "Portálfelhasználó visszavonva.")}>Visszavonás</AdminButton></div></div>;
+          return <div key={member.id} className="rounded-lg border border-[var(--adm-border)] p-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><span><b>{profile?.identityDisplayName || profile?.identityEmail || "Ügyfélfelhasználó"}</b><span className="ml-2 text-[var(--adm-text-muted)]">{profile?.identityEmail || ""}</span></span><AdminBadge tone={member.status === "ACTIVE" ? "green" : "neutral"}>{membershipStatusLabel(member.status)}</AdminBadge></div><p className="mt-1 text-xs text-[var(--adm-text-muted)]">{PORTAL_ROLE_LABELS[member.role]} · meghívva: {formatGrantDate(member.invitedAt)}</p><div className="mt-2 flex gap-2">{member.status === "ACTIVE" ? <AdminButton size="sm" variant="muted" disabled={busy} onClick={() => run(() => transitionAdminWorkspaceMembership(member.id, "suspend", member.revision).then(() => undefined), "Portálfelhasználó felfüggesztve.")}>Felfüggesztés</AdminButton> : null}<AdminButton size="sm" variant="muted" disabled={busy || member.status === "REVOKED"} onClick={() => run(() => transitionAdminWorkspaceMembership(member.id, "revoke", member.revision).then(() => undefined), "Portálfelhasználó visszavonva.")}>Visszavonás</AdminButton></div></div>;
         })}
       </div> : null}
       {tab === "units" ? <div className="mt-5"><p className="mb-3 text-sm text-[var(--adm-text-muted)]">Canonical ClientOrganizationGroup egységek.</p>{units.map((unit) => <div key={unit.id} className="mb-2 rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3 text-sm"><b>{unit.name}</b> · {unit.status}</div>)}</div> : null}
@@ -870,13 +945,15 @@ function PageBody() {
         subtitle="Tagsági kérelmek elbírálása és személyazonosság-alapú ügyhozzáférés (grant). Csak a jóváhagyott tagság ad hozzáférést, és önmagában a tagság még nem tesz láthatóvá ügyanyagot."
       />
 
-      <AdminPanel className="flex flex-wrap items-center justify-between gap-3 p-5">
-        <div>
-          <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Kérések létrehozása</h2>
-          <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Globális indításkor csak az engedélyezett ügyfelek és ügyek választhatók. A tervezet külön publikálható.</p>
+      <details className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-5">
+        <summary className="cursor-pointer font-serif text-xl font-semibold text-[var(--adm-text)]">Átmeneti globális ügyfélkérés indítás</summary>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs text-[var(--adm-text-muted)]">A napi ügyfélteendők elsődleges helye az adott ügy ügyfélkapcsolati panelje. Ez a globális indítás csak átmeneti admin eszköz.</p>
+          </div>
+          <ClientRequestComposer cases={cases} clients={clients} onChanged={reload} />
         </div>
-        <ClientRequestComposer cases={cases} clients={clients} onChanged={reload} />
-      </AdminPanel>
+      </details>
 
       {feedback && (
         <div
@@ -921,8 +998,8 @@ function PageBody() {
         </div>
       </details>
 
-      <AdminPanel className="p-5">
-        <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Operatív ügyfélportál sorok</h2>
+      <details className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-5">
+        <summary className="cursor-pointer font-serif text-xl font-semibold text-[var(--adm-text)]">Operatív ügyfélportál sorok</summary>
         <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Case-access alapján szűrt, ügyfélportál-specifikus munkasorok. Nem helyettesíti az Ügyek, Teendők vagy Kommunikáció oldalakat.</p>
         <div className="mt-4 grid gap-3 lg:grid-cols-4">
           <InteractionQueueCard title="Bekérések" items={interactionQueues.requests} empty="Nincs aktív bekérés." onRequestAction={(item, action) => run(async () => {
@@ -947,7 +1024,7 @@ function PageBody() {
             />
           </div>
         </div>
-      </AdminPanel>
+      </details>
 
       <AdminPanel className="p-5">
         <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Tagsági kérelmek ({pending.length})</h2>
@@ -993,7 +1070,7 @@ function PageBody() {
                   <p className="text-xs text-[var(--adm-text-muted)]">{m.identityEmail} · szervezet: {m.clientName || m.clientId}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <AdminBadge tone={m.identityStatus === "ACTIVE" ? "green" : "neutral"}>identity {m.identityStatus}</AdminBadge>
+                  <AdminBadge tone={m.identityStatus === "ACTIVE" ? "green" : "neutral"}>{membershipStatusLabel(m.identityStatus)}</AdminBadge>
                   <AdminButton size="sm" variant="muted" disabled={busy} onClick={() => run(() => transitionMembership(m.id, "revoke").then(() => undefined), "Tagság visszavonva.")}>Tagság visszavonása</AdminButton>
                 </div>
               </div>
@@ -1003,7 +1080,7 @@ function PageBody() {
                     <div key={g.id} data-testid="active-grant-row" className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3 text-xs text-[var(--adm-text-muted)]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span>Ügy: <span className="font-mono">{g.caseId ? g.caseId.slice(0, 8) : "—"}</span></span>
-                        <AdminBadge tone={g.status === "ACTIVE" ? "green" : "neutral"}>{g.status}</AdminBadge>
+                        <AdminBadge tone={g.status === "ACTIVE" ? "green" : "neutral"}>{membershipStatusLabel(g.status)}</AdminBadge>
                       </div>
                       <dl data-testid="grant-technical-details" className="mt-2 grid gap-x-3 gap-y-1 sm:grid-cols-2">
                         <div><dt className="font-semibold">Grant ID</dt><dd><code className="select-all break-all">{g.id}</code></dd></div>
