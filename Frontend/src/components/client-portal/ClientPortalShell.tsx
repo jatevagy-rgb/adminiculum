@@ -361,7 +361,20 @@ export function ClientPortalShell({ view, resourceId }: Props) {
 
   if (state.status === 'login' && view === 'home') return <PortalEntryLanding />;
 
-  const customerName = state.status === 'ready' ? (state.context.identity.displayName || state.context.identity.email) : null;
+  // Customer context label. For a workspace we prefer the canonical client/private
+  // customer display name + mode, which correctly identifies the customer context.
+  // We deliberately do NOT fall back to identity.displayName here: it can carry
+  // stale acceptance fixture data (e.g. a company name on an INDIVIDUAL identity).
+  const contextLabel = state.status === 'ready'
+    ? (() => {
+        const ws = state.context.selectedWorkspace;
+        if (ws) {
+          const mode = ws.mode === 'ORGANIZATION' ? 'Szervezeti ügyfél' : ws.mode === 'CASE_RELAY' ? 'Együttműködési ügyfél' : 'Magánügyfél';
+          return `${ws.clientDisplayName} · ${mode}`;
+        }
+        return state.context.identity.displayName || state.context.identity.email;
+      })()
+    : null;
 
   return (
     <main className="cp-shell min-h-screen overflow-x-hidden text-[var(--adm-text)]" data-testid="client-portal-shell">
@@ -371,7 +384,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
           {state.status === 'ready' ? <nav className="flex flex-wrap gap-1.5 text-sm" aria-label="Ügyfélportál navigáció">{nav.map(([label, href]) => <Link className="rounded-full px-3 py-2 font-medium text-[var(--adm-text-muted)] hover:bg-[var(--adm-ivory-100)] hover:text-[var(--adm-blue-950)] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" key={label} href={href}>{label}</Link>)}</nav> : null}
           {['ready', 'select', 'onboarding', 'no-workspace', 'pending', 'suspended', 'workspace-empty', 'service-error'].includes(state.status) ? <div className="flex items-center gap-3">{(state.status === 'ready' || state.status === 'workspace-empty') && state.context.workspaces.length > 1 ? <button className="rounded-full border border-[var(--adm-border)] px-3 py-2 text-sm text-[var(--adm-text-muted)]" onClick={() => { setSelectedPortalWorkspace(null); setSelectedReference(null); setState({ status: 'select', context: { ...state.context, state: 'SELECTION_REQUIRED', selectedWorkspace: null } }); }}>Munkatérváltás</button> : null}<button className="rounded-full border border-[var(--adm-border)] px-3 py-2 text-sm text-[var(--adm-text-muted)]" onClick={logoutCustomer}>Kijelentkezés</button></div> : null}
         </div>
-        {state.status === 'ready' && customerName ? <div className="border-t border-[var(--adm-border)] bg-[var(--adm-surface)]"><div className="mx-auto max-w-6xl px-4 py-2 text-sm text-[var(--adm-text-muted)] sm:px-6">{state.context.selectedWorkspace?.name}{customerName ? ` · ${customerName}` : ''}</div></div> : null}
+        {state.status === 'ready' && contextLabel ? <div className="border-t border-[var(--adm-border)] bg-[var(--adm-surface)]"><div className="mx-auto max-w-6xl px-4 py-2 text-sm text-[var(--adm-text-muted)] sm:px-6">{contextLabel}</div></div> : null}
       </header>
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         {state.status === 'loading' ? <Card>Betöltés...</Card> : null}
