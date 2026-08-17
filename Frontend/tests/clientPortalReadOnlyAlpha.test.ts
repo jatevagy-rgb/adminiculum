@@ -18,7 +18,9 @@ describe('client portal read-only alpha frontend', () => {
     assert.match(source, /Ügyeim/);
     assert.match(source, /Dokumentumok/);
     assert.match(source, /Teendők/);
-    assert.doesNotMatch(source, /AppShell|DashboardFocused|cockpit|Kommunikáció|Annotációk|Összehasonlítás|Audit/);
+    assert.doesNotMatch(source, /AppShell|DashboardFocused|cockpit|Annotációk|Összehasonlítás|Audit/);
+    assert.match(source, /Teendőim/);
+    assert.match(source, /Üzenetek/);
   });
 
   it('contains no write/action completion controls in the read-only portal', () => {
@@ -33,7 +35,7 @@ describe('client portal read-only alpha frontend', () => {
     assert.match(source, /stateLabel/);
     assert.match(source, /typeLabel/);
     assert.match(source, /categoryLabel/);
-    assert.match(source, /Figyelmet igényel/);
+    assert.match(source, /Jelenleg nincs teendője/);
     assert.match(source, /Legutóbbi frissítések/);
   });
 

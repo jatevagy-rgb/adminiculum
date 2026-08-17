@@ -19,7 +19,7 @@ function deadlineText(deadline: { label?: string; dueAt?: string }): string {
 }
 
 export function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <section className={`min-w-0 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm ${className}`}>{children}</section>;
+  return <section className={`min-w-0 overflow-hidden rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6 ${className}`}>{children}</section>;
 }
 
 export function ActionCard({ action }: { action: PortalActionRequest }) {
@@ -139,25 +139,27 @@ export function MatterView({
 }) {
   return (
     <div className="space-y-6">
-      <Card>
-        <p className="text-sm font-semibold text-[#7a5f18]">Közzétett ügy</p>
-        <h1 className="mt-2 break-words text-3xl font-semibold text-stone-950">{matter.title}</h1>
+      <Card className="bg-[#f7f1e2]">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#9b7b25]">Ügy áttekintése</p><h1 className="mt-2 break-words text-3xl font-semibold text-stone-950 sm:text-4xl">{matter.title}</h1><p className="mt-3 max-w-3xl break-words leading-7 text-stone-700">{matter.currentSummary || matter.statusLabel}</p></div>
+          <span className="shrink-0 rounded-full bg-white px-3 py-1.5 text-sm font-semibold text-[#6f5514]">{matter.statusLabel}</span>
+        </div>
         <div className="mt-5 grid gap-3 lg:grid-cols-2">
-          <div className="rounded-2xl bg-stone-50 p-4">
+          <div className="min-w-0 rounded-2xl bg-white/75 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Most itt tartunk</p>
             <p className="mt-2 break-words text-stone-800">{matter.currentSummary || matter.statusLabel}</p>
           </div>
-          <div className="rounded-2xl bg-stone-50 p-4">
+          <div className="min-w-0 rounded-2xl bg-white/75 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Mire várunk?</p>
             <p className="mt-2 font-semibold text-stone-900">{matter.waitingOnLabel || 'Nincs közzétett ügyféloldali teendő'}</p>
             <p className="mt-1 break-words text-sm text-stone-700">{matter.waitingDescription || 'Az iroda frissíti a portált, ha új lépés következik.'}</p>
           </div>
-          <div className="rounded-2xl bg-stone-50 p-4">
+          <div className="min-w-0 rounded-2xl bg-white/75 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">{matter.nextStepTitle || 'Következő lépés'}</p>
             <p className="mt-2 break-words text-stone-800">{matter.nextStepDescription || matter.nextStepLabel || 'Nincs közzétett következő lépés.'}</p>
             {matter.estimatedTiming ? <p className="mt-2 text-sm text-stone-600">Várható időzítés: {matter.estimatedTiming}</p> : null}
           </div>
-          <div className="rounded-2xl bg-stone-50 p-4">
+          <div className="min-w-0 rounded-2xl bg-white/75 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Kapcsolattartó</p>
             <p className="mt-2 text-stone-800">{matter.responsibleLawyerDisplay || 'Közzététel szerint'}</p>
             {matter.responsibleLawyerContactSafe ? <p className="mt-1 text-sm text-stone-600">{matter.responsibleLawyerContactSafe}</p> : null}

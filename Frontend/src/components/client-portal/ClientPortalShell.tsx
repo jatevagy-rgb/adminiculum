@@ -51,23 +51,25 @@ type LoadState =
   | { status: 'ready'; context: PortalIdentityContext; home: PortalHome; workspace: PortalWorkspace; matter?: PortalMatter & { documents: PortalDocument[]; actionRequests: PortalActionRequest[]; updates: PortalSafeUpdate[] }; document?: PortalDocument; action?: PortalActionRequest };
 
 function EmptyState() {
-  return <div className="rounded-3xl border border-stone-200 bg-white p-8 text-stone-600 shadow-sm">Jelenleg nincs az Ön számára közzétett aktív ügy.</div>;
+  return <div className="rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-6 text-stone-600">Jelenleg nincs közzétett aktív ügye.</div>;
 }
 
 function MatterCard({ matter }: { matter: PortalMatter }) {
   return (
-    <Link className="block min-w-0 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" href={`/portal/matters/${encodeURIComponent(matter.id)}`}>
+    <Link className="group block min-w-0 overflow-hidden rounded-2xl border border-stone-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" href={`/portal/matters/${encodeURIComponent(matter.id)}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9b7b25]">Aktív ügy</p>
-          <h3 className="mt-2 break-words text-xl font-semibold text-stone-950">{matter.title}</h3>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9b7b25]">Aktív ügy</p>
+          <h3 className="mt-2 break-words text-xl font-semibold text-stone-950 group-hover:text-[#7a5f18]">{matter.title}</h3>
         </div>
-        <span className="rounded-full bg-[#f3ead2] px-3 py-1 text-sm text-[#6f5514]">{matter.attentionCount ? 'Teendője van' : matter.statusLabel}</span>
+        <span className="shrink-0 rounded-full bg-[#f3ead2] px-3 py-1 text-sm font-semibold text-[#6f5514]">{matter.attentionCount ? 'Teendője van' : matter.statusLabel}</span>
       </div>
-      <p className="mt-4 break-words text-stone-700">{matter.nextStepLabel || 'A következő közzétett lépés itt fog megjelenni.'}</p>
-      <div className="mt-4 grid gap-2 text-sm text-stone-600 sm:grid-cols-2">
-        <span>Felelős: {matter.responsibleLawyerDisplay || 'Közzététel szerint'}</span>
-        <span>Dokumentumok: {matter.documentCount || 0}</span>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">Most itt tartunk</p><p className="mt-1 break-words text-sm leading-6 text-stone-700">{matter.currentSummary || matter.statusLabel}</p></div>
+        <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">Következő lépés</p><p className="mt-1 break-words text-sm leading-6 text-stone-700">{matter.nextStepLabel || 'A következő közzétett lépés itt fog megjelenni.'}</p></div>
+      </div>
+      <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 border-t border-stone-100 pt-4 text-sm text-stone-600">
+        <span>Felelős: {matter.responsibleLawyerDisplay || 'Közzététel szerint'}</span><span>Dokumentumok: {matter.documentCount || 0}</span><span className="font-semibold text-[#7a5f18]">Ügy megnyitása →</span>
       </div>
     </Link>
   );
@@ -93,29 +95,28 @@ function HomeView({ home, workspace }: { home: PortalHome; workspace: PortalWork
       ? 'Az ügyfélportál a közzétett ügyállapotot, dokumentumokat és kéréseket mutatja. Külső rendszerrel nem indít automatikus szinkronizációt.'
       : 'Az ügyfélportál az elsődleges közös munkatér az iroda által kifejezetten közzétett ügyinformációkhoz és teendőkhöz.';
   return (
-    <div className="space-y-6">
-      <Card className="bg-gradient-to-br from-white to-[#f7f1e2]">
+    <div className="space-y-8">
+      <section className="rounded-2xl border border-stone-200 bg-[#f7f1e2] p-6 sm:p-8">
         <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#9b7b25]">Adminiculum ügyfélportál</p>
-        <h1 className="mt-3 break-words text-3xl font-semibold text-stone-950 sm:text-4xl">Üdvözöljük</h1>
-        <p className="mt-3 max-w-2xl text-stone-700">{modeMessage}</p>
-      </Card>
-      <Card>
-        <h2 className="text-2xl font-semibold text-stone-950">Figyelmet igényel</h2>
-        <div className="mt-4 grid gap-3">{home.attention.length ? home.attention.map((action) => <ActionCard key={action.id} action={action} />) : <p className="text-stone-600">Nincs aktuális közzétett teendő.</p>}</div>
-      </Card>
-      <section className="grid gap-4 lg:grid-cols-2">{home.matters.length ? home.matters.map((matter) => <MatterCard key={matter.id} matter={matter} />) : <EmptyState />}</section>
-      <Card>
-        <h2 className="text-2xl font-semibold text-stone-950">Legutóbbi frissítések</h2>
-        <div className="mt-4 grid gap-3">{home.updates.length ? home.updates.map((update) => <UpdateCard key={update.id} update={update} />) : <p className="text-stone-600">Nincs közzétett frissítés.</p>}</div>
-      </Card>
-      <Card>
-        <h2 className="text-2xl font-semibold text-stone-950">Közelgő határidők</h2>
-        <div className="mt-4 grid gap-3">{workspace.upcomingDeadlines.length ? workspace.upcomingDeadlines.map((action) => <WorkspaceActionCard key={action.id} action={action} />) : <p className="text-stone-600">Nincs közzétett közelgő határidő.</p>}</div>
-      </Card>
-      <Card>
-        <h2 className="text-2xl font-semibold text-stone-950">Dokumentumok és kérések</h2>
-        <div className="mt-4 grid gap-3">{workspace.documents.length ? workspace.documents.slice(0, 6).map((document) => <WorkspaceDocumentCard key={`${document.kind}-${document.id}`} document={document} />) : <p className="text-stone-600">Nincs megosztott dokumentum vagy közzétett kérés.</p>}</div>
-      </Card>
+        <h1 className="mt-3 break-words text-3xl font-semibold text-stone-950 sm:text-4xl">Üdvözöljük{home.identity?.displayName ? `, ${home.identity.displayName}` : ''}</h1>
+        <p className="mt-3 max-w-2xl break-words leading-7 text-stone-700">{modeMessage}</p>
+      </section>
+      <section aria-labelledby="current-matter-heading">
+        <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b95e4b]">Áttekintés</p><h2 id="current-matter-heading" className="mt-1 text-2xl font-semibold text-stone-950">Aktív ügyei</h2></div><Link className="text-sm font-semibold text-[#7a5f18] hover:underline" href="/portal/ugyeim">Minden ügy megtekintése →</Link></div>
+        <div className="mt-4 grid gap-4">{home.matters.length ? home.matters.slice(0, 1).map((matter) => <MatterCard key={matter.id} matter={matter} />) : <EmptyState />}</div>
+      </section>
+      <section aria-labelledby="tasks-heading">
+        <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#b95e4b]">Következő lépések</p><h2 id="tasks-heading" className="mt-1 text-2xl font-semibold text-stone-950">Teendőim</h2></div><Link className="text-sm font-semibold text-[#7a5f18] hover:underline" href="/portal/teendoim">Teendőim megnyitása →</Link></div>
+        <div className="mt-4 grid gap-3">{home.attention.length ? home.attention.slice(0, 3).map((action) => <ActionCard key={action.id} action={action} />) : <p className="rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-5 text-stone-600">Jelenleg nincs teendője.</p>}</div>
+      </section>
+      <section aria-labelledby="updates-heading" className="grid gap-4 lg:grid-cols-[1.35fr_.65fr]">
+        <div className="min-w-0"><div className="flex flex-wrap items-end justify-between gap-3"><h2 id="updates-heading" className="text-2xl font-semibold text-stone-950">Legutóbbi frissítések</h2><span className="text-xs text-stone-500">Ügyfélnek szóló hírek</span></div><div className="mt-4 grid gap-3">{home.updates.length ? home.updates.slice(0, 3).map((update) => <UpdateCard key={update.id} update={update} />) : <p className="rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-5 text-stone-600">Nincs új frissítés.</p>}</div></div>
+        <div className="min-w-0 rounded-2xl border border-stone-200 bg-white p-5"><h2 className="text-xl font-semibold text-stone-950">Dokumentumok</h2><p className="mt-2 text-sm leading-6 text-stone-600">Az iroda által Önnel megosztott anyagok egy helyen.</p><p className="mt-5 text-sm text-stone-700">{workspace.documents.length ? `${workspace.documents.length} elérhető elem` : 'Nincs megosztott dokumentum.'}</p><Link className="mt-5 inline-flex font-semibold text-[#7a5f18] hover:underline" href="/portal/dokumentumok">Dokumentumok megnyitása →</Link></div>
+      </section>
+      <section className="grid gap-4 sm:grid-cols-2">
+        <div className="min-w-0 rounded-2xl border border-stone-200 bg-white p-5"><h2 className="text-xl font-semibold text-stone-950">Üzenetek</h2><p className="mt-2 text-sm leading-6 text-stone-600">Kérdései és az iroda válaszai itt jelennek meg.</p><p className="mt-4 text-sm text-stone-700">{workspace.messages.length ? `${workspace.messages.length} aktív beszélgetés` : 'Jelenleg nincs elérhető üzenetváltás.'}</p><Link className="mt-4 inline-flex font-semibold text-[#7a5f18] hover:underline" href="/portal/uzenetek">Üzenetek megnyitása →</Link></div>
+        <div className="min-w-0 rounded-2xl border border-stone-200 bg-white p-5"><h2 className="text-xl font-semibold text-stone-950">Közelgő határidők</h2><div className="mt-3 grid gap-2">{workspace.upcomingDeadlines.length ? workspace.upcomingDeadlines.slice(0, 2).map((action) => <WorkspaceActionCard key={action.id} action={action} />) : <p className="text-sm text-stone-600">Nincs közzétett közelgő határidő.</p>}</div></div>
+      </section>
     </div>
   );
 }
@@ -254,7 +255,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
       workspace.mode === 'ORGANIZATION' && capabilities.intakes ? ['Megkereséseim', '/portal/megkeresesek'] : null,
       capabilities.tasks && workspace.mode !== 'ORGANIZATION' ? ['Teendőim', '/portal/teendoim'] : null,
       capabilities.documents ? ['Dokumentumok', '/portal/dokumentumok'] : null,
-      capabilities.messages && communicationEnabled ? ['Kommunikáció', '/portal/uzenetek'] : null,
+      capabilities.messages && communicationEnabled ? [workspace.mode === 'INDIVIDUAL' ? 'Üzenetek' : 'Kommunikáció', '/portal/uzenetek'] : null,
       workspace.mode === 'ORGANIZATION' && capabilities.leadership ? ['Vezetői áttekintés', '/portal/szervezeti-attekintes'] : null,
       workspace.mode === 'CASE_RELAY' ? ['Együttműködési áttekintés', '/portal/szervezeti-attekintes'] : null,
     ].filter(Boolean) as string[][];
