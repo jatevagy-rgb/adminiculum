@@ -758,7 +758,7 @@ const PORTAL_ACTION_LABELS: Record<string, string> = {
   DOCUMENT_UPLOAD: 'Dokumentum bekérése',
   INFORMATION_REQUEST: 'Információkérés',
   APPROVAL_REQUEST: 'Belső használatra fenntartott korábbi típus',
-  CONFIRMATION_REQUEST: 'Visszaigazolás kérése',
+  CONFIRMATION_REQUEST: 'Belső használatra fenntartott korábbi típus',
   QUESTION: 'Kérdés',
   DATA_FORM: 'Adatbekérés',
   QUESTION_RESPONSE: 'Kérdés megválaszolása',
