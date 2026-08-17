@@ -98,7 +98,7 @@ function HomeView({ home, workspace }: { home: PortalHome; workspace: PortalWork
     <div className="space-y-8">
       <section className="rounded-2xl border border-stone-200 bg-[#f7f1e2] p-6 sm:p-8">
         <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#9b7b25]">Adminiculum ügyfélportál</p>
-        <h1 className="mt-3 break-words text-3xl font-semibold text-stone-950 sm:text-4xl">Üdvözöljük{home.identity?.displayName ? `, ${home.identity.displayName}` : ''}</h1>
+        <h1 className="mt-3 break-words text-3xl font-semibold text-stone-950 sm:text-4xl">Üdvözöljük</h1>
         <p className="mt-3 max-w-2xl break-words leading-7 text-stone-700">{modeMessage}</p>
       </section>
       <section aria-labelledby="current-matter-heading">
