@@ -338,8 +338,8 @@ export function CustomerInteractionCard({ caseId, allowAsk = true }: { caseId: s
 
   return (
     <Card>
-      <h2 className="text-2xl font-semibold">Kommunikáció</h2>
-      <p className="mt-2 text-sm text-stone-600">Csak ehhez a kifejezetten megosztott ügyhöz kapcsolódó ügyfélportál-műveletek jelennek meg.</p>
+      <h2 className="text-2xl font-semibold">Üzenetek</h2>
+      <p className="mt-2 text-sm text-stone-600">Itt jelennek meg az ehhez az ügyhöz tartozó kérdések és az iroda válaszai.</p>
       {message ? <p className="mt-3 rounded-2xl bg-stone-100 p-3 text-sm text-stone-700">{message}</p> : null}
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         <div className="rounded-2xl border border-stone-200 p-4">
