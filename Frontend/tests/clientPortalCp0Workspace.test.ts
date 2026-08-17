@@ -44,10 +44,18 @@ describe('CP0 anonymous entry and authenticated workspace shell', () => {
     const launcher = read('src/components/client-identity/CustomerAuthLauncher.tsx');
     const api = read('src/lib/api.ts');
     const portalApi = read('src/lib/clientPortalApi.ts');
+    const shell = read('src/components/client-portal/ClientPortalShell.tsx');
     assert.match(launcher, /client-portal-login-intent/);
     assert.match(launcher, /nem módosítja az iroda által engedélyezett hozzáféréseket/);
     assert.match(api, /x-client-portal-workspace/);
-    assert.match(portalApi, /skipWorkspaceContext: !publicReference/);
+    assert.match(portalApi, /CLIENT_PORTAL_WORKSPACE_STORAGE_KEY/);
+    assert.match(portalApi, /getStoredPortalWorkspace/);
+    assert.match(portalApi, /const effectiveReference = publicReference \|\| getStoredPortalWorkspace\(\)/);
+    assert.match(portalApi, /skipWorkspaceContext: !effectiveReference/);
+    assert.match(portalApi, /'x-client-portal-workspace': effectiveReference/);
+    assert.match(shell, /useState<string \| null>\(\(\) => getStoredPortalWorkspace\(\)\)/);
+    assert.match(shell, /error instanceof ApiError && error\.status === 403 && selectedReference/);
+    assert.match(shell, /setSelectedPortalWorkspace\(null\)/);
   });
 
   it('exposes workforce create, lifecycle, invitation, approval and explicit grant controls', () => {

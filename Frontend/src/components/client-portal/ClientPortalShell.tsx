@@ -20,6 +20,7 @@ import {
   getPortalMatter,
   getPortalWorkspace,
   getPortalIdentityContext,
+  getStoredPortalWorkspace,
   setSelectedPortalWorkspace,
   portalDownloadUrl,
   type PortalActionRequest,
@@ -169,7 +170,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
   const { instance, accounts, inProgress } = useMsal();
   const account = pickAccountByTenant(accounts, customerTenantId);
   const [state, setState] = useState<LoadState>({ status: 'loading' });
-  const [selectedReference, setSelectedReference] = useState<string | null>(null);
+  const [selectedReference, setSelectedReference] = useState<string | null>(() => getStoredPortalWorkspace());
   const [reloadNonce, setReloadNonce] = useState(0);
   // Canonical customer-auth layer: single MSAL instance, one logout config.
   const { logoutCustomer } = useCustomerAuth();
@@ -226,7 +227,12 @@ export function ClientPortalShell({ view, resourceId }: Props) {
           return;
         }
         if (!cancelled) {
-          if (error instanceof ApiError && error.status === 503) setState({ status: 'service-error' });
+          if (error instanceof ApiError && error.status === 403 && selectedReference) {
+            setSelectedPortalWorkspace(null);
+            setSelectedReference(null);
+            setState({ status: 'loading' });
+            setReloadNonce((value) => value + 1);
+          } else if (error instanceof ApiError && error.status === 503) setState({ status: 'service-error' });
           else if (error instanceof ApiError && [401, 403, 404].includes(error.status)) setState({ status: 'denied', message: 'A portálhozzáférés jelenleg nem aktív. Kérjük, vegye fel a kapcsolatot az irodával.' });
           else setState({ status: 'denied', message: 'A portál jelenleg nem érhető el. Kérjük, próbálja újra később.' });
         }

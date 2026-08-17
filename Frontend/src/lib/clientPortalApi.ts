@@ -242,17 +242,26 @@ export type PortalIdentityContext = {
   onboarding?: PortalOnboarding | null;
 };
 
-export function setSelectedPortalWorkspace(publicReference: string | null): void {
-  if (typeof window === 'undefined') return;
-  if (publicReference) localStorage.setItem('adminiculum:client-portal-workspace', publicReference);
-  else localStorage.removeItem('adminiculum:client-portal-workspace');
+export const CLIENT_PORTAL_WORKSPACE_STORAGE_KEY = 'adminiculum:client-portal-workspace';
+
+export function getStoredPortalWorkspace(): string | null {
+  if (typeof window === 'undefined') return null;
+  const value = localStorage.getItem(CLIENT_PORTAL_WORKSPACE_STORAGE_KEY);
+  return value && value.trim() ? value : null;
 }
 
-export async function getPortalIdentityContext(publicReference?: string) {
+export function setSelectedPortalWorkspace(publicReference: string | null): void {
+  if (typeof window === 'undefined') return;
+  if (publicReference) localStorage.setItem(CLIENT_PORTAL_WORKSPACE_STORAGE_KEY, publicReference);
+  else localStorage.removeItem(CLIENT_PORTAL_WORKSPACE_STORAGE_KEY);
+}
+
+export async function getPortalIdentityContext(publicReference?: string | null) {
+  const effectiveReference = publicReference || getStoredPortalWorkspace();
   return fetchApi<PortalIdentityContext>('/client-portal/me', {
     authContext: 'customer',
-    skipWorkspaceContext: !publicReference,
-    headers: publicReference ? { 'x-client-portal-workspace': publicReference } : undefined,
+    skipWorkspaceContext: !effectiveReference,
+    headers: effectiveReference ? { 'x-client-portal-workspace': effectiveReference } : undefined,
     suppressErrorStatuses: [401, 403, 409, 503],
     suppressErrorLogging: true,
   });
