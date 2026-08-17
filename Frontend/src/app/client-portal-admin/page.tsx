@@ -534,13 +534,6 @@ function activationFromWorkspace(workspace: AdminWorkspaceDTO): { customerType: 
   };
 }
 
-function activeGrantCountForClient(clientId: string, memberships: ActiveMembershipDTO[]): number {
-  return memberships
-    .filter((membership) => membership.clientId === clientId)
-    .flatMap((membership) => membership.activeGrants)
-    .filter((grant) => grant.status === "ACTIVE").length;
-}
-
 function ActivationWizard({ clients, workspaces, busy, run, onActivated }: {
   clients: Client[];
   workspaces: AdminWorkspaceDTO[];
@@ -555,7 +548,7 @@ function ActivationWizard({ clients, workspaces, busy, run, onActivated }: {
   const [relationship, setRelationship] = useState<"PORTAL_CENTRIC" | "EMAIL_CENTRIC" | "CONNECTED_SYSTEM">("PORTAL_CENTRIC");
   const [primaryEmail, setPrimaryEmail] = useState("");
   const [primaryName, setPrimaryName] = useState("");
-  const [portalRole, setPortalRole] = useState<PortalMembershipRole>("REPRESENTATIVE");
+  const [portalRole, setPortalRole] = useState<PortalMembershipRole>("MEMBER");
   const [unitName, setUnitName] = useState("");
 
   const client = clients.find((item) => item.id === clientId) || null;
@@ -648,14 +641,14 @@ function ActivationWizard({ clients, workspaces, busy, run, onActivated }: {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Ügyfélportál aktiválása</p>
-          <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Client-first aktiváció</h2>
+          <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Ügyfélportál aktiválása</h2>
           <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Az aktiválás a kanonikus ügyfélből indul, vagy itt hoz létre új ügyfelet ugyanazon ügyfélkezelési folyamaton keresztül. Ügyhozzáférés nem jön létre automatikusan.</p>
         </div>
         <AdminBadge tone="gold">Ügyfélportál aktív lesz</AdminBadge>
       </div>
       <div className="mt-5 grid gap-4">
         <section className="grid gap-2">
-          <h3 className="text-sm font-semibold text-[var(--adm-text)]">1. Ügyfél kiválasztása</h3>
+          <h3 className="text-sm font-semibold text-[var(--adm-text)]">Ügyfél kiválasztása</h3>
           <div className="flex flex-wrap gap-2">
             <button type="button" data-testid="activation-existing-client" onClick={() => setClientSource("existing")} className={`rounded-full border px-4 py-2 text-sm ${clientSource === "existing" ? "border-[var(--adm-gold)] bg-[var(--adm-gold-soft,#f3ead2)]" : "border-[var(--adm-border)]"}`}>Meglévő ügyfél</button>
             <button type="button" data-testid="activation-new-client" onClick={() => setClientSource("new")} className={`rounded-full border px-4 py-2 text-sm ${clientSource === "new" ? "border-[var(--adm-gold)] bg-[var(--adm-gold-soft,#f3ead2)]" : "border-[var(--adm-border)]"}`}>+ Új ügyfél létrehozása</button>
@@ -679,25 +672,25 @@ function ActivationWizard({ clients, workspaces, busy, run, onActivated }: {
           )}
         </section>
         <section className="grid gap-2">
-          <h3 className="text-sm font-semibold text-[var(--adm-text)]">2. Milyen ügyfél?</h3>
+          <h3 className="text-sm font-semibold text-[var(--adm-text)]">Ügyféltípus · Milyen ügyfél?</h3>
           <div className="flex flex-wrap gap-2">
             {(["INDIVIDUAL", "ORGANIZATION"] as const).map((type) => <button key={type} type="button" data-testid={`activation-type-${type}`} onClick={() => setCustomerType(type)} className={`rounded-full border px-4 py-2 text-sm ${customerType === type ? "border-[var(--adm-gold)] bg-[var(--adm-gold-soft,#f3ead2)]" : "border-[var(--adm-border)]"}`}>{MODE_LABELS[type]}</button>)}
           </div>
         </section>
         {customerType === "ORGANIZATION" ? (
           <section className="grid gap-2">
-            <h3 className="text-sm font-semibold text-[var(--adm-text)]">3. Hogyan dolgozunk együtt?</h3>
+            <h3 className="text-sm font-semibold text-[var(--adm-text)]">Együttműködés módja</h3>
             <div className="grid gap-2 md:grid-cols-3">
               {(["PORTAL_CENTRIC", "EMAIL_CENTRIC", "CONNECTED_SYSTEM"] as const).map((value) => <button key={value} type="button" data-testid={`relationship-${value}`} onClick={() => setRelationship(value)} className={`rounded-lg border p-3 text-left text-sm ${relationship === value ? "border-[var(--adm-gold)] bg-[var(--adm-gold-soft,#f3ead2)]" : "border-[var(--adm-border)]"}`}><b>{RELATIONSHIP_LABELS[value]}</b><span className="mt-1 block text-xs text-[var(--adm-text-muted)]">{value === "CONNECTED_SYSTEM" ? "Kapcsolt rendszer, CASE_RELAY áttekintés." : value === "EMAIL_CENTRIC" ? "E-mail az elsődleges, portál státuszhoz és dokumentumokhoz." : "Portál az elsődleges együttműködési felület."}</span></button>)}
             </div>
           </section>
         ) : null}
         <section className="grid gap-2">
-          <h3 className="text-sm font-semibold text-[var(--adm-text)]">4. Portál beállítása</h3>
+          <h3 className="text-sm font-semibold text-[var(--adm-text)]">Portál beállítása</h3>
           <p className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3 text-sm text-[var(--adm-text-muted)]">{targetName ? `${derivedName} · ${MODE_LABELS[mode]} · ${COMMUNICATION_LABELS[communicationMode]}` : "A név és mód az ügyfél megadása után automatikusan készül."}</p>
         </section>
         <section className="grid gap-2">
-          <h3 className="text-sm font-semibold text-[var(--adm-text)]">5. Felhasználók</h3>
+          <h3 className="text-sm font-semibold text-[var(--adm-text)]">Első felhasználó (opcionális meghívás)</h3>
           <div className="grid gap-2 lg:grid-cols-4">
             <input className={inputCls} value={primaryEmail} onChange={(event) => setPrimaryEmail(event.target.value)} placeholder="Elsődleges felhasználó e-mail" />
             <input className={inputCls} value={primaryName} onChange={(event) => setPrimaryName(event.target.value)} placeholder="Név (opcionális)" />
@@ -708,12 +701,12 @@ function ActivationWizard({ clients, workspaces, busy, run, onActivated }: {
         </section>
         {customerType === "ORGANIZATION" ? (
           <section className="grid gap-2">
-            <h3 className="text-sm font-semibold text-[var(--adm-text)]">6. Szervezeti egységek</h3>
+            <h3 className="text-sm font-semibold text-[var(--adm-text)]">Szervezeti egységek</h3>
             <input className={inputCls} value={unitName} onChange={(event) => setUnitName(event.target.value)} placeholder="Első szervezeti egység (opcionális)" />
           </section>
         ) : null}
         <section className="grid gap-2 rounded-xl border border-[var(--adm-border)] p-3">
-          <h3 className="text-sm font-semibold text-[var(--adm-text)]">7. Összegzés és aktiválás</h3>
+          <h3 className="text-sm font-semibold text-[var(--adm-text)]">Összegzés és aktiválás</h3>
           <p className="text-sm text-[var(--adm-text-muted)]">{targetName || "Nincs ügyfél megadva"} · {MODE_LABELS[mode]} · {customerType === "ORGANIZATION" ? RELATIONSHIP_LABELS[relationship] : "Magánügyfél portál"} · ügyhozzáférés nem jön létre.</p>
           <AdminButton data-testid="activate-client-portal" variant="gold" disabled={busy || !canActivate} onClick={() => run(activate, "Ügyfélportál aktív. Következő lépés: felhasználó meghívása, szervezeti egység vagy vezetői rálátás beállítása.")}>Ügyfélportál aktiválása</AdminButton>
         </section>
@@ -736,7 +729,7 @@ function ClientPortalDetail({ workspace, client, memberships, cases, units, scop
   const [tab, setTab] = useState("overview");
   const relationship = relationshipFromWorkspace(workspace, client);
   const clientMemberships = memberships.filter((item) => item.clientId === workspace.clientId);
-  const activeGrants = clientMemberships.flatMap((item) => item.activeGrants);
+  const activeGrants = workspace.activeCaseGrants;
   const tabs = ["overview", "users", ...(workspace.mode !== "INDIVIDUAL" ? ["units"] : []), "access", ...(workspace.mode !== "INDIVIDUAL" ? ["leadership"] : []), "settings", "audit"];
   const tabLabels: Record<string, string> = { overview: "Áttekintés", users: "Felhasználók", units: "Szervezeti egységek", access: "Ügyhozzáférések", leadership: "Vezetői rálátás", settings: "Beállítások", audit: "Audit" };
   return (
@@ -758,7 +751,7 @@ function ClientPortalDetail({ workspace, client, memberships, cases, units, scop
           ["Együttműködés", RELATIONSHIP_LABELS[relationship]],
           ["Portál státusza", portalStatusLabel(workspace.status)],
           ["Aktív felhasználók", String(workspace.activeMembershipCount)],
-          ["Aktív ügyhozzáférések", String(activeGrants.length)],
+          ["Aktív ügyhozzáférések", String(workspace.activeCaseGrantCount)],
           ...(workspace.mode !== "INDIVIDUAL" ? [["Szervezeti egységek", String(units.length)], ["Vezetői rálátások", String(scopes.filter((scope) => scope.status === "ACTIVE").length)]] : []),
         ].map(([label, value]) => <div key={label} className="rounded-lg bg-[var(--adm-bg,#faf8f3)] p-3"><p className="text-xs text-[var(--adm-text-muted)]">{label}</p><p className="mt-1 font-semibold">{value}</p></div>)}
       </div> : null}
@@ -866,11 +859,11 @@ function WorkspaceAdministration({ workspaces, clients, memberships, cases, busy
         </div>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[920px] border-separate border-spacing-y-2 text-left text-sm">
-            <thead className="text-xs uppercase tracking-[0.12em] text-[var(--adm-text-muted)]"><tr>{["Ügyfél", "Típus", "Együttműködés", "Portál státusza", "Aktív felhasználók", "Szervezeti egységek", "Aktív ügyhozzáférések", "Vezetői rálátások", "Utolsó változás", ""].map((head) => <th key={head} className="px-3 py-2">{head}</th>)}</tr></thead>
+            <thead className="text-xs uppercase tracking-[0.12em] text-[var(--adm-text-muted)]"><tr>{["Ügyfél", "Típus", "Együttműködés", "Portál státusza", "Aktív felhasználók", ...(visible.some((item) => item.mode !== "INDIVIDUAL") ? ["Szervezeti egységek"] : []), "Aktív ügyhozzáférések", ...(visible.some((item) => item.mode !== "INDIVIDUAL") ? ["Vezetői rálátások"] : []), "Utolsó változás", ""].map((head) => <th key={head} className="px-3 py-2">{head}</th>)}</tr></thead>
             <tbody>
               {visible.map((workspace) => {
                 const client = clients.find((item) => item.id === workspace.clientId);
-                return <tr key={workspace.id} className="bg-[var(--adm-surface)] shadow-sm"><td className="rounded-l-lg px-3 py-3 font-semibold">{workspace.clientName || client?.name || workspace.name}</td><td className="px-3 py-3">{MODE_LABELS[workspace.mode]}</td><td className="px-3 py-3">{RELATIONSHIP_LABELS[relationshipFromWorkspace(workspace, client)]}</td><td className="px-3 py-3"><AdminBadge tone={workspace.status === "ACTIVE" ? "green" : "neutral"}>{portalStatusLabel(workspace.status)}</AdminBadge></td><td className="px-3 py-3">{workspace.activeMembershipCount}</td><td className="px-3 py-3">{unitCounts[workspace.id] || 0}</td><td className="px-3 py-3">{activeGrantCountForClient(workspace.clientId, memberships)}</td><td className="px-3 py-3">{scopeCounts[workspace.id] || 0}</td><td className="px-3 py-3">{workspace.events[0]?.createdAt ? formatGrantDate(workspace.events[0].createdAt) : "—"}</td><td className="rounded-r-lg px-3 py-3 text-right"><AdminButton size="sm" variant="neutral" onClick={() => setSelectedWorkspaceId(workspace.id)}>Megnyitás</AdminButton></td></tr>;
+                return <tr key={workspace.id} className="bg-[var(--adm-surface)] shadow-sm"><td className="rounded-l-lg px-3 py-3 font-semibold">{workspace.clientName || client?.name || workspace.name}</td><td className="px-3 py-3">{MODE_LABELS[workspace.mode]}</td><td className="px-3 py-3">{workspace.mode === "INDIVIDUAL" ? "—" : RELATIONSHIP_LABELS[relationshipFromWorkspace(workspace, client)]}</td><td className="px-3 py-3"><AdminBadge tone={workspace.status === "ACTIVE" ? "green" : "neutral"}>{portalStatusLabel(workspace.status)}</AdminBadge></td><td className="px-3 py-3">{workspace.activeMembershipCount}</td>{workspace.mode !== "INDIVIDUAL" ? <td className="px-3 py-3">{unitCounts[workspace.id] || 0}</td> : null}<td className="px-3 py-3">{workspace.activeCaseGrantCount}</td>{workspace.mode !== "INDIVIDUAL" ? <td className="px-3 py-3">{scopeCounts[workspace.id] || 0}</td> : null}<td className="px-3 py-3">{workspace.events[0]?.createdAt ? formatGrantDate(workspace.events[0].createdAt) : "—"}</td><td className="rounded-r-lg px-3 py-3 text-right"><AdminButton size="sm" variant="neutral" onClick={() => setSelectedWorkspaceId(workspace.id)}>Megnyitás</AdminButton></td></tr>;
               })}
             </tbody>
           </table>
@@ -955,11 +948,11 @@ function PageBody() {
       <AdminSectionHeader
         eyebrow="Ügyfélportál"
         title="Ügyfélportál adminisztráció"
-        subtitle="Tagsági kérelmek elbírálása és személyazonosság-alapú ügyhozzáférés (grant). Csak a jóváhagyott tagság ad hozzáférést, és önmagában a tagság még nem tesz láthatóvá ügyanyagot."
+        subtitle="Aktív ügyfélportálok kezelése, felhasználók meghívása és ügyhozzáférések áttekintése."
       />
 
       <details className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-5">
-        <summary className="cursor-pointer font-serif text-xl font-semibold text-[var(--adm-text)]">Átmeneti globális ügyfélkérés indítás</summary>
+        <summary className="cursor-pointer font-serif text-xl font-semibold text-[var(--adm-text)]">Haladó / technikai eszközök</summary>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs text-[var(--adm-text-muted)]">A napi ügyfélteendők elsődleges helye az adott ügy ügyfélkapcsolati panelje. Ez a globális indítás csak átmeneti admin eszköz.</p>
@@ -997,7 +990,7 @@ function PageBody() {
       <WorkspaceAdministration workspaces={workspaces} clients={clients} memberships={memberships} cases={cases} busy={busy} run={run} />
 
       <details className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-5">
-        <summary className="cursor-pointer font-serif text-xl font-semibold text-[var(--adm-text)]">Haladó szervezeti adminisztráció / Audit</summary>
+        <summary className="cursor-pointer font-serif text-xl font-semibold text-[var(--adm-text)]">Haladó szervezeti eszközök és audit</summary>
         <div className="mt-4">
           <OrganizationAdminControlPlane
             clients={clients}
@@ -1012,7 +1005,7 @@ function PageBody() {
       </details>
 
       <details className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-5">
-        <summary className="cursor-pointer font-serif text-xl font-semibold text-[var(--adm-text)]">Operatív ügyfélportál sorok</summary>
+        <summary className="cursor-pointer font-serif text-xl font-semibold text-[var(--adm-text)]">Operatív sorok</summary>
         <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Case-access alapján szűrt, ügyfélportál-specifikus munkasorok. Nem helyettesíti az Ügyek, Teendők vagy Kommunikáció oldalakat.</p>
         <div className="mt-4 grid gap-3 lg:grid-cols-4">
           <InteractionQueueCard title="Bekérések" items={interactionQueues.requests} empty="Nincs aktív bekérés." onRequestAction={(item, action) => run(async () => {
@@ -1039,7 +1032,7 @@ function PageBody() {
         </div>
       </details>
 
-      <AdminPanel className="p-5">
+      {pending.length ? <AdminPanel className="p-5">
         <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Tagsági kérelmek ({pending.length})</h2>
         {loading ? <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Betöltés…</p> : null}
         {!loading && pending.length === 0 ? <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Nincs elbírálásra váró tagsági kérelem.</p> : null}
@@ -1068,7 +1061,7 @@ function PageBody() {
             </div>
           ))}
         </div>
-      </AdminPanel>
+      </AdminPanel> : null}
 
       <AdminPanel className="p-5">
         <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Aktív tagságok és ügyhozzáférések</h2>

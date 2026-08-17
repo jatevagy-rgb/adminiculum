@@ -100,6 +100,8 @@ export interface AdminWorkspaceDTO {
   connectedSystemState: 'NOT_CONFIGURED' | 'CONFIGURATION_REQUIRED' | 'READY' | 'DISABLED';
   revision: number;
   activeMembershipCount: number;
+  activeCaseGrantCount: number;
+  activeCaseGrants: ClientPortalGrantDTO[];
   pendingInvitationCount: number;
   pendingApprovalCount: number;
   invitations: Array<{

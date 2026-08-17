@@ -40,7 +40,7 @@ describe('client identity and membership foundation static boundary', () => {
 
   it('does not present legal approval wording to customers', () => {
     const publicationService = readFileSync(path.join(root, 'src/modules/client-publication/publicationService.ts'), 'utf8');
-    expect(publicationService).toContain('Belső használatra fenntartott korábbi típus');
+    expect(publicationService).toContain("CONFIRMATION_REQUEST: 'Megerősítés szükséges'");
     expect(frontend).toContain('A szervezet vagy csoport megadása önmagában nem ad hozzáférést');
     // Credential-handling reassurance now lives on the auth launcher (the surface
     // where the customer registers/logs in); the shell is onboarding-only.

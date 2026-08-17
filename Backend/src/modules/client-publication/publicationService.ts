@@ -757,8 +757,8 @@ type PortalContext = {
 const PORTAL_ACTION_LABELS: Record<string, string> = {
   DOCUMENT_UPLOAD: 'Dokumentum bekérése',
   INFORMATION_REQUEST: 'Információkérés',
-  APPROVAL_REQUEST: 'Belső használatra fenntartott korábbi típus',
-  CONFIRMATION_REQUEST: 'Belső használatra fenntartott korábbi típus',
+  APPROVAL_REQUEST: 'Megerősítés szükséges',
+  CONFIRMATION_REQUEST: 'Megerősítés szükséges',
   QUESTION: 'Kérdés',
   DATA_FORM: 'Adatbekérés',
   QUESTION_RESPONSE: 'Kérdés megválaszolása',
@@ -882,7 +882,7 @@ function toPortalMatter(row: Row, revision: Row | null, counts: Row = {}): Row {
     statusLabel: revision?.clientSafeStatus || 'Folyamatban',
     currentSummary: statusText,
     waitingOnLabel: revision?.clientSafeWaitingOn || (counts.attentionCount ? 'Ügyfél válasza szükséges' : 'Irodai feldolgozás'),
-    waitingDescription: counts.attentionCount ? 'Közzétett teendő vár teljesítésre az ügyfélportálon.' : 'Jelenleg nincs közzétett ügyféloldali teendő.',
+    waitingDescription: counts.attentionCount ? 'Közzétett teendő vár teljesítésre az ügyfélportálon.' : 'Jelenleg nincs szükség további teendőre Öntől.',
     nextStepLabel: nextStepText,
     nextStepTitle: nextStepText ? 'Következő lépés' : null,
     nextStepDescription: nextStepText,
@@ -937,12 +937,13 @@ function toPortalAction(row: Row, matter?: Row | null): Row {
 }
 
 function toPortalUpdate(row: Row, matter?: Row | null): Row {
+  const body = String(row.body || '').replace(/\s*Ez kizárólag ügyfélnek szánt, biztonságos frissítés\.?\s*/gi, ' ').trim();
   const dto = {
     id: row.id,
     matterId: matter?.id || null,
     matterTitle: matter?.title || null,
     title: row.title,
-    body: row.body,
+    body,
     categoryLabel: PORTAL_UPDATE_LABELS[row.category] || 'Frissítés érkezett',
     publishedAt: portalDate(row.publishedAt),
   };
@@ -1040,7 +1041,9 @@ export async function getPortalMatter(actor: Actor, publicationId: string, db: P
   // Published milestones + derived progress come only from the immutable current
   // revision; the customer-safe projection strips every internal field.
   const milestones = toCustomerMilestones(row.milestonesSnapshot);
-  const dto = { ...matter, documents: documents.items, actionRequests: actions.items, updates: updates.items, milestones, progressPercentage: row.progressPercentage != null ? Number(row.progressPercentage) : null };
+  const messageRead = audienceAllows(row, context.grants, 'MESSAGE_READ');
+  const messageSend = audienceAllows(row, context.grants, 'MESSAGE_SEND');
+  const dto = { ...matter, messageCapabilities: { canRead: messageRead, canSend: messageSend }, documents: documents.items, actionRequests: actions.items, updates: updates.items, milestones };
   assertNoForbiddenPortalFields(dto);
   return dto;
 }

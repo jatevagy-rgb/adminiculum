@@ -20,6 +20,7 @@ export type PortalMatter = {
   documentCount?: number;
   latestUpdateAt?: string | null;
   lastClientVisibleUpdateAt?: string | null;
+  messageCapabilities?: { canRead: boolean; canSend: boolean };
 };
 
 export type PortalDocument = {
@@ -290,7 +291,7 @@ export type PortalMilestone = {
 };
 
 export async function getPortalMatter(publicationId: string) {
-  return fetchApi<PortalMatter & { documents: PortalDocument[]; actionRequests: PortalActionRequest[]; updates: PortalSafeUpdate[]; milestones?: PortalMilestone[]; progressPercentage?: number | null }>(`/client-portal/matters/${encodeURIComponent(publicationId)}`, { suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
+  return fetchApi<PortalMatter & { documents: PortalDocument[]; actionRequests: PortalActionRequest[]; updates: PortalSafeUpdate[]; milestones?: PortalMilestone[] }>(`/client-portal/matters/${encodeURIComponent(publicationId)}`, { suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
 }
 
 export async function getPortalDocument(publicationId: string) {

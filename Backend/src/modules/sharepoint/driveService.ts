@@ -26,6 +26,9 @@ class DriveService {
   private siteId: string = '';
 
   private toSafeErrorMessage(operation: string, error: unknown): string {
+    if (operation === 'sharepoint-upload') {
+      return 'A dokumentum feltöltése jelenleg nem sikerült. Próbálja újra, vagy jelezze a rendszer adminisztrátorának.';
+    }
     if (error instanceof GraphClientError) {
       const statusPart = error.status ? ` (${error.status})` : '';
       return `${operation} failed${statusPart}: ${error.message}`;

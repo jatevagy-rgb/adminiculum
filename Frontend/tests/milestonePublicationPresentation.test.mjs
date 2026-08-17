@@ -52,8 +52,9 @@ test("customer portal renders progress from published milestones only, with huma
   assert.match(workspace, /MatterProgressSection/);
   // Humanized, customer-facing state labels — never raw enum values.
   for (const label of ["Kész", "Folyamatban", "Előttünk áll"]) assert.match(workspace, rx(label));
-  // Progress bar only renders when a numeric percentage is available (no fake 0%).
-  assert.match(workspace, /Number\.isFinite\(progressPercentage\)/);
+  // Customer UI renders the discrete published timeline and never derives a percentage.
+  assert.doesNotMatch(workspace, /Number\.isFinite\(progressPercentage\)/);
+  assert.doesNotMatch(workspace, /progressPercentage as number/);
   // Safe empty state rather than an empty void.
   assert.match(workspace, /Az iroda hamarosan közzéteszi az ügy mérföldköveit/);
 });

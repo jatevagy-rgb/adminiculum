@@ -108,27 +108,15 @@ function milestoneTone(state: string): string {
   return 'neutral';
 }
 
-function MatterProgressSection({ milestones, progressPercentage }: { milestones?: PortalMilestone[]; progressPercentage?: number | null }) {
+function MatterProgressSection({ milestones }: { milestones?: PortalMilestone[] }) {
   const ordered = (milestones ?? []).slice().sort((a, b) => a.displayOrder - b.displayOrder);
-  const hasProgress = typeof progressPercentage === 'number' && Number.isFinite(progressPercentage);
-  if (!ordered.length && !hasProgress) return null;
+  if (!ordered.length) return null;
   return (
     <Card>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h2 className="cp-card-heading">Az ügy előrehaladása</h2>
-        {hasProgress ? <span className="text-lg font-semibold text-[var(--adm-green-800)]">{progressPercentage}%</span> : null}
+        <span className="cp-kicker">Közzétett mérföldkövek</span>
       </div>
-      {hasProgress ? (
-        <div className="mt-4">
-          <div className="flex items-baseline justify-between">
-            <span className="cp-kicker">Előrehaladás</span>
-            <span className="text-lg font-semibold text-[var(--adm-text)]">{progressPercentage}%</span>
-          </div>
-          <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-[var(--adm-ivory-200)]">
-            <div className="h-full rounded-full bg-[var(--adm-green-700)] transition-all" style={{ width: `${Math.max(0, Math.min(100, progressPercentage as number))}%` }} />
-          </div>
-        </div>
-      ) : null}
       {ordered.length ? (
         <ol className="cp-milestones mt-6">
           {ordered.map((milestone) => (
@@ -154,7 +142,6 @@ type MatterWorkspaceMatter = PortalMatter & {
   actionRequests: PortalActionRequest[];
   updates: PortalSafeUpdate[];
   milestones?: PortalMilestone[];
-  progressPercentage?: number | null;
 };
 
 export function MatterView({
@@ -178,12 +165,12 @@ export function MatterView({
               <h1 className="cp-title mt-3 break-words text-3xl sm:text-4xl">{matter.title}</h1>
               <p className="mt-3 max-w-3xl break-words leading-7 text-[var(--adm-text)]">{matter.currentSummary || matter.statusLabel}</p>
             </div>
-            <span className="cp-pill shrink-0" data-tone="blue">{matter.statusLabel}</span>
+            {matter.statusLabel !== (matter.currentSummary || matter.statusLabel) ? <span className="cp-pill shrink-0" data-tone="blue">{matter.statusLabel}</span> : null}
           </div>
           <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm text-[var(--adm-text-muted)]">
-            <span><b className="font-semibold text-[var(--adm-text)]">Publikus céldátum:</b> {formatDate(matter.estimatedTiming)}</span>
-            <span>Közzétéve: {formatDate(matter.publishedAt)}</span>
-            <span>Utolsó ügyféloldali frissítés: {formatDate(matter.lastClientVisibleUpdateAt || matter.latestUpdateAt)}</span>
+            {matter.estimatedTiming ? <span><b className="font-semibold text-[var(--adm-text)]">Publikus céldátum:</b> {formatDate(matter.estimatedTiming)}</span> : null}
+            {matter.publishedAt ? <span>Közzétéve: {formatDate(matter.publishedAt)}</span> : null}
+            {matter.lastClientVisibleUpdateAt || matter.latestUpdateAt ? <span>Utolsó frissítés: {formatDate(matter.lastClientVisibleUpdateAt || matter.latestUpdateAt)}</span> : null}
           </div>
           {matter.publicDeadlines?.length ? (
             <ul className="mt-4 space-y-1 border-t border-[var(--adm-border)] pt-4 text-sm text-[var(--adm-text-muted)]">
@@ -200,7 +187,7 @@ export function MatterView({
         </div>
         <div className="cp-status-step" data-step="2" data-tone="waiting">
           <p className="cp-status-label"><StatusGlyph kind="waiting" /> Mire várunk?</p>
-          <p className="cp-status-body">{matter.waitingOnLabel || 'Nincs közzétett ügyféloldali teendő'}</p>
+          <p className="cp-status-body">{matter.waitingOnLabel || 'Jelenleg nincs szükség további teendőre Öntől.'}</p>
           <p className="cp-status-sub">{matter.waitingDescription || 'Az iroda frissíti a portált, ha új lépés következik.'}</p>
         </div>
         <div className="cp-status-step" data-step="3" data-tone="next">
@@ -217,7 +204,7 @@ export function MatterView({
         </div>
       ) : null}
 
-      <MatterProgressSection milestones={matter.milestones} progressPercentage={matter.progressPercentage} />
+      <MatterProgressSection milestones={matter.milestones} />
       {showDocuments ? (
         <Card>
           <h2 className="cp-card-heading">Dokumentumok</h2>

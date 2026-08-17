@@ -78,7 +78,7 @@ describe('internal portal-admin UI', () => {
       'Ügyfél kiválasztása',
       'activation-new-client-form',
       'Milyen ügyfél?',
-      'Hogyan dolgozunk együtt?',
+      'Együttműködés módja',
       'Portálon keresztül',
       'Elsősorban e-mailben',
       'Kapcsolt rendszer',
@@ -114,7 +114,7 @@ describe('internal portal-admin UI', () => {
     assert.match(src, /workspace\.mode === "INDIVIDUAL"[\s\S]*Meghatalmazott \/ kapcsolattartó/);
     assert.match(src, /Szervezeti adminisztrátor \/ kapcsolattartó/);
     assert.doesNotMatch(src, /<option value="APPROVER">/);
-    assert.match(src, /Haladó szervezeti adminisztráció \/ Audit/);
+    assert.match(src, /Haladó szervezeti eszközök és audit/);
     assert.match(src, /permissionLabel\(p\)/);
     assert.match(src, /permissionLabel\(permission\)/);
     assert.match(src, /permissionList\(g\.permissions\)/);

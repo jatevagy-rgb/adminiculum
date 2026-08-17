@@ -373,6 +373,7 @@ export function CustomerInteractionCard({ caseId, allowAsk = true }: { caseId: s
         ) : (
           <div className="rounded-2xl border border-[var(--adm-border)] p-4">
             <h3 className="font-semibold text-[var(--adm-text)]">Kérdések és válaszok</h3>
+            <p className="mt-2 text-sm text-[var(--adm-text-muted)]">Az üzenetváltást itt megtekintheti.</p>
             <div className="mt-4 space-y-2">
               {questions.length ? questions.map((thread) => <QuestionThreadRow key={thread.id} caseId={caseId} thread={thread} />) : <p className="text-sm text-[var(--adm-text-muted)]">Még nincs kérdésszál.</p>}
             </div>

@@ -368,17 +368,20 @@ export async function listAdminWorkspaces(actor: InternalActor, clientId?: strin
     orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
   });
   const workspaceIds = workspaces.map((workspace) => workspace.id);
-  const [memberships, invitations, clients, events] = await Promise.all([
+  const [memberships, invitations, clients, events, grants] = await Promise.all([
     db.clientPortalWorkspaceMembership.findMany({ where: { workspaceId: { in: workspaceIds } } }),
     db.clientPortalInvitation.findMany({ where: { workspaceId: { in: workspaceIds }, status: 'ACTIVE' } }),
     db.client.findMany({ where: { id: { in: [...new Set(workspaces.map((workspace) => workspace.clientId))] } }, select: { id: true, name: true } }),
     db.clientPortalWorkspaceEvent.findMany({ where: { workspaceId: { in: workspaceIds } }, orderBy: { createdAt: 'desc' }, take: 200 }),
+    db.clientPortalGrant.findMany({ where: { workspaceId: { in: workspaceIds }, status: 'ACTIVE', OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }] }, orderBy: { updatedAt: 'desc' } }),
   ]);
   const clientNames = new Map(clients.map((client) => [client.id, client.name]));
   return { items: workspaces.map((workspace) => ({
     ...workspace,
     clientName: clientNames.get(workspace.clientId) || null,
     activeMembershipCount: memberships.filter((membership) => membership.workspaceId === workspace.id && membership.status === 'ACTIVE').length,
+    activeCaseGrantCount: grants.filter((grant) => grant.workspaceId === workspace.id).length,
+    activeCaseGrants: grants.filter((grant) => grant.workspaceId === workspace.id).map((grant) => ({ ...grant, permissions: grant.permissions.map(String) })),
     pendingInvitationCount: invitations.filter((invitation) => invitation.workspaceId === workspace.id).length,
     pendingApprovalCount: memberships.filter((membership) => membership.workspaceId === workspace.id && membership.status === 'PENDING_APPROVAL').length,
     invitations: invitations.filter((invitation) => invitation.workspaceId === workspace.id).map((invitation) => ({

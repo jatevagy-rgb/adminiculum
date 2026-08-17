@@ -192,9 +192,20 @@ async function portalWorkspace(req: Request) {
     updatedAt: item.updatedAt || null,
     actionUrl: `/portal/matters/${encodeURIComponent(matter.id)}`,
   })));
-  const actions = requests.map(({ rawStatus, ...request }) => ({
-    ...request,
-    bucket: actionBucket(rawStatus, request.dueAt),
+  // HOME and Teendőim intentionally share the published ClientActionRequest
+  // projection. Interaction requests remain available as document/data
+  // requests, but are not a second customer task list.
+  const actions = (home.attention as Array<Record<string, any>>).map((action) => ({
+    id: action.id,
+    matterId: action.matterId,
+    matterTitle: action.matterTitle,
+    type: action.type || 'ACTION_REQUEST',
+    title: action.title,
+    description: action.instructions || null,
+    dueAt: action.dueAt || null,
+    status: 'PUBLISHED',
+    bucket: actionBucket('PUBLISHED', action.dueAt),
+    actionUrl: `/portal/matters/${encodeURIComponent(String(action.matterId || ''))}`,
   }));
   const documentItems = [
     ...(documents.items as Array<Record<string, unknown>>).map((item) => ({ ...item, kind: 'SHARED_DOCUMENT', actionUrl: `/portal/documents/${encodeURIComponent(String(item.id))}` })),
