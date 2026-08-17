@@ -776,6 +776,19 @@ function ClientPortalDetail({ workspace, client, memberships, cases, units, scop
           const linkedCase = cases.find((item) => item.id === grant.caseId);
           return <div key={grant.id} className="rounded-lg border border-[var(--adm-border)] p-3 text-sm"><b>{linkedCase ? `${linkedCase.caseNumber} · ${linkedCase.title}` : "Ügyhozzáférés"}</b><p className="mt-1 text-xs text-[var(--adm-text-muted)]">{permissionList(grant.permissions)} · érvényes: {formatGrantDate(grant.validUntil)}</p><details className="mt-2 text-xs"><summary className="cursor-pointer">Technikai adatok</summary><p className="font-mono">grant: {grant.id} · case: {grant.caseId} · revision: {grant.revision}</p></details></div>;
         }) : <p className="text-sm text-[var(--adm-text-muted)]">Nincs aktív ügyhozzáférés.</p>}
+        {workspace.memberships.filter((member) => member.status === "ACTIVE").map((member) => (
+          <WorkspaceGrantForm
+            key={`workspace-grant-${member.id}`}
+            workspace={workspace}
+            membership={member}
+            cases={cases}
+            busy={busy}
+            onGrant={({ caseId, permissions, validUntil }) => run(
+              () => createIdentityGrant({ workspaceMembershipId: member.id, caseId, permissions, validUntil }).then(() => undefined),
+              "Ügyhozzáférés létrehozva. Az ügyfél a portál frissítése után látja a közzétett ügyet.",
+            )}
+          />
+        ))}
       </div> : null}
       {tab === "leadership" ? <div className="mt-5 grid gap-2">{scopes.length ? scopes.map((scope) => <div key={scope.id} className="rounded-lg border border-[var(--adm-border)] p-3 text-sm"><b>{scope.scopeType === "UNIT" ? "Szervezeti egység rálátás" : "Teljes szervezeti rálátás"}</b><span className="ml-2 text-[var(--adm-text-muted)]">{scope.status}</span><p className="mt-1 text-xs text-[var(--adm-text-muted)]">Aggregate-only. Nem ad ügyhozzáférést.</p><AdminButton className="mt-2" size="sm" variant="muted" disabled={busy || scope.status === "REVOKED"} onClick={() => run(() => transitionSummaryScope(scope.id, "revoke").then(() => undefined), "Vezetői rálátás visszavonva.")}>Visszavonás</AdminButton></div>) : <p className="text-sm text-[var(--adm-text-muted)]">Nincs vezetői rálátás.</p>}</div> : null}
       {tab === "settings" ? <div className="mt-5 grid gap-3"><WorkspaceSettings workspace={workspace} busy={busy} run={run} /><div className="flex gap-2">{workspace.status !== "ACTIVE" ? <AdminButton variant="neutral" disabled={busy || workspace.status === "ARCHIVED"} onClick={() => run(() => transitionAdminWorkspace(workspace.id, "activate", workspace.revision).then(() => undefined), "Ügyfélportál aktiválva.")}>Aktiválás</AdminButton> : <AdminButton variant="muted" disabled={busy} onClick={() => run(() => transitionAdminWorkspace(workspace.id, "suspend", workspace.revision).then(() => undefined), "Ügyfélportál felfüggesztve.")}>Felfüggesztés</AdminButton>}<AdminButton variant="muted" disabled={busy || workspace.status === "ARCHIVED"} onClick={() => run(() => transitionAdminWorkspace(workspace.id, "archive", workspace.revision).then(() => undefined), "Ügyfélportál archiválva.")}>Archiválás</AdminButton></div></div> : null}

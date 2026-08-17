@@ -62,5 +62,7 @@ describe('CP0 anonymous entry and authenticated workspace shell', () => {
     const admin = read('src/app/client-portal-admin/page.tsx');
     for (const marker of ['Ügyfélportál aktiválása', 'Aktiválás', 'Felfüggesztés', 'Archiválás', 'Meghívás', 'Jóváhagyás', 'Visszavonás', 'Explicit ügyhozzáférés', 'Technikai adatok / Audit']) assert.match(admin, new RegExp(marker));
     assert.match(admin, /Ügyhozzáférés nem jön létre automatikusan/);
+    assert.match(admin, /workspace.memberships.filter\(\(member\) => member.status === "ACTIVE"\)/);
+    assert.match(admin, /workspaceMembershipId: member.id/);
   });
 });
