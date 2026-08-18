@@ -3,7 +3,11 @@
 // ============================================================================
 
 import mammoth from 'mammoth';
-import * as pdfParseModule from 'pdf-parse';
+
+type PdfParseModule = {
+  PDFParse?: unknown;
+  default?: unknown;
+};
 
 type LegacyPdfParseFn = (buffer: Buffer) => Promise<{
   text: string;
@@ -21,12 +25,12 @@ type PdfParseV2Instance = {
 
 type PdfParseV2Ctor = new (options: { data: Uint8Array }) => PdfParseV2Instance;
 
-function resolvePdfParseV2Ctor(): PdfParseV2Ctor | null {
+function resolvePdfParseV2Ctor(pdfParseModule: PdfParseModule): PdfParseV2Ctor | null {
   const candidate = (pdfParseModule as unknown as { PDFParse?: unknown })?.PDFParse;
   return typeof candidate === 'function' ? (candidate as PdfParseV2Ctor) : null;
 }
 
-function resolveLegacyPdfParse(): LegacyPdfParseFn | null {
+function resolveLegacyPdfParse(pdfParseModule: PdfParseModule): LegacyPdfParseFn | null {
   const candidate =
     (pdfParseModule as unknown as { default?: unknown })?.default ??
     (pdfParseModule as unknown);
@@ -117,7 +121,8 @@ async function extractFromDocx(buffer: Buffer): Promise<ExtractionResult> {
  */
 async function extractFromPdf(buffer: Buffer): Promise<ExtractionResult> {
   try {
-    const PdfParseCtor = resolvePdfParseV2Ctor();
+    const pdfParseModule = (await import('pdf-parse')) as PdfParseModule;
+    const PdfParseCtor = resolvePdfParseV2Ctor(pdfParseModule);
     if (PdfParseCtor) {
       const parser = new PdfParseCtor({ data: new Uint8Array(buffer) });
       try {
@@ -133,7 +138,7 @@ async function extractFromPdf(buffer: Buffer): Promise<ExtractionResult> {
       }
     }
 
-    const legacyPdfParse = resolveLegacyPdfParse();
+    const legacyPdfParse = resolveLegacyPdfParse(pdfParseModule);
     if (legacyPdfParse) {
       const result = await legacyPdfParse(buffer);
       return {
