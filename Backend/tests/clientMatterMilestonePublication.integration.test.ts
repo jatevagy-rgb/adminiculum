@@ -78,7 +78,11 @@ d('Customer-safe milestone publication (PostgreSQL)', () => {
     // Draft is not customer-visible.
     const beforePublish = await getPortalMatter(portalActor(), publicationId, db);
     expect(beforePublish.milestones).toEqual([]);
-    expect(beforePublish.progressPercentage).toBeNull();
+    // Current product contract: the customer matter DTO carries customer-safe
+    // milestones/statuses but NOT an automatically derived progress percentage
+    // (customer progress must not be inferred as completed/total milestones).
+    // Derived progress stays an internal preview/publish + stored-revision concept.
+    expect(beforePublish).not.toHaveProperty('progressPercentage');
 
     // Preview uses the customer mapper.
     const preview = await previewMilestonePublication(actor, caseId, db);
@@ -99,9 +103,10 @@ d('Customer-safe milestone publication (PostgreSQL)', () => {
     expect(published.progressPercentage).toBe(50);
     const firstRevisionId = published.revisionId;
 
-    // Preview and the customer DTO are identical for the published content.
+    // Preview and the customer DTO carry identical customer-safe milestone
+    // content; derived progress is intentionally NOT exposed on the customer DTO.
     const customer = await getPortalMatter(portalActor(), publicationId, db);
-    expect(customer.progressPercentage).toBe(50);
+    expect(customer).not.toHaveProperty('progressPercentage');
     expect(customer.milestones.map((m: any) => ({ title: m.title, state: m.state }))).toEqual([
       { title: 'Az ügy feldolgozása megkezdődött', state: 'COMPLETED' },
       { title: 'Végső szakmai ellenőrzés', state: 'NOT_STARTED' },
@@ -112,7 +117,8 @@ d('Customer-safe milestone publication (PostgreSQL)', () => {
     // Completing the internal tasks afterwards must NOT change the published revision.
     await db.task.update({ where: { id: taskB }, data: { status: 'DONE' } });
     const afterTaskDone = await getPortalMatter(portalActor(), publicationId, db);
-    expect(afterTaskDone.progressPercentage).toBe(50);
+    expect(afterTaskDone).not.toHaveProperty('progressPercentage');
+    // The immutable stored revision still records derived progress internally.
     const firstRev = await db.$queryRaw<Array<{ progressPercentage: number }>>`SELECT "progressPercentage" FROM client_matter_publication_revisions WHERE id=${firstRevisionId}`;
     expect(firstRev[0].progressPercentage).toBe(50);
 
@@ -126,7 +132,10 @@ d('Customer-safe milestone publication (PostgreSQL)', () => {
     expect(republished.progressPercentage).toBe(100);
     expect(republished.revisionId).not.toBe(firstRevisionId);
     const customer2 = await getPortalMatter(portalActor(), publicationId, db);
-    expect(customer2.progressPercentage).toBe(100);
+    expect(customer2).not.toHaveProperty('progressPercentage');
+    // Republish advanced the internal progress to 100; the prior revision is unchanged.
+    const republishedRev = await db.$queryRaw<Array<{ progressPercentage: number }>>`SELECT "progressPercentage" FROM client_matter_publication_revisions WHERE id=${republished.revisionId}`;
+    expect(republishedRev[0].progressPercentage).toBe(100);
     const firstRevAgain = await db.$queryRaw<Array<{ progressPercentage: number }>>`SELECT "progressPercentage" FROM client_matter_publication_revisions WHERE id=${firstRevisionId}`;
     expect(firstRevAgain[0].progressPercentage).toBe(50);
   });
