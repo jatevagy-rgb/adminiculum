@@ -20,6 +20,8 @@ import {
   listFacts,
   transitionAssessment,
   transitionFinding,
+  updateAssessmentItem,
+  updateFact,
   updateInitiative,
   updateMilestone,
   upsertOperatingProfile,
@@ -40,6 +42,10 @@ d('Company foundation (Phase 1) (PostgreSQL)', () => {
   const clientB = crypto.randomUUID();
   const caseA = crypto.randomUUID();
   const taskA = crypto.randomUUID();
+  const caseB = crypto.randomUUID();
+  const taskB = crypto.randomUUID();
+  const documentB = crypto.randomUUID();
+  const documentVersionB = crypto.randomUUID();
 
   const admin = { userId: adminId, role: 'ADMIN' };
   const lawyer = { userId: lawyerId, role: 'LAWYER' };
@@ -59,6 +65,11 @@ d('Company foundation (Phase 1) (PostgreSQL)', () => {
     ] });
     await db.case.create({ data: { id: caseA, caseNumber: `CO-${suffix}`, title: 'Case A', caseType: 'CONTRACT_REVIEW', clientId: clientA, assignedLawyerId: lawyerId, createdById: adminId } as never });
     await db.task.create({ data: { id: taskA, title: 'Remediation Task', taskType: 'OTHER', status: 'TODO', priority: 'MEDIUM', caseId: caseA, assignedToId: lawyerId, assignedById: adminId, requiredSkills: [] } as never });
+    // Client B fixtures for cross-client relationship-security assertions.
+    await db.case.create({ data: { id: caseB, caseNumber: `CO-B-${suffix}`, title: 'Case B', caseType: 'CONTRACT_REVIEW', clientId: clientB, assignedLawyerId: externalLawyerId, createdById: adminId } as never });
+    await db.task.create({ data: { id: taskB, title: 'Task B', taskType: 'OTHER', status: 'TODO', priority: 'MEDIUM', caseId: caseB, assignedToId: externalLawyerId, assignedById: adminId, requiredSkills: [] } as never });
+    await db.document.create({ data: { id: documentB, name: 'Doc B', category: 'OTHER', caseId: caseB, clientId: clientB } as never });
+    await db.documentVersion.create({ data: { id: documentVersionB, version: 1, name: 'Doc B v1', documentId: documentB, uploadedById: adminId } as never });
   });
 
   afterAll(async () => {
@@ -154,5 +165,61 @@ d('Company foundation (Phase 1) (PostgreSQL)', () => {
     expect(json).not.toContain('verifiedById');
     expect(json).not.toContain('internalNote');
     expect(json).not.toContain('recommendation');
+  });
+
+  it('refuses to link company records across clients via relational IDs', async () => {
+    // Client A initiative must not point at a Client B Case.
+    const initA = await createInitiative(admin, clientA, { title: 'A initiative', priority: 'MEDIUM', status: 'PLANNED' });
+    await expect(updateInitiative(admin, initA.id, { caseId: caseB })).rejects.toMatchObject({ code: 'CASE_CROSS_CLIENT' });
+    await expect(createInitiative(admin, clientA, { title: 'A2', priority: 'LOW', caseId: caseB })).rejects.toMatchObject({ code: 'CASE_CROSS_CLIENT' });
+
+    // A Client B initiative for the cross-client finding/milestone assertions.
+    const initB = await createInitiative(admin, clientB, { title: 'B initiative', priority: 'MEDIUM', status: 'PLANNED' });
+
+    const assessmentA = await createAssessment(admin, clientA, { type: 'COMPANY_OPERATING', title: 'A assessment' });
+    // Client A finding must not reference Client B initiative / task.
+    await expect(createFinding(admin, { clientId: clientA, assessmentId: assessmentA.id, title: 'x', developmentInitiativeId: initB.id }))
+      .rejects.toMatchObject({ code: 'INITIATIVE_CROSS_CLIENT' });
+    await expect(createFinding(admin, { clientId: clientA, assessmentId: assessmentA.id, title: 'x', remediationTaskId: taskB }))
+      .rejects.toMatchObject({ code: 'TASK_CROSS_CLIENT' });
+
+    // link-initiative and milestone links are also client-bound.
+    const findingA = await createFinding(admin, { clientId: clientA, assessmentId: assessmentA.id, title: 'ok' });
+    await expect(linkFindingToInitiative(admin, findingA.id, initB.id)).rejects.toMatchObject({ code: 'INITIATIVE_CROSS_CLIENT' });
+    await expect(createMilestone(admin, clientA, { type: 'FIRST_EXPORT', title: 'ms', developmentInitiativeId: initB.id }))
+      .rejects.toMatchObject({ code: 'INITIATIVE_CROSS_CLIENT' });
+
+    // Evidence document from another client is rejected for facts and items.
+    await expect(createFact(admin, clientA, { type: 'CERTIFICATION', value: 'ISO', sourceDocumentVersionId: documentVersionB }))
+      .rejects.toMatchObject({ code: 'EVIDENCE_CROSS_CLIENT' });
+    await expect(addAssessmentItem(admin, assessmentA.id, { key: 'ev', label: 'Evidence', evidenceDocumentVersionId: documentVersionB }))
+      .rejects.toMatchObject({ code: 'EVIDENCE_CROSS_CLIENT' });
+  });
+
+  it('rejects an incoherent fact validity interval (validTo before validFrom)', async () => {
+    await expect(createFact(admin, clientA, { type: 'EMPLOYEE_COUNT', value: '10', validFrom: '2026-06-01T00:00:00Z', validTo: '2026-01-01T00:00:00Z' }))
+      .rejects.toMatchObject({ code: 'FACT_VALIDITY_INVALID' });
+  });
+
+  it('resets verification when a verified fact value materially changes', async () => {
+    const fact = await createFact(admin, clientA, { type: 'REVENUE_BAND', value: 'BAND_A', validFrom: '2026-01-01T00:00:00Z' });
+    const verified = await verifyFact(admin, fact.id, { verificationStatus: 'LAW_FIRM_VERIFIED' });
+    expect(verified.verificationStatus).toBe('LAW_FIRM_VERIFIED');
+    const changed = await updateFact(admin, fact.id, { value: 'BAND_B' });
+    expect(changed.verificationStatus).toBe('UNVERIFIED');
+    expect(changed.verifiedById).toBeNull();
+    expect(changed.verifiedAt).toBeNull();
+    // DOCUMENT_VERIFIED requires real evidence.
+    await expect(verifyFact(admin, fact.id, { verificationStatus: 'DOCUMENT_VERIFIED' }))
+      .rejects.toMatchObject({ code: 'FACT_EVIDENCE_REQUIRED' });
+  });
+
+  it('locks assessment items once the assessment is completed', async () => {
+    const assessment = await createAssessment(admin, clientA, { type: 'HR_GOVERNANCE', title: 'Lock' });
+    const item = await addAssessmentItem(admin, assessment.id, { key: 'k1', label: 'Q' });
+    await transitionAssessment(admin, assessment.id, 'start');
+    await transitionAssessment(admin, assessment.id, 'complete');
+    await expect(addAssessmentItem(admin, assessment.id, { key: 'k2', label: 'Q2' })).rejects.toMatchObject({ code: 'ASSESSMENT_LOCKED' });
+    await expect(updateAssessmentItem(admin, item.id, { label: 'edited' })).rejects.toMatchObject({ code: 'ASSESSMENT_LOCKED' });
   });
 });

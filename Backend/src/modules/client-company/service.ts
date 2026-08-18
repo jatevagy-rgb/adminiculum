@@ -80,6 +80,58 @@ function assertTransition(from: string, to: string, table: Record<string, string
 }
 
 /* -------------------------------------------------------------------------- */
+/* Same-client relationship guards.                                           */
+/*                                                                            */
+/* Foreign keys alone do NOT prevent a company record for Client A from       */
+/* referencing a Case / Task / DocumentVersion / DevelopmentInitiative that   */
+/* belongs to Client B. Every optional cross-entity reference taken from      */
+/* request input is therefore verified against the canonical client-ownership */
+/* path before it is persisted, so relational IDs cannot leak data across     */
+/* clients.                                                                    */
+/* -------------------------------------------------------------------------- */
+
+async function assertDocumentVersionInClient(prisma: Prisma, clientId: string, documentVersionId: string): Promise<void> {
+  const ok = await prisma.documentVersion.findFirst({ where: { id: documentVersionId, document: { clientId } }, select: { id: true } });
+  if (!ok) throw new InteractionError(400, 'EVIDENCE_CROSS_CLIENT', 'Referenced document version does not belong to this client.');
+}
+
+async function assertInitiativeInClient(prisma: Prisma, clientId: string, initiativeId: string): Promise<void> {
+  const ok = await prisma.developmentInitiative.findFirst({ where: { id: initiativeId, clientId }, select: { id: true } });
+  if (!ok) throw new InteractionError(400, 'INITIATIVE_CROSS_CLIENT', 'Referenced initiative does not belong to this client.');
+}
+
+async function assertCaseInClient(prisma: Prisma, clientId: string, caseId: string): Promise<void> {
+  const ok = await prisma.case.findFirst({ where: { id: caseId, clientId }, select: { id: true } });
+  if (!ok) throw new InteractionError(400, 'CASE_CROSS_CLIENT', 'Referenced case does not belong to this client.');
+}
+
+async function assertTaskInClient(prisma: Prisma, clientId: string, taskId: string): Promise<void> {
+  const ok = await prisma.task.findFirst({ where: { id: taskId, case: { clientId } }, select: { id: true } });
+  if (!ok) throw new InteractionError(400, 'TASK_CROSS_CLIENT', 'Referenced remediation task does not belong to this client.');
+}
+
+async function assertItemInAssessment(prisma: Prisma, assessmentId: string, itemId: string): Promise<void> {
+  const ok = await prisma.assessmentItem.findFirst({ where: { id: itemId, assessmentId }, select: { id: true } });
+  if (!ok) throw new InteractionError(400, 'ITEM_CROSS_ASSESSMENT', 'Referenced assessment item does not belong to this assessment.');
+}
+
+/** Coherent validity interval: an explicit end date may not precede the start. */
+function assertValidityInterval(validFrom: Date, validTo: Date | null): void {
+  if (validTo && validTo.getTime() < validFrom.getTime()) {
+    throw new InteractionError(400, 'FACT_VALIDITY_INVALID', 'validTo must be on or after validFrom.');
+  }
+}
+
+/** Completed/archived assessments carry finalized professional findings and
+ *  their items must not be silently mutated. Editing is limited to the working
+ *  (DRAFT / IN_PROGRESS) states; controlled reopen/versioning is future scope. */
+function assertAssessmentEditable(status: string): void {
+  if (status === 'COMPLETED' || status === 'ARCHIVED') {
+    throw new InteractionError(409, 'ASSESSMENT_LOCKED', 'A completed or archived assessment cannot be modified.');
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /* Operating profile                                                          */
 /* -------------------------------------------------------------------------- */
 
@@ -160,15 +212,19 @@ export async function createFact(actor: InternalActor, clientId: string, input: 
   if (!isCompanyFactType(type)) throw new InteractionError(400, 'FACT_TYPE_UNKNOWN', 'Unknown company fact type.');
   const value = safeText(input.value, 'value', 2000, true)!;
   const validFrom = input.validFrom ? new Date(String(input.validFrom)) : new Date();
+  const validTo = input.validTo ? new Date(String(input.validTo)) : null;
+  assertValidityInterval(validFrom, validTo);
+  const sourceDocumentVersionId = input.sourceDocumentVersionId ? String(input.sourceDocumentVersionId) : null;
+  if (sourceDocumentVersionId) await assertDocumentVersionInClient(prisma, clientId, sourceDocumentVersionId);
   const row = await prisma.clientFact.create({
     data: {
       clientId,
       type,
       value,
       validFrom,
-      validTo: input.validTo ? new Date(String(input.validTo)) : null,
+      validTo,
       sourceReference: safeText(input.sourceReference, 'sourceReference', 500, false),
-      sourceDocumentVersionId: input.sourceDocumentVersionId ? String(input.sourceDocumentVersionId) : null,
+      sourceDocumentVersionId,
       verificationStatus: 'UNVERIFIED',
     },
   });
@@ -185,7 +241,26 @@ export async function updateFact(actor: InternalActor, factId: string, input: Re
   if (input.validFrom !== undefined) data.validFrom = new Date(String(input.validFrom));
   if (input.validTo !== undefined) data.validTo = input.validTo ? new Date(String(input.validTo)) : null;
   if (input.sourceReference !== undefined) data.sourceReference = safeText(input.sourceReference, 'sourceReference', 500, false);
-  if (input.sourceDocumentVersionId !== undefined) data.sourceDocumentVersionId = input.sourceDocumentVersionId ? String(input.sourceDocumentVersionId) : null;
+  if (input.sourceDocumentVersionId !== undefined) {
+    data.sourceDocumentVersionId = input.sourceDocumentVersionId ? String(input.sourceDocumentVersionId) : null;
+    if (data.sourceDocumentVersionId) await assertDocumentVersionInClient(prisma, row.clientId, data.sourceDocumentVersionId);
+  }
+  // Coherent validity interval on the effective (post-update) values.
+  const effectiveFrom = data.validFrom ?? row.validFrom;
+  const effectiveTo = data.validTo !== undefined ? data.validTo : row.validTo;
+  assertValidityInterval(effectiveFrom, effectiveTo);
+  // Verification is server-authoritative and evidence-bound: a material change
+  // to the asserted value or its source document must NOT silently retain a
+  // prior verification. Reset to UNVERIFIED and clear the workforce attestation
+  // so a fresh verification is required (history is preferred over a forged
+  // attestation; full temporal versioning is deferred).
+  const valueChanged = data.value !== undefined && data.value !== row.value;
+  const sourceChanged = data.sourceDocumentVersionId !== undefined && data.sourceDocumentVersionId !== row.sourceDocumentVersionId;
+  if (String(row.verificationStatus) !== 'UNVERIFIED' && (valueChanged || sourceChanged)) {
+    data.verificationStatus = 'UNVERIFIED';
+    data.verifiedById = null;
+    data.verifiedAt = null;
+  }
   const updated = await prisma.clientFact.update({ where: { id: factId }, data });
   return toFactDTO(updated);
 }
@@ -200,6 +275,10 @@ export async function verifyFact(actor: InternalActor, factId: string, input: Re
   const row = await prisma.clientFact.findUnique({ where: { id: factId } });
   if (!row) throw new InteractionError(404, 'FACT_NOT_FOUND', 'Fact not found.');
   await assertClientReadAccess(actor, row.clientId, prisma);
+  // DOCUMENT_VERIFIED must reference real evidence.
+  if (status === 'DOCUMENT_VERIFIED' && !row.sourceDocumentVersionId) {
+    throw new InteractionError(400, 'FACT_EVIDENCE_REQUIRED', 'Document verification requires a source document version.');
+  }
   const updated = await prisma.clientFact.update({
     where: { id: factId },
     data: { verificationStatus: status as any, verifiedById: actor.userId, verifiedAt: new Date() },
@@ -250,6 +329,8 @@ export async function createMilestone(actor: InternalActor, clientId: string, in
   if (!isCompanyMilestoneType(type)) throw new InteractionError(400, 'MILESTONE_TYPE_UNKNOWN', 'Unknown company milestone type.');
   const status = String(input.status || 'PLANNED');
   if (!MILESTONE_STATUS.has(status)) throw new InteractionError(400, 'MILESTONE_STATUS_INVALID', 'Invalid milestone status.');
+  const developmentInitiativeId = input.developmentInitiativeId ? String(input.developmentInitiativeId) : null;
+  if (developmentInitiativeId) await assertInitiativeInClient(prisma, clientId, developmentInitiativeId);
   const row = await prisma.companyMilestone.create({
     data: {
       clientId,
@@ -259,7 +340,7 @@ export async function createMilestone(actor: InternalActor, clientId: string, in
       milestoneDate: input.milestoneDate ? new Date(String(input.milestoneDate)) : null,
       targetDate: input.targetDate ? new Date(String(input.targetDate)) : null,
       status: status as any,
-      developmentInitiativeId: input.developmentInitiativeId ? String(input.developmentInitiativeId) : null,
+      developmentInitiativeId,
       createdByUserId: actor.userId,
     },
   });
@@ -280,7 +361,10 @@ export async function updateMilestone(actor: InternalActor, milestoneId: string,
     assertTransition(String(row.status), String(input.status), { PLANNED: ['ACHIEVED', 'CANCELLED'], ACHIEVED: ['PLANNED'], CANCELLED: ['PLANNED'] });
     data.status = String(input.status);
   }
-  if (input.developmentInitiativeId !== undefined) data.developmentInitiativeId = input.developmentInitiativeId ? String(input.developmentInitiativeId) : null;
+  if (input.developmentInitiativeId !== undefined) {
+    data.developmentInitiativeId = input.developmentInitiativeId ? String(input.developmentInitiativeId) : null;
+    if (data.developmentInitiativeId) await assertInitiativeInClient(prisma, row.clientId, data.developmentInitiativeId);
+  }
   const updated = await prisma.companyMilestone.update({ where: { id: milestoneId }, data });
   return toMilestoneDTO(updated);
 }
@@ -413,8 +497,11 @@ export async function addAssessmentItem(actor: InternalActor, assessmentId: stri
   const assessment = await prisma.assessment.findUnique({ where: { id: assessmentId } });
   if (!assessment) throw new InteractionError(404, 'ASSESSMENT_NOT_FOUND', 'Assessment not found.');
   await assertClientReadAccess(actor, assessment.clientId, prisma);
+  assertAssessmentEditable(assessment.status);
   const maturityLevel = input.maturityLevel != null && input.maturityLevel !== '' ? Number(input.maturityLevel) : null;
   if (maturityLevel != null && (maturityLevel < 0 || maturityLevel > 5)) throw new InteractionError(400, 'MATURITY_LEVEL_INVALID', 'Maturity level must be 0-5.');
+  const evidenceDocumentVersionId = input.evidenceDocumentVersionId ? String(input.evidenceDocumentVersionId) : null;
+  if (evidenceDocumentVersionId) await assertDocumentVersionInClient(prisma, assessment.clientId, evidenceDocumentVersionId);
   const row = await prisma.assessmentItem.create({
     data: {
       assessmentId,
@@ -428,7 +515,7 @@ export async function addAssessmentItem(actor: InternalActor, assessmentId: stri
       comment: safeText(input.comment, 'comment', 2000, false),
       targetState: safeText(input.targetState, 'targetState', 2000, false),
       reviewerUserId: input.reviewerUserId ? String(input.reviewerUserId) : null,
-      evidenceDocumentVersionId: input.evidenceDocumentVersionId ? String(input.evidenceDocumentVersionId) : null,
+      evidenceDocumentVersionId,
     },
   });
   return toItemDTO(row);
@@ -439,6 +526,7 @@ export async function updateAssessmentItem(actor: InternalActor, itemId: string,
   const row = await prisma.assessmentItem.findUnique({ where: { id: itemId }, include: { assessment: true } });
   if (!row) throw new InteractionError(404, 'ITEM_NOT_FOUND', 'Assessment item not found.');
   await assertClientReadAccess(actor, row.assessment.clientId, prisma);
+  assertAssessmentEditable(String(row.assessment.status));
   const data: any = {};
   if (input.label !== undefined) data.label = safeText(input.label, 'label', 240, true)!;
   if (input.currentPractice !== undefined) data.currentPractice = safeText(input.currentPractice, 'currentPractice', 2000, false);
@@ -452,7 +540,10 @@ export async function updateAssessmentItem(actor: InternalActor, itemId: string,
   if (input.comment !== undefined) data.comment = safeText(input.comment, 'comment', 2000, false);
   if (input.targetState !== undefined) data.targetState = safeText(input.targetState, 'targetState', 2000, false);
   if (input.reviewerUserId !== undefined) data.reviewerUserId = input.reviewerUserId ? String(input.reviewerUserId) : null;
-  if (input.evidenceDocumentVersionId !== undefined) data.evidenceDocumentVersionId = input.evidenceDocumentVersionId ? String(input.evidenceDocumentVersionId) : null;
+  if (input.evidenceDocumentVersionId !== undefined) {
+    data.evidenceDocumentVersionId = input.evidenceDocumentVersionId ? String(input.evidenceDocumentVersionId) : null;
+    if (data.evidenceDocumentVersionId) await assertDocumentVersionInClient(prisma, row.assessment.clientId, data.evidenceDocumentVersionId);
+  }
   const updated = await prisma.assessmentItem.update({ where: { id: itemId }, data });
   return toItemDTO(updated);
 }
@@ -505,18 +596,24 @@ export async function createFinding(actor: InternalActor, input: Record<string, 
   const assessmentId = String(input.assessmentId || '');
   const assessment = await prisma.assessment.findFirst({ where: { id: assessmentId, clientId }, select: { id: true } });
   if (!assessment) throw new InteractionError(404, 'ASSESSMENT_NOT_FOUND', 'Assessment not found for this client.');
+  const assessmentItemId = input.assessmentItemId ? String(input.assessmentItemId) : null;
+  if (assessmentItemId) await assertItemInAssessment(prisma, assessmentId, assessmentItemId);
+  const developmentInitiativeId = input.developmentInitiativeId ? String(input.developmentInitiativeId) : null;
+  if (developmentInitiativeId) await assertInitiativeInClient(prisma, clientId, developmentInitiativeId);
+  const remediationTaskId = input.remediationTaskId ? String(input.remediationTaskId) : null;
+  if (remediationTaskId) await assertTaskInClient(prisma, clientId, remediationTaskId);
   const row = await prisma.assessmentFinding.create({
     data: {
       clientId,
       assessmentId,
-      assessmentItemId: input.assessmentItemId ? String(input.assessmentItemId) : null,
+      assessmentItemId,
       severity: findingSeverity(input.severity) as any,
       title: safeText(input.title, 'title', 240, true)!,
       description: safeText(input.description, 'description', 3000, false),
       recommendation: safeText(input.recommendation, 'recommendation', 3000, false),
       status: 'OPEN',
-      developmentInitiativeId: input.developmentInitiativeId ? String(input.developmentInitiativeId) : null,
-      remediationTaskId: input.remediationTaskId ? String(input.remediationTaskId) : null,
+      developmentInitiativeId,
+      remediationTaskId,
       createdByUserId: actor.userId,
     },
   });
@@ -540,6 +637,7 @@ export async function linkFindingToInitiative(actor: InternalActor, findingId: s
   const row = await prisma.assessmentFinding.findUnique({ where: { id: findingId } });
   if (!row) throw new InteractionError(404, 'FINDING_NOT_FOUND', 'Finding not found.');
   await assertClientReadAccess(actor, row.clientId, prisma);
+  if (developmentInitiativeId) await assertInitiativeInClient(prisma, row.clientId, developmentInitiativeId);
   const updated = await prisma.assessmentFinding.update({ where: { id: findingId }, data: { developmentInitiativeId } });
   return toFindingDTO(updated);
 }
@@ -591,6 +689,8 @@ export async function createInitiative(actor: InternalActor, clientId: string, i
   await assertClientReadAccess(actor, clientId, prisma);
   const status = String(input.status || 'BACKLOG');
   if (!INITIATIVE_STATUS.has(status)) throw new InteractionError(400, 'INITIATIVE_STATUS_INVALID', 'Invalid initiative status.');
+  const caseId = input.caseId ? String(input.caseId) : null;
+  if (caseId) await assertCaseInClient(prisma, clientId, caseId);
   const row = await prisma.developmentInitiative.create({
     data: {
       clientId,
@@ -601,7 +701,7 @@ export async function createInitiative(actor: InternalActor, clientId: string, i
       priority: initiativePriority(input.priority) as any,
       status: status as any,
       lawFirmOwnerUserId: input.lawFirmOwnerUserId ? String(input.lawFirmOwnerUserId) : null,
-      caseId: input.caseId ? String(input.caseId) : null,
+      caseId,
       targetAt: input.targetAt ? new Date(String(input.targetAt)) : null,
     },
   });
@@ -634,7 +734,10 @@ export async function updateInitiative(actor: InternalActor, initiativeId: strin
     if (String(input.status) === 'PLANNED' && row.status === 'COMPLETED') data.completedAt = null;
   }
   if (input.lawFirmOwnerUserId !== undefined) data.lawFirmOwnerUserId = input.lawFirmOwnerUserId ? String(input.lawFirmOwnerUserId) : null;
-  if (input.caseId !== undefined) data.caseId = input.caseId ? String(input.caseId) : null;
+  if (input.caseId !== undefined) {
+    data.caseId = input.caseId ? String(input.caseId) : null;
+    if (data.caseId) await assertCaseInClient(prisma, row.clientId, data.caseId);
+  }
   if (input.targetAt !== undefined) data.targetAt = input.targetAt ? new Date(String(input.targetAt)) : null;
   const updated = await prisma.developmentInitiative.update({ where: { id: initiativeId }, data });
   return toInitiativeDTO(updated);

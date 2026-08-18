@@ -197,3 +197,22 @@ export function initiativeStatusLabel(status: string): string {
   };
   return labels[status] || status;
 }
+
+export function assessmentStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    DRAFT: 'Piszkozat',
+    IN_PROGRESS: 'Folyamatban',
+    COMPLETED: 'Lezárva',
+    ARCHIVED: 'Archivált',
+  };
+  return labels[status] || status;
+}
+
+export function companyMilestoneStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    PLANNED: 'Tervezett',
+    ACHIEVED: 'Teljesült',
+    CANCELLED: 'Törölve',
+  };
+  return labels[status] || status;
+}

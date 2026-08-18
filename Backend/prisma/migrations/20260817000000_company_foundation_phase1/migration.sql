@@ -270,4 +270,3 @@ ALTER TABLE "development_initiatives" ADD CONSTRAINT "development_initiatives_la
 
 -- AddForeignKey
 ALTER TABLE "development_initiatives" ADD CONSTRAINT "development_initiatives_caseId_fkey" FOREIGN KEY ("caseId") REFERENCES "cases"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-

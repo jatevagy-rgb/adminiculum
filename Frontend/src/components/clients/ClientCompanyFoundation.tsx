@@ -6,6 +6,8 @@ import {
   companyFactTypeLabel,
   factVerificationLabel,
   assessmentTypeLabel,
+  assessmentStatusLabel,
+  companyMilestoneStatusLabel,
   initiativeStatusLabel,
   type CompanyAssessment,
   type CompanyFact,
@@ -103,7 +105,7 @@ export function ClientCompanyFoundation({ clientId }: { clientId: string }) {
                       <b className="text-[var(--adm-text)]">{assessment.title}</b>
                       <span className="ml-2 text-xs text-[var(--adm-text-muted)]">{assessmentTypeLabel(assessment.type)}</span>
                     </div>
-                    <span className={labelCls}>{assessment.status}</span>
+                    <span className={labelCls}>{assessmentStatusLabel(assessment.status)}</span>
                   </div>
                   {assessment.findingCount != null ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Megállapítások: {assessment.findingCount}</p> : null}
                 </div>
@@ -133,7 +135,7 @@ export function ClientCompanyFoundation({ clientId }: { clientId: string }) {
                   <div key={milestone.id} className="rounded bg-white border border-[var(--adm-border)] p-2 text-sm">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <b className="text-[var(--adm-text)]">{milestone.title}</b>
-                      <span className={labelCls}>{milestone.status}</span>
+                      <span className={labelCls}>{companyMilestoneStatusLabel(milestone.status)}</span>
                     </div>
                     {milestone.targetDate ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Cél: {new Date(milestone.targetDate).toLocaleDateString("hu-HU")}</p> : null}
                   </div>
