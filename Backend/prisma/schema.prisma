@@ -90,6 +90,12 @@ model User {
   automationTriggerEvents           AutomationTriggerEvent[]
   automationPreference              UserAutomationPreference?
   automationSuppressions            UserAutomationSuppression[]
+  verifiedCompanyFacts               ClientFact[]
+  createdCompanyMilestones           CompanyMilestone[]
+  createdAssessments                 Assessment[]
+  reviewedAssessmentItems            AssessmentItem[]
+  createdAssessmentFindings          AssessmentFinding[]
+  ownedDevelopmentInitiatives        DevelopmentInitiative[]
 
   @@map("users")
 }
@@ -157,6 +163,12 @@ model Client {
   workgroups        ClientWorkgroup[] // Client workgroups for workload tracking
   redactorProfile   ClientRedactionProfile? // One-to-one relation for anonymization
   houseStyleProfile ClientHouseStyleProfile? // One-to-one relation for document house style
+  operatingProfile  ClientOperatingProfile? // Company foundation (Phase 1)
+  facts             ClientFact[] // Company foundation (Phase 1)
+  companyMilestones CompanyMilestone[] // Company foundation (Phase 1)
+  assessments       Assessment[] // Company foundation (Phase 1)
+  assessmentFindings AssessmentFinding[] // Company foundation (Phase 1)
+  developmentInitiatives DevelopmentInitiative[] // Company foundation (Phase 1)
 
   @@map("clients")
 }
@@ -761,6 +773,7 @@ model Case {
   lawyerHandoffPackages     LawyerHandoffPackage[]
   externalParticipants      CaseExternalParticipant[]
   intakeDeadlines           CaseIntakeDeadline[]
+  developmentInitiatives    DevelopmentInitiative[]
 
   @@map("cases")
 }
@@ -1053,6 +1066,8 @@ model DocumentVersion {
   reviewRounds            DocumentReviewRound[]      @relation("DocumentReviewRoundVersion")
   approvedReviews         DocumentReview[]           @relation("DocumentReviewApprovedVersion")
   reviewDecisions         ReviewDecision[]           @relation("ReviewDecisionVersion")
+  clientFactSources        ClientFact[]
+  assessmentItemEvidence   AssessmentItem[]
 
   @@unique([documentId, version])
   @@unique([documentId, id])
@@ -1546,6 +1561,7 @@ model Task {
   timeEntries           TimeEntry[]
   documentLinks         DocumentTaskLink[]
   reviewPoints          ReviewPoint[]
+  remediationFindings   AssessmentFinding[]
 
   @@index([complexityScore], map: "tasks_complexityScore_idx")
   @@index([maturityStage], map: "tasks_maturityStage_idx")
@@ -3847,4 +3863,239 @@ model ClientNotificationDelivery {
   @@index([intakeRequestId])
   @@index([clientId])
   @@map("client_notification_deliveries")
+}
+
+// ============================================================================
+// PHASE 1 — COMPANY FOUNDATION (generic, extensible).
+// ClientOperatingProfile / ClientFact / CompanyMilestone / Assessment /
+// AssessmentItem / AssessmentFinding / DevelopmentInitiative.
+// Extensible taxonomies (fact type, milestone type, assessment type) are
+// validated STRING codes via the server registry — NOT Prisma enums — so new
+// post-release packs (SUPPLIER_READINESS, AI_GOVERNANCE, ...) never require a
+// migration. Stable lifecycles use Prisma enums.
+// No second Client / Task / Document / org-unit hierarchy is introduced.
+// ============================================================================
+
+model ClientOperatingProfile {
+  id             String   @id @default(uuid())
+  clientId       String   @unique
+  client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  status         String?
+  summary        String?
+  internalNote   String?
+  lastReviewedAt DateTime?
+  nextReviewAt   DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("client_operating_profiles")
+}
+
+enum ClientFactVerificationStatus {
+  UNVERIFIED
+  CLIENT_PROVIDED
+  DOCUMENT_VERIFIED
+  LAW_FIRM_VERIFIED
+}
+
+model ClientFact {
+  id                       String                      @id @default(uuid())
+  clientId                 String
+  client                   Client                      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type                     String
+  value                    String
+  validFrom                DateTime
+  validTo                  DateTime?
+  sourceReference          String?
+  sourceDocumentVersionId  String?
+  sourceDocumentVersion    DocumentVersion?            @relation(fields: [sourceDocumentVersionId], references: [id], onDelete: SetNull)
+  verificationStatus       ClientFactVerificationStatus @default(UNVERIFIED)
+  verifiedById             String?
+  verifiedBy               User?                       @relation(fields: [verifiedById], references: [id], onDelete: SetNull)
+  verifiedAt               DateTime?
+  createdAt                DateTime                    @default(now())
+  updatedAt                DateTime                    @updatedAt
+
+  @@index([clientId, type, validFrom])
+  @@index([clientId, verificationStatus])
+  @@index([sourceDocumentVersionId])
+  @@map("client_facts")
+}
+
+enum CompanyMilestoneStatus {
+  PLANNED
+  ACHIEVED
+  CANCELLED
+}
+
+model CompanyMilestone {
+  id                       String                   @id @default(uuid())
+  clientId                 String
+  client                   Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type                     String
+  title                    String
+  description              String?
+  milestoneDate            DateTime?
+  targetDate               DateTime?
+  status                   CompanyMilestoneStatus    @default(PLANNED)
+  developmentInitiativeId  String?
+  developmentInitiative    DevelopmentInitiative?    @relation(fields: [developmentInitiativeId], references: [id], onDelete: SetNull)
+  createdByUserId          String
+  createdBy                User                     @relation(fields: [createdByUserId], references: [id])
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+
+  @@index([clientId, status])
+  @@index([clientId, milestoneDate])
+  @@index([developmentInitiativeId])
+  @@map("company_milestones")
+}
+
+enum AssessmentStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  ARCHIVED
+}
+
+enum AssessmentItemKind {
+  FACT
+  QUESTION
+  CHECK
+}
+
+model Assessment {
+  id             String          @id @default(uuid())
+  clientId       String
+  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type           String
+  title          String
+  status         AssessmentStatus @default(DRAFT)
+  methodRef      String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  reviewAt       DateTime?
+  createdByUserId String
+  createdBy      User            @relation(fields: [createdByUserId], references: [id])
+  items          AssessmentItem[]
+  findings       AssessmentFinding[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([clientId, status])
+  @@index([clientId, type])
+  @@map("assessments")
+}
+
+model AssessmentItem {
+  id                        String            @id @default(uuid())
+  assessmentId              String
+  assessment                Assessment        @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  key                       String
+  label                     String
+  kind                      AssessmentItemKind @default(QUESTION)
+  currentPractice           String?
+  maturityLevel             Int?
+  statusCode                String?
+  evidenceSummary           String?
+  comment                   String?
+  targetState               String?
+  reviewerUserId            String?
+  reviewer                  User?             @relation(fields: [reviewerUserId], references: [id], onDelete: SetNull)
+  evidenceDocumentVersionId String?
+  evidenceDocumentVersion   DocumentVersion?  @relation(fields: [evidenceDocumentVersionId], references: [id], onDelete: SetNull)
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+  findings                  AssessmentFinding[]
+
+  @@unique([assessmentId, key])
+  @@index([assessmentId])
+  @@index([evidenceDocumentVersionId])
+  @@map("assessment_items")
+}
+
+enum AssessmentFindingSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AssessmentFindingStatus {
+  OPEN
+  ACKNOWLEDGED
+  ACTION_PLANNED
+  RESOLVED
+}
+
+model AssessmentFinding {
+  id                       String                     @id @default(uuid())
+  clientId                 String
+  client                   Client                     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assessmentId             String
+  assessment               Assessment                 @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  assessmentItemId         String?
+  assessmentItem           AssessmentItem?            @relation(fields: [assessmentItemId], references: [id], onDelete: SetNull)
+  severity                 AssessmentFindingSeverity  @default(MEDIUM)
+  title                    String
+  description              String?
+  recommendation           String?
+  status                   AssessmentFindingStatus    @default(OPEN)
+  developmentInitiativeId  String?
+  developmentInitiative    DevelopmentInitiative?     @relation(fields: [developmentInitiativeId], references: [id], onDelete: SetNull)
+  remediationTaskId        String?
+  remediationTask          Task?                      @relation(fields: [remediationTaskId], references: [id], onDelete: SetNull)
+  createdByUserId          String
+  createdBy                User                       @relation(fields: [createdByUserId], references: [id])
+  createdAt                DateTime                   @default(now())
+  updatedAt                DateTime                   @updatedAt
+
+  @@index([assessmentId])
+  @@index([clientId, status])
+  @@index([developmentInitiativeId])
+  @@index([remediationTaskId])
+  @@map("assessment_findings")
+}
+
+enum DevelopmentInitiativePriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum DevelopmentInitiativeStatus {
+  BACKLOG
+  PLANNED
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+model DevelopmentInitiative {
+  id                  String                         @id @default(uuid())
+  clientId            String
+  client              Client                         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title               String
+  reason              String?
+  currentState        String?
+  targetState         String?
+  priority            DevelopmentInitiativePriority   @default(MEDIUM)
+  status              DevelopmentInitiativeStatus     @default(BACKLOG)
+  lawFirmOwnerUserId  String?
+  lawFirmOwner        User?                          @relation(fields: [lawFirmOwnerUserId], references: [id], onDelete: SetNull)
+  caseId              String?
+  case                Case?                          @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  targetAt            DateTime?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  milestones          CompanyMilestone[]
+  findings            AssessmentFinding[]
+  createdAt           DateTime                       @default(now())
+  updatedAt           DateTime                       @updatedAt
+
+  @@index([clientId, status])
+  @@index([caseId])
+  @@index([lawFirmOwnerUserId])
+  @@map("development_initiatives")
 }

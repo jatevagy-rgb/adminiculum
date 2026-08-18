@@ -22,6 +22,7 @@ import {
 } from "@/lib/api";
 import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePanel";
 import { ClientColorSelector } from "@/components/clients/ClientColorSelector";
+import { ClientCompanyFoundation } from "@/components/clients/ClientCompanyFoundation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 
 type DossierDocument = DocumentItem & { caseNumber: string; caseId: string };
@@ -510,6 +511,10 @@ function ClientDetailContent() {
             <div className="mt-3">
               <ClientHouseStylePanel clientId={clientId} clientName={client.name} />
             </div>
+          </section>
+
+          <section id="vallalati-mukodes" className="mt-4 scroll-mt-24 border-t border-[var(--adm-border)] pt-3">
+            <ClientCompanyFoundation clientId={clientId} />
           </section>
         </div>
       </aside>

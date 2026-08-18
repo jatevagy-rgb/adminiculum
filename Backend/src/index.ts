@@ -242,6 +242,9 @@ app.use('/api/v1/internal/client-interaction', clientInteractionInternalRouter);
 import { clientPublicationRouter } from './modules/client-publication/publication.routes';
 app.use('/api/v1/client-publications', clientPublicationRouter);
 
+import { clientCompanyRouter } from './modules/client-company/routes';
+app.use('/api/v1/client-company', clientCompanyRouter);
+
 import contractsRoutes from './modules/contracts/routes';
 app.use('/api/v1/contracts', contractsRoutes);
 
