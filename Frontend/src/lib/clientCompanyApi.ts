@@ -198,6 +198,26 @@ export function initiativeStatusLabel(status: string): string {
   return labels[status] || status;
 }
 
+export function companyFindingSeverityLabel(severity: string): string {
+  const labels: Record<string, string> = {
+    LOW: 'Alacsony',
+    MEDIUM: 'Közepes',
+    HIGH: 'Magas',
+    CRITICAL: 'Kritikus',
+  };
+  return labels[severity] || severity;
+}
+
+export function companyFindingStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    OPEN: 'Nyitott',
+    ACKNOWLEDGED: 'Tudomásul véve',
+    ACTION_PLANNED: 'Intézkedés tervezve',
+    RESOLVED: 'Megoldva',
+  };
+  return labels[status] || status;
+}
+
 export function assessmentStatusLabel(status: string): string {
   const labels: Record<string, string> = {
     DRAFT: 'Piszkozat',

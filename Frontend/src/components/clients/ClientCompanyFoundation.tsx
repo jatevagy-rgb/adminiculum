@@ -6,11 +6,14 @@ import {
   companyFactTypeLabel,
   factVerificationLabel,
   assessmentTypeLabel,
-  assessmentStatusLabel,
-  companyMilestoneStatusLabel,
   initiativeStatusLabel,
+  assessmentStatusLabel,
+  companyFindingSeverityLabel,
+  companyFindingStatusLabel,
+  companyMilestoneStatusLabel,
   type CompanyAssessment,
   type CompanyFact,
+  type CompanyFinding,
   type CompanyMilestone,
   type DevelopmentInitiative,
 } from "@/lib/clientCompanyApi";
@@ -33,6 +36,7 @@ export function ClientCompanyFoundation({ clientId }: { clientId: string }) {
   const [facts, setFacts] = useState<CompanyFact[]>([]);
   const [milestones, setMilestones] = useState<CompanyMilestone[]>([]);
   const [assessments, setAssessments] = useState<CompanyAssessment[]>([]);
+  const [findings, setFindings] = useState<CompanyFinding[]>([]);
   const [initiatives, setInitiatives] = useState<DevelopmentInitiative[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,17 +45,19 @@ export function ClientCompanyFoundation({ clientId }: { clientId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const [profileResult, factsResult, milestonesResult, assessmentsResult, initiativesResult] = await Promise.all([
+      const [profileResult, factsResult, milestonesResult, assessmentsResult, findingsResult, initiativesResult] = await Promise.all([
         clientCompanyApi.getProfile(clientId),
         clientCompanyApi.listFacts(clientId),
         clientCompanyApi.listMilestones(clientId),
         clientCompanyApi.listAssessments(clientId),
+        clientCompanyApi.listFindings(clientId),
         clientCompanyApi.listInitiatives(clientId),
       ]);
       setProfile(profileResult);
       setFacts(factsResult.items);
       setMilestones(milestonesResult.items);
       setAssessments(assessmentsResult.items);
+      setFindings(findingsResult.items);
       setInitiatives(initiativesResult.items);
     } catch {
       setError("A vállalati működés adatai nem tölthetők be.");
@@ -98,18 +104,37 @@ export function ClientCompanyFoundation({ clientId }: { clientId: string }) {
 
           <Section title="Felmérések" empty={!assessments.length}>
             <div className="grid gap-2">
-              {assessments.map((assessment) => (
-                <div key={assessment.id} className="rounded bg-white border border-[var(--adm-border)] p-2 text-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <b className="text-[var(--adm-text)]">{assessment.title}</b>
-                      <span className="ml-2 text-xs text-[var(--adm-text-muted)]">{assessmentTypeLabel(assessment.type)}</span>
+              {assessments.map((assessment) => {
+                const assessmentFindings = findings.filter((finding) => finding.assessmentId === assessment.id);
+                return (
+                  <div key={assessment.id} className="rounded bg-white border border-[var(--adm-border)] p-2 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <b className="text-[var(--adm-text)]">{assessment.title}</b>
+                        <span className="ml-2 text-xs text-[var(--adm-text-muted)]">{assessmentTypeLabel(assessment.type)}</span>
+                      </div>
+                      <span className={labelCls}>{assessmentStatusLabel(assessment.status)}</span>
                     </div>
-                    <span className={labelCls}>{assessmentStatusLabel(assessment.status)}</span>
+                    {assessment.itemCount != null ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Tételek: {assessment.itemCount}</p> : null}
+                    {assessmentFindings.length ? (
+                      <>
+                        <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Megállapítások: {assessmentFindings.length}</p>
+                        <div className="mt-2 space-y-1">
+                          {assessmentFindings.map((finding) => (
+                            <div key={finding.id} className="rounded bg-[var(--adm-ivory-100)] p-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <b className="text-[var(--adm-text)]">{finding.title}</b>
+                                <span className={labelCls}>{companyFindingSeverityLabel(finding.severity)}</span>
+                              </div>
+                              <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Státusz: {companyFindingStatusLabel(finding.status)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
                   </div>
-                  {assessment.findingCount != null ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Megállapítások: {assessment.findingCount}</p> : null}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </Section>
 
