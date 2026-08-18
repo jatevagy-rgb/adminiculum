@@ -2,8 +2,6 @@
  * Adminiculum Backend V2 - Main Application Entry Point (minimal deployable)
  */
 
-import 'dotenv/config';
-
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
