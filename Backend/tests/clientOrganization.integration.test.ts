@@ -104,8 +104,8 @@ d('Organization / responsibility map (Phase 3) (PostgreSQL)', () => {
       { id: portalIdentityId2, provider: 'ENTRA_EXTERNAL_ID', issuer: 'https://issuer.test', subject: `sub2-${suffix}`, normalizedEmail: `person2-${suffix}@test.invalid`, displayName: 'Portal Person 2', accountType: 'ORGANIZATION_MEMBER' },
     ] as never });
     await db.clientPortalWorkspace.createMany({ data: [
-      { id: workspaceA, clientId: clientA, name: 'A workspace', mode: 'ORGANIZATION', createdById: adminId },
-      { id: workspaceB, clientId: clientB, name: 'B workspace', mode: 'ORGANIZATION', createdById: adminId },
+      { id: workspaceA, clientId: clientA, name: 'A workspace', mode: 'ORGANIZATION', createdById: adminId, publicReference: `ws-a-${suffix}` },
+      { id: workspaceB, clientId: clientB, name: 'B workspace', mode: 'ORGANIZATION', createdById: adminId, publicReference: `ws-b-${suffix}` },
     ] as never });
     await db.clientPortalWorkspaceMembership.createMany({ data: [
       { id: membershipA, clientPortalIdentityId: portalIdentityId, workspaceId: workspaceA, status: 'ACTIVE' },
