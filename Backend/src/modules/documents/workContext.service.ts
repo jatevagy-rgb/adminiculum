@@ -15,6 +15,7 @@
 import { Request } from 'express';
 import { prisma } from '../../prisma/prisma.service';
 import { userCanReadCase, userCanManageCase } from '../cases/authorization';
+import { hrConfidentialReadAllowed } from './authorization';
 
 export class DocumentWorkContextError extends Error {
   constructor(public readonly code: string, message: string, public readonly status = 400) {
@@ -325,8 +326,11 @@ export async function listTaskDocuments(req: Request, taskId: string) {
   if (read === null) throw new DocumentWorkContextError('TASK_NOT_FOUND', 'Task not found.', 404);
   if (!read) throw new DocumentWorkContextError('TASK_ACCESS_FORBIDDEN', 'You do not have access to this task.', 403);
 
+  const privileged = hrConfidentialReadAllowed(String(req.user?.role || ''));
   const links = await prisma.documentTaskLink.findMany({
-    where: { taskId },
+    // Phase 3: non-privileged users must not see HR_CONFIDENTIAL documents
+    // (title/filename/existence) through a task's linked-document list.
+    where: { taskId, ...(privileged ? {} : { document: { securityClassification: { not: 'HR_CONFIDENTIAL' } } }) },
     orderBy: { createdAt: 'asc' },
     take: 50,
     select: {

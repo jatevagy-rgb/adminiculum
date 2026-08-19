@@ -20,7 +20,7 @@ import {
 import reviewSuggestionsRoutes from './reviewSuggestions.routes';
 import { authenticate } from '../../middleware/auth';
 import { prisma } from '../../prisma/prisma.service';
-import { requireDocumentReadAccess, requireDocumentManageAccess } from './authorization';
+import { requireDocumentReadAccess, requireDocumentManageAccess, requireHrConfidentialReadAccess } from './authorization';
 import { userCanManageCase } from '../cases/authorization';
 import { createTaskFromDocumentSource, SourceLinkedTaskError } from '../tasks/services';
 import { getDocumentEditorMetadata } from '../documentEditor/service';
@@ -41,7 +41,7 @@ router.use('/:documentId/versions/:versionId/annotations', annotationRoutes);
 // Logical document work metadata and the two-way document/task relationship.
 // Version review/publication state is untouched by these routes.
 // ============================================================================
-router.get('/:id/work-context', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/work-context', authenticate, requireHrConfidentialReadAccess, async (req: Request, res: Response): Promise<void> => {
   try { res.json(await getDocumentWorkContext(req, String(req.params.id || ''))); }
   catch (error) { sendWorkContextError(res, error); }
 });
@@ -139,7 +139,7 @@ router.get('/search', authenticate, async (req: Request, res: Response): Promise
       return;
     }
 
-    const results = await documentsService.searchDocuments(q, limit);
+    const results = await documentsService.searchDocuments(q, limit, String((req as any).user?.role || ''));
     res.json(results);
   } catch (error) {
     console.error('Search documents error:', error);
@@ -378,7 +378,7 @@ function sendDocumentCommentError(res: Response, error: unknown): void {
  * GET /api/v1/documents/:id/comments
  * Document-level comments only. No selected text, anchors, editor JSON, or content persistence.
  */
-router.get('/:id/comments', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/comments', authenticate, requireHrConfidentialReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const result = await listDocumentComments(req, String(req.params.id || ''), req.query);
     res.json(result);
@@ -630,7 +630,7 @@ router.post('/:id/versions/:versionId/promote-current', authenticate, requireDoc
  * GET /api/v1/documents/:id
  * Get document by ID
  */
-router.get('/:id', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id', authenticate, requireHrConfidentialReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const document = await documentsService.getDocumentById(id);
@@ -659,7 +659,7 @@ router.get('/:id', authenticate, async (req: Request, res: Response): Promise<vo
  * GET /api/v1/documents/:id/text
  * Extract readable text from the real SharePoint-backed document when available.
  */
-router.get('/:id/text', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/text', authenticate, requireHrConfidentialReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const document = await prisma.document.findUnique({
@@ -988,10 +988,10 @@ router.post('/:id/save-workspace-version', authenticate, async (req: Request, re
  * GET /api/v1/documents/:id/download
  * Download document from SharePoint
  */
-router.get('/:id/download', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/download', authenticate, requireHrConfidentialReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
-    
+
     // Get document to find SharePoint item ID
     const document = await prisma.document.findUnique({
       where: { id }

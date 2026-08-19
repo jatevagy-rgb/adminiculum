@@ -128,4 +128,3 @@ ALTER TABLE "organization_person_document_links" ADD CONSTRAINT "organization_pe
 
 -- AddForeignKey
 ALTER TABLE "organization_person_document_links" ADD CONSTRAINT "organization_person_document_links_documentVersionId_fkey" FOREIGN KEY ("documentVersionId") REFERENCES "document_versions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-

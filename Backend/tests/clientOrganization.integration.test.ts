@@ -25,8 +25,9 @@ import {
   updateGroup,
   updatePerson,
 } from '../src/modules/client-organization/service';
-import { hrConfidentialReadAllowed } from '../src/modules/documents/authorization';
+import { hrConfidentialReadAllowed, requireHrConfidentialReadAccess } from '../src/modules/documents/authorization';
 import documentsService from '../src/modules/documents/services';
+import { listTaskDocuments } from '../src/modules/documents/workContext.service';
 
 const databaseUrl = process.env.CLIENT_INTERACTION_TEST_DATABASE_URL || process.env.CLIENT_IDENTITY_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const d = databaseUrl ? describe : describe.skip;
@@ -49,6 +50,13 @@ d('Organization / responsibility map (Phase 3) (PostgreSQL)', () => {
   const verStd = crypto.randomUUID();
   const docHr = crypto.randomUUID();
   const verHr = crypto.randomUUID();
+  const taskA = crypto.randomUUID();
+  const portalIdentityId = crypto.randomUUID();
+  const workspaceA = crypto.randomUUID();
+  const workspaceB = crypto.randomUUID();
+  const membershipA = crypto.randomUUID();
+  const membershipB = crypto.randomUUID();
+  const membershipRevoked = crypto.randomUUID();
 
   const admin = { userId: adminId, role: 'ADMIN' };
   const lawyer = { userId: lawyerId, role: 'LAWYER' };
@@ -82,7 +90,36 @@ d('Organization / responsibility map (Phase 3) (PostgreSQL)', () => {
       { id: verStd, documentId: docStd, version: 1, name: 'v1', uploadedById: adminId, isCurrent: true, uploadSource: 'LAWYER_UPLOAD', versionType: 'ORIGINAL' },
       { id: verHr, documentId: docHr, version: 1, name: 'v1', uploadedById: adminId, isCurrent: true, uploadSource: 'LAWYER_UPLOAD', versionType: 'ORIGINAL' },
     ] as never });
+    // Task + document-task links (STANDARD and HR) for the task-documents HR filter.
+    await db.task.create({ data: { id: taskA, title: 'Feladat', taskType: 'OTHER', status: 'TODO', priority: 'MEDIUM', caseId: caseA, assignedToId: lawyerId, assignedById: adminId, requiredSkills: [] } as never });
+    await db.documentTaskLink.createMany({ data: [
+      { documentId: docStd, taskId: taskA, createdById: adminId },
+      { documentId: docHr, taskId: taskA, createdById: adminId },
+    ] as never });
+    // Portal workspaces + memberships for portalMembershipId validation.
+    // clientA workspace + ACTIVE and REVOKED memberships; clientB workspace + membership (cross-client).
+    const portalIdentityId2 = crypto.randomUUID();
+    await db.clientPortalIdentity.createMany({ data: [
+      { id: portalIdentityId, provider: 'ENTRA_EXTERNAL_ID', issuer: 'https://issuer.test', subject: `sub-${suffix}`, normalizedEmail: `person-${suffix}@test.invalid`, displayName: 'Portal Person', accountType: 'ORGANIZATION_MEMBER' },
+      { id: portalIdentityId2, provider: 'ENTRA_EXTERNAL_ID', issuer: 'https://issuer.test', subject: `sub2-${suffix}`, normalizedEmail: `person2-${suffix}@test.invalid`, displayName: 'Portal Person 2', accountType: 'ORGANIZATION_MEMBER' },
+    ] as never });
+    await db.clientPortalWorkspace.createMany({ data: [
+      { id: workspaceA, clientId: clientA, name: 'A workspace', mode: 'ORGANIZATION', createdById: adminId },
+      { id: workspaceB, clientId: clientB, name: 'B workspace', mode: 'ORGANIZATION', createdById: adminId },
+    ] as never });
+    await db.clientPortalWorkspaceMembership.createMany({ data: [
+      { id: membershipA, clientPortalIdentityId: portalIdentityId, workspaceId: workspaceA, status: 'ACTIVE' },
+      { id: membershipRevoked, clientPortalIdentityId: portalIdentityId2, workspaceId: workspaceA, status: 'REVOKED' },
+      { id: membershipB, clientPortalIdentityId: portalIdentityId, workspaceId: workspaceB, status: 'ACTIVE' },
+    ] as never });
   });
+
+  function mockRes() {
+    const res: any = { statusCode: 0, body: null };
+    res.status = (c: number) => { res.statusCode = c; return res; };
+    res.json = (b: any) => { res.body = b; return res; };
+    return res;
+  }
 
   afterAll(async () => {
     await db?.$disconnect();
@@ -183,5 +220,57 @@ d('Organization / responsibility map (Phase 3) (PostgreSQL)', () => {
     expect(json).not.toContain('employmentStatus');
     expect(json).not.toContain('responsibilitiesSummary');
     expect(json).not.toContain('HR_CONFIDENTIAL');
+  });
+
+  it('validates portalMembershipId: same-client OK, rejects cross-client + revoked', async () => {
+    const ok = await createPerson(admin, clientA, { name: 'Portál személy', portalMembershipId: membershipA });
+    expect(ok.portalMembershipId).toBe(membershipA);
+    // Cross-client workspace membership rejected.
+    await expect(createPerson(admin, clientA, { name: 'X', portalMembershipId: membershipB }))
+      .rejects.toMatchObject({ code: 'CROSS_CLIENT_PORTAL_MEMBERSHIP' });
+    // Revoked membership rejected.
+    await expect(createPerson(admin, clientA, { name: 'Y', portalMembershipId: membershipRevoked }))
+      .rejects.toMatchObject({ code: 'PORTAL_MEMBERSHIP_INACTIVE' });
+    // Non-existent membership rejected.
+    await expect(updatePerson(admin, ok.id, { portalMembershipId: crypto.randomUUID() }))
+      .rejects.toMatchObject({ code: 'PORTAL_MEMBERSHIP_NOT_FOUND' });
+  });
+
+  it('hides HR_CONFIDENTIAL documents from search for non-privileged users', async () => {
+    const adminHits = await documentsService.searchDocuments(suffix, 50, 'ADMIN');
+    expect(adminHits.some((d: any) => d.id === docHr)).toBe(true);
+    expect(adminHits.some((d: any) => d.id === docStd)).toBe(true);
+    const lawyerHits = await documentsService.searchDocuments(suffix, 50, 'LAWYER');
+    expect(lawyerHits.some((d: any) => d.id === docHr)).toBe(false);
+    expect(lawyerHits.some((d: any) => d.id === docStd)).toBe(true);
+  });
+
+  it('HR read-gate middleware blocks an HR document for non-privileged, allows privileged + standard', async () => {
+    // HR document + LAWYER -> forbidden, next not called.
+    const res1 = mockRes(); let next1 = false;
+    await requireHrConfidentialReadAccess({ params: { id: docHr }, user: { role: 'LAWYER' } } as any, res1 as any, () => { next1 = true; });
+    expect(next1).toBe(false);
+    expect(res1.statusCode).toBe(403);
+    // HR document + ADMIN -> next called.
+    const res2 = mockRes(); let next2 = false;
+    await requireHrConfidentialReadAccess({ params: { id: docHr }, user: { role: 'ADMIN' } } as any, res2 as any, () => { next2 = true; });
+    expect(next2).toBe(true);
+    // STANDARD document + LAWYER -> next called (unchanged behaviour).
+    const res3 = mockRes(); let next3 = false;
+    await requireHrConfidentialReadAccess({ params: { id: docStd }, user: { role: 'LAWYER' } } as any, res3 as any, () => { next3 = true; });
+    expect(next3).toBe(true);
+  });
+
+  it('filters HR_CONFIDENTIAL documents from a task linked-document list', async () => {
+    const adminDocs = await listTaskDocuments({ user: { userId: adminId, role: 'ADMIN' } } as any, taskA);
+    expect(adminDocs.documents.some((d: any) => d.id === docHr)).toBe(true);
+    const lawyerDocs = await listTaskDocuments({ user: { userId: lawyerId, role: 'LAWYER' } } as any, taskA);
+    expect(lawyerDocs.documents.some((d: any) => d.id === docHr)).toBe(false);
+    expect(lawyerDocs.documents.some((d: any) => d.id === docStd)).toBe(true);
+  });
+
+  it('rejects cross-client owner person linkage', async () => {
+    const personB = await createPerson(admin, clientB, { name: 'B személy', employmentStatus: 'ACTIVE' });
+    await expect(setContractBusinessOwner(admin, contractId, personB.id)).rejects.toMatchObject({ code: 'CROSS_CLIENT_PERSON' });
   });
 });

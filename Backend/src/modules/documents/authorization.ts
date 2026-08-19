@@ -41,6 +41,45 @@ export function hrConfidentialReadAllowed(userRole: string | undefined | null): 
   return ['ADMIN', 'PARTNER'].includes(String(userRole || ''));
 }
 
+/**
+ * Additive HR-confidential read gate for the `/:id` document routes that are
+ * NOT already behind `requireDocumentReadAccess` (document detail, text,
+ * download, work-context, comments). It applies ONLY the classification
+ * boundary — it does not add or alter case-scoping — so STANDARD documents are
+ * unaffected and behaviour is unchanged for them. HR_CONFIDENTIAL documents are
+ * blocked for non-privileged roles before the handler runs, closing the leak
+ * on routes the case-scoped middleware does not cover. Missing documents fall
+ * through so the handler produces its own 404 (no existence signal added here).
+ */
+export async function requireHrConfidentialReadAccess(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const documentId = getDocumentId(req);
+  if (!documentId) {
+    next();
+    return;
+  }
+  try {
+    const document = await prisma.document.findUnique({
+      where: { id: documentId },
+      select: { securityClassification: true },
+    });
+    if (
+      document &&
+      String(document.securityClassification) === 'HR_CONFIDENTIAL' &&
+      !hrConfidentialReadAllowed((req.user as any)?.role)
+    ) {
+      sendForbidden(res);
+      return;
+    }
+    next();
+  } catch {
+    sendAuthorizationError(res);
+  }
+}
+
 async function resolveDocumentAccess(documentId: string): Promise<{ caseId: string | null; securityClassification: string | null }> {
   const document = await prisma.document.findUnique({
     where: { id: documentId },

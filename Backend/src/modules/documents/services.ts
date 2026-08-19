@@ -468,7 +468,7 @@ class DocumentsService {
   /**
    * Search documents by metadata (file name, type, case/client linkage)
    */
-  async searchDocuments(query: string, limit = 50): Promise<DocumentSearchItem[]> {
+  async searchDocuments(query: string, limit = 50, userRole?: string): Promise<DocumentSearchItem[]> {
     const q = query.trim();
     if (!q) {
       return [];
@@ -478,6 +478,9 @@ class DocumentsService {
 
     const documents = await prisma.document.findMany({
       where: {
+        // Phase 3: non-privileged users must not discover HR_CONFIDENTIAL
+        // documents (title/filename/existence) through search.
+        ...(userRole && !hrConfidentialReadAllowed(userRole) ? { securityClassification: { not: 'HR_CONFIDENTIAL' } } : {}),
         OR: [
           { fileName: { contains: q, mode: 'insensitive' } },
           { documentType: { contains: q, mode: 'insensitive' } },

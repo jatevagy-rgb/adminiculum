@@ -106,6 +106,30 @@ async function assertSameClientInitiative(prisma: Prisma, clientId: string, init
   if (i.clientId !== clientId) throw new InteractionError(403, 'CROSS_CLIENT_INITIATIVE', 'Initiative belongs to another client.');
 }
 
+/**
+ * Validate the optional portal-membership reference. This is a PLAIN reference
+ * (deliberately not a Prisma FK) and is NOT an authorization principal — linking
+ * an OrganizationPerson to a membership never grants Case/Document/portal access.
+ * We only enforce referential integrity so the loose coupling cannot become an
+ * integrity hole or a cross-client leak: the membership must exist, its
+ * workspace must belong to the SAME Client, and it must not be in a terminal
+ * (REVOKED/EXPIRED) state.
+ */
+async function assertPortalMembershipSameClient(prisma: Prisma, clientId: string, membershipId: string): Promise<void> {
+  const membership = await prisma.clientPortalWorkspaceMembership.findUnique({
+    where: { id: membershipId },
+    select: { status: true, workspaceId: true },
+  });
+  if (!membership) throw new InteractionError(404, 'PORTAL_MEMBERSHIP_NOT_FOUND', 'Portal membership not found.');
+  const workspace = await prisma.clientPortalWorkspace.findUnique({ where: { id: membership.workspaceId }, select: { clientId: true } });
+  if (!workspace || workspace.clientId !== clientId) {
+    throw new InteractionError(403, 'CROSS_CLIENT_PORTAL_MEMBERSHIP', 'Portal membership belongs to another client workspace.');
+  }
+  if (['REVOKED', 'EXPIRED'].includes(String(membership.status))) {
+    throw new InteractionError(400, 'PORTAL_MEMBERSHIP_INACTIVE', 'Portal membership is revoked or expired.');
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* DTOs                                                                       */
 /* -------------------------------------------------------------------------- */
@@ -292,6 +316,11 @@ export async function createPerson(actor: InternalActor, clientId: string, input
   }
   const status = String(input.employmentStatus || 'ACTIVE');
   if (!Object.keys(PERSON_TRANSITIONS).includes(status)) throw new InteractionError(400, 'PERSON_STATUS_INVALID', 'Invalid employment status.');
+  let portalMembershipId: string | null = null;
+  if (input.portalMembershipId) {
+    portalMembershipId = String(input.portalMembershipId);
+    await assertPortalMembershipSameClient(prisma, clientId, portalMembershipId);
+  }
   const row = await prisma.organizationPerson.create({
     data: {
       clientId,
@@ -304,7 +333,7 @@ export async function createPerson(actor: InternalActor, clientId: string, input
       startDate: input.startDate ? new Date(String(input.startDate)) : null,
       endDate: input.endDate ? new Date(String(input.endDate)) : null,
       responsibilitiesSummary: safeText(input.responsibilitiesSummary, 'responsibilitiesSummary', 2000, false),
-      portalMembershipId: input.portalMembershipId ? String(input.portalMembershipId) : null,
+      portalMembershipId,
     },
   });
   return toPersonDTO(row);
@@ -342,7 +371,11 @@ export async function updatePerson(actor: InternalActor, personId: string, input
     }
     data.deputyPersonId = deputyId;
   }
-  if (input.portalMembershipId !== undefined) data.portalMembershipId = input.portalMembershipId ? String(input.portalMembershipId) : null;
+  if (input.portalMembershipId !== undefined) {
+    const membershipId = input.portalMembershipId ? String(input.portalMembershipId) : null;
+    if (membershipId) await assertPortalMembershipSameClient(prisma, row.clientId, membershipId);
+    data.portalMembershipId = membershipId;
+  }
   const updated = await prisma.organizationPerson.update({ where: { id: personId }, data });
   return toPersonDTO(updated);
 }
