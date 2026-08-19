@@ -32,15 +32,24 @@ function sendAuthorizationError(res: Response): void {
   });
 }
 
-async function resolveOwningCaseId(documentId: string): Promise<string | null> {
+/** Phase 3 HR-confidential gate. A conservative narrow role gate: only client
+ *  managers (ADMIN/PARTNER) may read HR_CONFIDENTIAL documents. The canonical
+ *  document authorization remains case-scoped; classification is an ADDITIONAL
+ *  boundary and never grants access. A future per-user HR permission would
+ *  extend this helper without a parallel ACL. */
+export function hrConfidentialReadAllowed(userRole: string | undefined | null): boolean {
+  return ['ADMIN', 'PARTNER'].includes(String(userRole || ''));
+}
+
+async function resolveDocumentAccess(documentId: string): Promise<{ caseId: string | null; securityClassification: string | null }> {
   const document = await prisma.document.findUnique({
     where: { id: documentId },
-    select: { caseId: true },
+    select: { caseId: true, securityClassification: true },
   });
   if (!document) {
-    return null;
+    return { caseId: null, securityClassification: null };
   }
-  return document.caseId;
+  return { caseId: document.caseId, securityClassification: String(document.securityClassification || 'STANDARD') };
 }
 
 async function requireDocumentAccess(
@@ -60,7 +69,7 @@ async function requireDocumentAccess(
   }
 
   try {
-    const caseId = await resolveOwningCaseId(documentId);
+    const { caseId, securityClassification } = await resolveDocumentAccess(documentId);
     if (!caseId) {
       // Document missing, or (defensively) has no owning case: not found — do not
       // reveal existence, and never proceed to a raw-text service path.
@@ -69,6 +78,14 @@ async function requireDocumentAccess(
         code: 'DOCUMENT_NOT_FOUND',
         message: 'Document not found',
       });
+      return;
+    }
+
+    // Phase 3 HR-confidential: classification is an additional boundary on top
+    // of the case-scoped check. Organization chart visibility must not imply HR
+    // document access.
+    if (securityClassification === 'HR_CONFIDENTIAL' && !hrConfidentialReadAllowed((req.user as any)?.role)) {
+      sendForbidden(res);
       return;
     }
 

@@ -248,6 +248,9 @@ app.use('/api/v1/client-company', clientCompanyRouter);
 import { clientContractsRouter } from './modules/client-contracts/routes';
 app.use('/api/v1/client-contracts', clientContractsRouter);
 
+import { clientOrganizationRouter } from './modules/client-organization/routes';
+app.use('/api/v1/client-organization', clientOrganizationRouter);
+
 import contractsRoutes from './modules/contracts/routes';
 app.use('/api/v1/contracts', contractsRoutes);
 

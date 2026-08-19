@@ -173,6 +173,7 @@ model Client {
   contractRecords ContractRecord[] // Contract library (Phase 2)
   obligations ClientObligation[] // Contract library (Phase 2)
   entitlements ContractEntitlement[] // Contract library (Phase 2)
+  organizationPersons OrganizationPerson[] // Organization (Phase 3)
 
   @@map("clients")
 }
@@ -921,6 +922,12 @@ model Document {
   // Persistent workspace text for modified working copy documents
   workspaceText String? // Stores the workspace editor draft text when documentType = 'MODIFIED_WORKING_COPY'
 
+  // Phase 3: HR-confidential security classification (canonical Document layer).
+  // STANDARD documents are governed by the existing case-scoped authorization;
+  // HR_CONFIDENTIAL additionally requires a privileged workforce role. The
+  // classification itself does NOT grant access.
+  securityClassification DocumentSecurityClassification @default(STANDARD)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1075,6 +1082,7 @@ model DocumentVersion {
   assessmentItemEvidence   AssessmentItem[]
   canonicalContracts       ContractRecord[]
   obligationEvidence       ClientObligation[]
+  personDocumentLinks      OrganizationPersonDocumentLink[]
 
   @@unique([documentId, version])
   @@unique([documentId, id])
@@ -2454,10 +2462,17 @@ model ClientOrganizationGroup {
   createdAt       DateTime                      @default(now())
   updatedAt       DateTime                      @updatedAt
   revision        Int                           @default(0)
+  // Phase 3: optional org-chart hierarchy (same Client, no cycles enforced in
+  // service). NULL workspaceId groups may nest; org workspace groups nest too.
+  parentGroupId   String?
+  parentGroup     ClientOrganizationGroup?       @relation("ClientOrganizationGroupHierarchy", fields: [parentGroupId], references: [id], onDelete: SetNull)
+  childGroups     ClientOrganizationGroup[]      @relation("ClientOrganizationGroupHierarchy")
+  persons         OrganizationPerson[]
 
   @@unique([clientId, workspaceId, name])
   @@index([clientId, status])
   @@index([workspaceId, status])
+  @@index([parentGroupId])
   @@map("client_organization_groups")
 }
 
@@ -4099,12 +4114,15 @@ model DevelopmentInitiative {
   completedAt         DateTime?
   milestones          CompanyMilestone[]
   findings            AssessmentFinding[]
+  clientOwnerPersonId String?
+  clientOwnerPerson   OrganizationPerson?             @relation(fields: [clientOwnerPersonId], references: [id], onDelete: SetNull)
   createdAt           DateTime                       @default(now())
   updatedAt           DateTime                       @updatedAt
 
   @@index([clientId, status])
   @@index([caseId])
   @@index([lawFirmOwnerUserId])
+  @@index([clientOwnerPersonId])
   @@map("development_initiatives")
 }
 
@@ -4168,6 +4186,8 @@ model ContractRecord {
   parties                    ContractParty[]
   obligations                ClientObligation[]
   entitlements               ContractEntitlement[]
+  businessOwnerPersonId      String?
+  businessOwnerPerson        OrganizationPerson?           @relation(fields: [businessOwnerPersonId], references: [id], onDelete: SetNull)
   createdAt                  DateTime                     @default(now())
   updatedAt                  DateTime                     @updatedAt
 
@@ -4177,6 +4197,7 @@ model ContractRecord {
   @@index([canonicalDocumentVersionId])
   @@index([parentContractId])
   @@index([familyRootContractId])
+  @@index([businessOwnerPersonId])
   @@map("contract_records")
 }
 
@@ -4223,6 +4244,8 @@ model ClientObligation {
   relatedTask               Task?                 @relation(fields: [relatedTaskId], references: [id], onDelete: SetNull)
   evidenceDocumentVersionId String?
   evidenceDocumentVersion   DocumentVersion?      @relation(fields: [evidenceDocumentVersionId], references: [id], onDelete: SetNull)
+  ownerPersonId             String?
+  ownerPerson               OrganizationPerson?   @relation(fields: [ownerPersonId], references: [id], onDelete: SetNull)
   createdAt                 DateTime              @default(now())
   updatedAt                 DateTime              @updatedAt
 
@@ -4230,6 +4253,7 @@ model ClientObligation {
   @@index([clientId, nextDueDate])
   @@index([sourceContractId, status])
   @@index([relatedTaskId])
+  @@index([ownerPersonId])
   @@map("client_obligations")
 }
 
@@ -4258,4 +4282,91 @@ model ContractEntitlement {
   @@index([contractId, status])
   @@index([clientId, status])
   @@map("contract_entitlements")
+}
+
+// ============================================================================
+// PHASE 3 — ORGANIZATION / RESPONSIBILITY MAP.
+// OrganizationPerson is an operational responsibility record, DISTINCT from
+// ClientPortalIdentity / ClientPortalMembership / internal User. A person may
+// exist without any Adminiculum/portal account. ClientOrganizationGroup remains
+// the canonical unit model (no second hierarchy). Extensible responsibility /
+// document-role taxonomies are validated STRING codes via the server registry.
+// No HRIS data is stored; HR-confidential classification is on the canonical
+// Document layer and does not grant access.
+// ============================================================================
+
+enum DocumentSecurityClassification {
+  STANDARD
+  HR_CONFIDENTIAL
+}
+
+enum OrganizationPersonStatus {
+  ACTIVE
+  ON_LEAVE
+  INACTIVE
+  ENDED
+}
+
+model OrganizationPerson {
+  id                       String                         @id @default(uuid())
+  clientId                 String
+  client                   Client                         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organizationGroupId      String?
+  organizationGroup        ClientOrganizationGroup?        @relation(fields: [organizationGroupId], references: [id], onDelete: SetNull)
+  managerPersonId          String?
+  managerPerson            OrganizationPerson?             @relation("PersonManager", fields: [managerPersonId], references: [id], onDelete: SetNull)
+  directReports            OrganizationPerson[]            @relation("PersonManager")
+  deputyPersonId           String?
+  deputyPerson             OrganizationPerson?             @relation("PersonDeputy", fields: [deputyPersonId], references: [id], onDelete: SetNull)
+  isDeputyFor              OrganizationPerson[]            @relation("PersonDeputy")
+  name                     String
+  jobTitle                 String?
+  employmentStatus         OrganizationPersonStatus        @default(ACTIVE)
+  startDate                DateTime?
+  endDate                  DateTime?
+  responsibilitiesSummary  String?
+  // Optional portal-membership link. This is NOT an authorization principal:
+  // linking does not grant Case/Document access. Stored as a plain reference to
+  // avoid coupling; validated in the service against the same Client workspace.
+  portalMembershipId       String?
+  responsibilities         OrganizationPersonResponsibility[]
+  documentLinks            OrganizationPersonDocumentLink[]
+  ownedContracts           ContractRecord[]
+  ownedObligations         ClientObligation[]
+  ownedInitiatives         DevelopmentInitiative[]
+  createdAt                DateTime                       @default(now())
+  updatedAt                DateTime                       @updatedAt
+
+  @@index([clientId, employmentStatus])
+  @@index([clientId, organizationGroupId])
+  @@index([managerPersonId])
+  @@index([deputyPersonId])
+  @@map("organization_persons")
+}
+
+model OrganizationPersonResponsibility {
+  id                    String              @id @default(uuid())
+  organizationPersonId  String
+  organizationPerson    OrganizationPerson   @relation(fields: [organizationPersonId], references: [id], onDelete: Cascade)
+  type                  String
+  label                 String
+  createdAt             DateTime             @default(now())
+
+  @@index([organizationPersonId])
+  @@map("organization_person_responsibilities")
+}
+
+model OrganizationPersonDocumentLink {
+  id                   String             @id @default(uuid())
+  organizationPersonId String
+  organizationPerson   OrganizationPerson @relation(fields: [organizationPersonId], references: [id], onDelete: Cascade)
+  documentVersionId    String
+  documentVersion      DocumentVersion    @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+  documentRole          String
+  createdAt            DateTime           @default(now())
+
+  @@unique([organizationPersonId, documentVersionId, documentRole])
+  @@index([organizationPersonId])
+  @@index([documentVersionId])
+  @@map("organization_person_document_links")
 }

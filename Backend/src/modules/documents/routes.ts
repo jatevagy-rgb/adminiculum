@@ -303,7 +303,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
 router.get('/case/:caseId', authenticate, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
-    const documents = await documentsService.getCaseDocuments(caseId);
+    const documents = await documentsService.getCaseDocuments(caseId, String((req as any).user?.role || ''));
     res.json(documents);
   } catch (error) {
     console.error('Get case documents error:', error);

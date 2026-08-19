@@ -7,6 +7,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { driveService } from '../sharepoint';
+import { hrConfidentialReadAllowed } from './authorization';
 import {
   CreateDocumentInput,
   DocumentResponse,
@@ -322,9 +323,13 @@ class DocumentsService {
   /**
    * Get all documents for a case
    */
-  async getCaseDocuments(caseId: string): Promise<DocumentListItem[]> {
+  async getCaseDocuments(caseId: string, userRole?: string): Promise<DocumentListItem[]> {
     const documents = await prisma.document.findMany({
-      where: { caseId },
+      where: {
+        caseId,
+        // Phase 3: non-privileged users must not see HR_CONFIDENTIAL documents in lists.
+        ...(userRole && !hrConfidentialReadAllowed(userRole) ? { securityClassification: { not: 'HR_CONFIDENTIAL' } } : {}),
+      },
       orderBy: { createdAt: 'desc' }
     });
 

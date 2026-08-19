@@ -24,6 +24,7 @@ import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePane
 import { ClientColorSelector } from "@/components/clients/ClientColorSelector";
 import { ClientCompanyFoundation } from "@/components/clients/ClientCompanyFoundation";
 import { ClientContractLibrary } from "@/components/clients/ClientContractLibrary";
+import { ClientOrganization } from "@/components/clients/ClientOrganization";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 
 type DossierDocument = DocumentItem & { caseNumber: string; caseId: string };
@@ -520,6 +521,10 @@ function ClientDetailContent() {
 
           <section id="szerzodes-tar" className="mt-4 scroll-mt-24 border-t border-[var(--adm-border)] pt-3">
             <ClientContractLibrary clientId={clientId} />
+          </section>
+
+          <section id="szervezet" className="mt-4 scroll-mt-24 border-t border-[var(--adm-border)] pt-3">
+            <ClientOrganization clientId={clientId} />
           </section>
         </div>
       </aside>
