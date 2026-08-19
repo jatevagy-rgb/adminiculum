@@ -98,12 +98,23 @@ function MatterCard({ matter }: { matter: PortalMatter }) {
   );
 }
 
+function portalWorkspaceStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    PUBLISHED: 'Közzétéve',
+    OPEN: 'Nyitott',
+    IN_PROGRESS: 'Folyamatban',
+    COMPLETED: 'Kész',
+    EXPIRED: 'Lejárt',
+  };
+  return labels[status] || status;
+}
+
 function WorkspaceActionCard({ action }: { action: PortalWorkspaceAction }) {
   return (
     <Link className="cp-row cp-card-hover block p-4 focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" href={action.actionUrl}>
       <p className="cp-kicker">{action.matterTitle}</p>
       <h3 className="cp-title mt-1 text-lg">{action.title}</h3>
-      <p className="mt-2 text-sm text-[var(--adm-text-muted)]">{action.status}{action.dueAt ? ` · Határidő: ${formatDate(action.dueAt)}` : ''}</p>
+      <p className="mt-2 text-sm text-[var(--adm-text-muted)]">{portalWorkspaceStatusLabel(action.status)}{action.dueAt ? ` · Határidő: ${formatDate(action.dueAt)}` : ''}</p>
     </Link>
   );
 }

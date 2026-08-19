@@ -96,6 +96,7 @@ model User {
   reviewedAssessmentItems            AssessmentItem[]
   createdAssessmentFindings          AssessmentFinding[]
   ownedDevelopmentInitiatives        DevelopmentInitiative[]
+  lawFirmOwnedContracts               ContractRecord[]
 
   @@map("users")
 }
@@ -169,6 +170,9 @@ model Client {
   assessments       Assessment[] // Company foundation (Phase 1)
   assessmentFindings AssessmentFinding[] // Company foundation (Phase 1)
   developmentInitiatives DevelopmentInitiative[] // Company foundation (Phase 1)
+  contractRecords ContractRecord[] // Contract library (Phase 2)
+  obligations ClientObligation[] // Contract library (Phase 2)
+  entitlements ContractEntitlement[] // Contract library (Phase 2)
 
   @@map("clients")
 }
@@ -774,6 +778,7 @@ model Case {
   externalParticipants      CaseExternalParticipant[]
   intakeDeadlines           CaseIntakeDeadline[]
   developmentInitiatives    DevelopmentInitiative[]
+  contractRecords           ContractRecord[]
 
   @@map("cases")
 }
@@ -1068,6 +1073,8 @@ model DocumentVersion {
   reviewDecisions         ReviewDecision[]           @relation("ReviewDecisionVersion")
   clientFactSources        ClientFact[]
   assessmentItemEvidence   AssessmentItem[]
+  canonicalContracts       ContractRecord[]
+  obligationEvidence       ClientObligation[]
 
   @@unique([documentId, version])
   @@unique([documentId, id])
@@ -1562,6 +1569,7 @@ model Task {
   documentLinks         DocumentTaskLink[]
   reviewPoints          ReviewPoint[]
   remediationFindings   AssessmentFinding[]
+  obligationRelated     ClientObligation[]
 
   @@index([complexityScore], map: "tasks_complexityScore_idx")
   @@index([maturityStage], map: "tasks_maturityStage_idx")
@@ -4098,4 +4106,156 @@ model DevelopmentInitiative {
   @@index([caseId])
   @@index([lawFirmOwnerUserId])
   @@map("development_initiatives")
+}
+
+// ============================================================================
+// PHASE 2 — CONTRACT LIBRARY (Szerződéstár).
+// ContractRecord is the structured legal/business relationship, DISTINCT from
+// the physical Document/DocumentVersion. The canonical final DocumentVersion is
+// LINKED, never copied. Extensible taxonomies (contractType, party roleCode,
+// obligation source/trigger/frequency, entitlement type) are validated STRING
+// codes via the server registry — NOT Prisma enums — so new categories never
+// require a migration. Stable lifecycles/security use Prisma enums.
+// No second Document / Task / org hierarchy / Document ACL is introduced.
+// ============================================================================
+
+enum ContractLifecycleStatus {
+  DRAFT
+  NEGOTIATION
+  AWAITING_SIGNATURE
+  SIGNED_NOT_EFFECTIVE
+  ACTIVE
+  TERMINATING
+  EXPIRED
+  TERMINATED
+  SUPERSEDED
+}
+
+enum ContractSecurityClassification {
+  STANDARD
+  RESTRICTED
+}
+
+model ContractRecord {
+  id                         String                       @id @default(uuid())
+  clientId                   String
+  client                     Client                       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title                      String
+  contractType               String
+  status                     ContractLifecycleStatus       @default(DRAFT)
+  businessOwnerLabel         String?
+  lawFirmOwnerUserId         String?
+  lawFirmOwner               User?                        @relation(fields: [lawFirmOwnerUserId], references: [id], onDelete: SetNull)
+  sourceCaseId               String?
+  sourceCase                 Case?                        @relation(fields: [sourceCaseId], references: [id], onDelete: SetNull)
+  canonicalDocumentVersionId String?
+  canonicalDocumentVersion   DocumentVersion?             @relation(fields: [canonicalDocumentVersionId], references: [id], onDelete: SetNull)
+  signatureDate              DateTime?
+  effectiveDate              DateTime?
+  expiryDate                 DateTime?
+  termType                   String?
+  noticePeriodDays           Int?
+  autoRenewal                Boolean                      @default(false)
+  nextCriticalDate           DateTime?
+  securityClassification     ContractSecurityClassification @default(STANDARD)
+  internalNote               String?
+  parentContractId           String?
+  parentContract             ContractRecord?              @relation("ContractFamily", fields: [parentContractId], references: [id], onDelete: SetNull)
+  amendments                 ContractRecord[]             @relation("ContractFamily")
+  familyRootContractId       String?
+  familyRootContract         ContractRecord?              @relation("ContractFamilyRoot", fields: [familyRootContractId], references: [id], onDelete: SetNull)
+  rootFamilyMembers          ContractRecord[]             @relation("ContractFamilyRoot")
+  parties                    ContractParty[]
+  obligations                ClientObligation[]
+  entitlements               ContractEntitlement[]
+  createdAt                  DateTime                     @default(now())
+  updatedAt                  DateTime                     @updatedAt
+
+  @@index([clientId, status])
+  @@index([clientId, expiryDate])
+  @@index([clientId, nextCriticalDate])
+  @@index([canonicalDocumentVersionId])
+  @@index([parentContractId])
+  @@index([familyRootContractId])
+  @@map("contract_records")
+}
+
+model ContractParty {
+  id                 String         @id @default(uuid())
+  contractId         String
+  contract           ContractRecord @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  roleCode           String
+  displayName        String
+  registrationNumber String?
+  taxNumber          String?
+  country            String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([contractId])
+  @@map("contract_parties")
+}
+
+enum ClientObligationStatus {
+  OPEN
+  IN_PROGRESS
+  SATISFIED
+  WAIVED
+  EXPIRED
+}
+
+model ClientObligation {
+  id                        String                @id @default(uuid())
+  clientId                  String
+  client                    Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sourceType                String
+  sourceContractId          String?
+  sourceContract            ContractRecord?       @relation(fields: [sourceContractId], references: [id], onDelete: SetNull)
+  sourceReference           String?
+  title                     String
+  description               String?
+  ownerLabel                String?
+  triggerType               String
+  frequencyCode             String?
+  nextDueDate               DateTime?
+  status                    ClientObligationStatus @default(OPEN)
+  relatedTaskId             String?
+  relatedTask               Task?                 @relation(fields: [relatedTaskId], references: [id], onDelete: SetNull)
+  evidenceDocumentVersionId String?
+  evidenceDocumentVersion   DocumentVersion?      @relation(fields: [evidenceDocumentVersionId], references: [id], onDelete: SetNull)
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+
+  @@index([clientId, status])
+  @@index([clientId, nextDueDate])
+  @@index([sourceContractId, status])
+  @@index([relatedTaskId])
+  @@map("client_obligations")
+}
+
+enum ContractEntitlementStatus {
+  ACTIVE
+  EXERCISED
+  EXPIRED
+  WAIVED
+}
+
+model ContractEntitlement {
+  id              String                      @id @default(uuid())
+  contractId      String
+  contract        ContractRecord              @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  clientId        String
+  client          Client                      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type            String
+  title           String
+  description     String?
+  sourceReference String?
+  exerciseByDate  DateTime?
+  status          ContractEntitlementStatus   @default(ACTIVE)
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+
+  @@index([contractId, status])
+  @@index([clientId, status])
+  @@map("contract_entitlements")
 }

@@ -245,6 +245,9 @@ app.use('/api/v1/client-publications', clientPublicationRouter);
 import { clientCompanyRouter } from './modules/client-company/routes';
 app.use('/api/v1/client-company', clientCompanyRouter);
 
+import { clientContractsRouter } from './modules/client-contracts/routes';
+app.use('/api/v1/client-contracts', clientContractsRouter);
+
 import contractsRoutes from './modules/contracts/routes';
 app.use('/api/v1/contracts', contractsRoutes);
 
