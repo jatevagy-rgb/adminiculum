@@ -38,6 +38,8 @@ d('Contract library (Phase 2) (PostgreSQL)', () => {
   const clientB = crypto.randomUUID();
   const caseA = crypto.randomUUID();
   const taskA = crypto.randomUUID();
+  const caseB = crypto.randomUUID();
+  const taskB = crypto.randomUUID();
   const docA = crypto.randomUUID();
   const versionA = crypto.randomUUID();
   const docB = crypto.randomUUID();
@@ -60,7 +62,9 @@ d('Contract library (Phase 2) (PostgreSQL)', () => {
       { id: clientB, name: `Contract Client B ${suffix}` },
     ] });
     await db.case.create({ data: { id: caseA, caseNumber: `CL-${suffix}`, title: 'Case A', caseType: 'CONTRACT_REVIEW', clientId: clientA, assignedLawyerId: lawyerId, createdById: adminId } as never });
+    await db.case.create({ data: { id: caseB, caseNumber: `CLB-${suffix}`, title: 'Case B', caseType: 'CONTRACT_REVIEW', clientId: clientB, assignedLawyerId: externalLawyerId, createdById: externalLawyerId } as never });
     await db.task.create({ data: { id: taskA, title: 'Obligation Task', taskType: 'OTHER', status: 'TODO', priority: 'MEDIUM', caseId: caseA, assignedToId: lawyerId, assignedById: adminId, requiredSkills: [] } as never });
+    await db.task.create({ data: { id: taskB, title: 'Other Client Task', taskType: 'OTHER', status: 'TODO', priority: 'MEDIUM', caseId: caseB, assignedToId: externalLawyerId, assignedById: adminId, requiredSkills: [] } as never });
     await db.document.createMany({ data: [
       { id: docA, name: 'Doc A', mimeType: 'text/plain', category: 'CONTRACT', clientId: clientA, caseId: caseA, isLatest: true },
       { id: docB, name: 'Doc B', mimeType: 'text/plain', category: 'CONTRACT', clientId: clientB, caseId: caseA, isLatest: true },
@@ -93,6 +97,9 @@ d('Contract library (Phase 2) (PostgreSQL)', () => {
   it('validates date ranges and notice period', async () => {
     await expect(createContract(admin, clientA, { title: 'Bad dates', contractType: 'SERVICE', effectiveDate: '2027-01-01T00:00:00Z', expiryDate: '2026-01-01T00:00:00Z' })).rejects.toMatchObject({ code: 'DATE_RANGE_INVALID' });
     await expect(createContract(admin, clientA, { title: 'Bad notice', contractType: 'SERVICE', noticePeriodDays: -1 })).rejects.toMatchObject({ code: 'NOTICE_PERIOD_INVALID' });
+    await expect(createContract(admin, clientA, { title: 'Bad date', contractType: 'SERVICE', effectiveDate: 'not-a-date' })).rejects.toMatchObject({ code: 'DATE_INVALID' });
+    const c = await createContract(admin, clientA, { title: 'Partial date update', contractType: 'SERVICE', effectiveDate: '2026-01-01T00:00:00Z', expiryDate: '2027-01-01T00:00:00Z' });
+    await expect(updateContract(admin, c.id, { effectiveDate: '2028-01-01T00:00:00Z' })).rejects.toMatchObject({ code: 'DATE_RANGE_INVALID' });
   });
 
   it('rejects cross-client canonical DocumentVersion and accepts same-client', async () => {
@@ -107,14 +114,17 @@ d('Contract library (Phase 2) (PostgreSQL)', () => {
   it('enforces family/amendment rules: same client, no self-parent, no cycle', async () => {
     const original = await createContract(admin, clientA, { title: 'Eredeti', contractType: 'LEASE' });
     const amendment = await createContract(admin, clientA, { title: '1. sz. módosítás', contractType: 'LEASE', parentContractId: original.id });
+    const secondAmendment = await createContract(admin, clientA, { title: '2. sz. módosítás', contractType: 'LEASE', parentContractId: amendment.id });
     expect(amendment.parentContractId).toBe(original.id);
     expect(amendment.familyRootContractId).toBe(original.id);
+    expect(secondAmendment.familyRootContractId).toBe(original.id);
     const family = await getContractFamily(admin, original.id);
-    expect(family.members.map((m: any) => m.id).sort()).toEqual([original.id, amendment.id].sort());
+    expect(family.members.map((m: any) => m.id).sort()).toEqual([original.id, amendment.id, secondAmendment.id].sort());
     // Self-parent rejected.
     await expect(updateContract(admin, original.id, { parentContractId: original.id })).rejects.toMatchObject({ code: 'SELF_PARENT_FORBIDDEN' });
     // Cycle: make original a child of its own amendment -> rejected.
-    await expect(updateContract(admin, original.id, { parentContractId: amendment.id })).rejects.toMatchObject({ code: 'CONTRACT_FAMILY_CYCLE' });
+    await expect(updateContract(admin, original.id, { parentContractId: secondAmendment.id })).rejects.toMatchObject({ code: 'CONTRACT_FAMILY_CYCLE' });
+    await expect(updateContract(admin, amendment.id, { parentContractId: secondAmendment.id })).rejects.toMatchObject({ code: 'CONTRACT_FAMILY_CYCLE' });
   });
 
   it('validates party role and supports add/remove', async () => {
@@ -128,6 +138,7 @@ d('Contract library (Phase 2) (PostgreSQL)', () => {
 
   it('runs an obligation lifecycle and links a same-client Task; rejects cross-client', async () => {
     const contract = await createContract(admin, clientA, { title: 'Kötelezettség forrása', contractType: 'LEASE' });
+    await expect(createObligation(admin, clientA, { sourceType: 'CONTRACT', title: 'Hiányzó forrás', triggerType: 'DATE' })).rejects.toMatchObject({ code: 'OBLIGATION_SOURCE_CONTRACT_REQUIRED' });
     const obligation = await createObligation(admin, clientA, { sourceType: 'CONTRACT', sourceContractId: contract.id, title: 'Éves beszámoló', triggerType: 'RECURRING', frequencyCode: 'ANNUAL', nextDueDate: '2027-01-31T00:00:00Z' });
     expect(obligation.status).toBe('OPEN');
     await transitionObligation(admin, obligation.id, 'IN_PROGRESS');
@@ -136,12 +147,14 @@ d('Contract library (Phase 2) (PostgreSQL)', () => {
     // Link a same-client Task.
     const updated = await db.clientObligation.update({ where: { id: obligation.id }, data: { relatedTaskId: taskA } });
     expect(updated.relatedTaskId).toBe(taskA);
+    await expect(updateObligation(admin, obligation.id, { relatedTaskId: taskB })).rejects.toMatchObject({ code: 'CROSS_CLIENT_TASK' });
     // Cross-client evidence version rejected.
     await expect(updateObligation(admin, obligation.id, { evidenceDocumentVersionId: versionB })).rejects.toMatchObject({ code: 'CROSS_CLIENT_DOCUMENT_VERSION' });
   });
 
   it('runs an entitlement lifecycle', async () => {
-    const contract = await createContract(admin, clientA, { title: 'Jogok', contractType: 'PARTNERSHIP' });
+    const contract = await createContract(admin, clientA, { title: 'Jogok', contractType: 'PARTNERSHIP', effectiveDate: '2027-01-01T00:00:00Z' });
+    await expect(createEntitlement(admin, contract.id, { type: 'RENEWAL_OPTION', title: 'Túl korai', exerciseByDate: '2026-12-31T00:00:00Z' })).rejects.toMatchObject({ code: 'ENTITLEMENT_DATE_INVALID' });
     const entitlement = await createEntitlement(admin, contract.id, { type: 'RENEWAL_OPTION', title: 'Megújítási opció' });
     expect(entitlement.status).toBe('ACTIVE');
     await transitionEntitlement(admin, entitlement.id, 'EXERCISED');

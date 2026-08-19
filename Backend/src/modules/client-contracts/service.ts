@@ -121,22 +121,47 @@ async function resolveFamilyRoot(prisma: Prisma, contractId: string, contractCli
     if (p.parentContractId) {
       cur = p.parentContractId;
     } else {
-      return p.familyRootContractId || cur;
+      // The parent chain is authoritative. Do not trust a stale denormalized
+      // familyRootContractId while assigning a new parent.
+      return cur;
     }
   }
   return contractId;
 }
 
-function validateDates(input: Record<string, unknown>): void {
-  if (input.effectiveDate && input.expiryDate) {
-    const eff = new Date(String(input.effectiveDate));
-    const exp = new Date(String(input.expiryDate));
+function parseDate(value: unknown, field: string): Date | null {
+  if (value == null || value === '') return null;
+  const parsed = value instanceof Date ? new Date(value.getTime()) : new Date(String(value));
+  if (!Number.isFinite(parsed.getTime())) throw new InteractionError(400, 'DATE_INVALID', `${field} must be a valid date.`);
+  return parsed;
+}
+
+function validateDates(input: Record<string, unknown>, existing?: { effectiveDate?: Date | null; expiryDate?: Date | null }): void {
+  const eff = parseDate(input.effectiveDate !== undefined ? input.effectiveDate : existing?.effectiveDate, 'effectiveDate');
+  const exp = parseDate(input.expiryDate !== undefined ? input.expiryDate : existing?.expiryDate, 'expiryDate');
+  if (eff && exp) {
     if (eff.getTime() > exp.getTime()) throw new InteractionError(400, 'DATE_RANGE_INVALID', 'expiryDate must be on or after effectiveDate.');
   }
   if (input.noticePeriodDays != null && input.noticePeriodDays !== '') {
     const n = Number(input.noticePeriodDays);
-    if (!Number.isFinite(n) || n < 0) throw new InteractionError(400, 'NOTICE_PERIOD_INVALID', 'noticePeriodDays must be a non-negative integer.');
+    if (!Number.isInteger(n) || n < 0) throw new InteractionError(400, 'NOTICE_PERIOD_INVALID', 'noticePeriodDays must be a non-negative integer.');
   }
+}
+
+async function assertLawFirmOwner(prisma: Prisma, userId: string | null): Promise<void> {
+  if (!userId) return;
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, status: true, isActive: true } });
+  if (!user || user.isActive === false || String(user.status) !== 'ACTIVE') {
+    throw new InteractionError(400, 'LAW_FIRM_OWNER_INVALID', 'lawFirmOwnerUserId must reference an active workforce user.');
+  }
+}
+
+function validateSecurityClassification(value: unknown): 'STANDARD' | 'RESTRICTED' {
+  const classification = String(value || 'STANDARD');
+  if (classification !== 'STANDARD' && classification !== 'RESTRICTED') {
+    throw new InteractionError(400, 'SECURITY_CLASSIFICATION_INVALID', 'Invalid contract security classification.');
+  }
+  return classification;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -266,6 +291,9 @@ export async function createContract(actor: InternalActor, clientId: string, inp
   const status = String(input.status || 'DRAFT');
   if (!LIFECYCLE_STATUS.has(status)) throw new InteractionError(400, 'CONTRACT_STATUS_INVALID', 'Invalid contract status.');
   validateDates(input);
+  const securityClassification = validateSecurityClassification(input.securityClassification);
+  const lawFirmOwnerUserId = input.lawFirmOwnerUserId ? String(input.lawFirmOwnerUserId) : null;
+  await assertLawFirmOwner(prisma, lawFirmOwnerUserId);
   let parentId: string | null = null;
   let familyRootId: string | null = null;
   if (input.parentContractId) {
@@ -281,17 +309,17 @@ export async function createContract(actor: InternalActor, clientId: string, inp
       contractType: type,
       status: status as any,
       businessOwnerLabel: safeText(input.businessOwnerLabel, 'businessOwnerLabel', 180, false),
-      lawFirmOwnerUserId: input.lawFirmOwnerUserId ? String(input.lawFirmOwnerUserId) : null,
+      lawFirmOwnerUserId,
       sourceCaseId: input.sourceCaseId ? String(input.sourceCaseId) : null,
       canonicalDocumentVersionId: input.canonicalDocumentVersionId ? String(input.canonicalDocumentVersionId) : null,
-      signatureDate: input.signatureDate ? new Date(String(input.signatureDate)) : null,
-      effectiveDate: input.effectiveDate ? new Date(String(input.effectiveDate)) : null,
-      expiryDate: input.expiryDate ? new Date(String(input.expiryDate)) : null,
+      signatureDate: parseDate(input.signatureDate, 'signatureDate'),
+      effectiveDate: parseDate(input.effectiveDate, 'effectiveDate'),
+      expiryDate: parseDate(input.expiryDate, 'expiryDate'),
       termType: safeText(input.termType, 'termType', 60, false),
       noticePeriodDays: input.noticePeriodDays != null && input.noticePeriodDays !== '' ? Number(input.noticePeriodDays) : null,
       autoRenewal: Boolean(input.autoRenewal),
-      nextCriticalDate: input.nextCriticalDate ? new Date(String(input.nextCriticalDate)) : null,
-      securityClassification: String(input.securityClassification || 'STANDARD') as any,
+      nextCriticalDate: parseDate(input.nextCriticalDate, 'nextCriticalDate'),
+      securityClassification: securityClassification as any,
       internalNote: safeText(input.internalNote, 'internalNote', 2000, false),
       parentContractId: parentId,
       familyRootContractId: familyRootId,
@@ -305,23 +333,26 @@ export async function updateContract(actor: InternalActor, contractId: string, i
   const row = await prisma.contractRecord.findUnique({ where: { id: contractId } });
   if (!row) throw new InteractionError(404, 'CONTRACT_NOT_FOUND', 'Contract not found.');
   await assertClientReadAccess(actor, row.clientId, prisma);
-  validateDates(input);
+  validateDates(input, row);
   const data: any = {};
   if (input.title !== undefined) data.title = safeText(input.title, 'title', 240, true)!;
   if (input.businessOwnerLabel !== undefined) data.businessOwnerLabel = safeText(input.businessOwnerLabel, 'businessOwnerLabel', 180, false);
-  if (input.lawFirmOwnerUserId !== undefined) data.lawFirmOwnerUserId = input.lawFirmOwnerUserId ? String(input.lawFirmOwnerUserId) : null;
+  if (input.lawFirmOwnerUserId !== undefined) {
+    data.lawFirmOwnerUserId = input.lawFirmOwnerUserId ? String(input.lawFirmOwnerUserId) : null;
+    await assertLawFirmOwner(prisma, data.lawFirmOwnerUserId);
+  }
   if (input.sourceCaseId !== undefined) {
     if (input.sourceCaseId) await assertSameClientCase(prisma, row.clientId, String(input.sourceCaseId));
     data.sourceCaseId = input.sourceCaseId ? String(input.sourceCaseId) : null;
   }
-  if (input.signatureDate !== undefined) data.signatureDate = input.signatureDate ? new Date(String(input.signatureDate)) : null;
-  if (input.effectiveDate !== undefined) data.effectiveDate = input.effectiveDate ? new Date(String(input.effectiveDate)) : null;
-  if (input.expiryDate !== undefined) data.expiryDate = input.expiryDate ? new Date(String(input.expiryDate)) : null;
+  if (input.signatureDate !== undefined) data.signatureDate = parseDate(input.signatureDate, 'signatureDate');
+  if (input.effectiveDate !== undefined) data.effectiveDate = parseDate(input.effectiveDate, 'effectiveDate');
+  if (input.expiryDate !== undefined) data.expiryDate = parseDate(input.expiryDate, 'expiryDate');
   if (input.termType !== undefined) data.termType = safeText(input.termType, 'termType', 60, false);
   if (input.noticePeriodDays !== undefined) data.noticePeriodDays = input.noticePeriodDays != null && input.noticePeriodDays !== '' ? Number(input.noticePeriodDays) : null;
   if (input.autoRenewal !== undefined) data.autoRenewal = Boolean(input.autoRenewal);
-  if (input.nextCriticalDate !== undefined) data.nextCriticalDate = input.nextCriticalDate ? new Date(String(input.nextCriticalDate)) : null;
-  if (input.securityClassification !== undefined) data.securityClassification = String(input.securityClassification);
+  if (input.nextCriticalDate !== undefined) data.nextCriticalDate = parseDate(input.nextCriticalDate, 'nextCriticalDate');
+  if (input.securityClassification !== undefined) data.securityClassification = validateSecurityClassification(input.securityClassification);
   if (input.internalNote !== undefined) data.internalNote = safeText(input.internalNote, 'internalNote', 2000, false);
   if (input.parentContractId !== undefined) {
     const parentId = input.parentContractId ? String(input.parentContractId) : null;
@@ -448,6 +479,7 @@ export async function createObligation(actor: InternalActor, clientId: string, i
   await assertClientReadAccess(actor, clientId, prisma);
   const sourceType = String(input.sourceType || 'CONTRACT');
   if (!isObligationSourceType(sourceType)) throw new InteractionError(400, 'OBLIGATION_SOURCE_UNKNOWN', 'Unknown obligation source type.');
+  if (sourceType === 'CONTRACT' && !input.sourceContractId) throw new InteractionError(400, 'OBLIGATION_SOURCE_CONTRACT_REQUIRED', 'Contract obligations require a source contract.');
   const triggerType = String(input.triggerType || 'DATE');
   if (!isObligationTriggerType(triggerType)) throw new InteractionError(400, 'OBLIGATION_TRIGGER_UNKNOWN', 'Unknown obligation trigger type.');
   if (input.frequencyCode != null && !isObligationFrequency(String(input.frequencyCode))) throw new InteractionError(400, 'OBLIGATION_FREQUENCY_UNKNOWN', 'Unknown obligation frequency code.');
@@ -471,7 +503,7 @@ export async function createObligation(actor: InternalActor, clientId: string, i
       ownerLabel: safeText(input.ownerLabel, 'ownerLabel', 180, false),
       triggerType,
       frequencyCode: input.frequencyCode ? String(input.frequencyCode) : null,
-      nextDueDate: input.nextDueDate ? new Date(String(input.nextDueDate)) : null,
+      nextDueDate: parseDate(input.nextDueDate, 'nextDueDate'),
       status: 'OPEN',
       relatedTaskId: input.relatedTaskId ? String(input.relatedTaskId) : null,
       evidenceDocumentVersionId: input.evidenceDocumentVersionId ? String(input.evidenceDocumentVersionId) : null,
@@ -494,7 +526,7 @@ export async function updateObligation(actor: InternalActor, obligationId: strin
     if (input.frequencyCode != null && !isObligationFrequency(String(input.frequencyCode))) throw new InteractionError(400, 'OBLIGATION_FREQUENCY_UNKNOWN', 'Unknown obligation frequency code.');
     data.frequencyCode = input.frequencyCode ? String(input.frequencyCode) : null;
   }
-  if (input.nextDueDate !== undefined) data.nextDueDate = input.nextDueDate ? new Date(String(input.nextDueDate)) : null;
+  if (input.nextDueDate !== undefined) data.nextDueDate = parseDate(input.nextDueDate, 'nextDueDate');
   if (input.relatedTaskId !== undefined) {
     if (input.relatedTaskId) await assertSameClientTask(prisma, row.clientId, String(input.relatedTaskId));
     data.relatedTaskId = input.relatedTaskId ? String(input.relatedTaskId) : null;
@@ -543,6 +575,10 @@ export async function createEntitlement(actor: InternalActor, contractId: string
   await assertClientReadAccess(actor, contract.clientId, prisma);
   const type = String(input.type || '');
   if (!isEntitlementType(type)) throw new InteractionError(400, 'ENTITLEMENT_TYPE_UNKNOWN', 'Unknown entitlement type.');
+  const exerciseByDate = parseDate(input.exerciseByDate, 'exerciseByDate');
+  if (exerciseByDate && contract.effectiveDate && exerciseByDate < contract.effectiveDate) {
+    throw new InteractionError(400, 'ENTITLEMENT_DATE_INVALID', 'exerciseByDate must be on or after the contract effective date.');
+  }
   const row = await prisma.contractEntitlement.create({
     data: {
       contractId,
@@ -551,7 +587,7 @@ export async function createEntitlement(actor: InternalActor, contractId: string
       title: safeText(input.title, 'title', 240, true)!,
       description: safeText(input.description, 'description', 3000, false),
       sourceReference: safeText(input.sourceReference, 'sourceReference', 240, false),
-      exerciseByDate: input.exerciseByDate ? new Date(String(input.exerciseByDate)) : null,
+      exerciseByDate,
       status: 'ACTIVE',
     },
   });
@@ -567,7 +603,13 @@ export async function updateEntitlement(actor: InternalActor, entitlementId: str
   if (input.title !== undefined) data.title = safeText(input.title, 'title', 240, true)!;
   if (input.description !== undefined) data.description = safeText(input.description, 'description', 3000, false);
   if (input.sourceReference !== undefined) data.sourceReference = safeText(input.sourceReference, 'sourceReference', 240, false);
-  if (input.exerciseByDate !== undefined) data.exerciseByDate = input.exerciseByDate ? new Date(String(input.exerciseByDate)) : null;
+  if (input.exerciseByDate !== undefined) {
+    const exerciseByDate = parseDate(input.exerciseByDate, 'exerciseByDate');
+    if (exerciseByDate && row.contract.effectiveDate && exerciseByDate < row.contract.effectiveDate) {
+      throw new InteractionError(400, 'ENTITLEMENT_DATE_INVALID', 'exerciseByDate must be on or after the contract effective date.');
+    }
+    data.exerciseByDate = exerciseByDate;
+  }
   const updated = await prisma.contractEntitlement.update({ where: { id: entitlementId }, data });
   return toEntitlementDTO(updated);
 }
