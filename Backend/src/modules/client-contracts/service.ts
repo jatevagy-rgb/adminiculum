@@ -176,6 +176,11 @@ export function toContractDTO(row: any): any {
     contractType: row.contractType,
     status: row.status,
     businessOwnerLabel: row.businessOwnerLabel,
+    businessOwnerPersonId: row.businessOwnerPersonId,
+    businessOwnerPersonName: row.businessOwnerPerson?.name ?? null,
+    businessOwnerPersonActive: row.businessOwnerPerson ? String(row.businessOwnerPerson.employmentStatus) === 'ACTIVE' : null,
+    businessOwnerDisplay: row.businessOwnerPerson?.name ?? row.businessOwnerLabel ?? null,
+    lawFirmOwnerName: row.lawFirmOwner?.name ?? null,
     lawFirmOwnerUserId: row.lawFirmOwnerUserId,
     sourceCaseId: row.sourceCaseId,
     canonicalDocumentVersionId: row.canonicalDocumentVersionId,
@@ -220,6 +225,9 @@ export function toObligationDTO(row: any): any {
     title: row.title,
     description: row.description,
     ownerLabel: row.ownerLabel,
+    ownerPersonId: row.ownerPersonId,
+    ownerPersonName: row.ownerPerson?.name ?? null,
+    ownerDisplay: row.ownerPerson?.name ?? row.ownerLabel ?? null,
     triggerType: row.triggerType,
     frequencyCode: row.frequencyCode,
     nextDueDate: iso(row.nextDueDate),
@@ -257,7 +265,11 @@ export async function listContracts(actor: InternalActor, clientId: string, opts
   await assertClientReadAccess(actor, clientId, prisma);
   const rows = await prisma.contractRecord.findMany({
     where: { clientId, ...(opts.status ? { status: opts.status as any } : {}), ...(opts.type ? { contractType: opts.type } : {}) },
-    include: { parties: true },
+    include: {
+      parties: true,
+      businessOwnerPerson: { select: { id: true, name: true, employmentStatus: true } },
+      lawFirmOwner: { select: { id: true, name: true } },
+    },
     orderBy: [{ createdAt: 'desc' }],
   });
   const dto = rows.map((row) => ({ ...toContractDTO(row), parties: row.parties.map(toPartyDTO) }));
@@ -268,7 +280,14 @@ export async function listContracts(actor: InternalActor, clientId: string, opts
 export async function getContract(actor: InternalActor, contractId: string, prisma: Prisma = defaultPrisma) {
   const row = await prisma.contractRecord.findUnique({
     where: { id: contractId },
-    include: { parties: true, amendments: { orderBy: { createdAt: 'asc' } }, obligations: true, entitlements: true },
+    include: {
+      parties: true,
+      amendments: { orderBy: { createdAt: 'asc' } },
+      obligations: { include: { ownerPerson: { select: { id: true, name: true } }, sourceContract: { select: { id: true, title: true } } } },
+      entitlements: true,
+      businessOwnerPerson: { select: { id: true, name: true, employmentStatus: true } },
+      lawFirmOwner: { select: { id: true, name: true } },
+    },
   });
   if (!row) throw new InteractionError(404, 'CONTRACT_NOT_FOUND', 'Contract not found.');
   await assertClientReadAccess(actor, row.clientId, prisma);
@@ -467,6 +486,10 @@ export async function listObligations(actor: InternalActor, clientId: string, op
   await assertClientReadAccess(actor, clientId, prisma);
   const rows = await prisma.clientObligation.findMany({
     where: { clientId, ...(opts.status ? { status: opts.status as any } : {}), ...(opts.contractId ? { sourceContractId: opts.contractId } : {}) },
+    include: {
+      ownerPerson: { select: { id: true, name: true } },
+      sourceContract: { select: { id: true, title: true } },
+    },
     orderBy: { createdAt: 'desc' },
   });
   const dto = rows.map(toObligationDTO);
