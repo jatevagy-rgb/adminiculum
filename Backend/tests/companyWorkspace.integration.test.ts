@@ -42,11 +42,14 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
   const contractLegacy = crypto.randomUUID();
   const contractNoOwner = crypto.randomUUID();
   const contractInactiveOwner = crypto.randomUUID();
+  const contractB = crypto.randomUUID();
   const obligationOwned = crypto.randomUUID();
   const obligationLegacy = crypto.randomUUID();
   const obligationNoOwner = crypto.randomUUID();
+  const obligationB = crypto.randomUUID();
   const initiativeOwned = crypto.randomUUID();
   const initiativeLegacy = crypto.randomUUID();
+  const initiativeB = crypto.randomUUID();
   const assessmentArchived = crypto.randomUUID();
   const findingArchived = crypto.randomUUID();
   const personOwner = crypto.randomUUID();
@@ -103,25 +106,25 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
       { id: findingResolved, clientId: clientA, assessmentId: assessmentHigh, severity: 'HIGH', title: 'Rendezett adatkezelés', status: 'RESOLVED', createdByUserId: adminId },
       { id: findingArchived, clientId: clientA, assessmentId: assessmentArchived, severity: 'CRITICAL', title: 'Archivált kritikus megállapítás', status: 'OPEN', createdByUserId: adminId },
     ] as never });
-    await db.contractParty.createMany({ data: [
-      { contractId: contractOwned, roleCode: 'CUSTOMER', displayName: 'Egyedi megrendelő' },
-      { contractId: contractLegacy, roleCode: 'LESSOR', displayName: 'Bérbeadó Zrt.' },
-      { contractId: contractLegacy, roleCode: 'LESSEE', displayName: 'Bérlő Kft.' },
-    ] as never });
     // Contracts: one owned by person, one legacy label only, one with no owner.
     await db.contractRecord.createMany({ data: [
       { id: contractOwned, clientId: clientA, title: 'Beszállítói keretszerződés', contractType: 'B2B_SUPPLY', status: 'ACTIVE', effectiveDate: new Date('2026-01-01T00:00:00Z'), expiryDate: new Date('2027-01-01T00:00:00Z') },
       { id: contractLegacy, clientId: clientA, title: 'Irodabérleti szerződés', contractType: 'LEASE', status: 'ACTIVE', businessOwnerLabel: 'Tulajdonos (A. B.)', effectiveDate: new Date('2025-01-01T00:00:00Z') },
       { id: contractNoOwner, clientId: clientA, title: 'Szolgáltatási szerződés', contractType: 'SERVICE', status: 'ACTIVE', effectiveDate: new Date('2026-03-01T00:00:00Z') },
       { id: contractInactiveOwner, clientId: clientA, title: 'Karbantartási szerződés', contractType: 'SERVICE', status: 'ACTIVE', effectiveDate: new Date('2026-02-01T00:00:00Z') },
-      { id: contractOwned + 'b', clientId: clientB, title: 'B ügyfél szerződés', contractType: 'SERVICE', status: 'ACTIVE', effectiveDate: new Date('2026-01-01T00:00:00Z') },
+      { id: contractB, clientId: clientB, title: 'B ügyfél szerződés', contractType: 'SERVICE', status: 'ACTIVE', effectiveDate: new Date('2026-01-01T00:00:00Z') },
+    ] as never });
+    await db.contractParty.createMany({ data: [
+      { contractId: contractOwned, roleCode: 'CUSTOMER', displayName: 'Egyedi megrendelő' },
+      { contractId: contractLegacy, roleCode: 'LESSOR', displayName: 'Bérbeadó Zrt.' },
+      { contractId: contractLegacy, roleCode: 'LESSEE', displayName: 'Bérlő Kft.' },
     ] as never });
     // Obligations: owned, legacy label only, no owner, and one belonging to client B.
     await db.clientObligation.createMany({ data: [
       { id: obligationOwned, clientId: clientA, sourceType: 'CONTRACT', sourceContractId: contractOwned, title: 'Éves beszámoló benyújtása', triggerType: 'RECURRING', frequencyCode: 'ANNUAL', status: 'OPEN', nextDueDate: new Date('2026-09-30T00:00:00Z') },
       { id: obligationLegacy, clientId: clientA, sourceType: 'CONTRACT', sourceContractId: contractLegacy, title: 'Bérleti díj éves indexálása', triggerType: 'DATE', status: 'IN_PROGRESS', ownerLabel: 'Pénzügyi vezető', nextDueDate: new Date('2026-12-31T00:00:00Z') },
       { id: obligationNoOwner, clientId: clientA, sourceType: 'CONTRACT', sourceContractId: contractNoOwner, title: 'Szolgáltatási jelentés', triggerType: 'RECURRING', frequencyCode: 'QUARTERLY', status: 'OPEN', nextDueDate: new Date('2026-08-15T00:00:00Z') },
-      { id: obligationOwned + 'b', clientId: clientB, sourceType: 'CONTRACT', sourceContractId: contractOwned + 'b', title: 'B kötelezettség', triggerType: 'DATE', status: 'OPEN', nextDueDate: new Date('2026-10-01T00:00:00Z') },
+      { id: obligationB, clientId: clientB, sourceType: 'CONTRACT', sourceContractId: contractB, title: 'B kötelezettség', triggerType: 'DATE', status: 'OPEN', nextDueDate: new Date('2026-10-01T00:00:00Z') },
     ] as never });
     // Organization: groups + persons.
     await db.clientOrganizationGroup.create({ data: { id: groupRoot, clientId: clientA, name: 'Vezetőség', createdById: adminId } });
@@ -136,7 +139,7 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     await db.developmentInitiative.createMany({ data: [
       { id: initiativeOwned, clientId: clientA, title: 'ISO 27001 bevezetés', priority: 'HIGH', status: 'ACTIVE', startedAt: new Date('2026-04-01T00:00:00Z') },
       { id: initiativeLegacy, clientId: clientA, title: 'Könyvelési folyamatfejlesztés', priority: 'MEDIUM', status: 'PLANNED' },
-      { id: initiativeOwned + 'b', clientId: clientB, title: 'B program', priority: 'MEDIUM', status: 'ACTIVE' },
+      { id: initiativeB, clientId: clientB, title: 'B program', priority: 'MEDIUM', status: 'ACTIVE' },
     ] as never });
     await db.companyMilestone.create({ data: { id: crypto.randomUUID(), clientId: clientA, type: 'IMPORTANT_IT_SYSTEM', title: 'Bevezetés kezdete', status: 'PLANNED', targetDate: new Date('2026-09-01T00:00:00Z'), developmentInitiativeId: initiativeOwned, createdByUserId: adminId } });
     // Link owners.
@@ -276,9 +279,9 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     const json = JSON.stringify(view);
     expect(json).not.toContain('B ügyfél szerződés');
     expect(json).not.toContain('B program');
-    expect(view.contracts.some((c: any) => c.id === contractOwned + 'b')).toBe(false);
-    expect(view.obligations.some((o: any) => o.id === obligationOwned + 'b')).toBe(false);
-    expect(view.initiatives.some((i: any) => i.id === initiativeOwned + 'b')).toBe(false);
+    expect(view.contracts.some((c: any) => c.id === contractB)).toBe(false);
+    expect(view.obligations.some((o: any) => o.id === obligationB)).toBe(false);
+    expect(view.initiatives.some((i: any) => i.id === initiativeB)).toBe(false);
   });
 
   it('masks a corrupted cross-client owner relation in the read projection', async () => {
