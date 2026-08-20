@@ -39,6 +39,7 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
   const contractOwned = crypto.randomUUID();
   const contractLegacy = crypto.randomUUID();
   const contractNoOwner = crypto.randomUUID();
+  const contractInactiveOwner = crypto.randomUUID();
   const obligationOwned = crypto.randomUUID();
   const obligationLegacy = crypto.randomUUID();
   const obligationNoOwner = crypto.randomUUID();
@@ -93,6 +94,7 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
       { id: contractOwned, clientId: clientA, title: 'Beszállítói keretszerződés', contractType: 'B2B_SUPPLY', status: 'ACTIVE', effectiveDate: new Date('2026-01-01T00:00:00Z'), expiryDate: new Date('2027-01-01T00:00:00Z') },
       { id: contractLegacy, clientId: clientA, title: 'Irodabérleti szerződés', contractType: 'LEASE', status: 'ACTIVE', businessOwnerLabel: 'Tulajdonos (A. B.)', effectiveDate: new Date('2025-01-01T00:00:00Z') },
       { id: contractNoOwner, clientId: clientA, title: 'Szolgáltatási szerződés', contractType: 'SERVICE', status: 'ACTIVE', effectiveDate: new Date('2026-03-01T00:00:00Z') },
+      { id: contractInactiveOwner, clientId: clientA, title: 'Korábbi vezetőhöz rendelt szerződés', contractType: 'SERVICE', status: 'ACTIVE', effectiveDate: new Date('2026-02-01T00:00:00Z') },
       { id: contractOwned + 'b', clientId: clientB, title: 'B ügyfél szerződés', contractType: 'SERVICE', status: 'ACTIVE', effectiveDate: new Date('2026-01-01T00:00:00Z') },
     ] as never });
     // Obligations: owned, legacy label only, no owner, and one belonging to client B.
@@ -119,6 +121,7 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     await db.companyMilestone.create({ data: { id: crypto.randomUUID(), clientId: clientA, type: 'IMPORTANT_IT_SYSTEM', title: 'Bevezetés kezdete', status: 'PLANNED', targetDate: new Date('2026-09-01T00:00:00Z'), developmentInitiativeId: initiativeOwned, createdByUserId: adminId } });
     // Link owners.
     await setContractBusinessOwner(admin, contractOwned, personOwner);
+    await setContractBusinessOwner(admin, contractInactiveOwner, personInactive);
     await setObligationOwner(admin, obligationOwned, personOwner);
     await setInitiativeClientOwner(admin, initiativeOwned, personOwner);
   });
