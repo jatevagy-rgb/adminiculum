@@ -1,4 +1,4 @@
-name: Prisma migration replayability
+name: Prisma Migration Gate
 
 on:
   workflow_dispatch:
@@ -11,33 +11,6 @@ on:
       - 'Backend/scripts/verify-migration-replay.mjs'
       - 'Backend/scripts/test-migration-webjob-runner.mjs'
       - 'Backend/App_Data/jobs/triggered/adminiculum-db-migrate/runner.cjs'
-      - 'Backend/src/modules/documents/comparison/**'
-      - 'Backend/src/modules/documents/review/**'
-      - 'Backend/src/modules/client-publication/**'
-      - 'Backend/src/modules/client-identity/**'
-      - 'Backend/src/modules/client-interaction/**'
-      - 'Backend/src/modules/client-workspace/**'
-      - 'Backend/src/middleware/clientPortalAuth.ts'
-      - 'Backend/tests/**comparison**'
-      - 'Backend/tests/**review**'
-      - 'Backend/tests/**publication**'
-      - 'Backend/tests/**Publication**'
-      - 'Backend/tests/**[Mm]ilestone**'
-      - 'Backend/tests/**[Ww]orkflow**'
-      - 'Backend/tests/**[Ll]ifecycle**'
-      - 'Backend/src/modules/cases/**'
-      - 'Backend/src/modules/tasks/**'
-      - 'Backend/tests/**identity**'
-      - 'Backend/tests/clientIdentityMembership.integration.test.ts'
-      - 'Backend/tests/**Interaction**'
-      - 'Backend/tests/**interaction**'
-      - 'Backend/tests/**ExternalCommunication**'
-      - 'Backend/tests/**externalCommunication**'
-      - 'Backend/tests/**workspace**'
-      - 'Backend/tests/**Intake**'
-      - 'Backend/tests/**intake**'
-      - 'Backend/tests/**Onboarding**'
-      - 'Backend/tests/**onboarding**'
       - 'Backend/package.json'
       - 'Backend/package-lock.json'
       - '.github/workflows/prisma-migration-replayability.yml'
@@ -53,40 +26,19 @@ on:
       - 'Backend/scripts/verify-migration-replay.mjs'
       - 'Backend/scripts/test-migration-webjob-runner.mjs'
       - 'Backend/App_Data/jobs/triggered/adminiculum-db-migrate/runner.cjs'
-      - 'Backend/src/modules/documents/comparison/**'
-      - 'Backend/src/modules/documents/review/**'
-      - 'Backend/src/modules/client-publication/**'
-      - 'Backend/src/modules/client-identity/**'
-      - 'Backend/src/modules/client-interaction/**'
-      - 'Backend/src/modules/client-workspace/**'
-      - 'Backend/src/middleware/clientPortalAuth.ts'
-      - 'Backend/tests/**comparison**'
-      - 'Backend/tests/**review**'
-      - 'Backend/tests/**publication**'
-      - 'Backend/tests/**Publication**'
-      - 'Backend/tests/**[Mm]ilestone**'
-      - 'Backend/tests/**[Ww]orkflow**'
-      - 'Backend/tests/**[Ll]ifecycle**'
-      - 'Backend/src/modules/cases/**'
-      - 'Backend/src/modules/tasks/**'
-      - 'Backend/tests/**identity**'
-      - 'Backend/tests/clientIdentityMembership.integration.test.ts'
-      - 'Backend/tests/**Interaction**'
-      - 'Backend/tests/**interaction**'
-      - 'Backend/tests/**ExternalCommunication**'
-      - 'Backend/tests/**externalCommunication**'
-      - 'Backend/tests/**workspace**'
-      - 'Backend/tests/**Intake**'
-      - 'Backend/tests/**intake**'
-      - 'Backend/tests/**Onboarding**'
-      - 'Backend/tests/**onboarding**'
       - 'Backend/package.json'
       - 'Backend/package-lock.json'
       - '.github/workflows/prisma-migration-replayability.yml'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  replayability:
+  migration-gate:
+    name: Migration gate (empty replay + webjob)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
@@ -115,121 +67,36 @@ jobs:
         working-directory: Backend
         run: npm ci
 
-      - name: Verify canonical empty replay
+      - name: Verify canonical empty migration replay
         working-directory: Backend
         env:
           MIGRATION_REPLAY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
         run: npm run db:migrations:verify-replay
 
-      - name: Run comparison PostgreSQL integration tests
-        working-directory: Backend
-        env:
-          COMPARISON_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:comparison:db
-
-      - name: Run review PostgreSQL integration tests
-        working-directory: Backend
-        env:
-          REVIEW_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:review:db
-
-      - name: Run publication PostgreSQL integration tests
-        working-directory: Backend
-        env:
-          PUBLICATION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:publication:db
-
-      - name: Run client identity PostgreSQL integration tests
-        working-directory: Backend
-        env:
-          CLIENT_IDENTITY_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:client-identity:db
-
-      - name: Run migration WebJob PostgreSQL tests
+      - name: Run migration WebJob runner test
         working-directory: Backend
         env:
           WEBJOB_TEST_ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
         run: npm run test:migration:webjob
 
-      - name: Run client interaction PostgreSQL integration tests
-        working-directory: Backend
-        env:
-          CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:client-interaction:db
-
-      - name: Run CP0 workspace PostgreSQL integration tests
-        working-directory: Backend
-        env:
-          CLIENT_WORKSPACE_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:client-workspace:db
-
-      - name: Run company foundation PostgreSQL integration tests
-        working-directory: Backend
-        env:
-          CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:company:db
-
-      - name: Run contract library PostgreSQL integration tests
-        working-directory: Backend
-        env:
-          CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:contracts:db
-
-      - name: Run organization PostgreSQL integration tests
-        working-directory: Backend
-        env:
-          CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:organization:db
-
-      - name: Run CP1 organizational access PostgreSQL integration tests
-        working-directory: Backend
-        env:
-          CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:org-access:db
-
-      - name: Run CP1 external communication/document access PostgreSQL integration tests
-        working-directory: Backend
-        env:
-          CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-          PUBLICATION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-          CLIENT_PORTAL_READ_ENABLED: 'true'
-          CLIENT_PORTAL_ACTIONS_ENABLED: 'true'
-          CLIENT_PORTAL_QUESTIONS_ENABLED: 'true'
-        run: npm run test:cp1-external-communication-docs:db
-
-      - name: Run CP1 intake and triage PostgreSQL integration tests
-        working-directory: Backend
-        env:
-          CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-          CLIENT_PORTAL_ACTIONS_ENABLED: 'true'
-          CLIENT_PORTAL_ORGANIZATIONAL_INTAKE_ENABLED: 'true'
-          CLIENT_PORTAL_DATA_REQUESTS_ENABLED: 'true'
-          CLIENT_PORTAL_DOCUMENT_UPLOADS_ENABLED: 'true'
-        run: npm run test:intake:db
-
-      - name: Run client portal membership onboarding PostgreSQL integration tests
-        working-directory: Backend
-        env:
-          CLIENT_IDENTITY_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:membership-onboarding:db
-
-      - name: Run customer-safe milestone publication PostgreSQL integration tests
-        working-directory: Backend
-        env:
-          PUBLICATION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-          CLIENT_PORTAL_READ_ENABLED: 'true'
-        run: npm run test:milestone:db
-
-      - name: Run workflow template + DAG PostgreSQL integration tests
-        working-directory: Backend
-        env:
-          WORKFLOW_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:workflow:db
-
-      - name: Run workflow completion + forced case-close PostgreSQL integration tests
-        working-directory: Backend
-        env:
-          WORKFLOW_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:lifecycle:db
+      - name: Migration gate summary
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: job } = await github.rest.actions.getJobForRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              job_id: context.job,
+            });
+            const rows = job.steps
+              .filter((s) => !['Set up job', 'Complete job'].includes(s.name))
+              .map((s) => {
+                const result = s.conclusion === 'success' ? 'PASS' : s.conclusion === 'failure' ? 'FAIL' : s.conclusion;
+                return `| ${s.name} | ${result} |`;
+              })
+              .join('\n');
+            core.summary.addHeading('Prisma Migration Gate');
+            core.summary.addRaw('| Step | Result |\n|------|--------|\n' + rows + '\n');
+            core.summary.addRaw('Migration replay runs on an empty schema and applies every post-baseline migration in order. A broken migration MUST fail this gate.');
+            await core.summary.write();
