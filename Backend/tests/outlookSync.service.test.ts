@@ -129,6 +129,17 @@ describe('syncOutlookMailbox (service unit)', () => {
     expect(res.items[0]).toMatchObject({ duplicate: true, imported: false });
     expect((prisma as any).communication.create).not.toHaveBeenCalled();
   });
+
+  it('deduplicates repeated messages within one Graph page', async () => {
+    (prisma as any).communication.findMany.mockResolvedValueOnce([]);
+    (prisma as any).communication.create.mockResolvedValue({ id: 'only-one' });
+    (prisma as any).communicationAttachment.create.mockResolvedValue({ id: 'a1' });
+
+    const message = graphMsg('same', null);
+    const res = await syncOutlookMailbox('u1', { reader: fakeReader([message, message]) });
+    expect((prisma as any).communication.create).toHaveBeenCalledTimes(1);
+    expect(res.summary.imported).toBe(1);
+  });
 });
 
 describe('applySafeConversationLinkage', () => {

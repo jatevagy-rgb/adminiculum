@@ -35,10 +35,11 @@ jest.mock('../src/prisma/prisma.service', () => {
   };
   const communicationAttachment = { findMany: jest.fn(), create: jest.fn() };
   const client = { findMany: jest.fn(), findUnique: jest.fn() };
-  const caseData: any = { findUnique: jest.fn() };
+  const caseData: any = { findUnique: jest.fn(), findMany: jest.fn() };
+  const caseCollaborator = { findFirst: jest.fn() };
   const task = { findMany: jest.fn(), create: jest.fn(), update: jest.fn(), findUnique: jest.fn() };
   const timelineEvent = { create: jest.fn() };
-  const mock: any = { communication, communicationAttachment, client, case: caseData, task, timelineEvent };
+  const mock: any = { communication, communicationAttachment, client, case: caseData, caseCollaborator, task, timelineEvent };
   mock.$transaction = jest.fn((cb: any) => cb(mock));
   return { prisma: mock };
 });
@@ -53,9 +54,9 @@ function requestJson(
   app: Express,
   method: string,
   path: string,
-  options: { authenticated?: boolean; body?: unknown } = {}
+  options: { authenticated?: boolean; body?: unknown; role?: string } = {}
 ): Promise<TestResponse> {
-  const { authenticated = true, body } = options;
+  const { authenticated = true, body, role = 'ADMIN' } = options;
   const payload = body === undefined ? undefined : JSON.stringify(body);
   return new Promise((resolve, reject) => {
     const server = app.listen(0, '127.0.0.1', () => {
@@ -72,7 +73,7 @@ function requestJson(
           path,
           method,
           headers: {
-            ...(authenticated ? { authorization: 'Bearer test-token' } : {}),
+            ...(authenticated ? { authorization: 'Bearer test-token', 'x-test-role': role } : {}),
             'content-type': 'application/json',
             ...(payload ? { 'content-length': Buffer.byteLength(payload) } : {}),
           },
@@ -131,6 +132,14 @@ describe('POST /communications/outlook/sync', () => {
     process.env.ENABLE_OUTLOOK_IMPORT = 'true';
     const res = await requestJson(createApp(), 'POST', SYNC_PATH, { authenticated: false, body: {} });
     expect(res.status).toBe(401);
+    expect(syncOutlookMailbox).not.toHaveBeenCalled();
+  });
+
+  it('rejects a customer identity at the backend boundary', async () => {
+    process.env.ENABLE_OUTLOOK_IMPORT = 'true';
+    const res = await requestJson(createApp(), 'POST', SYNC_PATH, { role: 'CLIENT', body: {} });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('COMMUNICATION_WORKFORCE_ONLY');
     expect(syncOutlookMailbox).not.toHaveBeenCalled();
   });
 

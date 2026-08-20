@@ -115,6 +115,10 @@ describe('POST /communications/outlook/import (mock write import)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     delete process.env.ENABLE_OUTLOOK_IMPORT;
+    process.env.COMMUNICATIONS_MAILBOX = MAILBOX;
+    process.env.OUTLOOK_GRAPH_CLIENT_ID = 'graph-client';
+    process.env.OUTLOOK_GRAPH_CLIENT_SECRET = 'graph-secret';
+    process.env.OUTLOOK_GRAPH_TENANT_ID = 'graph-tenant';
     (prisma as any).communication.findMany.mockResolvedValue([]);
     (prisma as any).communication.create.mockResolvedValue({ id: 'new-1' });
     (prisma as any).communicationAttachment.create.mockResolvedValue({ id: 'att-row-1' });
@@ -141,6 +145,16 @@ describe('POST /communications/outlook/import (mock write import)', () => {
     const res = await requestJson(createApp(), 'POST', PATH, { body: { mailboxAddress: MAILBOX } });
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect((prisma as any).communication.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a client-supplied mailbox outside the server scope', async () => {
+    process.env.ENABLE_OUTLOOK_IMPORT = 'true';
+    const res = await requestJson(createApp(), 'POST', PATH, {
+      body: { mailboxAddress: 'other@example.com', messages: [inboundMsg] },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('OUTLOOK_MAILBOX_SCOPE_MISMATCH');
     expect((prisma as any).communication.create).not.toHaveBeenCalled();
   });
 

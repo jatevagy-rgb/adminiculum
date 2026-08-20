@@ -9,7 +9,7 @@
 // - Create timeline events for communication actions
 // ============================================================================
 
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { Prisma } from '@prisma/client';
 import { authenticate } from '../../middleware/auth';
 import {
@@ -24,9 +24,68 @@ import {
   runOutlookImportDryRun,
   syncOutlookMailbox,
 } from './outlookImport.service';
+import { readOutlookSyncConfig } from './outlookGraphLive';
 import { canUserActOnTask, createTaskFromCommunicationSource, SourceLinkedTaskError } from '../tasks/services';
 
 const router = Router();
+
+const PRIVILEGED_COMMUNICATION_ROLES = new Set(['ADMIN', 'PARTNER']);
+
+function requireWorkforceCommunicationUser(req: Request, res: Response, next: NextFunction): void {
+  if (req.user?.role === 'CLIENT' || req.user?.role === 'EXTERNAL_REVIEWER') {
+    res.status(403).json({ status: 403, code: 'COMMUNICATION_WORKFORCE_ONLY', message: 'This communication workspace is for workforce users.' });
+    return;
+  }
+  next();
+}
+
+async function userCanReadCase(caseId: string, userId: string, role: string): Promise<boolean> {
+  const caseRow = await prisma.case.findUnique({
+    where: { id: caseId },
+    select: { id: true, assignedLawyerId: true, createdById: true },
+  });
+  if (!caseRow) return false;
+  if (PRIVILEGED_COMMUNICATION_ROLES.has(role)) return true;
+  if (caseRow.assignedLawyerId === userId || caseRow.createdById === userId) return true;
+  const collaborator = await prisma.caseCollaborator.findFirst({ where: { caseId, userId }, select: { id: true } });
+  return Boolean(collaborator);
+}
+
+async function userCanReadCommunication(userId: string, role: string, row: { caseId: string | null; createdById: string }): Promise<boolean> {
+  if (PRIVILEGED_COMMUNICATION_ROLES.has(role)) return true;
+  if (row.caseId) return userCanReadCase(row.caseId, userId, role);
+  return row.createdById === userId;
+}
+
+router.use(authenticate, requireWorkforceCommunicationUser);
+
+router.param('id', async (req: Request, res: Response, next: NextFunction, id: string) => {
+  // Let the feature gate produce its product-safe 501 response before doing
+  // resource authorization/database work for disabled mutations.
+  if (!isDatabaseFoundationEnabled('ENABLE_COMMUNICATIONS_PERSISTENCE')) {
+    next();
+    return;
+  }
+  try {
+    const row = await prisma.communication.findUnique({
+      where: { id: String(id) },
+      select: { id: true, caseId: true, createdById: true },
+    });
+    if (!row) {
+      res.status(404).json({ status: 404, code: 'COMMUNICATION_NOT_FOUND', message: 'Communication not found.' });
+      return;
+    }
+    if (!req.user?.userId || !(await userCanReadCommunication(req.user.userId, req.user.role, row))) {
+      res.status(403).json({ status: 403, code: 'COMMUNICATION_ACCESS_FORBIDDEN', message: 'You do not have access to this communication.' });
+      return;
+    }
+    (req as any).communicationAccess = row;
+    next();
+  } catch (error) {
+    logPrismaRouteError('communication authorization', error);
+    res.status(500).json({ status: 500, code: 'COMMUNICATION_AUTHORIZATION_ERROR', message: 'Communication access could not be verified.' });
+  }
+});
 const requireCommunicationsFoundation = requireDatabaseFoundation({
   feature: 'COMMUNICATIONS',
   enabled: () => isDatabaseFoundationEnabled('ENABLE_COMMUNICATIONS_PERSISTENCE'),
@@ -249,6 +308,27 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
 
     const where: any = {};
 
+    if (!req.user?.userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated workforce user is required.' });
+      return;
+    }
+    if (!PRIVILEGED_COMMUNICATION_ROLES.has(req.user.role)) {
+      const accessibleCases = await prisma.case.findMany({
+        where: {
+          OR: [
+            { assignedLawyerId: req.user.userId },
+            { createdById: req.user.userId },
+            { collaborators: { some: { userId: req.user.userId } } },
+          ],
+        },
+        select: { id: true },
+      });
+      where.OR = [
+        { caseId: null, createdById: req.user.userId },
+        ...(accessibleCases.length > 0 ? [{ caseId: { in: accessibleCases.map((row) => row.id) } }] : []),
+      ];
+    }
+
     if (caseId) {
       where.caseId = String(caseId);
     }
@@ -430,6 +510,23 @@ router.post('/', authenticate, requireCommunicationsFoundation, async (req: Requ
       return;
     }
 
+    if (caseId) {
+      const canRead = req.user?.userId ? await userCanReadCase(String(caseId), req.user.userId, req.user.role) : false;
+      if (!canRead) {
+        res.status(403).json({ status: 403, code: 'CASE_ACCESS_FORBIDDEN', message: 'You do not have access to this case.' });
+        return;
+      }
+      const linkedCase = await prisma.case.findUnique({ where: { id: String(caseId) }, select: { clientId: true } });
+      if (!linkedCase) {
+        res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found.' });
+        return;
+      }
+      if (clientId && clientId !== linkedCase.clientId) {
+        res.status(409).json({ status: 409, code: 'CLIENT_CASE_MISMATCH', message: 'Communication client and case client must match.' });
+        return;
+      }
+    }
+
     const communication = await prisma.communication.create({
       data: {
         type,
@@ -491,11 +588,30 @@ router.post('/:id/link-case', authenticate, requireCommunicationsFoundation, asy
 
     // Verify case exists
     const caseData = await prisma.case.findUnique({
-      where: { id: caseId }
+      where: { id: caseId },
+      select: { id: true, caseNumber: true, clientId: true },
     });
 
     if (!caseData) {
       res.status(404).json({ error: 'Case not found' });
+      return;
+    }
+
+    if (!req.user?.userId || !(await userCanReadCase(String(caseId), req.user.userId, req.user.role))) {
+      res.status(403).json({ status: 403, code: 'CASE_ACCESS_FORBIDDEN', message: 'You do not have access to this case.' });
+      return;
+    }
+
+    const current = await prisma.communication.findUnique({
+      where: { id: String(id) },
+      select: { id: true, clientId: true },
+    });
+    if (!current) {
+      res.status(404).json({ status: 404, code: 'COMMUNICATION_NOT_FOUND', message: 'Communication not found.' });
+      return;
+    }
+    if (current.clientId && current.clientId !== caseData.clientId) {
+      res.status(409).json({ status: 409, code: 'CLIENT_CASE_MISMATCH', message: 'Communication client and case client must match.' });
       return;
     }
 
@@ -1151,7 +1267,12 @@ router.post('/outlook/import-dry-run', authenticate, requireOutlookImportFoundat
 router.post('/outlook/import', authenticate, requireOutlookImportFoundation, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
-    const result = await importOutlookMessages((req.body || {}) as Record<string, any>, userId);
+    const config = readOutlookSyncConfig();
+    if (!config) {
+      res.status(501).json({ status: 501, code: 'OUTLOOK_IMPORT_NOT_CONFIGURED', message: 'Outlook import is not configured for a server-controlled mailbox.' });
+      return;
+    }
+    const result = await importOutlookMessages((req.body || {}) as Record<string, any>, userId, config.mailboxAddress);
     res.status(201).json(result);
   } catch (error) {
     if (error instanceof OutlookImportServiceError) {
@@ -1220,6 +1341,14 @@ router.post('/:id/link-client', authenticate, requireCommunicationsFoundation, a
     if (!communication) {
       res.status(404).json({ status: 404, code: 'COMMUNICATION_NOT_FOUND', message: 'Communication not found.' });
       return;
+    }
+
+    if (communication.caseId) {
+      const linkedCase = await prisma.case.findUnique({ where: { id: communication.caseId }, select: { clientId: true } });
+      if (!linkedCase || linkedCase.clientId !== client.id) {
+        res.status(409).json({ status: 409, code: 'CLIENT_CASE_MISMATCH', message: 'A case-linked communication must keep its case client.' });
+        return;
+      }
     }
 
     const updated = await prisma.communication.update({

@@ -34,11 +34,11 @@ describe('outlookGraphLive (live reader unit)', () => {
       delete process.env.SP_CLIENT_ID;
       expect(readOutlookSyncConfig()).toBeNull();
     });
-    it('reads mailbox and reuses SP_*/AZURE_* credentials', () => {
+    it('reads dedicated Outlook Graph credentials only', () => {
       process.env.COMMUNICATIONS_MAILBOX = 'legal@example.com';
-      process.env.SP_CLIENT_ID = 'cid';
-      process.env.SP_CLIENT_SECRET = 'secret';
-      process.env.SP_TENANT_ID = 'tid';
+      process.env.OUTLOOK_GRAPH_CLIENT_ID = 'cid';
+      process.env.OUTLOOK_GRAPH_CLIENT_SECRET = 'secret';
+      process.env.OUTLOOK_GRAPH_TENANT_ID = 'tid';
       const cfg = readOutlookSyncConfig();
       expect(cfg).toEqual({
         mailboxAddress: 'legal@example.com',
@@ -47,13 +47,12 @@ describe('outlookGraphLive (live reader unit)', () => {
         tenantId: 'tid',
       });
     });
-    it('falls back to AZURE_* credential names', () => {
+    it('does not fall back to unrelated Azure credential names', () => {
       process.env.COMMUNICATIONS_MAILBOX = 'legal@example.com';
-      delete process.env.SP_CLIENT_ID;
       process.env.AZURE_CLIENT_ID = 'cid';
       process.env.AZURE_CLIENT_SECRET = 'secret';
       process.env.AZURE_TENANT_ID = 'tid';
-      expect(readOutlookSyncConfig()).not.toBeNull();
+      expect(readOutlookSyncConfig()).toBeNull();
     });
   });
 

@@ -4,8 +4,9 @@
 // Bounded read of recent inbound mail from a configured workforce mailbox via
 // Microsoft Graph. It NEVER exposes, logs, or returns bearer tokens. It fetches
 // a bounded window of lightweight metadata (no full bodies, no arbitrary mailbox
-// dump). Credentials reuse the canonical SP_*/AZURE_* app-only secret pair, and
-// the target mailbox is read from COMMUNICATIONS_MAILBOX.
+// dump). Credentials use dedicated Outlook Graph app-only settings, and the
+// target mailbox is read from COMMUNICATIONS_MAILBOX. SharePoint credentials
+// are not interchangeable with Graph credentials.
 //
 // The transport is injectable so tests can provide a fake HTTP + token without
 // any live Graph/Azure dependency.
@@ -43,9 +44,9 @@ const MAX_MESSAGES_LIMIT = 200;
 
 export function readOutlookSyncConfig(): OutlookSyncConfig | null {
   const mailboxAddress = (process.env.COMMUNICATIONS_MAILBOX || '').trim();
-  const clientId = process.env.SP_CLIENT_ID || process.env.AZURE_CLIENT_ID || '';
-  const clientSecret = process.env.SP_CLIENT_SECRET || process.env.AZURE_CLIENT_SECRET || '';
-  const tenantId = process.env.SP_TENANT_ID || process.env.AZURE_TENANT_ID || '';
+  const clientId = process.env.OUTLOOK_GRAPH_CLIENT_ID || '';
+  const clientSecret = process.env.OUTLOOK_GRAPH_CLIENT_SECRET || '';
+  const tenantId = process.env.OUTLOOK_GRAPH_TENANT_ID || '';
   if (!mailboxAddress || !clientId || !clientSecret || !tenantId) return null;
   return { mailboxAddress, clientId, clientSecret, tenantId };
 }

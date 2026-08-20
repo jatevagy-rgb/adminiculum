@@ -254,8 +254,19 @@ export async function runOutlookImportDryRun(body: OutlookImportBody): Promise<R
   };
 }
 
-export async function importOutlookMessages(body: OutlookImportBody, userId: string | undefined): Promise<Record<string, unknown>> {
+export async function importOutlookMessages(
+  body: OutlookImportBody,
+  userId: string | undefined,
+  expectedMailboxAddress?: string,
+): Promise<Record<string, unknown>> {
   const { mailboxAddress, messages } = readPayload(body);
+  if (expectedMailboxAddress && normalizeEmailAddress(mailboxAddress) !== normalizeEmailAddress(expectedMailboxAddress)) {
+    throw new OutlookImportServiceError(400, {
+      status: 400,
+      code: 'OUTLOOK_MAILBOX_SCOPE_MISMATCH',
+      message: 'The import mailbox must match the server-configured workforce mailbox.',
+    });
+  }
   const mailboxNorm = normalizeEmailAddress(mailboxAddress);
   const normalized = messages.map((raw: any) => normalizeOutlookMessage(raw, mailboxNorm, mailboxAddress));
 
@@ -283,9 +294,16 @@ export async function importOutlookMessages(body: OutlookImportBody, userId: str
   }
 
   // New (non-duplicate, valid) messages to import.
-  const toImport = normalized.filter(
-    (n) => n.valid && n.externalMessageId && !existingById.has(n.externalMessageId),
-  );
+  // De-duplicate the incoming page as well as the database. Graph retries can
+  // repeat an item in one response; without this guard the second create would
+  // abort the whole transaction on the unique externalMessageId constraint.
+  const batchIds = new Set<string>();
+  const toImport = normalized.filter((n) => {
+    if (!n.valid || !n.externalMessageId || existingById.has(n.externalMessageId)) return false;
+    if (batchIds.has(n.externalMessageId)) return false;
+    batchIds.add(n.externalMessageId);
+    return true;
+  });
 
   const importedIds = new Map<string, string>();
   if (toImport.length > 0) {
@@ -345,6 +363,7 @@ export async function importOutlookMessages(body: OutlookImportBody, userId: str
     }
   }
 
+  const reportedImportedIds = new Set<string>();
   const items = normalized.map((n) => {
     if (!n.valid) {
       return {
@@ -368,6 +387,17 @@ export async function importOutlookMessages(body: OutlookImportBody, userId: str
         direction: n.direction,
       };
     }
+    if (reportedImportedIds.has(ext)) {
+      return {
+        externalMessageId: ext,
+        communicationId: importedIds.get(ext) || null,
+        imported: false,
+        duplicate: true,
+        valid: true,
+        direction: n.direction,
+      };
+    }
+    reportedImportedIds.add(ext);
     return {
       externalMessageId: ext,
       communicationId: importedIds.get(ext) || null,
@@ -557,7 +587,7 @@ export async function syncOutlookMailbox(
   }
 
   const payload = mapGraphMessagesToOutlookImportPayload(messages, config.mailboxAddress);
-  const result = (await importOutlookMessages(payload, userId)) as {
+  const result = (await importOutlookMessages(payload, userId, config.mailboxAddress)) as {
     items: Array<{
       externalMessageId: string | null;
       communicationId: string | null;
