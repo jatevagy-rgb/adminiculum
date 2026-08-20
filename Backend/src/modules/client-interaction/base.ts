@@ -100,6 +100,40 @@ export async function internalCaseScope(actor: InternalActor, prisma: Prisma = d
   return Array.from(new Set([...owned.map((c: { id: string }) => c.id), ...collaborated.map((c: { caseId: string }) => c.caseId)]));
 }
 
+/**
+ * Canonical Client read-access gate for the internal company modules (Phase 1-4).
+ * ADMIN/PARTNER may read any client; every other active workforce role is limited
+ * to clients they have Case access in (created / assigned / collaborating).
+ *
+ * Single source of truth reused by the client-company, client-contracts,
+ * client-organization and company-workspace services so the policy cannot drift.
+ * It is NOT a new ACL and it never implies Case/Document/HR_CONFIDENTIAL access.
+ *
+ * Fail-closed on scope resolution: `internalCaseScope` returns `null` ONLY for
+ * ADMIN/PARTNER (already returned above); for any other role it returns the
+ * concrete (possibly empty) case-id list. A `null` reaching here would be
+ * unexpected for a non-manager and must NEVER be treated as "all clients" — it is
+ * coerced to an empty scope so access is denied, not silently granted.
+ */
+export async function assertClientReadAccess(
+  actor: InternalActor,
+  clientId: string,
+  prisma: Prisma = defaultPrisma,
+): Promise<{ id: string; name: string }> {
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true } });
+  if (!client) throw new InteractionError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
+  const user = await prisma.user.findUnique({ where: { id: actor.userId }, select: { id: true, role: true, status: true, isActive: true } });
+  if (!user || user.isActive === false || String(user.status) !== 'ACTIVE') {
+    throw new InteractionError(403, 'CLIENT_ACCESS_FORBIDDEN', 'Actor cannot access this client.');
+  }
+  if (['ADMIN', 'PARTNER'].includes(String(user.role))) return client;
+  const scope = await internalCaseScope(actor, prisma);
+  const scopedCaseIds = scope ?? [];
+  const has = await prisma.case.findFirst({ where: { id: { in: scopedCaseIds }, clientId }, select: { id: true } });
+  if (!has) throw new InteractionError(403, 'CLIENT_ACCESS_FORBIDDEN', 'Actor has no case access in this client.');
+  return client;
+}
+
 export async function applyInternalQueueCaseScope(where: Record<string, unknown>, actor: InternalActor, prisma: Prisma = defaultPrisma): Promise<Record<string, unknown>> {
   if (where.caseId) {
     await assertInternalCaseAccess(actor, String(where.caseId), prisma);

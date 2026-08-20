@@ -29,6 +29,7 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
   let db: PrismaClient;
   const suffix = crypto.randomUUID();
   const adminId = crypto.randomUUID();
+  const partnerId = crypto.randomUUID();
   const lawyerId = crypto.randomUUID();
   const externalLawyerId = crypto.randomUUID();
   const clientA = crypto.randomUUID();
@@ -39,6 +40,7 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
   const contractOwned = crypto.randomUUID();
   const contractLegacy = crypto.randomUUID();
   const contractNoOwner = crypto.randomUUID();
+  const contractInactiveOwner = crypto.randomUUID();
   const obligationOwned = crypto.randomUUID();
   const obligationLegacy = crypto.randomUUID();
   const obligationNoOwner = crypto.randomUUID();
@@ -46,7 +48,9 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
   const initiativeLegacy = crypto.randomUUID();
   const personOwner = crypto.randomUUID();
   const personInactive = crypto.randomUUID();
+  const personInactiveOwner = crypto.randomUUID();
   const personB = crypto.randomUUID();
+  const inactiveWorkforceId = crypto.randomUUID();
 
   const admin = { userId: adminId, role: 'ADMIN' };
   const lawyer = { userId: lawyerId, role: 'LAWYER' };
@@ -57,8 +61,10 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
     await db.user.createMany({ data: [
       { id: adminId, email: `ws-admin-${suffix}@test.invalid`, name: 'Workspace Admin', role: 'ADMIN', status: 'ACTIVE', isActive: true, skills: [] },
+      { id: partnerId, email: `ws-partner-${suffix}@test.invalid`, name: 'Workspace Partner', role: 'PARTNER', status: 'ACTIVE', isActive: true, skills: [] },
       { id: lawyerId, email: `ws-lawyer-${suffix}@test.invalid`, name: 'Workspace Lawyer', role: 'LAWYER', status: 'ACTIVE', isActive: true, skills: [] },
       { id: externalLawyerId, email: `ws-lawyer-b-${suffix}@test.invalid`, name: 'Workspace Lawyer B', role: 'LAWYER', status: 'ACTIVE', isActive: true, skills: [] },
+      { id: inactiveWorkforceId, email: `ws-inactive-${suffix}@test.invalid`, name: 'Workspace Inactive', role: 'LAWYER', status: 'INACTIVE', isActive: false, skills: [] },
     ] as never });
     await db.client.createMany({ data: [
       { id: clientA, name: `Workspace Client A ${suffix}` },
@@ -69,6 +75,8 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     await db.clientOperatingProfile.create({ data: { clientId: clientA, summary: 'Családi tulajdonú kereskedő cég, dinamikus exportmérleggel.', status: 'ACTIVE', nextReviewAt: new Date('2026-12-01T00:00:00Z') } });
     await db.clientFact.createMany({ data: [
       { clientId: clientA, type: 'EMPLOYEE_COUNT', value: '42 fő', validFrom: new Date('2026-01-01T00:00:00Z'), verificationStatus: 'CLIENT_PROVIDED' },
+      // Superseded historical EMPLOYEE_COUNT (ended before now) — must NOT appear in the current Cégkép.
+      { clientId: clientA, type: 'EMPLOYEE_COUNT', value: '30 fő', validFrom: new Date('2024-01-01T00:00:00Z'), validTo: new Date('2025-12-31T00:00:00Z'), verificationStatus: 'CLIENT_PROVIDED' },
       { clientId: clientA, type: 'REVENUE_BAND', value: '500 M Ft – 1 Mrd Ft', validFrom: new Date('2026-01-01T00:00:00Z'), verificationStatus: 'UNVERIFIED' },
       { clientId: clientA, type: 'OPERATING_COUNTRY', value: 'Magyarország, Szlovákia', validFrom: new Date('2026-01-01T00:00:00Z'), verificationStatus: 'LAW_FIRM_VERIFIED' },
       { clientId: clientA, type: 'IMPORTANT_IT_SYSTEM', value: 'Vállalatirányítási rendszer', validFrom: new Date('2026-01-01T00:00:00Z'), verificationStatus: 'UNVERIFIED' },
@@ -92,6 +100,7 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
       { id: contractOwned, clientId: clientA, title: 'Beszállítói keretszerződés', contractType: 'B2B_SUPPLY', status: 'ACTIVE', effectiveDate: new Date('2026-01-01T00:00:00Z'), expiryDate: new Date('2027-01-01T00:00:00Z') },
       { id: contractLegacy, clientId: clientA, title: 'Irodabérleti szerződés', contractType: 'LEASE', status: 'ACTIVE', businessOwnerLabel: 'Tulajdonos (A. B.)', effectiveDate: new Date('2025-01-01T00:00:00Z') },
       { id: contractNoOwner, clientId: clientA, title: 'Szolgáltatási szerződés', contractType: 'SERVICE', status: 'ACTIVE', effectiveDate: new Date('2026-03-01T00:00:00Z') },
+      { id: contractInactiveOwner, clientId: clientA, title: 'Karbantartási szerződés', contractType: 'SERVICE', status: 'ACTIVE', effectiveDate: new Date('2026-02-01T00:00:00Z') },
       { id: contractOwned + 'b', clientId: clientB, title: 'B ügyfél szerződés', contractType: 'SERVICE', status: 'ACTIVE', effectiveDate: new Date('2026-01-01T00:00:00Z') },
     ] as never });
     // Obligations: owned, legacy label only, no owner, and one belonging to client B.
@@ -107,6 +116,7 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     await db.organizationPerson.createMany({ data: [
       { id: personOwner, clientId: clientA, organizationGroupId: groupFinance, name: 'Pénzügyi vezető', jobTitle: 'Pénzügyi vezető', employmentStatus: 'ACTIVE' },
       { id: personInactive, clientId: clientA, organizationGroupId: groupRoot, name: 'Korábbi ügyvezető', jobTitle: 'Ügyvezető', employmentStatus: 'ENDED' },
+      { id: personInactiveOwner, clientId: clientA, organizationGroupId: groupFinance, name: 'Távozott felelős', jobTitle: 'Szerződésgazda', employmentStatus: 'ENDED' },
       { id: personB, clientId: clientB, name: 'B személy', jobTitle: 'B vezető', employmentStatus: 'ACTIVE' },
     ] as never });
     // Initiatives: one with client owner, one without, plus milestone for the owned one.
@@ -120,6 +130,9 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     await setContractBusinessOwner(admin, contractOwned, personOwner);
     await setObligationOwner(admin, obligationOwned, personOwner);
     await setInitiativeClientOwner(admin, initiativeOwned, personOwner);
+    // An ENDED person who IS the current owner of an active contract — the only
+    // legitimate "inactive owner" attention case.
+    await setContractBusinessOwner(admin, contractInactiveOwner, personInactiveOwner);
   });
 
   afterAll(async () => {
@@ -171,16 +184,35 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     expect(view.gaps.obligationsWithoutOwner.map((g: any) => g.id)).toContain(obligationNoOwner);
   });
 
-  it('computes the deterministic attention summary from existing data', async () => {
+  it('computes the deterministic attention summary; active initiatives are not a warning', async () => {
     const view = await getWorkspaceOverview(admin, clientA, db);
     const codes = view.attention.map((a: any) => a.code);
     expect(codes).toContain('OPEN_IMPORTANT_FINDINGS');
     expect(codes).toContain('CONTRACTS_WITHOUT_OWNER');
     expect(codes).toContain('OBLIGATIONS_WITHOUT_OWNER');
     expect(codes).toContain('INACTIVE_OWNER_PERSONS');
-    expect(codes).toContain('ACTIVE_INITIATIVES');
+    // Active initiatives are normal, expected state — never an attention warning.
+    expect(codes).not.toContain('ACTIVE_INITIATIVES');
     const contractGap = view.attention.find((a: any) => a.code === 'CONTRACTS_WITHOUT_OWNER');
-    expect(contractGap.count).toBe(1); // only the ACTIVE contract without a person owner
+    // Only the ACTIVE contract with NO owner at all — legacy-label contracts are not gaps.
+    expect(contractGap.count).toBe(1);
+  });
+
+  it('flags only inactive persons who are the actual current owner, not every former employee', async () => {
+    const view = await getWorkspaceOverview(admin, clientA, db);
+    const inactiveIds = view.gaps.inactiveOwnerPersons.map((p: any) => p.id);
+    expect(inactiveIds).toContain(personInactiveOwner); // ENDED and owns an ACTIVE contract
+    expect(inactiveIds).not.toContain(personInactive);  // ENDED but owns nothing current
+    const item = view.attention.find((a: any) => a.code === 'INACTIVE_OWNER_PERSONS');
+    expect(item.count).toBe(1);
+  });
+
+  it('shows only currently-valid facts in the company profile (superseded facts are hidden)', async () => {
+    const view = await getWorkspaceOverview(admin, clientA, db);
+    const sizeGroup = view.factGroups.find((g: any) => g.key === 'SIZE');
+    const employeeValues = sizeGroup.facts.filter((f: any) => f.type === 'EMPLOYEE_COUNT').map((f: any) => f.value);
+    expect(employeeValues).toContain('42 fő');     // current (no validTo)
+    expect(employeeValues).not.toContain('30 fő'); // superseded (validTo in the past)
   });
 
   it('presents assessments with their important open findings', async () => {
@@ -219,11 +251,18 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     expect(view.initiatives.some((i: any) => i.id === initiativeOwned + 'b')).toBe(false);
   });
 
-  it('enforces workforce-only access: a lawyer without a case in the client is forbidden', async () => {
+  it('enforces the canonical workforce access posture (ADMIN/PARTNER/lawyer/scope/inactive/external)', async () => {
+    // ADMIN and PARTNER may read any client.
+    expect((await getWorkspaceOverview(admin, clientA, db)).client.id).toBe(clientA);
+    expect((await getWorkspaceOverview({ userId: partnerId, role: 'PARTNER' }, clientA, db)).client.id).toBe(clientA);
+    // A lawyer WITH a Case in the client may read it; WITHOUT one is forbidden.
+    expect((await getWorkspaceOverview(lawyer, clientA, db)).client.id).toBe(clientA);
     await expect(getWorkspaceOverview(externalLawyer, clientA, db)).rejects.toMatchObject({ code: 'CLIENT_ACCESS_FORBIDDEN' });
-    // A lawyer with a case in the client may read it.
-    const view = await getWorkspaceOverview(lawyer, clientA, db);
-    expect(view.client.id).toBe(clientA);
+    // An inactive workforce user is forbidden even though they hold a workforce role.
+    await expect(getWorkspaceOverview({ userId: inactiveWorkforceId, role: 'LAWYER' }, clientA, db)).rejects.toMatchObject({ code: 'CLIENT_ACCESS_FORBIDDEN' });
+    // A customer/external identity (not a workforce User) resolves to no user -> forbidden;
+    // company-level access never leaks to non-workforce principals.
+    await expect(getWorkspaceOverview({ userId: crypto.randomUUID(), role: 'CLIENT' }, clientA, db)).rejects.toMatchObject({ code: 'CLIENT_ACCESS_FORBIDDEN' });
   });
 
   it('phase 2 DTOs surface the linked owner alongside the legacy label (regression coverage)', async () => {

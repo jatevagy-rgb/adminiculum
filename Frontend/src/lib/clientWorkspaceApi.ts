@@ -107,8 +107,7 @@ export type WorkspaceAttentionCode =
   | 'OPEN_IMPORTANT_FINDINGS'
   | 'CONTRACTS_WITHOUT_OWNER'
   | 'OBLIGATIONS_WITHOUT_OWNER'
-  | 'INACTIVE_OWNER_PERSONS'
-  | 'ACTIVE_INITIATIVES';
+  | 'INACTIVE_OWNER_PERSONS';
 
 export type CompanyWorkspaceOverview = {
   client: { id: string; name: string };
@@ -163,8 +162,6 @@ export function attentionItemText(code: WorkspaceAttentionCode, count: number): 
       return `${count} kötelezettséghez még nincs kijelölt felelős.`;
     case 'INACTIVE_OWNER_PERSONS':
       return `${count} kijelölt felelős már nem aktív.`;
-    case 'ACTIVE_INITIATIVES':
-      return `${count} aktív fejlesztési kezdeményezés folyamatban.`;
     default:
       return 'Figyelmet igénylő terület.';
   }

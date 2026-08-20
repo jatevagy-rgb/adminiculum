@@ -11,8 +11,8 @@ import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import {
   InteractionError,
   InternalActor,
+  assertClientReadAccess,
   assertClientSafe,
-  internalCaseScope,
   safeText,
 } from '../client-interaction/base';
 import {
@@ -65,19 +65,6 @@ function requireManager(actor: InternalActor): void {
   }
 }
 
-async function assertClientReadAccess(actor: InternalActor, clientId: string, prisma: Prisma = defaultPrisma) {
-  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true } });
-  if (!client) throw new InteractionError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
-  const user = await prisma.user.findUnique({ where: { id: actor.userId }, select: { id: true, role: true, status: true, isActive: true } });
-  if (!user || user.isActive === false || String(user.status) !== 'ACTIVE') throw new InteractionError(403, 'CLIENT_ACCESS_FORBIDDEN', 'Actor cannot access this client.');
-  if (['ADMIN', 'PARTNER'].includes(String(user.role))) return client;
-  const scope = await internalCaseScope(actor, prisma);
-  if (scope !== null) {
-    const has = await prisma.case.findFirst({ where: { id: { in: scope }, clientId }, select: { id: true } });
-    if (!has) throw new InteractionError(403, 'CLIENT_ACCESS_FORBIDDEN', 'Actor has no case access in this client.');
-  }
-  return client;
-}
 
 function assertTransition(from: string, to: string, table: Record<string, string[]>): void {
   if (!table[from]?.includes(to)) {
