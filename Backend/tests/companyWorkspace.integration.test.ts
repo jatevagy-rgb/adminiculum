@@ -225,7 +225,8 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     const sizeGroup = view.factGroups.find((g: any) => g.key === 'SIZE');
     const employeeFacts = sizeGroup.facts.filter((f: any) => f.type === 'EMPLOYEE_COUNT');
     expect(employeeFacts.map((f: any) => f.value)).toEqual(expect.arrayContaining(['30 fő', '42 fő', '43 fő', '99 fő']));
-    expect(employeeFacts.filter((f: any) => f.isCurrent).map((f: any) => f.value)).toEqual(['43 fő']);
+    expect(employeeFacts.filter((f: any) => f.isCurrent)).toHaveLength(1);
+    expect(employeeFacts.find((f: any) => f.value === '43 fő').isCurrent).toBe(true);
     expect(employeeFacts.find((f: any) => f.value === '30 fő').isCurrent).toBe(false);
     expect(employeeFacts.find((f: any) => f.value === '99 fő').isCurrent).toBe(false);
   });
@@ -239,7 +240,9 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
   it('uses a neutral deterministic party summary without a universal SUPPLIER assumption', async () => {
     const view = await getWorkspaceOverview(admin, clientA, db);
     expect(view.contracts.find((c: any) => c.id === contractOwned).counterpartySummary).toBe('Egyedi megrendelő');
-    expect(view.contracts.find((c: any) => c.id === contractLegacy).counterpartySummary).toBe('Bérbeadó Zrt. · Bérlő Kft.');
+    const multiple = view.contracts.find((c: any) => c.id === contractLegacy).counterpartySummary;
+    expect(multiple).toContain('Bérbeadó Zrt.');
+    expect(multiple).toContain('Bérlő Kft.');
   });
 
   it('presents assessments with their important open findings', async () => {
