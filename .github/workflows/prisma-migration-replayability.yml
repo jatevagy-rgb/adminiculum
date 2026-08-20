@@ -71,37 +71,45 @@ jobs:
         working-directory: Backend
         env:
           MIGRATION_REPLAY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run db:migrations:verify-replay
+        run: |
+          npm run db:migrations:verify-replay
+          rc=$?
+          echo "replay=$rc" > "$RUNNER_TEMP/ci-migration-results.txt"
+          exit $rc
 
       - name: Run migration WebJob runner test
         working-directory: Backend
         env:
           WEBJOB_TEST_ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
-        run: npm run test:migration:webjob
+        run: |
+          npm run test:migration:webjob
+          rc=$?
+          echo "webjob=$rc" >> "$RUNNER_TEMP/ci-migration-results.txt"
+          exit $rc
 
       - name: Migration gate summary
         if: always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              const { data: runJobs } = await github.rest.actions.listJobsForRun({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                run_id: context.runId,
-              });
-              const job = runJobs.jobs.find((j) => String(j.id) === String(context.job)) || runJobs.jobs[0];
-              const rows = job.steps
-                .filter((s) => !['Set up job', 'Complete job'].includes(s.name))
-                .map((s) => {
-                  const result = s.conclusion === 'success' ? 'PASS' : s.conclusion === 'failure' ? 'FAIL' : s.conclusion;
-                  return `| ${s.name} | ${result} |`;
-                })
-                .join('\n');
-              core.summary.addHeading('Prisma Migration Gate');
-              core.summary.addRaw('| Step | Result |\n|------|--------|\n' + rows + '\n');
-              core.summary.addRaw('Migration replay runs on an empty schema and applies every post-baseline migration in order. A broken migration MUST fail this gate.');
-              await core.summary.write();
-            } catch (error) {
-              core.warning('Summary generation failed (non-fatal): ' + error.message);
-            }
+        continue-on-error: true
+        run: |
+          declare -A names=(
+            [replay]="Canonical empty migration replay"
+            [webjob]="Migration WebJob runner test"
+          )
+          {
+            echo "### Prisma Migration Gate"
+            echo
+            echo "| Check | Result |"
+            echo "|-------|--------|"
+            while IFS='=' read -r key rc; do
+              if [ "$rc" = "0" ]; then
+                res=":white_check_mark: PASS"
+              elif [ "$rc" = "PENDING" ]; then
+                res=":heavy_minus_sign: SKIPPED (prior failure)"
+              else
+                res=":x: FAIL"
+              fi
+              echo "| ${names[$key]:-$key} | $res |"
+            done < "$RUNNER_TEMP/ci-migration-results.txt"
+            echo
+            echo "Migration replay runs on an empty schema and applies every post-baseline migration in order. A broken migration MUST fail this gate."
+          } >> "$GITHUB_STEP_SUMMARY"

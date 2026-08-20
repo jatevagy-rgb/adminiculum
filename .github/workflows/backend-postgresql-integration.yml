@@ -59,65 +59,111 @@ jobs:
           MIGRATION_REPLAY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
         run: npm run db:migrations:verify-replay
 
+      - name: Initialize suite result tracking
+        run: |
+          for s in comparison review publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant; do
+            echo "$s=PENDING" >> "$RUNNER_TEMP/ci-suite-results.txt"
+          done
+
       - name: Document comparison PG
         working-directory: Backend
         env:
           COMPARISON_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:comparison:db
+        run: |
+          npm run test:comparison:db
+          rc=$?
+          sed -i "s/^comparison=PENDING$/comparison=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
 
       - name: Document review PG
         working-directory: Backend
         env:
           REVIEW_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:review:db
+        run: |
+          npm run test:review:db
+          rc=$?
+          sed -i "s/^review=PENDING$/review=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
 
       - name: Publication PG
         working-directory: Backend
         env:
           PUBLICATION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:publication:db
+        run: |
+          npm run test:publication:db
+          rc=$?
+          sed -i "s/^publication=PENDING$/publication=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
 
       - name: Client identity membership PG
         working-directory: Backend
         env:
           CLIENT_IDENTITY_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:client-identity:db
+        run: |
+          npm run test:client-identity:db
+          rc=$?
+          sed -i "s/^identity=PENDING$/identity=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
 
       - name: Client interaction PG
         working-directory: Backend
         env:
           CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:client-interaction:db
+        run: |
+          npm run test:client-interaction:db
+          rc=$?
+          sed -i "s/^interaction=PENDING$/interaction=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
 
       - name: CP0 workspace PG
         working-directory: Backend
         env:
           CLIENT_WORKSPACE_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:client-workspace:db
+        run: |
+          npm run test:client-workspace:db
+          rc=$?
+          sed -i "s/^workspace=PENDING$/workspace=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
 
       - name: Company foundation PG
         working-directory: Backend
         env:
           CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:company:db
+        run: |
+          npm run test:company:db
+          rc=$?
+          sed -i "s/^company=PENDING$/company=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
 
       - name: Contract library PG
         working-directory: Backend
         env:
           CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:contracts:db
+        run: |
+          npm run test:contracts:db
+          rc=$?
+          sed -i "s/^contracts=PENDING$/contracts=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
 
       - name: Organization PG
         working-directory: Backend
         env:
           CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:organization:db
+        run: |
+          npm run test:organization:db
+          rc=$?
+          sed -i "s/^organization=PENDING$/organization=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
 
       - name: Organization access (CP1) PG
         working-directory: Backend
         env:
           CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:org-access:db
+        run: |
+          npm run test:org-access:db
+          rc=$?
+          sed -i "s/^org-access=PENDING$/org-access=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
 
       - name: CP1 external communication / document access PG
         working-directory: Backend
@@ -127,7 +173,11 @@ jobs:
           CLIENT_PORTAL_READ_ENABLED: 'true'
           CLIENT_PORTAL_ACTIONS_ENABLED: 'true'
           CLIENT_PORTAL_QUESTIONS_ENABLED: 'true'
-        run: npm run test:cp1-external-communication-docs:db
+        run: |
+          npm run test:cp1-external-communication-docs:db
+          rc=$?
+          sed -i "s/^cp1-external=PENDING$/cp1-external=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
 
       - name: CP1 intake and triage PG
         working-directory: Backend
@@ -137,63 +187,101 @@ jobs:
           CLIENT_PORTAL_ORGANIZATIONAL_INTAKE_ENABLED: 'true'
           CLIENT_PORTAL_DATA_REQUESTS_ENABLED: 'true'
           CLIENT_PORTAL_DOCUMENT_UPLOADS_ENABLED: 'true'
-        run: npm run test:intake:db
+        run: |
+          npm run test:intake:db
+          rc=$?
+          sed -i "s/^intake=PENDING$/intake=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
 
       - name: Client portal membership onboarding PG
         working-directory: Backend
         env:
           CLIENT_IDENTITY_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:membership-onboarding:db
+        run: |
+          npm run test:membership-onboarding:db
+          rc=$?
+          sed -i "s/^onboarding=PENDING$/onboarding=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
 
       - name: Customer-safe milestone publication PG
         working-directory: Backend
         env:
           PUBLICATION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
           CLIENT_PORTAL_READ_ENABLED: 'true'
-        run: npm run test:milestone:db
+        run: |
+          npm run test:milestone:db
+          rc=$?
+          sed -i "s/^milestone=PENDING$/milestone=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
 
       - name: Workflow template + DAG PG
         working-directory: Backend
         env:
           WORKFLOW_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:workflow:db
+        run: |
+          npm run test:workflow:db
+          rc=$?
+          sed -i "s/^workflow=PENDING$/workflow=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
 
       - name: Workflow completion / forced case-close PG
         working-directory: Backend
         env:
           WORKFLOW_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npm run test:lifecycle:db
+        run: |
+          npm run test:lifecycle:db
+          rc=$?
+          sed -i "s/^lifecycle=PENDING$/lifecycle=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
 
       - name: Organization zero-grant PG
         working-directory: Backend
         env:
           CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npx jest --runInBand tests/clientPortalOrganizationZeroGrant.integration.test.ts
+        run: |
+          npx jest --runInBand tests/clientPortalOrganizationZeroGrant.integration.test.ts
+          rc=$?
+          sed -i "s/^zero-grant=PENDING$/zero-grant=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
 
       - name: Backend PostgreSQL integration summary
         if: always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              const { data: runJobs } = await github.rest.actions.listJobsForRun({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                run_id: context.runId,
-              });
-              const job = runJobs.jobs.find((j) => String(j.id) === String(context.job)) || runJobs.jobs[0];
-              const rows = job.steps
-                .filter((s) => !['Set up job', 'Complete job'].includes(s.name))
-                .map((s) => {
-                  const result = s.conclusion === 'success' ? 'PASS' : s.conclusion === 'failure' ? 'FAIL' : s.conclusion;
-                  return `| ${s.name} | ${result} |`;
-                })
-                .join('\n');
-              core.summary.addHeading('Backend PostgreSQL Integration');
-              core.summary.addRaw('| Step | Result |\n|------|--------|\n' + rows + '\n');
-              await core.summary.write();
-            } catch (error) {
-              core.warning('Summary generation failed (non-fatal): ' + error.message);
-            }
+        continue-on-error: true
+        run: |
+          declare -A names=(
+            [comparison]="Document comparison"
+            [review]="Document review"
+            [publication]="Publication"
+            [identity]="Client identity membership"
+            [interaction]="Client interaction"
+            [workspace]="CP0 workspace"
+            [company]="Company foundation"
+            [contracts]="Contract library"
+            [organization]="Organization"
+            [org-access]="Organization access (CP1)"
+            [cp1-external]="CP1 external communication / document access"
+            [intake]="CP1 intake and triage"
+            [onboarding]="Client portal membership onboarding"
+            [milestone]="Customer-safe milestone publication"
+            [workflow]="Workflow template + DAG"
+            [lifecycle]="Workflow completion / forced case-close"
+            [zero-grant]="Organization zero-grant"
+          )
+          {
+            echo "### Backend PostgreSQL Integration"
+            echo
+            echo "| Suite | Result |"
+            echo "|-------|--------|"
+            while IFS='=' read -r key rc; do
+              if [ "$rc" = "0" ]; then
+                res=":white_check_mark: PASS"
+              elif [ "$rc" = "PENDING" ]; then
+                res=":heavy_minus_sign: SKIPPED (prior failure)"
+              else
+                res=":x: FAIL"
+              fi
+              echo "| ${names[$key]:-$key} | $res |"
+            done < "$RUNNER_TEMP/ci-suite-results.txt"
+          } >> "$GITHUB_STEP_SUMMARY"
