@@ -1,92 +1,283 @@
-name: Deploy to Azure Web App
+name: Deploy to Azure App Service (manual, sequential)
+
+# Adminiculum production runs on Azure App Service (NOT Container Apps).
+#   Backend  : source ZIP (package.json at archive ROOT) -> Kudu ZipDeploy -> Oryx Linux server-side build.
+#   Migration: canonical `adminiculum-db-migrate` triggered WebJob ONLY (no direct SQL / db push / DATABASE_URL here).
+#   Frontend : Next.js standalone (.next/standalone + .next/static + public) -> ZIP -> App Service (Oryx OFF, `node server.js`).
+#   Sequence : backend -> health -> (migration -> health) -> frontend -> smoke. Backend and frontend never run concurrently.
+# This workflow is MANUAL (workflow_dispatch) on purpose: a code push must never deploy production.
 
 on:
-  push:
-    branches: [ "main" ]
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to deploy. Must be the canonical release branch unless allow_nonrelease_ref is set.'
+        required: true
+        default: 'release/editor-ops-workflow-1'
+      deploy_backend:
+        description: 'Deploy the backend App Service.'
+        type: boolean
+        default: true
+      run_migration:
+        description: 'Run the adminiculum-db-migrate WebJob (enable ONLY when the release adds a new Prisma migration).'
+        type: boolean
+        default: false
+      deploy_frontend:
+        description: 'Deploy the frontend App Service (runs only after backend + migration are healthy).'
+        type: boolean
+        default: true
+      allow_nonrelease_ref:
+        description: 'Explicitly allow deploying a ref other than the canonical release branch.'
+        type: boolean
+        default: false
+
+# A single production deployment at a time; do not cancel an in-flight deploy.
+concurrency:
+  group: adminiculum-appservice-production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CANONICAL_RELEASE_REF: release/editor-ops-workflow-1
+  BACKEND_APP: adminiculumbackend-b1-01
+  FRONTEND_APP: adminiculumfrontend-austriaeast-01
+  RESOURCE_GROUP: Adminiculum
+  MIGRATION_WEBJOB: adminiculum-db-migrate
 
 jobs:
-  build:
+  # ---------------------------------------------------------------------------
+  # Release-policy guard: only the canonical release branch may deploy unless a
+  # human explicitly opts in via allow_nonrelease_ref.
+  # ---------------------------------------------------------------------------
+  guard:
+    name: Release policy guard
     runs-on: ubuntu-latest
+    steps:
+      - name: Validate deployment ref
+        run: |
+          set -euo pipefail
+          REF='${{ inputs.ref }}'
+          if [ "$REF" != "${CANONICAL_RELEASE_REF}" ] && [ "${{ inputs.allow_nonrelease_ref }}" != "true" ]; then
+            echo "Refusing to deploy '$REF': not the canonical release branch (${CANONICAL_RELEASE_REF})."
+            echo "Set allow_nonrelease_ref=true to override deliberately."
+            exit 1
+          fi
+          echo "Deploying ref: $REF"
 
+  # ---------------------------------------------------------------------------
+  # Backend: source ZIP with package.json at ROOT -> Kudu ZipDeploy -> Oryx.
+  # ---------------------------------------------------------------------------
+  backend:
+    name: Deploy backend (App Service, Oryx build)
+    runs-on: ubuntu-latest
+    needs: guard
+    if: ${{ inputs.deploy_backend }}
+    environment: production
     steps:
       - uses: actions/checkout@v4
-
-      - name: Zip deployment package (source package for Oryx server-side build)
-        run: |
-          zip -r deploy.zip Backend/src/ Backend/prisma/ Backend/templates/ Backend/package.json Backend/package-lock.json Backend/tsconfig.json .deployment swagger.yaml swagger2.yaml || true
-          ls -la
-          echo "CHECK Backend/src/index.ts in ZIP:"
-          unzip -l deploy.zip | grep -E 'Backend/src/index\.ts$' || true
-          echo "CHECK Backend/package.json in ZIP:"
-          unzip -l deploy.zip | grep -E 'Backend/package\.json$' || true
-          echo "CHECK Backend/templates/ in ZIP:"
-          unzip -l deploy.zip | grep -E 'Backend/templates/' || true
-          echo "TOP LEVEL DIRS in ZIP:"
-          unzip -l deploy.zip | head -n 30
-
-      - name: Upload deployment artifact
-        uses: actions/upload-artifact@v4
         with:
-          name: webapp-package
-          path: deploy.zip
-          if-no-files-found: error
+          ref: ${{ inputs.ref }}
 
-  deploy:
+      - name: Package backend source (package.json at archive ROOT)
+        run: |
+          set -euo pipefail
+          rm -f backend-deploy.zip
+          # Zip from INSIDE Backend/ so package.json is at the archive root (Oryx contract).
+          # No Backend/ wrapper, no node_modules (Linux deps are built server-side by Oryx).
+          ( cd Backend && zip -r -q "$GITHUB_WORKSPACE/backend-deploy.zip" \
+              package.json package-lock.json tsconfig.json .deployment \
+              src prisma templates scripts App_Data )
+          # OpenAPI spec files the runtime resolver looks for at wwwroot root, if present.
+          for spec in swagger2.yaml swagger.yaml; do
+            if [ -f "$spec" ]; then zip -j -q backend-deploy.zip "$spec"; fi
+          done
+
+      - name: Validate backend archive (fail fast)
+        run: |
+          set -euo pipefail
+          unzip -Z1 backend-deploy.zip > ziplist.txt
+          echo "--- archive entries (top) ---"; head -n 20 ziplist.txt
+          fail() { echo "ARTIFACT INVALID: $1"; exit 1; }
+          # Required at ROOT / present:
+          grep -qxF 'package.json'        ziplist.txt || fail "package.json not at archive root"
+          grep -qxF 'package-lock.json'   ziplist.txt || fail "package-lock.json missing"
+          grep -qxF 'tsconfig.json'       ziplist.txt || fail "tsconfig.json missing"
+          grep -qxF '.deployment'         ziplist.txt || fail ".deployment missing"
+          grep -qxF 'src/index.ts'        ziplist.txt || fail "src/index.ts missing"
+          grep -qxF 'prisma/schema.prisma' ziplist.txt || fail "prisma/schema.prisma missing"
+          grep -qxF 'App_Data/jobs/triggered/adminiculum-db-migrate/runner.cjs' ziplist.txt || fail "migration WebJob missing"
+          # Must NOT contain:
+          grep -q '^Backend/'  ziplist.txt && fail "Backend/ wrapper present (breaks Oryx root)"
+          grep -q 'node_modules/' ziplist.txt && fail "node_modules present (Windows/Linux mismatch risk)"
+          grep -q '^Frontend/' ziplist.txt && fail "Frontend/ present in backend archive"
+          echo "Backend archive OK: package.json at root, webjob present, no wrapper/node_modules/Frontend."
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy via Kudu ZipDeploy (Oryx server-side build)
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            az webapp deployment source config-zip \
+              --resource-group "${RESOURCE_GROUP}" \
+              --name "${BACKEND_APP}" \
+              --src backend-deploy.zip \
+              --timeout 1200 || echo "config-zip CLI returned non-zero (possible CLI timeout) — verifying server-side state next."
+
+      - name: Verify server-side deployment reached SUCCESS
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            TOKEN=$(az account get-access-token --query accessToken -o tsv)
+            for i in $(seq 1 40); do
+              BODY=$(curl -s -m 25 -H "Authorization: Bearer $TOKEN" \
+                "https://${BACKEND_APP}.scm.azurewebsites.net/api/deployments?\$top=1" || echo '[]')
+              STATUS=$(printf '%s' "$BODY" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);console.log((j[0]&&j[0].status)??'?')}catch(e){console.log('?')}})")
+              echo "[$i] server-side deployment status=$STATUS (4=Success 3=Failed 1=InProgress)"
+              if [ "$STATUS" = "4" ]; then echo "Deployment succeeded."; exit 0; fi
+              if [ "$STATUS" = "3" ]; then echo "Deployment FAILED server-side."; exit 1; fi
+              sleep 20
+            done
+            echo "Timed out waiting for terminal deployment state."; exit 1
+
+      - name: Backend health gate (/health 200)
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 16); do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' -m 15 "https://${BACKEND_APP}.azurewebsites.net/health" || echo 000)
+            echo "[$i] /health -> $CODE"
+            if [ "$CODE" = "200" ]; then echo "Backend healthy."; exit 0; fi
+            sleep 15
+          done
+          echo "Backend did not become healthy — STOP (do not migrate an unhealthy backend)."; exit 1
+
+  # ---------------------------------------------------------------------------
+  # Migration: canonical adminiculum-db-migrate WebJob ONLY. Never direct DB.
+  # ---------------------------------------------------------------------------
+  migration:
+    name: Run canonical migration WebJob
     runs-on: ubuntu-latest
-    needs: build
-
+    needs: backend
+    if: ${{ inputs.run_migration && needs.backend.result == 'success' }}
+    environment: production
     steps:
-      - name: Download deployment artifact
-        uses: actions/download-artifact@v4
+      - name: Azure login
+        uses: azure/login@v2
         with:
-          name: webapp-package
-          path: .
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Verify downloaded deployment package
-        run: |
-          echo "CHECK Backend/src/index.ts in downloaded ZIP:"
-          unzip -l ./deploy.zip | grep -E 'Backend/src/index\.ts$' || true
-          echo "CHECK Backend/package.json in downloaded ZIP:"
-          unzip -l ./deploy.zip | grep -E 'Backend/package\.json$' || true
-          echo "TOP LEVEL DIRS in downloaded ZIP:"
-          unzip -l ./deploy.zip | head -n 30
-
-      - name: Check secrets presence
-        run: |
-          if [ -z "${{ secrets.AZURE_WEBAPP_NAME }}" ]; then echo "AZURE_WEBAPP_NAME is EMPTY" && exit 1; else echo "AZURE_WEBAPP_NAME is set"; fi
-          if [ -z "${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}" ]; then echo "AZURE_WEBAPP_PUBLISH_PROFILE is EMPTY" && exit 1; else echo "AZURE_WEBAPP_PUBLISH_PROFILE is set"; fi
-
-      - name: Deploy
-        uses: azure/webapps-deploy@v3
+      - name: Trigger + verify migration WebJob
+        uses: azure/cli@v2
         with:
-          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: ./deploy.zip
+          inlineScript: |
+            set -euo pipefail
+            az webapp webjob triggered run \
+              --resource-group "${RESOURCE_GROUP}" \
+              --name "${BACKEND_APP}" \
+              --webjob-name "${MIGRATION_WEBJOB}"
+            TOKEN=$(az account get-access-token --query accessToken -o tsv)
+            for i in $(seq 1 30); do
+              sleep 10
+              BODY=$(curl -s -m 25 -H "Authorization: Bearer $TOKEN" \
+                "https://${BACKEND_APP}.scm.azurewebsites.net/api/triggeredwebjobs/${MIGRATION_WEBJOB}/history" || echo '{}')
+              STATUS=$(printf '%s' "$BODY" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);console.log((j.runs&&j.runs[0]&&j.runs[0].status)||'Pending')}catch(e){console.log('?')}})")
+              echo "[$i] WebJob status=$STATUS"
+              if [ "$STATUS" = "Success" ]; then echo "Migration WebJob succeeded."; exit 0; fi
+              if [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Error" ] || [ "$STATUS" = "Aborted" ]; then
+                echo "Migration WebJob did not succeed."; exit 1; fi
+            done
+            echo "Timed out waiting for migration WebJob."; exit 1
 
-  smoke:
+      - name: Backend health gate after migration (/health 200)
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 12); do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' -m 15 "https://${BACKEND_APP}.azurewebsites.net/health" || echo 000)
+            echo "[$i] /health -> $CODE"
+            if [ "$CODE" = "200" ]; then exit 0; fi
+            sleep 15
+          done
+          echo "Backend unhealthy after migration."; exit 1
+
+  # ---------------------------------------------------------------------------
+  # Frontend: Next standalone -> ZIP -> App Service (Oryx OFF). Only after
+  # backend (+ migration if requested) is healthy. Never concurrent with backend.
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Deploy frontend (App Service, standalone)
     runs-on: ubuntu-latest
-    needs: deploy
-    if: ${{ vars.RUN_SMOKE == 'true' }}
-    env:
-      SMOKE_BASE_URL: ${{ vars.SMOKE_BASE_URL }}
-      SMOKE_TOKEN: ${{ secrets.SMOKE_TOKEN }}
-      SMOKE_CHECK_NOTIFICATIONS: ${{ vars.SMOKE_CHECK_NOTIFICATIONS }}
-      SMOKE_CHECK_DRY_RUN: ${{ vars.SMOKE_CHECK_DRY_RUN }}
-      SMOKE_TASK_ID: ${{ vars.SMOKE_TASK_ID }}
+    needs: [backend, migration]
+    # Run when frontend requested AND backend succeeded AND migration either succeeded or was intentionally skipped.
+    if: >-
+      ${{ inputs.deploy_frontend
+          && needs.backend.result == 'success'
+          && (needs.migration.result == 'success' || needs.migration.result == 'skipped') }}
+    environment: production
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          ref: ${{ inputs.ref }}
 
-      - name: Install dependencies
-        run: npm ci
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-      - name: Run smoke suite
-        run: node scripts/smoke.js
+      - name: Production Next build (standalone)
+        working-directory: Frontend
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          test -d .next/standalone || { echo "standalone output missing (next.config output: 'standalone'?)"; exit 1; }
 
+      - name: Assemble + validate standalone package
+        working-directory: Frontend
+        run: |
+          set -euo pipefail
+          SERVER=$(find .next/standalone -name server.js -not -path '*/node_modules/*' | head -1)
+          test -n "$SERVER" || { echo "standalone server.js not found"; exit 1; }
+          SA_DIR=$(dirname "$SERVER")
+          mkdir -p "$SA_DIR/.next"
+          cp -r .next/static "$SA_DIR/.next/static"
+          if [ -d public ]; then cp -r public "$SA_DIR/public"; fi
+          test -d "$SA_DIR/.next/static" || { echo ".next/static not assembled"; exit 1; }
+          ( cd "$SA_DIR" && zip -r -q "$GITHUB_WORKSPACE/frontend-deploy.zip" . )
+          unzip -Z1 "$GITHUB_WORKSPACE/frontend-deploy.zip" > "$GITHUB_WORKSPACE/felist.txt"
+          grep -qxF 'server.js' "$GITHUB_WORKSPACE/felist.txt" || { echo "server.js not at package root"; exit 1; }
+          grep -q '^.next/static/' "$GITHUB_WORKSPACE/felist.txt" || { echo ".next/static missing from package"; exit 1; }
+          echo "Frontend standalone package OK: server.js at root + .next/static present."
 
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy frontend (zip, Oryx OFF — app already runs `node server.js`)
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            az webapp deploy \
+              --resource-group "${RESOURCE_GROUP}" \
+              --name "${FRONTEND_APP}" \
+              --src-path frontend-deploy.zip \
+              --type zip
+
+      - name: Frontend smoke (unauthenticated)
+        run: |
+          set -euo pipefail
+          ok=1
+          for path in / /portal; do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' -m 20 "https://${FRONTEND_APP}.azurewebsites.net${path}" || echo 000)
+            echo "GET ${path} -> $CODE"
+            [ "$CODE" = "200" ] || ok=0
+          done
+          [ "$ok" = "1" ] || { echo "Frontend smoke failed."; exit 1; }
+          echo "Frontend smoke OK (/ and /portal 200)."
