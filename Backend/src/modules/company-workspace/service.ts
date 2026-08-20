@@ -44,8 +44,7 @@ const FACT_GROUP_KEYS: Record<string, string> = {
   AI_USAGE: 'DIGITAL',
   REGULATED_ACTIVITY: 'REGULATORY',
   CERTIFICATION: 'REGULATORY',
-  // Financing is a financial-scale characteristic, not a regulatory one.
-  FINANCING: 'SIZE',
+  FINANCING: 'REGULATORY',
 };
 
 const FACT_GROUP_LABELS: Record<string, string> = {
@@ -78,10 +77,11 @@ function ownerDisplay(personName: string | null | undefined, legacyLabel: string
  * relevant other parties. We therefore show a bounded, deterministic summary of
  * the recorded party names rather than guessing a semantic opposite party.
  */
-function partnerName(parties: { id: string; roleCode: string; displayName: string }[]): string | null {
+function counterpartySummary(parties: { roleCode: string; displayName: string }[]): string | null {
   if (!parties.length) return null;
-  const ordered = [...parties].sort((a, b) => a.id.localeCompare(b.id));
-  return ordered.length === 1 ? ordered[0].displayName : `${ordered[0].displayName} +${ordered.length - 1}`;
+  const ordered = [...parties].sort((a, b) => a.displayName.localeCompare(b.displayName) || a.roleCode.localeCompare(b.roleCode));
+  const names = ordered.map((party) => party.displayName).filter(Boolean);
+  return names.length <= 2 ? names.join(' · ') : `${names.slice(0, 2).join(' · ')} +${names.length - 2}`;
 }
 
 export interface WorkspaceGapItem {
@@ -114,7 +114,7 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
       orderBy: { createdAt: 'desc' },
       include: {
         parties: { select: { id: true, roleCode: true, displayName: true } },
-        businessOwnerPerson: { select: { id: true, name: true, employmentStatus: true } },
+        businessOwnerPerson: { select: { id: true, clientId: true, name: true, employmentStatus: true } },
         lawFirmOwner: { select: { id: true, name: true } },
         obligations: { select: { id: true, status: true } },
       },
@@ -123,7 +123,7 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
       where: { clientId, status: { in: ['OPEN', 'IN_PROGRESS'] } },
       orderBy: { nextDueDate: 'asc' },
       include: {
-        ownerPerson: { select: { id: true, name: true } },
+        ownerPerson: { select: { id: true, clientId: true, name: true, employmentStatus: true } },
         sourceContract: { select: { id: true, title: true } },
       },
     }),
@@ -140,7 +140,7 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
       where: { clientId },
       orderBy: { createdAt: 'desc' },
       include: {
-        clientOwnerPerson: { select: { id: true, name: true } },
+        clientOwnerPerson: { select: { id: true, clientId: true, name: true, employmentStatus: true } },
         lawFirmOwner: { select: { id: true, name: true } },
         milestones: { orderBy: { targetDate: 'asc' } },
       },
@@ -154,16 +154,20 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
   if (!client) throw new InteractionError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
 
   /* ---- Profile + grouped facts ---------------------------------------- */
-  // Cégkép is the CURRENT company picture: show only facts that are valid now
-  // (validTo is null or in the future). Superseded historical facts are NOT shown
-  // here so the profile never displays several conflicting values of the same
-  // fact type as if all were simultaneously true. History is not deleted — it
-  // remains available through the Phase 1 ClientFact API.
-  const nowMs = Date.now();
-  const currentFacts = facts.filter((f) => f.validTo === null || f.validTo.getTime() > nowMs);
-  const factGroups: Array<{ key: string; label: string; facts: Array<{ id: string; type: string; value: string; verificationStatus: string; validFrom: string; validTo: string | null; sourceReference: string | null }> }> = [];
+  // Cégkép keeps history visible but marks exactly one eligible newest row per
+  // type as current. Future rows and expired rows can never become live facts.
+  const now = new Date();
+  const currentFactTypes = new Set<string>();
+  const currentFactIds = new Set<string>();
+  for (const fact of facts) {
+    if (fact.validFrom <= now && (!fact.validTo || fact.validTo >= now) && !currentFactTypes.has(fact.type)) {
+      currentFactTypes.add(fact.type);
+      currentFactIds.add(fact.id);
+    }
+  }
+  const factGroups: Array<{ key: string; label: string; facts: Array<{ id: string; type: string; value: string; verificationStatus: string; validFrom: string; validTo: string | null; sourceReference: string | null; isCurrent: boolean }> }> = [];
   const grouped: Record<string, Array<any>> = {};
-  for (const fact of currentFacts) {
+  for (const fact of facts) {
     const key = FACT_GROUP_KEYS[fact.type] || 'OTHER';
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push({
@@ -173,7 +177,8 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
       verificationStatus: String(fact.verificationStatus),
       validFrom: fact.validFrom.toISOString(),
       validTo: fact.validTo ? fact.validTo.toISOString() : null,
-      sourceReference: fact.sourceReference,
+        sourceReference: fact.sourceReference,
+        isCurrent: currentFactIds.has(fact.id),
     });
   }
   for (const key of Object.keys(FACT_GROUP_LABELS)) {
@@ -181,11 +186,12 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
   }
 
   /* ---- Assessments + findings ------------------------------------------ */
-  const allFindings = assessments.flatMap((a) => a.findings);
+  const activeAssessments = assessments.filter((a) => a.status !== 'ARCHIVED');
+  const allFindings = activeAssessments.flatMap((a) => a.findings);
   const importantFindings = allFindings.filter((f) => (f.severity === 'HIGH' || f.severity === 'CRITICAL') && f.status !== 'RESOLVED');
 
   const assessmentsDto = assessments.map((a) => {
-    const openImportant = a.findings.filter((f) => (f.severity === 'HIGH' || f.severity === 'CRITICAL') && f.status !== 'RESOLVED');
+    const openImportant = a.status === 'ARCHIVED' ? [] : a.findings.filter((f) => (f.severity === 'HIGH' || f.severity === 'CRITICAL') && f.status !== 'RESOLVED');
     return {
       id: a.id,
       title: a.title,
@@ -206,13 +212,13 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
     title: c.title,
     contractType: c.contractType,
     status: String(c.status),
-    partnerName: partnerName(c.parties),
+    counterpartySummary: counterpartySummary(c.parties),
     effectiveDate: iso(c.effectiveDate),
     expiryDate: iso(c.expiryDate),
     nextCriticalDate: iso(c.nextCriticalDate),
-    businessOwnerPersonId: c.businessOwnerPersonId,
-    businessOwnerDisplay: ownerDisplay(c.businessOwnerPerson?.name, c.businessOwnerLabel),
-    businessOwnerPersonActive: c.businessOwnerPerson ? ACTIVE_PERSON_STATUS.has(String(c.businessOwnerPerson.employmentStatus)) : null,
+    businessOwnerPersonId: c.businessOwnerPerson?.clientId === clientId ? c.businessOwnerPersonId : null,
+    businessOwnerDisplay: c.businessOwnerPerson?.clientId === clientId ? ownerDisplay(c.businessOwnerPerson?.name, c.businessOwnerLabel) : ownerDisplay(null, c.businessOwnerLabel),
+    businessOwnerPersonActive: c.businessOwnerPerson?.clientId === clientId ? ACTIVE_PERSON_STATUS.has(String(c.businessOwnerPerson.employmentStatus)) : null,
     lawFirmOwnerName: c.lawFirmOwner?.name ?? null,
     openObligationCount: c.obligations.filter((o) => o.status === 'OPEN' || o.status === 'IN_PROGRESS').length,
   }));
@@ -222,8 +228,9 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
     title: o.title,
     sourceContractId: o.sourceContractId,
     sourceContractTitle: o.sourceContract?.title ?? null,
-    ownerPersonId: o.ownerPersonId,
-    ownerDisplay: ownerDisplay(o.ownerPerson?.name, o.ownerLabel),
+    ownerPersonId: o.ownerPerson?.clientId === clientId ? o.ownerPersonId : null,
+    ownerDisplay: o.ownerPerson?.clientId === clientId ? ownerDisplay(o.ownerPerson?.name, o.ownerLabel) : ownerDisplay(null, o.ownerLabel),
+    ownerPersonActive: o.ownerPerson?.clientId === clientId ? ACTIVE_PERSON_STATUS.has(String(o.ownerPerson.employmentStatus)) : null,
     nextDueDate: iso(o.nextDueDate),
     status: String(o.status),
     sourceType: o.sourceType,
@@ -243,7 +250,7 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
       responsibilityLabels: p.responsibilities.slice(0, 3).map((r) => r.label),
     }));
 
-  const activeInitiatives = initiatives.filter((i) => i.status === 'ACTIVE');
+  const activeInitiatives = initiatives.filter((i) => ['ACTIVE', 'PLANNED', 'ON_HOLD'].includes(String(i.status)));
 
   // A responsibility gap means NO owner at all — neither a linked OrganizationPerson
   // nor a legacy owner label. A contract/obligation carrying a legacy label DOES
@@ -261,9 +268,9 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
   // IN_PROGRESS obligation, or an ACTIVE initiative. A former employee who owns
   // nothing current is organization history, not an attention item.
   const currentOwnerPersonIds = new Set<string>();
-  for (const c of activeContracts) if (c.businessOwnerPersonId) currentOwnerPersonIds.add(c.businessOwnerPersonId);
-  for (const o of openObligations) if (o.ownerPersonId) currentOwnerPersonIds.add(o.ownerPersonId);
-  for (const i of activeInitiatives) if (i.clientOwnerPersonId) currentOwnerPersonIds.add(i.clientOwnerPersonId);
+  for (const c of activeContracts) if (c.businessOwnerPerson?.clientId === clientId && c.businessOwnerPersonId) currentOwnerPersonIds.add(c.businessOwnerPersonId);
+  for (const o of openObligations) if (o.ownerPerson?.clientId === clientId && o.ownerPersonId) currentOwnerPersonIds.add(o.ownerPersonId);
+  for (const i of activeInitiatives) if (i.clientOwnerPerson?.clientId === clientId && i.clientOwnerPersonId) currentOwnerPersonIds.add(i.clientOwnerPersonId);
   const inactiveOwnerPersons: WorkspaceGapItem[] = persons
     .filter((p) => INACTIVE_PERSON_STATUS.has(String(p.employmentStatus)) && currentOwnerPersonIds.has(p.id))
     .map((p) => ({ id: p.id, title: p.name }));
@@ -286,8 +293,9 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
       title: i.title,
       priority: String(i.priority),
       status: String(i.status),
-      clientOwnerPersonId: i.clientOwnerPersonId,
-      clientOwnerDisplay: ownerDisplay(i.clientOwnerPerson?.name, null),
+      clientOwnerPersonId: i.clientOwnerPerson?.clientId === clientId ? i.clientOwnerPersonId : null,
+      clientOwnerDisplay: i.clientOwnerPerson?.clientId === clientId ? ownerDisplay(i.clientOwnerPerson?.name, null) : null,
+      clientOwnerPersonActive: i.clientOwnerPerson?.clientId === clientId ? ACTIVE_PERSON_STATUS.has(String(i.clientOwnerPerson.employmentStatus)) : null,
       lawFirmOwnerName: i.lawFirmOwner?.name ?? null,
       targetAt: iso(i.targetAt),
       nextMilestone: nextMilestone

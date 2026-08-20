@@ -501,7 +501,6 @@ function ClientDetailContent() {
             <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">Gyors műveletek</h3>
             <div className="space-y-1">
               <button onClick={() => setShowNewCaseModal(true)} className="adm-link-button w-full px-3 py-2 text-left text-xs">Új ügy indítása</button>
-              <Link href={`/clients/${clientId}/vallalati-mukodes`} className="adm-link-button block px-3 py-2 text-xs">Vállalati működés</Link>
               <Link href={`/clients/${clientId}/workgroups`} className="adm-link-button block px-3 py-2 text-xs">Munkacsoportok</Link>
             </div>
           </div>

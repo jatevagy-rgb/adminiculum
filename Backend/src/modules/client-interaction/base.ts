@@ -120,6 +120,7 @@ export async function assertClientReadAccess(
   clientId: string,
   prisma: Prisma = defaultPrisma,
 ): Promise<{ id: string; name: string }> {
+  requireInternal(actor);
   const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true } });
   if (!client) throw new InteractionError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
   const user = await prisma.user.findUnique({ where: { id: actor.userId }, select: { id: true, role: true, status: true, isActive: true } });
