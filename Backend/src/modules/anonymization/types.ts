@@ -24,7 +24,12 @@
 /** Revision of the deterministic algorithm. Bump when output changes for equal input. */
 export const ANONYMIZATION_ALGORITHM_REVISION = 1;
 
-/** Hard guard against pathological inputs. Processing is linear; this is a safety net. */
+/**
+ * Hard, fail-closed guard against pathological inputs. `detectCandidates`
+ * (and therefore `runAnonymization`) throws `AnonymizationInputTooLargeError`
+ * when the source exceeds this many UTF-16 code units, rather than emitting a
+ * partially-anonymized document. Sized generously so real legal documents pass.
+ */
 export const MAX_INPUT_CHARS = 2_000_000;
 
 export type SensitiveCategory =

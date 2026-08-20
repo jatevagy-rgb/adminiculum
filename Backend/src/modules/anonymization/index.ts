@@ -38,6 +38,7 @@ export {
 } from './detectors';
 
 export {
+  AnonymizationInputTooLargeError,
   applyApprovedRedactions,
   buildInternalMapping,
   buildResult,

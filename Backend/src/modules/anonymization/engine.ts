@@ -47,6 +47,22 @@ const ALL_DETECTORS = [
   'exact-term',
 ] as const;
 
+/**
+ * Thrown when the source text exceeds {@link MAX_INPUT_CHARS}. Carries only the
+ * observed length and the bound — never any source content — so callers can log
+ * or surface it without leaking sensitive text.
+ */
+export class AnonymizationInputTooLargeError extends Error {
+  readonly inputLength: number;
+  readonly maxInputChars: number;
+  constructor(inputLength: number) {
+    super(`anonymization input exceeds maximum of ${MAX_INPUT_CHARS} characters (received ${inputLength})`);
+    this.name = 'AnonymizationInputTooLargeError';
+    this.inputLength = inputLength;
+    this.maxInputChars = MAX_INPUT_CHARS;
+  }
+}
+
 function sha256(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
@@ -69,8 +85,12 @@ export function detectCandidates(
 ): { candidates: AnonymizationCandidate[]; warnings: string[] } {
   const warnings: string[] = [];
 
+  // Fail closed on pathological input. Silently truncating would emit a
+  // partially-anonymized document (the unprocessed tail would keep its original
+  // sensitive values), so refusing is the privacy-safe choice. The message
+  // carries only the length bound — never any source content.
   if (sourceText.length > MAX_INPUT_CHARS) {
-    warnings.push(`input exceeds ${MAX_INPUT_CHARS} chars; processing continues`);
+    throw new AnonymizationInputTooLargeError(sourceText.length);
   }
 
   const enabledDetectors = options.enabledDetectors ?? [...ALL_DETECTORS];
