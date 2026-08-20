@@ -15,9 +15,12 @@ import {
   detectCandidates,
   detectExactTermCandidates,
   findOccurrences,
+  foldForMatch,
   placeholderFor,
   PseudonymAssigner,
   runAnonymization,
+  AnonymizationInputTooLargeError,
+  MAX_INPUT_CHARS,
   type AnonymizationCandidate,
   type AnonymizationOptions,
 } from '../src/modules/anonymization';
@@ -418,5 +421,123 @@ describe('text normalization helpers', () => {
       diacriticInsensitive: true,
     });
     expect(source.slice(occ.start, occ.end)).toBe('ŐZE');
+  });
+
+  it('accepts a precomputed folded source and yields identical results', () => {
+    const source = 'Kovács Péter és KOVACS PETER meg Nagy Anna.';
+    const opts = { caseInsensitive: true, diacriticInsensitive: true } as const;
+    const folded = foldForMatch(source);
+    const withFold = findOccurrences(source, 'Kovács Péter', opts, folded);
+    const withoutFold = findOccurrences(source, 'Kovács Péter', opts);
+    expect(withFold).toEqual(withoutFold);
+    expect(withFold).toHaveLength(2);
+    expect(withFold.map((o) => source.slice(o.start, o.end))).toEqual(['Kovács Péter', 'KOVACS PETER']);
+  });
+});
+
+describe('privacy: warnings and safe export never echo original values', () => {
+  it('manual-term warnings identify by ordinal, not by value', () => {
+    const source = 'Egy teljesen ártalmatlan mondat, semmi érzékeny.';
+    const opts: AnonymizationOptions = {
+      manualTerms: [
+        { term: 'Kovács Péter', category: 'PERSON' }, // not found
+        { term: 'Titkos Ügyfél Kft.', category: 'BUSINESS_SECRET' }, // not found
+        { term: 'X', category: 'PERSON' }, // too short
+        { term: '   ', category: 'OTHER_SENSITIVE' }, // empty after trim
+      ],
+    };
+    const { warnings } = detectCandidates(source, opts);
+    const joined = warnings.join('\n');
+    // Reason substrings preserved for callers…
+    expect(warnings.some((w) => w.includes('not found'))).toBe(true);
+    expect(warnings.some((w) => w.includes('too short'))).toBe(true);
+    expect(warnings.some((w) => w.includes('empty term'))).toBe(true);
+    // …but the sensitive term text itself is never present.
+    expect(joined).not.toContain('Kovács');
+    expect(joined).not.toContain('Titkos Ügyfél Kft.');
+  });
+
+  it('safe export package never contains an unmatched/too-short manual term', () => {
+    const source = 'Ártalmatlan tartalom, egyetlen érzékeny adat sincs benne.';
+    const opts: AnonymizationOptions = {
+      manualTerms: [
+        { term: 'Kovács Péter', category: 'PERSON' },
+        { term: 'Titkos Ügyfél Kft.', category: 'BUSINESS_SECRET' },
+        { term: 'Q', category: 'PERSON' },
+      ],
+    };
+    const { result } = runAnonymization(source, opts, []);
+    const serializedPkg = JSON.stringify(buildSanitizedPackage(result));
+    expect(serializedPkg).not.toContain('Kovács Péter');
+    expect(serializedPkg).not.toContain('Titkos Ügyfél Kft.');
+    // The full result (which carries warnings) is also clean of the raw terms.
+    expect(JSON.stringify(result.warnings)).not.toContain('Kovács');
+  });
+});
+
+describe('input bound is fail-closed', () => {
+  it('throws AnonymizationInputTooLargeError above MAX_INPUT_CHARS', () => {
+    const huge = 'a'.repeat(MAX_INPUT_CHARS + 1);
+    expect(() => detectCandidates(huge, noTerms())).toThrow(AnonymizationInputTooLargeError);
+    expect(() => runAnonymization(huge, noTerms(), [])).toThrow(AnonymizationInputTooLargeError);
+  });
+
+  it('the error message carries only the bound, never source content', () => {
+    const huge = 'sensitive-token-'.repeat(1) + 'a'.repeat(MAX_INPUT_CHARS);
+    try {
+      detectCandidates(huge, noTerms());
+      throw new Error('expected throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(AnonymizationInputTooLargeError);
+      expect((e as Error).message).not.toContain('sensitive-token');
+      expect((e as AnonymizationInputTooLargeError).maxInputChars).toBe(MAX_INPUT_CHARS);
+    }
+  });
+
+  it('accepts input exactly at the bound', () => {
+    const atLimit = 'a'.repeat(MAX_INPUT_CHARS);
+    expect(() => detectCandidates(atLimit, noTerms())).not.toThrow();
+  });
+});
+
+describe('adjacent and boundary redactions', () => {
+  it('replaces two directly adjacent distinct entities without corruption', () => {
+    const text = 'AnnaBéla'; // two adjacent manual terms, no separator
+    const opts: AnonymizationOptions = {
+      manualTerms: [
+        { term: 'Anna', category: 'PERSON' },
+        { term: 'Béla', category: 'PERSON' },
+      ],
+      exactTermsWholeWords: false, // allow embedded adjacency
+    };
+    const { result } = runAnonymization(text, opts, ids(detect(text, opts)));
+    expect(result.appliedCount).toBe(2);
+    expect(result.anonymizedText).toBe('[SZEMÉLY_1][SZEMÉLY_2]');
+    expect(result.anonymizedText).not.toContain('Anna');
+    expect(result.anonymizedText).not.toContain('Béla');
+  });
+
+  it('adjacent regex entities are both replaced', () => {
+    const text = 'a@b.hu+36301234567'; // email immediately followed by a phone
+    const { result } = runAnonymization(text, noTerms(), ids(detect(text, noTerms())));
+    expect(result.anonymizedText).not.toContain('a@b.hu');
+    expect(result.anonymizedText).not.toContain('+36301234567');
+  });
+});
+
+describe('performance: source is folded once regardless of dictionary size', () => {
+  it('a large manual dictionary over a large document completes quickly', () => {
+    const source = ('Semleges bekezdés Kovács Péter tartalommal. ').repeat(4000); // ~170k chars
+    const manualTerms = Array.from({ length: 500 }, (_, i) => ({
+      term: `NemLétező Kifejezés ${i}`,
+      category: 'OTHER_SENSITIVE' as const,
+    }));
+    manualTerms.push({ term: 'Kovács Péter', category: 'OTHER_SENSITIVE' as const });
+    const started = Date.now();
+    const { result } = runAnonymization(source, { manualTerms }, []);
+    expect(Date.now() - started).toBeLessThan(5000);
+    // No approvals → text unchanged, and no term text leaked into warnings.
+    expect(result.anonymizedText).toBe(source);
+    expect(JSON.stringify(result.warnings)).not.toContain('NemLétező Kifejezés 1');
   });
 });

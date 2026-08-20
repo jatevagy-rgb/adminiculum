@@ -14,7 +14,7 @@
  */
 
 import type { AnonymizationCandidate, CandidateConfidence, DetectorName, SensitiveCategory } from './types';
-import { findOccurrences } from './textNormalization';
+import { findOccurrences, foldForMatch } from './textNormalization';
 import { PseudonymAssigner } from './pseudonyms';
 
 /** Overlap precedence: manual/exact terms outrank regex detections. */
@@ -210,23 +210,42 @@ export function detectExactTermCandidates(
 
   const occurrencesByTerm: Array<{ start: number; end: number; originalText: string; category: SensitiveCategory }> = [];
 
+  // Fold the source ONCE and reuse it for every manual term. Folding is
+  // O(source length) and allocates two arrays of that length; doing it per term
+  // turned a large manual dictionary into an O(terms × source length) allocation
+  // amplifier (a denial-of-service vector). The folded copy depends only on the
+  // source, so reuse is deterministic and does not change any output.
+  const foldedSource =
+    options.caseInsensitive || options.diacriticInsensitive ? foldForMatch(source) : undefined;
+
+  // Warnings must identify a term by ordinal position and reason ONLY. The term
+  // text itself is user-supplied sensitive data (PERSON / BUSINESS_SECRET / ...),
+  // and warnings flow into the safe export package — echoing the value here would
+  // leak the original secret out of the canonical environment.
+  let termOrdinal = 0;
   for (const { term, category } of terms) {
+    termOrdinal += 1;
     const clean = term.trim();
     if (clean.length === 0) {
-      warnings.push(`manual term ignored: empty term`);
+      warnings.push(`manual term #${termOrdinal} ignored: empty term`);
       continue;
     }
     if (clean.length < options.minTermLength) {
-      warnings.push(`manual term ignored: too short (${JSON.stringify(clean)})`);
+      warnings.push(`manual term #${termOrdinal} ignored: too short (min ${options.minTermLength})`);
       continue;
     }
-    const occurrences = findOccurrences(source, clean, {
-      caseInsensitive: options.caseInsensitive,
-      diacriticInsensitive: options.diacriticInsensitive,
-      wholeWord: options.wholeWord,
-    });
+    const occurrences = findOccurrences(
+      source,
+      clean,
+      {
+        caseInsensitive: options.caseInsensitive,
+        diacriticInsensitive: options.diacriticInsensitive,
+        wholeWord: options.wholeWord,
+      },
+      foldedSource,
+    );
     if (occurrences.length === 0) {
-      warnings.push(`manual term not found in source (${JSON.stringify(clean)})`);
+      warnings.push(`manual term #${termOrdinal} not found in source`);
       continue;
     }
     for (const occ of occurrences) {

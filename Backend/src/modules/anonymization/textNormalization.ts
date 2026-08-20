@@ -64,6 +64,13 @@ export function findOccurrences(
     caseInsensitive: true,
     diacriticInsensitive: true,
   },
+  /**
+   * Optional pre-folded copy of `source` (from `foldForMatch`). When a caller
+   * searches many terms against the same source it can fold once and pass the
+   * result here to avoid re-folding per term. Must be `foldForMatch(source)` for
+   * the identical `source` — passing a mismatched fold would corrupt offsets.
+   */
+  precomputedFoldedSource?: { folded: string; indexMap: number[] },
 ): Occurrence[] {
   if (term.length === 0) {
     return [];
@@ -73,7 +80,7 @@ export function findOccurrences(
     return scanLiteral(source, term, options.wholeWord === true);
   }
 
-  const foldedSource = foldForMatch(source);
+  const foldedSource = precomputedFoldedSource ?? foldForMatch(source);
   const foldedTerm = foldForMatch(term);
   if (foldedTerm.folded.length === 0) {
     return [];
