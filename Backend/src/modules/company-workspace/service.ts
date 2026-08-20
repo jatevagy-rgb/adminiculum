@@ -20,7 +20,7 @@
  * and no new company publication scope.
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
-import { InteractionError, InternalActor, assertClientSafe, internalCaseScope } from '../client-interaction/base';
+import { InteractionError, InternalActor, assertClientReadAccess, assertClientSafe } from '../client-interaction/base';
 
 type Prisma = typeof defaultPrisma;
 
@@ -44,7 +44,8 @@ const FACT_GROUP_KEYS: Record<string, string> = {
   AI_USAGE: 'DIGITAL',
   REGULATED_ACTIVITY: 'REGULATORY',
   CERTIFICATION: 'REGULATORY',
-  FINANCING: 'REGULATORY',
+  // Financing is a financial-scale characteristic, not a regulatory one.
+  FINANCING: 'SIZE',
 };
 
 const FACT_GROUP_LABELS: Record<string, string> = {
@@ -57,20 +58,6 @@ const FACT_GROUP_LABELS: Record<string, string> = {
   OTHER: 'Egyéb jellemzők',
 };
 
-async function assertClientReadAccess(actor: InternalActor, clientId: string, prisma: Prisma = defaultPrisma) {
-  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true } });
-  if (!client) throw new InteractionError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
-  const user = await prisma.user.findUnique({ where: { id: actor.userId }, select: { id: true, role: true, status: true, isActive: true } });
-  if (!user || user.isActive === false || String(user.status) !== 'ACTIVE') throw new InteractionError(403, 'CLIENT_ACCESS_FORBIDDEN', 'Actor cannot access this client.');
-  if (['ADMIN', 'PARTNER'].includes(String(user.role))) return client;
-  const scope = await internalCaseScope(actor, prisma);
-  if (scope !== null) {
-    const has = await prisma.case.findFirst({ where: { id: { in: scope }, clientId }, select: { id: true } });
-    if (!has) throw new InteractionError(403, 'CLIENT_ACCESS_FORBIDDEN', 'Actor has no case access in this client.');
-  }
-  return client;
-}
-
 function iso(v: Date | null | undefined): string | null {
   return v ? v.toISOString() : null;
 }
@@ -82,9 +69,19 @@ function ownerDisplay(personName: string | null | undefined, legacyLabel: string
   return null;
 }
 
-function partnerName(parties: { roleCode: string; displayName: string }[]): string | null {
-  const partner = parties.find((p) => p.roleCode === 'SUPPLIER') || parties[0];
-  return partner ? partner.displayName : null;
+/**
+ * Deterministic party summary for a contract's recorded parties. Adminiculum
+ * contracts span many types (lease, NDA, supply, financing, ...), so there is NO
+ * universal "counterparty" role — `SUPPLIER` is only meaningful for supply
+ * contracts, not for LESSOR/LESSEE, lender/borrower, etc. The client company
+ * itself is not stored as a party on these records, so the listed parties are the
+ * relevant other parties. We therefore show a bounded, deterministic summary of
+ * the recorded party names rather than guessing a semantic opposite party.
+ */
+function partnerName(parties: { id: string; roleCode: string; displayName: string }[]): string | null {
+  if (!parties.length) return null;
+  const ordered = [...parties].sort((a, b) => a.id.localeCompare(b.id));
+  return ordered.length === 1 ? ordered[0].displayName : `${ordered[0].displayName} +${ordered.length - 1}`;
 }
 
 export interface WorkspaceGapItem {
@@ -92,8 +89,11 @@ export interface WorkspaceGapItem {
   title: string;
 }
 
+// Attention codes represent things that genuinely need the workforce's attention.
+// "Active initiatives" is normal, expected state (shown in the development plan
+// section), not a warning — it is intentionally NOT an attention code.
 export interface WorkspaceAttentionItem {
-  code: 'OPEN_IMPORTANT_FINDINGS' | 'CONTRACTS_WITHOUT_OWNER' | 'OBLIGATIONS_WITHOUT_OWNER' | 'INACTIVE_OWNER_PERSONS' | 'ACTIVE_INITIATIVES';
+  code: 'OPEN_IMPORTANT_FINDINGS' | 'CONTRACTS_WITHOUT_OWNER' | 'OBLIGATIONS_WITHOUT_OWNER' | 'INACTIVE_OWNER_PERSONS';
   count: number;
 }
 
@@ -154,9 +154,16 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
   if (!client) throw new InteractionError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
 
   /* ---- Profile + grouped facts ---------------------------------------- */
+  // Cégkép is the CURRENT company picture: show only facts that are valid now
+  // (validTo is null or in the future). Superseded historical facts are NOT shown
+  // here so the profile never displays several conflicting values of the same
+  // fact type as if all were simultaneously true. History is not deleted — it
+  // remains available through the Phase 1 ClientFact API.
+  const nowMs = Date.now();
+  const currentFacts = facts.filter((f) => f.validTo === null || f.validTo.getTime() > nowMs);
   const factGroups: Array<{ key: string; label: string; facts: Array<{ id: string; type: string; value: string; verificationStatus: string; validFrom: string; validTo: string | null; sourceReference: string | null }> }> = [];
   const grouped: Record<string, Array<any>> = {};
-  for (const fact of facts) {
+  for (const fact of currentFacts) {
     const key = FACT_GROUP_KEYS[fact.type] || 'OTHER';
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push({
@@ -236,14 +243,29 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
       responsibilityLabels: p.responsibilities.slice(0, 3).map((r) => r.label),
     }));
 
+  const activeInitiatives = initiatives.filter((i) => i.status === 'ACTIVE');
+
+  // A responsibility gap means NO owner at all — neither a linked OrganizationPerson
+  // nor a legacy owner label. A contract/obligation carrying a legacy label DOES
+  // have a (transitional) owner and is not counted as a gap; the "inactive owner"
+  // and person-link migration concerns are handled separately.
   const contractsWithoutOwner: WorkspaceGapItem[] = activeContracts
-    .filter((c) => !c.businessOwnerPersonId)
+    .filter((c) => !c.businessOwnerPersonId && !c.businessOwnerLabel)
     .map((c) => ({ id: c.id, title: c.title }));
   const obligationsWithoutOwner: WorkspaceGapItem[] = openObligations
-    .filter((o) => !o.ownerPersonId)
+    .filter((o) => !o.ownerPersonId && !o.ownerLabel)
     .map((o) => ({ id: o.id, title: o.title }));
+
+  // An inactive/ENDED person is only an ownership problem when they are the
+  // CURRENT owner of a still-relevant object: an ACTIVE contract, an OPEN/
+  // IN_PROGRESS obligation, or an ACTIVE initiative. A former employee who owns
+  // nothing current is organization history, not an attention item.
+  const currentOwnerPersonIds = new Set<string>();
+  for (const c of activeContracts) if (c.businessOwnerPersonId) currentOwnerPersonIds.add(c.businessOwnerPersonId);
+  for (const o of openObligations) if (o.ownerPersonId) currentOwnerPersonIds.add(o.ownerPersonId);
+  for (const i of activeInitiatives) if (i.clientOwnerPersonId) currentOwnerPersonIds.add(i.clientOwnerPersonId);
   const inactiveOwnerPersons: WorkspaceGapItem[] = persons
-    .filter((p) => INACTIVE_PERSON_STATUS.has(String(p.employmentStatus)))
+    .filter((p) => INACTIVE_PERSON_STATUS.has(String(p.employmentStatus)) && currentOwnerPersonIds.has(p.id))
     .map((p) => ({ id: p.id, title: p.name }));
 
   const gaps = {
@@ -290,8 +312,6 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
   if (contractsWithoutOwner.length) attention.push({ code: 'CONTRACTS_WITHOUT_OWNER', count: contractsWithoutOwner.length });
   if (obligationsWithoutOwner.length) attention.push({ code: 'OBLIGATIONS_WITHOUT_OWNER', count: obligationsWithoutOwner.length });
   if (inactiveOwnerPersons.length) attention.push({ code: 'INACTIVE_OWNER_PERSONS', count: inactiveOwnerPersons.length });
-  const activeInitiatives = initiatives.filter((i) => i.status === 'ACTIVE');
-  if (activeInitiatives.length) attention.push({ code: 'ACTIVE_INITIATIVES', count: activeInitiatives.length });
 
   const dto = {
     client: { id: client.id, name: client.name },
