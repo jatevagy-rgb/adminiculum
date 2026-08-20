@@ -48,6 +48,19 @@ describe('Company workspace UI (structural)', () => {
     assert.match(src, /Ehhez az ügyfélhez még nincs rögzített fejlesztési kezdeményezés/);
   });
 
+  it('renders ClientFact current-vs-history clearly instead of claiming conflicting facts are true', () => {
+    const src = component() + api();
+    assert.match(component(), /isCurrent/);
+    assert.match(component(), /korábbi/);
+    assert.match(api(), /isCurrent: boolean/);
+  });
+
+  it('renders inactive-owner wording for actually-referenced owners only', () => {
+    const src = component() + api();
+    assert.match(api(), /kijelölt felelős már nem aktív/);
+    assert.match(component(), /INACTIVE_OWNER_PERSONS/);
+  });
+
   it('never renders raw UUIDs, Prisma enums or projector terminology in the UI', () => {
     const src = component();
     assert.doesNotMatch(src, /employmentStatus=\{/);

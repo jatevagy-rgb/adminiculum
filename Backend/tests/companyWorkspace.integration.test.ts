@@ -39,6 +39,7 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
   const contractOwned = crypto.randomUUID();
   const contractLegacy = crypto.randomUUID();
   const contractNoOwner = crypto.randomUUID();
+  const contractInactiveOwner = crypto.randomUUID();
   const obligationOwned = crypto.randomUUID();
   const obligationLegacy = crypto.randomUUID();
   const obligationNoOwner = crypto.randomUUID();
@@ -46,6 +47,7 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
   const initiativeLegacy = crypto.randomUUID();
   const personOwner = crypto.randomUUID();
   const personInactive = crypto.randomUUID();
+  const personEndedNotOwner = crypto.randomUUID();
   const personB = crypto.randomUUID();
 
   const admin = { userId: adminId, role: 'ADMIN' };
@@ -72,6 +74,8 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
       { clientId: clientA, type: 'REVENUE_BAND', value: '500 M Ft – 1 Mrd Ft', validFrom: new Date('2026-01-01T00:00:00Z'), verificationStatus: 'UNVERIFIED' },
       { clientId: clientA, type: 'OPERATING_COUNTRY', value: 'Magyarország, Szlovákia', validFrom: new Date('2026-01-01T00:00:00Z'), verificationStatus: 'LAW_FIRM_VERIFIED' },
       { clientId: clientA, type: 'IMPORTANT_IT_SYSTEM', value: 'Vállalatirányítási rendszer', validFrom: new Date('2026-01-01T00:00:00Z'), verificationStatus: 'UNVERIFIED' },
+      // Historical (expired) fact for the same type as a current one — must not be presented as live.
+      { clientId: clientA, type: 'EMPLOYEE_COUNT', value: '35 fő', validFrom: new Date('2024-01-01T00:00:00Z'), validTo: new Date('2025-12-31T00:00:00Z'), verificationStatus: 'UNVERIFIED' },
       { clientId: clientB, type: 'EMPLOYEE_COUNT', value: '7 fő', validFrom: new Date('2026-01-01T00:00:00Z'), verificationStatus: 'UNVERIFIED' },
     ] as never });
     // Client A assessments + findings (one with an important open finding).
@@ -92,6 +96,7 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
       { id: contractOwned, clientId: clientA, title: 'Beszállítói keretszerződés', contractType: 'B2B_SUPPLY', status: 'ACTIVE', effectiveDate: new Date('2026-01-01T00:00:00Z'), expiryDate: new Date('2027-01-01T00:00:00Z') },
       { id: contractLegacy, clientId: clientA, title: 'Irodabérleti szerződés', contractType: 'LEASE', status: 'ACTIVE', businessOwnerLabel: 'Tulajdonos (A. B.)', effectiveDate: new Date('2025-01-01T00:00:00Z') },
       { id: contractNoOwner, clientId: clientA, title: 'Szolgáltatási szerződés', contractType: 'SERVICE', status: 'ACTIVE', effectiveDate: new Date('2026-03-01T00:00:00Z') },
+      { id: contractInactiveOwner, clientId: clientA, title: 'Karbantartási szerződés', contractType: 'SERVICE', status: 'ACTIVE', effectiveDate: new Date('2026-02-01T00:00:00Z') },
       { id: contractOwned + 'b', clientId: clientB, title: 'B ügyfél szerződés', contractType: 'SERVICE', status: 'ACTIVE', effectiveDate: new Date('2026-01-01T00:00:00Z') },
     ] as never });
     // Obligations: owned, legacy label only, no owner, and one belonging to client B.
@@ -107,6 +112,7 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     await db.organizationPerson.createMany({ data: [
       { id: personOwner, clientId: clientA, organizationGroupId: groupFinance, name: 'Pénzügyi vezető', jobTitle: 'Pénzügyi vezető', employmentStatus: 'ACTIVE' },
       { id: personInactive, clientId: clientA, organizationGroupId: groupRoot, name: 'Korábbi ügyvezető', jobTitle: 'Ügyvezető', employmentStatus: 'ENDED' },
+      { id: personEndedNotOwner, clientId: clientA, name: 'Régi munkatárs', jobTitle: 'Munkatárs', employmentStatus: 'ENDED' },
       { id: personB, clientId: clientB, name: 'B személy', jobTitle: 'B vezető', employmentStatus: 'ACTIVE' },
     ] as never });
     // Initiatives: one with client owner, one without, plus milestone for the owned one.
@@ -120,6 +126,8 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     await setContractBusinessOwner(admin, contractOwned, personOwner);
     await setObligationOwner(admin, obligationOwned, personOwner);
     await setInitiativeClientOwner(admin, initiativeOwned, personOwner);
+    // An ENDED person still referenced as the current owner of an ACTIVE contract.
+    await setContractBusinessOwner(admin, contractInactiveOwner, personInactive);
   });
 
   afterAll(async () => {
@@ -181,6 +189,28 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     expect(codes).toContain('ACTIVE_INITIATIVES');
     const contractGap = view.attention.find((a: any) => a.code === 'CONTRACTS_WITHOUT_OWNER');
     expect(contractGap.count).toBe(1); // only the ACTIVE contract without a person owner
+    const inactiveGap = view.attention.find((a: any) => a.code === 'INACTIVE_OWNER_PERSONS');
+    expect(inactiveGap.count).toBe(1); // only the ENDED person still referenced as an owner
+  });
+
+  it('flags an inactive person only when they are ACTUALLY referenced as a current owner', async () => {
+    const view = await getWorkspaceOverview(admin, clientA, db);
+    // The ENDED person who still owns an ACTIVE contract IS an ownership gap.
+    expect(view.gaps.inactiveOwnerPersons.map((g: any) => g.id)).toContain(personInactive);
+    // A former employee who is NOT referenced as any current owner is NOT a gap.
+    expect(view.gaps.inactiveOwnerPersons.map((g: any) => g.id)).not.toContain(personEndedNotOwner);
+    expect(view.gaps.inactiveOwnerCount).toBe(1);
+  });
+
+  it('marks current vs historical ClientFacts (isCurrent flag respects validFrom/validTo)', async () => {
+    const view = await getWorkspaceOverview(admin, clientA, db);
+    const sizeGroup = view.factGroups.find((g: any) => g.key === 'SIZE');
+    const employeeFacts = sizeGroup.facts.filter((f: any) => f.type === 'EMPLOYEE_COUNT');
+    expect(employeeFacts.length).toBe(2);
+    const current = employeeFacts.find((f: any) => f.isCurrent);
+    const historical = employeeFacts.find((f: any) => !f.isCurrent);
+    expect(current.value).toBe('42 fő');
+    expect(historical.value).toBe('35 fő');
   });
 
   it('presents assessments with their important open findings', async () => {

@@ -11,16 +11,16 @@
  * initiatives) so the UI can answer "Mire kell most figyelni?" without exposing
  * internal architecture.
  *
- * Workforce-only. Client-scoped reads reuse the exact access posture of the
- * Phase 1-3 modules (never a new ACL): ADMIN/PARTNER may read any client;
- * lawyers/collaborating lawyers only clients they have a Case in.
+ * Workforce-only. Client-scoped reads reuse the canonical Phase 1-3 access
+ * helper (never a new ACL): ADMIN/PARTNER may read any client; lawyers and
+ * collaborating lawyers only clients they have a Case in.
  *
  * NOTE: this module is deliberately distinct from `client-workspace` (the CP1
  * customer-facing organizational workspace). Phase 4 exposes no customer route
  * and no new company publication scope.
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
-import { InteractionError, InternalActor, assertClientSafe, internalCaseScope } from '../client-interaction/base';
+import { InteractionError, InternalActor, assertClientReadAccess, assertClientSafe } from '../client-interaction/base';
 
 type Prisma = typeof defaultPrisma;
 
@@ -57,20 +57,6 @@ const FACT_GROUP_LABELS: Record<string, string> = {
   OTHER: 'Egyéb jellemzők',
 };
 
-async function assertClientReadAccess(actor: InternalActor, clientId: string, prisma: Prisma = defaultPrisma) {
-  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true } });
-  if (!client) throw new InteractionError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
-  const user = await prisma.user.findUnique({ where: { id: actor.userId }, select: { id: true, role: true, status: true, isActive: true } });
-  if (!user || user.isActive === false || String(user.status) !== 'ACTIVE') throw new InteractionError(403, 'CLIENT_ACCESS_FORBIDDEN', 'Actor cannot access this client.');
-  if (['ADMIN', 'PARTNER'].includes(String(user.role))) return client;
-  const scope = await internalCaseScope(actor, prisma);
-  if (scope !== null) {
-    const has = await prisma.case.findFirst({ where: { id: { in: scope }, clientId }, select: { id: true } });
-    if (!has) throw new InteractionError(403, 'CLIENT_ACCESS_FORBIDDEN', 'Actor has no case access in this client.');
-  }
-  return client;
-}
-
 function iso(v: Date | null | undefined): string | null {
   return v ? v.toISOString() : null;
 }
@@ -82,9 +68,20 @@ function ownerDisplay(personName: string | null | undefined, legacyLabel: string
   return null;
 }
 
-function partnerName(parties: { roleCode: string; displayName: string }[]): string | null {
-  const partner = parties.find((p) => p.roleCode === 'SUPPLIER') || parties[0];
-  return partner ? partner.displayName : null;
+/**
+ * Counterparty display for a contract party set.
+ *
+ * The client company is typically the CUSTOMER party. The counterparty is the
+ * first party that is not the client's own role. If there is no non-client
+ * party, fall back to a bounded summary of the party names rather than guessing
+ * a universal counterparty role (SUPPLIER is not universal across lease, NDA,
+ * partnership or financing relationships).
+ */
+function counterpartyLabel(parties: { roleCode: string; displayName: string }[]): string | null {
+  const nonClient = parties.filter((p) => p.roleCode !== 'CUSTOMER');
+  const chosen = nonClient.length ? nonClient : parties;
+  if (chosen.length === 0) return null;
+  return chosen.slice(0, 2).map((p) => p.displayName).join(', ');
 }
 
 export interface WorkspaceGapItem {
@@ -154,10 +151,16 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
   if (!client) throw new InteractionError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
 
   /* ---- Profile + grouped facts ---------------------------------------- */
-  const factGroups: Array<{ key: string; label: string; facts: Array<{ id: string; type: string; value: string; verificationStatus: string; validFrom: string; validTo: string | null; sourceReference: string | null }> }> = [];
+  // ClientFact records may carry history: multiple rows can exist for the same
+  // type with different validFrom/validTo. Only the CURRENT fact per type is
+  // shown as the live profile fact; expired/future rows are marked historical
+  // and never presented as if simultaneously true.
+  const today = new Date();
+  const factGroups: Array<{ key: string; label: string; facts: Array<{ id: string; type: string; value: string; verificationStatus: string; validFrom: string; validTo: string | null; sourceReference: string | null; isCurrent: boolean }> }> = [];
   const grouped: Record<string, Array<any>> = {};
   for (const fact of facts) {
     const key = FACT_GROUP_KEYS[fact.type] || 'OTHER';
+    const isCurrent = fact.validFrom <= today && (fact.validTo === null || fact.validTo >= today);
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push({
       id: fact.id,
@@ -167,6 +170,7 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
       validFrom: fact.validFrom.toISOString(),
       validTo: fact.validTo ? fact.validTo.toISOString() : null,
       sourceReference: fact.sourceReference,
+      isCurrent,
     });
   }
   for (const key of Object.keys(FACT_GROUP_LABELS)) {
@@ -174,7 +178,11 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
   }
 
   /* ---- Assessments + findings ------------------------------------------ */
-  const allFindings = assessments.flatMap((a) => a.findings);
+  // Archived assessments are historical records; their findings are not active
+  // attention (RESOLVED is the only terminal finding state; ARCHIVED assessment
+  // findings should not re-surface as live attention).
+  const activeAssessments = assessments.filter((a) => a.status !== 'ARCHIVED');
+  const allFindings = activeAssessments.flatMap((a) => a.findings);
   const importantFindings = allFindings.filter((f) => (f.severity === 'HIGH' || f.severity === 'CRITICAL') && f.status !== 'RESOLVED');
 
   const assessmentsDto = assessments.map((a) => {
@@ -199,7 +207,7 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
     title: c.title,
     contractType: c.contractType,
     status: String(c.status),
-    partnerName: partnerName(c.parties),
+    partnerName: counterpartyLabel(c.parties),
     effectiveDate: iso(c.effectiveDate),
     expiryDate: iso(c.expiryDate),
     nextCriticalDate: iso(c.nextCriticalDate),
@@ -236,14 +244,43 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
       responsibilityLabels: p.responsibilities.slice(0, 3).map((r) => r.label),
     }));
 
+  // Owner references are already same-client by construction (the FK lives on
+  // the same row as the owning object). A defensive filter guards against
+  // corrupt/historical data ever leaking an owner person of another client.
+  const ownedByPerson: Map<string, string[]> = new Map();
+  for (const c of activeContracts) {
+    if (c.businessOwnerPersonId) {
+      const list = ownedByPerson.get(c.businessOwnerPersonId) || [];
+      list.push(c.title);
+      ownedByPerson.set(c.businessOwnerPersonId, list);
+    }
+  }
+  for (const o of openObligations) {
+    if (o.ownerPersonId) {
+      const list = ownedByPerson.get(o.ownerPersonId) || [];
+      list.push(o.title);
+      ownedByPerson.set(o.ownerPersonId, list);
+    }
+  }
+  for (const i of initiatives) {
+    if (i.clientOwnerPersonId) {
+      const list = ownedByPerson.get(i.clientOwnerPersonId) || [];
+      list.push(i.title);
+      ownedByPerson.set(i.clientOwnerPersonId, list);
+    }
+  }
+
   const contractsWithoutOwner: WorkspaceGapItem[] = activeContracts
     .filter((c) => !c.businessOwnerPersonId)
     .map((c) => ({ id: c.id, title: c.title }));
   const obligationsWithoutOwner: WorkspaceGapItem[] = openObligations
     .filter((o) => !o.ownerPersonId)
     .map((o) => ({ id: o.id, title: o.title }));
+  // An inactive/ended person is an ownership problem ONLY when they are actually
+  // referenced as the current owner of an active/relevant object — never every
+  // former employee in the organization history.
   const inactiveOwnerPersons: WorkspaceGapItem[] = persons
-    .filter((p) => INACTIVE_PERSON_STATUS.has(String(p.employmentStatus)))
+    .filter((p) => INACTIVE_PERSON_STATUS.has(String(p.employmentStatus)) && ownedByPerson.has(p.id))
     .map((p) => ({ id: p.id, title: p.name }));
 
   const gaps = {

@@ -11,6 +11,7 @@ export type WorkspaceFactGroup = {
     validFrom: string;
     validTo: string | null;
     sourceReference: string | null;
+    isCurrent: boolean;
   }>;
 };
 

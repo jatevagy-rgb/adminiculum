@@ -119,12 +119,17 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
                   <div key={group.key} className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">{group.label}</p>
                     <ul className="mt-2 space-y-1.5">
-                      {group.facts.map((fact) => (
-                        <li key={fact.id} className="text-sm text-[var(--adm-text)]">
-                          <span className="text-[var(--adm-text-muted)]">{companyFactTypeLabel(fact.type)}:</span> {fact.value}
-                          <span className="ml-1 text-xs text-[var(--adm-text-muted)]">({factVerificationLabel(fact.verificationStatus)})</span>
-                        </li>
-                      ))}
+                      {[...group.facts]
+                        .sort((a, b) => Number(b.isCurrent) - Number(a.isCurrent))
+                        .map((fact) => (
+                          <li key={fact.id} className="text-sm text-[var(--adm-text)]">
+                            <span className="text-[var(--adm-text-muted)]">{companyFactTypeLabel(fact.type)}:</span> {fact.value}
+                            <span className="ml-1 text-xs text-[var(--adm-text-muted)]">
+                              ({factVerificationLabel(fact.verificationStatus)})
+                              {!fact.isCurrent ? ` · korábbi (${formatWorkspaceDate(fact.validFrom)})` : ''}
+                            </span>
+                          </li>
+                        ))}
                     </ul>
                   </div>
                 ))}

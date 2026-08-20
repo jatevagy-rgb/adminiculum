@@ -14,6 +14,7 @@ import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import {
   InteractionError,
   InternalActor,
+  assertClientReadAccess,
   assertClientSafe,
   forbidden,
   internalCaseScope,
@@ -57,22 +58,8 @@ function requireManager(actor: InternalActor): void {
 }
 
 /** Client-scoped read access. ADMIN/PARTNER see any client; lawyers/collaborating
- *  lawyers only clients they have a Case in (mirrors the existing execution
- *  scope, never a new ACL). */
-async function assertClientReadAccess(actor: InternalActor, clientId: string, prisma: Prisma = defaultPrisma) {
-  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true } });
-  if (!client) throw new InteractionError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
-  const user = await prisma.user.findUnique({ where: { id: actor.userId }, select: { id: true, role: true, status: true, isActive: true } });
-  if (!user || user.isActive === false || String(user.status) !== 'ACTIVE') throw new InteractionError(403, 'CLIENT_ACCESS_FORBIDDEN', 'Actor cannot access this client.');
-  if (['ADMIN', 'PARTNER'].includes(String(user.role))) return client;
-  const scope = await internalCaseScope(actor, prisma);
-  if (scope !== null) {
-    const has = await prisma.case.findFirst({ where: { id: { in: scope }, clientId }, select: { id: true } });
-    if (!has) throw new InteractionError(403, 'CLIENT_ACCESS_FORBIDDEN', 'Actor has no case access in this client.');
-  }
-  return client;
-}
-
+ *  lawyers only clients they have a Case in (shared canonical helper from the
+ *  interaction base; never a new ACL). */
 function assertTransition(from: string, to: string, table: Record<string, string[]>): void {
   if (!table[from]?.includes(to)) {
     throw new InteractionError(409, 'INVALID_STATUS_TRANSITION', `Transition ${from} -> ${to} is not allowed.`);
