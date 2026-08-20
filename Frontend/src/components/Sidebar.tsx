@@ -85,6 +85,7 @@ const routeMap: Record<string, string> = {
   reviews: "/reviews",
   "documents-compare": "/documents/compare",
   notifications: "/notifications",
+  communications: "/communications",
   "time-entries": "/time-entries",
   "timesheet-presets": "/timesheet-presets",
   clients: "/clients",
@@ -97,7 +98,7 @@ const navGroups: Array<{ id: string; label: string; items: string[] }> = [
   {
     id: "operations",
     label: "Napi munka",
-    items: ["dashboard", "tasks", "notifications", "reviews"],
+    items: ["dashboard", "tasks", "notifications", "communications", "reviews"],
   },
   {
     id: "matters",
@@ -122,6 +123,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
   const isReviewsActive = activeItem === "reviews";
   const isDocumentsCompareActive = activeItem === "documents-compare";
   const isNotificationsActive = activeItem === "notifications";
+  const isCommunicationsActive = activeItem === "communications";
   const isTimeEntriesActive = activeItem === "time-entries";
   const isTimesheetPresetsActive = activeItem === "timesheet-presets";
   const isCalendarActive = activeItem === "calendar";
@@ -132,6 +134,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
     dashboard: "Műszerfal",
     tasks: "Feladatok",
     notifications: "Kommunikáció",
+    communications: "Ügykommunikáció",
     reviews: "Review sor",
     cases: "Ügyek",
     "clause-library": "Záradék könyvtár",
@@ -242,6 +245,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
                 || nav.id === "reviews" && isReviewsActive
                 || nav.id === "documents-compare" && isDocumentsCompareActive
                 || nav.id === "notifications" && isNotificationsActive
+                || nav.id === "communications" && isCommunicationsActive
                 || nav.id === "time-entries" && isTimeEntriesActive
                 || nav.id === "timesheet-presets" && isTimesheetPresetsActive
                 || nav.id === "calendar" && isCalendarActive

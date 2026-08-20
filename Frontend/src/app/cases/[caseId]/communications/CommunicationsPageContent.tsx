@@ -145,7 +145,6 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
       setIsLoadingList(true);
       const data = await getCommunications({
         caseId: caseContextId,
-        type: 'NOTE',
         limit: 50
       });
       setCommunications(data.communications);
@@ -545,6 +544,18 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                         <span className={`text-[9px] uppercase tracking-[0.1em] px-1.5 py-0.5 rounded ${communicationTypeColors[comm.type]}`}>
                           {communicationTypeLabels[comm.type]}
                         </span>
+                        {comm.direction === 'INBOUND' && (
+                          <span className="text-[9px] text-[#1F4A33]">Bejövő</span>
+                        )}
+                        {comm.direction === 'OUTBOUND' && (
+                          <span className="text-[9px] text-[#514D45]">Kimenő</span>
+                        )}
+                        {comm.source === 'OUTLOOK' && (
+                          <span className="text-[9px] text-[#3B82F6]">Outlook</span>
+                        )}
+                        {comm.providerConversationId && (
+                          <span className="text-[9px] text-[#7B776D]">szál</span>
+                        )}
                         {comm.caseId && (
                             <span className="text-[9px] text-[#10B981]">Ügyhöz kapcsolva</span>
                         )}

@@ -3596,6 +3596,12 @@ export interface CommunicationItem {
   updatedAt: string;
   attachmentCount: number;
   sourceTaskCount: number;
+  providerConversationId: string | null;
+  direction: 'INBOUND' | 'OUTBOUND' | null;
+  receivedAt: string | null;
+  source: 'MANUAL' | 'OUTLOOK' | null;
+  syncStatus: 'IMPORTED' | 'PENDING' | 'FAILED' | null;
+  triage: 'LINKED' | 'NEEDS_ASSIGNMENT' | 'IGNORED' | 'DUPLICATE_OR_ERROR';
   case?: { id: string; caseNumber: string; title: string } | null;
   client?: { id: string; name: string; email: string } | null;
   createdBy?: { id: string; name: string; email: string };
@@ -3707,6 +3713,65 @@ export async function linkCommunicationToCase(
       body: JSON.stringify({ caseId }),
     }
   );
+}
+
+export type OutlookSyncSummary = {
+  imported: number;
+  alreadyKnown: number;
+  needsAssignment: number;
+  failed: number;
+};
+
+export type OutlookSyncResult = {
+  success: boolean;
+  configured: boolean;
+  mailboxAddress: string | null;
+  summary: OutlookSyncSummary;
+  threadLinked: number;
+  items: Array<{
+    externalMessageId: string | null;
+    communicationId: string | null;
+    imported: boolean;
+    duplicate: boolean;
+    valid: boolean;
+    linkedToCase: boolean;
+    needsAssignment: boolean;
+    direction: 'INBOUND' | 'OUTBOUND' | null;
+  }>;
+};
+
+export async function runOutlookSync(): Promise<OutlookSyncResult> {
+  return fetchApi<OutlookSyncResult>('/communications/outlook/sync', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+export async function linkCommunicationToClient(
+  communicationId: string,
+  clientId: string
+): Promise<{ success: boolean; communication: CommunicationItem; message: string }> {
+  return fetchApi<{ success: boolean; communication: CommunicationItem; message: string }>(
+    `/communications/${communicationId}/link-client`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ clientId }),
+    }
+  );
+}
+
+export async function ignoreCommunication(communicationId: string): Promise<{ success: boolean; message: string }> {
+  return fetchApi<{ success: boolean; message: string }>(`/communications/${communicationId}/ignore`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+export async function unignoreCommunication(communicationId: string): Promise<{ success: boolean; message: string }> {
+  return fetchApi<{ success: boolean; message: string }>(`/communications/${communicationId}/unignore`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
 }
 
 export async function getReviewTasks(): Promise<TaskItem[]> {

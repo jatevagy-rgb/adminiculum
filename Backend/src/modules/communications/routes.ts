@@ -22,6 +22,7 @@ import {
   importOutlookMessages,
   OutlookImportServiceError,
   runOutlookImportDryRun,
+  syncOutlookMailbox,
 } from './outlookImport.service';
 import { canUserActOnTask, createTaskFromCommunicationSource, SourceLinkedTaskError } from '../tasks/services';
 
@@ -85,15 +86,32 @@ type CommunicationListRow = {
   createdById: string;
   createdAt: Date;
   updatedAt: Date;
+  providerConversationId?: string | null;
+  direction?: 'INBOUND' | 'OUTBOUND' | null;
+  receivedAt?: Date | null;
+  source?: 'MANUAL' | 'OUTLOOK' | null;
+  syncStatus?: 'IMPORTED' | 'PENDING' | 'FAILED' | null;
+  metadata?: unknown;
 };
 
-type CommunicationListItem = Omit<CommunicationListRow, 'content' | 'createdAt' | 'updatedAt'> & {
+type CommunicationTriage = 'LINKED' | 'NEEDS_ASSIGNMENT' | 'IGNORED' | 'DUPLICATE_OR_ERROR';
+
+type CommunicationListItem = Omit<
+  CommunicationListRow,
+  'content' | 'createdAt' | 'updatedAt' | 'receivedAt' | 'providerConversationId' | 'direction' | 'source' | 'syncStatus' | 'metadata'
+> & {
   contentPreview: string | null;
   clientColorKey: string | null;
   createdAt: string;
   updatedAt: string;
   attachmentCount: number;
   sourceTaskCount: number;
+  providerConversationId: string | null;
+  direction: 'INBOUND' | 'OUTBOUND' | null;
+  receivedAt: string | null;
+  source: 'MANUAL' | 'OUTLOOK' | null;
+  syncStatus: 'IMPORTED' | 'PENDING' | 'FAILED' | null;
+  triage: CommunicationTriage;
 };
 
 interface CreateCommunicationInput {
@@ -140,6 +158,15 @@ function mapCommunicationListItem(
   sourceTaskCounts: Map<string, number>,
   clientColorKeys: Map<string, string>
 ): CommunicationListItem {
+  let triage: CommunicationTriage = 'NEEDS_ASSIGNMENT';
+  if (row.caseId) {
+    triage = 'LINKED';
+  } else if (readTriageFlag(row) === 'IGNORED') {
+    triage = 'IGNORED';
+  } else if (row.syncStatus === 'FAILED') {
+    triage = 'DUPLICATE_OR_ERROR';
+  }
+
   return {
     id: row.id,
     type: row.type,
@@ -159,7 +186,21 @@ function mapCommunicationListItem(
     updatedAt: row.updatedAt.toISOString(),
     attachmentCount: attachmentCounts.get(row.id) || 0,
     sourceTaskCount: sourceTaskCounts.get(row.id) || 0,
+    providerConversationId: (row as any).providerConversationId || null,
+    direction: (row as any).direction || null,
+    receivedAt: (row as any).receivedAt ? new Date((row as any).receivedAt).toISOString() : null,
+    source: (row as any).source || null,
+    syncStatus: (row as any).syncStatus || null,
+    triage,
   };
+}
+
+function readTriageFlag(row: CommunicationListRow): 'IGNORED' | null {
+  const meta = (row as any).metadata;
+  if (meta && typeof meta === 'object' && (meta as Record<string, unknown>).triage === 'IGNORED') {
+    return 'IGNORED';
+  }
+  return null;
 }
 
 function countByKey<T extends Record<string, unknown>>(rows: T[], key: keyof T): Map<string, number> {
@@ -247,6 +288,12 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
           createdById: true,
           createdAt: true,
           updatedAt: true,
+          providerConversationId: true,
+          direction: true,
+          receivedAt: true,
+          source: true,
+          syncStatus: true,
+          metadata: true,
         },
       }) as CommunicationListRow[];
     } catch (error) {
@@ -1116,4 +1163,166 @@ router.post('/outlook/import', authenticate, requireOutlookImportFoundation, asy
     res.status(500).json({ error: 'Error importing Outlook communications' });
   }
 });
+
+// ============================================================================
+// POST /api/v1/communications/outlook/sync
+// ----------------------------------------------------------------------------
+// LIVE inbound sync boundary (workforce, gated by ENABLE_OUTLOOK_IMPORT AND
+// configured COMMUNICATIONS_MAILBOX + app-only credentials). Reads a bounded
+// recent window from the workforce mailbox via Microsoft Graph, imports
+// idempotently, and applies SAFE thread linkage. Returns only safe counts — no
+// raw Graph payloads, no Graph/tenant ids, no tokens, no provider stack traces.
+// Provider failures are classified into safe user-facing outcomes.
+// ============================================================================
+
+router.post('/outlook/sync', authenticate, requireOutlookImportFoundation, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const result = await syncOutlookMailbox(userId);
+    res.status(201).json(result);
+  } catch (error) {
+    if (error instanceof OutlookImportServiceError) {
+      if (error.logRoute) logPrismaRouteError(error.logRoute, error);
+      res.status(error.status).json(error.responseBody);
+      return;
+    }
+    logPrismaRouteError('POST /communications/outlook/sync', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Az Outlook szinkron nem sikerült.' });
+  }
+});
+
+// ============================================================================
+// POST /api/v1/communications/:id/link-client — explicit, safe Client assignment
+// ----------------------------------------------------------------------------
+// A lawyer explicitly selects the Client this communication belongs to. This is
+// the safe layer-2 matching path (no guessing). caseId is left untouched unless
+// the selected client differs from the communication's current client.
+// ============================================================================
+
+router.post('/:id/link-client', authenticate, requireCommunicationsFoundation, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const { id } = req.params;
+    const clientId = typeof req.body?.clientId === 'string' ? req.body.clientId.trim() : '';
+
+    if (!clientId) {
+      res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'clientId is required.' });
+      return;
+    }
+
+    const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true } });
+    if (!client) {
+      res.status(404).json({ status: 404, code: 'CLIENT_NOT_FOUND', message: 'Client not found.' });
+      return;
+    }
+
+    const communication = await prisma.communication.findUnique({ where: { id: String(id) }, select: { id: true, clientId: true, caseId: true } });
+    if (!communication) {
+      res.status(404).json({ status: 404, code: 'COMMUNICATION_NOT_FOUND', message: 'Communication not found.' });
+      return;
+    }
+
+    const updated = await prisma.communication.update({
+      where: { id: String(id) },
+      data: { clientId: client.id },
+      select: { id: true, clientId: true, caseId: true, subject: true },
+    });
+
+    if (communication.caseId && updated.caseId) {
+      await createTimelineEvent({
+        caseId: updated.caseId,
+        userId,
+        eventType: 'CLIENT_CONTACT',
+        payload: {
+          communicationId: updated.id,
+          subject: updated.subject,
+          action: 'client_assigned',
+          clientId: client.id,
+        },
+      });
+    }
+
+    res.json({ success: true, communication: updated, message: `Kommunikáció hozzárendelve: ${client.name}` });
+  } catch (error) {
+    logPrismaRouteError('POST /communications/:id/link-client', error);
+    const prismaErr = buildPrismaErrorResponse(error);
+    if (prismaErr) {
+      res.status(prismaErr.status).json(prismaErr.body);
+      return;
+    }
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'A kommunikáció ügyfélhez rendelése nem sikerült.' });
+  }
+});
+
+// ============================================================================
+// POST /api/v1/communications/:id/ignore | /unignore — triage
+// ----------------------------------------------------------------------------
+// Lightweight triage: mark an unassigned imported message as "ignored / not a
+// matter" or restore it. Persisted additively inside the existing metadata JSON
+// (no schema migration). Only applies to communications without a case.
+// ============================================================================
+
+async function requireCommunicationForTriage(id: string, res: Response, userId: string): Promise<{ id: string } | null> {
+  const row = await prisma.communication.findUnique({
+    where: { id: String(id) },
+    select: { id: true, caseId: true, metadata: true },
+  });
+  if (!row) {
+    res.status(404).json({ status: 404, code: 'COMMUNICATION_NOT_FOUND', message: 'Communication not found.' });
+    return null;
+  }
+  if (row.caseId) {
+    res.status(409).json({ status: 409, code: 'COMMUNICATION_ALREADY_LINKED', message: 'A case-linked communication cannot be ignored.' });
+    return null;
+  }
+  void userId;
+  return { id: row.id };
+}
+
+router.post('/:id/ignore', authenticate, requireCommunicationsFoundation, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const guard = await requireCommunicationForTriage(String(req.params.id), res, userId);
+    if (!guard) return;
+
+    const row = await prisma.communication.findUnique({ where: { id: guard.id }, select: { metadata: true } });
+    const meta = (row?.metadata && typeof row.metadata === 'object' ? { ...(row.metadata as Record<string, unknown>) } : {}) as Record<string, unknown>;
+    meta.triage = 'IGNORED';
+
+    const updated = await prisma.communication.update({
+      where: { id: guard.id },
+      data: { metadata: meta as any },
+      select: { id: true, metadata: true },
+    });
+
+    res.json({ success: true, communication: updated, message: 'Kommunikáció megjelölve: nem ügyhöz tartozó.' });
+  } catch (error) {
+    logPrismaRouteError('POST /communications/:id/ignore', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'A kommunikáció megjelölése nem sikerült.' });
+  }
+});
+
+router.post('/:id/unignore', authenticate, requireCommunicationsFoundation, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const guard = await requireCommunicationForTriage(String(req.params.id), res, userId);
+    if (!guard) return;
+
+    const row = await prisma.communication.findUnique({ where: { id: guard.id }, select: { metadata: true } });
+    const meta = (row?.metadata && typeof row.metadata === 'object' ? { ...(row.metadata as Record<string, unknown>) } : {}) as Record<string, unknown>;
+    delete meta.triage;
+
+    const updated = await prisma.communication.update({
+      where: { id: guard.id },
+      data: { metadata: meta as any },
+      select: { id: true, metadata: true },
+    });
+
+    res.json({ success: true, communication: updated, message: 'Kommunikáció visszaállítva feldolgozásra.' });
+  } catch (error) {
+    logPrismaRouteError('POST /communications/:id/unignore', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'A kommunikáció visszaállítása nem sikerült.' });
+  }
+});
+
 export default router;

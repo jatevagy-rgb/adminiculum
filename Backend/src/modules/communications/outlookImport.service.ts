@@ -1,4 +1,11 @@
 import { prisma } from '../../prisma/prisma.service';
+import { mapGraphMessagesToOutlookImportPayload } from './outlookGraph.adapter';
+import {
+  OutlookGraphReaderError,
+  createOutlookGraphMailReader,
+  parseOutlookSyncLimit,
+  type OutlookSyncConfig,
+} from './outlookGraphLive';
 
 const OUTLOOK_PREVIEW_LIMIT = 240;
 
@@ -385,4 +392,252 @@ export async function importOutlookMessages(body: OutlookImportBody, userId: str
     summary,
     items,
   };
+}
+
+// ============================================================================
+// SAFE CONVERSATION (THREAD) LINKAGE
+// ----------------------------------------------------------------------------
+// Deterministic, non-guessing propagation: for each freshly imported message
+// that carries a provider conversation id, if the OTHER messages already in the
+// SAME conversation resolve to EXACTLY ONE distinct linked case, the imported
+// message inherits that case (and its consistent client). If the conversation is
+// unassigned or linked to MULTIPLE different cases, the message is left
+// unassigned (needs review). No "probably this case" fallback and no guessed id.
+// ============================================================================
+
+export type ImportedMessageRef = {
+  communicationId: string;
+  providerConversationId: string | null;
+};
+
+type ConversationLinkageDb = {
+  communication: {
+    findMany: (args: {
+      where: Record<string, unknown>;
+      select: Record<string, boolean>;
+    }) => Promise<Array<{ id: string; caseId: string | null; clientId: string | null }>>;
+    update: (args: { where: { id: string }; data: Record<string, unknown> }) => Promise<unknown>;
+  };
+};
+
+export async function applySafeConversationLinkage(
+  db: ConversationLinkageDb,
+  refs: ImportedMessageRef[],
+): Promise<{ linked: string[]; unassigned: string[] }> {
+  const linked: string[] = [];
+  const unassigned: string[] = [];
+
+  const grouped = new Map<string, string[]>();
+  for (const ref of refs) {
+    if (!ref.providerConversationId) {
+      unassigned.push(ref.communicationId);
+      continue;
+    }
+    const list = grouped.get(ref.providerConversationId) || [];
+    list.push(ref.communicationId);
+    grouped.set(ref.providerConversationId, list);
+  }
+
+  for (const conversationId of grouped.keys()) {
+    const ids = grouped.get(conversationId) as string[];
+    const existing = await db.communication.findMany({
+      where: { providerConversationId: conversationId },
+      select: { id: true, caseId: true, clientId: true },
+    });
+
+    const distinctCaseIds = new Set<string>();
+    let clientIdForCase: string | null = null;
+    for (const row of existing) {
+      if (row.caseId) {
+        distinctCaseIds.add(row.caseId);
+        clientIdForCase = row.clientId || null;
+      }
+    }
+
+    // Exactly one distinct linked case across the conversation -> safe to propagate.
+    if (distinctCaseIds.size !== 1) {
+      for (const id of ids) unassigned.push(id);
+      continue;
+    }
+
+    const targetCaseId = distinctCaseIds.values().next().value as string;
+    for (const id of ids) {
+      const row = existing.find((r) => r.id === id);
+      if (row && row.caseId) {
+        linked.push(id);
+        continue;
+      }
+      await db.communication.update({ where: { id }, data: { caseId: targetCaseId, clientId: clientIdForCase } });
+      linked.push(id);
+    }
+  }
+
+  return { linked, unassigned };
+}
+
+// ============================================================================
+// LIVE OUTLOOK SYNC (workforce, gated)
+// ----------------------------------------------------------------------------
+// Bounded inbound sync: reads a bounded recent window from the configured
+// workforce mailbox via the Graph reader, maps through the shared normalizer,
+// imports idempotently (dedupe by externalMessageId), then applies SAFE thread
+// linkage. Returns only safe counts; never raw Graph payloads or tokens. Provider
+// failures are classified into safe user-facing outcomes.
+// ============================================================================
+
+export type OutlookSyncResult = {
+  success: boolean;
+  configured: boolean;
+  mailboxAddress: string | null;
+  summary: { imported: number; alreadyKnown: number; needsAssignment: number; failed: number };
+  threadLinked: number;
+  items: Array<{
+    externalMessageId: string | null;
+    communicationId: string | null;
+    imported: boolean;
+    duplicate: boolean;
+    valid: boolean;
+    linkedToCase: boolean;
+    needsAssignment: boolean;
+    direction: 'INBOUND' | 'OUTBOUND' | null;
+  }>;
+};
+
+type SyncDeps = {
+  reader?: ReturnType<typeof createOutlookGraphMailReader>;
+};
+
+export async function syncOutlookMailbox(
+  userId: string | undefined,
+  opts: SyncDeps = {},
+  rawConfig?: OutlookSyncConfig | null,
+): Promise<OutlookSyncResult> {
+  const reader = opts.reader || createOutlookGraphMailReader();
+  const config = rawConfig !== undefined ? rawConfig : reader.config();
+
+  if (!config) {
+    throw new OutlookImportServiceError(501, {
+      status: 501,
+      code: 'OUTLOOK_IMPORT_NOT_CONFIGURED',
+      message: 'Outlook kommunikáció szinkron nincs beállítva ebben a környezetben.',
+      feature: 'OUTLOOK_IMPORT',
+      nextStep: 'A production környezetben állítsd be a COMMUNICATIONS_MAILBOX és az app-only Graph hitelesítést.',
+    });
+  }
+
+  let messages;
+  try {
+    messages = await reader.fetchRecentInbound(parseOutlookSyncLimit(undefined));
+  } catch (error) {
+    if (error instanceof OutlookGraphReaderError) {
+      throw new OutlookImportServiceError(502, {
+        status: 502,
+        code: mapGraphErrorCode(error.classification),
+        message: mapGraphErrorToMessage(error.classification),
+        feature: 'OUTLOOK_IMPORT',
+      });
+    }
+    throw new OutlookImportServiceError(502, {
+      status: 502,
+      code: 'OUTLOOK_GRAPH_UNAVAILABLE',
+      message: 'Az Outlook szinkron pillanatnyilag nem érhető el. Kérjük, próbáld újra később.',
+      feature: 'OUTLOOK_IMPORT',
+    });
+  }
+
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return {
+      success: true,
+      configured: true,
+      mailboxAddress: config.mailboxAddress,
+      summary: { imported: 0, alreadyKnown: 0, needsAssignment: 0, failed: 0 },
+      threadLinked: 0,
+      items: [],
+    };
+  }
+
+  const payload = mapGraphMessagesToOutlookImportPayload(messages, config.mailboxAddress);
+  const result = (await importOutlookMessages(payload, userId)) as {
+    items: Array<{
+      externalMessageId: string | null;
+      communicationId: string | null;
+      imported: boolean;
+      duplicate: boolean;
+      valid: boolean;
+      direction: 'INBOUND' | 'OUTBOUND' | null;
+    }>;
+  };
+
+  // Build refs for newly imported messages so safe thread linkage can run.
+  const refs: ImportedMessageRef[] = [];
+  for (let i = 0; i < messages.length; i += 1) {
+    const item = result.items[i];
+    if (item && item.imported && item.communicationId) {
+      const conversationId =
+        typeof (messages[i] as { conversationId?: unknown }).conversationId === 'string'
+          ? ((messages[i] as { conversationId?: unknown }).conversationId as string)
+          : null;
+      refs.push({ communicationId: item.communicationId, providerConversationId: conversationId });
+    }
+  }
+
+  const { linked } = await applySafeConversationLinkage(prisma as unknown as ConversationLinkageDb, refs);
+
+  const items = result.items.map((item, i) => {
+    const isLinked = Boolean(item.communicationId && linked.includes(item.communicationId));
+    return {
+      externalMessageId: item.externalMessageId,
+      communicationId: item.communicationId,
+      imported: item.imported,
+      duplicate: item.duplicate,
+      valid: item.valid,
+      linkedToCase: isLinked,
+      needsAssignment: item.imported && Boolean(item.communicationId) && !isLinked,
+      direction: item.direction,
+    };
+  });
+
+  const importedCount = items.filter((i) => i.imported).length;
+  const alreadyKnown = items.filter((i) => i.duplicate).length;
+  const needsAssignment = items.filter((i) => i.needsAssignment).length;
+  const failed = items.filter((i) => !i.valid).length;
+
+  return {
+    success: true,
+    configured: true,
+    mailboxAddress: config.mailboxAddress,
+    summary: { imported: importedCount, alreadyKnown, needsAssignment, failed },
+    threadLinked: linked.length,
+    items,
+  };
+}
+
+function mapGraphErrorCode(classification: OutlookGraphReaderError['classification']): string {
+  switch (classification) {
+    case 'CONFIG_UNAVAILABLE':
+      return 'OUTLOOK_IMPORT_NOT_CONFIGURED';
+    case 'RATE_LIMITED':
+      return 'OUTLOOK_GRAPH_RATE_LIMITED';
+    case 'AUTHORIZATION_FAILED':
+      return 'OUTLOOK_GRAPH_AUTHORIZATION_FAILED';
+    case 'GRAPH_UNAVAILABLE':
+      return 'OUTLOOK_GRAPH_UNAVAILABLE';
+    default:
+      return 'OUTLOOK_GRAPH_UNAVAILABLE';
+  }
+}
+
+function mapGraphErrorToMessage(classification: OutlookGraphReaderError['classification']): string {
+  switch (classification) {
+    case 'CONFIG_UNAVAILABLE':
+      return 'Az Outlook szinkron nincs beállítva ebben a környezetben.';
+    case 'RATE_LIMITED':
+      return 'Az Outlook ideiglenesen túl sok kérést kapott. Próbáld újra később.';
+    case 'AUTHORIZATION_FAILED':
+      return 'Az Outlook elérési engedély nem érvényes. Fordulj a rendszergazdához.';
+    case 'GRAPH_UNAVAILABLE':
+      return 'Az Outlook szinkron pillanatnyilag nem érhető el. Próbáld újra később.';
+    default:
+      return 'Az Outlook szinkron nem sikerült. Próbáld újra később.';
+  }
 }
