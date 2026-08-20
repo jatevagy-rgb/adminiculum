@@ -61,7 +61,7 @@ jobs:
 
       - name: Initialize suite result tracking
         run: |
-          for s in comparison review publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant; do
+          for s in comparison review publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant company-workspace; do
             echo "$s=PENDING" >> "$RUNNER_TEMP/ci-suite-results.txt"
           done
 
@@ -163,6 +163,16 @@ jobs:
           npm run test:org-access:db
           rc=$?
           sed -i "s/^org-access=PENDING$/org-access=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit $rc
+
+      - name: Phase 4 company workspace PG
+        working-directory: Backend
+        env:
+          CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: |
+          npm run test:workspace:db
+          rc=$?
+          sed -i "s/^company-workspace=PENDING$/company-workspace=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit $rc
 
       - name: CP1 external communication / document access PG
@@ -268,6 +278,7 @@ jobs:
             [workflow]="Workflow template + DAG"
             [lifecycle]="Workflow completion / forced case-close"
             [zero-grant]="Organization zero-grant"
+            [company-workspace]="Phase 4 company workspace"
           )
           {
             echo "### Backend PostgreSQL Integration"
