@@ -177,18 +177,23 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const { data: job } = await github.rest.actions.getJobForRun({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              job_id: context.job,
-            });
-            const rows = job.steps
-              .filter((s) => !['Set up job', 'Complete job'].includes(s.name))
-              .map((s) => {
-                const result = s.conclusion === 'success' ? 'PASS' : s.conclusion === 'failure' ? 'FAIL' : s.conclusion;
-                return `| ${s.name} | ${result} |`;
-              })
-              .join('\n');
-            core.summary.addHeading('Backend PostgreSQL Integration');
-            core.summary.addRaw('| Step | Result |\n|------|--------|\n' + rows + '\n');
-            await core.summary.write();
+            try {
+              const { data: runJobs } = await github.rest.actions.listJobsForRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: context.runId,
+              });
+              const job = runJobs.jobs.find((j) => String(j.id) === String(context.job)) || runJobs.jobs[0];
+              const rows = job.steps
+                .filter((s) => !['Set up job', 'Complete job'].includes(s.name))
+                .map((s) => {
+                  const result = s.conclusion === 'success' ? 'PASS' : s.conclusion === 'failure' ? 'FAIL' : s.conclusion;
+                  return `| ${s.name} | ${result} |`;
+                })
+                .join('\n');
+              core.summary.addHeading('Backend PostgreSQL Integration');
+              core.summary.addRaw('| Step | Result |\n|------|--------|\n' + rows + '\n');
+              await core.summary.write();
+            } catch (error) {
+              core.warning('Summary generation failed (non-fatal): ' + error.message);
+            }
