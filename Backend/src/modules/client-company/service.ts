@@ -657,6 +657,10 @@ export function toInitiativeDTO(row: any): any {
     priority: row.priority,
     status: row.status,
     lawFirmOwnerUserId: row.lawFirmOwnerUserId,
+    lawFirmOwnerName: row.lawFirmOwner?.name ?? null,
+    clientOwnerPersonId: row.clientOwnerPersonId,
+    clientOwnerPersonName: row.clientOwnerPerson?.name ?? null,
+    clientOwnerDisplay: row.clientOwnerPerson?.name ?? null,
     caseId: row.caseId,
     targetAt: row.targetAt ? row.targetAt.toISOString() : null,
     startedAt: row.startedAt ? row.startedAt.toISOString() : null,
@@ -677,6 +681,10 @@ export async function listInitiatives(actor: InternalActor, clientId: string, op
   await assertClientReadAccess(actor, clientId, prisma);
   const rows = await prisma.developmentInitiative.findMany({
     where: { clientId, ...(opts.status ? { status: opts.status as any } : {}) },
+    include: {
+      clientOwnerPerson: { select: { id: true, name: true } },
+      lawFirmOwner: { select: { id: true, name: true } },
+    },
     orderBy: [{ createdAt: 'desc' }],
   });
   const dto = rows.map(toInitiativeDTO);
@@ -709,10 +717,22 @@ export async function createInitiative(actor: InternalActor, clientId: string, i
 }
 
 export async function getInitiative(actor: InternalActor, initiativeId: string, prisma: Prisma = defaultPrisma) {
-  const row = await prisma.developmentInitiative.findUnique({ where: { id: initiativeId } });
+  const row = await prisma.developmentInitiative.findUnique({
+    where: { id: initiativeId },
+    include: {
+      clientOwnerPerson: { select: { id: true, name: true } },
+      lawFirmOwner: { select: { id: true, name: true } },
+      milestones: { orderBy: { targetDate: 'asc' } },
+    },
+  });
   if (!row) throw new InteractionError(404, 'INITIATIVE_NOT_FOUND', 'Initiative not found.');
   await assertClientReadAccess(actor, row.clientId, prisma);
-  return toInitiativeDTO(row);
+  const dto = {
+    ...toInitiativeDTO(row),
+    milestones: row.milestones.map(toMilestoneDTO),
+  };
+  assertClientSafe(dto);
+  return dto;
 }
 
 export async function updateInitiative(actor: InternalActor, initiativeId: string, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
