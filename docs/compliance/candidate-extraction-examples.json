@@ -1,0 +1,114 @@
+{
+  "manifestVersion": "1.0.0",
+  "title": "Candidate Extraction Examples — Pipeline Validation Only",
+  "purpose": "Prove the future LegalProvision extraction format is workable using a very small representative sample from different source structures (one Hungarian Act, two EU instruments, one international-source-promulgating Act). These are NOT requirements and MUST NOT enter production.",
+  "globalFlags": {
+    "legalReviewState": "LEGAL_REVIEW_REQUIRED",
+    "productionStatus": "NON_PRODUCTION_SAMPLE",
+    "extractionMethod": "deterministic targeted heading scan + manual drafting by OpenCode for pipeline validation only; NOT legally verified",
+    "language": "hu"
+  },
+  "anchorStrategy": {
+    "primary": ["legalSourceId", "excerptSha256", "citation", "provisionReference"],
+    "advisory": "lineRange is informational only and may shift on regeneration; re-resolve against the source sha256 before any legal assertion",
+    "note": "full strategy in docs/compliance/SOURCE_INVENTORY.md §10"
+  },
+  "samples": [
+    {
+      "id": "SAMPLE-001",
+      "legalReviewState": "LEGAL_REVIEW_REQUIRED",
+      "productionStatus": "NON_PRODUCTION_SAMPLE",
+      "sourceStructure": "HU_ACT (consolidated)",
+      "sourceAnchor": {
+        "legalSourceId": "LS-0006",
+        "canonicalSourceKey": "HU:ACT:1995:LIII",
+        "sha256": "6f1ce5812b96c243b94291aa295358bfb6fb9191a34c85cf9a1b2f3e3568ef61",
+        "citation": "1995. évi LIII. törvény a környezet védelmének általános szabályairól",
+        "provisionReference": "66. § (1)",
+        "headingContext": "környezethasználat engedélyhez kötése",
+        "lineRange": [1204, 1263],
+        "excerptSha256": "c65acbf4fba56985393f9b0e746ceeaf11c196c86b1efed2cde802397a0009c5"
+      },
+      "actor": "környezethasználó (environmental user / operator)",
+      "obligation": "Environmental use is subject to prior authorization by the environmental authority — a környezetvédelmi engedély (environmental permit) for activities subject to environmental impact assessment, an egységes környezethasználati engedély (integrated environmental permit) where applicable, or a környezetvédelmi működési engedély (operating permit) where applicable.",
+      "condition": "activity falls within the scope of environmental impact assessment / integrated environmental-use licensing / environmental review; subject to the exceptions in § 66 (2)",
+      "threshold": "thresholds via referenced implementing legislation (kormányrendelet) — not self-contained here",
+      "deadline": "not specified in this provision",
+      "uncertainty": "The concrete thresholds and the full exception list (§ 66 (2)) require the referenced government decrees; cross-source verification needed. Line range is a captured approximation.",
+      "sourceFile": "1995. évi LIII. törvény.txt"
+    },
+    {
+      "id": "SAMPLE-002",
+      "legalReviewState": "LEGAL_REVIEW_REQUIRED",
+      "productionStatus": "NON_PRODUCTION_SAMPLE",
+      "sourceStructure": "EU_REGULATION (consolidated, REACH)",
+      "sourceAnchor": {
+        "legalSourceId": "LS-0050",
+        "canonicalSourceKey": "EU:EU_REGULATION:CELEX:32006R1907",
+        "sha256": "76199ff7dccf3f14d68da2658b2fef006b69ef6729c7b36909322c5fceba7475",
+        "citation": "Reg. (EC) No 1907/2006 (REACH)",
+        "celex": "02006R1907",
+        "versionDate": "2026-05-11",
+        "provisionReference": "31. cikk (1)",
+        "headingContext": "A biztonsági adatlapokra vonatkozó követelmények",
+        "lineRange": [2462, 2620],
+        "excerptSha256": "872d6d757333f497e6d19e62c393321283b00b6aa35c7dc530fe7507bc5f4a39"
+      },
+      "actor": "az anyag vagy keverék szállítója (supplier of a substance or mixture)",
+      "obligation": "Supply the recipient with a safety data sheet (SDS) compiled in accordance with Annex II, where the substance/mixture meets the criteria in Article 31(1).",
+      "condition": "substance/mixture classified as dangerous per CLP, or PBT/vPvB, or otherwise listed in Article 31(1)",
+      "threshold": "classification criteria per CLP / Article 31(1)(a)–(d)",
+      "deadline": "not specified in this provision",
+      "uncertainty": "Near-duplicate source file exists in the corpus (different sha256, same CELEX version date); the canonical version must be fixed before use. Full list of SDS triggers in Annex II and Art 31(1) needs legal review.",
+      "sourceFile": "Egységes szerkezetbe foglalt SZÖVEG_ 32006R1907 — HU — 11.05.2026.txt"
+    },
+    {
+      "id": "SAMPLE-003",
+      "legalReviewState": "LEGAL_REVIEW_REQUIRED",
+      "productionStatus": "NON_PRODUCTION_SAMPLE",
+      "sourceStructure": "EU_DIRECTIVE (original OJ text, NIS2)",
+      "sourceAnchor": {
+        "legalSourceId": "LS-0058",
+        "canonicalSourceKey": "EU:EU_DIRECTIVE:CELEX:32022L2555",
+        "sha256": "7c02f6e8a051dad38d25356bcca50f629ba1ec16a969e1f7e5ae7c34ef6eb912",
+        "citation": "Directive (EU) 2022/2555 (NIS2)",
+        "celex": "32022L2555",
+        "versionDate": "2022-12-27",
+        "provisionReference": "21. cikk (1)",
+        "headingContext": "A kiberbiztonsági kockázatkezelési intézkedések",
+        "lineRange": [1704, 1765],
+        "excerptSha256": "40a714dc1d641b7ac9b21bb0fed46664a1babaf90a91ddb605e6456d4ab1ce75"
+      },
+      "actor": "a tagállamok (Member States) — transposition to essential and important entities",
+      "obligation": "Ensure that essential and important entities take appropriate and proportionate technical, operational and organisational measures to manage cyber-security risk to their network and information systems, and to prevent or minimise the impact of incidents.",
+      "condition": "entity qualifies as an essential or important entity under NIS2",
+      "threshold": "entity size/importance per NIS2 Articles 2–3; security level proportionate to emerging risks",
+      "deadline": "transposition deadline and sector-specific obligations referenced in the Directive's final provisions",
+      "uncertainty": "Directive — obligations apply to Member States; the national transposition (HU 2024/LXIX + 418/2024) must be cross-referenced before asserting a client-facing requirement.",
+      "sourceFile": "L_2022333HU.01008001.xml.txt"
+    },
+    {
+      "id": "SAMPLE-004",
+      "legalReviewState": "LEGAL_REVIEW_REQUIRED",
+      "productionStatus": "NON_PRODUCTION_SAMPLE",
+      "sourceStructure": "HU_ACT promulgating an international (OECD) convention",
+      "sourceAnchor": {
+        "legalSourceId": "LS-0014",
+        "canonicalSourceKey": "HU:ACT:2000:XXXVII",
+        "sha256": "49079a50bc9dc82779ca0976368361c77d67663a8bafdf8c8e489c7bda7bc94b",
+        "citation": "2000. évi XXXVII. törvény (OECD Anti-Bribery Convention promulgation)",
+        "provisionReference": "1. Cikk (1) bekezdés",
+        "headingContext": "A külföldi hivatalos személy megvesztegetésének bűncselekménye",
+        "lineRange": [398, 409],
+        "excerptSha256": "b23444efde95c7356bee5e10c9431e27fecde290d46633bf2c71b18cac42cb45"
+      },
+      "actor": "Szerződő Fél (Contracting Party / the State)",
+      "obligation": "Adopt measures necessary to make it a criminal offence, when committed intentionally, for any person to offer, promise or give an undue pecuniary or other advantage to a foreign public official, directly or through intermediaries, for that official to act or refrain from acting in relation to the performance of official duties, in order to obtain or retain business or other improper advantage in international business.",
+      "condition": "intentional conduct; advantage to foreign public official in connection with official duties; intent to obtain/retain business or other improper advantage in international commerce",
+      "threshold": "none (conduct offence)",
+      "deadline": "none",
+      "uncertainty": "This is a State-level obligation transposed into HU criminal law by implementing statutes (the corpus contains only the promulgation act, not the Penal Code); mapping to a client-facing obligation is not straightforward and needs legal review.",
+      "sourceFile": "2000. évi XXXVII. törvény.txt"
+    }
+  ]
+}

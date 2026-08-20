@@ -1,0 +1,48 @@
+{
+  "manifestVersion": "1.0.0",
+  "title": "Fact-Definition Candidates — Grow-with-Us Compliance Applicability Input Map",
+  "purpose": "DESIGN MANIFEST ONLY. Candidate catalogue of organization facts that future ApplicabilityRule expressions will reference. NOT hardcoded into controllers. NOT inserted as DB rows. Do not implement now.",
+  "storageIntent": {
+    "definitions": "future OrganizationFactDefinition registry (NEW) — key, dataType, domain, allowedValues, prompt, verificationRule",
+    "values": "reuse existing ClientFact (type = fact key, value, validFrom/validTo, verificationStatus, sourceDocumentVersionId)",
+    "warning": "Do NOT create a parallel OrganizationFact value table unless the schema is proven structurally incapable of expressing a value."
+  },
+  "factCatalogue": [
+    { "key": "employeeCount", "dataType": "number", "domain": "corporate", "required": false, "corpusEvidence": ["2012/I (Labour Code)", "NIS2 (2022/2555) size categories", "2004/XXXIV SME act"], "notes": "headcount threshold (e.g. 10/50/250/500) is a recurring applicability input" },
+    { "key": "annualRevenueBand", "dataType": "category", "domain": "tax", "required": false, "corpusEvidence": ["2007/CXXVII (VAT)", "2004/XXXIV SME act", "2003/361 Recommendation"], "notes": "banded revenue for SME/regime applicability" },
+    { "key": "balanceSheetBand", "dataType": "category", "domain": "accounting", "required": false, "corpusEvidence": ["2000/C (accounting act)", "2003/361 Recommendation"], "notes": "SME balance-sheet total band" },
+    { "key": "companyType", "dataType": "category", "domain": "corporate", "required": false, "corpusEvidence": ["2006/V company registry", "2013/V Civil Code"], "notes": "Kft/Zrt/Egyéni/etc.; affects registration & filing obligations" },
+    { "key": "sector", "dataType": "category", "domain": "corporate", "required": false, "corpusEvidence": ["NIS2 (2022/2555) sector lists", "2019/1020 market surveillance"], "notes": "sector-specific obligations; NIS2 essential/important entity mapping" },
+    { "key": "activities", "dataType": "multi", "domain": "corporate", "required": false, "corpusEvidence": ["2013/V Civil Code"], "notes": "main/ancillary activities for permit & sector triggers" },
+    { "key": "countriesOfOperation", "dataType": "multi", "domain": "corporate", "required": false, "corpusEvidence": ["952/2013 customs", "2021/821 dual-use"], "notes": "export/import & customs applicability" },
+    { "key": "b2b", "dataType": "boolean", "domain": "consumer", "required": false, "corpusEvidence": ["1997/CLV consumer protection", "2013/V consumer rules", "45/2014", "373/2021"], "notes": "business-to-business sales" },
+    { "key": "b2c", "dataType": "boolean", "domain": "consumer", "required": false, "corpusEvidence": ["1997/CLV", "2008/XLVII unfair practices", "45/2014", "373/2021", "19/2014 NGM"], "notes": "business-to-consumer sales — triggers consumer-law obligations" },
+    { "key": "b2g", "dataType": "boolean", "domain": "procurement", "required": false, "corpusEvidence": ["2015/CXLIII public procurement"], "notes": "public-sector customers" },
+    { "key": "webshop", "dataType": "boolean", "domain": "consumer", "required": false, "corpusEvidence": ["2001/CVIII e-commerce", "2008/XLVII", "DSA (2022/2065)"], "notes": "online storefront / e-commerce activity" },
+    { "key": "importsOutsideEU", "dataType": "boolean", "domain": "customs", "required": false, "corpusEvidence": ["952/2013 customs", "2021/821 dual-use", "REACH"], "notes": "imports from third countries" },
+    { "key": "exportsOutsideEU", "dataType": "boolean", "domain": "customs", "required": false, "corpusEvidence": ["2021/821 dual-use", "952/2013 customs"], "notes": "exports to third countries; dual-use screening" },
+    { "key": "manufacturesProducts", "dataType": "boolean", "domain": "product", "required": false, "corpusEvidence": ["2019/1020 market surveillance", "GPSR (2023/988)", "REACH/CLP"], "notes": "manufacturer role — producer obligations" },
+    { "key": "distributesProducts", "dataType": "boolean", "domain": "product", "required": false, "corpusEvidence": ["2019/1020", "GPSR (2023/988)", "REACH/CLP"], "notes": "distributor/importer role" },
+    { "key": "processesPersonalData", "dataType": "boolean", "domain": "data", "required": false, "corpusEvidence": ["GDPR (2016/679)", "2011/CXII Infotv"], "notes": "data controller/processor" },
+    { "key": "specialCategoryData", "dataType": "boolean", "domain": "data", "required": false, "corpusEvidence": ["GDPR Art. 9"], "notes": "special-category (sensitive) personal data" },
+    { "key": "childrenData", "dataType": "boolean", "domain": "data", "required": false, "corpusEvidence": ["GDPR Art. 8"], "notes": "children's personal data processing" },
+    { "key": "usesAI", "dataType": "boolean", "domain": "ai", "required": false, "corpusEvidence": ["AI Act (2024/1689)", "2025/LXXV", "344/2025"], "notes": "deploys/uses AI systems — risk-classification input" },
+    { "key": "developsAI", "dataType": "boolean", "domain": "ai", "required": false, "corpusEvidence": ["AI Act (2024/1689)"], "notes": "develops AI systems (provider role)" },
+    { "key": "hazardousMaterials", "dataType": "boolean", "domain": "chemicals", "required": false, "corpusEvidence": ["REACH (1907/2006)", "CLP (1272/2008)"], "notes": "handles/places hazardous substances or mixtures on the market" },
+    { "key": "publicProcurement", "dataType": "boolean", "domain": "procurement", "required": false, "corpusEvidence": ["2015/CXLIII"], "notes": "participates in public procurement (or is subject to it)" },
+    { "key": "receivesStateFunding", "dataType": "boolean", "domain": "grants", "required": false, "corpusEvidence": ["2023/CVIII ESG/CSR", "2004/XXXIV"], "notes": "receives state/grant support" },
+    { "key": "wasteGeneratingActivity", "dataType": "boolean", "domain": "environment", "required": false, "corpusEvidence": ["2012/CLXXXV waste", "80/2023 EPR"], "notes": "generates waste / EPR (extended producer responsibility) exposure" },
+    { "key": "placesPackagingOnMarket", "dataType": "boolean", "domain": "environment", "required": false, "corpusEvidence": ["80/2023 EPR"], "notes": "EPR for packaging" },
+    { "key": "environmentalUseRequiresPermit", "dataType": "boolean", "domain": "environment", "required": false, "corpusEvidence": ["1995/LIII § 66"], "notes": "environmental use permit applicability" },
+    { "key": "criticalEntity", "dataType": "boolean", "domain": "cyber", "required": false, "corpusEvidence": ["CER (2022/2557)", "2024/LXXXIV"], "notes": "critical-entity resilience obligations" },
+    { "key": "essentialOrImportantEntity", "dataType": "boolean", "domain": "cyber", "required": false, "corpusEvidence": ["NIS2 (2022/2555)", "2024/LXIX"], "notes": "NIS2 cybersecurity risk-management applicability" },
+    { "key": "financialSector", "dataType": "boolean", "domain": "cyber", "required": false, "corpusEvidence": ["DORA (2022/2554)"], "notes": "financial-sector digital-resilience obligations" },
+    { "key": "digitalServiceProvider", "dataType": "boolean", "domain": "consumer", "required": false, "corpusEvidence": ["DSA (2022/2065)", "2001/CVIII"], "notes": "intermediary / online platform / information-society service" },
+    { "key": "internationalTrade", "dataType": "boolean", "domain": "customs", "required": false, "corpusEvidence": ["952/2013", "2021/821", "2017/CLII"], "notes": "cross-border goods movement" }
+  ],
+  "notes": [
+    "Keys are suggested names only; final registry keys are decided in Phase 7 design.",
+    "corpusEvidence cites sources present in the corpus; absence of a cited law elsewhere does not imply non-applicability.",
+    "No value is stored here; only definitions/candidates. ClientFact stores actual values."
+  ]
+}
