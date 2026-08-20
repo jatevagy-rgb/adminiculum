@@ -54,13 +54,30 @@ backend deploy → /health 200 → [migration WebJob → /health 200] → fronte
 ```
 
 - If the backend is not healthy, **stop** — do not migrate an unhealthy backend.
-- Frontend runs only after backend (+ migration, if requested) is healthy.
+- Frontend runs after backend (+ migration, if requested) is healthy. A **frontend-only** run
+  (`deploy_backend=false`) first verifies the current production backend `/health` is 200, so a
+  frontend fix never forces an unnecessary backend redeploy.
+
+## One pinned release SHA per deployment
+
+- The `resolve` job resolves the canonical release branch to **one immutable commit SHA** and
+  exposes it as a job output; the backend, migration, and frontend jobs all use that exact SHA.
+  This removes the race where the release branch could advance between jobs and deploy mismatched
+  commits. The resolved SHA is reported at the end of each run.
+- `run_migration=true` requires `deploy_backend=true` (no migration against an unverified backend
+  release), enforced in the `resolve` job.
 
 ## Trigger & safety
 
 - **Manual only** (`workflow_dispatch`). A code push must never deploy production.
-- The workflow deploys the **canonical release branch** `release/editor-ops-workflow-1` by
-  default and refuses other refs unless `allow_nonrelease_ref=true` is set deliberately.
+- Production source is **always** the canonical release branch `release/editor-ops-workflow-1`.
+  There is **no** feature-branch/ref override — a hotfix must be integrated into the release
+  branch first, then deployed.
+- The workflow declares `environment: production` on the deploy jobs. This **only** enforces
+  approvals/protection **if** the repository has a GitHub Environment named `production`
+  configured with required reviewers/protection rules. **Recommended repository setup:** create
+  the `production` GitHub Environment with required reviewers so each production deploy needs a
+  human approval. This workflow does not, and cannot, guarantee that gate by itself.
 - Smoke checks are **unauthenticated and bounded** (`/health`, `/`, `/portal`). Authenticated
   production acceptance is a separate, deliberate activity — no bearer tokens are stored in or
   used by deployment workflows.

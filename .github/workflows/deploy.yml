@@ -5,33 +5,30 @@ name: Deploy to Azure App Service (manual, sequential)
 #   Migration: canonical `adminiculum-db-migrate` triggered WebJob ONLY (no direct SQL / db push / DATABASE_URL here).
 #   Frontend : Next.js standalone (.next/standalone + .next/static + public) -> ZIP -> App Service (Oryx OFF, `node server.js`).
 #   Sequence : backend -> health -> (migration -> health) -> frontend -> smoke. Backend and frontend never run concurrently.
+#
+# Production source is ALWAYS the canonical release branch, resolved once to an immutable commit SHA that every
+# job reuses, so backend + migration + frontend all belong to the SAME release commit. There is no feature-branch
+# override: a hotfix must be integrated into the release branch first.
+#
 # This workflow is MANUAL (workflow_dispatch) on purpose: a code push must never deploy production.
 
 on:
   workflow_dispatch:
     inputs:
-      ref:
-        description: 'Git ref to deploy. Must be the canonical release branch unless allow_nonrelease_ref is set.'
-        required: true
-        default: 'release/editor-ops-workflow-1'
       deploy_backend:
         description: 'Deploy the backend App Service.'
         type: boolean
         default: true
       run_migration:
-        description: 'Run the adminiculum-db-migrate WebJob (enable ONLY when the release adds a new Prisma migration).'
+        description: 'Run the adminiculum-db-migrate WebJob (requires deploy_backend; enable ONLY when the release adds a new Prisma migration).'
         type: boolean
         default: false
       deploy_frontend:
-        description: 'Deploy the frontend App Service (runs only after backend + migration are healthy).'
+        description: 'Deploy the frontend App Service (after backend + migration health, or against the current healthy backend when deploy_backend is off).'
         type: boolean
         default: true
-      allow_nonrelease_ref:
-        description: 'Explicitly allow deploying a ref other than the canonical release branch.'
-        type: boolean
-        default: false
 
-# A single production deployment at a time; do not cancel an in-flight deploy.
+# One production deployment at a time; do not cancel an in-flight deploy.
 concurrency:
   group: adminiculum-appservice-production-deploy
   cancel-in-progress: false
@@ -48,37 +45,54 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Release-policy guard: only the canonical release branch may deploy unless a
-  # human explicitly opts in via allow_nonrelease_ref.
+  # Resolve the canonical release branch to ONE immutable SHA and validate the
+  # requested component combination. Every downstream job checks out this SHA.
   # ---------------------------------------------------------------------------
-  guard:
-    name: Release policy guard
+  resolve:
+    name: Resolve release SHA + validate inputs
     runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.rev.outputs.sha }}
     steps:
-      - name: Validate deployment ref
+      - name: Validate component inputs
         run: |
           set -euo pipefail
-          REF='${{ inputs.ref }}'
-          if [ "$REF" != "${CANONICAL_RELEASE_REF}" ] && [ "${{ inputs.allow_nonrelease_ref }}" != "true" ]; then
-            echo "Refusing to deploy '$REF': not the canonical release branch (${CANONICAL_RELEASE_REF})."
-            echo "Set allow_nonrelease_ref=true to override deliberately."
-            exit 1
+          if [ "${{ inputs.deploy_backend }}" != "true" ] && [ "${{ inputs.deploy_frontend }}" != "true" ]; then
+            echo "Nothing to deploy: enable deploy_backend and/or deploy_frontend."; exit 1
           fi
-          echo "Deploying ref: $REF"
+          # No migration against an unverified backend release: run_migration requires a backend deploy in the same run.
+          if [ "${{ inputs.run_migration }}" = "true" ] && [ "${{ inputs.deploy_backend }}" != "true" ]; then
+            echo "run_migration=true requires deploy_backend=true."; exit 1
+          fi
+          echo "Inputs OK (backend=${{ inputs.deploy_backend }}, migration=${{ inputs.run_migration }}, frontend=${{ inputs.deploy_frontend }})."
+
+      - uses: actions/checkout@v4
+        with:
+          ref: release/editor-ops-workflow-1
+          fetch-depth: 1
+
+      - name: Resolve canonical release branch to an immutable SHA
+        id: rev
+        run: |
+          set -euo pipefail
+          SHA=$(git rev-parse HEAD)
+          echo "Resolved ${CANONICAL_RELEASE_REF} -> $SHA"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Backend: source ZIP with package.json at ROOT -> Kudu ZipDeploy -> Oryx.
+  # Verifies the EXACT deployment record created by THIS run.
   # ---------------------------------------------------------------------------
   backend:
     name: Deploy backend (App Service, Oryx build)
     runs-on: ubuntu-latest
-    needs: guard
+    needs: resolve
     if: ${{ inputs.deploy_backend }}
     environment: production
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ needs.resolve.outputs.sha }}
 
       - name: Package backend source (package.json at archive ROOT)
         run: |
@@ -100,7 +114,6 @@ jobs:
           unzip -Z1 backend-deploy.zip > ziplist.txt
           echo "--- archive entries (top) ---"; head -n 20 ziplist.txt
           fail() { echo "ARTIFACT INVALID: $1"; exit 1; }
-          # Required at ROOT / present:
           grep -qxF 'package.json'        ziplist.txt || fail "package.json not at archive root"
           grep -qxF 'package-lock.json'   ziplist.txt || fail "package-lock.json missing"
           grep -qxF 'tsconfig.json'       ziplist.txt || fail "tsconfig.json missing"
@@ -108,7 +121,6 @@ jobs:
           grep -qxF 'src/index.ts'        ziplist.txt || fail "src/index.ts missing"
           grep -qxF 'prisma/schema.prisma' ziplist.txt || fail "prisma/schema.prisma missing"
           grep -qxF 'App_Data/jobs/triggered/adminiculum-db-migrate/runner.cjs' ziplist.txt || fail "migration WebJob missing"
-          # Must NOT contain:
           grep -q '^Backend/'  ziplist.txt && fail "Backend/ wrapper present (breaks Oryx root)"
           grep -q 'node_modules/' ziplist.txt && fail "node_modules present (Windows/Linux mismatch risk)"
           grep -q '^Frontend/' ziplist.txt && fail "Frontend/ present in backend archive"
@@ -119,33 +131,57 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Deploy via Kudu ZipDeploy (Oryx server-side build)
+      - name: Deploy via Kudu ZipDeploy and verify THIS deployment reaches SUCCESS
         uses: azure/cli@v2
         with:
           inlineScript: |
             set -euo pipefail
+            API="https://${BACKEND_APP}.scm.azurewebsites.net/api/deployments"
+            auth() { az account get-access-token --query accessToken -o tsv; }
+            latest_id() {
+              curl -s -m 25 -H "Authorization: Bearer $(auth)" "$API?\$top=1" \
+                | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);process.stdout.write((j[0]&&j[0].id)||'')}catch(e){process.stdout.write('')}})"
+            }
+            status_of() {
+              curl -s -m 25 -H "Authorization: Bearer $(auth)" "$API/$1" \
+                | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);process.stdout.write(String(j.status??'?'))}catch(e){process.stdout.write('?')}})"
+            }
+
+            # 1) Record the deployment id that exists BEFORE we start (may be empty).
+            PRE_ID="$(latest_id || true)"
+            echo "Pre-deploy latest deployment id: ${PRE_ID:-<none>}"
+
+            # 2) Start ZipDeploy. A CLI timeout / non-zero exit is NOT proof of failure;
+            #    the server-side terminal state below is authoritative.
             az webapp deployment source config-zip \
               --resource-group "${RESOURCE_GROUP}" \
               --name "${BACKEND_APP}" \
               --src backend-deploy.zip \
-              --timeout 1200 || echo "config-zip CLI returned non-zero (possible CLI timeout) — verifying server-side state next."
+              --timeout 1200 || echo "config-zip CLI returned non-zero (possible timeout) — verifying server-side."
 
-      - name: Verify server-side deployment reached SUCCESS
-        uses: azure/cli@v2
-        with:
-          inlineScript: |
-            set -euo pipefail
-            TOKEN=$(az account get-access-token --query accessToken -o tsv)
+            # 3) Wait for a NEW deployment record (id != PRE_ID) to appear.
+            NEW_ID=""
             for i in $(seq 1 40); do
-              BODY=$(curl -s -m 25 -H "Authorization: Bearer $TOKEN" \
-                "https://${BACKEND_APP}.scm.azurewebsites.net/api/deployments?\$top=1" || echo '[]')
-              STATUS=$(printf '%s' "$BODY" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);console.log((j[0]&&j[0].status)??'?')}catch(e){console.log('?')}})")
-              echo "[$i] server-side deployment status=$STATUS (4=Success 3=Failed 1=InProgress)"
-              if [ "$STATUS" = "4" ]; then echo "Deployment succeeded."; exit 0; fi
-              if [ "$STATUS" = "3" ]; then echo "Deployment FAILED server-side."; exit 1; fi
+              CUR="$(latest_id || true)"
+              if [ -n "$CUR" ] && [ "$CUR" != "$PRE_ID" ]; then NEW_ID="$CUR"; break; fi
+              echo "[$i] waiting for this run's deployment record (latest=${CUR:-<none>})"
+              sleep 15
+            done
+            if [ -z "$NEW_ID" ]; then
+              echo "No new deployment record appeared for this run — refusing to accept a prior Success."
+              exit 1
+            fi
+            echo "This run's deployment id: $NEW_ID"
+
+            # 4) Poll ONLY that deployment id to a terminal state (4=Success, 3=Failed).
+            for i in $(seq 1 40); do
+              ST="$(status_of "$NEW_ID")"
+              echo "[$i] deployment $NEW_ID status=$ST"
+              if [ "$ST" = "4" ]; then echo "Deployment $NEW_ID succeeded."; exit 0; fi
+              if [ "$ST" = "3" ]; then echo "Deployment $NEW_ID failed server-side."; exit 1; fi
               sleep 20
             done
-            echo "Timed out waiting for terminal deployment state."; exit 1
+            echo "Timed out waiting for deployment $NEW_ID to reach a terminal state."; exit 1
 
       - name: Backend health gate (/health 200)
         run: |
@@ -159,12 +195,13 @@ jobs:
           echo "Backend did not become healthy — STOP (do not migrate an unhealthy backend)."; exit 1
 
   # ---------------------------------------------------------------------------
-  # Migration: canonical adminiculum-db-migrate WebJob ONLY. Never direct DB.
+  # Migration: canonical adminiculum-db-migrate WebJob ONLY. Verifies the EXACT
+  # run created by THIS trigger (a prior Success must never satisfy this run).
   # ---------------------------------------------------------------------------
   migration:
     name: Run canonical migration WebJob
     runs-on: ubuntu-latest
-    needs: backend
+    needs: [resolve, backend]
     if: ${{ inputs.run_migration && needs.backend.result == 'success' }}
     environment: production
     steps:
@@ -173,27 +210,56 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Trigger + verify migration WebJob
+      - name: Trigger + verify THIS migration WebJob run
         uses: azure/cli@v2
         with:
           inlineScript: |
             set -euo pipefail
+            HIST="https://${BACKEND_APP}.scm.azurewebsites.net/api/triggeredwebjobs/${MIGRATION_WEBJOB}/history"
+            auth() { az account get-access-token --query accessToken -o tsv; }
+            latest_run_id() {
+              curl -s -m 25 -H "Authorization: Bearer $(auth)" "$HIST" \
+                | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);process.stdout.write((j.runs&&j.runs[0]&&j.runs[0].id)||'')}catch(e){process.stdout.write('')}})"
+            }
+            run_status() {
+              curl -s -m 25 -H "Authorization: Bearer $(auth)" "$HIST" \
+                | RID="$1" node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);const r=(j.runs||[]).find(x=>x.id===process.env.RID);process.stdout.write(r?String(r.status):'Pending')}catch(e){process.stdout.write('?')}})"
+            }
+
+            # 1) Latest run id BEFORE we trigger (may be empty / a prior run).
+            PRE_RUN="$(latest_run_id || true)"
+            echo "Pre-trigger latest WebJob run id: ${PRE_RUN:-<none>}"
+
+            # 2) Trigger the canonical migration WebJob.
             az webapp webjob triggered run \
               --resource-group "${RESOURCE_GROUP}" \
               --name "${BACKEND_APP}" \
               --webjob-name "${MIGRATION_WEBJOB}"
-            TOKEN=$(az account get-access-token --query accessToken -o tsv)
+
+            # 3) Wait for a NEW run id (!= PRE_RUN) to appear.
+            NEW_RUN=""
             for i in $(seq 1 30); do
-              sleep 10
-              BODY=$(curl -s -m 25 -H "Authorization: Bearer $TOKEN" \
-                "https://${BACKEND_APP}.scm.azurewebsites.net/api/triggeredwebjobs/${MIGRATION_WEBJOB}/history" || echo '{}')
-              STATUS=$(printf '%s' "$BODY" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);console.log((j.runs&&j.runs[0]&&j.runs[0].status)||'Pending')}catch(e){console.log('?')}})")
-              echo "[$i] WebJob status=$STATUS"
-              if [ "$STATUS" = "Success" ]; then echo "Migration WebJob succeeded."; exit 0; fi
-              if [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Error" ] || [ "$STATUS" = "Aborted" ]; then
-                echo "Migration WebJob did not succeed."; exit 1; fi
+              CUR="$(latest_run_id || true)"
+              if [ -n "$CUR" ] && [ "$CUR" != "$PRE_RUN" ]; then NEW_RUN="$CUR"; break; fi
+              echo "[$i] waiting for this run's WebJob execution (latest=${CUR:-<none>})"
+              sleep 8
             done
-            echo "Timed out waiting for migration WebJob."; exit 1
+            if [ -z "$NEW_RUN" ]; then
+              echo "No new WebJob run appeared for this trigger — refusing to accept a prior Success."
+              exit 1
+            fi
+            echo "This run's WebJob execution id: $NEW_RUN"
+
+            # 4) Poll ONLY that run to a terminal state; require Success.
+            for i in $(seq 1 40); do
+              ST="$(run_status "$NEW_RUN")"
+              echo "[$i] WebJob run $NEW_RUN status=$ST"
+              if [ "$ST" = "Success" ]; then echo "Migration WebJob run $NEW_RUN succeeded."; exit 0; fi
+              if [ "$ST" = "Failed" ] || [ "$ST" = "Error" ] || [ "$ST" = "Aborted" ]; then
+                echo "Migration WebJob run $NEW_RUN did not succeed."; exit 1; fi
+              sleep 10
+            done
+            echo "Timed out waiting for WebJob run $NEW_RUN."; exit 1
 
       - name: Backend health gate after migration (/health 200)
         run: |
@@ -207,23 +273,40 @@ jobs:
           echo "Backend unhealthy after migration."; exit 1
 
   # ---------------------------------------------------------------------------
-  # Frontend: Next standalone -> ZIP -> App Service (Oryx OFF). Only after
-  # backend (+ migration if requested) is healthy. Never concurrent with backend.
+  # Frontend: Next standalone -> ZIP -> App Service (Oryx OFF). Uses the SAME
+  # pinned SHA. Supports frontend-only deploys: when the backend was not
+  # deployed this run, it first proves the CURRENT production backend is healthy.
+  # Never runs concurrently with the backend job.
   # ---------------------------------------------------------------------------
   frontend:
     name: Deploy frontend (App Service, standalone)
     runs-on: ubuntu-latest
-    needs: [backend, migration]
-    # Run when frontend requested AND backend succeeded AND migration either succeeded or was intentionally skipped.
+    needs: [resolve, backend, migration]
+    # always() so this is evaluated even when backend/migration were intentionally skipped;
+    # explicit result checks still block if backend or migration FAILED.
     if: >-
-      ${{ inputs.deploy_frontend
-          && needs.backend.result == 'success'
+      ${{ always()
+          && inputs.deploy_frontend
+          && needs.resolve.result == 'success'
+          && (needs.backend.result == 'success' || needs.backend.result == 'skipped')
           && (needs.migration.result == 'success' || needs.migration.result == 'skipped') }}
     environment: production
     steps:
+      - name: If backend was not deployed this run, require the current production backend to be healthy
+        if: ${{ inputs.deploy_backend != true }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 8); do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' -m 15 "https://${BACKEND_APP}.azurewebsites.net/health" || echo 000)
+            echo "[$i] current backend /health -> $CODE"
+            if [ "$CODE" = "200" ]; then echo "Current backend healthy — proceeding with frontend-only deploy."; exit 0; fi
+            sleep 10
+          done
+          echo "Current production backend is not healthy — refusing frontend-only deploy."; exit 1
+
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ needs.resolve.outputs.sha }}
 
       - uses: actions/setup-node@v4
         with:
