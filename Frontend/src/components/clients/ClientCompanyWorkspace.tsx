@@ -122,7 +122,7 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
                       {group.facts.map((fact) => (
                         <li key={fact.id} className="text-sm text-[var(--adm-text)]">
                           <span className="text-[var(--adm-text-muted)]">{companyFactTypeLabel(fact.type)}:</span> {fact.value}
-                          <span className="ml-1 text-xs text-[var(--adm-text-muted)]">({factVerificationLabel(fact.verificationStatus)})</span>
+                          <span className="ml-1 text-xs text-[var(--adm-text-muted)]">({factVerificationLabel(fact.verificationStatus)}{fact.isCurrent ? '' : ' · korábbi vagy jövőbeli adat'})</span>
                         </li>
                       ))}
                     </ul>
@@ -186,7 +186,7 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
                       <span className={labelCls}>{contractStatusLabel(contract.status)}</span>
                     </div>
                     <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
-                      {contract.partnerName ? `Partner: ${contract.partnerName} · ` : ''}
+                      {contract.counterpartySummary ? `Szerződő fél(ek): ${contract.counterpartySummary} · ` : ''}
                       Hatály: {formatWorkspaceDate(contract.effectiveDate)} – {formatWorkspaceDate(contract.expiryDate)}
                       {contract.nextCriticalDate ? ` · Következő dátum: ${formatWorkspaceDate(contract.nextCriticalDate)}` : ''}
                     </p>
@@ -214,7 +214,7 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
                           <b className="text-[var(--adm-text)]">{obligation.title}</b>
                           <span className="ml-2 text-xs text-[var(--adm-text-muted)]">{obligationStatusLabel(obligation.status)}</span>
                         </div>
-                        <span className={labelCls}>Felelős: {ownerDisplayText(obligation.ownerDisplay)}</span>
+                        <span className={labelCls}>Felelős: {ownerDisplayText(obligation.ownerDisplay)}{obligation.ownerPersonActive === false ? ' (nem aktív)' : ''}</span>
                       </div>
                       <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
                         {obligation.sourceContractTitle ? `Kapcsolt szerződés: ${obligation.sourceContractTitle}` : ''}
@@ -291,6 +291,7 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
                     </div>
                     <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
                       Ügyféloldali felelős: {ownerDisplayText(initiative.clientOwnerDisplay)}
+                      {initiative.clientOwnerPersonActive === false ? ' (nem aktív)' : ''}
                       {initiative.lawFirmOwnerName ? ` · Irodai felelős: ${initiative.lawFirmOwnerName}` : ''}
                       {initiative.targetAt ? ` · Cél: ${formatWorkspaceDate(initiative.targetAt)}` : ''}
                     </p>

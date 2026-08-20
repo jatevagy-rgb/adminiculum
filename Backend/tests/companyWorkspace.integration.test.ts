@@ -69,6 +69,7 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     await db.clientOperatingProfile.create({ data: { clientId: clientA, summary: 'Családi tulajdonú kereskedő cég, dinamikus exportmérleggel.', status: 'ACTIVE', nextReviewAt: new Date('2026-12-01T00:00:00Z') } });
     await db.clientFact.createMany({ data: [
       { clientId: clientA, type: 'EMPLOYEE_COUNT', value: '42 fő', validFrom: new Date('2026-01-01T00:00:00Z'), verificationStatus: 'CLIENT_PROVIDED' },
+      { clientId: clientA, type: 'EMPLOYEE_COUNT', value: '35 fő', validFrom: new Date('2025-01-01T00:00:00Z'), validTo: new Date('2025-12-31T23:59:59Z'), verificationStatus: 'LAW_FIRM_VERIFIED' },
       { clientId: clientA, type: 'REVENUE_BAND', value: '500 M Ft – 1 Mrd Ft', validFrom: new Date('2026-01-01T00:00:00Z'), verificationStatus: 'UNVERIFIED' },
       { clientId: clientA, type: 'OPERATING_COUNTRY', value: 'Magyarország, Szlovákia', validFrom: new Date('2026-01-01T00:00:00Z'), verificationStatus: 'LAW_FIRM_VERIFIED' },
       { clientId: clientA, type: 'IMPORTANT_IT_SYSTEM', value: 'Vállalatirányítási rendszer', validFrom: new Date('2026-01-01T00:00:00Z'), verificationStatus: 'UNVERIFIED' },
@@ -137,6 +138,8 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     expect(groupLabels).toContain('Digitális működés és adatok');
     const sizeFacts = view.factGroups.find((g: any) => g.key === 'SIZE').facts;
     expect(sizeFacts.map((f: any) => f.type)).toEqual(expect.arrayContaining(['EMPLOYEE_COUNT', 'REVENUE_BAND']));
+    expect(sizeFacts.find((f: any) => f.value === '42 fő').isCurrent).toBe(true);
+    expect(sizeFacts.find((f: any) => f.value === '35 fő').isCurrent).toBe(false);
   });
 
   it('surfaces the linked OrganizationPerson owner on contracts, obligations and initiatives', async () => {
@@ -178,7 +181,7 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     expect(codes).toContain('CONTRACTS_WITHOUT_OWNER');
     expect(codes).toContain('OBLIGATIONS_WITHOUT_OWNER');
     expect(codes).toContain('INACTIVE_OWNER_PERSONS');
-    expect(codes).toContain('ACTIVE_INITIATIVES');
+    expect(codes).not.toContain('ACTIVE_INITIATIVES');
     const contractGap = view.attention.find((a: any) => a.code === 'CONTRACTS_WITHOUT_OWNER');
     expect(contractGap.count).toBe(1); // only the ACTIVE contract without a person owner
   });
@@ -224,6 +227,10 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     // A lawyer with a case in the client may read it.
     const view = await getWorkspaceOverview(lawyer, clientA, db);
     expect(view.client.id).toBe(clientA);
+  });
+
+  it('rejects non-workforce roles before evaluating client scope', async () => {
+    await expect(getWorkspaceOverview({ userId: adminId, role: 'CLIENT' }, clientA, db)).rejects.toMatchObject({ code: 'INTERACTION_NOT_AUTHORIZED' });
   });
 
   it('phase 2 DTOs surface the linked owner alongside the legacy label (regression coverage)', async () => {

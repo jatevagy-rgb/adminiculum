@@ -11,6 +11,7 @@ export type WorkspaceFactGroup = {
     validFrom: string;
     validTo: string | null;
     sourceReference: string | null;
+    isCurrent: boolean;
   }>;
 };
 
@@ -38,7 +39,7 @@ export type WorkspaceContract = {
   title: string;
   contractType: string;
   status: string;
-  partnerName: string | null;
+  counterpartySummary: string | null;
   effectiveDate: string | null;
   expiryDate: string | null;
   nextCriticalDate: string | null;
@@ -56,6 +57,7 @@ export type WorkspaceObligation = {
   sourceContractTitle: string | null;
   ownerPersonId: string | null;
   ownerDisplay: string | null;
+  ownerPersonActive: boolean | null;
   nextDueDate: string | null;
   status: string;
   sourceType: string;
@@ -82,6 +84,7 @@ export type WorkspaceInitiative = {
   status: string;
   clientOwnerPersonId: string | null;
   clientOwnerDisplay: string | null;
+  clientOwnerPersonActive: boolean | null;
   lawFirmOwnerName: string | null;
   targetAt: string | null;
   nextMilestone: {
@@ -107,8 +110,7 @@ export type WorkspaceAttentionCode =
   | 'OPEN_IMPORTANT_FINDINGS'
   | 'CONTRACTS_WITHOUT_OWNER'
   | 'OBLIGATIONS_WITHOUT_OWNER'
-  | 'INACTIVE_OWNER_PERSONS'
-  | 'ACTIVE_INITIATIVES';
+  | 'INACTIVE_OWNER_PERSONS';
 
 export type CompanyWorkspaceOverview = {
   client: { id: string; name: string };
@@ -163,8 +165,6 @@ export function attentionItemText(code: WorkspaceAttentionCode, count: number): 
       return `${count} kötelezettséghez még nincs kijelölt felelős.`;
     case 'INACTIVE_OWNER_PERSONS':
       return `${count} kijelölt felelős már nem aktív.`;
-    case 'ACTIVE_INITIATIVES':
-      return `${count} aktív fejlesztési kezdeményezés folyamatban.`;
     default:
       return 'Figyelmet igénylő terület.';
   }
