@@ -103,7 +103,7 @@ jobs:
           ( cd Backend && zip -r -q "$GITHUB_WORKSPACE/backend-deploy.zip" \
               package.json package-lock.json tsconfig.json .deployment \
               src prisma templates scripts App_Data )
-          # OpenAPI spec files the runtime resolver looks for at wwwroot root, if present.
+          # OpenAPI spec files live at repository root and must land at archive root.
           for spec in swagger2.yaml swagger.yaml; do
             if [ -f "$spec" ]; then zip -j -q backend-deploy.zip "$spec"; fi
           done
@@ -136,46 +136,43 @@ jobs:
         with:
           inlineScript: |
             set -euo pipefail
-            API="https://${BACKEND_APP}.scm.azurewebsites.net/api/deployments"
+            API="https://${BACKEND_APP}.scm.azurewebsites.net/api"
             auth() { az account get-access-token --query accessToken -o tsv; }
-            latest_id() {
-              curl -s -m 25 -H "Authorization: Bearer $(auth)" "$API?\$top=1" \
-                | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);process.stdout.write((j[0]&&j[0].id)||'')}catch(e){process.stdout.write('')}})"
-            }
-            status_of() {
-              curl -s -m 25 -H "Authorization: Bearer $(auth)" "$API/$1" \
-                | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);process.stdout.write(String(j.status??'?'))}catch(e){process.stdout.write('?')}})"
-            }
+            TOKEN="$(auth)"
+            HEADERS="$(mktemp)"
+            BODY="$(mktemp)"
+            trap 'rm -f "$HEADERS" "$BODY"' EXIT
 
-            # 1) Record the deployment id that exists BEFORE we start (may be empty).
-            PRE_ID="$(latest_id || true)"
-            echo "Pre-deploy latest deployment id: ${PRE_ID:-<none>}"
+            # Kudu's async publish response contains the exact deployment Location.
+            # Keep the Entra token in memory only; never print it or use a publish profile.
+            set +e
+            HTTP_CODE="$(curl -sS -m 1200 -D "$HEADERS" -o "$BODY" -w '%{http_code}' \
+              -X POST \
+              -H "Authorization: Bearer ${TOKEN}" \
+              -H 'Content-Type: application/zip' \
+              --data-binary @backend-deploy.zip \
+              "${API}/publish?type=zip&isAsync=true")"
+            CURL_STATUS=$?
+            set -e
+            echo "Kudu publish HTTP status=${HTTP_CODE:-<none>} curl_status=${CURL_STATUS}"
 
-            # 2) Start ZipDeploy. A CLI timeout / non-zero exit is NOT proof of failure;
-            #    the server-side terminal state below is authoritative.
-            az webapp deployment source config-zip \
-              --resource-group "${RESOURCE_GROUP}" \
-              --name "${BACKEND_APP}" \
-              --src backend-deploy.zip \
-              --timeout 1200 || echo "config-zip CLI returned non-zero (possible timeout) — verifying server-side."
-
-            # 3) Wait for a NEW deployment record (id != PRE_ID) to appear.
-            NEW_ID=""
-            for i in $(seq 1 40); do
-              CUR="$(latest_id || true)"
-              if [ -n "$CUR" ] && [ "$CUR" != "$PRE_ID" ]; then NEW_ID="$CUR"; break; fi
-              echo "[$i] waiting for this run's deployment record (latest=${CUR:-<none>})"
-              sleep 15
-            done
-            if [ -z "$NEW_ID" ]; then
-              echo "No new deployment record appeared for this run — refusing to accept a prior Success."
+            LOCATION="$(awk 'BEGIN{IGNORECASE=1}/^Location:/{sub(/^[^:]*:[[:space:]]*/,"");gsub(/[\r\n]/,"");print;exit}' "$HEADERS")"
+            if [ -z "$LOCATION" ]; then
+              echo "Kudu did not return a deployment Location; refusing to infer identity from deployment history."
               exit 1
             fi
+            case "$LOCATION" in
+              https://*.scm.azurewebsites.net/api/deployments/*) ;;
+              *) echo "Unexpected Kudu deployment Location; refusing to poll it."; exit 1;;
+            esac
+            NEW_ID="${LOCATION##*/}"
             echo "This run's deployment id: $NEW_ID"
 
-            # 4) Poll ONLY that deployment id to a terminal state (4=Success, 3=Failed).
+            # A CLI/curl timeout or non-zero status is not authoritative once a
+            # deployment Location was returned; poll this exact server-side run.
             for i in $(seq 1 40); do
-              ST="$(status_of "$NEW_ID")"
+              ST="$(curl -sS -m 25 -H "Authorization: Bearer ${TOKEN}" "$LOCATION" \
+                | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);process.stdout.write(String(j.status??'?'))}catch(e){process.stdout.write('?')}})")"
               echo "[$i] deployment $NEW_ID status=$ST"
               if [ "$ST" = "4" ]; then echo "Deployment $NEW_ID succeeded."; exit 0; fi
               if [ "$ST" = "3" ]; then echo "Deployment $NEW_ID failed server-side."; exit 1; fi
@@ -215,44 +212,35 @@ jobs:
         with:
           inlineScript: |
             set -euo pipefail
-            HIST="https://${BACKEND_APP}.scm.azurewebsites.net/api/triggeredwebjobs/${MIGRATION_WEBJOB}/history"
+            API="https://${BACKEND_APP}.scm.azurewebsites.net/api/triggeredwebjobs/${MIGRATION_WEBJOB}"
             auth() { az account get-access-token --query accessToken -o tsv; }
-            latest_run_id() {
-              curl -s -m 25 -H "Authorization: Bearer $(auth)" "$HIST" \
-                | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);process.stdout.write((j.runs&&j.runs[0]&&j.runs[0].id)||'')}catch(e){process.stdout.write('')}})"
-            }
-            run_status() {
-              curl -s -m 25 -H "Authorization: Bearer $(auth)" "$HIST" \
-                | RID="$1" node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);const r=(j.runs||[]).find(x=>x.id===process.env.RID);process.stdout.write(r?String(r.status):'Pending')}catch(e){process.stdout.write('?')}})"
-            }
-
-            # 1) Latest run id BEFORE we trigger (may be empty / a prior run).
-            PRE_RUN="$(latest_run_id || true)"
-            echo "Pre-trigger latest WebJob run id: ${PRE_RUN:-<none>}"
-
-            # 2) Trigger the canonical migration WebJob.
-            az webapp webjob triggered run \
-              --resource-group "${RESOURCE_GROUP}" \
-              --name "${BACKEND_APP}" \
-              --webjob-name "${MIGRATION_WEBJOB}"
-
-            # 3) Wait for a NEW run id (!= PRE_RUN) to appear.
-            NEW_RUN=""
-            for i in $(seq 1 30); do
-              CUR="$(latest_run_id || true)"
-              if [ -n "$CUR" ] && [ "$CUR" != "$PRE_RUN" ]; then NEW_RUN="$CUR"; break; fi
-              echo "[$i] waiting for this run's WebJob execution (latest=${CUR:-<none>})"
-              sleep 8
-            done
-            if [ -z "$NEW_RUN" ]; then
-              echo "No new WebJob run appeared for this trigger — refusing to accept a prior Success."
+            TOKEN="$(auth)"
+            HEADERS="$(mktemp)"
+            BODY="$(mktemp)"
+            trap 'rm -f "$HEADERS" "$BODY"' EXIT
+            set +e
+            HTTP_CODE="$(curl -sS -m 60 -D "$HEADERS" -o "$BODY" -w '%{http_code}' \
+              -X POST -H "Authorization: Bearer ${TOKEN}" "${API}/run")"
+            CURL_STATUS=$?
+            set -e
+            echo "WebJob trigger HTTP status=${HTTP_CODE:-<none>} curl_status=${CURL_STATUS}"
+            LOCATION="$(awk 'BEGIN{IGNORECASE=1}/^Location:/{sub(/^[^:]*:[[:space:]]*/,"");gsub(/[\r\n]/,"");print;exit}' "$HEADERS")"
+            if [ -z "$LOCATION" ]; then
+              echo "WebJob trigger did not return a run Location; refusing to infer identity from history."
               exit 1
             fi
+            case "$LOCATION" in
+              https://*.scm.azurewebsites.net/api/triggeredwebjobs/${MIGRATION_WEBJOB}/history/*) ;;
+              *) echo "Unexpected WebJob run Location; refusing to poll it."; exit 1;;
+            esac
+            NEW_RUN="${LOCATION##*/}"
             echo "This run's WebJob execution id: $NEW_RUN"
 
-            # 4) Poll ONLY that run to a terminal state; require Success.
+            # Poll ONLY the run URL returned by THIS trigger; a prior Success
+            # in the history list can never satisfy this job.
             for i in $(seq 1 40); do
-              ST="$(run_status "$NEW_RUN")"
+              ST="$(curl -sS -m 25 -H "Authorization: Bearer ${TOKEN}" "$LOCATION" \
+                | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);process.stdout.write(String(j.status??'?'))}catch(e){process.stdout.write('?')}})")"
               echo "[$i] WebJob run $NEW_RUN status=$ST"
               if [ "$ST" = "Success" ]; then echo "Migration WebJob run $NEW_RUN succeeded."; exit 0; fi
               if [ "$ST" = "Failed" ] || [ "$ST" = "Error" ] || [ "$ST" = "Aborted" ]; then
@@ -341,6 +329,23 @@ jobs:
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Verify production frontend standalone contract
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            STARTUP="$(az webapp config show --resource-group "${RESOURCE_GROUP}" --name "${FRONTEND_APP}" --query appCommandLine -o tsv)"
+            [ "$STARTUP" = "node server.js" ] || { echo "Unexpected frontend startup command: ${STARTUP:-<empty>}"; exit 1; }
+            SETTINGS="$(az webapp config appsettings list --resource-group "${RESOURCE_GROUP}" --name "${FRONTEND_APP}" -o json)"
+            node - "$SETTINGS" <<'NODE'
+            const settings = JSON.parse(process.argv[2]);
+            const values = Object.fromEntries(settings.map(({name, value}) => [name, value]));
+            for (const name of ['SCM_DO_BUILD_DURING_DEPLOYMENT', 'ENABLE_ORYX_BUILD']) {
+              if (values[name] !== 'false') throw new Error(`${name} must be false for the standalone package`);
+            }
+            NODE
+            echo "Frontend production contract verified: Oryx OFF, startup node server.js."
 
       - name: Deploy frontend (zip, Oryx OFF — app already runs `node server.js`)
         uses: azure/cli@v2
