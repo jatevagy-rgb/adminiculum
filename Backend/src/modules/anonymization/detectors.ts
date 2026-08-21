@@ -46,7 +46,12 @@ const EU_VAT_RE = /\b[A-Z]{2}\s?\d{8,12}\b/g;
 /** Hungarian cégjegyzékszám: 2-2-6 form. */
 const COMPANY_REGISTRY_RE = /\b\d{2}-\d{2}-\d{6}\b/g;
 
-const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+/**
+ * Practical RFC limits keep email scanning bounded even for a MAX_INPUT_CHARS
+ * document. Oversized candidates are rejected rather than partially matched.
+ */
+const EMAIL_LOCAL_MAX_CHARS = 64;
+const EMAIL_DOMAIN_MAX_CHARS = 253;
 
 function ibanValid(matched: string): boolean {
   const alnum = matched.replace(/[^A-Z0-9]/gi, '');
@@ -62,12 +67,6 @@ function ibanValid(matched: string): boolean {
 }
 
 const PATTERNS: DetectorPattern[] = [
-  {
-    detector: 'email',
-    category: 'EMAIL',
-    regex: EMAIL_RE,
-    confidence: 'HIGH',
-  },
   {
     detector: 'phone',
     category: 'PHONE',
@@ -103,6 +102,14 @@ const PATTERNS: DetectorPattern[] = [
   },
 ];
 
+const EMAIL_PATTERN: DetectorPattern = {
+  detector: 'email',
+  category: 'EMAIL',
+  // The email detector uses the bounded scanner below, not a backtracking regex.
+  regex: /$^/g,
+  confidence: 'HIGH',
+};
+
 /** Matches whose intervals overlap (share at least one code unit). */
 function overlaps(a: { start: number; end: number }, b: { start: number; end: number }): boolean {
   return a.start < b.end && b.start < a.end;
@@ -112,17 +119,96 @@ function overlaps(a: { start: number; end: number }, b: { start: number; end: nu
 function dedupeSameDetector<T extends { start: number; end: number }>(matches: T[]): T[] {
   const sorted = [...matches].sort((a, b) => a.start - b.start || b.end - a.end);
   const kept: T[] = [];
+  let last: T | undefined;
   for (const m of sorted) {
-    const dup = kept.find((k) => overlaps(k, m));
-    if (!dup) {
-      kept.push(m);
+    // Kept items are non-overlapping and sorted by start, so only the most
+    // recently kept interval can overlap the current one. Scanning the whole
+    // `kept` array turned large match sets quadratic (e.g. thousands of
+    // occurrences of a common manual term).
+    if (last && overlaps(last, m)) {
+      continue;
     }
+    kept.push(m);
+    last = m;
   }
   return kept;
 }
 
-function collectPatternMatches(source: string, enabled: Set<DetectorName>): Array<{ start: number; end: number; originalText: string; pattern: DetectorPattern }> {
-  const raw: Array<{ start: number; end: number; originalText: string; pattern: DetectorPattern }> = [];
+function isAsciiLetter(code: number): boolean {
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+}
+
+function isEmailLocalChar(code: number): boolean {
+  return isAsciiLetter(code) || (code >= 48 && code <= 57) || code === 46 || code === 95 || code === 37 || code === 43 || code === 45;
+}
+
+function isEmailDomainChar(code: number): boolean {
+  return isAsciiLetter(code) || (code >= 48 && code <= 57) || code === 46 || code === 45;
+}
+
+type RawPatternMatch = { start: number; end: number; originalText: string; pattern: DetectorPattern };
+
+/**
+ * Scan around literal '@' characters with fixed bounds instead of applying a
+ * backtracking regex at every source position. This makes no-'@' and malformed
+ * email-like MAX_INPUT documents linear in source length.
+ */
+function collectEmailMatches(source: string): RawPatternMatch[] {
+  const raw: RawPatternMatch[] = [];
+  let cursor = 0;
+
+  while (cursor < source.length) {
+    const at = source.indexOf('@', cursor);
+    if (at === -1) {
+      break;
+    }
+
+    let localStart = at;
+    const localFloor = Math.max(0, at - EMAIL_LOCAL_MAX_CHARS);
+    while (localStart > localFloor && isEmailLocalChar(source.charCodeAt(localStart - 1))) {
+      localStart -= 1;
+    }
+    const localTooLong = localStart === localFloor && localStart > 0 && isEmailLocalChar(source.charCodeAt(localStart - 1));
+
+    let position = at + 1;
+    const domainLimit = Math.min(source.length, at + 1 + EMAIL_DOMAIN_MAX_CHARS);
+    let tldLength = 0;
+    let inTld = false;
+    let matchEnd = -1;
+
+    while (position < domainLimit && isEmailDomainChar(source.charCodeAt(position))) {
+      const code = source.charCodeAt(position);
+      if (code === 46) {
+        inTld = true;
+        tldLength = 0;
+      } else if (inTld && isAsciiLetter(code)) {
+        tldLength += 1;
+        if (tldLength >= 2) {
+          matchEnd = position + 1;
+        }
+      } else if (inTld) {
+        // A TLD is letters only. Keep scanning because a later dot may begin one.
+        inTld = false;
+        tldLength = 0;
+      }
+      position += 1;
+    }
+
+    const domainTooLong = position === domainLimit && position < source.length && isEmailDomainChar(source.charCodeAt(position));
+    if (localStart < at && !localTooLong && !domainTooLong && matchEnd !== -1) {
+      raw.push({ start: localStart, end: matchEnd, originalText: source.slice(localStart, matchEnd), pattern: EMAIL_PATTERN });
+    }
+
+    // The complete domain-like run was inspected once, so skip it to keep a
+    // hostile sequence of malformed addresses linear rather than O('@' × bound).
+    cursor = Math.max(at + 1, position);
+  }
+
+  return raw;
+}
+
+function collectPatternMatches(source: string, enabled: Set<DetectorName>): RawPatternMatch[] {
+  const raw: RawPatternMatch[] = enabled.has('email') ? collectEmailMatches(source) : [];
   for (const pattern of PATTERNS) {
     if (!enabled.has(pattern.detector)) {
       continue;
