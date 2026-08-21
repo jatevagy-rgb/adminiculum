@@ -11,6 +11,7 @@ import { PortalEntryLanding } from './PortalEntryLanding';
 import { PortalOnboarding } from './PortalOnboarding';
 import { PortalWorkspaceSelector } from './PortalWorkspaceSelector';
 import { OrganizationPortalViews, type OrganizationPortalView } from './OrganizationPortalViews';
+import { OrgHomeView } from './OrgHomeView';
 import { CustomerInteractionCard } from './CustomerInteractionCard';
 import { ActionCard, Card, formatDate, MatterView, UpdateCard } from './MatterWorkspace';
 import {
@@ -35,7 +36,7 @@ import {
   type PortalIdentityContext,
 } from '@/lib/clientPortalApi';
 
-type PortalView = 'home' | 'matters' | 'tasks' | 'documents' | 'messages' | 'matter' | 'document' | 'action' | 'intakes' | 'new-intake' | 'leadership';
+type PortalView = 'home' | 'matters' | 'tasks' | 'documents' | 'messages' | 'matter' | 'document' | 'action' | 'intakes' | 'new-intake' | 'leadership' | 'contracts' | 'company';
 
 type Props = { view: PortalView; resourceId?: string };
 
@@ -357,16 +358,41 @@ export function ClientPortalShell({ view, resourceId }: Props) {
     const capabilities = state.context.selectedWorkspace.capabilities;
     const workspace = state.context.selectedWorkspace;
     const communicationEnabled = workspace.communicationMode !== 'EXTERNAL_ONLY';
+    if (workspace.mode === 'ORGANIZATION') {
+      // Phase 5 organizational IA (7 top-level items). Legacy org entries are
+      // relocated under their section or removed from the top level.
+      return [
+        ['Főoldal', '/portal'],
+        ['Ügyek', '/portal/ugyeim'],
+        ['Szerződések', '/portal/szerzodesek'],
+        ['Teendők', '/portal/teendoim'],
+        ['Vállalat', '/portal/vallalat'],
+        ['Dokumentumok', '/portal/dokumentumok'],
+        ['Kapcsolat', '/portal/uzenetek'],
+      ].filter(([, href]) => {
+        if (href === '/portal/ugyeim' && !capabilities.matters) return false;
+        if (href === '/portal/teendoim' && !capabilities.tasks) return false;
+        if (href === '/portal/dokumentumok' && !capabilities.documents) return false;
+        if (href === '/portal/uzenetek' && (!capabilities.messages || !communicationEnabled)) return false;
+        return true;
+      }) as string[][];
+    }
+    if (workspace.mode === 'CASE_RELAY') {
+      return [
+        capabilities.home ? ['Főoldal', '/portal'] : null,
+        capabilities.matters ? ['Ügyek', '/portal/ugyeim'] : null,
+        capabilities.documents ? ['Dokumentumok', '/portal/dokumentumok'] : null,
+        capabilities.messages && communicationEnabled ? ['Kommunikáció', '/portal/uzenetek'] : null,
+        ['Együttműködési áttekintés', '/portal/szervezeti-attekintes'],
+      ].filter(Boolean) as string[][];
+    }
+    // INDIVIDUAL — keep existing behavior.
     return [
       capabilities.home ? ['Főoldal', '/portal'] : null,
       capabilities.matters ? ['Ügyeim', '/portal/ugyeim'] : null,
-      workspace.mode === 'ORGANIZATION' && capabilities.intakes ? ['Új megkeresés', '/portal/megkeresesek/uj'] : null,
-      workspace.mode === 'ORGANIZATION' && capabilities.intakes ? ['Megkereséseim', '/portal/megkeresesek'] : null,
-      capabilities.tasks && workspace.mode !== 'ORGANIZATION' ? ['Teendőim', '/portal/teendoim'] : null,
+      capabilities.tasks ? ['Teendőim', '/portal/teendoim'] : null,
       capabilities.documents ? ['Dokumentumok', '/portal/dokumentumok'] : null,
-      capabilities.messages && communicationEnabled ? [workspace.mode === 'INDIVIDUAL' ? 'Üzenetek' : 'Kommunikáció', '/portal/uzenetek'] : null,
-      workspace.mode === 'ORGANIZATION' && capabilities.leadership ? ['Vezetői áttekintés', '/portal/szervezeti-attekintes'] : null,
-      workspace.mode === 'CASE_RELAY' ? ['Együttműködési áttekintés', '/portal/szervezeti-attekintes'] : null,
+      capabilities.messages && communicationEnabled ? ['Üzenetek', '/portal/uzenetek'] : null,
     ].filter(Boolean) as string[][];
   }, [state]);
 
@@ -408,7 +434,10 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         {state.status === 'workspace-empty' ? <Card><h1 className="cp-title text-3xl">{state.context.selectedWorkspace?.name}</h1><p className="cp-subtitle mt-3">Az ügyfélfelülethez való hozzáférése aktív, de ezen a felületen jelenleg nincs elérhető tartalom.</p></Card> : null}
         {state.status === 'service-error' ? <Card><h1 className="cp-title text-3xl">A portál jelenleg nem érhető el</h1><p className="cp-subtitle mt-3">Kérjük, próbálja újra később.</p></Card> : null}
         {state.status === 'denied' ? <Card>{state.message}</Card> : null}
-        {state.status === 'ready' && (state.context.selectedWorkspace?.mode === 'ORGANIZATION' || state.context.selectedWorkspace?.mode === 'CASE_RELAY') ? (
+        {state.status === 'ready' && (state.context.selectedWorkspace?.mode === 'ORGANIZATION' || state.context.selectedWorkspace?.mode === 'CASE_RELAY') && view === 'home' && state.context.selectedWorkspace?.mode === 'ORGANIZATION' ? (
+          <OrgHomeView workspaceId={state.context.selectedWorkspace.publicReference} />
+        ) : null}
+        {state.status === 'ready' && (state.context.selectedWorkspace?.mode === 'ORGANIZATION' || state.context.selectedWorkspace?.mode === 'CASE_RELAY') && !(state.context.selectedWorkspace?.mode === 'ORGANIZATION' && view === 'home') ? (
           <OrganizationPortalViews
             view={view as OrganizationPortalView}
             resourceId={resourceId}

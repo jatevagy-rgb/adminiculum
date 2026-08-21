@@ -23,7 +23,7 @@ import { clientSafeError } from "@/lib/clientInteractionApi";
 import { CustomerInteractionCard } from "./CustomerInteractionCard";
 import { MatterView } from "./MatterWorkspace";
 
-export type OrganizationPortalView = "home" | "matters" | "documents" | "messages" | "matter" | "intakes" | "new-intake" | "leadership";
+export type OrganizationPortalView = "home" | "matters" | "tasks" | "documents" | "messages" | "matter" | "intakes" | "new-intake" | "leadership" | "contracts" | "company";
 
 type Props = {
   view: OrganizationPortalView;
@@ -120,11 +120,11 @@ function OrgCaseCard({ item }: { item: PortalOrganizationCase }) {
   );
 }
 
-function Section({ title, children, empty }: { title: string; children?: React.ReactNode; empty?: boolean }) {
+function Section({ title, children, empty, emptyText }: { title: string; children?: React.ReactNode; empty?: boolean; emptyText?: string }) {
   return (
     <section className={card}>
       <h2 className="font-serif text-2xl font-semibold text-stone-950">{title}</h2>
-      <div className="mt-4 grid gap-3">{empty ? <p className="text-sm text-stone-600">Nincs megjeleníthető elem.</p> : children}</div>
+      <div className="mt-4 grid gap-3">{empty ? <p className="text-sm text-stone-600">{emptyText || "Nincs megjeleníthető elem."}</p> : children}</div>
     </section>
   );
 }
@@ -229,14 +229,45 @@ function OrganizationDocuments({ workspace }: { workspace: PortalWorkspace }) {
 }
 
 function OrganizationMessages({ workspace, cases }: { workspace: PortalWorkspace; cases: PortalOrganizationCase[] }) {
-  if (!workspace.messages.length) return <Section title="Kommunikáció" empty />;
+  if (!workspace.messages.length) return <Section title="Kapcsolat" empty emptyText="Még nincs folyamatban kérdés vagy üzenetváltás." />;
   return (
-    <Section title="Kommunikáció">
-      {workspace.messages.map((message) => {
-        const linked = cases.find((item) => message.matterTitle.includes(item.publicTitle) || message.actionUrl.includes(item.publicReference));
-        return <Link key={message.id} href={message.actionUrl} className="rounded-2xl bg-stone-50 p-4"><b>{message.matterTitle}</b><span className="block text-sm text-stone-700">{linked?.organizationUnitName ? `${linked.organizationUnitName} · ` : ""}{message.subject} · {message.status}</span></Link>;
-      })}
+    <Section title="Kapcsolat">
+      <p className="text-sm text-stone-600">Itt tud az irodával az ügyeiről egyeztetni.</p>
+      <div className="mt-3 grid gap-3">
+        {workspace.messages.map((message) => {
+          const linked = cases.find((item) => message.matterTitle.includes(item.publicTitle) || message.actionUrl.includes(item.publicReference));
+          return <Link key={message.id} href={message.actionUrl} className="rounded-2xl bg-stone-50 p-4"><b>{message.matterTitle}</b><span className="block text-sm text-stone-700">{linked?.organizationUnitName ? `${linked.organizationUnitName} · ` : ""}{message.subject} · {message.status}</span></Link>;
+        })}
+      </div>
     </Section>
+  );
+}
+
+function OrganizationTasks({ workspace }: { workspace: PortalWorkspace }) {
+  const groups: Array<[string, string]> = [["now", "Most szükséges"], ["upcoming", "Közelgő"], ["completed", "Teljesített"]];
+  return (
+    <div className="space-y-5">
+      <section className={card}>
+        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#b95e4b]">Teendők</p>
+        <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950">Ami most Öntől kell</h1>
+      </section>
+      {groups.map(([bucket, label]) => {
+        const items = workspace.actions.filter((item) => item.bucket === bucket);
+        return <Section key={bucket} title={label} empty={!items.length} emptyText={bucket === "completed" ? "Még nincs teljesített teendő." : "Jelenleg nincs Öntől szükséges teendő."}>{items.slice(0, 10).map((item) => <Link key={item.id} href={item.actionUrl} className="rounded-2xl border border-stone-200 bg-white p-4 text-sm"><b className="block text-stone-950">{item.title}</b><span className="mt-1 block text-stone-600">{item.matterTitle}{item.dueAt ? ` · Határidő: ${formatDate(item.dueAt)}` : ""}</span></Link>)}</Section>;
+      })}
+    </div>
+  );
+}
+
+function ComingNext({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="space-y-5">
+      <section className={card}>
+        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#b95e4b]">{title}</p>
+        <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950">{title}</h1>
+        <p className="mt-3 max-w-2xl leading-7 text-stone-700">{message}</p>
+      </section>
+    </div>
   );
 }
 
@@ -388,10 +419,12 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
       {view === "matter" ? <OrganizationMatterDetail detail={state.detail} matter={state.matter} matterLoading={state.matterLoading} matterError={state.matterError} /> : null}
       {view === "documents" ? <OrganizationDocuments workspace={workspace} /> : null}
       {view === "messages" ? <OrganizationMessages workspace={workspace} cases={state.cases} /> : null}
+      {view === "tasks" ? <OrganizationTasks workspace={workspace} /> : null}
+      {view === "contracts" ? <ComingNext title="Szerződések" message="A szerződéses áttekintés hamarosan ezen a felületen lesz elérhető. Jelenleg nincs közzétett szerződéses áttekintés." /> : null}
+      {view === "company" ? <ComingNext title="Vállalat" message="A vállalati áttekintés hamarosan ezen a felületen lesz elérhető." /> : null}
       {view === "intakes" && !isCaseRelay ? <Section title="Megkereséseim" empty={!state.intakes.length}>{state.intakes.map((item) => <IntakeRow key={item.reference} item={item} />)}</Section> : null}
       {view === "new-intake" && !isCaseRelay ? <NewIntake units={state.units} onCreated={load} /> : null}
       {view === "leadership" ? <LeadershipSummary units={state.leadership} mode={context.selectedWorkspace?.mode} /> : null}
-      {!hasLeadership && view !== "leadership" ? null : null}
     </div>
   );
 }
