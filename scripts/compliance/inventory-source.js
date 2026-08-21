@@ -30,7 +30,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const SCRIPT_VERSION = '1.0.0';
+const SCRIPT_VERSION = '1.1.0';
 
 // ---------------------------------------------------------------------------
 // Argument parsing
@@ -219,19 +219,31 @@ function classifyName(source, what) {
 }
 
 function classifyFileName(fileName, header, sourceUrl) {
-  // Prefer the filename (canonical for the corpus), fall back to the CÍM header
-  // so generic fixture names still classify correctly.
+  // Filename is canonical for the corpus, but the CÍM header independently
+  // confirms it when present. `_basis` records the classification evidence:
+  //   - content-verified : filename AND header agree
+  //   - header-title     : classification derived from the CÍM header only
+  //   - filename         : classification derived from the filename only (inferred)
   const byName = classifyName(fileName, 'filename');
-  if (byName.sourceType !== 'UNKNOWN') return byName;
   const headerTitle = header && header['CÍM'] ? header['CÍM'] : null;
   if (headerTitle) {
     const byHeader = classifyName(headerTitle, 'headerTitle');
+    if (byHeader.sourceType !== 'UNKNOWN' && byHeader.sourceType === byName.sourceType) {
+      byName._basis = 'content-verified';
+      return byName;
+    }
     if (byHeader.sourceType !== 'UNKNOWN') {
       delete byHeader._source;
+      byHeader._basis = 'headerTitle';
       return byHeader;
     }
   }
+  if (byName.sourceType !== 'UNKNOWN') {
+    byName._basis = 'filename';
+    return byName;
+  }
   delete byName._source;
+  byName._basis = 'filename';
   return byName;
 }
 
@@ -382,6 +394,88 @@ function computeConfidence(entry) {
 }
 
 // ---------------------------------------------------------------------------
+// Zip member listing (mechanical, deterministic — no third-party dependency)
+// ---------------------------------------------------------------------------
+
+/**
+ * List the member file names inside a ZIP buffer by parsing the End-Of-Central-
+ * Directory record and the central directory. Pure metadata extraction; never
+ * extracts or runs any content. Returns [] if the buffer is not a ZIP.
+ */
+function listZipMembers(buf) {
+  const eocdSignature = 0x06054b50; // 'PK\x05\x06'
+  const cdEntrySignature = 0x02014b50; // 'PK\x01\x02'
+  if (buf.length < 22) return [];
+  const tailStart = Math.max(0, buf.length - 65557);
+  let eocd = -1;
+  for (let i = buf.length - 22; i >= tailStart; i -= 1) {
+    if (buf.readUInt32LE(i) === eocdSignature) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) return [];
+  const cdCount = buf.readUInt16LE(eocd + 10);
+  const cdOffset = buf.readUInt32LE(eocd + 16);
+  const names = [];
+  let p = cdOffset;
+  for (let n = 0; n < cdCount; n += 1) {
+    if (p + 46 > buf.length) break;
+    if (buf.readUInt32LE(p) !== cdEntrySignature) break;
+    const nameLen = buf.readUInt16LE(p + 28);
+    const extraLen = buf.readUInt16LE(p + 30);
+    const commentLen = buf.readUInt16LE(p + 32);
+    const name = buf.toString('utf8', p + 46, p + 46 + nameLen);
+    names.push(name);
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  return names;
+}
+
+// ---------------------------------------------------------------------------
+// Provenance classification
+// ---------------------------------------------------------------------------
+
+/**
+ * Classify what a source file actually IS in the corpus, so the inventory never
+ * implies a standalone source exists when only an incorporation/promulgation
+ * instrument (or a pointer/archive) is present.
+ *
+ *  - STANDALONE_SOURCE        : an original legal source file present in corpus
+ *  - INCORPORATED_PROMULGATED : a national act that promulgates/incorporates an
+ *                               instrument whose original is NOT standalone here
+ *  - POINTER_ONLY             : a non-substantive note/pointer (no legal text)
+ *  - ARCHIVE_ARTIFACT         : a packaging archive (not a source)
+ *  - UNKNOWN                  : could not be classified
+ *
+ * This is a mechanical metadata classification; it makes no legal determination
+ * and never asserts which version is applicable.
+ */
+function detectProvenance(entry) {
+  if (entry.kind === 'NOTE') {
+    return { provenance: 'POINTER_ONLY', provenanceNote: 'non-substantive note/pointer file; no legal text in corpus' };
+  }
+  if (entry.kind === 'ARTIFACT') {
+    return { provenance: 'ARCHIVE_ARTIFACT', provenanceNote: 'packaging archive; not a legal source in itself' };
+  }
+  if (entry.kind !== 'SOURCE') {
+    return { provenance: 'UNKNOWN', provenanceNote: 'unclassifiable entry' };
+  }
+  // A Hungarian act whose title states it "kihirdet" (promulgates) an external
+  // instrument. The external/original instrument is NOT standalone in the corpus.
+  const title = (entry.title || entry.citation || '');
+  const isPromulgation = /kihirdet/i.test(title);
+  if (isPromulgation) {
+    const mentionsOecd = /OECD|Gazdasági Együttműködési és Fejlesztési Szervezet/i.test(title);
+    const note = mentionsOecd
+      ? 'Hungarian promulgation act incorporating an OECD instrument (e.g. the Anti-Bribery Convention). No standalone OECD source file exists in this corpus; only the national promulgation act is present.'
+      : 'Hungarian promulgation act incorporating an external instrument. No standalone original source file exists in this corpus; only the national promulgation act is present.';
+    return { provenance: 'INCORPORATED_PROMULGATED', provenanceNote: note };
+  }
+  return { provenance: 'STANDALONE_SOURCE', provenanceNote: 'original legal source file present in corpus' };
+}
+
+// ---------------------------------------------------------------------------
 // Per-file inventory
 // ---------------------------------------------------------------------------
 
@@ -404,6 +498,10 @@ function inventoryFile(filePath, relPath, fileName) {
   const sourceType = cls.sourceType;
   const citation = cls.citation || null;
   const citationParts = cls.citationParts || null;
+  // Whether the classification was derived from the filename (fallback) rather
+  // than from verified content. Filename-derived fields are marked inferred and
+  // must never be presented as authoritative metadata.
+  const classificationBasis = (cls._basis === 'filename') ? 'filename-inferred' : (cls._basis === 'headerTitle') ? 'header-title' : 'content-verified';
 
   let jurisdiction = 'UNKNOWN';
   if (kind === 'SOURCE') {
@@ -469,6 +567,9 @@ function inventoryFile(filePath, relPath, fileName) {
 
   const completeness = completenessHeuristic(text, sourceType, kind);
 
+  // Provenance classification (mechanical; no legal determination).
+  const prov = detectProvenance({ kind, sourceType, title, citation });
+
   const entry = {
     kind,
     fileName,
@@ -478,6 +579,9 @@ function inventoryFile(filePath, relPath, fileName) {
     encoding,
     sourceType,
     jurisdiction,
+    provenance: prov.provenance,
+    provenanceNote: prov.provenanceNote,
+    classificationBasis,
     headerTitle,
     sourceUrl,
     downloadedAt,
@@ -495,6 +599,15 @@ function inventoryFile(filePath, relPath, fileName) {
     parseConfidence: null, // computed after assembly below
     notes: [],
   };
+
+  if (kind === 'ARTIFACT' && sourceType === 'ARCHIVE') {
+    try {
+      entry.archiveMembers = listZipMembers(buf);
+    } catch (e) {
+      entry.archiveMembers = null;
+      entry.notes.push('archive member listing failed (metadata only)');
+    }
+  }
 
   if (sourceUrl && sourceUrl.includes('utm_source=chatgpt.com')) {
     entry.notes.push('source URL contains a utm_source=chatgpt.com tracking suffix (metadata only; citation unaffected)');
@@ -560,6 +673,9 @@ function buildManifest(corpusRoot, entries, generatedAt) {
         celexBase: e.celexBase,
         title: e.title,
         language: 'hu',
+        provenance: e.provenance,
+        provenanceNote: e.provenanceNote,
+        classificationBasis: e.classificationBasis,
       });
     }
   }
@@ -582,6 +698,64 @@ function buildManifest(corpusRoot, entries, generatedAt) {
     }
   }
 
+  // Exact duplicates (byte-identical) across any files, regardless of name.
+  const shaGroups = new Map();
+  for (const e of sourceEntries) {
+    if (!shaGroups.has(e.sha256)) shaGroups.set(e.sha256, []);
+    shaGroups.get(e.sha256).push(e);
+  }
+  const exactDuplicates = [];
+  for (const [sha, list] of shaGroups) {
+    if (list.length > 1) {
+      exactDuplicates.push({
+        type: 'EXACT_DUPLICATE',
+        sha256: sha,
+        sizeBytes: list[0].sizeBytes,
+        files: list.map((e) => e.relativePath),
+      });
+    }
+  }
+
+  // Version-variant candidates: same canonical source, different checksum and a
+  // differing version/effective marker (REACH pair is the live example). This is
+  // a mechanical relationship; it never declares which version is applicable.
+  const versionVariants = [];
+  for (const [key, list] of dupGroups) {
+    if (list.length <= 1) continue;
+    const sig = new Set(list.map((e) => e.sha256));
+    if (sig.size > 1) {
+      versionVariants.push({
+        type: 'SAME_SOURCE_DIFFERENT_HASH',
+        canonicalSourceKey: key,
+        files: list.map((e) => ({
+          relativePath: e.relativePath,
+          sha256: e.sha256,
+          sizeBytes: e.sizeBytes,
+          versionDate: e.versionDate,
+          effectivePeriod: e.effectivePeriod,
+          celex: e.celex,
+        })),
+        note: 'same canonical source key, different checksum. No legal determination of which version is applicable.',
+      });
+    }
+  }
+
+  // Relationships array (typed, deterministic, mechanical).
+  const relationships = [
+    ...exactDuplicates,
+    ...versionVariants,
+    ...artifactEntries.map((e) => ({
+      type: e.kind === 'NOTE' ? 'POINTER_ONLY' : 'ARCHIVE_MEMBER',
+      file: e.relativePath,
+      sha256: e.sha256,
+      sizeBytes: e.sizeBytes,
+      note: e.kind === 'NOTE'
+        ? 'non-substantive pointer file; no legal text'
+        : 'packaging archive; member list below is mechanical, inferred packaging of corpus TXT files',
+      ...(Array.isArray(e.archiveMembers) ? { archiveMembers: e.archiveMembers } : {}),
+    })),
+  ];
+
   const versions = sourceEntries.map((e) => {
     const key = canonicalKey(e);
     const { id } = legalSources.find((ls) => ls.canonicalSourceKey === key) || {};
@@ -593,6 +767,9 @@ function buildManifest(corpusRoot, entries, generatedAt) {
       sha256: e.sha256,
       encoding: e.encoding,
       sourceType: e.sourceType,
+      provenance: e.provenance,
+      provenanceNote: e.provenanceNote,
+      classificationBasis: e.classificationBasis,
       sourceUrl: e.sourceUrl,
       downloadedAt: e.downloadedAt,
       citation: e.citation,
@@ -605,6 +782,11 @@ function buildManifest(corpusRoot, entries, generatedAt) {
     };
   });
 
+  // Deterministic ordering regardless of input order: legalSources by key,
+  // versions by relative canonical path, artifacts by path.
+  legalSources.sort((a, b) => a.canonicalSourceKey.localeCompare(b.canonicalSourceKey, 'hu'));
+  versions.sort((a, b) => a.relativePath.localeCompare(b.relativePath, 'hu'));
+
   const artifacts = artifactEntries.map((e) => ({
     fileName: e.fileName,
     relativePath: e.relativePath,
@@ -612,11 +794,37 @@ function buildManifest(corpusRoot, entries, generatedAt) {
     sha256: e.sha256,
     kind: e.kind,
     sourceType: e.sourceType,
+    provenance: e.provenance,
+    provenanceNote: e.provenanceNote,
+    archiveMembers: e.archiveMembers,
     notes: e.notes,
   }));
 
+  // Machine-readable diagnostics (metadata-level only).
+  const diagnostics = {
+    totalFiles: entries.length,
+    txtFiles: entries.filter((e) => /\.txt$/i.test(e.fileName)).length,
+    archiveFiles: artifactEntries.filter((e) => e.kind === 'ARTIFACT').length,
+    noteFiles: artifactEntries.filter((e) => e.kind === 'NOTE').length,
+    zeroByteFiles: entries.filter((e) => e.sizeBytes === 0).map((e) => e.relativePath),
+    unreadableFiles: entries.filter((e) => e.encoding === 'UNKNOWN').map((e) => ({ relativePath: e.relativePath, encoding: e.encoding })),
+    encodingIssues: entries.filter((e) => e.encoding === 'UNKNOWN').map((e) => e.relativePath),
+    ambiguousMetadata: sourceEntries.filter((e) => e.parseConfidence === 'LOW' || e.sourceType === 'UNKNOWN').map((e) => ({
+      relativePath: e.relativePath,
+      parseConfidence: e.parseConfidence,
+      sourceType: e.sourceType,
+    })),
+    inferredFromFilename: sourceEntries.filter((e) => e.classificationBasis === 'filename-inferred').map((e) => e.relativePath),
+    duplicateAmbiguity: versionVariants.map((v) => ({
+      canonicalSourceKey: v.canonicalSourceKey,
+      files: v.files.map((f) => f.relativePath),
+    })),
+    provenanceUncertainty: sourceEntries.filter((e) => e.provenance === 'UNKNOWN').map((e) => e.relativePath),
+    incorporatedPromulgated: sourceEntries.filter((e) => e.provenance === 'INCORPORATED_PROMULGATED').map((e) => e.relativePath),
+  };
+
   return {
-    manifestVersion: '1.0.0',
+    manifestVersion: '1.1.0',
     generator: {
       name: 'scripts/compliance/inventory-source.js',
       version: SCRIPT_VERSION,
@@ -629,24 +837,29 @@ function buildManifest(corpusRoot, entries, generatedAt) {
     },
     schema: {
       LegalSource: {
-        fields: ['id', 'canonicalSourceKey', 'jurisdiction', 'sourceType', 'documentType', 'citation', 'celexBase', 'title', 'language'],
+        fields: ['id', 'canonicalSourceKey', 'jurisdiction', 'sourceType', 'documentType', 'citation', 'celexBase', 'title', 'language', 'provenance', 'provenanceNote', 'classificationBasis'],
         identity: ['canonicalSourceKey'],
         note: 'Stable canonical legal-source identity. Survives file re-downloads because it is derived from citation/CELEX, not file name.',
       },
       LegalSourceVersion: {
-        fields: ['legalSourceId', 'fileName', 'relativePath', 'sizeBytes', 'sha256', 'encoding', 'sourceType', 'sourceUrl', 'downloadedAt', 'citation', 'celex', 'versionDate', 'effectivePeriod', 'completeness', 'parseConfidence', 'notes'],
+        fields: ['legalSourceId', 'fileName', 'relativePath', 'sizeBytes', 'sha256', 'encoding', 'sourceType', 'provenance', 'provenanceNote', 'classificationBasis', 'sourceUrl', 'downloadedAt', 'citation', 'celex', 'versionDate', 'effectivePeriod', 'completeness', 'parseConfidence', 'notes'],
         identity: ['legalSourceId', 'sha256'],
-        note: 'One manifest entry per physical file = one LegalSourceVersion. A new sha256 for the same legalSourceId is a candidate RegulatoryChange (metadata-level only).',
+        note: 'One manifest entry per physical file = one LegalSourceVersion. A new sha256 for the same legalSourceId is a candidate version change (metadata-level only).',
+      },
+      Provenance: {
+        values: ['STANDALONE_SOURCE', 'INCORPORATED_PROMULGATED', 'POINTER_ONLY', 'ARCHIVE_ARTIFACT', 'UNKNOWN'],
+        note: 'Mechanical classification of what a file IS in the corpus. INCORPORATED_PROMULGATED means the original instrument is NOT standalone here (only the national promulgation act is present). No legal applicability implied.',
       },
     },
     changeDetection: {
-      strategy: 'same canonicalSourceKey (legalSourceId) with a different sha256 => candidate RegulatoryChange entry; no automatic legal-meaning diff',
+      strategy: 'same canonicalSourceKey (legalSourceId) with a different sha256 => candidate version change entry; no automatic legal-meaning diff',
       keyFields: ['canonicalSourceKey'],
       fingerprintFields: ['sha256', 'sizeBytes', 'versionDate', 'effectivePeriod'],
       limitations: [
         'metadata-only; does not diff legal meaning',
         'does not compute requirement impact',
-        'manual/legal review required before any RegulatoryChange is accepted',
+        'manual/legal review required before any version-change is accepted',
+        'filename-derived fields (classificationBasis=filename-inferred) are NOT authoritative',
       ],
     },
     counts: {
@@ -656,7 +869,13 @@ function buildManifest(corpusRoot, entries, generatedAt) {
       archiveFiles: artifactEntries.filter((e) => e.kind === 'ARTIFACT').length,
       uniqueLegalSources: legalSources.length,
       nearDuplicateGroups: [...dupGroups.values()].filter((l) => new Set(l.map((e) => e.sha256)).size > 1 && l.length > 1).length,
+      exactDuplicateGroups: exactDuplicates.length,
+      versionVariantGroups: versionVariants.length,
+      incorporatedPromulgated: sourceEntries.filter((e) => e.provenance === 'INCORPORATED_PROMULGATED').length,
+      standaloneSources: sourceEntries.filter((e) => e.provenance === 'STANDALONE_SOURCE').length,
     },
+    relationships,
+    diagnostics,
     legalSources,
     versions,
     artifacts,
@@ -742,5 +961,7 @@ module.exports = {
   normalizeSpaces,
   parseHeader,
   sha256,
+  detectProvenance,
+  listZipMembers,
   SCRIPT_VERSION,
 };

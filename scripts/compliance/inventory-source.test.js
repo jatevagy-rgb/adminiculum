@@ -290,3 +290,151 @@ test('huTitleBlock and euTitleBlock return null on empty/unstructured input', ()
   assert.strictEqual(huTitleBlock([], 'HU_ACT'), null);
   assert.strictEqual(euTitleBlock([]), null);
 });
+
+// ---------------------------------------------------------------------------
+// Phase: engineering hardening — provenance, duplicates, zip, no legal output
+// ---------------------------------------------------------------------------
+
+const { detectProvenance, listZipMembers } = require('./inventory-source.js');
+
+test('provenance: a Hungarian promulgation act is INCORPORATED_PROMULGATED, not a standalone source', () => {
+  const p = detectProvenance({
+    kind: 'SOURCE',
+    title: '2000. évi XXXVII. törvény a Gazdasági Együttműködési és Fejlesztési Szervezet (OECD) tagállamai … Egyezmény kihirdetéséről',
+  });
+  assert.strictEqual(p.provenance, 'INCORPORATED_PROMULGATED');
+  assert.match(p.provenanceNote, /no standalone OECD source file/i);
+});
+
+test('provenance: ordinary statutes and EU texts are STANDALONE_SOURCE', () => {
+  assert.strictEqual(detectProvenance({ kind: 'SOURCE', title: '1995. évi LIII. törvény a környezet védelméről' }).provenance, 'STANDALONE_SOURCE');
+  assert.strictEqual(detectProvenance({ kind: 'SOURCE', title: 'AZ EURÓPAI PARLAMENT ÉS A TANÁCS (EU) 2016/679 RENDELETE' }).provenance, 'STANDALONE_SOURCE');
+});
+
+test('provenance: note and artifact are POINTER_ONLY / ARCHIVE_ARTIFACT', () => {
+  assert.strictEqual(detectProvenance({ kind: 'NOTE', title: null }).provenance, 'POINTER_ONLY');
+  assert.strictEqual(detectProvenance({ kind: 'ARTIFACT', title: null }).provenance, 'ARCHIVE_ARTIFACT');
+});
+
+test('listZipMembers parses central directory member names from a real ZIP buffer', () => {
+  // Build a minimal valid ZIP in-memory (store method, no compression).
+  const { Buffer } = require('node:buffer');
+  const names = ['a.txt', 'b.txt'];
+  const chunks = [];
+  const localOffsets = [];
+  for (const name of names) {
+    const nameBuf = Buffer.from(name, 'utf8');
+    localOffsets.push(Buffer.concat(chunks).length);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(0, 4); // version
+    local.writeUInt16LE(0, 6); // flags
+    local.writeUInt16LE(0, 8); // method: store
+    local.writeUInt16LE(0, 10);
+    local.writeUInt16LE(0, 12);
+    local.writeUInt16LE(0, 14);
+    local.writeUInt16LE(nameBuf.length, 26);
+    local.writeUInt16LE(0, 28);
+    chunks.push(local, nameBuf);
+  }
+  const central = [];
+  const cdStart = Buffer.concat(chunks).length;
+  for (let i = 0; i < names.length; i += 1) {
+    const nameBuf = Buffer.from(names[i], 'utf8');
+    const entry = Buffer.alloc(46);
+    entry.writeUInt32LE(0x02014b50, 0);
+    entry.writeUInt16LE(0x031E, 4); // version made by
+    entry.writeUInt16LE(0, 6);
+    entry.writeUInt16LE(0, 8);
+    entry.writeUInt16LE(0, 10);
+    entry.writeUInt16LE(0, 12);
+    entry.writeUInt16LE(0, 14);
+    entry.writeUInt16LE(0, 16);
+    entry.writeUInt16LE(0, 18);
+    entry.writeUInt16LE(0, 20);
+    entry.writeUInt16LE(0, 22);
+    entry.writeUInt16LE(0, 24);
+    entry.writeUInt16LE(nameBuf.length, 28);
+    entry.writeUInt16LE(0, 30);
+    entry.writeUInt16LE(0, 32);
+    entry.writeUInt16LE(0, 34);
+    entry.writeUInt32LE(0, 38);
+    entry.writeUInt32LE(localOffsets[i], 42);
+    central.push(entry, nameBuf);
+  }
+  const centralBuf = Buffer.concat(central);
+  const cdSize = centralBuf.length;
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4);
+  eocd.writeUInt16LE(0, 6);
+  eocd.writeUInt16LE(names.length, 8);
+  eocd.writeUInt16LE(names.length, 10);
+  eocd.writeUInt32LE(cdSize, 12);
+  eocd.writeUInt32LE(cdStart, 16);
+  eocd.writeUInt16LE(0, 20);
+  const zip = Buffer.concat([Buffer.concat(chunks), centralBuf, eocd]);
+  assert.deepStrictEqual(listZipMembers(zip), names);
+});
+
+test('listZipMembers returns [] for non-zip data', () => {
+  assert.deepStrictEqual(listZipMembers(Buffer.from('not a zip file at all')), []);
+});
+
+test('REACH variant: same canonical source, different hash => SAME_SOURCE_DIFFERENT_HASH relationship, no legal-current claim', () => {
+  const base = `CÍM: Egységes szerkezetbe foglalt SZÖVEG: 32006R1907 — HU — 11.05.2026
+FORRÁS: https://eur-lex.europa.eu/legal-content/HU/TXT/HTML/?uri=CELEX:02006R1907-20260511
+LETÖLTÉS: 2026-08-19T10:47:51.510Z
+
+AZ EURÓPAI PARLAMENT ÉS A TANÁCS (EU) 1907/2006 RENDELETE
+1. cikk
+`;
+  const a = base;
+  const b = base + '\nTOC re-download delta\n';
+  const dir = makeFixtureDir(test, {
+    'reach.txt': a,
+    'reach (1).txt': b,
+  });
+  const e1 = inventoryFile(path.join(dir, 'reach.txt'), 'reach.txt', 'reach.txt');
+  const e2 = inventoryFile(path.join(dir, 'reach (1).txt'), 'reach (1).txt', 'reach (1).txt');
+  const m = buildManifest(dir, [e1, e2], '2026-08-20T00:00:00.000Z');
+  assert.strictEqual(m.counts.versionVariantGroups, 1);
+  const rel = m.relationships.find((r) => r.type === 'SAME_SOURCE_DIFFERENT_HASH');
+  assert.ok(rel);
+  assert.strictEqual(rel.canonicalSourceKey, 'EU:EU_REGULATION:CELEX:32006R1907');
+  assert.match(rel.note, /no legal determination of which version is applicable/i);
+  // no assertion of which is legally current
+  assert.ok(!('applicable' in rel.files[0]));
+});
+
+test('no legal Requirement/Applicability/Control output anywhere in the manifest', () => {
+  const dir = makeFixtureDir(test, { 'act.txt': HU_ACT_FIXTURE, 'eu.txt': EU_REG_FIXTURE, 'reach.txt': EU_REG_FIXTURE });
+  const e1 = inventoryFile(path.join(dir, 'act.txt'), 'act.txt', 'act.txt');
+  const e2 = inventoryFile(path.join(dir, 'eu.txt'), 'eu.txt', 'eu.txt');
+  const e3 = inventoryFile(path.join(dir, 'reach.txt'), 'reach.txt', 'reach.txt');
+  const m = buildManifest(dir, [e1, e2, e3], '2026-08-20T00:00:00.000Z');
+  const json = JSON.stringify(m);
+  for (const token of ['Requirement', 'ApplicabilityRule', 'Control', 'EvidenceRequirement', 'ComplianceDocumentType', 'RegulatoryChange', 'GrowthTrigger']) {
+    assert.ok(!json.includes(token), `manifest must not contain ${token}`);
+  }
+});
+
+test('deterministic ordering and relative canonical paths (forward slashes, not Windows backslashes)', () => {
+  const dir = makeFixtureDir(test, { 'sub/act.txt': HU_ACT_FIXTURE, 'b.txt': EU_REG_FIXTURE });
+  const e1 = inventoryFile(path.join(dir, 'sub', 'act.txt'), path.join('sub', 'act.txt'), 'act.txt');
+  const e2 = inventoryFile(path.join(dir, 'b.txt'), 'b.txt', 'b.txt');
+  const m = buildManifest(dir, [e1, e2], '2026-08-20T00:00:00.000Z');
+  assert.strictEqual(e1.relativePath, 'sub/act.txt');
+  assert.ok(!e1.relativePath.includes('\\'));
+  // versions sorted deterministically
+  const files = m.versions.map((v) => v.relativePath);
+  assert.deepStrictEqual(files, [...files].sort((x, y) => x.localeCompare(y, 'hu')));
+});
+
+test('classification derived only from a filename is marked inferred, never authoritative', () => {
+  // A file with no CÍM/FORRÁS header still classifies by its filename.
+  const dir = makeFixtureDir(test, { '1995. évi LIII. törvény.txt': 'no header block here\n' });
+  const e = inventoryFile(path.join(dir, '1995. évi LIII. törvény.txt'), '1995. évi LIII. törvény.txt', '1995. évi LIII. törvény.txt');
+  assert.strictEqual(e.sourceType, 'HU_ACT');
+  assert.strictEqual(e.classificationBasis, 'filename-inferred');
+});

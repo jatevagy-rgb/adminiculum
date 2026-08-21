@@ -53,7 +53,7 @@ EU texts carry a similar header with `eur-lex.europa.eu` or
 |---|---|---|
 | HU (Hungary) | 49 | Statutes + decrees, consolidated current-state exports with `Hatályos:` validity range |
 | EU (European Union) | 13 | Regulations and directives, HU language |
-| US / UK / OECD / other | 0 | **None present.** The only OECD-related material is the Hungarian promulgation act of the OECD Anti-Bribery Convention (2000. évi XXXVII. törvény). |
+| US / UK / OECD / other | 0 | **None present.** The only OECD-related material is the Hungarian promulgation act of the OECD Anti-Bribery Convention (2000. évi XXXVII. törvény), which is **incorporated/promulgated text, NOT a standalone OECD source.** See §8b. |
 
 The corpus is therefore **HU + EU only.** No foreign common-law or other
 national sources exist.
@@ -230,3 +230,107 @@ Run tests:
 ```bash
 node --test scripts/compliance/inventory-source.test.js
 ```
+
+## 14. Provenance Classification (hardened)
+
+Every source version is now classified by what it IS in the corpus — so the
+inventory never implies a standalone source exists when only a national
+incorporation instrument is present.
+
+| Provenance | Count (versions) | Meaning |
+|---|---|---|
+| `STANDALONE_SOURCE` | 62 | An original legal source file present in the corpus |
+| `INCORPORATED_PROMULGATED` | 1 | National act that promulgates an instrument whose original is **not** standalone here |
+| `POINTER_ONLY` | 1 | Non-substantive note/pointer (`jogszabaly.txt`) |
+| `ARCHIVE_ARTIFACT` | 1 | Packaging archive (`tv ek.zip`) |
+| `UNKNOWN` | 0 | — |
+
+**OECD:** The corpus contains **no standalone OECD source file.** The only
+OECD-related material is `2000. évi XXXVII. törvény.txt` — the Hungarian act
+that promulgates the OECD Anti-Bribery Convention. Its provenance is
+`INCORPORATED_PROMULGATED`; the manifest records a provenance note stating that
+no standalone OECD source exists in the corpus. No OECD provenance is fabricated.
+
+## 15. Classification Basis (verified vs inferred)
+
+Each version records `classificationBasis`:
+`content-verified` (filename **and** CÍM header agree),
+`header-title` (header only), or `filename-inferred` (filename only).
+
+In this corpus all 63 versions are **content-verified** — the filename citation
+and the embedded CÍM header agree. `filename-inferred` fields are transparently
+marked and are **never** presented as authoritative metadata.
+
+## 16. Duplicate / Version Relationships
+
+`manifest.relationships[]` is a typed, deterministic relationship list:
+
+| Type | Meaning |
+|---|---|
+| `EXACT_DUPLICATE` | byte-identical files (same SHA-256) |
+| `SAME_SOURCE_DIFFERENT_HASH` | same canonical source key, different checksum |
+| `POINTER_ONLY` | non-substantive pointer file |
+| `ARCHIVE_MEMBER` | packaging archive (with mechanical member list) |
+
+**REACH (Section 4 requirement):** the two REACH files
+(`Egységes szerkezetbe foglalt SZÖVEG_ 32006R1907 — HU — 11.05.2026.txt` and its
+`(1)` twin) share the same canonical key `EU:EU_REGULATION:CELEX:32006R1907`,
+the same CELEX version date `2026-05-11`, and both contain the EUR-Lex document
+version marker `068.001`, but differ in checksum and byte size
+(`76199ff7…` / 1,329,738 vs `489f4181…` / 1,329,440) and in their capture head
+(one begins with the TOC navigation, the other with the consolidated body +
+disclaimer). They are recorded as `SAME_SOURCE_DIFFERENT_HASH` /
+`POSSIBLE_VERSION_VARIANT`. The manifest **does not declare** which is legally
+applicable — that requires legal review.
+
+## 17. Text Normalization
+
+`scripts/compliance/normalize-source.js` is a conservative mechanical layer:
+normalizes line endings to LF, strips a UTF-8 BOM, trims trailing whitespace per
+line, and **preserves** paragraph boundaries, section/article identifiers and
+Hungarian/EU Unicode. It never collapses internal whitespace, never translates,
+never summarizes, and never rewrites legal wording. It never writes to the
+source corpus.
+
+## 18. Structural Markers (candidate only)
+
+`scripts/compliance/structure-source.js` mechanically reports explicit
+structural locators: Hungarian `§`, subsection `(n)`, point, `melléklet`/annex,
+`fejezet`/chapter; EU `cikk`/Article, `bekezdés`/paragraph, `melléklet`/Annex,
+`fejezet`/Chapter, `szakasz`/Section. Output is structure locators (kind + line),
+**not** legal propositions.
+
+## 19. Stable Source Anchors
+
+`scripts/compliance/provision-anchor.js` builds a deterministic multi-part
+anchor for a future legal-review candidate:
+
+```
+sourceKey + sourceSha256 + provisionReference + excerptSha256   (primary, stable)
+headingContext (if explicit)                                     (context)
+lineSpan.start/end                                               (advisory only)
+```
+
+Line numbers are advisory capture-time data and must be re-verified against the
+current file checksum; they are never a stable legal identity. The anchor module
+makes no legal claim.
+
+## 20. Diagnostics
+
+`manifest.diagnostics` reports (machine-readable):
+`totalFiles`, `txtFiles`, `archiveFiles`, `noteFiles`, `zeroByteFiles`,
+`unreadableFiles`, `encodingIssues`, `ambiguousMetadata`, `inferredFromFilename`,
+`duplicateAmbiguity`, `provenanceUncertainty`, `incorporatedPromulgated`.
+
+Current corpus: 0 zero-byte, 0 unreadable legal texts, 0 ambiguous metadata, 1
+duplicate ambiguity (REACH), 1 incorporated/promulgated (OECD), 0 provenance
+uncertainty. See `docs/compliance/CORPUS_DIAGNOSTICS.md`.
+
+## 21. No Requirements / No Legal Conclusions
+
+This lane performs **source engineering only.** The manifest and tooling create
+**no** `Requirement`, `ApplicabilityRule`, `Control`, `EvidenceRequirement`,
+`ComplianceDocumentType`, `RegulatoryChange` or `GrowthTrigger` records, and make
+**no** fact-applicability decisions (e.g. "50 employees ⇒ whistleblowing").
+`docs/compliance/CURRENT_MODEL_REUSE_MAP.md` preserves the reuse conclusions for
+later phases; no Prisma models or migrations are created.
