@@ -79,6 +79,14 @@ describe("Phase 5A organizational customer portal shell + home journey", () => {
     assert.doesNotMatch(views, /internal Task|taskStatus|workInstruction/);
   });
 
+  it("home action link falls back to action-request detail when no matter publication id", () => {
+    const src = orgHome();
+    // When matterPublicationId is absent the action id is a request id, not a matter id.
+    assert.match(src, /action\.matterPublicationId\s*\?\s*`\/portal\/matters\/\$\{encodeURIComponent\(action\.matterPublicationId\)\}`\s*:\s*`\/portal\/action-requests\/\$\{encodeURIComponent\(action\.id\)\}`/);
+    assert.doesNotMatch(src, /action\.matterPublicationId\s*\|\|\s*action\.id/);
+    assert.doesNotMatch(src, /\/portal\/matters\/\$\{encodeURIComponent\(action\.matterPublicationId\s*\|\|\s*action\.id\)\}/);
+  });
+
   it("INDIVIDUAL nav remains unchanged and backward compatible", () => {
     const src = shell();
     const orgIdx = src.indexOf("if (workspace.mode === 'ORGANIZATION')");

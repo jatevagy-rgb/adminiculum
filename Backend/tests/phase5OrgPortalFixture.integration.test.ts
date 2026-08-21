@@ -332,4 +332,66 @@ d('Phase 5 org-portal fixture foundation (PostgreSQL)', () => {
     expect(json).not.toContain('workInstruction');
     expect(json).not.toContain('Internal task');
   });
+
+  it('org home current matter progress comes from the immutable published revision', async () => {
+    const home = await getOrganizationalHome(ids.authorizedIdentity, ids.orgWsA, db);
+    expect(home.currentMatter).toBeTruthy();
+    expect(home.currentMatter!.progressPercentage).toBe(50);
+    // Value is the immutable revision field, not a live/inferred value.
+    const revision = await db.clientMatterPublicationRevision.findUnique({
+      where: { id: ids.matterRevision },
+      select: { progressPercentage: true },
+    });
+    expect(revision?.progressPercentage).toBe(50);
+  });
+
+  it('org home contact summary totals include all authorized threads, not only the newest five', async () => {
+    // Seed five additional open threads with unread lawyer messages on caseOne.
+    const membershipId = ids.authorizedMembership;
+    for (let i = 0; i < 5; i++) {
+      const threadId = crypto.randomUUID();
+      await db.clientQuestionThread.create({
+        data: {
+          id: threadId,
+          clientId: ids.clientA,
+          caseId: ids.caseOne,
+          clientPortalIdentityId: ids.authorizedIdentity,
+          workspaceId: ids.orgWsA,
+          category: 'QUESTION',
+          subject: `További kérdés ${i}`,
+          status: 'OPEN',
+        },
+      });
+      await db.clientQuestionThreadParticipant.create({
+        data: {
+          id: crypto.randomUUID(),
+          threadId,
+          workspaceMembershipId: membershipId,
+          participantRole: 'PARTICIPANT',
+          canRead: true,
+          canWrite: true,
+        },
+      });
+      await db.clientQuestionMessage.create({
+        data: {
+          id: crypto.randomUUID(),
+          threadId,
+          authorType: 'LAWYER' as never,
+          clientPortalIdentityId: null,
+          bodySafe: `Válasz ${i}`,
+          visibility: 'SENT',
+          sentAt: new Date(`2026-08-0${i + 1}T00:00:00Z`),
+        },
+      });
+    }
+
+    const home = await getOrganizationalHome(ids.authorizedIdentity, ids.orgWsA, db);
+    // Existing threadA (open) + 5 new open threads = 6 open threads total.
+    expect(home.contactSummary.openCount).toBeGreaterThanOrEqual(6);
+    // Five unread lawyer messages.
+    expect(home.contactSummary.unreadCount).toBeGreaterThanOrEqual(5);
+    // Totals must not be capped at the preview limit of five.
+    expect(home.contactSummary.openCount).toBeGreaterThan(5);
+    expect(home.contactSummary.latestPreview).toBeTruthy();
+  });
 });
