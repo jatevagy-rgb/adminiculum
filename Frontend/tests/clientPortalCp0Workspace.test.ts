@@ -28,7 +28,9 @@ describe('CP0 anonymous entry and authenticated workspace shell', () => {
     assert.match(shell, /capabilities\.tasks/);
     assert.match(shell, /capabilities\.documents/);
     assert.match(shell, /capabilities\.messages/);
-    assert.match(shell, /capabilities\.intakes/);
+    assert.match(shell, /OrgHomeView/);
+    assert.match(shell, /'Szerződések', '\/portal\/szerzodesek'/);
+    assert.match(shell, /'Vállalat', '\/portal\/vallalat'/);
     assert.match(shell, /setSelectedPortalWorkspace\(null\)/);
     assert.match(shell, /PortalWorkspaceSelector/);
     assert.match(shell, /Nincs aktív ügyfélfelülete/);

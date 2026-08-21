@@ -358,6 +358,64 @@ export async function getPortalOrganizationSummary() {
   return fetchApi<{ units: PortalLeadershipUnitAggregate[] }>('/client-portal/org/summary/organization', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
 }
 
+export type PortalOrgHomeMatter = {
+  publicationId: string;
+  title: string;
+  status: string;
+  currentPosition: string;
+  nextStep: string | null;
+  waitingOn: string;
+  publicTargetDate: string | null;
+  progressPercentage?: number | null;
+  milestones: Array<{ reference?: string | null; title?: string | null; state?: string | null; displayOrder?: number; completedAt?: string | null }>;
+};
+
+export type PortalOrgHomeRow = {
+  publicReference: string;
+  matterPublicationId: string;
+  publicTitle: string;
+  organizationUnitName: string | null;
+  relationshipToCase: string;
+  publicStatus: string;
+  waitingOn: string;
+  nextStep: string | null;
+  publicTargetDate: string | null;
+  customerActionRequired: boolean;
+  lastPublishedUpdateAt: string | null;
+};
+
+export type PortalOrgHomeDocument = {
+  id: string;
+  matterTitle?: string | null;
+  title: string;
+  publishedAt?: string | null;
+  downloadAvailable: boolean;
+};
+
+export type PortalOrgHomeAction = {
+  id: string;
+  matterPublicationId?: string | null;
+  matterTitle?: string | null;
+  title: string;
+  instructions?: string | null;
+  dueAt?: string | null;
+  typeLabel: string;
+  readOnlyNote: string;
+};
+
+export type PortalOrgHome = {
+  customer: { name: string };
+  currentMatter?: PortalOrgHomeMatter;
+  matters: PortalOrgHomeRow[];
+  actions: PortalOrgHomeAction[];
+  recentDocuments: PortalOrgHomeDocument[];
+  contactSummary: { openCount: number; unreadCount: number; latestPreview: string | null; latestUpdatedAt: string | null };
+};
+
+export async function getPortalOrgHome() {
+  return fetchApi<PortalOrgHome>('/client-portal/org/home', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
+}
+
 export async function getPortalUnitSummary(groupId: string) {
   return fetchApi<PortalLeadershipUnitAggregate>(`/client-portal/org/summary/unit/${encodeURIComponent(groupId)}`, { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
 }

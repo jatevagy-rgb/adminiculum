@@ -164,7 +164,9 @@ describe('internal portal-admin UI', () => {
     assert.match(shell, /'\/portal\/uzenetek'/);
     assert.match(shell, /Amit most érdemes elintézni/);
     assert.match(shell, /Kérdések és válaszok/);
-    assert.match(shell, /workspace\.mode === 'ORGANIZATION' && capabilities\.intakes \? \['Új megkeresés'/);
+    assert.match(shell, /'Szerződések', '\/portal\/szerzodesek'/);
+    assert.match(shell, /'Vállalat', '\/portal\/vallalat'/);
+    assert.match(shell, /OrgHomeView/);
     assert.match(read('src/lib/clientPortalApi.ts'), /intakes\?: boolean/);
     assert.match(read('src/lib/clientPortalApi.ts'), /leadership\?: boolean/);
     assert.doesNotMatch(shell, /Belső munkapad|Review sor|Munkaórák/);

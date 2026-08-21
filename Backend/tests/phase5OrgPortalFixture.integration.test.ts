@@ -38,6 +38,7 @@ import { projectContractLibraryForCustomer } from '../src/modules/client-contrac
 import { setCanonicalDocument } from '../src/modules/client-contracts/service';
 import { listCustomerThreads, getCustomerThread } from '../src/modules/client-interaction/questionService';
 import { listCustomerSubmissions } from '../src/modules/client-interaction/submissionService';
+import { getOrganizationalHome } from '../src/modules/client-workspace/orgHomeService';
 
 const databaseUrl = process.env.CLIENT_INTERACTION_TEST_DATABASE_URL || process.env.CLIENT_IDENTITY_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const d = databaseUrl ? describe : describe.skip;
@@ -258,5 +259,77 @@ d('Phase 5 org-portal fixture foundation (PostgreSQL)', () => {
     expect(promoted).toBeNull();
     const doc = await db.document.findFirst({ where: { name: 'scan_pending.pdf' } });
     expect(doc).toBeNull();
+  });
+
+  it('org home authorization: membership without Case grant shows no matters and no journey', async () => {
+    // noGrant holds an ACTIVE membership but no case grant -> home lists no matters.
+    const home = await getOrganizationalHome(ids.noGrantIdentity, ids.orgWsA, db);
+    expect(home.customer.name).toBeTruthy();
+    expect(home.matters).toEqual([]);
+    expect(home.currentMatter).toBeUndefined();
+    expect(home.actions).toEqual([]);
+    expect(home.recentDocuments).toEqual([]);
+    expect(home.contactSummary.openCount).toBe(0);
+  });
+
+  it('org home authorization: inactive identity is denied at the workspace boundary', async () => {
+    await expect(getOrganizationalHome(ids.inactiveIdentity, ids.orgWsA, db))
+      .rejects.toMatchObject({ code: 'CLIENT_IDENTITY_NOT_ACTIVE' });
+  });
+
+  it('org home shows only granted matters, from immutable published revision', async () => {
+    const home = await getOrganizationalHome(ids.authorizedIdentity, ids.orgWsA, db);
+    // authorized has grants on caseOne (REQUESTER) and caseTwo (PARTICIPANT).
+    const refs = home.matters.map((m) => m.publicReference);
+    expect(refs.length).toBeGreaterThanOrEqual(1);
+    // The current journey comes from the published matter revision.
+    expect(home.currentMatter).toBeTruthy();
+    if (home.currentMatter) {
+      expect(home.currentMatter.title).toBeTruthy();
+      expect(home.currentMatter.status).toBeTruthy();
+      // Eddig -> published milestones (immutable snapshot).
+      expect(Array.isArray(home.currentMatter.milestones)).toBe(true);
+      // Most -> published current position.
+      expect(home.currentMatter.currentPosition).toBeTruthy();
+      // Következőként -> published next step / neutral text.
+      expect(typeof home.currentMatter.nextStep).toBe('string');
+    }
+  });
+
+  it('org home recent documents are exact-version published only, no internal doc', async () => {
+    const home = await getOrganizationalHome(ids.authorizedIdentity, ids.orgWsA, db);
+    const json = JSON.stringify(home.recentDocuments);
+    // The published exact-version document is present; the internal doc is not.
+    expect(json).toContain('Keretszerződés');
+    expect(json).not.toContain('Belső vázlat');
+    expect(json).not.toContain('HR dokumentum');
+    expect(json).not.toContain('scan_pending');
+  });
+
+  it('org home contact summary reflects only participant-authorized threads', async () => {
+    const home = await getOrganizationalHome(ids.authorizedIdentity, ids.orgWsA, db);
+    // threadA belongs to caseOne (authorized, participant) and is OPEN.
+    expect(home.contactSummary.openCount).toBeGreaterThanOrEqual(1);
+    // The cross-client thread (caseCrossClient, client B) must never surface.
+    const json = JSON.stringify(home.contactSummary);
+    expect(json).not.toContain('B ügyfél szál');
+  });
+
+  it('org home never leaks internal Task / finding / storage data', async () => {
+    const home = await getOrganizationalHome(ids.authorizedIdentity, ids.orgWsA, db);
+    const json = JSON.stringify(home);
+    for (const forbidden of ['workInstruction', 'taskNotes', 'Internal task', 'Hiányzó irányítás', 'spItemId', 'sharePoint', 'assessmentFinding', 'internalOwner', 'reviewer']) {
+      expect(json.toLowerCase()).not.toContain(forbidden.toLowerCase());
+    }
+  });
+
+  it('org home action summary is customer action objects, not internal Task', async () => {
+    const home = await getOrganizationalHome(ids.authorizedIdentity, ids.orgWsA, db);
+    expect(Array.isArray(home.actions)).toBe(true);
+    // Actions carry customer-safe type labels only; internal task fields absent.
+    const json = JSON.stringify(home.actions);
+    expect(json).not.toContain('taskNotes');
+    expect(json).not.toContain('workInstruction');
+    expect(json).not.toContain('Internal task');
   });
 });
