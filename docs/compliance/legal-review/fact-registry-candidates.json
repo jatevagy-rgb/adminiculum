@@ -1121,6 +1121,115 @@
       "sensitive": false,
       "refreshPolicy": "USER_PROVIDED",
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "distanceConsumerContractConcluded",
+      "labelHu": "Távollévők közötti fogyasztói szerződés",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "scope": "CONTRACT",
+      "legalMeaning": "Távollévők között jön létre fogyasztói szerződés?",
+      "collectionQuestionHu": "Távollévők között jön létre fogyasztói szerződés?",
+      "usedByRules": [
+        "APPL-DISTANCE-PRECONTRACT",
+        "APPL-DISTANCE-CONFIRMATION"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "electronicDistanceContractWithPayment",
+      "labelHu": "Elektronikus fizetési kötelezettség",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "scope": "CONTRACT",
+      "legalMeaning": "Elektronikus úton kötött szerződés fizetési kötelezettséget keletkeztet?",
+      "collectionQuestionHu": "Elektronikus úton kötött szerződés fizetési kötelezettséget keletkeztet?",
+      "usedByRules": [
+        "APPL-ONLINE-PAYMENT-ORDER"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "withdrawalRightClassification",
+      "labelHu": "Elállási/felmondási jog hatálya",
+      "dataType": "enum",
+      "allowedValues": [
+        "IN_SCOPE",
+        "OUT_OF_SCOPE",
+        "UNKNOWN"
+      ],
+      "scope": "CONTRACT",
+      "legalMeaning": "Az elállási vagy felmondási jog hatályának specialistai minősítése.",
+      "collectionQuestionHu": "Az elállási vagy felmondási jog hatályának specialistai minősítése.",
+      "usedByRules": [
+        "APPL-WITHDRAWAL-INFORMATION"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "consumerWithdrawalExercised",
+      "labelHu": "Fogyasztói elállás vagy felmondás",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "scope": "EVENT",
+      "legalMeaning": "A fogyasztó elállási vagy felmondási nyilatkozatot tett?",
+      "collectionQuestionHu": "A fogyasztó elállási vagy felmondási nyilatkozatot tett?",
+      "usedByRules": [
+        "APPL-WITHDRAWAL-REFUND"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "mandatoryGuaranteeProductClassification",
+      "labelHu": "Kötelező jótállási termékkategória",
+      "dataType": "enum",
+      "allowedValues": [
+        "IN_SCOPE",
+        "OUT_OF_SCOPE",
+        "UNKNOWN"
+      ],
+      "scope": "PRODUCT_SERVICE",
+      "legalMeaning": "A termék kötelező jótállási hatályának és értékhatárának specialistai minősítése.",
+      "collectionQuestionHu": "A termék kötelező jótállási hatályának és értékhatárának specialistai minősítése.",
+      "usedByRules": [
+        "APPL-MANDATORY-GUARANTEE"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "ecommerceAccessibilityScopeClassification",
+      "labelHu": "E-kereskedelmi akadálymentességi hatály",
+      "dataType": "enum",
+      "allowedValues": [
+        "IN_SCOPE",
+        "OUT_OF_SCOPE",
+        "UNKNOWN"
+      ],
+      "scope": "SALES_CHANNEL",
+      "legalMeaning": "Az e-kereskedelmi szolgáltatás 2022. évi XVII. törvény szerinti hatályának specialistai minősítése.",
+      "collectionQuestionHu": "Az e-kereskedelmi szolgáltatás 2022. évi XVII. törvény szerinti hatályának specialistai minősítése.",
+      "usedByRules": [
+        "APPL-ECOMMERCE-ACCESSIBILITY"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
     }
   ]
 }

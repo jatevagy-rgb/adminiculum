@@ -756,6 +756,154 @@
       "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
       "legalReviewNotes": "A 46. § (5) önálló, a kezdeti tájékoztatástól különböző kötelezettség."
+    },
+    {
+      "requirementKey": "DISTANCE_CONTRACT_PRECONTRACT_INFORMATION",
+      "titleHu": "Távollévők közötti fogyasztói szerződés szerződéskötés előtti tájékoztatása",
+      "summaryHu": "Világosan és közérthetően megadja a 11. § (1) szerinti, operatívan összetartozó szerződéses tájékoztatási csomagot, beleértve az azonosítást, árat és költségeket, teljesítést, panaszkezelést, elállást és a releváns digitális jellemzőket.",
+      "domain": "fogyasztovedelem",
+      "subdomain": "consumer_commerce",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Vállalkozás",
+      "trigger": "Fogyasztóval távollévők között kötendő szerződés.",
+      "requiredAction": "Világosan és közérthetően megadja a 11. § (1) szerinti, operatívan összetartozó szerződéses tájékoztatási csomagot, beleértve az azonosítást, árat és költségeket, teljesítést, panaszkezelést, elállást és a releváns digitális jellemzőket.",
+      "deadline": "A fogyasztó szerződési nyilatkozata előtt.",
+      "frequency": "Az érintett szerződéshez vagy eseményhez igazodóan.",
+      "evidenceExpected": "A közzétett vagy közölt tájékoztatás és annak verziója.",
+      "sourceAnchors": [
+        "A-CC-45-11"
+      ],
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "Nem kötelező ÁSZF-et modellez; a jogszabály a tájékoztatás tartalmát és idejét írja elő."
+    },
+    {
+      "requirementKey": "ONLINE_ORDER_PAYMENT_ACKNOWLEDGEMENT",
+      "titleHu": "Elektronikus fizetési kötelezettséget keletkeztető megrendelés jelölése",
+      "summaryHu": "Közvetlenül a szerződési nyilatkozat előtt jól láthatóan közli a törvényben felsorolt kulcsinformációkat, és a megrendelési funkció egyértelműen jelzi a fizetési kötelezettséget.",
+      "domain": "fogyasztovedelem",
+      "subdomain": "consumer_commerce",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Vállalkozás",
+      "trigger": "Elektronikus úton kötött távollévők közötti szerződés fizetési kötelezettséget keletkeztet.",
+      "requiredAction": "Közvetlenül a szerződési nyilatkozat előtt jól láthatóan közli a törvényben felsorolt kulcsinformációkat, és a megrendelési funkció egyértelműen jelzi a fizetési kötelezettséget.",
+      "deadline": "Közvetlenül a fogyasztói nyilatkozat előtt.",
+      "frequency": "Az érintett szerződéshez vagy eseményhez igazodóan.",
+      "evidenceExpected": "Rendelési felület és verziózott felirati bizonyíték.",
+      "sourceAnchors": [
+        "A-CC-45-14-18"
+      ],
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "Csak elektronikus, fizetési kötelezettséget keletkeztető távollévők közötti szerződésre vonatkozik."
+    },
+    {
+      "requirementKey": "DISTANCE_CONTRACT_DURABLE_MEDIUM_CONFIRMATION",
+      "titleHu": "Távollévők közötti fogyasztói szerződés visszaigazolása tartós adathordozón",
+      "summaryHu": "Tartós adathordozón visszaigazolja a megkötött szerződést és a forrás szerinti tájékoztatást.",
+      "domain": "fogyasztovedelem",
+      "subdomain": "consumer_commerce",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Vállalkozás",
+      "trigger": "Távollévők között fogyasztói szerződés jön létre.",
+      "requiredAction": "Tartós adathordozón visszaigazolja a megkötött szerződést és a forrás szerinti tájékoztatást.",
+      "deadline": "Ésszerű időn belül; áru esetén legkésőbb átadáskor, szolgáltatásnál legkésőbb a teljesítés megkezdésekor.",
+      "frequency": "Az érintett szerződéshez vagy eseményhez igazodóan.",
+      "evidenceExpected": "Visszaigazolás és küldési bizonyíték.",
+      "sourceAnchors": [
+        "A-CC-45-14-18"
+      ],
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "Az előzetesen tartós adathordozón már átadott információ kivételét a specialistai review kezeli."
+    },
+    {
+      "requirementKey": "DISTANCE_CONTRACT_WITHDRAWAL_INFORMATION",
+      "titleHu": "Elállási/felmondási jog előzetes tájékoztatása",
+      "summaryHu": "Tájékoztatja a fogyasztót a jog határidejéről, feltételeiről, következményeiről és a nyilatkozatmintáról.",
+      "domain": "fogyasztovedelem",
+      "subdomain": "consumer_commerce",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Vállalkozás",
+      "trigger": "Üzlethelyiségen kívül vagy távollévők között fogyasztói szerződés jön létre, és az elállási/felmondási jog nem kizárt.",
+      "requiredAction": "Tájékoztatja a fogyasztót a jog határidejéről, feltételeiről, következményeiről és a nyilatkozatmintáról.",
+      "deadline": "A fogyasztó szerződési nyilatkozata előtt.",
+      "frequency": "Az érintett szerződéshez vagy eseményhez igazodóan.",
+      "evidenceExpected": "Tájékoztatás és nyilatkozatminta verziója.",
+      "sourceAnchors": [
+        "A-CC-45-11",
+        "A-CC-45-20-23"
+      ],
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "A 29. § szerinti kizárások és a digitális/szolgáltatási feltételek külön specialistai minősítést igényelnek."
+    },
+    {
+      "requirementKey": "DISTANCE_CONTRACT_WITHDRAWAL_REFUND",
+      "titleHu": "Elállás vagy felmondás utáni fogyasztói visszatérítés",
+      "summaryHu": "Visszatéríti a fogyasztó által megfizetett teljes összeget a forrás szerinti módban és korlátokkal.",
+      "domain": "fogyasztovedelem",
+      "subdomain": "consumer_commerce",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Vállalkozás",
+      "trigger": "A fogyasztó szabályszerűen eláll vagy felmond egy üzlethelyiségen kívül vagy távollévők között kötött szerződést.",
+      "requiredAction": "Visszatéríti a fogyasztó által megfizetett teljes összeget a forrás szerinti módban és korlátokkal.",
+      "deadline": "Haladéktalanul, de legkésőbb az elállásról való tudomásszerzéstől számított 14 napon belül.",
+      "frequency": "Az érintett szerződéshez vagy eseményhez igazodóan.",
+      "evidenceExpected": "Visszatérítési tranzakció és az elállási nyilatkozat nyoma.",
+      "sourceAnchors": [
+        "A-CC-45-20-23"
+      ],
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "Áru esetén a visszatartási jog, illetve a fuvarozási költség kivételei megmaradnak."
+    },
+    {
+      "requirementKey": "MANDATORY_GUARANTEE_INFORMATION",
+      "titleHu": "Kötelező jótállás tájékoztatása és jótállási jegye",
+      "summaryHu": "A fogyasztási cikkel együtt vagy a forrás szerinti határidőben a szükséges jótállási tájékoztatást, adott esetben jótállási jegyet bocsátja rendelkezésre.",
+      "domain": "fogyasztovedelem",
+      "subdomain": "consumer_commerce",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Vállalkozás",
+      "trigger": "A vállalkozás a rendelet szerinti új, kötelező jótállás alá tartozó tartós fogyasztási cikket értékesít fogyasztónak.",
+      "requiredAction": "A fogyasztási cikkel együtt vagy a forrás szerinti határidőben a szükséges jótállási tájékoztatást, adott esetben jótállási jegyet bocsátja rendelkezésre.",
+      "deadline": "A fogyasztási cikkel együtt; elektronikus átadásnál legkésőbb az átadást vagy üzembe helyezést követő napon.",
+      "frequency": "Az érintett szerződéshez vagy eseményhez igazodóan.",
+      "evidenceExpected": "Jótállási jegy vagy a 3/A. § szerinti jól olvasható tájékoztatás és átadási bizonyíték.",
+      "sourceAnchors": [
+        "A-CC-151-1-3"
+      ],
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "A termékcsoport és értékhatár minősítése szükséges; a hiányos 19/2014. NGM forrás miatt igényintézési sablon nem készül."
+    },
+    {
+      "requirementKey": "ECOMMERCE_ACCESSIBILITY_DOCUMENTATION",
+      "titleHu": "E-kereskedelmi szolgáltatás akadálymentességi dokumentációja",
+      "summaryHu": "Értékeli, dokumentálja és hozzáférhető formában nyilvánosságra hozza a szolgáltatás akadálymentességi követelményeknek való megfelelését.",
+      "domain": "fogyasztovedelem",
+      "subdomain": "consumer_commerce",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Vállalkozás",
+      "trigger": "A szolgáltató a 2022. évi XVII. törvény hatálya alá tartozó e-kereskedelmi szolgáltatást nyújt fogyasztóknak.",
+      "requiredAction": "Értékeli, dokumentálja és hozzáférhető formában nyilvánosságra hozza a szolgáltatás akadálymentességi követelményeknek való megfelelését.",
+      "deadline": "A forrás szerinti szolgáltatás nyújtása alatt; a megfelelés változásait folyamatosan követi.",
+      "frequency": "Az érintett szerződéshez vagy eseményhez igazodóan.",
+      "evidenceExpected": "Akadálymentességi értékelés, dokumentáció és közzétételi bizonyíték.",
+      "sourceAnchors": [
+        "A-CC-2022-1-6"
+      ],
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "Nem minden webshop tartozik a hatály alá; a szolgáltatási minősítés külön jogi/technikai kapu."
     }
   ],
   "anchors": {
@@ -1134,6 +1282,71 @@
         "end": 558
       },
       "excerptSha256": "e11433a031269dcd0429fd5ef25d97ee6a9ddd01254858de0c2bddbb92cee718",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-CC-45-11": {
+      "sourceKey": "HU:DECREE:45/2014:KORM",
+      "sourceSha256": "c58d42ea66cdf9c05e200c0bf370ba0dcb5476f9ea74cfd8d053a16573d66792",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "11. § (1)-(7)",
+      "headingContext": "Wave 4B substantive review",
+      "lineSpan": {
+        "start": 211,
+        "end": 271
+      },
+      "excerptSha256": "e7d7c9d8be7e2b091737e8d06281c287a76a5e924e508a44c1fb0ae31567a392",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-CC-45-14-18": {
+      "sourceKey": "HU:DECREE:45/2014:KORM",
+      "sourceSha256": "c58d42ea66cdf9c05e200c0bf370ba0dcb5476f9ea74cfd8d053a16573d66792",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "14-18. §",
+      "headingContext": "Wave 4B substantive review",
+      "lineSpan": {
+        "start": 303,
+        "end": 367
+      },
+      "excerptSha256": "5f3b16c8d8731999fe8daef92662aed06227dc32a579a447e0c58851cd2ff4c9",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-CC-45-20-23": {
+      "sourceKey": "HU:DECREE:45/2014:KORM",
+      "sourceSha256": "c58d42ea66cdf9c05e200c0bf370ba0dcb5476f9ea74cfd8d053a16573d66792",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "20-23. §",
+      "headingContext": "Wave 4B substantive review",
+      "lineSpan": {
+        "start": 347,
+        "end": 401
+      },
+      "excerptSha256": "971ac715916c2fdf488a4a6ee907ea7b849d88fa01e45f4ad468db51b5872781",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-CC-151-1-3": {
+      "sourceKey": "HU:DECREE:151/2003:KORM",
+      "sourceSha256": "ea8c57c09bf080b8861e330daa108686d9712f6c38b70fc73c966ef10aca939d",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "1-3/A. §",
+      "headingContext": "Wave 4B substantive review",
+      "lineSpan": {
+        "start": 11,
+        "end": 85
+      },
+      "excerptSha256": "8bbe14101f9eff63af15104fb3adb77a4985749d6975ae74951cd980235138d7",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-CC-2022-1-6": {
+      "sourceKey": "HU:ACT:2022:XVII",
+      "sourceSha256": "32915a89275c1cb32fe881bd5e9bf8e7c7e0f8cb88b2ccab28e53eb594310cf3",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "1. § (2), 6. §",
+      "headingContext": "Wave 4B substantive review",
+      "lineSpan": {
+        "start": 27,
+        "end": 259
+      },
+      "excerptSha256": "0ca5a3cd7da3a7d42c0fca487da1dd2aa1954508d63cea4a14314c85d2d8bc00",
       "provenance": "STANDALONE_SOURCE"
     }
   }

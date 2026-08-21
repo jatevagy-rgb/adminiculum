@@ -75,3 +75,10 @@ Státusz: `LEGAL_REVIEW_REQUIRED`. A táblák candidate tételek, nem jóváhagy
 - **Munkavédelmi kockázatértékelés:** A munkáltató a tevékenység megkezdése előtt, majd eltérő jogszabályi rendelkezés hiányában legalább öt évente készíti és dokumentálja. A változás vagy esemény által kiváltott felülvizsgálat ettől külön kötelezettség.
 - **Munkabaleset:** A munkaképtelenséggel járó baleset kivizsgálása és dokumentálása külön candidate; a súlyos baleset haladéktalan hatósági bejelentése és a helyszín megőrzése külön, specialistai minősítési kapu mögötti candidate.
 - **Munkáltatói írásbeli tájékoztatás:** Az új munkaviszony utáni hét napos írásbeli tájékoztatás és a változás hatálybalépésekor esedékes tájékoztatás külön candidate. Nem készült munkaszerződés vagy más DOCX-sablon.
+
+## Consumer commerce
+
+- **Távollévők közötti szerződés:** a 45/2014. Korm. rendelet szerinti előzetes információ, fizetési kötelezettséget jelző online megrendelési felület és tartós adathordozós visszaigazolás külön candidate. A B2C státusz önmagában nem elég: szerződési és csatorna-tény szükséges.
+- **Elállás:** az előzetes tájékoztatás és az esemény utáni, 14 napon belüli visszatérítés külön candidate. A kizárások, digitális tartalom és teljesítés előtti szolgáltatás specialistai kapun maradnak.
+- **Kötelező jótállás:** csak a rendelet szerinti új tartós fogyasztási cikkek termékkategória- és értékhatár-minősítése után jön létre tájékoztatási/jótállási jegy candidate. Nem készült új DOCX a kategória-megállapítás és a hiányos 19/2014. NGM korpusz miatt.
+- **E-kereskedelmi akadálymentesség:** a 2022. évi XVII. törvény potenciális e-kereskedelmi szolgáltatási hatálya külön specialistai kapu; nem teszi a webshopot DSA-közvetítővé.

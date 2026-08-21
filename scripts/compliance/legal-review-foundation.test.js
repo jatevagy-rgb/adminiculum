@@ -91,6 +91,9 @@ test('captured anchor excerpt hashes resolve against the read-only corpus', () =
     'HU:ACT:1993:XCIII': '1993. évi XCIII. törvény.txt',
     'HU:DECREE:5/1993:MÜM': '5_1993. (XII. 26.) MüM rendelet.txt',
     'HU:ACT:2012:I': '2012. évi I. törvény.txt',
+    'HU:DECREE:45/2014:KORM': '45_2014. (II. 26.) Korm. rendelet.txt',
+    'HU:DECREE:151/2003:KORM': '151_2003. (IX. 22.) Korm. rendelet.txt',
+    'HU:ACT:2022:XVII': '2022. évi XVII. törvény.txt',
   };
   for (const anchor of Object.values(requirements.anchors)) {
     const reachFirstCapture = anchor.sourceKey === 'EU:EU_REGULATION:CELEX:32006R1907' && anchor.sourceSha256 === '489f4181edde13eed8af1aeeb62c19665f54de600f8943caa014f4dd0171f873';
@@ -121,6 +124,22 @@ test('Wave 4A separates periodic, event-based, accident and employer-information
   for (const key of ['WORKPLACE_RISK_ASSESSMENT_INITIAL_PERIODIC', 'WORKPLACE_RISK_ASSESSMENT_EVENT_REVIEW', 'WORK_ACCIDENT_INVESTIGATION_RECORD', 'SERIOUS_WORK_ACCIDENT_NOTIFICATION', 'EMPLOYER_WRITTEN_INFORMATION_INITIAL', 'EMPLOYER_WRITTEN_INFORMATION_CHANGE']) {
     assert.strictEqual(requirementsByKey.get(key).legalReviewStatus, 'LEGAL_REVIEW_REQUIRED');
   }
+});
+
+test('Wave 4B keeps consumer channel and event duties atomic', () => {
+  const requirementsByKey = new Map(requirements.requirements.map((item) => [item.requirementKey, item]));
+  const rulesByKey = new Map(applicability.rules.map((item) => [item.ruleKey, item]));
+  const factsByKey = new Map(facts.facts.map((item) => [item.factKey, item]));
+  assert.match(requirementsByKey.get('DISTANCE_CONTRACT_WITHDRAWAL_REFUND').deadline, /14 napon belül/);
+  assert.notStrictEqual(requirementsByKey.get('DISTANCE_CONTRACT_PRECONTRACT_INFORMATION').requirementKey, requirementsByKey.get('DISTANCE_CONTRACT_DURABLE_MEDIUM_CONFIRMATION').requirementKey);
+  assert.strictEqual(factsByKey.get('distanceConsumerContractConcluded').scope, 'CONTRACT');
+  assert.strictEqual(factsByKey.get('consumerWithdrawalExercised').scope, 'EVENT');
+  assert.strictEqual(factsByKey.get('mandatoryGuaranteeProductClassification').scope, 'PRODUCT_SERVICE');
+  assert.strictEqual(factsByKey.get('ecommerceAccessibilityScopeClassification').scope, 'SALES_CHANNEL');
+  assert.ok(JSON.stringify(rulesByKey.get('APPL-DISTANCE-PRECONTRACT').logic).includes('distanceConsumerContractConcluded'));
+  assert.ok(!JSON.stringify(rulesByKey.get('APPL-DISTANCE-PRECONTRACT').logic).includes('customerRelationship'));
+  assert.ok(!JSON.stringify(rulesByKey.get('APPL-ECOMMERCE-ACCESSIBILITY').logic).includes('dsaIntermediaryServiceClassification'));
+  assert.ok(!requirements.requirements.some((item) => /ÁSZF/.test(item.titleHu)));
 });
 
 test('Wave 3A maintains role, temporal and directive implementation gates', () => {

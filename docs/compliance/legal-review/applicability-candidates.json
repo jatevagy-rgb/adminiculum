@@ -1007,6 +1007,118 @@
       "sourceAnchor": "A-MT-46",
       "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-DISTANCE-PRECONTRACT",
+      "requirementKey": "DISTANCE_CONTRACT_PRECONTRACT_INFORMATION",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "distanceConsumerContractConcluded",
+          "value": true
+        }
+      },
+      "requiredFacts": [
+        "distanceConsumerContractConcluded"
+      ],
+      "sourceAnchor": "A-CC-45-11",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-ONLINE-PAYMENT-ORDER",
+      "requirementKey": "ONLINE_ORDER_PAYMENT_ACKNOWLEDGEMENT",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "electronicDistanceContractWithPayment",
+          "value": true
+        }
+      },
+      "requiredFacts": [
+        "electronicDistanceContractWithPayment"
+      ],
+      "sourceAnchor": "A-CC-45-14-18",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-DISTANCE-CONFIRMATION",
+      "requirementKey": "DISTANCE_CONTRACT_DURABLE_MEDIUM_CONFIRMATION",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "distanceConsumerContractConcluded",
+          "value": true
+        }
+      },
+      "requiredFacts": [
+        "distanceConsumerContractConcluded"
+      ],
+      "sourceAnchor": "A-CC-45-14-18",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-WITHDRAWAL-INFORMATION",
+      "requirementKey": "DISTANCE_CONTRACT_WITHDRAWAL_INFORMATION",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "withdrawalRightClassification",
+          "value": "IN_SCOPE"
+        }
+      },
+      "requiredFacts": [
+        "withdrawalRightClassification"
+      ],
+      "sourceAnchor": "A-CC-45-11",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-WITHDRAWAL-REFUND",
+      "requirementKey": "DISTANCE_CONTRACT_WITHDRAWAL_REFUND",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "consumerWithdrawalExercised",
+          "value": true
+        }
+      },
+      "requiredFacts": [
+        "consumerWithdrawalExercised"
+      ],
+      "sourceAnchor": "A-CC-45-20-23",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-MANDATORY-GUARANTEE",
+      "requirementKey": "MANDATORY_GUARANTEE_INFORMATION",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "mandatoryGuaranteeProductClassification",
+          "value": "IN_SCOPE"
+        }
+      },
+      "requiredFacts": [
+        "mandatoryGuaranteeProductClassification"
+      ],
+      "sourceAnchor": "A-CC-151-1-3",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-ECOMMERCE-ACCESSIBILITY",
+      "requirementKey": "ECOMMERCE_ACCESSIBILITY_DOCUMENTATION",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "ecommerceAccessibilityScopeClassification",
+          "value": "IN_SCOPE"
+        }
+      },
+      "requiredFacts": [
+        "ecommerceAccessibilityScopeClassification"
+      ],
+      "sourceAnchor": "A-CC-2022-1-6",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
     }
   ],
   "operatorVocabulary": {
