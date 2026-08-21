@@ -524,6 +524,112 @@
       "effectiveDate": "2026-01-01",
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
       "legalReviewNotes": "A nem fogyasztó igénybevevővel kötött szerződésben az eltérés lehetősége forrásszövegben szerepel; szerződéses minősítés szükséges."
+    },
+    {
+      "requirementKey": "REACH_SDS_SUPPLY",
+      "titleHu": "REACH szerinti biztonsági adatlap átadása",
+      "summaryHu": "A biztonsági adatlapot a címzett részére a rendelet szerinti esetben rendelkezésre bocsátja.",
+      "domain": "chemicals",
+      "subdomain": "chemicals",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Szerep- és műszaki minősítéssel érintett gazdasági szereplő",
+      "trigger": "A szállító veszélyes anyagot vagy keveréket szolgáltat a 31. cikk hatálya szerinti címzettnek.",
+      "requiredAction": "A biztonsági adatlapot a címzett részére a rendelet szerinti esetben rendelkezésre bocsátja.",
+      "deadline": null,
+      "frequency": "Az ügylethez vagy a forgalomba hozatalhoz kapcsolódóan.",
+      "evidenceExpected": "SDS-verzió és átadási nyom.",
+      "sourceAnchors": [
+        "A-REACH-31-A",
+        "A-REACH-31-B"
+      ],
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "VERSION_AMBIGUITY_NON_MATERIAL_FOR_THIS_PROVISION: a két capture releváns 31. cikkes szövege normalizálva azonos; REACH-szerep és termékbesorolás specialistai kapu."
+    },
+    {
+      "requirementKey": "CLP_CLASSIFY_LABEL_PACKAGE",
+      "titleHu": "CLP szerinti osztályozás, címkézés és csomagolás",
+      "summaryHu": "A forgalomba hozatal előtt elvégzi a rendelet szerinti osztályozást, valamint gondoskodik a címkézésről és csomagolásról.",
+      "domain": "chemicals",
+      "subdomain": "chemicals",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Szerep- és műszaki minősítéssel érintett gazdasági szereplő",
+      "trigger": "A gyártó, importőr vagy downstream felhasználó anyagot/keveréket hoz forgalomba, és a CLP szerinti minősítés érintett.",
+      "requiredAction": "A forgalomba hozatal előtt elvégzi a rendelet szerinti osztályozást, valamint gondoskodik a címkézésről és csomagolásról.",
+      "deadline": null,
+      "frequency": "Az ügylethez vagy a forgalomba hozatalhoz kapcsolódóan.",
+      "evidenceExpected": "Osztályozási és címke/csomagolási megfelelőségi bizonyíték.",
+      "sourceAnchors": [
+        "A-CLP-4-17"
+      ],
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "A veszélyességi osztály és címketartalom kémiai/szakértői minősítés, nem profiladatból automatizálható."
+    },
+    {
+      "requirementKey": "DUAL_USE_EXPORT_AUTHORISATION_HOLD",
+      "titleHu": "Kettős felhasználású ügylet engedélyezési felülvizsgálata",
+      "summaryHu": "Az ügyletet az alkalmazandó engedélyezési szabály szerint felülvizsgálja, és engedélykötelezettség esetén engedély nélkül nem teljesíti.",
+      "domain": "export_control",
+      "subdomain": "export_control",
+      "requirementType": "AUTHORIZATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Szerep- és műszaki minősítéssel érintett gazdasági szereplő",
+      "trigger": "Az ügylet exportot, transzfert, brókertevékenységet, technikai segítségnyújtást vagy tranzitot érint, és a tétel/célország/végfelhasználás exportkontroll-kaput jelez.",
+      "requiredAction": "Az ügyletet az alkalmazandó engedélyezési szabály szerint felülvizsgálja, és engedélykötelezettség esetén engedély nélkül nem teljesíti.",
+      "deadline": null,
+      "frequency": "Az ügylethez vagy a forgalomba hozatalhoz kapcsolódóan.",
+      "evidenceExpected": "Szakértői besorolási, screening- és engedély/hold nyom.",
+      "sourceAnchors": [
+        "A-DUAL-USE-3-11"
+      ],
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "A listás tétel, catch-all, végfelhasználás és rendeltetés exportkontroll-szakértői minősítés."
+    },
+    {
+      "requirementKey": "UCC_CUSTOMS_INFORMATION_ACCURACY",
+      "titleHu": "Uniós vámkódex szerinti vámhatósági információ pontossága",
+      "summaryHu": "A vámhatóság részére a szükséges okmányokat és pontos, teljes információt rendelkezésre bocsátja, és együttműködik.",
+      "domain": "customs",
+      "subdomain": "customs",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Szerep- és műszaki minősítéssel érintett gazdasági szereplő",
+      "trigger": "A gazdasági szereplő vámhatósági nyilatkozatot, kérelmet vagy döntéshez szükséges információt nyújt be.",
+      "requiredAction": "A vámhatóság részére a szükséges okmányokat és pontos, teljes információt rendelkezésre bocsátja, és együttműködik.",
+      "deadline": null,
+      "frequency": "Az ügylethez vagy a forgalomba hozatalhoz kapcsolódóan.",
+      "evidenceExpected": "Benytújtott nyilatkozat, okmány és alátámasztó üzleti irat.",
+      "sourceAnchors": [
+        "A-UCC-15"
+      ],
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "Tarifális és vámérték-minősítés jogi/technikai szakértői határ."
+    },
+    {
+      "requirementKey": "MARKET_SURVEILLANCE_EU_OPERATOR",
+      "titleHu": "EU-s felelős gazdasági szereplő és dokumentáció rendelkezésre állása",
+      "summaryHu": "Biztosítja a megfelelő uniós gazdasági szereplőt és kérésre rendelkezésre bocsátja a megfelelőségi dokumentációt/hatósági együttműködéshez szükséges információt.",
+      "domain": "product_compliance",
+      "subdomain": "product_compliance",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Szerep- és műszaki minősítéssel érintett gazdasági szereplő",
+      "trigger": "Az érintett termék uniós jogharmonizációs szabály szerinti termék, amelyet uniós piacon hoznak forgalomba, és a 4. cikk feltételei érintettek.",
+      "requiredAction": "Biztosítja a megfelelő uniós gazdasági szereplőt és kérésre rendelkezésre bocsátja a megfelelőségi dokumentációt/hatósági együttműködéshez szükséges információt.",
+      "deadline": null,
+      "frequency": "Az ügylethez vagy a forgalomba hozatalhoz kapcsolódóan.",
+      "evidenceExpected": "Gazdasági szereplő azonosítása, műszaki dokumentáció elérhetősége, hatósági válasznyom.",
+      "sourceAnchors": [
+        "A-MARKET-4"
+      ],
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "Termékjogszabályi hatály és megfelelőségértékelés termékspecifikus specialistai kérdés."
     }
   ],
   "anchors": {
@@ -785,6 +891,84 @@
         "end": 600
       },
       "excerptSha256": "588e52a6070b0f70a8e1d116e9593178ba01e96d79c78801b12b20d71ed89d36",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-REACH-31-A": {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32006R1907",
+      "sourceSha256": "489f4181edde13eed8af1aeeb62c19665f54de600f8943caa014f4dd0171f873",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "31. cikk",
+      "headingContext": "Wave 3B substantive provision review",
+      "lineSpan": {
+        "start": 2442,
+        "end": 2541
+      },
+      "excerptSha256": "030e3b15c50d7358a6e4fe85a30dc2e1c0d1da6da68a2175cc301e09f3d5de6e",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-REACH-31-B": {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32006R1907",
+      "sourceSha256": "76199ff7dccf3f14d68da2658b2fef006b69ef6729c7b36909322c5fceba7475",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "31. cikk",
+      "headingContext": "Wave 3B substantive provision review",
+      "lineSpan": {
+        "start": 2463,
+        "end": 2562
+      },
+      "excerptSha256": "030e3b15c50d7358a6e4fe85a30dc2e1c0d1da6da68a2175cc301e09f3d5de6e",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-CLP-4-17": {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32008R1272",
+      "sourceSha256": "4827ae957ce595cf2666cd7a3d764c4d6c45187251d27c167a60bdc39b0b2b66",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "4., 17. cikk",
+      "headingContext": "Wave 3B substantive provision review",
+      "lineSpan": {
+        "start": 780,
+        "end": 1255
+      },
+      "excerptSha256": "079141d78fd78ba811f742fd43e09907f82d8c876b92dc8d8f7cd28f980719ca",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-DUAL-USE-3-11": {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32021R0821",
+      "sourceSha256": "f51f85fbad6abae3c75b2cd43a24b52d6f0b39bf8daf6c3354370c0e9f4a0277",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "3-11. cikk",
+      "headingContext": "Wave 3B substantive provision review",
+      "lineSpan": {
+        "start": 299,
+        "end": 455
+      },
+      "excerptSha256": "c16cb89dd1edf86dc43ec45deeb63b1305971fd2a84e3e68f3f72052a9bfb7b3",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-UCC-15": {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32013R0952",
+      "sourceSha256": "3ab279aa508e537f4e164f2b07991159610d3cb595805122914fba6b9ea84c08",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "15. cikk",
+      "headingContext": "Wave 3B substantive provision review",
+      "lineSpan": {
+        "start": 1225,
+        "end": 1255
+      },
+      "excerptSha256": "b12a68fdd6f465550275981404b119adc8423533a732c2401b0c8fd29fe27504",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-MARKET-4": {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32019R1020",
+      "sourceSha256": "3f296a0237666915a2ca3c8bef018d4b3b5e9895a6abeb20e9ed85d2900f50ed",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "4. cikk",
+      "headingContext": "Wave 3B substantive provision review",
+      "lineSpan": {
+        "start": 407,
+        "end": 452
+      },
+      "excerptSha256": "14311e3194dcc63f88451cc670b04e74b51807c3d879e2f89c6753e1cedfe257",
       "provenance": "STANDALONE_SOURCE"
     }
   }

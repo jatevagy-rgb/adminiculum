@@ -773,6 +773,125 @@
       "sourceAnchor": "A-ECOM-5-6",
       "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-REACH-SDS",
+      "requirementKey": "REACH_SDS_SUPPLY",
+      "logic": {
+        "AND": [
+          {
+            "EXISTS": {
+              "fact": "chemicalPlacedOnMarket"
+            }
+          },
+          {
+            "EXISTS": {
+              "fact": "reachSdsDutyClassification"
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "chemicalPlacedOnMarket",
+        "reachSdsDutyClassification"
+      ],
+      "sourceAnchor": "A-REACH-31-A",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-CLP-LABEL",
+      "requirementKey": "CLP_CLASSIFY_LABEL_PACKAGE",
+      "logic": {
+        "AND": [
+          {
+            "EXISTS": {
+              "fact": "chemicalPlacedOnMarket"
+            }
+          },
+          {
+            "EXISTS": {
+              "fact": "clpEconomicRoleClassification"
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "chemicalPlacedOnMarket",
+        "clpEconomicRoleClassification"
+      ],
+      "sourceAnchor": "A-CLP-4-17",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-DUAL-USE-HOLD",
+      "requirementKey": "DUAL_USE_EXPORT_AUTHORISATION_HOLD",
+      "logic": {
+        "AND": [
+          {
+            "EXISTS": {
+              "fact": "crossBorderControlledTransaction"
+            }
+          },
+          {
+            "EXISTS": {
+              "fact": "dualUseControlClassification"
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "crossBorderControlledTransaction",
+        "dualUseControlClassification"
+      ],
+      "sourceAnchor": "A-DUAL-USE-3-11",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-UCC-INFO",
+      "requirementKey": "UCC_CUSTOMS_INFORMATION_ACCURACY",
+      "logic": {
+        "AND": [
+          {
+            "EXISTS": {
+              "fact": "customsDeclarationOrApplicationSubmitted"
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "customsDeclarationOrApplicationSubmitted"
+      ],
+      "sourceAnchor": "A-UCC-15",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-MARKET-EU-OPERATOR",
+      "requirementKey": "MARKET_SURVEILLANCE_EU_OPERATOR",
+      "logic": {
+        "AND": [
+          {
+            "EXISTS": {
+              "fact": "productPlacedOnEuMarket"
+            }
+          },
+          {
+            "EXISTS": {
+              "fact": "productHarmonisationScopeClassification"
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "productPlacedOnEuMarket",
+        "productHarmonisationScopeClassification"
+      ],
+      "sourceAnchor": "A-MARKET-4",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
     }
   ],
   "operatorVocabulary": {

@@ -874,6 +874,153 @@
       "sensitive": false,
       "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "chemicalPlacedOnMarket",
+      "labelHu": "Vegyi anyag vagy keverék forgalomba hozatala",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "Értékesít vagy átad vegyi anyagot vagy keveréket más szervezetnek?",
+      "collectionQuestionHu": "Értékesít vagy átad vegyi anyagot vagy keveréket más szervezetnek?",
+      "usedByRules": [
+        "APPL-REACH-SDS",
+        "APPL-CLP-LABEL"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "reachSdsDutyClassification",
+      "labelHu": "REACH SDS-kötelezettség minősítése",
+      "dataType": "enum",
+      "allowedValues": [
+        "IN_SCOPE",
+        "OUT_OF_SCOPE",
+        "UNKNOWN"
+      ],
+      "existingClientFactType": null,
+      "legalMeaning": "REACH-szerep és termékminősítés specialistai eredménye.",
+      "collectionQuestionHu": "REACH-szerep és termékminősítés specialistai eredménye.",
+      "usedByRules": [
+        "APPL-REACH-SDS"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "clpEconomicRoleClassification",
+      "labelHu": "CLP gazdasági szerep",
+      "dataType": "enum",
+      "allowedValues": [
+        "MANUFACTURER",
+        "IMPORTER",
+        "DOWNSTREAM_USER",
+        "DISTRIBUTOR",
+        "UNKNOWN"
+      ],
+      "existingClientFactType": null,
+      "legalMeaning": "CLP-szerep és veszélyességi minősítés szakértői eredménye.",
+      "collectionQuestionHu": "CLP-szerep és veszélyességi minősítés szakértői eredménye.",
+      "usedByRules": [
+        "APPL-CLP-LABEL"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "crossBorderControlledTransaction",
+      "labelHu": "Határokon átnyúló ellenőrzött ügylet",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "Exportál vagy más országból/más országba továbbít árut, szoftvert vagy technológiát?",
+      "collectionQuestionHu": "Exportál vagy más országból/más országba továbbít árut, szoftvert vagy technológiát?",
+      "usedByRules": [
+        "APPL-DUAL-USE-HOLD"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "dualUseControlClassification",
+      "labelHu": "Kettős felhasználású kontroll-minősítés",
+      "dataType": "enum",
+      "allowedValues": [
+        "REVIEW_REQUIRED",
+        "OUT_OF_SCOPE",
+        "UNKNOWN"
+      ],
+      "existingClientFactType": null,
+      "legalMeaning": "Lista/catch-all/végfelhasználási szakértői minősítés.",
+      "collectionQuestionHu": "Lista/catch-all/végfelhasználási szakértői minősítés.",
+      "usedByRules": [
+        "APPL-DUAL-USE-HOLD"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "customsDeclarationOrApplicationSubmitted",
+      "labelHu": "Vámnyilatkozat vagy vámkérelem",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "Nyújtanak be vámnyilatkozatot vagy vámhatósági kérelmet?",
+      "collectionQuestionHu": "Nyújtanak be vámnyilatkozatot vagy vámhatósági kérelmet?",
+      "usedByRules": [
+        "APPL-UCC-INFO"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "productPlacedOnEuMarket",
+      "labelHu": "Termék EU-piaci forgalomba hozatala",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "Hoznak terméket az Európai Unió piacára?",
+      "collectionQuestionHu": "Hoznak terméket az Európai Unió piacára?",
+      "usedByRules": [
+        "APPL-MARKET-EU-OPERATOR"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "productHarmonisationScopeClassification",
+      "labelHu": "Termékjogi harmonizációs hatály",
+      "dataType": "enum",
+      "allowedValues": [
+        "IN_SCOPE",
+        "OUT_OF_SCOPE",
+        "UNKNOWN"
+      ],
+      "existingClientFactType": null,
+      "legalMeaning": "Termékspecifikus jogi és megfelelőségértékelési minősítés.",
+      "collectionQuestionHu": "Termékspecifikus jogi és megfelelőségértékelési minősítés.",
+      "usedByRules": [
+        "APPL-MARKET-EU-OPERATOR"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
     }
   ]
 }

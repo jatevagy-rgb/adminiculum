@@ -83,9 +83,16 @@ test('captured anchor excerpt hashes resolve against the read-only corpus', () =
     'HU:ACT:2001:CVIII': '2001. évi CVIII. törvény.txt',
     'HU:DECREE:373/2021:KORM': '373_2021. (VI. 30.) Korm. rendelet.txt',
     'EU:EU_DIRECTIVE:CELEX:32022L2555': 'L_2022333HU.01008001.xml.txt',
+    'EU:EU_REGULATION:CELEX:32006R1907': 'Egységes szerkezetbe foglalt SZÖVEG_ 32006R1907 — HU — 11.05.2026.txt',
+    'EU:EU_REGULATION:CELEX:32008R1272': 'Egységes szerkezetbe foglalt SZÖVEG_ 32008R1272 — HU — 01.07.2026.txt',
+    'EU:EU_REGULATION:CELEX:32021R0821': 'Egységes szerkezetbe foglalt SZÖVEG_ 32021R0821 — HU — 15.11.2025.txt',
+    'EU:EU_REGULATION:CELEX:32013R0952': 'L_2013269HU.01000101.xml.txt',
+    'EU:EU_REGULATION:CELEX:32019R1020': 'L_2019169HU.01000101.xml.txt',
   };
   for (const anchor of Object.values(requirements.anchors)) {
-    const lines = fs.readFileSync(path.join(corpus, sourceFiles[anchor.sourceKey]), 'utf8').split(/\r?\n/);
+    const reachFirstCapture = anchor.sourceKey === 'EU:EU_REGULATION:CELEX:32006R1907' && anchor.sourceSha256 === '489f4181edde13eed8af1aeeb62c19665f54de600f8943caa014f4dd0171f873';
+    const sourceFile = reachFirstCapture ? 'Egységes szerkezetbe foglalt SZÖVEG_ 32006R1907 — HU — 11.05.2026 (1).txt' : sourceFiles[anchor.sourceKey];
+    const lines = fs.readFileSync(path.join(corpus, sourceFile), 'utf8').split(/\r?\n/);
     const excerpt = lines.slice(anchor.lineSpan.start - 1, anchor.lineSpan.end).join('\n');
     assert.strictEqual(compactHash(excerpt), anchor.excerptSha256);
   }

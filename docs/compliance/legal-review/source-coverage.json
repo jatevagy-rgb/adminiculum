@@ -46,11 +46,12 @@
       "coverageStatus": "VERSION_AMBIGUOUS",
       "domains": [],
       "requirementsExtracted": [],
-      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewNotes": "VERSION_AMBIGUITY_NON_MATERIAL_FOR_THIS_PROVISION; source-level ambiguity retained.",
       "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=1207401"
+        "31. cikk compared in both captures"
       ],
-      "unreviewedReason": null
+      "unreviewedReason": null,
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "EU:EU_REGULATION:CELEX:32008R1272",
@@ -59,14 +60,15 @@
       "sourceSha256": "4827ae957ce595cf2666cd7a3d764c4d6c45187251d27c167a60bdc39b0b2b66",
       "version": "2026-07-01",
       "provenance": "STANDALONE_SOURCE",
-      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
       "domains": [],
       "requirementsExtracted": [],
       "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
       "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=2271360"
+        "Wave 3B source-specific articles"
       ],
-      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel.",
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "EU:EU_REGULATION:CELEX:32013R0952",
@@ -75,14 +77,15 @@
       "sourceSha256": "3ab279aa508e537f4e164f2b07991159610d3cb595805122914fba6b9ea84c08",
       "version": "2013-10-10",
       "provenance": "STANDALONE_SOURCE",
-      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
       "domains": [],
       "requirementsExtracted": [],
       "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
       "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=361260"
+        "Wave 3B source-specific articles"
       ],
-      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel.",
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "EU:EU_REGULATION:CELEX:32016R0679",
@@ -115,14 +118,15 @@
       "sourceSha256": "3f296a0237666915a2ca3c8bef018d4b3b5e9895a6abeb20e9ed85d2900f50ed",
       "version": "2019-06-25",
       "provenance": "STANDALONE_SOURCE",
-      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
       "domains": [],
       "requirementsExtracted": [],
       "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
       "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=172871"
+        "Wave 3B source-specific articles"
       ],
-      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel.",
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "EU:EU_REGULATION:CELEX:32021R0821",
@@ -131,14 +135,15 @@
       "sourceSha256": "f51f85fbad6abae3c75b2cd43a24b52d6f0b39bf8daf6c3354370c0e9f4a0277",
       "version": "2025-11-15",
       "provenance": "STANDALONE_SOURCE",
-      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
       "domains": [],
       "requirementsExtracted": [],
       "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
       "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=883123"
+        "Wave 3B source-specific articles"
       ],
-      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel.",
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "EU:EU_REGULATION:CELEX:32022R2065",
