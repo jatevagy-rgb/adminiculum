@@ -1,4 +1,6 @@
 import {
+  ATTACHMENT_METADATA_EXPAND,
+  createOutlookGraphMailReader,
   OutlookGraphReaderError,
   parseOutlookSyncLimit,
   readOutlookSyncConfig,
@@ -116,5 +118,97 @@ describe('outlookGraphLive (live reader unit)', () => {
       expect(JSON.stringify(mapped)).not.toContain('Bearer');
       expect(JSON.stringify(mapped)).not.toContain('access_token');
     });
+  });
+});
+
+describe('outlookGraphLive: attachment metadata-only wire boundary', () => {
+  const realEnv = { ...process.env };
+  afterEach(() => {
+    process.env = { ...realEnv };
+  });
+
+  function configureEnv(): void {
+    process.env.COMMUNICATIONS_MAILBOX = 'legal@example.com';
+    process.env.OUTLOOK_GRAPH_CLIENT_ID = 'cid';
+    process.env.OUTLOOK_GRAPH_CLIENT_SECRET = 'secret';
+    process.env.OUTLOOK_GRAPH_TENANT_ID = 'tid';
+  }
+
+  /** Run fetchRecentInbound with injected token + fetch; capture the requested URL. */
+  async function captureRequestedUrl(graphValue: unknown[] = []): Promise<{ url: string; parsed: URL }> {
+    configureEnv();
+    let captured = '';
+    const httpFetch = jest.fn(async (input: unknown) => {
+      captured = String(input);
+      return new Response(JSON.stringify({ value: graphValue }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as unknown as typeof fetch;
+    const reader = createOutlookGraphMailReader({
+      getAccessToken: async () => 'test-token',
+      httpFetch,
+    });
+    await reader.fetchRecentInbound(10);
+    return { url: captured, parsed: new URL(captured) };
+  }
+
+  it('1. generated Graph URL requests attachment metadata via a constrained $select', async () => {
+    const { parsed } = await captureRequestedUrl();
+    // Decoded query semantics (robust to encoding choices).
+    expect(parsed.searchParams.get('$expand')).toBe('attachments($select=id,name,contentType,size)');
+    expect(parsed.searchParams.get('$expand')).toBe(ATTACHMENT_METADATA_EXPAND);
+  });
+
+  it('2. generated query does NOT use an unrestricted $expand=attachments', async () => {
+    const { url, parsed } = await captureRequestedUrl();
+    // The expand value must not be the bare collection.
+    expect(parsed.searchParams.get('$expand')).not.toBe('attachments');
+    // And no `$expand=attachments` that is not immediately followed by `(`.
+    expect(url).not.toMatch(/\$expand=attachments(?!\()/);
+  });
+
+  it('3. generated query never requests contentBytes / binary bodies', async () => {
+    const { url } = await captureRequestedUrl();
+    expect(url.toLowerCase()).not.toContain('contentbytes');
+    expect(url).not.toContain('/$value');
+  });
+
+  it('4. a Graph response carrying contentBytes is stripped by the adapter to metadata only', () => {
+    const mapped = mapGraphMessageToOutlookImportMessage(
+      {
+        id: 'graph-id',
+        internetMessageId: '<im-2>',
+        conversationId: 'c-2',
+        from: { emailAddress: { address: 'client@example.com' } },
+        hasAttachments: true,
+        // Simulate Graph unexpectedly returning binary + unknown fields.
+        attachments: [
+          {
+            id: 'att-9',
+            name: 'secret.pdf',
+            contentType: 'application/pdf',
+            size: 4096,
+            // @ts-expect-error — contentBytes/unknown fields must be ignored, not typed in.
+            contentBytes: 'JVBERi0xLjcKJUERROR_BINARY',
+            // @ts-expect-error — unknown extra field must not be spread.
+            isInline: false,
+          },
+        ],
+      },
+      'legal@example.com',
+    );
+    expect(mapped.attachments).toHaveLength(1);
+    expect(mapped.attachments[0]).toEqual({
+      providerAttachmentId: 'att-9',
+      name: 'secret.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: 4096,
+    });
+    // Absolutely no binary or unknown fields survive serialization.
+    const serialized = JSON.stringify(mapped);
+    expect(serialized).not.toContain('contentBytes');
+    expect(serialized).not.toContain('JVBERi0');
+    expect(serialized).not.toContain('isInline');
   });
 });

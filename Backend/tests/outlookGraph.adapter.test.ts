@@ -108,6 +108,39 @@ describe('outlookGraph.adapter', () => {
     expect(JSON.stringify(mapped.attachments)).not.toContain('contentBytes');
   });
 
+  it('defensively strips contentBytes and unknown attachment fields (no raw spread)', () => {
+    const mapped = mapGraphMessageToOutlookImportMessage(
+      {
+        ...graphMessage,
+        attachments: [
+          {
+            id: 'attachment-2',
+            name: 'binary.pdf',
+            contentType: 'application/pdf',
+            size: 9001,
+            // Fields Graph may return that must never be persisted or serialized:
+            // @ts-expect-error contentBytes is intentionally not part of GraphAttachment
+            contentBytes: 'JVBERi0xLjcncontent',
+            // @ts-expect-error unknown provider fields must not be spread through
+            '@odata.mediaContentType': 'application/pdf',
+            // @ts-expect-error unknown provider fields must not be spread through
+            isInline: true,
+          },
+        ],
+      },
+      MAILBOX,
+    );
+
+    expect(mapped.attachments).toEqual([
+      { providerAttachmentId: 'attachment-2', name: 'binary.pdf', contentType: 'application/pdf', sizeBytes: 9001 },
+    ]);
+    const serialized = JSON.stringify(mapped);
+    expect(serialized).not.toContain('contentBytes');
+    expect(serialized).not.toContain('JVBERi0');
+    expect(serialized).not.toContain('isInline');
+    expect(serialized).not.toContain('mediaContentType');
+  });
+
   it('handles missing sender and recipients safely', () => {
     const mapped = mapGraphMessageToOutlookImportMessage(
       {

@@ -39,6 +39,20 @@ export type OutlookSyncConfig = {
 };
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
+
+/**
+ * Attachment properties this import is ALLOWED to read from Microsoft Graph.
+ * This is the metadata-only wire boundary: it must match the persistence
+ * contract (id, name, contentType, size) and must NEVER include `contentBytes`,
+ * raw MIME, or any binary body. The `$expand=attachments` clause is constrained
+ * to exactly these fields so Graph does not stream attachment binaries into
+ * backend memory before the future quarantine/scan/review pipeline exists.
+ */
+const ATTACHMENT_METADATA_FIELDS = ['id', 'name', 'contentType', 'size'] as const;
+
+/** Metadata-only attachment expansion, e.g. `attachments($select=id,name,contentType,size)`. */
+export const ATTACHMENT_METADATA_EXPAND = `attachments($select=${ATTACHMENT_METADATA_FIELDS.join(',')})`;
+
 const DEFAULT_MAX_MESSAGES = 50;
 const MAX_MESSAGES_LIMIT = 200;
 
@@ -155,9 +169,14 @@ export function createOutlookGraphMailReader(deps: OutlookGraphReaderDeps = {}) 
       'attachments',
     ].join(',');
 
+    // Attachment expansion is constrained to metadata fields only. An
+    // unrestricted `$expand=attachments` would let Graph return `contentBytes`
+    // for fileAttachments and pull attachment binaries into memory. The clause is
+    // Graph's literal `$expand` syntax (parentheses/`$select`/commas), consistent
+    // with the message-level `$select` above; see ATTACHMENT_METADATA_EXPAND.
     const url =
       `${GRAPH_BASE}/users/${encodeURIComponent(config.mailboxAddress)}/messages` +
-      `?$select=${fields}&$top=${capped}&$expand=attachments`;
+      `?$select=${fields}&$top=${capped}&$expand=${ATTACHMENT_METADATA_EXPAND}`;
 
     let response: Response;
     try {
