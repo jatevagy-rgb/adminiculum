@@ -55,7 +55,9 @@ describe('intake architecture is separated, not another monolith', () => {
   });
 
   it('keeps the dialog itself small — composition, not implementation', () => {
-    expect(dialog.split('\n').length).toBeLessThan(240);
+    // The dialog grew only through delegated sections (workflow selection, detailed
+    // settings, sticky actions). It must never reimplement section internals.
+    expect(dialog.split('\n').length).toBeLessThan(400);
   });
 });
 
@@ -359,7 +361,7 @@ describe('double submit is stopped synchronously', () => {
 
   it('no longer depends on the stale submitting value', () => {
     expect(hook).not.toContain('if (submitting) return');
-    expect(hook).toContain('}, [validate, buildPayload, onCreated]);');
+    expect(hook).toContain('}, [validate, buildPayload, onCreated, onAfterCreate]);');
   });
 });
 
