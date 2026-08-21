@@ -5,6 +5,27 @@ Status: **PREFLIGHT ONLY — no product implementation.**
 Author lane: `jatevagy` (opencode)
 Canonical release inspected: `cacfbe5714d9da67c278eff3ec9d0a8004981d13`
 
+> **Replay note (Phase 5 test-foundation replay onto canonical)**
+>
+> This preflight's original analysis was made against the canonical release SHA
+> `cacfbe5714d9da67c278eff3ec9d0a8004981d13`.
+>
+> It was replayed (via `opencode/phase5-test-foundation-canonical-replay`) onto
+> the current canonical release tip `397925be5e9a56f6149439065267862b5a2a478e`
+> (subsequently advanced to `fde1e18187d87aeca410be0630373cb90f32aca2` by an
+> unrelated frontend deploy fix) — see the associated test-foundation work.
+>
+> The replay re-verified the fixture against the CURRENT canonical Prisma
+> client and confirmed the relevant portal authorization/model assumptions in
+> this preflight remain valid:
+>   - `resolveActiveCustomerGrant` remains the single customer authorization gate.
+>   - `resolveParticipantAccess` / `decidePermissions` remain the typed decision layer.
+>   - The immutable `ClientMatterPublicationRevision` publication model is unchanged.
+>   - The dormant customer projectors (`projectOrganizationForCustomer`,
+>     `projectContractLibraryForCustomer`, `projectCompanyOverviewForCustomer`)
+>     remain unwired to any route.
+> No statement in this preflight required correction after replay.
+
 ---
 
 ## 0. Scope & Ground Rules

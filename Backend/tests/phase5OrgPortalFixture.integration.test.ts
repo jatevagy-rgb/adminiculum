@@ -37,6 +37,7 @@ import { projectOrganizationForCustomer } from '../src/modules/client-organizati
 import { projectContractLibraryForCustomer } from '../src/modules/client-contracts/projector';
 import { setCanonicalDocument } from '../src/modules/client-contracts/service';
 import { listCustomerThreads, getCustomerThread } from '../src/modules/client-interaction/questionService';
+import { listCustomerSubmissions } from '../src/modules/client-interaction/submissionService';
 
 const databaseUrl = process.env.CLIENT_INTERACTION_TEST_DATABASE_URL || process.env.CLIENT_IDENTITY_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const d = databaseUrl ? describe : describe.skip;
@@ -215,5 +216,41 @@ d('Phase 5 org-portal fixture foundation (PostgreSQL)', () => {
     const serialized = JSON.stringify(threads);
     expect(serialized).not.toContain('Belső Outlook levél');
     expect(serialized).not.toContain('Bizalmas belső levél');
+  });
+
+  it('HR-confidential / internal document is not customer-visible by membership, grant or co-publication', async () => {
+    // The authorized customer has workspace membership + Case grant + a published
+    // document in the same Case. None of these may surface the HR_CONFIDENTIAL
+    // document, which has no ClientDocumentPublication.
+    const actor = ACTOR(ids.authorizedIdentity, ids.orgWsA);
+    const docs = await listPortalDocuments(actor, undefined, db);
+    const json = JSON.stringify(docs);
+    expect(json).not.toContain('HR dokumentum');
+    expect(json).not.toContain('HR v1');
+    expect(json).not.toContain(ids.docHrConfidential);
+    expect(json).not.toContain(ids.docHrConfidentialVersion);
+    // A guessed publication id pointing at the HR doc/version is not a resource.
+    await expect(getPortalDocument(actor, ids.docHrConfidential, db))
+      .rejects.toMatchObject({ code: 'PORTAL_RESOURCE_NOT_FOUND' });
+  });
+
+  it('non-CLEAN uploaded file never becomes a customer document or CLEAN by implication', async () => {
+    const ctx = await authorizedCustomerContext(db, ids.authorizedIdentity, ids.caseOne, ids.orgWsA);
+    const subs = await listCustomerSubmissions(ctx, undefined, db);
+    const submission = subs.items.find((s: any) => String(s.id) === ids.submissionA);
+    expect(submission).toBeTruthy();
+    // The SCANNING file is reported as a client-safe PROCESSING state, never
+    // RECEIVED/CLEAN, and never promoted to a Document/DocumentVersion.
+    const file = (submission.files || []).find((f: any) => String(f.id) === ids.submissionFileNotClean);
+    expect(file).toBeTruthy();
+    expect(file.state).toBe('PROCESSING');
+    expect(file.state).not.toBe('RECEIVED');
+    // No DocumentVersion was created from the non-CLEAN file.
+    const promoted = await db.documentVersion.findFirst({
+      where: { originalFileName: 'scan_pending.pdf' },
+    });
+    expect(promoted).toBeNull();
+    const doc = await db.document.findFirst({ where: { name: 'scan_pending.pdf' } });
+    expect(doc).toBeNull();
   });
 });
