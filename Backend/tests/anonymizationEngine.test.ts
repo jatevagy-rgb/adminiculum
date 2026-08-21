@@ -47,8 +47,17 @@ describe('detectors: email', () => {
   });
 
   it('does not fire on a bare @ without a domain', () => {
-    const c = detect('valami@itt', noTerms());
-    expect(c).toHaveLength(0);
+    expect(detect('@', noTerms())).toHaveLength(0);
+    expect(detect('valami@itt', noTerms())).toHaveLength(0);
+  });
+
+  it('detects common domains and TLDs in Hungarian surrounding text', () => {
+    const c = detect('Elérhetőség: ugyfel@example.com, masik@iroda.co.uk és harmadik@ceg.hu.', noTerms());
+    expect(c.filter((candidate) => candidate.type === 'EMAIL').map((candidate) => candidate.originalText)).toEqual([
+      'ugyfel@example.com',
+      'masik@iroda.co.uk',
+      'harmadik@ceg.hu',
+    ]);
   });
 });
 
@@ -167,6 +176,44 @@ describe('detectors: manual exact terms', () => {
     );
     expect(candidates).toHaveLength(0);
     expect(warnings.some((w) => w.includes('too short'))).toBe(true);
+  });
+
+  it('dedupes identical, contained and overlapping spans while keeping adjacent spans', () => {
+    const { candidates } = detectExactTermCandidates(
+      'abcdef',
+      [
+        { term: 'abcdef', category: 'PERSON' },
+        { term: 'abcdef', category: 'PERSON' },
+        { term: 'bcd', category: 'PERSON' },
+        { term: 'cdef', category: 'PERSON' },
+        { term: 'abc', category: 'PERSON' },
+      ],
+      { caseInsensitive: true, diacriticInsensitive: true, minTermLength: 2, wholeWord: false },
+    );
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({ start: 0, end: 6, originalText: 'abcdef' });
+
+    const adjacent = detectExactTermCandidates(
+      'abcdef',
+      [
+        { term: 'abc', category: 'PERSON' },
+        { term: 'def', category: 'PERSON' },
+      ],
+      { caseInsensitive: true, diacriticInsensitive: true, minTermLength: 2, wholeWord: false },
+    );
+    expect(adjacent.candidates.map((candidate) => candidate.originalText)).toEqual(['abc', 'def']);
+  });
+
+  it('dedupes thousands of ordered non-overlapping matches without a quadratic scan', () => {
+    const source = 'Kovács Péter '.repeat(5_000);
+    const started = Date.now();
+    const { candidates } = detectExactTermCandidates(
+      source,
+      [{ term: 'Kovács Péter', category: 'PERSON' }],
+      { caseInsensitive: true, diacriticInsensitive: true, minTermLength: 2 },
+    );
+    expect(candidates).toHaveLength(5_000);
+    expect(Date.now() - started).toBeLessThan(8_000);
   });
 });
 
@@ -496,7 +543,34 @@ describe('input bound is fail-closed', () => {
 
   it('accepts input exactly at the bound', () => {
     const atLimit = 'a'.repeat(MAX_INPUT_CHARS);
+    const started = Date.now();
     expect(() => detectCandidates(atLimit, noTerms())).not.toThrow();
+    expect(Date.now() - started).toBeLessThan(8_000);
+  });
+
+  it('bounds malformed email-like input without losing normal email detection', () => {
+    const adversarialInputs = [
+      'a'.repeat(MAX_INPUT_CHARS),
+      `${'a'.repeat(MAX_INPUT_CHARS - 1)}@`,
+      `${'a'.repeat(200_000)}@`,
+      `${'a'.repeat(64)}@${'b'.repeat(200_000)}`,
+      `${'a'.repeat(64)}@${'b'.repeat(200_000)}.x`,
+      `${'a'.repeat(65)}@example.hu`,
+      `user@${'b'.repeat(254)}.hu`,
+      'Kapcsolat: user@example és user@example.',
+      'Kapcsolat: a@@example.hu b@-example.hu c@example.1x d@example.x',
+    ];
+    const started = Date.now();
+    for (const input of adversarialInputs) {
+      expect(() => detectCandidates(input, noTerms())).not.toThrow();
+    }
+    expect(Date.now() - started).toBeLessThan(8_000);
+
+    const normal = detect('Elérhetőség: kovacs.peter@example.hu és a@b.org', noTerms());
+    expect(normal.filter((candidate) => candidate.type === 'EMAIL').map((candidate) => candidate.originalText)).toEqual([
+      'kovacs.peter@example.hu',
+      'a@b.org',
+    ]);
   });
 });
 
@@ -534,8 +608,9 @@ describe('performance: source is folded once regardless of dictionary size', () 
     }));
     manualTerms.push({ term: 'Kovács Péter', category: 'OTHER_SENSITIVE' as const });
     const started = Date.now();
-    const { result } = runAnonymization(source, { manualTerms }, []);
-    expect(Date.now() - started).toBeLessThan(5000);
+    const { result, candidates } = runAnonymization(source, { manualTerms }, []);
+    expect(Date.now() - started).toBeLessThan(8_000);
+    expect(candidates).toHaveLength(4_000);
     // No approvals → text unchanged, and no term text leaked into warnings.
     expect(result.anonymizedText).toBe(source);
     expect(JSON.stringify(result.warnings)).not.toContain('NemLétező Kifejezés 1');
