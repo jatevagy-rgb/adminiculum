@@ -39,6 +39,7 @@
     "test:contracts:db": "jest --runInBand tests/clientContractLibrary.integration.test.ts",
     "test:organization:db": "jest --runInBand tests/clientOrganization.integration.test.ts",
     "test:org-access:db": "jest --runInBand tests/clientPortalOrganizationalAccess.integration.test.ts",
+    "test:phase5-fixture:db": "jest --runInBand tests/phase5OrgPortalFixture.integration.test.ts",
     "test:cp1-external-communication-docs:db": "jest --runInBand tests/clientPortalExternalCommunicationDocumentAccess.integration.test.ts",
     "test:intake:db": "jest --runInBand tests/clientPortalIntakeTriage.integration.test.ts",
     "test:membership-onboarding:db": "jest --runInBand tests/clientPortalMembershipOnboarding.integration.test.ts",
