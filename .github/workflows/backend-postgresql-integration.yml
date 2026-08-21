@@ -61,7 +61,7 @@ jobs:
 
       - name: Initialize suite result tracking
         run: |
-for s in comparison review publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture; do
+          for s in comparison review publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture; do
             echo "$s=PENDING" >> "$RUNNER_TEMP/ci-suite-results.txt"
           done
 
