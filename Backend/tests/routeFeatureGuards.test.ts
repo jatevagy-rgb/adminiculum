@@ -21,6 +21,7 @@ jest.mock('../src/prisma/prisma.service', () => ({
   prisma: {
     case: {
       findUnique: jest.fn(),
+      findMany: jest.fn(),
     },
     caseCollaborator: {
       findFirst: jest.fn(),
@@ -267,6 +268,7 @@ describe('database foundation route guards', () => {
       { sourceCommunicationId: 'communication-1' },
       { sourceCommunicationId: 'communication-1' },
     ]);
+    (prisma.case.findMany as jest.Mock).mockResolvedValue([{ id: 'case-1' }]);
 
     const response = await requestJson(createApp(), 'GET', '/communications?limit=8');
 

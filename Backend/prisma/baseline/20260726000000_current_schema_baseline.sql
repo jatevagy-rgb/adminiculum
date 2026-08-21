@@ -1465,6 +1465,14 @@ CREATE UNIQUE INDEX "document_versions_documentId_version_key" ON "document_vers
 -- CreateIndex
 CREATE UNIQUE INDEX "document_versions_documentId_id_key" ON "document_versions"("documentId", "id");
 
+-- Additive DB-level integrity enforced by migration
+-- 20260723143000_contract_workspace_version_foundation (predates the baseline
+-- cut; not representable in schema.prisma, so it must live in the baseline).
+-- At most one current version per document.
+CREATE UNIQUE INDEX "document_versions_one_current_per_document_key"
+    ON "document_versions"("documentId")
+    WHERE "currentVersion" = true;
+
 -- CreateIndex
 CREATE INDEX "document_annotations_documentId_documentVersionId_status_idx" ON "document_annotations"("documentId", "documentVersionId", "status");
 
@@ -1560,6 +1568,22 @@ CREATE INDEX "task_submissions_taskId_createdAt_idx" ON "task_submissions"("task
 
 -- CreateIndex
 CREATE UNIQUE INDEX "task_submissions_taskId_revisionNumber_key" ON "task_submissions"("taskId", "revisionNumber");
+
+-- Additive DB-level integrity enforced by migration
+-- 20260718120000_add_task_submission_workflow (predates the baseline cut; not
+-- representable in schema.prisma, so it must live in the baseline).
+-- At most one active draft per task.
+CREATE UNIQUE INDEX "task_submissions_one_active_draft_per_task_key"
+    ON "task_submissions"("taskId")
+    WHERE "status" = 'DRAFT';
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'task_submissions_not_self_reviewing_check') THEN
+    ALTER TABLE "task_submissions" ADD CONSTRAINT "task_submissions_not_self_reviewing_check"
+      CHECK ("submittedById" IS NULL OR "submittedById" <> "assignedReviewerId");
+  END IF;
+END $$;
 
 -- CreateIndex
 CREATE INDEX "task_submission_documents_documentId_idx" ON "task_submission_documents"("documentId");

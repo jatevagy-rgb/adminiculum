@@ -59,9 +59,15 @@ jobs:
           MIGRATION_REPLAY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
         run: npm run db:migrations:verify-replay
 
+      - name: Provision task/document dedicated DBs (canonical schema copies)
+        working-directory: Backend
+        env:
+          PG_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: npm run db:provision:task-document
+
       - name: Initialize suite result tracking
         run: |
-          for s in comparison review publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture; do
+          for s in comparison review publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture document-version task-lifecycle-schema task-review-decision task-submission; do
             echo "$s=PENDING" >> "$RUNNER_TEMP/ci-suite-results.txt"
           done
 
@@ -260,6 +266,58 @@ jobs:
           sed -i "s/^phase5-fixture=PENDING$/phase5-fixture=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit "$rc"
 
+      - name: Document version persistence PG
+        working-directory: Backend
+        env:
+          DOCUMENT_VERSION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_document_versions_backend_ci
+        run: |
+          if npm run test:document-version:db; then
+            rc=0
+          else
+            rc=$?
+          fi
+          sed -i "s/^document-version=PENDING$/document-version=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit "$rc"
+
+      - name: Task lifecycle additive schema PG
+        working-directory: Backend
+        env:
+          TASK_LIFECYCLE_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_task_lifecycle_schema_ci
+        run: |
+          if npm run test:task-lifecycle-schema:db; then
+            rc=0
+          else
+            rc=$?
+          fi
+          sed -i "s/^task-lifecycle-schema=PENDING$/task-lifecycle-schema=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit "$rc"
+
+      - name: Task review decision PG
+        working-directory: Backend
+        env:
+          TASK_REVIEW_DECISION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_task_review_decision_backend_ci
+        run: |
+          if npm run test:task-review-decision:db; then
+            rc=0
+          else
+            rc=$?
+          fi
+          sed -i "s/^task-review-decision=PENDING$/task-review-decision=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit "$rc"
+
+      - name: Task submission PG
+        working-directory: Backend
+        env:
+          TASK_SUBMISSION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_task_submission_backend_ci
+        run: |
+          if npm run test:task-submission:db; then
+            rc=0
+          else
+            rc=$?
+          fi
+          sed -i "s/^task-submission=PENDING$/task-submission=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit "$rc"
+
       - name: Backend PostgreSQL integration summary
         if: always()
         continue-on-error: true
@@ -283,6 +341,10 @@ jobs:
             [lifecycle]="Workflow completion / forced case-close"
             [zero-grant]="Organization zero-grant"
             [phase5-fixture]="Phase 5 org-portal fixture foundation"
+            [document-version]="Document version persistence"
+            [task-lifecycle-schema]="Task lifecycle additive schema"
+            [task-review-decision]="Task review decision"
+            [task-submission]="Task submission"
           )
           {
             echo "### Backend PostgreSQL Integration"

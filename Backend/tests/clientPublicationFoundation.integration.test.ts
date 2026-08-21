@@ -170,6 +170,10 @@ describeWithDatabase('Client publication foundation PostgreSQL boundary', () => 
     const published = await publishDocumentPublication(actor, draft.id, { expectedRevision: approved.revision }, db);
     expect(published.documentVersionId).toBe(ids.version2);
     expect(published.status).toBe('PUBLISHED');
+    // Simulate a genuine newer upload becoming current: production enforces at
+    // most one current version per document (document_versions_one_current_per_document_key),
+    // so the previous current must be superseded before v4 is marked current.
+    await db.documentVersion.updateMany({ where: { documentId: ids.document }, data: { isCurrent: false } });
     await db.documentVersion.create({ data: { id: 'f5000000-0000-4000-8000-000000000099', documentId: ids.document, version: 4, name: 'publication-v4.txt', originalFileName: 'publication-v4.txt', mimeType: 'text/plain', size: 30, storageReference: 'publication-v4-storage', spItemId: 'publication-v4-sp', isCurrent: true, uploadedById: ids.lawyer, previousVersionId: ids.version3 } });
     expect((await db.$queryRaw<Array<{ documentVersionId: string }>>`SELECT "documentVersionId" FROM client_document_publications WHERE id=${draft.id}`)[0].documentVersionId).toBe(ids.version2);
     const superseded = await supersedeDocumentPublication(actor, draft.id, { expectedRevision: published.revision }, db);

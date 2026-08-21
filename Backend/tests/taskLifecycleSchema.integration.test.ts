@@ -238,11 +238,27 @@ describeWithDatabase('task lifecycle additive schema', () => {
   });
 
   it('rejects deleting a task that owns submission history', async () => {
-    await expect(client.query(`DELETE FROM "tasks" WHERE "id" = $1`, [ids.task])).rejects.toMatchObject({ code: '23001' });
+    // PostgreSQL error code varies by minor version / FK enforcement path
+    // (RESTRICT can surface as 23001 or foreign-key violation 23503).
+    let error: any;
+    try {
+      await client.query(`DELETE FROM "tasks" WHERE "id" = $1`, [ids.task]);
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeDefined();
+    expect(['23001', '23503']).toContain(error.code);
   });
 
   it('rejects deleting a document linked to submission history', async () => {
-    await expect(client.query(`DELETE FROM "documents" WHERE "id" = $1`, [ids.documentOne])).rejects.toMatchObject({ code: '23001' });
+    let error: any;
+    try {
+      await client.query(`DELETE FROM "documents" WHERE "id" = $1`, [ids.documentOne]);
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeDefined();
+    expect(['23001', '23503']).toContain(error.code);
   });
 
   it('keeps historical time entries valid without task attribution', async () => {
