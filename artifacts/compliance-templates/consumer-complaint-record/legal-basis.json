@@ -1,0 +1,24 @@
+{
+  "templateKey": "consumer-complaint-record",
+  "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+  "requirementKeys": [
+    "CONSUMER_COMPLAINT_RECORD_AND_RESPONSE"
+  ],
+  "sourceAnchors": [
+    {
+      "sourceKey": "HU:ACT:1997:CLV",
+      "sourceSha256": "f874622e77cd465443a23f7f32393a694c85459881a82556edcfa944a1f8b812",
+      "sourceVersion": "2026-02-01",
+      "provisionReference": "17/A. § (3a)-(8)",
+      "headingContext": "Panaszkezelés, ügyfélszolgálat",
+      "lineSpan": {
+        "start": 267,
+        "end": 355
+      },
+      "excerptSha256": "b94948998a33079da8f97d4c279ffa3b917966747952791e692db19ceba4eb03",
+      "provenance": "STANDALONE_SOURCE",
+      "anchorKey": "A-CP-17A-3A-8"
+    }
+  ],
+  "customerDocumentCitation": "Human-readable legal references may be added only after lawyer review; hashes remain internal."
+}

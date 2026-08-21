@@ -1,0 +1,24 @@
+{
+  "templateKey": "gdpr-processing-activities-register",
+  "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+  "requirementKeys": [
+    "GDPR_ROPA_CONTROLLER"
+  ],
+  "sourceAnchors": [
+    {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32016R0679",
+      "sourceSha256": "50c4abba9befdf5615003b5105810fe0fdaf338c7e88a1e1ad71f0c86494a02b",
+      "sourceVersion": "2016-05-04",
+      "provisionReference": "30. cikk (1)-(5)",
+      "headingContext": "Az adatkezelési tevékenységek nyilvántartása",
+      "lineSpan": {
+        "start": 1694,
+        "end": 1755
+      },
+      "excerptSha256": "b5a876421fe23e4c361860c756b7fcc3ec926a34e3d22c3d66ba7520045a16c7",
+      "provenance": "STANDALONE_SOURCE",
+      "anchorKey": "A-GDPR-30-1-5"
+    }
+  ],
+  "customerDocumentCitation": "Human-readable legal references may be added only after lawyer review; hashes remain internal."
+}

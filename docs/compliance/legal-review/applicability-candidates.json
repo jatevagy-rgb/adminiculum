@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0.0",
+  "status": "LEGAL_REVIEW_REQUIRED",
+  "resultStates": ["APPLIES", "DOES_NOT_APPLY", "LIKELY_APPLIES", "REQUIRES_LEGAL_REVIEW", "UNKNOWN"],
+  "rules": [
+    {"ruleKey":"APPL-GDPR-ROPA","requirementKey":"GDPR_ROPA_CONTROLLER","logic":{"OR":[{"NUMBER_THRESHOLD":{"fact":"employeeCount","operator":">=","value":250}},{"EXISTS":{"fact":"processingPersonalData"}},{"EXISTS":{"fact":"specialCategoryData"}}]},"requiredFacts":["employeeCount","processingPersonalData","specialCategoryData","processingIsOccasional","processingRiskLikely"],"missingFactOutcome":"UNKNOWN_FACT_REQUIRED","sourceAnchor":"A-GDPR-30-1-5","legalReviewStatus":"LEGAL_REVIEW_REQUIRED"},
+    {"ruleKey":"APPL-GDPR-DIRECT-COLLECTION","requirementKey":"GDPR_PRIVACY_INFORMATION_DIRECT_COLLECTION","logic":{"AND":[{"EXISTS":{"fact":"processesPersonalData"}},{"ENUM_MATCH":{"fact":"dataCollectionSource","value":"DIRECT_FROM_DATA_SUBJECT"}}]},"requiredFacts":["processesPersonalData","dataCollectionSource"],"missingFactOutcome":"UNKNOWN_FACT_REQUIRED","sourceAnchor":"A-GDPR-13-1-2","legalReviewStatus":"LEGAL_REVIEW_REQUIRED"},
+    {"ruleKey":"APPL-CONSUMER-COMPLAINT","requirementKey":"CONSUMER_COMPLAINT_RECORD_AND_RESPONSE","logic":{"AND":[{"ENUM_MATCH":{"fact":"customerRelationship","value":"B2C"}},{"EXISTS":{"fact":"consumerComplaintReceived"}}]},"requiredFacts":["customerRelationship","consumerComplaintReceived"],"missingFactOutcome":"UNKNOWN_FACT_REQUIRED","sourceAnchor":"A-CP-17A-3A-8","legalReviewStatus":"LEGAL_REVIEW_REQUIRED"},
+    {"ruleKey":"APPL-WB-CHANNEL","requirementKey":"WHISTLEBLOWING_INTERNAL_CHANNEL","logic":{"OR":[{"NUMBER_THRESHOLD":{"fact":"employeeCount","operator":">=","value":50}},{"ENUM_MATCH":{"fact":"whistleblowingSpecialCategory","value":"IN_SCOPE_2023_XXV_18_2"}}]},"requiredFacts":["employeeCount","whistleblowingSpecialCategory"],"missingFactOutcome":"UNKNOWN_FACT_REQUIRED","sourceAnchor":"A-WB-18-19","legalReviewStatus":"LEGAL_REVIEW_REQUIRED"},
+    {"ruleKey":"APPL-WB-ACK","requirementKey":"WHISTLEBLOWING_ACKNOWLEDGEMENT_AND_INVESTIGATION","logic":{"AND":[{"ENUM_MATCH":{"fact":"internalWhistleblowingChannelStatus","value":"OPERATING"}},{"ENUM_MATCH":{"fact":"whistleblowingReportForm","value":"WRITTEN"}}]},"requiredFacts":["internalWhistleblowingChannelStatus","whistleblowingReportForm"],"missingFactOutcome":"UNKNOWN_FACT_REQUIRED","sourceAnchor":"A-WB-21-25","legalReviewStatus":"LEGAL_REVIEW_REQUIRED"}
+  ]
+}

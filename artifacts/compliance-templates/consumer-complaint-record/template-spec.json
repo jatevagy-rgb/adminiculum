@@ -1,0 +1,35 @@
+{
+  "templateKey": "consumer-complaint-record",
+  "version": "0.1.0",
+  "generatedAt": "2026-08-21",
+  "sourceCorpusManifestVersion": "1.1.0",
+  "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+  "approvedAt": null,
+  "supersedes": null,
+  "legalTextPolicy": "FIXED_TEXT_REVIEW_REQUIRED",
+  "companySpecificFields": [
+    "company.legal_name",
+    "company.registered_office",
+    "company.registration_number",
+    "company.tax_number",
+    "company.employee_count",
+    "company.main_activity",
+    "company.representative_name",
+    "document.version",
+    "document.effective_date",
+    "document.review_date",
+    "document.owner_name",
+    "document.approved_by",
+    "complaint.reference_number"
+  ],
+  "lawyerSelectableOptions": [],
+  "conditionalSections": [
+    {
+      "sectionKey": "applicability.review",
+      "conditionRuleKey": "MANUAL_LEGAL_REVIEW",
+      "variant": "REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    }
+  ],
+  "rendering": "Deterministic replacement only; no runtime AI; output is a reviewable draft."
+}
