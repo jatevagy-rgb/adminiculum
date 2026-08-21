@@ -1,0 +1,967 @@
+{
+  "generatedFrom": "source-coverage.json",
+  "remainingSourceCount": 46,
+  "sources": [
+    {
+      "sourceKey": "EU:EU_DIRECTIVE:CELEX:32022L2557",
+      "title": "AZ EURÓPAI PARLAMENT ÉS A TANÁCS (EU) 2022/2557 IRÁNYELVE a kritikus szervezetek rezilienciájáról és a 2008/114/EK tanácsi irányelv hatályon kívül helyezéséről",
+      "jurisdiction": "EU",
+      "version": "2022-12-27",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "digital_sectoral",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32006R1907",
+      "title": "AZ EURÓPAI PARLAMENT ÉS A TANÁCS 1907/2006/EK RENDELETE a vegyi anyagok regisztrálásáról, értékeléséről, engedélyezéséről és korlátozásáról (REACH), az Európai Vegyianyag-ügynökség létrehozásáról, az 1999/45/EK irányelv módosításáról, valamint a 793/93/EGK tanácsi rendelet, az 1488/94/EK bizottsági rendelet, a 76/769/EGK tanácsi irányelv, a 91/155/EGK, a 93/67/EGK, a 93/105/EK és a 2000/21/EK bizottsági irányelv hatályon kívül helyezéséről (EGT vonatkozású szöveg)",
+      "jurisdiction": "EU",
+      "version": "2026-05-11",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "VERSION_AMBIGUOUS",
+      "primaryCluster": "other",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "SOURCE_DEPENDENCY_MISSING: current consolidated version selection"
+    },
+    {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32023R0988",
+      "title": "AZ EURÓPAI PARLAMENT ÉS A TANÁCS (EU) 2023/988 RENDELETE az általános termékbiztonságról, az 1025/2012/EU európai parlamenti és tanácsi rendelet és az (EU) 2020/1828 európai parlamenti és tanácsi irányelv módosításáról, valamint a 2001/95/EK európai parlamenti és tanácsi irányelv és a 87/357/EGK tanácsi irányelv hatályon kívül helyezéséről",
+      "jurisdiction": "EU",
+      "version": "2023-05-23",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "consumer_commerce_product",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "HIGH",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "HIGH"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:1990:C",
+      "title": "1990. évi C. TÖRVÉNY a helyi adókról",
+      "jurisdiction": "HU",
+      "version": "2026-07-31",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "tax_accounting_customs",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:1993:XCIII",
+      "title": "1993. évi XCIII. törvény a munkavédelemről",
+      "jurisdiction": "HU",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "employment_hr_safety",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "HIGH",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "HIGH"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:1995:CXVII",
+      "title": "1995. évi CXVII. törvény a személyi jövedelemadóról",
+      "jurisdiction": "HU",
+      "version": "2026-07-24",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "tax_accounting_customs",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:1995:LIII",
+      "title": "1995. évi LIII. törvény a környezet védelmének általános szabályairól",
+      "jurisdiction": "HU",
+      "version": "2026-08-12",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "environment_waste",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "MEDIUM",
+      "scores": {
+        "smeRelevance": "MEDIUM",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:1995:XXXIII",
+      "title": "1995. évi XXXIII. törvény a találmányok szabadalmi oltalmáról",
+      "jurisdiction": "HU",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "other",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:1996:LVII",
+      "title": "1996. évi LVII. törvény a tisztességtelen piaci magatartás és a versenykorlátozás tilalmáról",
+      "jurisdiction": "HU",
+      "version": "2026-06-29",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "corporate_ip_competition",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:1996:LXXXI",
+      "title": "1996. évi LXXXI. törvény a társasági adóról és az osztalékadóról",
+      "jurisdiction": "HU",
+      "version": "2026-02-28",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "tax_accounting_customs",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:1997:XI",
+      "title": "1997. évi XI. törvény a védjegyek és a földrajzi árujelzők oltalmáról",
+      "jurisdiction": "HU",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "corporate_ip_competition",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:1999:LXXVI",
+      "title": "1999. évi LXXVI. törvény a szerzői jogról",
+      "jurisdiction": "HU",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "corporate_ip_competition",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2000:C",
+      "title": "2000. évi C. törvény a számvitelről",
+      "jurisdiction": "HU",
+      "version": "2026-02-28",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "tax_accounting_customs",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2004:XXXIV",
+      "title": "2004. évi XXXIV. törvény a kis- és középvállalkozásokról, fejlődésük támogatásáról",
+      "jurisdiction": "HU",
+      "version": "2024-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "other",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2006:V",
+      "title": "2006. évi V. törvény a cégnyilvánosságról, a bírósági cégeljárásról és a végelszámolásról",
+      "jurisdiction": "HU",
+      "version": "2026-03-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "corporate_ip_competition",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2007:CXXVII",
+      "title": "2007. évi CXXVII. törvény az általános forgalmi adóról",
+      "jurisdiction": "HU",
+      "version": "2026-07-31",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "tax_accounting_customs",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2008:XLVII",
+      "title": "2008. évi XLVII. törvény a fogyasztókkal szembeni tisztességtelen kereskedelmi gyakorlat tilalmáról",
+      "jurisdiction": "HU",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "consumer_commerce_product",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "HIGH",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "HIGH"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2008:XLVIII",
+      "title": "2008. évi XLVIII. törvény a gazdasági reklámtevékenység alapvető feltételeiről és egyes korlátairól",
+      "jurisdiction": "HU",
+      "version": "2025-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "consumer_commerce_product",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "HIGH",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "HIGH"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2011:CXII",
+      "title": "2011. évi CXII. törvény az információs önrendelkezési jogról és az információszabadságról",
+      "jurisdiction": "HU",
+      "version": "2026-07-29",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "other",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2012:CLXXXV",
+      "title": "2012. évi CLXXXV. törvény a hulladékról",
+      "jurisdiction": "HU",
+      "version": "2026-08-12",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "environment_waste",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "MEDIUM",
+      "scores": {
+        "smeRelevance": "MEDIUM",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2012:I",
+      "title": "2012. évi I. törvény a munka törvénykönyvéről",
+      "jurisdiction": "HU",
+      "version": "2025-02-28",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "employment_hr_safety",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "HIGH",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "HIGH"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2013:V",
+      "title": "2013. évi V. törvény a Polgári Törvénykönyvről",
+      "jurisdiction": "HU",
+      "version": "2026-03-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "corporate_ip_competition",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2015:CXLIII",
+      "title": "2015. évi CXLIII. törvény a közbeszerzésekről",
+      "jurisdiction": "HU",
+      "version": "2026-08-08",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "other",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2017:CL",
+      "title": "2017. évi CL. törvény az adózás rendjéről",
+      "jurisdiction": "HU",
+      "version": "2026-07-15",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "tax_accounting_customs",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2017:CLI",
+      "title": "2017. évi CLI. törvény az adóigazgatási rendtartásról",
+      "jurisdiction": "HU",
+      "version": "2026-07-29",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "tax_accounting_customs",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2017:CLII",
+      "title": "2017. évi CLII. törvény az uniós vámjog végrehajtásáról",
+      "jurisdiction": "HU",
+      "version": "2026-08-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "tax_accounting_customs",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2017:LII",
+      "title": "2017. évi LII. törvény az Európai Unió és az ENSZ Biztonsági Tanácsa által elrendelt pénzügyi és vagyoni korlátozó intézkedések végrehajtásáról",
+      "jurisdiction": "HU",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "other",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2017:LIII",
+      "title": "2017. évi LIII. törvény a pénzmosás és a terrorizmus finanszírozása megelőzéséről és megakadályozásáról",
+      "jurisdiction": "HU",
+      "version": "2026-07-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "other",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2018:LII",
+      "title": "2018. évi LII. törvény a szociális hozzájárulási adóról",
+      "jurisdiction": "HU",
+      "version": "2026-05-14",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "employment_hr_safety",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "HIGH",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "HIGH"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2018:LIV",
+      "title": "2018. évi LIV. törvény az üzleti titok védelméről",
+      "jurisdiction": "HU",
+      "version": "2018-08-09",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "corporate_ip_competition",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2019:CXXII",
+      "title": "2019. évi CXXII. törvény a társadalombiztosítás ellátásaira jogosultakról, valamint ezen ellátások fedezetéről",
+      "jurisdiction": "HU",
+      "version": "2026-07-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "other",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2022:XLV",
+      "title": "2022. évi XLV. törvény egyes adótörvények módosításáról",
+      "jurisdiction": "HU",
+      "version": "2024-11-29",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "tax_accounting_customs",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2022:XVII",
+      "title": "2022. évi XVII. törvény a termékekre és a szolgáltatásokra vonatkozó akadálymentességi követelményeknek való megfelelés általános szabályairól",
+      "jurisdiction": "HU",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "consumer_commerce_product",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "HIGH",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "HIGH"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2023:CVIII",
+      "title": "2023. évi CVIII. törvény a fenntartható finanszírozás és az egységes vállalati felelősségvállalás ösztönzését szolgáló környezettudatos, társadalmi és szociális szempontokat is figyelembe vevő, vállalati társadalmi felelősségvállalás szabályairól és azzal összefüggő egyéb törvények módosításáról",
+      "jurisdiction": "HU",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "employment_hr_safety",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "HIGH",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "HIGH"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2024:LXXXIV",
+      "title": "2024. évi LXXXIV. törvény a kritikus szervezetek ellenálló képességéről",
+      "jurisdiction": "HU",
+      "version": "2026-01-06",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "digital_sectoral",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2025:LIV",
+      "title": "2025. évi LIV. törvény egyes adókötelezettségekről és egyes adótörvények módosításáról",
+      "jurisdiction": "HU",
+      "version": "2026-08-18",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "tax_accounting_customs",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:ACT:2025:LXXV",
+      "title": "2025. évi LXXV. törvény az Európai Unió mesterséges intelligenciáról szóló rendeletének magyarországi végrehajtásáról",
+      "jurisdiction": "HU",
+      "version": "2026-08-02",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "other",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:DECREE:151/2003:KORM",
+      "title": "151/2003. (IX. 22.) Korm. rendelet az egyes tartós fogyasztási cikkekre vonatkozó kötelező jótállásról",
+      "jurisdiction": "HU",
+      "version": "2026-03-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "consumer_commerce_product",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "HIGH",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "HIGH"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:DECREE:19/2014:NGM",
+      "title": "19/2014. (IV. 29.) NGM rendelet a fogyasztó és vállalkozás közötti szerződés keretében eladott dolgokra vonatkozó szavatossági és jótállási igények intézésének eljárási szabályairól",
+      "jurisdiction": "HU",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "SOURCE_INCOMPLETE",
+      "primaryCluster": "consumer_commerce_product",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "HIGH",
+        "sourceCompleteness": "LOW",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "HIGH"
+      },
+      "dependency": "SOURCE_DEPENDENCY_MISSING: complete source capture"
+    },
+    {
+      "sourceKey": "HU:DECREE:33/1998:NM",
+      "title": "33/1998. (VI. 24.) NM rendelet a munkaköri, szakmai, illetve személyi higiénés alkalmasság orvosi vizsgálatáról és véleményezéséről",
+      "jurisdiction": "HU",
+      "version": "2026-07-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "employment_hr_safety",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "HIGH",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "HIGH"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:DECREE:344/2025:KORM",
+      "title": "344/2025. (X. 31.) Korm. rendelet az Európai Unió mesterséges intelligenciáról szóló rendeletének magyarországi végrehajtásáról szóló 2025. évi LXXV. törvény végrehajtásáról",
+      "jurisdiction": "HU",
+      "version": "2025-12-02",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "other",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:DECREE:45/2014:KORM",
+      "title": "45/2014. (II. 26.) Korm. rendelet a fogyasztó és a vállalkozás közötti szerződések részletes szabályairól",
+      "jurisdiction": "HU",
+      "version": "2026-08-02",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "consumer_commerce_product",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "HIGH",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "HIGH"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:DECREE:465/2017:KORM",
+      "title": "465/2017. (XII. 28.) Korm. rendelet az adóigazgatási eljárás részletszabályairól",
+      "jurisdiction": "HU",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "tax_accounting_customs",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:DECREE:5/1993:MÜM",
+      "title": "5/1993. (XII. 26.) MüM rendelet a munkavédelemről szóló 1993. évi XCIII. törvény egyes rendelkezéseinek végrehajtásáról",
+      "jurisdiction": "HU",
+      "version": "2025-05-01",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "employment_hr_safety",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "HIGH",
+      "scores": {
+        "smeRelevance": "HIGH",
+        "applicabilityDeterminability": "HIGH",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "HIGH",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "HIGH"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "HU:DECREE:80/2023:KORM",
+      "title": "80/2023. (III. 14.) Korm. rendelet a kiterjesztett gyártói felelősségi rendszer működésének részletes szabályairól",
+      "jurisdiction": "HU",
+      "version": "2026-08-12",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "environment_waste",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "MEDIUM",
+      "scores": {
+        "smeRelevance": "MEDIUM",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "HIGH",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    },
+    {
+      "sourceKey": "UNKNOWN:L_202490772HU.000101.fmx.xml.txt",
+      "title": "A BIZOTTSÁG AJÁNLÁSA a mikro-, kis- és középvállalkozások fogalmának meghatározásáról",
+      "jurisdiction": "EU",
+      "version": "2024-12-05",
+      "provenance": "STANDALONE_SOURCE",
+      "currentStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "primaryCluster": "other",
+      "existingDomainHints": [],
+      "likelyBusinessRelevance": "LOW",
+      "scores": {
+        "smeRelevance": "LOW",
+        "applicabilityDeterminability": "MEDIUM",
+        "sourceCompleteness": "HIGH",
+        "operationalValue": "MEDIUM",
+        "specialistComplexity": "MEDIUM",
+        "documentControlValue": "MEDIUM"
+      },
+      "dependency": "No corpus-evidenced blocker identified at planning stage"
+    }
+  ],
+  "waves": [
+    [
+      "Wave 4A - Employment / workforce safety",
+      [
+        "HU:ACT:2012:I",
+        "HU:ACT:1993:XCIII",
+        "HU:DECREE:5/1993:MÜM",
+        "HU:DECREE:33/1998:NM",
+        "HU:ACT:2019:CXXII"
+      ],
+      "employee count, workforce, hazardous work, payroll status",
+      "employment-law classification; occupational-health facts",
+      "employment records, safety controls"
+    ],
+    [
+      "Wave 4B - Consumer commerce",
+      [
+        "HU:DECREE:45/2014:KORM",
+        "HU:ACT:2008:XLVII",
+        "HU:ACT:2008:XLVIII",
+        "HU:DECREE:151/2003:KORM",
+        "HU:ACT:2022:XVII"
+      ],
+      "B2C sales, distance selling, advertising, durable goods",
+      "product/service scope and sector exceptions",
+      "consumer information and evidence controls"
+    ],
+    [
+      "Wave 4C - Tax and accounting core",
+      [
+        "HU:ACT:2000:C",
+        "HU:ACT:2017:CL",
+        "HU:ACT:2017:CLI",
+        "HU:ACT:2007:CXXVII",
+        "HU:ACT:1990:C"
+      ],
+      "tax registrations, transactions, accounting records, local presence",
+      "tax classification and current rate/threshold analysis",
+      "recordkeeping and filing evidence"
+    ]
+  ]
+}
