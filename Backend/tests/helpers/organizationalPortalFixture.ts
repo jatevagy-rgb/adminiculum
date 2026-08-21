@@ -73,6 +73,7 @@ export interface OrgPortalFixtureIds {
   // Documents + versions (client A, caseOne)
   docPublished: string;
   docPublishedVersion: string;
+  docPublishedVersion2: string;
   docInternal: string;
   docInternalVersion: string;
   docHrConfidential: string;
@@ -154,6 +155,7 @@ export async function createOrganizationalPortalFixture(
     matterRevision: id('matterRevision'),
     docPublished: id('docPublished'),
     docPublishedVersion: id('docPublishedVersion'),
+    docPublishedVersion2: id('docPublishedVersion2'),
     docInternal: id('docInternal'),
     docInternalVersion: id('docInternalVersion'),
     docHrConfidential: id('docHrConfidential'),
@@ -306,7 +308,10 @@ export async function createOrganizationalPortalFixture(
     { id: ids.docSelected, name: 'Korlátozott dokumentum', category: 'CONTRACT', caseId: ids.caseOne, clientId: ids.clientA },
   ] as never });
   await db.documentVersion.createMany({ data: [
-    { id: ids.docPublishedVersion, version: 1, name: 'Keretszerződés v1', originalFileName: 'contract.pdf', mimeType: 'application/pdf', size: 1024, storageReference: 'sp://published', isCurrent: true, documentId: ids.docPublished, uploadedById: ids.adminId },
+    { id: ids.docPublishedVersion, version: 1, name: 'Keretszerződés v1', originalFileName: 'contract-v1.pdf', mimeType: 'application/pdf', size: 1024, storageReference: 'sp://published-v1', isCurrent: false, documentId: ids.docPublished, uploadedById: ids.adminId },
+    // A newer current version of the SAME document is intentionally not
+    // published. Customer reads must follow the publication's pinned V1 id.
+    { id: ids.docPublishedVersion2, version: 2, name: 'Keretszerződés v2', originalFileName: 'contract-v2.pdf', mimeType: 'application/pdf', size: 2048, storageReference: 'sp://unpublished-v2', isCurrent: true, documentId: ids.docPublished, previousVersionId: ids.docPublishedVersion, uploadedById: ids.adminId },
     { id: ids.docInternalVersion, version: 1, name: 'Belső vázlat v1', originalFileName: 'draft.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 512, storageReference: 'sp://internal', isCurrent: true, documentId: ids.docInternal, uploadedById: ids.adminId },
     { id: ids.docHrConfidentialVersion, version: 1, name: 'HR v1', originalFileName: 'hr.pdf', mimeType: 'application/pdf', size: 100, storageReference: 'sp://hr', isCurrent: true, documentId: ids.docHrConfidential, uploadedById: ids.adminId },
     { id: ids.docCrossClientVersion, version: 1, name: 'B v1', originalFileName: 'b.pdf', mimeType: 'application/pdf', size: 100, storageReference: 'sp://b', isCurrent: true, documentId: ids.docCrossClient, uploadedById: ids.adminId },

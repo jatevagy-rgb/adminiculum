@@ -93,12 +93,18 @@ d('Phase 5 org-portal fixture foundation (PostgreSQL)', () => {
   });
 
   it('exact-version publication is required for customer document visibility', async () => {
-    // The published document is visible via its exact published publication id.
+    // V2 is newer/current for the same Document, but only V1 is published.
+    // The customer-safe DTO exposes versionLabel, so this fails if the canonical
+    // read path starts resolving a Document's latest version instead of p.documentVersionId.
     const actor = ACTOR(ids.authorizedIdentity, ids.orgWsA);
     const visible = await getPortalDocument(actor, ids.docPublication, db);
     expect(String(visible.id)).toBe(ids.docPublication);
+    expect(visible.versionLabel).toBe('Közzétett változat 1');
+    expect(visible.versionLabel).not.toBe('Közzétett változat 2');
     // The internal document has NO publication -> no customer-visible id to fetch.
     const publishedDocs = await listPortalDocuments(actor, undefined, db);
+    const published = publishedDocs.items.find((item: any) => String(item.id) === ids.docPublication);
+    expect(published).toMatchObject({ title: 'Keretszerződés (publikált)', versionLabel: 'Közzétett változat 1' });
     const idsReturned = publishedDocs.items.map((item: any) => String(item.id));
     expect(idsReturned).toContain(ids.docPublication);
     expect(idsReturned).not.toContain(ids.docInternal); // internal doc has no publication row
