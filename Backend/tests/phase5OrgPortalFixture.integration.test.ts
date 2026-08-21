@@ -376,7 +376,7 @@ d('Phase 5 org-portal fixture foundation (PostgreSQL)', () => {
         data: {
           id: crypto.randomUUID(),
           threadId,
-          authorType: 'LAWYER' as never,
+          authorType: 'INTERNAL' as never,
           clientPortalIdentityId: null,
           bodySafe: `Válasz ${i}`,
           visibility: 'SENT',
