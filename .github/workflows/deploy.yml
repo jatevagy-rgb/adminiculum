@@ -35,6 +35,7 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write # GitHub OIDC token for Azure federated login (no client secret).
 
 env:
   CANONICAL_RELEASE_REF: release/editor-ops-workflow-1
@@ -126,10 +127,12 @@ jobs:
           grep -q '^Frontend/' ziplist.txt && fail "Frontend/ present in backend archive"
           echo "Backend archive OK: package.json at root, webjob present, no wrapper/node_modules/Frontend."
 
-      - name: Azure login
+      - name: Azure login (OIDC, no client secret)
         uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy via Kudu ZipDeploy and verify THIS deployment reaches SUCCESS
         uses: azure/cli@v2
@@ -202,10 +205,12 @@ jobs:
     if: ${{ inputs.run_migration && needs.backend.result == 'success' }}
     environment: production
     steps:
-      - name: Azure login
+      - name: Azure login (OIDC, no client secret)
         uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Trigger + verify THIS migration WebJob run
         uses: azure/cli@v2
@@ -361,10 +366,12 @@ jobs:
           grep -q '^.next/static/' "$GITHUB_WORKSPACE/felist.txt" || { echo ".next/static missing from package"; exit 1; }
           echo "Frontend standalone package OK: server.js at root + .next/static present."
 
-      - name: Azure login
+      - name: Azure login (OIDC, no client secret)
         uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Verify production frontend standalone contract
         uses: azure/cli@v2
