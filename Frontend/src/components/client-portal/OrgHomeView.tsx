@@ -109,13 +109,18 @@ export function OrgHomeView({ workspaceId }: { workspaceId: string }) {
       {home.currentMatter ? <Journey matter={home.currentMatter} /> : <Section title="Aktív ügyek" empty emptyText="Jelenleg nincs közzétett aktív ügye." />}
 
       <Section kicker="Tőled várjuk" title="Ami most Öntől kell" empty={!actionNow.length} emptyText="Jelenleg nincs Öntől szükséges teendő.">
-        {actionNow.slice(0, 4).map((action) => (
-          <Link key={action.id} href={`/portal/matters/${encodeURIComponent(action.matterPublicationId || action.id)}`} className="rounded-2xl border border-[#eadfbf] bg-[#fffaf0] p-4 text-sm">
-            <b className="block text-stone-950">{action.title}</b>
-            <span className="mt-1 block text-stone-700">{action.matterTitle || "Közzétett ügy"}{action.dueAt ? ` · Határidő: ${formatDate(action.dueAt)}` : ""}</span>
-            <span className="mt-1 block text-stone-500">{action.typeLabel}</span>
-          </Link>
-        ))}
+        {actionNow.slice(0, 4).map((action) => {
+          const actionHref = action.matterPublicationId
+            ? `/portal/matters/${encodeURIComponent(action.matterPublicationId)}`
+            : `/portal/action-requests/${encodeURIComponent(action.id)}`;
+          return (
+            <Link key={action.id} href={actionHref} className="rounded-2xl border border-[#eadfbf] bg-[#fffaf0] p-4 text-sm">
+              <b className="block text-stone-950">{action.title}</b>
+              <span className="mt-1 block text-stone-700">{action.matterTitle || "Közzétett ügy"}{action.dueAt ? ` · Határidő: ${formatDate(action.dueAt)}` : ""}</span>
+              <span className="mt-1 block text-stone-500">{action.typeLabel}</span>
+            </Link>
+          );
+        })}
       </Section>
 
       <Section kicker="Ügyek" title="Aktív ügyek" empty={!home.matters.length} emptyText="Jelenleg nincs közzétett ügy.">

@@ -181,6 +181,7 @@ export async function listOrganizationalCases(
 export interface OrganizationalCaseDetail extends OrganizationalCaseRow {
   requesterDisplayName: string | null;
   currentStatusText: string;
+  progressPercentage: number | null;
   safeMilestones: unknown[];
   capabilities: {
     showTimeline: boolean;
@@ -231,7 +232,7 @@ export async function getOrganizationalCaseDetail(
   if (!publication?.currentRevisionId) throw new InteractionError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Case is not available.');
   const revision = await prisma.clientMatterPublicationRevision.findUnique({
     where: { id: publication.currentRevisionId },
-    select: { clientSafeTitle: true, clientSafeStatus: true, clientSafeNextStep: true, clientSafeCurrentPosition: true, clientSafeWaitingOn: true, publicTargetDate: true, responsibleLawyerDisplay: true, publishedDeadlinesSnapshot: true, milestonesSnapshot: true },
+    select: { clientSafeTitle: true, clientSafeStatus: true, clientSafeNextStep: true, clientSafeCurrentPosition: true, clientSafeWaitingOn: true, publicTargetDate: true, responsibleLawyerDisplay: true, publishedDeadlinesSnapshot: true, milestonesSnapshot: true, progressPercentage: true },
   });
   if (!revision) throw new InteractionError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Case is not available.');
 
@@ -246,6 +247,7 @@ export async function getOrganizationalCaseDetail(
     // projection is a later CP1 stage.
     requesterDisplayName: null,
     currentStatusText: revision.clientSafeCurrentPosition || revision.clientSafeStatus,
+    progressPercentage: revision.progressPercentage ?? null,
     safeMilestones: toCustomerMilestones(revision.milestonesSnapshot),
     capabilities: capabilitiesFrom(access),
   };

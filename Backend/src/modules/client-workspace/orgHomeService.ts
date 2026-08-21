@@ -122,7 +122,6 @@ async function resolveCurrentMatter(
           completedAt: m.completedAt ?? null,
         }))
       : [];
-    const progress = (detail as any).progressPercentage != null ? Number((detail as any).progressPercentage) : null;
     return {
       publicationId: row.matterPublicationId,
       title: row.publicTitle,
@@ -131,7 +130,7 @@ async function resolveCurrentMatter(
       nextStep: row.nextStep,
       waitingOn: row.waitingOn,
       publicTargetDate: row.publicTargetDate,
-      progressPercentage: progress,
+      progressPercentage: detail.progressPercentage ?? null,
       milestones,
     };
   } catch {
@@ -145,31 +144,69 @@ async function resolveCurrentMatter(
  * Aggregate participant-authorized question threads across the customer's
  * granted cases into a compact contact summary.
  */
+async function unreadForThread(threadId: string, membershipId: string, prisma: Prisma): Promise<number> {
+  const readState = await prisma.clientQuestionThreadReadState.findUnique({
+    where: { threadId_workspaceMembershipId: { threadId, workspaceMembershipId: membershipId } },
+    select: { lastReadAt: true },
+  });
+  return prisma.clientQuestionMessage.count({
+    where: {
+      threadId,
+      visibility: 'SENT',
+      createdAt: readState?.lastReadAt ? { gt: readState.lastReadAt } : undefined,
+    },
+  });
+}
+
+/**
+ * Aggregate participant-authorized question threads across the customer's
+ * granted cases into a compact contact summary.
+ *
+ * openCount/unreadCount include EVERY authorized thread; the preview is still
+ * limited to the five newest threads so the home surface stays compact.
+ */
 async function buildContactSummary(
   identityId: string,
   workspaceId: string,
-  caseRows: OrgHomeMatterRow[],
   prisma: Prisma,
 ): Promise<OrgHomeContactSummary> {
-  const empty: OrgHomeContactSummary = { openCount: 0, unreadCount: 0, latestPreview: null, latestUpdatedAt: null };
   let open = 0;
   let unread = 0;
   let latestPreview: string | null = null;
   let latestUpdatedAt: string | null = null;
-  // Resolve the actual case ids for the granted case references (publicReference
-  // is the caseNumber; resolveActiveCustomerGrant requires the case id).
-  const refs = caseRows.map((r) => r.publicReference);
-  const cases = refs.length ? await prisma.case.findMany({ where: { caseNumber: { in: refs } }, select: { id: true, caseNumber: true } }) : [];
-  const caseIdByRef = new Map(cases.map((c) => [c.caseNumber, c.id]));
-  for (const row of caseRows) {
-    const caseId = caseIdByRef.get(row.publicReference);
-    if (!caseId) continue;
+
+  const now = new Date();
+  const grants = await prisma.clientPortalGrant.findMany({
+    where: {
+      clientPortalIdentityId: identityId,
+      workspaceId,
+      status: 'ACTIVE',
+      validFrom: { lte: now },
+      OR: [{ validUntil: null }, { validUntil: { gt: now } }],
+    },
+    select: { caseId: true },
+    distinct: ['caseId'],
+  });
+
+  for (const { caseId } of grants) {
     try {
       const ctx = await resolveActiveCustomerGrant(identityId, caseId, workspaceId, prisma);
-      const threads = await listCustomerThreads(ctx, prisma, { limit: 5 });
-      open += threads.items.filter((t: any) => t.status !== 'CLOSED' && !t.archived).length;
-      unread += Number(threads.unreadMessages || 0);
-      for (const t of threads.items as any[]) {
+      // Totals: every thread where this membership is an authorized participant.
+      const threads = await prisma.clientQuestionThread.findMany({
+        where: {
+          caseId,
+          workspaceId,
+          participants: { some: { workspaceMembershipId: ctx.membershipId, removedAt: null, canRead: true } },
+        },
+        select: { id: true, status: true, archivedAt: true, updatedAt: true, lastMessageAt: true },
+      });
+      for (const t of threads) {
+        if (t.status !== 'CLOSED' && !t.archivedAt) open += 1;
+        unread += await unreadForThread(t.id, ctx.membershipId, prisma);
+      }
+      // Preview remains limited to the five newest threads.
+      const preview = await listCustomerThreads(ctx, prisma, { limit: 5 });
+      for (const t of preview.items as any[]) {
         const ts = iso(t.lastMessageAt || t.updatedAt || null);
         if (ts && (!latestUpdatedAt || ts > latestUpdatedAt)) {
           latestUpdatedAt = ts;
@@ -203,7 +240,7 @@ export async function getOrganizationalHome(
     resolveCurrentMatter(identityId, workspaceId, caseRows, prisma),
     listPortalActionRequests({ userId: identityId, role: 'CLIENT_PORTAL', workspaceId }, undefined, prisma),
     listPortalDocuments({ userId: identityId, role: 'CLIENT_PORTAL', workspaceId }, undefined, prisma),
-    buildContactSummary(identityId, workspaceId, caseRows, prisma),
+    buildContactSummary(identityId, workspaceId, prisma),
   ]);
 
   const dto: OrgHomeDto = {
