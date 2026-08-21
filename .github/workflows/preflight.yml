@@ -81,7 +81,6 @@ jobs:
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
-    continue-on-error: true
     defaults:
       run:
         working-directory: Backend
@@ -107,6 +106,7 @@ jobs:
         run: npx prisma generate
 
       - name: Non-PG tests
+        continue-on-error: true
         run: npx jest --runInBand
 
   frontend-preflight:
