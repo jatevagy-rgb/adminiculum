@@ -94,6 +94,8 @@ test('captured anchor excerpt hashes resolve against the read-only corpus', () =
     'HU:DECREE:45/2014:KORM': '45_2014. (II. 26.) Korm. rendelet.txt',
     'HU:DECREE:151/2003:KORM': '151_2003. (IX. 22.) Korm. rendelet.txt',
     'HU:ACT:2022:XVII': '2022. évi XVII. törvény.txt',
+    'HU:ACT:2000:C': '2000. évi C. törvény.txt',
+    'HU:ACT:2007:CXXVII': '2007. évi CXXVII. törvény.txt',
   };
   for (const anchor of Object.values(requirements.anchors)) {
     const reachFirstCapture = anchor.sourceKey === 'EU:EU_REGULATION:CELEX:32006R1907' && anchor.sourceSha256 === '489f4181edde13eed8af1aeeb62c19665f54de600f8943caa014f4dd0171f873';

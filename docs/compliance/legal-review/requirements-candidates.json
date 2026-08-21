@@ -904,6 +904,90 @@
       "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
       "legalReviewNotes": "Nem minden webshop tartozik a hatály alá; a szolgáltatási minősítés külön jogi/technikai kapu."
+    },
+    {
+      "requirementKey": "ACCOUNTING_REPORT_AND_BOOKKEEPING",
+      "titleHu": "Beszámoló és azt alátámasztó könyvvezetés",
+      "summaryHu": "Magyar nyelvű, könyvvezetéssel alátámasztott beszámolót készít.",
+      "domain": "tax_accounting",
+      "subdomain": "tax_accounting_core",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Gazdálkodó vagy adóalany",
+      "trigger": "A számviteli törvény hatálya alá tartozó gazdálkodó üzleti éve lezárul.",
+      "requiredAction": "Magyar nyelvű, könyvvezetéssel alátámasztott beszámolót készít.",
+      "deadline": "Az üzleti év könyveinek zárását követően.",
+      "frequency": "Üzleti évhez vagy érintett gazdasági eseményhez igazodóan.",
+      "evidenceExpected": "Beszámoló és alátámasztó könyvvezetési nyom.",
+      "sourceAnchors": [
+        "A-ACC-4"
+      ],
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "A beszámolótípus, közzététel és könyvvizsgálat külön regime/threshold specialistai minősítést igényel."
+    },
+    {
+      "requirementKey": "ACCOUNTING_POLICY_PREPARATION",
+      "titleHu": "Számviteli politika elkészítése és módosítása",
+      "summaryHu": "Elkészíti, illetve átvezeti a szükséges számviteli politikát; ezért a képviseletre jogosult személy felelős.",
+      "domain": "tax_accounting",
+      "subdomain": "tax_accounting_core",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Gazdálkodó vagy adóalany",
+      "trigger": "Újonnan alakuló gazdálkodó jön létre, vagy a számviteli politika módosítását igénylő törvénymódosítás lép hatályba.",
+      "requiredAction": "Elkészíti, illetve átvezeti a szükséges számviteli politikát; ezért a képviseletre jogosult személy felelős.",
+      "deadline": "A megalakulástól, illetve a törvénymódosítás hatálybalépésétől számított 90 napon belül.",
+      "frequency": "Üzleti évhez vagy érintett gazdasági eseményhez igazodóan.",
+      "evidenceExpected": "Hatályos számviteli politika és módosítási nyom.",
+      "sourceAnchors": [
+        "A-ACC-POLICY"
+      ],
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "Nem generál teljes számviteli politikát: a cég specifikus számviteli választásai specialistai inputok."
+    },
+    {
+      "requirementKey": "VAT_INVOICE_ISSUANCE",
+      "titleHu": "Áfa szerinti számlakibocsátás",
+      "summaryHu": "Gondoskodik a számla kibocsátásáról a forrás szerinti időpontban.",
+      "domain": "tax_accounting",
+      "subdomain": "tax_accounting_core",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Gazdálkodó vagy adóalany",
+      "trigger": "Az adóalany olyan termékértékesítést vagy szolgáltatásnyújtást teljesít, amelyhez az Áfa tv. számlakibocsátási kötelezettséget rendel.",
+      "requiredAction": "Gondoskodik a számla kibocsátásáról a forrás szerinti időpontban.",
+      "deadline": "Legkésőbb a teljesítésig vagy előlegnél az adó megállapításáig, legfeljebb a törvényi ésszerű időn belül.",
+      "frequency": "Üzleti évhez vagy érintett gazdasági eseményhez igazodóan.",
+      "evidenceExpected": "Számla és kibocsátási időpont bizonyítéka.",
+      "sourceAnchors": [
+        "A-VAT-INVOICE"
+      ],
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "Nem számít áfát és nem modellezi az összes mentességet; a számlakötelezettség hatályát adózási specialistai minősítés dönti el."
+    },
+    {
+      "requirementKey": "VAT_INVOICE_AUTHENTICITY_INTEGRITY",
+      "titleHu": "Számla eredetének, sértetlenségének és olvashatóságának biztosítása",
+      "summaryHu": "A számla megőrzési időszakának végéig biztosítja a számla eredetének hitelességét, adattartalma sértetlenségét és olvashatóságát.",
+      "domain": "tax_accounting",
+      "subdomain": "tax_accounting_core",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Gazdálkodó vagy adóalany",
+      "trigger": "Számlát bocsátanak ki vagy őriznek meg.",
+      "requiredAction": "A számla megőrzési időszakának végéig biztosítja a számla eredetének hitelességét, adattartalma sértetlenségét és olvashatóságát.",
+      "deadline": "A számla kibocsátásától a megőrzési időszak végéig.",
+      "frequency": "Üzleti évhez vagy érintett gazdasági eseményhez igazodóan.",
+      "evidenceExpected": "Üzleti ellenőrzési eljárás és megőrzött számlaadat.",
+      "sourceAnchors": [
+        "A-VAT-INVOICE-INTEGRITY"
+      ],
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "A megőrzési idő konkrét hossza nem e szakaszból ered; azt nem találgatja a candidate."
     }
   ],
   "anchors": {
@@ -1347,6 +1431,58 @@
         "end": 259
       },
       "excerptSha256": "0ca5a3cd7da3a7d42c0fca487da1dd2aa1954508d63cea4a14314c85d2d8bc00",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-ACC-4": {
+      "sourceKey": "HU:ACT:2000:C",
+      "sourceSha256": "717044712bfa9b5c4709e2881cc82a8d60369fdf90783ae01a8cb40e5090fdd2",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "4. § (1)",
+      "headingContext": "Wave 4C substantive review",
+      "lineSpan": {
+        "start": 421,
+        "end": 425
+      },
+      "excerptSha256": "83797996a7e2c20e25a3378131da93219c045808a1a4c10ad8f852534448e139",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-ACC-POLICY": {
+      "sourceKey": "HU:ACT:2000:C",
+      "sourceSha256": "717044712bfa9b5c4709e2881cc82a8d60369fdf90783ae01a8cb40e5090fdd2",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "14. § (11)-(12)",
+      "headingContext": "Wave 4C substantive review",
+      "lineSpan": {
+        "start": 635,
+        "end": 647
+      },
+      "excerptSha256": "080605c0c4cab616d0376920c7f9b7cc9da61047a94d420c56043f69bd02d83b",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-VAT-INVOICE": {
+      "sourceKey": "HU:ACT:2007:CXXVII",
+      "sourceSha256": "b5e9c8d039788c2e54e2084d8225e53708e8253fecf3a09b9d7aef0b849d1dc0",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "159-163. §",
+      "headingContext": "Wave 4C substantive review",
+      "lineSpan": {
+        "start": 2713,
+        "end": 2781
+      },
+      "excerptSha256": "362847677232b8b1331f69d8249b998915dc90dde66ca2ee4ba242eab74c5f6a",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-VAT-INVOICE-INTEGRITY": {
+      "sourceKey": "HU:ACT:2007:CXXVII",
+      "sourceSha256": "b5e9c8d039788c2e54e2084d8225e53708e8253fecf3a09b9d7aef0b849d1dc0",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "168/A. §",
+      "headingContext": "Wave 4C substantive review",
+      "lineSpan": {
+        "start": 2853,
+        "end": 2857
+      },
+      "excerptSha256": "9cb111044a106b1776a241f05aa4fea538819464533fb52eb0cc9c3095d3b723",
       "provenance": "STANDALONE_SOURCE"
     }
   }

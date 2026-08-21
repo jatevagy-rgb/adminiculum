@@ -1230,6 +1230,78 @@
       "sensitive": false,
       "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "accountingActScopeClassification",
+      "labelHu": "Számviteli törvény hatálya",
+      "dataType": "enum",
+      "allowedValues": [
+        "IN_SCOPE",
+        "OUT_OF_SCOPE",
+        "UNKNOWN"
+      ],
+      "scope": "COMPANY",
+      "legalMeaning": "A számviteli törvény szerinti beszámolási és könyvvezetési hatály specialistai minősítése.",
+      "collectionQuestionHu": "A számviteli törvény szerinti beszámolási és könyvvezetési hatály specialistai minősítése.",
+      "usedByRules": [
+        "APPL-ACCOUNTING-REPORT"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "accountingPolicyTriggerOccurred",
+      "labelHu": "Számviteli politika kiváltó eseménye",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "scope": "REPORTING_EVENT",
+      "legalMeaning": "Újonnan alakuló gazdálkodó vagy számviteli politikát érintő törvénymódosítás történt?",
+      "collectionQuestionHu": "Újonnan alakuló gazdálkodó vagy számviteli politikát érintő törvénymódosítás történt?",
+      "usedByRules": [
+        "APPL-ACCOUNTING-POLICY"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "DERIVED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "vatInvoiceIssuanceClassification",
+      "labelHu": "Áfa szerinti számlakibocsátási hatály",
+      "dataType": "enum",
+      "allowedValues": [
+        "IN_SCOPE",
+        "OUT_OF_SCOPE",
+        "UNKNOWN"
+      ],
+      "scope": "TRANSACTION",
+      "legalMeaning": "Az ügylet Áfa tv. szerinti számlakibocsátási hatályának specialistai minősítése.",
+      "collectionQuestionHu": "Az ügylet Áfa tv. szerinti számlakibocsátási hatályának specialistai minősítése.",
+      "usedByRules": [
+        "APPL-VAT-INVOICE"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "invoiceIssuedOrRetained",
+      "labelHu": "Kibocsátott vagy megőrzött számla",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "scope": "TRANSACTION",
+      "legalMeaning": "Számlát bocsátottak ki vagy őriznek meg?",
+      "collectionQuestionHu": "Számlát bocsátottak ki vagy őriznek meg?",
+      "usedByRules": [
+        "APPL-VAT-INVOICE-INTEGRITY"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "DERIVED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
     }
   ]
 }

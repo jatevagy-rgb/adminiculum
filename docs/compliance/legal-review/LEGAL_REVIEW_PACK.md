@@ -82,3 +82,8 @@ Státusz: `LEGAL_REVIEW_REQUIRED`. A táblák candidate tételek, nem jóváhagy
 - **Elállás:** az előzetes tájékoztatás és az esemény utáni, 14 napon belüli visszatérítés külön candidate. A kizárások, digitális tartalom és teljesítés előtti szolgáltatás specialistai kapun maradnak.
 - **Kötelező jótállás:** csak a rendelet szerinti új tartós fogyasztási cikkek termékkategória- és értékhatár-minősítése után jön létre tájékoztatási/jótállási jegy candidate. Nem készült új DOCX a kategória-megállapítás és a hiányos 19/2014. NGM korpusz miatt.
 - **E-kereskedelmi akadálymentesség:** a 2022. évi XVII. törvény potenciális e-kereskedelmi szolgáltatási hatálya külön specialistai kapu; nem teszi a webshopot DSA-közvetítővé.
+
+## Tax / accounting core
+
+- **Számvitel:** a számviteli törvény hatálya alá tartozó gazdálkodó beszámolót és azt alátámasztó könyvvezetést készít; az új alapítás vagy törvénymódosítás utáni számviteli politika külön, 90 napos candidate. A beszámolótípus és küszöbök specialistai minősítésben maradnak.
+- **Számla:** az Áfa tv. hatálya szerinti ügylet számlakibocsátása, majd a számla hitelességének, sértetlenségének és olvashatóságának fenntartása külön candidate. Nincs áfaszámítás, NAV-integráció vagy házi adóűrlap.

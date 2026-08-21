@@ -1119,6 +1119,70 @@
       "sourceAnchor": "A-CC-2022-1-6",
       "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-ACCOUNTING-REPORT",
+      "requirementKey": "ACCOUNTING_REPORT_AND_BOOKKEEPING",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "accountingActScopeClassification",
+          "value": "IN_SCOPE"
+        }
+      },
+      "requiredFacts": [
+        "accountingActScopeClassification"
+      ],
+      "sourceAnchor": "A-ACC-4",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-ACCOUNTING-POLICY",
+      "requirementKey": "ACCOUNTING_POLICY_PREPARATION",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "accountingPolicyTriggerOccurred",
+          "value": true
+        }
+      },
+      "requiredFacts": [
+        "accountingPolicyTriggerOccurred"
+      ],
+      "sourceAnchor": "A-ACC-POLICY",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-VAT-INVOICE",
+      "requirementKey": "VAT_INVOICE_ISSUANCE",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "vatInvoiceIssuanceClassification",
+          "value": "IN_SCOPE"
+        }
+      },
+      "requiredFacts": [
+        "vatInvoiceIssuanceClassification"
+      ],
+      "sourceAnchor": "A-VAT-INVOICE",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-VAT-INVOICE-INTEGRITY",
+      "requirementKey": "VAT_INVOICE_AUTHENTICITY_INTEGRITY",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "invoiceIssuedOrRetained",
+          "value": true
+        }
+      },
+      "requiredFacts": [
+        "invoiceIssuedOrRetained"
+      ],
+      "sourceAnchor": "A-VAT-INVOICE-INTEGRITY",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
     }
   ],
   "operatorVocabulary": {

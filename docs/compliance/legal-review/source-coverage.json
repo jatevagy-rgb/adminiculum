@@ -396,14 +396,21 @@
       "sourceSha256": "717044712bfa9b5c4709e2881cc82a8d60369fdf90783ae01a8cb40e5090fdd2",
       "version": "2026-02-28",
       "provenance": "STANDALONE_SOURCE",
-      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
-      "domains": [],
-      "requirementsExtracted": [],
-      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
-      "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=433266"
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
+      "domains": [
+        "tax_accounting"
       ],
-      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+      "requirementsExtracted": [
+        "ACCOUNTING_REPORT_AND_BOOKKEEPING",
+        "ACCOUNTING_POLICY_PREPARATION"
+      ],
+      "reviewNotes": "Wave 4C bounded substantive review; all candidates remain LEGAL_REVIEW_REQUIRED.",
+      "reviewedProvisions": [
+        "4. § (1)",
+        "14. § (11)-(12)"
+      ],
+      "unreviewedReason": "Beszámolótípus-, könyvvizsgálat- és közzétételi küszöbök külön specialistai review tárgyai.",
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "HU:ACT:2000:XXXVII",
@@ -481,14 +488,21 @@
       "sourceSha256": "b5e9c8d039788c2e54e2084d8225e53708e8253fecf3a09b9d7aef0b849d1dc0",
       "version": "2026-07-31",
       "provenance": "STANDALONE_SOURCE",
-      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
-      "domains": [],
-      "requirementsExtracted": [],
-      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
-      "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=348003"
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
+      "domains": [
+        "tax_accounting"
       ],
-      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+      "requirementsExtracted": [
+        "VAT_INVOICE_ISSUANCE",
+        "VAT_INVOICE_AUTHENTICITY_INTEGRITY"
+      ],
+      "reviewNotes": "Wave 4C bounded substantive review; no VAT calculation or NAV integration candidate.",
+      "reviewedProvisions": [
+        "159-163. §",
+        "168/A. §"
+      ],
+      "unreviewedReason": "Ügylet-, mentesség- és adóalanyi minősítés specialistai kapu.",
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "HU:ACT:2008:XLVII",
