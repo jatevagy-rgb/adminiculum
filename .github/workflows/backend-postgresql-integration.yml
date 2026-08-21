@@ -252,10 +252,13 @@ jobs:
           CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
           CLIENT_PORTAL_READ_ENABLED: 'true'
         run: |
-          npm run test:phase5-fixture:db
-          rc=$?
+          if npm run test:phase5-fixture:db; then
+            rc=0
+          else
+            rc=$?
+          fi
           sed -i "s/^phase5-fixture=PENDING$/phase5-fixture=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
-          exit $rc
+          exit "$rc"
 
       - name: Backend PostgreSQL integration summary
         if: always()
