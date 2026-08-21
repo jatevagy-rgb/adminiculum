@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
+    "verify:prod-auth-config": "node scripts/validate-production-auth-build.mjs",
+    "verify:prod-auth-bundle": "node scripts/assert-production-auth-bundle.mjs",
     "verify:prod-env": "node scripts/assert-production-bundle-env.js",
     "start": "next start -p 3000",
     "lint": "next lint",

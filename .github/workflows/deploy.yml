@@ -279,6 +279,25 @@ jobs:
           && (needs.backend.result == 'success' || needs.backend.result == 'skipped')
           && (needs.migration.result == 'success' || needs.migration.result == 'skipped') }}
     environment: production
+    # Public, browser-exposed build configuration. Next.js inlines NEXT_PUBLIC_*
+    # at BUILD TIME, so these MUST be present when `next build` runs — a runtime
+    # App Service setting cannot repair an already-baked client bundle. Sourced
+    # from GitHub Environment (production) VARIABLES (non-secret public IDs/URLs),
+    # never from secrets. See Frontend/scripts/production-auth-build-contract.mjs.
+    env:
+      NEXT_PUBLIC_WORKFORCE_ENTRA_CLIENT_ID: ${{ vars.NEXT_PUBLIC_WORKFORCE_ENTRA_CLIENT_ID }}
+      NEXT_PUBLIC_WORKFORCE_ENTRA_TENANT_ID: ${{ vars.NEXT_PUBLIC_WORKFORCE_ENTRA_TENANT_ID }}
+      NEXT_PUBLIC_WORKFORCE_ENTRA_AUTHORITY: ${{ vars.NEXT_PUBLIC_WORKFORCE_ENTRA_AUTHORITY }}
+      NEXT_PUBLIC_WORKFORCE_ENTRA_REDIRECT_URI: ${{ vars.NEXT_PUBLIC_WORKFORCE_ENTRA_REDIRECT_URI }}
+      NEXT_PUBLIC_WORKFORCE_ENTRA_POST_LOGOUT_REDIRECT_URI: ${{ vars.NEXT_PUBLIC_WORKFORCE_ENTRA_POST_LOGOUT_REDIRECT_URI }}
+      NEXT_PUBLIC_WORKFORCE_ADMINICULUM_API_SCOPE: ${{ vars.NEXT_PUBLIC_WORKFORCE_ADMINICULUM_API_SCOPE }}
+      NEXT_PUBLIC_ENTRA_CLIENT_ID: ${{ vars.NEXT_PUBLIC_ENTRA_CLIENT_ID }}
+      NEXT_PUBLIC_ENTRA_TENANT_ID: ${{ vars.NEXT_PUBLIC_ENTRA_TENANT_ID }}
+      NEXT_PUBLIC_ENTRA_AUTHORITY: ${{ vars.NEXT_PUBLIC_ENTRA_AUTHORITY }}
+      NEXT_PUBLIC_ENTRA_REDIRECT_URI: ${{ vars.NEXT_PUBLIC_ENTRA_REDIRECT_URI }}
+      NEXT_PUBLIC_ENTRA_POST_LOGOUT_REDIRECT_URI: ${{ vars.NEXT_PUBLIC_ENTRA_POST_LOGOUT_REDIRECT_URI }}
+      NEXT_PUBLIC_ADMINICULUM_API_SCOPE: ${{ vars.NEXT_PUBLIC_ADMINICULUM_API_SCOPE }}
+      NEXT_PUBLIC_BACKEND_BASE_URL: ${{ vars.NEXT_PUBLIC_BACKEND_BASE_URL }}
     steps:
       - name: If backend was not deployed this run, require the current production backend to be healthy
         if: ${{ inputs.deploy_backend != true }}
@@ -300,6 +319,15 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Validate production public auth build config (fail closed)
+        working-directory: Frontend
+        run: |
+          set -euo pipefail
+          # Fails BEFORE build if any required public NEXT_PUBLIC_* auth variable
+          # is empty, so an invalid artifact (empty MSAL clientId/authority) can
+          # never be generated. Prints variable NAMES only, never values.
+          npm run verify:prod-auth-config
+
       - name: Production Next build (standalone)
         working-directory: Frontend
         run: |
@@ -307,6 +335,14 @@ jobs:
           npm ci
           npm run build
           test -d .next/standalone || { echo "standalone output missing (next.config output: 'standalone'?)"; exit 1; }
+
+      - name: Assert baked auth config in standalone artifact (regression guard)
+        working-directory: Frontend
+        run: |
+          set -euo pipefail
+          # Proves the emitted bundle contains the real workforce + customer
+          # clientId/authority/scopes (not the incident's empty state).
+          npm run verify:prod-auth-bundle
 
       - name: Assemble + validate standalone package
         working-directory: Frontend
