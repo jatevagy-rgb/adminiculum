@@ -19,15 +19,18 @@ describe("CP1 organizational client portal UI", () => {
     assert.match(shell(), /selectedWorkspace\?\.mode === 'ORGANIZATION'/);
     assert.match(shell(), /selectedWorkspace\?\.mode === 'CASE_RELAY'/);
     assert.match(shell(), /OrganizationPortalViews/);
-    assert.match(shell(), /Új megkeresés/);
-    assert.match(shell(), /Megkereséseim/);
-    assert.match(shell(), /capabilities\.intakes/);
-    assert.match(shell(), /Kommunikáció/);
-    assert.match(shell(), /Vezetői áttekintés/);
-    assert.match(shell(), /workspace\.mode === 'ORGANIZATION' && capabilities\.leadership/);
-    assert.match(shell(), /Együttműködési áttekintés/);
+    assert.match(shell(), /OrgHomeView/);
+    // Phase 5 organizational IA (7 top-level items).
+    assert.match(shell(), /'Szerződések', '\/portal\/szerzodesek'/);
+    assert.match(shell(), /'Vállalat', '\/portal\/vallalat'/);
+    assert.match(shell(), /'Kapcsolat', '\/portal\/uzenetek'/);
     assert.equal(existsSync(path.join(root, "src/app/portal/szervezeti-attekintes/page.tsx")), true);
+    assert.equal(existsSync(path.join(root, "src/app/portal/szerzodesek/page.tsx")), true);
+    assert.equal(existsSync(path.join(root, "src/app/portal/vallalat/page.tsx")), true);
     assert.match(read("src/app/portal/megkeresesek/uj/page.tsx"), /view="new-intake"/);
+    // Legacy ORG top-level nav entries are removed from the organizational IA.
+    assert.doesNotMatch(shell(), /workspace\.mode === 'ORGANIZATION' && capabilities\.intakes \? \['Új megkeresés'/);
+    assert.doesNotMatch(shell(), /workspace\.mode === 'ORGANIZATION' && capabilities\.leadership \? \['Vezetői áttekintés'/);
   });
 
   it("defines customer-safe organization DTOs and endpoint wrappers", () => {

@@ -41,6 +41,7 @@ import {
 import { resolveMemberUnits } from '../modules/client-workspace/organizationUnitService';
 import { getOrganizationalCaseDetail, listOrganizationalCases, OrganizationalCaseListParams } from '../modules/client-workspace/organizationalCaseService';
 import { organizationSummary, unitSummary } from '../modules/client-workspace/leadershipSummaryService';
+import { getOrganizationalHome } from '../modules/client-workspace/orgHomeService';
 import { RelationshipToCase } from '../modules/client-workspace/organizationalAccessPolicy';
 import {
   createIntakeDraft,
@@ -425,6 +426,16 @@ router.post('/org/intakes/:intakeId/responses', async (req, res) => {
 router.post('/org/intakes/:intakeId/attachments', async (req, res) => {
   try { if (!(await portalIntake(req, res))) return; const context = orgContext(req); res.status(201).json(await addIntakeAttachment(context.identityId, context.workspaceId, String(req.params.intakeId), req.body || {})); }
   catch (error) { fail(res, error); }
+});
+
+router.get('/org/home', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await getOrganizationalHome(identityId, workspaceId));
+  } catch (error) {
+    fail(res, error);
+  }
 });
 
 router.get('/org/units', async (req, res) => {

@@ -1,0 +1,99 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
+const root = process.cwd();
+const read = (relative: string) => readFileSync(path.join(root, relative), "utf8");
+
+describe("Phase 5A organizational customer portal shell + home journey", () => {
+  const shell = () => read("src/components/client-portal/ClientPortalShell.tsx");
+  const orgHome = () => read("src/components/client-portal/OrgHomeView.tsx");
+  const orgViews = () => read("src/components/client-portal/OrganizationPortalViews.tsx");
+  const api = () => read("src/lib/clientPortalApi.ts");
+
+  it("organizational nav has the exact Phase 5 IA labels in order", () => {
+    const src = shell();
+    const orgIdx = src.indexOf("if (workspace.mode === 'ORGANIZATION')");
+    const orgBlock = src.slice(orgIdx, src.indexOf("if (workspace.mode === 'CASE_RELAY')"));
+    const order = ["Főoldal", "Ügyek", "Szerződések", "Teendők", "Vállalat", "Dokumentumok", "Kapcsolat"];
+    let last = -1;
+    for (const label of order) {
+      const idx = orgBlock.indexOf(`'${label}'`);
+      assert.ok(idx > -1, `org IA missing ${label}`);
+      assert.ok(idx > last, `org IA order violated for ${label}`);
+      last = idx;
+    }
+    // No technical/legacy wording in the org nav.
+    assert.doesNotMatch(orgBlock, /Ügyeim|Új megkeresés|Megkereséseim|Vezetői áttekintés|Kommunikáció|Együttműködési áttekintés/);
+  });
+
+  it("Főoldal renders Eddig / Most / Következőként journey", () => {
+    const src = orgHome();
+    for (const token of ["Eddig", "Most", "Következőként", "A munkája menete", "Üdvözöljük", "Tőled várjuk", "Ami most Öntől kell", "Kapcsolat"]) {
+      assert.match(src, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+    assert.match(src, /matter\.currentPosition/);
+    assert.match(src, /matter\.nextStep/);
+    assert.match(src, /milestones/);
+    assert.match(src, /progressPercentage/);
+    // neutral next-step empty state
+    assert.match(src, /Jelenleg nincs Öntől szükséges teendő/);
+  });
+
+  it("home empty states are human, never raw data markers", () => {
+    const src = orgHome();
+    for (const empty of ["Jelenleg nincs közzétett aktív ügye", "Ehhez a munkához még nem tettünk közzé dokumentumot", "Még nincs folyamatban kérdés vagy üzenetváltás"]) {
+      assert.match(src, new RegExp(empty.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+    assert.doesNotMatch(src, /No data|0 records/);
+  });
+
+  it("home journey derives from immutable published revision, not live task/finding", () => {
+    const src = orgHome();
+    assert.doesNotMatch(src, /taskNotes|workInstruction|AssessmentFinding|internalOwner|reviewer|spItemId|sharePoint|aiPrompt|aiResponse|auditEvent/);
+    assert.match(src, /getPortalOrgHome/);
+  });
+
+  it("uses the canonical org home endpoint with a customer-safe DTO", () => {
+    const apiSrc = api();
+    for (const token of ["PortalOrgHome", "getPortalOrgHome", "/client-portal/org/home", "PortalOrgHomeMatter", "contactSummary", "currentMatter"]) {
+      assert.match(apiSrc, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+    assert.doesNotMatch(apiSrc, /prisma|storageProvider|scanProvider|quarantineStorageReference|spItemId/);
+  });
+
+  it("Szerződések and Vállalat are prepared as coming-next routes, not raw data", () => {
+    const views = orgViews();
+    assert.match(views, /view === "contracts"/);
+    assert.match(views, /view === "company"/);
+    assert.match(views, /hamarosan ezen a felületen lesz elérhető/);
+    assert.doesNotMatch(views, /ContractRecord|company-workspace|getWorkspaceOverview/);
+  });
+
+  it("Teendők uses customer action objects, not the internal Task list", () => {
+    const views = orgViews();
+    assert.match(views, /OrganizationTasks/);
+    assert.match(views, /workspace\.actions\.filter/);
+    assert.match(views, /Most szükséges/);
+    assert.doesNotMatch(views, /internal Task|taskStatus|workInstruction/);
+  });
+
+  it("INDIVIDUAL nav remains unchanged and backward compatible", () => {
+    const src = shell();
+    const orgIdx = src.indexOf("if (workspace.mode === 'ORGANIZATION')");
+    const caseRelayIdx = src.indexOf("if (workspace.mode === 'CASE_RELAY')");
+    const individualBlock = src.slice(caseRelayIdx + "if (workspace.mode === 'CASE_RELAY')".length);
+    assert.match(individualBlock, /Ügyeim/);
+    assert.match(individualBlock, /Teendőim/);
+    assert.match(individualBlock, /Üzenetek/);
+  });
+
+  it("Kapcsolat wording unifies customer messaging, not Outlook", () => {
+    const views = orgViews();
+    assert.match(views, /title="Kapcsolat"/);
+    assert.match(views, /Itt tud az irodával az ügyeiről egyeztetni/);
+    assert.doesNotMatch(views, /title="Kommunikáció"/);
+    assert.doesNotMatch(views, /Outlook sync/);
+  });
+});
