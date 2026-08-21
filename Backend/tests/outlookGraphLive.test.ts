@@ -189,9 +189,9 @@ describe('outlookGraphLive: attachment metadata-only wire boundary', () => {
             name: 'secret.pdf',
             contentType: 'application/pdf',
             size: 4096,
-            // @ts-expect-error — contentBytes/unknown fields must be ignored, not typed in.
+            // contentBytes/unknown fields must be ignored, not typed in.
             contentBytes: 'JVBERi0xLjcKJUERROR_BINARY',
-            // @ts-expect-error — unknown extra field must not be spread.
+            // unknown extra field must not be spread.
             isInline: false,
           },
         ],
