@@ -11,6 +11,8 @@ const root = path.resolve(__dirname, '..', '..');
 const corpus = 'C:/Users/hubay/Documents/Adminiculum/tvek';
 const requirements = JSON.parse(fs.readFileSync(path.join(root, 'docs/compliance/legal-review/requirements-candidates.json'), 'utf8'));
 const applicability = JSON.parse(fs.readFileSync(path.join(root, 'docs/compliance/legal-review/applicability-candidates.json'), 'utf8'));
+const coverage = JSON.parse(fs.readFileSync(path.join(root, 'docs/compliance/legal-review/source-coverage.json'), 'utf8'));
+const facts = JSON.parse(fs.readFileSync(path.join(root, 'docs/compliance/legal-review/fact-registry-candidates.json'), 'utf8'));
 const fields = JSON.parse(fs.readFileSync(path.join(root, 'artifacts/compliance-templates/template-fields.json'), 'utf8')).fields;
 const templates = fs.readdirSync(path.join(root, 'artifacts/compliance-templates'), { withFileTypes: true }).filter((entry) => entry.isDirectory());
 const compactHash = (text) => crypto.createHash('sha256').update(Buffer.from(text.replace(/\s+/g, ' ').trim(), 'utf8')).digest('hex');
@@ -31,7 +33,41 @@ test('every requirement has a complete source anchor and every applicability rul
       assert.ok(anchor.provisionReference && anchor.provenance);
     }
   }
-  for (const rule of applicability.rules) assert.ok(keys.has(rule.requirementKey));
+  const factKeys = new Set(facts.facts.map((fact) => fact.factKey));
+  for (const rule of applicability.rules) {
+    assert.ok(keys.has(rule.requirementKey));
+    for (const fact of rule.requiredFacts) assert.ok(factKeys.has(fact), fact);
+  }
+});
+
+function evaluateRopa(input) {
+  const required = ['employeeCount', 'processingRiskLikely', 'processingIsOccasional', 'specialCategoryData', 'criminalOffenceData'];
+  if (required.some((key) => typeof input[key] === 'undefined')) return 'REQUIRES_LEGAL_REVIEW';
+  if (input.employeeCount >= 250) return 'APPLIES';
+  return input.processingRiskLikely || !input.processingIsOccasional || input.specialCategoryData || input.criminalOffenceData
+    ? 'APPLIES'
+    : 'DOES_NOT_APPLY';
+}
+
+test('GDPR Article 30(5) ROPA exception retains each statutory exception', () => {
+  assert.strictEqual(evaluateRopa({ employeeCount: 250, processingRiskLikely: false, processingIsOccasional: true, specialCategoryData: false, criminalOffenceData: false }), 'APPLIES');
+  assert.strictEqual(evaluateRopa({ employeeCount: 20, processingRiskLikely: false, processingIsOccasional: true, specialCategoryData: false, criminalOffenceData: false }), 'DOES_NOT_APPLY');
+  for (const exceptionKey of ['processingRiskLikely', 'specialCategoryData', 'criminalOffenceData']) {
+    const input = { employeeCount: 20, processingRiskLikely: false, processingIsOccasional: true, specialCategoryData: false, criminalOffenceData: false };
+    input[exceptionKey] = true;
+    assert.strictEqual(evaluateRopa(input), 'APPLIES', exceptionKey);
+  }
+  assert.strictEqual(evaluateRopa({ employeeCount: 20, processingRiskLikely: false, processingIsOccasional: false, specialCategoryData: false, criminalOffenceData: false }), 'APPLIES');
+  assert.strictEqual(evaluateRopa({ employeeCount: 20, processingRiskLikely: false, processingIsOccasional: true, specialCategoryData: false }), 'REQUIRES_LEGAL_REVIEW');
+});
+
+test('full corpus disposition is unique, complete and never an approval', () => {
+  assert.strictEqual(coverage.coverage.length, 62);
+  assert.strictEqual(new Set(coverage.coverage.map((entry) => entry.sourceKey)).size, 62);
+  for (const entry of coverage.coverage) {
+    assert.ok(['REQUIREMENTS_EXTRACTED', 'REQUIRES_SPECIALIST_LEGAL_REVIEW', 'VERSION_AMBIGUOUS', 'REFERENCE_OR_PROMULGATION_ONLY', 'SOURCE_INCOMPLETE'].includes(entry.coverageStatus));
+    assert.notStrictEqual(entry.coverageStatus, 'APPROVED');
+  }
 });
 
 test('captured anchor excerpt hashes resolve against the read-only corpus', () => {
@@ -49,7 +85,8 @@ test('captured anchor excerpt hashes resolve against the read-only corpus', () =
 
 test('template packages carry source basis, known fields and no automatic approval', () => {
   const registry = new Set(fields.map((field) => field.key));
-  assert.strictEqual(templates.length, 6);
+  assert.strictEqual(templates.length, 11);
+  const requirementKeys = new Set(requirements.requirements.map((item) => item.requirementKey));
   for (const template of templates) {
     const folder = path.join(root, 'artifacts/compliance-templates', template.name);
     const spec = JSON.parse(fs.readFileSync(path.join(folder, 'template-spec.json'), 'utf8'));
@@ -58,6 +95,7 @@ test('template packages carry source basis, known fields and no automatic approv
     assert.strictEqual(spec.legalReviewStatus, 'LEGAL_REVIEW_REQUIRED');
     assert.strictEqual(spec.approvedAt, null);
     assert.ok(basis.sourceAnchors.length > 0);
+    for (const key of basis.requirementKeys) assert.ok(requirementKeys.has(key), key);
     for (const key of fieldRefs.fieldKeys) assert.ok(registry.has(key), key);
     assert.ok(fs.statSync(path.join(folder, 'template.docx')).size > 1000);
     const xml = readDocxDocumentXml(path.join(folder, 'template.docx'));

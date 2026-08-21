@@ -10,14 +10,14 @@
       "sourceSha256": "50c4abba9befdf5615003b5105810fe0fdaf338c7e88a1e1ad71f0c86494a02b",
       "sourceVersion": "2016-05-04",
       "provisionReference": "13. cikk (1)-(2)",
-      "headingContext": "Rendelkezésre bocsátandó információk, ha a személyes adatokat az érintettől gyűjtik",
+      "headingContext": "Közvetlen adatgyűjtésnél rendelkezésre bocsátandó információk",
       "lineSpan": {
         "start": 1130,
         "end": 1187
       },
       "excerptSha256": "e25fbac8ba33df08a9d89a813050ab6ac6b1f82f860fd5a315eb1efd8fc52db0",
       "provenance": "STANDALONE_SOURCE",
-      "anchorKey": "A-GDPR-13-1-2"
+      "anchorKey": "A-GDPR-13"
     }
   ],
   "customerDocumentCitation": "Human-readable legal references may be added only after lawyer review; hashes remain internal."

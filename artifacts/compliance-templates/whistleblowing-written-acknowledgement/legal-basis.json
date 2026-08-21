@@ -2,7 +2,7 @@
   "templateKey": "whistleblowing-written-acknowledgement",
   "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
   "requirementKeys": [
-    "WHISTLEBLOWING_ACKNOWLEDGEMENT_AND_INVESTIGATION"
+    "WHISTLEBLOWING_ACKNOWLEDGEMENT"
   ],
   "sourceAnchors": [
     {

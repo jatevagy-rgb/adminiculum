@@ -1,0 +1,635 @@
+{
+  "schemaVersion": "1.0.0",
+  "status": "LEGAL_REVIEW_REQUIRED",
+  "facts": [
+    {
+      "factKey": "employeeCount",
+      "labelHu": "Foglalkoztatotti létszám",
+      "dataType": "number",
+      "allowedValues": null,
+      "existingClientFactType": "EMPLOYEE_COUNT",
+      "legalMeaning": "A foglalkoztatásra irányuló jogviszonyban foglalkoztatottak létszáma.",
+      "usedByRules": [
+        "APPL-GDPR-ROPA",
+        "APPL-WB-CHANNEL"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "Mennyi személyt foglalkoztat a vállalkozás foglalkoztatásra irányuló jogviszonyban?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "processesPersonalData",
+      "labelHu": "Személyes adatok kezelése",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "A vállalkozás személyes adatot kezel-e.",
+      "usedByRules": [
+        "APPL-GDPR-DIRECT-COLLECTION"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "Kezel a vállalkozás természetes személyre vonatkozó személyes adatot?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "processingRiskLikely",
+      "labelHu": "Adatkezelési kockázat valószínűsége",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "A GDPR 30. cikk (5) szerinti kockázati feltétel.",
+      "usedByRules": [
+        "APPL-GDPR-ROPA"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "Az adatkezelés valószínűsíthetően kockázattal jár az érintettek jogaira és szabadságaira nézve?",
+      "sensitive": false,
+      "refreshPolicy": "LAWYER_REVIEWED_CLASSIFICATION",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "processingIsOccasional",
+      "labelHu": "Alkalmi adatkezelés",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "A GDPR 30. cikk (5) szerinti alkalmi jelleg.",
+      "usedByRules": [
+        "APPL-GDPR-ROPA"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "Az adott adatkezelés alkalmi jellegű?",
+      "sensitive": false,
+      "refreshPolicy": "LAWYER_REVIEWED_CLASSIFICATION",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "specialCategoryData",
+      "labelHu": "Különleges adatok kezelése",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": "SENSITIVE_DATA_USAGE",
+      "legalMeaning": "A GDPR 9. cikk (1) szerinti adatkategória érintettsége.",
+      "usedByRules": [
+        "APPL-GDPR-ROPA"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "Kezel különleges személyes adatokat?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "criminalOffenceData",
+      "labelHu": "Bűnügyi adatok kezelése",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "A GDPR 10. cikk szerinti adat érintettsége.",
+      "usedByRules": [
+        "APPL-GDPR-ROPA"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "Kezel bűncselekményekre vagy büntetőjogi felelősségre vonatkozó adatokat?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "dataCollectionSource",
+      "labelHu": "Adatgyűjtés forrása",
+      "dataType": "enum",
+      "allowedValues": [
+        "DIRECT_FROM_DATA_SUBJECT",
+        "OTHER",
+        "B2C",
+        "B2B",
+        "IN_SCOPE_2023_XXV_18_2",
+        "NOT_IN_SCOPE",
+        "UNKNOWN"
+      ],
+      "existingClientFactType": null,
+      "legalMeaning": "Közvetlen vagy közvetett adatgyűjtés.",
+      "usedByRules": [
+        "APPL-GDPR-DIRECT-COLLECTION"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "Közvetlenül az érintettől gyűjti az adatokat?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "customerRelationship",
+      "labelHu": "Ügyfélkapcsolat típusa",
+      "dataType": "enum",
+      "allowedValues": [
+        "DIRECT_FROM_DATA_SUBJECT",
+        "OTHER",
+        "B2C",
+        "B2B",
+        "IN_SCOPE_2023_XXV_18_2",
+        "NOT_IN_SCOPE",
+        "UNKNOWN"
+      ],
+      "existingClientFactType": null,
+      "legalMeaning": "Fogyasztói kapcsolat ténye.",
+      "usedByRules": [
+        "APPL-CONSUMER-COMPLAINT",
+        "APPL-CONSUMER-COMPLAINT-RECORD",
+        "APPL-CONSUMER-COMPLAINT-RESPONSE",
+        "APPL-CONSUMER-COMPLAINT-RETENTION"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "Értékesít vagy nyújt szolgáltatást magánszemély fogyasztóknak?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "personalDataBreach",
+      "labelHu": "Adatvédelmi incidens",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "A GDPR 33-34. cikk szerinti incidens.",
+      "usedByRules": [
+        "APPL-GDPR-BREACH-AUTHORITY",
+        "APPL-GDPR-BREACH-RECORD",
+        "APPL-GDPR-BREACH-SUBJECT"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "Történt személyes adatot érintő biztonsági incidens?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "breachRiskLikely",
+      "labelHu": "Incidens kockázata",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "A GDPR 33. cikk (1) szerinti kockázati vizsgálat eredménye.",
+      "usedByRules": [
+        "APPL-GDPR-BREACH-AUTHORITY"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "Az incidens valószínűsíthetően kockázattal jár az érintettek jogaira és szabadságaira?",
+      "sensitive": false,
+      "refreshPolicy": "LAWYER_REVIEWED_CLASSIFICATION",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "breachHighRiskLikely",
+      "labelHu": "Incidens magas kockázata",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "A GDPR 34. cikk (1) szerinti magas kockázat.",
+      "usedByRules": [
+        "APPL-GDPR-BREACH-SUBJECT"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "Az incidens valószínűsíthetően magas kockázattal jár?",
+      "sensitive": false,
+      "refreshPolicy": "LAWYER_REVIEWED_CLASSIFICATION",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "breachSubjectNoticeException",
+      "labelHu": "Érintetti tájékoztatási kivétel",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "A GDPR 34. cikk (3) kivételi feltétele.",
+      "usedByRules": [
+        "APPL-GDPR-BREACH-SUBJECT"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "A GDPR 34. cikk (3) szerinti kivétel fennáll?",
+      "sensitive": false,
+      "refreshPolicy": "LAWYER_REVIEWED_CLASSIFICATION",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "whistleblowingSpecialCategory",
+      "labelHu": "Bejelentővédelmi különös kategória",
+      "dataType": "enum",
+      "allowedValues": [
+        "DIRECT_FROM_DATA_SUBJECT",
+        "OTHER",
+        "B2C",
+        "B2B",
+        "IN_SCOPE_2023_XXV_18_2",
+        "NOT_IN_SCOPE",
+        "UNKNOWN"
+      ],
+      "existingClientFactType": "REGULATED_ACTIVITY",
+      "legalMeaning": "A 2023. évi XXV. törvény 18. § (2) kategóriája.",
+      "usedByRules": [
+        "APPL-WB-CHANNEL"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "A vállalkozás a törvény 18. § (2) szerinti különös kategóriába tartozik?",
+      "sensitive": false,
+      "refreshPolicy": "LAWYER_REVIEWED_CLASSIFICATION",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "complaintReceived",
+      "labelHu": "Fogyasztói panasz érkezése",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "Fogyasztói panasz ténye.",
+      "usedByRules": [
+        "APPL-CONSUMER-COMPLAINT-RECORD",
+        "APPL-CONSUMER-COMPLAINT-RESPONSE"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "Érkezett fogyasztói panasz?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "complaintOral",
+      "labelHu": "Panasz szóbeli formája",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "A panasz szóbeli előterjesztése.",
+      "usedByRules": [
+        "APPL-CONSUMER-COMPLAINT-RECORD"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "A panaszt szóban terjesztették elő?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "complaintWritten",
+      "labelHu": "Panasz írásbeli formája",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "A panasz írásbeli előterjesztése.",
+      "usedByRules": [
+        "APPL-CONSUMER-COMPLAINT-RESPONSE"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "A panaszt írásban terjesztették elő?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "complaintImmediateResolutionPossible",
+      "labelHu": "Azonnali panaszvizsgálat lehetősége",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "A szóbeli panasz azonnali kezelhetősége.",
+      "usedByRules": [
+        "APPL-CONSUMER-COMPLAINT-RECORD"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "A szóbeli panasz azonnal kivizsgálható volt?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "complaintConsumerDisagrees",
+      "labelHu": "Fogyasztói egyet nem értés",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "A fogyasztó egyetértése a szóbeli panasz kezelésével.",
+      "usedByRules": [
+        "APPL-CONSUMER-COMPLAINT-RECORD"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "A fogyasztó egyetértett a panasz kezelésével?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "complaintRecordOrWrittenComplaintExists",
+      "labelHu": "Megőrzendő panasz-irat",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "Jegyzőkönyv vagy írásbeli panasz és válasz keletkezése.",
+      "usedByRules": [
+        "APPL-CONSUMER-COMPLAINT-RETENTION"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "Keletkezett jegyzőkönyv vagy írásbeli panaszhoz kapcsolódó irat?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "internalWhistleblowingChannelStatus",
+      "labelHu": "Belső bejelentési rendszer állapota",
+      "dataType": "enum",
+      "allowedValues": [
+        "DIRECT_FROM_DATA_SUBJECT",
+        "OTHER",
+        "B2C",
+        "B2B",
+        "IN_SCOPE_2023_XXV_18_2",
+        "NOT_IN_SCOPE",
+        "UNKNOWN"
+      ],
+      "existingClientFactType": null,
+      "legalMeaning": "A belső rendszer működési állapota.",
+      "usedByRules": [
+        "APPL-WB-ACKNOWLEDGEMENT",
+        "APPL-WB-INVESTIGATION",
+        "APPL-WB-EXTENSION",
+        "APPL-WB-OUTCOME",
+        "APPL-WB-ACCESSIBLE-INFORMATION"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "Működik belső visszaélés-bejelentési rendszer?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "whistleblowingReportReceived",
+      "labelHu": "Visszaélés-bejelentés érkezése",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "Belső rendszerbe érkezett bejelentés ténye.",
+      "usedByRules": [
+        "APPL-WB-ACKNOWLEDGEMENT",
+        "APPL-WB-INVESTIGATION",
+        "APPL-WB-EXTENSION",
+        "APPL-WB-OUTCOME"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "Érkezett bejelentés a belső rendszerbe?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "whistleblowingReportForm",
+      "labelHu": "Visszaélés-bejelentés formája",
+      "dataType": "enum",
+      "allowedValues": [
+        "DIRECT_FROM_DATA_SUBJECT",
+        "OTHER",
+        "B2C",
+        "B2B",
+        "IN_SCOPE_2023_XXV_18_2",
+        "NOT_IN_SCOPE",
+        "UNKNOWN"
+      ],
+      "existingClientFactType": null,
+      "legalMeaning": "A bejelentés írásbeli vagy szóbeli formája.",
+      "usedByRules": [
+        "APPL-WB-ACKNOWLEDGEMENT"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "A bejelentést írásban vagy szóban tették meg?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "whistleblowingInvestigationOmitted",
+      "labelHu": "Kivizsgálás mellőzése",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "A kivizsgálás mellőzésének ténye és jogszerűsége.",
+      "usedByRules": [
+        "APPL-WB-INVESTIGATION"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "A kivizsgálást mellőzték?",
+      "sensitive": false,
+      "refreshPolicy": "LAWYER_REVIEWED_CLASSIFICATION",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "whistleblowingInvestigationExtensionNeeded",
+      "labelHu": "Kivizsgálási hosszabbítás szükségessége",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "Különösen indokolt hosszabbítási helyzet.",
+      "usedByRules": [
+        "APPL-WB-EXTENSION"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "Szükséges különösen indokolt határidő-hosszabbítás?",
+      "sensitive": false,
+      "refreshPolicy": "LAWYER_REVIEWED_CLASSIFICATION",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "whistleblowingInvestigationClosed",
+      "labelHu": "Kivizsgálás lezárása",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "A kivizsgálás lezárult vagy mellőzésre került.",
+      "usedByRules": [
+        "APPL-WB-OUTCOME"
+      ],
+      "sourceBasis": [
+        "A-GDPR-30",
+        "A-GDPR-13",
+        "A-GDPR-33",
+        "A-GDPR-34",
+        "A-CP-17A",
+        "A-WB-18-19"
+      ],
+      "collectionQuestionHu": "Lezárult vagy mellőzésre került a kivizsgálás?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    }
+  ]
+}

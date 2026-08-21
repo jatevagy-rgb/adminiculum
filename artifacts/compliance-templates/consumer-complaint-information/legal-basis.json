@@ -1,8 +1,8 @@
 {
-  "templateKey": "consumer-complaint-record",
+  "templateKey": "consumer-complaint-information",
   "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
   "requirementKeys": [
-    "CONSUMER_COMPLAINT_RECORD"
+    "CONSUMER_COMPLAINT_INFORMATION"
   ],
   "sourceAnchors": [
     {

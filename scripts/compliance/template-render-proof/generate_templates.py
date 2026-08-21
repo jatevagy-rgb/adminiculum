@@ -26,7 +26,7 @@ TEMPLATES = [
     {
         "key": "gdpr-processing-activities-register", "title": "Adatkezelési tevékenységek nyilvántartása",
         "subtitle": "Adatkezelői nyilvántartás - felülvizsgálati tervezet", "kind": "register",
-        "requirements": ["GDPR_ROPA_CONTROLLER"], "anchors": ["A-GDPR-30-1-5"],
+        "requirements": ["GDPR_ROPA_CONTROLLER"], "anchors": ["A-GDPR-30"],
         "sections": [
             ("Rendeltetés", "A nyilvántartás az adatkezelő felelősségébe tartozó adatkezelési tevékenységek áttekinthető, írásbeli rögzítésére szolgál."),
             ("Nyilvántartási bejegyzés", "Minden adatkezelési tevékenységet külön, a tényleges működésnek megfelelő bejegyzésben kell rögzíteni."),
@@ -38,7 +38,7 @@ TEMPLATES = [
     {
         "key": "gdpr-direct-collection-privacy-notice", "title": "Adatkezelési tájékoztató",
         "subtitle": "Közvetlen adatgyűjtéshez - jogi felülvizsgálati tervezet", "kind": "notice",
-        "requirements": ["GDPR_PRIVACY_INFORMATION_DIRECT_COLLECTION"], "anchors": ["A-GDPR-13-1-2"],
+        "requirements": ["GDPR_PRIVACY_INFORMATION_DIRECT_COLLECTION"], "anchors": ["A-GDPR-13"],
         "sections": [
             ("Ki kezeli az adatokat", "Adatkezelő: {{company.legal_name}}; székhely: {{company.registered_office}}."),
             ("Az adatkezelés célja és jogalapja", "Cél: {{privacy.processing_purpose}}. Jogalap: {{privacy.legal_basis}}."),
@@ -49,7 +49,7 @@ TEMPLATES = [
     {
         "key": "consumer-complaint-record", "title": "Fogyasztói panasz jegyzőkönyve",
         "subtitle": "Kitöltendő nyilvántartási űrlap", "kind": "form",
-        "requirements": ["CONSUMER_COMPLAINT_RECORD_AND_RESPONSE"], "anchors": ["A-CP-17A-3A-8"],
+        "requirements": ["CONSUMER_COMPLAINT_RECORD"], "anchors": ["A-CP-17A"],
         "sections": [("Használat", "A jegyzőkönyvet a fogyasztóvédelmi szabályok szerinti esetekben, a tényleges panaszkezelési folyamathoz igazítva kell kitölteni.")],
         "table": ["Fogyasztó neve és elérhetősége", "A panasz előterjesztésének helye, ideje és módja", "A panasz részletes leírása és bizonyítékai", "A vállalkozás álláspontja", "Jegyzőkönyv felvevője", "Egyedi azonosító", "Fogyasztó aláírása / nyilatkozata"],
         "extra_fields": ["complaint.reference_number"]
@@ -57,7 +57,7 @@ TEMPLATES = [
     {
         "key": "consumer-complaint-written-response", "title": "Írásbeli válasz fogyasztói panaszra",
         "subtitle": "Ügyfélnek küldhető választervezet - jogi felülvizsgálat szükséges", "kind": "letter",
-        "requirements": ["CONSUMER_COMPLAINT_RECORD_AND_RESPONSE"], "anchors": ["A-CP-17A-3A-8"],
+        "requirements": ["CONSUMER_COMPLAINT_WRITTEN_RESPONSE"], "anchors": ["A-CP-17A"],
         "sections": [
             ("Hivatkozás", "Ügyszám: {{complaint.reference_number}}. Tisztelt Fogyasztó!"),
             ("A panasz kivizsgálása", "A bejelentésben foglaltakat megvizsgáltuk. A végleges válaszban a tényállást, a döntést és annak indokait pontosan kell rögzíteni."),
@@ -68,7 +68,7 @@ TEMPLATES = [
     {
         "key": "whistleblowing-internal-procedure", "title": "Belső visszaélés-bejelentési eljárásrend",
         "subtitle": "Foglalkoztatói működési tervezet - jogi felülvizsgálat szükséges", "kind": "policy",
-        "requirements": ["WHISTLEBLOWING_INTERNAL_CHANNEL", "WHISTLEBLOWING_ACKNOWLEDGEMENT_AND_INVESTIGATION"], "anchors": ["A-WB-18-19", "A-WB-21-25"],
+        "requirements": ["WHISTLEBLOWING_INTERNAL_CHANNEL", "WHISTLEBLOWING_INVESTIGATION_DEADLINE", "WHISTLEBLOWING_INVESTIGATION_EXTENSION", "WHISTLEBLOWING_ACCESSIBLE_INFORMATION"], "anchors": ["A-WB-18-19", "A-WB-21-25"],
         "sections": [
             ("Cél és hatály", "Az eljárásrend a {{company.legal_name}} belső visszaélés-bejelentési rendszerének működési keretét rögzíti."),
             ("Működtető és pártatlanság", "A rendszer működtetőjét, helyettesítését és összeférhetetlenségi szabályait a jóváhagyott változatban kell kijelölni."),
@@ -81,13 +81,64 @@ TEMPLATES = [
     {
         "key": "whistleblowing-written-acknowledgement", "title": "Visszaigazolás belső visszaélés-bejelentésről",
         "subtitle": "Írásbeli visszaigazolási tervezet", "kind": "letter",
-        "requirements": ["WHISTLEBLOWING_ACKNOWLEDGEMENT_AND_INVESTIGATION"], "anchors": ["A-WB-21-25"],
+        "requirements": ["WHISTLEBLOWING_ACKNOWLEDGEMENT"], "anchors": ["A-WB-21-25"],
         "sections": [
             ("Hivatkozás", "Bejelentés azonosítója: {{whistleblowing.report_reference}}. Tisztelt Bejelentő!"),
             ("Visszaigazolás", "Ezúton visszaigazoljuk bejelentésének kézhezvételét."),
             ("Eljárási tájékoztatás", "A bejelentést a vonatkozó belső eljárásrend és a jogszabályi keretek szerint vizsgáljuk ki. A személyes adatok kezelésére vonatkozó tájékoztatást a végleges dokumentumhoz kell csatolni vagy elérhetővé tenni."),
             ("Kapcsolattartás", "A vizsgálat során szükség esetén további információt kérhetünk. A megkeresésekre a kijelölt csatornán válaszoljon.")
         ], "table": None, "extra_fields": ["whistleblowing.report_reference"]
+    },
+    {
+        "key": "gdpr-breach-authority-notification", "title": "Adatvédelmi incidens hatósági bejelentése",
+        "subtitle": "Hatósági bejelentési tervezet - jogi felülvizsgálat szükséges", "kind": "notice",
+        "requirements": ["GDPR_BREACH_AUTHORITY_NOTIFICATION"], "anchors": ["A-GDPR-33"],
+        "sections": [
+            ("Hivatkozás", "Incidensazonosító: {{incident.reference_number}}."),
+            ("Tényállás", "Észlelés időpontja: {{incident.detected_at}}. Leírás: {{incident.description}}."),
+            ("Kockázat és intézkedések", "Kockázatértékelés: {{incident.risk_assessment}}. Megtett vagy tervezett intézkedések: {{incident.measures}}."),
+            ("Jogi felülvizsgálat", "A végleges bejelentés tartalmát, címzettjét és esetleges késedelem indokát ügyenként jogásznak kell ellenőriznie.")
+        ], "table": None, "extra_fields": ["incident.reference_number", "incident.detected_at", "incident.description", "incident.risk_assessment", "incident.measures"]
+    },
+    {
+        "key": "gdpr-breach-record", "title": "Adatvédelmi incidens nyilvántartása",
+        "subtitle": "Belső incidens-nyilvántartási tervezet", "kind": "register",
+        "requirements": ["GDPR_BREACH_RECORD"], "anchors": ["A-GDPR-33"],
+        "sections": [("Használat", "Minden személyesadat-incidenst külön bejegyzésben, a tényleges tényállás és intézkedések alapján kell rögzíteni.")],
+        "table": ["Incidensazonosító", "Tudomásszerzés időpontja", "Tényállás", "Hatások", "Kockázatértékelés", "Orvosló intézkedések"],
+        "extra_fields": ["incident.reference_number", "incident.detected_at", "incident.description", "incident.risk_assessment", "incident.measures"]
+    },
+    {
+        "key": "gdpr-breach-subject-notice", "title": "Tájékoztatás adatvédelmi incidensről",
+        "subtitle": "Érintettnek szóló tájékoztatási tervezet - jogi felülvizsgálat szükséges", "kind": "notice",
+        "requirements": ["GDPR_BREACH_SUBJECT_NOTICE"], "anchors": ["A-GDPR-34"],
+        "sections": [
+            ("Tényállás", "Incidensazonosító: {{incident.reference_number}}. Leírás: {{incident.description}}."),
+            ("Lehetséges következmények", "{{incident.risk_assessment}}"),
+            ("Megtett intézkedések", "{{incident.measures}}"),
+            ("Kapcsolattartás", "A végleges tájékoztatóban a konkrét ügyhöz igazított kapcsolattartási és jogorvoslati információt kell megadni.")
+        ], "table": None, "extra_fields": ["incident.reference_number", "incident.description", "incident.risk_assessment", "incident.measures"]
+    },
+    {
+        "key": "consumer-complaint-information", "title": "Panaszkezelési tájékoztató",
+        "subtitle": "Fogyasztói tájékoztató tervezet - jogi felülvizsgálat szükséges", "kind": "notice",
+        "requirements": ["CONSUMER_COMPLAINT_INFORMATION"], "anchors": ["A-CP-17A"],
+        "sections": [
+            ("Panasz előterjesztése", "A {{company.legal_name}} a panaszokat a végleges, jóváhagyott eljárásrendben megjelölt csatornákon fogadja."),
+            ("Kezelés és válasz", "A panasz kivizsgálását és az írásbeli választ a vonatkozó fogyasztóvédelmi szabályok és a tényleges ügy szerint kell teljesíteni."),
+            ("Jogérvényesítés", "A végleges változatban a vállalkozásra irányadó békéltető testületi és hatósági tájékoztatást kell feltüntetni.")
+        ], "table": None, "extra_fields": []
+    },
+    {
+        "key": "whistleblowing-outcome-notice", "title": "Tájékoztatás visszaélés-bejelentés kivizsgálásának eredményéről",
+        "subtitle": "Bejelentőnek szóló eredménytájékoztatási tervezet", "kind": "letter",
+        "requirements": ["WHISTLEBLOWING_OUTCOME_INFORMATION"], "anchors": ["A-WB-21-25"],
+        "sections": [
+            ("Hivatkozás", "Bejelentés azonosítója: {{whistleblowing.report_reference}}."),
+            ("Eredmény", "{{whistleblowing.outcome_summary}}"),
+            ("Intézkedések", "{{whistleblowing.measures_summary}}"),
+            ("Jogi felülvizsgálat", "A végleges tájékoztatást az ügy tényeihez, a titoktartási korlátokhoz és az alkalmazandó eljárási szabályokhoz kell igazítani.")
+        ], "table": None, "extra_fields": ["whistleblowing.report_reference", "whistleblowing.outcome_summary", "whistleblowing.measures_summary"]
     }
 ]
 

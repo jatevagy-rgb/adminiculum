@@ -1,27 +1,10 @@
 {
-  "templateKey": "whistleblowing-internal-procedure",
+  "templateKey": "whistleblowing-outcome-notice",
   "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
   "requirementKeys": [
-    "WHISTLEBLOWING_INTERNAL_CHANNEL",
-    "WHISTLEBLOWING_INVESTIGATION_DEADLINE",
-    "WHISTLEBLOWING_INVESTIGATION_EXTENSION",
-    "WHISTLEBLOWING_ACCESSIBLE_INFORMATION"
+    "WHISTLEBLOWING_OUTCOME_INFORMATION"
   ],
   "sourceAnchors": [
-    {
-      "sourceKey": "HU:ACT:2023:XXV",
-      "sourceSha256": "c88a6c6b20a913e4194d127c60af9a321a0d8c9d0b94fac5c6fa23bcddd68055",
-      "sourceVersion": "2026-07-29",
-      "provisionReference": "18-19. §",
-      "headingContext": "A foglalkoztató által létrehozott belső visszaélés-bejelentési rendszer",
-      "lineSpan": {
-        "start": 421,
-        "end": 441
-      },
-      "excerptSha256": "a2b7fc891200524569797821a93bb7c3fc30cc4cec27ebe9235d59662da6ede8",
-      "provenance": "STANDALONE_SOURCE",
-      "anchorKey": "A-WB-18-19"
-    },
     {
       "sourceKey": "HU:ACT:2023:XXV",
       "sourceSha256": "c88a6c6b20a913e4194d127c60af9a321a0d8c9d0b94fac5c6fa23bcddd68055",

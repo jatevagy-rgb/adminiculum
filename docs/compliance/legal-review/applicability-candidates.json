@@ -1,12 +1,496 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "2.0.0",
   "status": "LEGAL_REVIEW_REQUIRED",
-  "resultStates": ["APPLIES", "DOES_NOT_APPLY", "LIKELY_APPLIES", "REQUIRES_LEGAL_REVIEW", "UNKNOWN"],
+  "resultStates": [
+    "APPLIES",
+    "DOES_NOT_APPLY",
+    "LIKELY_APPLIES",
+    "REQUIRES_LEGAL_REVIEW",
+    "UNKNOWN"
+  ],
   "rules": [
-    {"ruleKey":"APPL-GDPR-ROPA","requirementKey":"GDPR_ROPA_CONTROLLER","logic":{"OR":[{"NUMBER_THRESHOLD":{"fact":"employeeCount","operator":">=","value":250}},{"EXISTS":{"fact":"processingPersonalData"}},{"EXISTS":{"fact":"specialCategoryData"}}]},"requiredFacts":["employeeCount","processingPersonalData","specialCategoryData","processingIsOccasional","processingRiskLikely"],"missingFactOutcome":"UNKNOWN_FACT_REQUIRED","sourceAnchor":"A-GDPR-30-1-5","legalReviewStatus":"LEGAL_REVIEW_REQUIRED"},
-    {"ruleKey":"APPL-GDPR-DIRECT-COLLECTION","requirementKey":"GDPR_PRIVACY_INFORMATION_DIRECT_COLLECTION","logic":{"AND":[{"EXISTS":{"fact":"processesPersonalData"}},{"ENUM_MATCH":{"fact":"dataCollectionSource","value":"DIRECT_FROM_DATA_SUBJECT"}}]},"requiredFacts":["processesPersonalData","dataCollectionSource"],"missingFactOutcome":"UNKNOWN_FACT_REQUIRED","sourceAnchor":"A-GDPR-13-1-2","legalReviewStatus":"LEGAL_REVIEW_REQUIRED"},
-    {"ruleKey":"APPL-CONSUMER-COMPLAINT","requirementKey":"CONSUMER_COMPLAINT_RECORD_AND_RESPONSE","logic":{"AND":[{"ENUM_MATCH":{"fact":"customerRelationship","value":"B2C"}},{"EXISTS":{"fact":"consumerComplaintReceived"}}]},"requiredFacts":["customerRelationship","consumerComplaintReceived"],"missingFactOutcome":"UNKNOWN_FACT_REQUIRED","sourceAnchor":"A-CP-17A-3A-8","legalReviewStatus":"LEGAL_REVIEW_REQUIRED"},
-    {"ruleKey":"APPL-WB-CHANNEL","requirementKey":"WHISTLEBLOWING_INTERNAL_CHANNEL","logic":{"OR":[{"NUMBER_THRESHOLD":{"fact":"employeeCount","operator":">=","value":50}},{"ENUM_MATCH":{"fact":"whistleblowingSpecialCategory","value":"IN_SCOPE_2023_XXV_18_2"}}]},"requiredFacts":["employeeCount","whistleblowingSpecialCategory"],"missingFactOutcome":"UNKNOWN_FACT_REQUIRED","sourceAnchor":"A-WB-18-19","legalReviewStatus":"LEGAL_REVIEW_REQUIRED"},
-    {"ruleKey":"APPL-WB-ACK","requirementKey":"WHISTLEBLOWING_ACKNOWLEDGEMENT_AND_INVESTIGATION","logic":{"AND":[{"ENUM_MATCH":{"fact":"internalWhistleblowingChannelStatus","value":"OPERATING"}},{"ENUM_MATCH":{"fact":"whistleblowingReportForm","value":"WRITTEN"}}]},"requiredFacts":["internalWhistleblowingChannelStatus","whistleblowingReportForm"],"missingFactOutcome":"UNKNOWN_FACT_REQUIRED","sourceAnchor":"A-WB-21-25","legalReviewStatus":"LEGAL_REVIEW_REQUIRED"}
+    {
+      "ruleKey": "APPL-GDPR-ROPA",
+      "requirementKey": "GDPR_ROPA_CONTROLLER",
+      "logic": {
+        "OR": [
+          {
+            "NUMBER_THRESHOLD": {
+              "fact": "employeeCount",
+              "operator": ">=",
+              "value": 250
+            }
+          },
+          {
+            "AND": [
+              {
+                "NUMBER_THRESHOLD": {
+                  "fact": "employeeCount",
+                  "operator": "<",
+                  "value": 250
+                }
+              },
+              {
+                "OR": [
+                  {
+                    "ENUM_MATCH": {
+                      "fact": "processingRiskLikely",
+                      "value": true
+                    }
+                  },
+                  {
+                    "ENUM_MATCH": {
+                      "fact": "processingIsOccasional",
+                      "value": false
+                    }
+                  },
+                  {
+                    "ENUM_MATCH": {
+                      "fact": "specialCategoryData",
+                      "value": true
+                    }
+                  },
+                  {
+                    "ENUM_MATCH": {
+                      "fact": "criminalOffenceData",
+                      "value": true
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "requiredFacts": [
+        "employeeCount",
+        "processingRiskLikely",
+        "processingIsOccasional",
+        "specialCategoryData",
+        "criminalOffenceData"
+      ],
+      "sourceAnchor": "A-GDPR-30",
+      "missingFactOutcome": "REQUIRES_LEGAL_REVIEW",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-GDPR-DIRECT-COLLECTION",
+      "requirementKey": "GDPR_PRIVACY_INFORMATION_DIRECT_COLLECTION",
+      "logic": {
+        "AND": [
+          {
+            "ENUM_MATCH": {
+              "fact": "processesPersonalData",
+              "value": true
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "dataCollectionSource",
+              "value": "DIRECT_FROM_DATA_SUBJECT"
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "processesPersonalData",
+        "dataCollectionSource"
+      ],
+      "sourceAnchor": "A-GDPR-13",
+      "missingFactOutcome": "UNKNOWN_FACT_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-GDPR-BREACH-AUTHORITY",
+      "requirementKey": "GDPR_BREACH_AUTHORITY_NOTIFICATION",
+      "logic": {
+        "AND": [
+          {
+            "ENUM_MATCH": {
+              "fact": "personalDataBreach",
+              "value": true
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "breachRiskLikely",
+              "value": true
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "personalDataBreach",
+        "breachRiskLikely"
+      ],
+      "sourceAnchor": "A-GDPR-33",
+      "missingFactOutcome": "REQUIRES_LEGAL_REVIEW",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-GDPR-BREACH-RECORD",
+      "requirementKey": "GDPR_BREACH_RECORD",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "personalDataBreach",
+          "value": true
+        }
+      },
+      "requiredFacts": [
+        "personalDataBreach"
+      ],
+      "sourceAnchor": "A-GDPR-33",
+      "missingFactOutcome": "UNKNOWN_FACT_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-GDPR-BREACH-SUBJECT",
+      "requirementKey": "GDPR_BREACH_SUBJECT_NOTICE",
+      "logic": {
+        "AND": [
+          {
+            "ENUM_MATCH": {
+              "fact": "personalDataBreach",
+              "value": true
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "breachHighRiskLikely",
+              "value": true
+            }
+          },
+          {
+            "NOT": {
+              "ENUM_MATCH": {
+                "fact": "breachSubjectNoticeException",
+                "value": true
+              }
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "personalDataBreach",
+        "breachHighRiskLikely",
+        "breachSubjectNoticeException"
+      ],
+      "sourceAnchor": "A-GDPR-34",
+      "missingFactOutcome": "REQUIRES_LEGAL_REVIEW",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-CONSUMER-COMPLAINT",
+      "requirementKey": "CONSUMER_COMPLAINT_INFORMATION",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "customerRelationship",
+          "value": "B2C"
+        }
+      },
+      "requiredFacts": [
+        "customerRelationship"
+      ],
+      "sourceAnchor": "A-CP-17A",
+      "missingFactOutcome": "UNKNOWN_FACT_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-CONSUMER-COMPLAINT-RECORD",
+      "requirementKey": "CONSUMER_COMPLAINT_RECORD",
+      "logic": {
+        "AND": [
+          {
+            "ENUM_MATCH": {
+              "fact": "customerRelationship",
+              "value": "B2C"
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "complaintReceived",
+              "value": true
+            }
+          },
+          {
+            "OR": [
+              {
+                "AND": [
+                  {
+                    "ENUM_MATCH": {
+                      "fact": "complaintOral",
+                      "value": true
+                    }
+                  },
+                  {
+                    "ENUM_MATCH": {
+                      "fact": "complaintImmediateResolutionPossible",
+                      "value": false
+                    }
+                  }
+                ]
+              },
+              {
+                "ENUM_MATCH": {
+                  "fact": "complaintConsumerDisagrees",
+                  "value": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "requiredFacts": [
+        "customerRelationship",
+        "complaintReceived",
+        "complaintOral",
+        "complaintImmediateResolutionPossible",
+        "complaintConsumerDisagrees"
+      ],
+      "sourceAnchor": "A-CP-17A",
+      "missingFactOutcome": "REQUIRES_LEGAL_REVIEW",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-CONSUMER-COMPLAINT-RESPONSE",
+      "requirementKey": "CONSUMER_COMPLAINT_WRITTEN_RESPONSE",
+      "logic": {
+        "AND": [
+          {
+            "ENUM_MATCH": {
+              "fact": "customerRelationship",
+              "value": "B2C"
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "complaintReceived",
+              "value": true
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "complaintWritten",
+              "value": true
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "customerRelationship",
+        "complaintReceived",
+        "complaintWritten"
+      ],
+      "sourceAnchor": "A-CP-17A",
+      "missingFactOutcome": "REQUIRES_LEGAL_REVIEW",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-CONSUMER-COMPLAINT-RETENTION",
+      "requirementKey": "CONSUMER_COMPLAINT_RETENTION",
+      "logic": {
+        "AND": [
+          {
+            "ENUM_MATCH": {
+              "fact": "customerRelationship",
+              "value": "B2C"
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "complaintRecordOrWrittenComplaintExists",
+              "value": true
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "customerRelationship",
+        "complaintRecordOrWrittenComplaintExists"
+      ],
+      "sourceAnchor": "A-CP-17A",
+      "missingFactOutcome": "REQUIRES_LEGAL_REVIEW",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-WB-CHANNEL",
+      "requirementKey": "WHISTLEBLOWING_INTERNAL_CHANNEL",
+      "logic": {
+        "OR": [
+          {
+            "NUMBER_THRESHOLD": {
+              "fact": "employeeCount",
+              "operator": ">=",
+              "value": 50
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "whistleblowingSpecialCategory",
+              "value": "IN_SCOPE_2023_XXV_18_2"
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "employeeCount",
+        "whistleblowingSpecialCategory"
+      ],
+      "sourceAnchor": "A-WB-18-19",
+      "missingFactOutcome": "REQUIRES_LEGAL_REVIEW",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-WB-ACKNOWLEDGEMENT",
+      "requirementKey": "WHISTLEBLOWING_ACKNOWLEDGEMENT",
+      "logic": {
+        "AND": [
+          {
+            "ENUM_MATCH": {
+              "fact": "internalWhistleblowingChannelStatus",
+              "value": "ACTIVE"
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "whistleblowingReportReceived",
+              "value": true
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "whistleblowingReportForm",
+              "value": "WRITTEN"
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "internalWhistleblowingChannelStatus",
+        "whistleblowingReportReceived",
+        "whistleblowingReportForm"
+      ],
+      "sourceAnchor": "A-WB-21-25",
+      "missingFactOutcome": "REQUIRES_LEGAL_REVIEW",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-WB-INVESTIGATION",
+      "requirementKey": "WHISTLEBLOWING_INVESTIGATION_DEADLINE",
+      "logic": {
+        "AND": [
+          {
+            "ENUM_MATCH": {
+              "fact": "internalWhistleblowingChannelStatus",
+              "value": "ACTIVE"
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "whistleblowingReportReceived",
+              "value": true
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "whistleblowingInvestigationOmitted",
+              "value": false
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "internalWhistleblowingChannelStatus",
+        "whistleblowingReportReceived",
+        "whistleblowingInvestigationOmitted"
+      ],
+      "sourceAnchor": "A-WB-21-25",
+      "missingFactOutcome": "REQUIRES_LEGAL_REVIEW",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-WB-EXTENSION",
+      "requirementKey": "WHISTLEBLOWING_INVESTIGATION_EXTENSION",
+      "logic": {
+        "AND": [
+          {
+            "ENUM_MATCH": {
+              "fact": "internalWhistleblowingChannelStatus",
+              "value": "ACTIVE"
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "whistleblowingReportReceived",
+              "value": true
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "whistleblowingInvestigationExtensionNeeded",
+              "value": true
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "internalWhistleblowingChannelStatus",
+        "whistleblowingReportReceived",
+        "whistleblowingInvestigationExtensionNeeded"
+      ],
+      "sourceAnchor": "A-WB-21-25",
+      "missingFactOutcome": "REQUIRES_LEGAL_REVIEW",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-WB-OUTCOME",
+      "requirementKey": "WHISTLEBLOWING_OUTCOME_INFORMATION",
+      "logic": {
+        "AND": [
+          {
+            "ENUM_MATCH": {
+              "fact": "internalWhistleblowingChannelStatus",
+              "value": "ACTIVE"
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "whistleblowingReportReceived",
+              "value": true
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "whistleblowingInvestigationClosed",
+              "value": true
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "internalWhistleblowingChannelStatus",
+        "whistleblowingReportReceived",
+        "whistleblowingInvestigationClosed"
+      ],
+      "sourceAnchor": "A-WB-21-25",
+      "missingFactOutcome": "REQUIRES_LEGAL_REVIEW",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-WB-ACCESSIBLE-INFORMATION",
+      "requirementKey": "WHISTLEBLOWING_ACCESSIBLE_INFORMATION",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "internalWhistleblowingChannelStatus",
+          "value": "ACTIVE"
+        }
+      },
+      "requiredFacts": [
+        "internalWhistleblowingChannelStatus"
+      ],
+      "sourceAnchor": "A-WB-21-25",
+      "missingFactOutcome": "REQUIRES_LEGAL_REVIEW",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    }
   ]
 }

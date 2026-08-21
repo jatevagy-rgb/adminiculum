@@ -1,0 +1,1023 @@
+{
+  "schemaVersion": "1.0.0",
+  "corpusManifestVersion": "1.1.0",
+  "generatedAt": "2026-08-21",
+  "coverage": [
+    {
+      "sourceKey": "EU:EU_DIRECTIVE:CELEX:32022L2555",
+      "title": "AZ EURÓPAI PARLAMENT ÉS A TANÁCS (EU) 2022/2555 IRÁNYELVE az Unió egész területén egységesen magas szintű kiberbiztonságot biztosító intézkedésekről, valamint a 910/2014/EU rendelet és az (EU) 2018/1972 irányelv módosításáról és az (EU) 2016/1148 irányelv hatályon kívül helyezéséről (NIS 2 irányelv)",
+      "jurisdiction": "EU",
+      "sourceSha256": "7c02f6e8a051dad38d25356bcca50f629ba1ec16a969e1f7e5ae7c34ef6eb912",
+      "version": "2022-12-27",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=296431"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "EU:EU_DIRECTIVE:CELEX:32022L2557",
+      "title": "AZ EURÓPAI PARLAMENT ÉS A TANÁCS (EU) 2022/2557 IRÁNYELVE a kritikus szervezetek rezilienciájáról és a 2008/114/EK tanácsi irányelv hatályon kívül helyezéséről",
+      "jurisdiction": "EU",
+      "sourceSha256": "2679f602acc653ef1994578cf6843d42154905c1bb820754699f81698dc53556",
+      "version": "2022-12-27",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=137413"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32006R1907",
+      "title": "AZ EURÓPAI PARLAMENT ÉS A TANÁCS 1907/2006/EK RENDELETE a vegyi anyagok regisztrálásáról, értékeléséről, engedélyezéséről és korlátozásáról (REACH), az Európai Vegyianyag-ügynökség létrehozásáról, az 1999/45/EK irányelv módosításáról, valamint a 793/93/EGK tanácsi rendelet, az 1488/94/EK bizottsági rendelet, a 76/769/EGK tanácsi irányelv, a 91/155/EGK, a 93/67/EGK, a 93/105/EK és a 2000/21/EK bizottsági irányelv hatályon kívül helyezéséről (EGT vonatkozású szöveg)",
+      "jurisdiction": "EU",
+      "sourceSha256": "489f4181edde13eed8af1aeeb62c19665f54de600f8943caa014f4dd0171f873",
+      "version": "2026-05-11",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "VERSION_AMBIGUOUS",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=1207401"
+      ],
+      "unreviewedReason": null
+    },
+    {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32008R1272",
+      "title": "AZ EURÓPAI PARLAMENT ÉS A TANÁCS 1272/2008/EK RENDELETE az anyagok és keverékek osztályozásáról, címkézéséről és csomagolásáról, a 67/548/EGK és az 1999/45/EK irányelv módosításáról és hatályon kívül helyezéséről, valamint az 1907/2006/EK rendelet módosításáról",
+      "jurisdiction": "EU",
+      "sourceSha256": "4827ae957ce595cf2666cd7a3d764c4d6c45187251d27c167a60bdc39b0b2b66",
+      "version": "2026-07-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=2271360"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32013R0952",
+      "title": "AZ EURÓPAI PARLAMENT ÉS A TANÁCS 952/2013/EU RENDELETE az Uniós Vámkódex létrehozásáról (átdolgozás)",
+      "jurisdiction": "EU",
+      "sourceSha256": "3ab279aa508e537f4e164f2b07991159610d3cb595805122914fba6b9ea84c08",
+      "version": "2013-10-10",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=361260"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32016R0679",
+      "title": "AZ EURÓPAI PARLAMENT ÉS A TANÁCS (EU) 2016/679 RENDELETE a természetes személyeknek a személyes adatok kezelése tekintetében történő védelméről és az ilyen adatok szabad áramlásáról, valamint a 95/46/EK rendelet hatályon kívül helyezéséről (általános adatvédelmi rendelet)",
+      "jurisdiction": "EU",
+      "sourceSha256": "50c4abba9befdf5615003b5105810fe0fdaf338c7e88a1e1ad71f0c86494a02b",
+      "version": "2016-05-04",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
+      "domains": [
+        "adatvedelem"
+      ],
+      "requirementsExtracted": [
+        "GDPR_ROPA_CONTROLLER",
+        "GDPR_PRIVACY_INFORMATION_DIRECT_COLLECTION",
+        "GDPR_BREACH_AUTHORITY_NOTIFICATION",
+        "GDPR_BREACH_RECORD",
+        "GDPR_BREACH_SUBJECT_NOTICE"
+      ],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=371488"
+      ],
+      "unreviewedReason": null
+    },
+    {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32019R1020",
+      "title": "AZ EURÓPAI PARLAMENT ÉS A TANÁCS (EU) 2019/1020 RENDELETE a piacfelügyeletről és a termékek megfelelőségéről, valamint a 2004/42/EK irányelv, továbbá a 765/2008/EK és a 305/2011/EU rendelet módosításáról",
+      "jurisdiction": "EU",
+      "sourceSha256": "3f296a0237666915a2ca3c8bef018d4b3b5e9895a6abeb20e9ed85d2900f50ed",
+      "version": "2019-06-25",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=172871"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32021R0821",
+      "title": "AZ EURÓPAI PARLAMENT ÉS A TANÁCS (EU) 2021/821 RENDELETE a kettős felhasználású termékek kivitelére, az azokkal végzett brókertevékenységre, az azokkal kapcsolatos technikai segítségnyújtásra, valamint azok tranzitjára és transzferjére vonatkozó uniós ellenőrzési rendszer kialakításáról (átdolgozás) (HL L 206, 2021.6.11., 1. o)",
+      "jurisdiction": "EU",
+      "sourceSha256": "f51f85fbad6abae3c75b2cd43a24b52d6f0b39bf8daf6c3354370c0e9f4a0277",
+      "version": "2025-11-15",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=883123"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32022R2065",
+      "title": "AZ EURÓPAI PARLAMENT ÉS A TANÁCS (EU) 2022/2065 RENDELETE a digitális szolgáltatások egységes piacáról és a 2000/31/EK irányelv módosításáról (digitális szolgáltatásokról szóló rendelet)",
+      "jurisdiction": "EU",
+      "sourceSha256": "f66b55501fdeb9a855fd173ce378a4fee8135bee713827f4c9f690923bcad9c1",
+      "version": "2022-10-27",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=448020"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32022R2554",
+      "title": "AZ EURÓPAI PARLAMENT ÉS A TANÁCS (EU) 2022/2554 RENDELETE a pénzügyi ágazat digitális működési rezilienciájáról, valamint az 1060/2009/EK, a 648/2012/EU, a 600/2014/EU, a 909/2014/EU és az (EU) 2016/1011 rendelet módosításáról",
+      "jurisdiction": "EU",
+      "sourceSha256": "9bf208b8f40648e9696e0d38cda4bcfec2a2d647204b9e406b85d54d4e068c67",
+      "version": "2022-12-27",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=333020"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32023R0988",
+      "title": "AZ EURÓPAI PARLAMENT ÉS A TANÁCS (EU) 2023/988 RENDELETE az általános termékbiztonságról, az 1025/2012/EU európai parlamenti és tanácsi rendelet és az (EU) 2020/1828 európai parlamenti és tanácsi irányelv módosításáról, valamint a 2001/95/EK európai parlamenti és tanácsi irányelv és a 87/357/EGK tanácsi irányelv hatályon kívül helyezéséről",
+      "jurisdiction": "EU",
+      "sourceSha256": "2b4354df6f4da48f21281aebde5997daa6bafd0c26dd03c6f64bb3ba00ed57d4",
+      "version": "2023-05-23",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=199456"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32024R1689",
+      "title": "AZ EURÓPAI PARLAMENT ÉS A TANÁCS (EU) 2024/1689 RENDELETE a mesterséges intelligenciára vonatkozó harmonizált szabályok megállapításáról, valamint a 300/2008/EK, a 167/2013/EU, a 168/2013/EU, az (EU) 2018/858, az (EU) 2018/1139 és az (EU) 2019/2144 rendelet, továbbá a 2014/90/EU, az (EU) 2016/797 és az (EU) 2020/1828 irányelv módosításáról (a mesterséges intelligenciáról szóló rendelet)",
+      "jurisdiction": "EU",
+      "sourceSha256": "ed0d639a76f475d535a2c4cbe0620e78459b86d8cba441c7439c10b31fc4f354",
+      "version": "2024-07-12",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=639115"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:1990:C",
+      "title": "1990. évi C. TÖRVÉNY a helyi adókról",
+      "jurisdiction": "HU",
+      "sourceSha256": "6138e4db7d4715a66a85e23fba5cf7061d998eaafc49f3ec3290fd4519a29435",
+      "version": "2026-07-31",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=166017"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:1993:XCIII",
+      "title": "1993. évi XCIII. törvény a munkavédelemről",
+      "jurisdiction": "HU",
+      "sourceSha256": "b7cbae3e25952a041e25e74d216b4c3e347997de42dc9494a8f08ffc7a296088",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=168152"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:1995:CXVII",
+      "title": "1995. évi CXVII. törvény a személyi jövedelemadóról",
+      "jurisdiction": "HU",
+      "sourceSha256": "f905069f899230157b137e736419952c4519b07da89a3205ff4d949c08617801",
+      "version": "2026-07-24",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=426306"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:1995:LIII",
+      "title": "1995. évi LIII. törvény a környezet védelmének általános szabályairól",
+      "jurisdiction": "HU",
+      "sourceSha256": "6f1ce5812b96c243b94291aa295358bfb6fb9191a34c85cf9a1b2f3e3568ef61",
+      "version": "2026-08-12",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=171569"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:1995:XXXIII",
+      "title": "1995. évi XXXIII. törvény a találmányok szabadalmi oltalmáról",
+      "jurisdiction": "HU",
+      "sourceSha256": "d76a7aa7964e32c61bedfbf85668651c7a43508aac34806ecc12cb56df035737",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=306234"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:1996:LVII",
+      "title": "1996. évi LVII. törvény a tisztességtelen piaci magatartás és a versenykorlátozás tilalmáról",
+      "jurisdiction": "HU",
+      "sourceSha256": "4e8e8734ffb1d8cc215f890e49697c5219b8d88566eaf74f5e6670186dd5140e",
+      "version": "2026-06-29",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=347794"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:1996:LXXXI",
+      "title": "1996. évi LXXXI. törvény a társasági adóról és az osztalékadóról",
+      "jurisdiction": "HU",
+      "sourceSha256": "f95b8fcded15e6fc763e55f034c158e0cd706470460b187c2ccde83e3f6e40d9",
+      "version": "2026-02-28",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=424399"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:1997:CLV",
+      "title": "1997. évi CLV. törvény a fogyasztóvédelemről",
+      "jurisdiction": "HU",
+      "sourceSha256": "f874622e77cd465443a23f7f32393a694c85459881a82556edcfa944a1f8b812",
+      "version": "2026-02-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
+      "domains": [
+        "fogyasztovedelem"
+      ],
+      "requirementsExtracted": [
+        "CONSUMER_COMPLAINT_INFORMATION",
+        "CONSUMER_COMPLAINT_RECORD",
+        "CONSUMER_COMPLAINT_WRITTEN_RESPONSE",
+        "CONSUMER_COMPLAINT_RETENTION"
+      ],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=178484"
+      ],
+      "unreviewedReason": null
+    },
+    {
+      "sourceKey": "HU:ACT:1997:XI",
+      "title": "1997. évi XI. törvény a védjegyek és a földrajzi árujelzők oltalmáról",
+      "jurisdiction": "HU",
+      "sourceSha256": "f0a06f32028507ec35c13d73f94169955ad1311e73d7a6fe3dd639772124bb64",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=218616"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:1999:LXXVI",
+      "title": "1999. évi LXXVI. törvény a szerzői jogról",
+      "jurisdiction": "HU",
+      "sourceSha256": "5c7c753e2382e0e1911ac905f75a0b2bb5ab78dcd72eb196e9a0052c1483b417",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=205114"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2000:C",
+      "title": "2000. évi C. törvény a számvitelről",
+      "jurisdiction": "HU",
+      "sourceSha256": "717044712bfa9b5c4709e2881cc82a8d60369fdf90783ae01a8cb40e5090fdd2",
+      "version": "2026-02-28",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=433266"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2000:XXXVII",
+      "title": "2000. évi XXXVII. törvény a Gazdasági Együttműködési és Fejlesztési Szervezet (OECD) tagállamai, valamint Argentína, Brazília, Bulgária, Chile és Szlovákia által Párizsban, 1997. november 21-én elfogadott – a külföldi hivatalos személyek megvesztegetése elleni küzdelemről szóló – Egyezmény kihirdetéséről",
+      "jurisdiction": "HU",
+      "sourceSha256": "49079a50bc9dc82779ca0976368361c77d67663a8bafdf8c8e489c7bda7bc94b",
+      "version": "2000-06-03",
+      "provenance": "INCORPORATED_PROMULGATED",
+      "coverageStatus": "REFERENCE_OR_PROMULGATION_ONLY",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=34359"
+      ],
+      "unreviewedReason": null
+    },
+    {
+      "sourceKey": "HU:ACT:2001:CVIII",
+      "title": "2001. évi CVIII. törvény az elektronikus kereskedelmi szolgáltatások, valamint az információs társadalommal összefüggő szolgáltatások egyes kérdéseiről",
+      "jurisdiction": "HU",
+      "sourceSha256": "8d6f0b1fc08ecbbb49a4ad05dae5449dcfda6737d8d030a69c3e88404eb41df0",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=101234"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2004:XXXIV",
+      "title": "2004. évi XXXIV. törvény a kis- és középvállalkozásokról, fejlődésük támogatásáról",
+      "jurisdiction": "HU",
+      "sourceSha256": "39c389b3e84697b07fd5ce74c535ea7507ec74d0d46ac1e7e862a0322cca78e0",
+      "version": "2024-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=28787"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2006:V",
+      "title": "2006. évi V. törvény a cégnyilvánosságról, a bírósági cégeljárásról és a végelszámolásról",
+      "jurisdiction": "HU",
+      "sourceSha256": "558d9f417614019a2fd3154de0ef435c135347c425e16161f166383c7ed574e3",
+      "version": "2026-03-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=377275"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2007:CXXVII",
+      "title": "2007. évi CXXVII. törvény az általános forgalmi adóról",
+      "jurisdiction": "HU",
+      "sourceSha256": "b5e9c8d039788c2e54e2084d8225e53708e8253fecf3a09b9d7aef0b849d1dc0",
+      "version": "2026-07-31",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=348003"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2008:XLVII",
+      "title": "2008. évi XLVII. törvény a fogyasztókkal szembeni tisztességtelen kereskedelmi gyakorlat tilalmáról",
+      "jurisdiction": "HU",
+      "sourceSha256": "3de4ff619628dabcd4a51f0e89f39722efc75f90c5d5a3085c3dae1d771e067a",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=54638"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2008:XLVIII",
+      "title": "2008. évi XLVIII. törvény a gazdasági reklámtevékenység alapvető feltételeiről és egyes korlátairól",
+      "jurisdiction": "HU",
+      "sourceSha256": "0c77281cd9cd5427507681ffc8060a922c5c95f0c4173918560e0790b622b043",
+      "version": "2025-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=33723"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2011:CXII",
+      "title": "2011. évi CXII. törvény az információs önrendelkezési jogról és az információszabadságról",
+      "jurisdiction": "HU",
+      "sourceSha256": "f02fdf818ab2ee97937eb355e93587bbe6a5ffa1f7d12e5557940d9f85d4c022",
+      "version": "2026-07-29",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=246186"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2012:CLXXXV",
+      "title": "2012. évi CLXXXV. törvény a hulladékról",
+      "jurisdiction": "HU",
+      "sourceSha256": "79fe90c8be4949fd42c086bef115085c82b7da3ded9fe8c03e194d3d46805aa1",
+      "version": "2026-08-12",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=383413"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2012:I",
+      "title": "2012. évi I. törvény a munka törvénykönyvéről",
+      "jurisdiction": "HU",
+      "sourceSha256": "0896a91665e2c6bf663dff863a2f06fd2ab6a4af48c6f8f69ff88c40f6f87400",
+      "version": "2025-02-28",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=241034"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2013:V",
+      "title": "2013. évi V. törvény a Polgári Törvénykönyvről",
+      "jurisdiction": "HU",
+      "sourceSha256": "3bfd24f6c751bb685d14a6aefdc1a86157764ec7bbf150ee28fcfb8429d7f615",
+      "version": "2026-03-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=388642"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2015:CXLIII",
+      "title": "2015. évi CXLIII. törvény a közbeszerzésekről",
+      "jurisdiction": "HU",
+      "sourceSha256": "e5ef8f6e08ad87595d596b51d47816570d7c1b9e749e672ffde1db911e73e3c1",
+      "version": "2026-08-08",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=442093"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2017:CL",
+      "title": "2017. évi CL. törvény az adózás rendjéről",
+      "jurisdiction": "HU",
+      "sourceSha256": "c8ab612961418b467c8178300330a515619ab3d0256f75bb41fcfadc12f31204",
+      "version": "2026-07-15",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=427712"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2017:CLI",
+      "title": "2017. évi CLI. törvény az adóigazgatási rendtartásról",
+      "jurisdiction": "HU",
+      "sourceSha256": "a131ae1bd375e77dfb6c997d3dfea10c6a4c874ab2482d43e3a6bb56d02f1eb8",
+      "version": "2026-07-29",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=161288"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2017:CLII",
+      "title": "2017. évi CLII. törvény az uniós vámjog végrehajtásáról",
+      "jurisdiction": "HU",
+      "sourceSha256": "36fbf6cc80556a69d36ed5cd2c031394e5b152f5de863d0ca0ba32c5739ad895",
+      "version": "2026-08-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=312017"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2017:LII",
+      "title": "2017. évi LII. törvény az Európai Unió és az ENSZ Biztonsági Tanácsa által elrendelt pénzügyi és vagyoni korlátozó intézkedések végrehajtásáról",
+      "jurisdiction": "HU",
+      "sourceSha256": "b52f2d2c4c001b63ee60b5cb94de5ad5abb821afd2bf67eda6d7295482204988",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=62895"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2017:LIII",
+      "title": "2017. évi LIII. törvény a pénzmosás és a terrorizmus finanszírozása megelőzéséről és megakadályozásáról",
+      "jurisdiction": "HU",
+      "sourceSha256": "c09f11e6457f4e858db0726bac3077cf801a49bf5a9c4bd8c784314db038ffbd",
+      "version": "2026-07-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=230866"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2018:LII",
+      "title": "2018. évi LII. törvény a szociális hozzájárulási adóról",
+      "jurisdiction": "HU",
+      "sourceSha256": "a1dc4a27e1e79501619fbab8d6136eb9bcdded45be01c7e088585732fc1c8101",
+      "version": "2026-05-14",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=84529"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2018:LIV",
+      "title": "2018. évi LIV. törvény az üzleti titok védelméről",
+      "jurisdiction": "HU",
+      "sourceSha256": "7151b6466fc98921a4ad4ce849394a8af616cac319f303b2676d48f2f6fc8309",
+      "version": "2018-08-09",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=28900"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2019:CXXII",
+      "title": "2019. évi CXXII. törvény a társadalombiztosítás ellátásaira jogosultakról, valamint ezen ellátások fedezetéről",
+      "jurisdiction": "HU",
+      "sourceSha256": "5e3dad30a7087779cc638cefba95461d4d4c14d30c03f54b50790707851fce01",
+      "version": "2026-07-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=213983"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2022:XLV",
+      "title": "2022. évi XLV. törvény egyes adótörvények módosításáról",
+      "jurisdiction": "HU",
+      "sourceSha256": "3b5b54021885b89c4682c3ad6f4150482c7b46d0aa6845d173f4391bea10798c",
+      "version": "2024-11-29",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=10686"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2022:XVII",
+      "title": "2022. évi XVII. törvény a termékekre és a szolgáltatásokra vonatkozó akadálymentességi követelményeknek való megfelelés általános szabályairól",
+      "jurisdiction": "HU",
+      "sourceSha256": "32915a89275c1cb32fe881bd5e9bf8e7c7e0f8cb88b2ccab28e53eb594310cf3",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=63589"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2023:CVIII",
+      "title": "2023. évi CVIII. törvény a fenntartható finanszírozás és az egységes vállalati felelősségvállalás ösztönzését szolgáló környezettudatos, társadalmi és szociális szempontokat is figyelembe vevő, vállalati társadalmi felelősségvállalás szabályairól és azzal összefüggő egyéb törvények módosításáról",
+      "jurisdiction": "HU",
+      "sourceSha256": "1e5b0d76e2c6240864055c32c038fbb0dbba5bea70cc3a2da0165be2e6bbe349",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=87169"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2023:XXV",
+      "title": "2023. évi XXV. törvény a panaszokról, a közérdekű bejelentésekről, valamint a visszaélések bejelentésével összefüggő szabályokról",
+      "jurisdiction": "HU",
+      "sourceSha256": "c88a6c6b20a913e4194d127c60af9a321a0d8c9d0b94fac5c6fa23bcddd68055",
+      "version": "2026-07-29",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
+      "domains": [
+        "governance"
+      ],
+      "requirementsExtracted": [
+        "WHISTLEBLOWING_INTERNAL_CHANNEL",
+        "WHISTLEBLOWING_ACKNOWLEDGEMENT",
+        "WHISTLEBLOWING_INVESTIGATION_DEADLINE",
+        "WHISTLEBLOWING_INVESTIGATION_EXTENSION",
+        "WHISTLEBLOWING_OUTCOME_INFORMATION",
+        "WHISTLEBLOWING_ACCESSIBLE_INFORMATION"
+      ],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=92074"
+      ],
+      "unreviewedReason": null
+    },
+    {
+      "sourceKey": "HU:ACT:2024:LXIX",
+      "title": "2024. évi LXIX. törvény Magyarország kiberbiztonságáról",
+      "jurisdiction": "HU",
+      "sourceSha256": "0d0ee727ccec321ff26361ec7e83ec9cb46accea16a289739fdfc1bbc997399c",
+      "version": "2026-07-29",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=252222"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2024:LXXXIV",
+      "title": "2024. évi LXXXIV. törvény a kritikus szervezetek ellenálló képességéről",
+      "jurisdiction": "HU",
+      "sourceSha256": "2aca3efda4dedc5791f84c7dfe0425131a1b8aaaf5acb7a34c8b1ad811ffb566",
+      "version": "2026-01-06",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=99529"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2025:LIV",
+      "title": "2025. évi LIV. törvény egyes adókötelezettségekről és egyes adótörvények módosításáról",
+      "jurisdiction": "HU",
+      "sourceSha256": "500f0272b11e6a90f58e69211558b14fd0a9d027f5873837b64acc040b045009",
+      "version": "2026-08-18",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=25486"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:ACT:2025:LXXV",
+      "title": "2025. évi LXXV. törvény az Európai Unió mesterséges intelligenciáról szóló rendeletének magyarországi végrehajtásáról",
+      "jurisdiction": "HU",
+      "sourceSha256": "5e2349897cbf77a0c681698fdddc3519163ebdfc88cdfa7acbaa87d00829b5ff",
+      "version": "2026-08-02",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=20302"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:DECREE:151/2003:KORM",
+      "title": "151/2003. (IX. 22.) Korm. rendelet az egyes tartós fogyasztási cikkekre vonatkozó kötelező jótállásról",
+      "jurisdiction": "HU",
+      "sourceSha256": "ea8c57c09bf080b8861e330daa108686d9712f6c38b70fc73c966ef10aca939d",
+      "version": "2026-03-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=13918"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:DECREE:19/2014:NGM",
+      "title": "19/2014. (IV. 29.) NGM rendelet a fogyasztó és vállalkozás közötti szerződés keretében eladott dolgokra vonatkozó szavatossági és jótállási igények intézésének eljárási szabályairól",
+      "jurisdiction": "HU",
+      "sourceSha256": "213be2bd9d490be5e4a7d23efe2b9b29a2c0949e6343c6c27bb12dcd93efcd0b",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "SOURCE_INCOMPLETE",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=8252"
+      ],
+      "unreviewedReason": null
+    },
+    {
+      "sourceKey": "HU:DECREE:33/1998:NM",
+      "title": "33/1998. (VI. 24.) NM rendelet a munkaköri, szakmai, illetve személyi higiénés alkalmasság orvosi vizsgálatáról és véleményezéséről",
+      "jurisdiction": "HU",
+      "sourceSha256": "09aa0c94602f8603dd820bcd11630fe12031c0e1dc4e15fe664beb9229cc73d8",
+      "version": "2026-07-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=97404"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:DECREE:344/2025:KORM",
+      "title": "344/2025. (X. 31.) Korm. rendelet az Európai Unió mesterséges intelligenciáról szóló rendeletének magyarországi végrehajtásáról szóló 2025. évi LXXV. törvény végrehajtásáról",
+      "jurisdiction": "HU",
+      "sourceSha256": "eeba9fbf910b7682596e57784d2bffd89d65425dd72708f9c56c4da8bac0c320",
+      "version": "2025-12-02",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=12367"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:DECREE:373/2021:KORM",
+      "title": "373/2021. (VI. 30.) Korm. rendelet a fogyasztó és vállalkozás közötti, az áruk adásvételére, valamint a digitális tartalom szolgáltatására és digitális szolgáltatások nyújtására irányuló szerződések részletes szabályairól",
+      "jurisdiction": "HU",
+      "sourceSha256": "bda82d65599013b145615ecb8e697aab268d75965eed6bdfb61d60350890eff9",
+      "version": "2024-05-08",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=43598"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:DECREE:418/2024:KORM",
+      "title": "418/2024. (XII. 23.) Korm. rendelet Magyarország kiberbiztonságáról szóló törvény végrehajtásáról",
+      "jurisdiction": "HU",
+      "sourceSha256": "4424221433f9dca241c81addcad211d7816077a9851625b005182cadad9adc8c",
+      "version": "2025-10-10",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=186249"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:DECREE:45/2014:KORM",
+      "title": "45/2014. (II. 26.) Korm. rendelet a fogyasztó és a vállalkozás közötti szerződések részletes szabályairól",
+      "jurisdiction": "HU",
+      "sourceSha256": "c58d42ea66cdf9c05e200c0bf370ba0dcb5476f9ea74cfd8d053a16573d66792",
+      "version": "2026-08-02",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=68220"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:DECREE:465/2017:KORM",
+      "title": "465/2017. (XII. 28.) Korm. rendelet az adóigazgatási eljárás részletszabályairól",
+      "jurisdiction": "HU",
+      "sourceSha256": "946285719981de6f3030e260a50efb1c3b0a40d69f370558c25ab73e799cfc96",
+      "version": "2026-01-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=169679"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:DECREE:5/1993:MÜM",
+      "title": "5/1993. (XII. 26.) MüM rendelet a munkavédelemről szóló 1993. évi XCIII. törvény egyes rendelkezéseinek végrehajtásáról",
+      "jurisdiction": "HU",
+      "sourceSha256": "8d3f809bdcf6757c9e5af92193bea5553558f45d19ed15ad01f3be782cccf657",
+      "version": "2025-05-01",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=31738"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "HU:DECREE:80/2023:KORM",
+      "title": "80/2023. (III. 14.) Korm. rendelet a kiterjesztett gyártói felelősségi rendszer működésének részletes szabályairól",
+      "jurisdiction": "HU",
+      "sourceSha256": "a91f729bcc956f499bcd5ecbd7a9b6d9274abbc8d25fe7bd0482f3aebb448f96",
+      "version": "2026-08-12",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=112096"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    },
+    {
+      "sourceKey": "UNKNOWN:L_202490772HU.000101.fmx.xml.txt",
+      "title": "A BIZOTTSÁG AJÁNLÁSA a mikro-, kis- és középvállalkozások fogalmának meghatározásáról",
+      "jurisdiction": "EU",
+      "sourceSha256": "89422c636bf984b2c5be68e846e81a9d371e205d5cc8d43c7c914b24d3c6439f",
+      "version": "2024-12-05",
+      "provenance": "STANDALONE_SOURCE",
+      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "domains": [],
+      "requirementsExtracted": [],
+      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewedProvisions": [
+        "FULL_TEXT_SCAN chars=25165"
+      ],
+      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+    }
+  ]
+}

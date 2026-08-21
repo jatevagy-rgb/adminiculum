@@ -1,23 +1,23 @@
 {
-  "templateKey": "gdpr-processing-activities-register",
+  "templateKey": "gdpr-breach-record",
   "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
   "requirementKeys": [
-    "GDPR_ROPA_CONTROLLER"
+    "GDPR_BREACH_RECORD"
   ],
   "sourceAnchors": [
     {
       "sourceKey": "EU:EU_REGULATION:CELEX:32016R0679",
       "sourceSha256": "50c4abba9befdf5615003b5105810fe0fdaf338c7e88a1e1ad71f0c86494a02b",
       "sourceVersion": "2016-05-04",
-      "provisionReference": "30. cikk (1)-(5)",
-      "headingContext": "Az adatkezelési tevékenységek nyilvántartása",
+      "provisionReference": "33. cikk (1)-(5)",
+      "headingContext": "Az adatvédelmi incidens bejelentése a felügyeleti hatóságnak",
       "lineSpan": {
-        "start": 1694,
-        "end": 1755
+        "start": 1810,
+        "end": 1859
       },
-      "excerptSha256": "b5a876421fe23e4c361860c756b7fcc3ec926a34e3d22c3d66ba7520045a16c7",
+      "excerptSha256": "dae390aa02cc7be673017060f1736c1107e391bf260a20e37e483155ff28c802",
       "provenance": "STANDALONE_SOURCE",
-      "anchorKey": "A-GDPR-30"
+      "anchorKey": "A-GDPR-33"
     }
   ],
   "customerDocumentCitation": "Human-readable legal references may be added only after lawyer review; hashes remain internal."

@@ -1,0 +1,23 @@
+{
+  "templateKey": "gdpr-breach-authority-notification",
+  "registryFile": "../template-fields.json",
+  "fieldKeys": [
+    "company.legal_name",
+    "company.registered_office",
+    "company.registration_number",
+    "company.tax_number",
+    "company.employee_count",
+    "company.main_activity",
+    "company.representative_name",
+    "document.version",
+    "document.effective_date",
+    "document.review_date",
+    "document.owner_name",
+    "document.approved_by",
+    "incident.reference_number",
+    "incident.detected_at",
+    "incident.description",
+    "incident.risk_assessment",
+    "incident.measures"
+  ]
+}

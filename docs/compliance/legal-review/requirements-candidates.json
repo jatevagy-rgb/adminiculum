@@ -1,104 +1,414 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "2.0.0",
   "status": "LEGAL_REVIEW_REQUIRED",
-  "scope": "Source-grounded candidate requirements only. Not production rules and not an automatic applicability decision.",
   "requirements": [
     {
       "requirementKey": "GDPR_ROPA_CONTROLLER",
       "titleHu": "Adatkezelési tevékenységek nyilvántartása - adatkezelő",
-      "summaryHu": "Az adatkezelő a felelősségébe tartozó adatkezelési tevékenységekről írásbeli, elektronikus formában is vezethető nyilvántartást vezet; annak tartalmát a GDPR 30. cikk (1) határozza meg.",
+      "summaryHu": "A 30. cikk (1) szerinti nyilvántartás vezetése és megkeresésre rendelkezésre bocsátása.",
       "domain": "adatvedelem",
-      "subdomain": "nyilvantartas",
+      "subdomain": "adatvedelem",
       "requirementType": "RECORDKEEPING",
       "mandatoryLevel": "CONDITIONAL_MANDATORY",
-      "regulatedActor": "adatkezelo vallalkozas vagy szervezet",
-      "trigger": "A GDPR 30. cikk (5) szerinti kivetel nem alkalmazhato.",
-      "requiredAction": "A 30. cikk (1) szerinti tartalmu nyilvantartas vezetese es megkeresesre a felugyeleti hatosag rendelkezesere bocsatasa.",
+      "regulatedActor": "vállalkozás vagy az adott kötelezettség címzettje",
+      "trigger": "Az adatkezelő személyes adatot kezel, és a 30. cikk (5) kivétel nem alkalmazható.",
+      "requiredAction": "A 30. cikk (1) szerinti nyilvántartás vezetése és megkeresésre rendelkezésre bocsátása.",
       "deadline": null,
-      "frequency": "Folyamatosan naprakész nyilvántartás.",
+      "frequency": "Az adott eseményhez vagy folyamathoz igazodóan.",
       "evidenceExpected": "Írásbeli vagy elektronikus nyilvántartás.",
+      "sourceAnchors": [
+        "A-GDPR-30"
+      ],
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
-      "legalReviewNotes": "A 250 fő alatti kivétel és annak kivételei tényalapú vizsgálatot igényelnek.",
-      "sourceAnchors": ["A-GDPR-30-1-5"]
+      "legalReviewNotes": "A 250 fő alatti kivétel négy törvényi kivételét a külön applicability rule kezeli.",
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED"
     },
     {
       "requirementKey": "GDPR_PRIVACY_INFORMATION_DIRECT_COLLECTION",
       "titleHu": "Adatkezelési tájékoztatás közvetlen adatgyűjtéskor",
-      "summaryHu": "Ha a személyes adatokat az érintettől gyűjtik, az adatkezelő a megszerzéskor a GDPR 13. cikkében felsorolt információkat az érintett rendelkezésére bocsátja.",
+      "summaryHu": "A 13. cikk (1)-(2) szerinti információk rendelkezésre bocsátása.",
       "domain": "adatvedelem",
-      "subdomain": "tajekoztatas",
+      "subdomain": "adatvedelem",
       "requirementType": "DOCUMENTATION",
       "mandatoryLevel": "CONDITIONAL_MANDATORY",
-      "regulatedActor": "adatkezelo",
-      "trigger": "Személyes adatok közvetlen gyűjtése az érintettől.",
-      "requiredAction": "A 13. cikk (1)-(2) szerinti tájékoztatás rendelkezésre bocsátása a megszerzés időpontjában.",
+      "regulatedActor": "vállalkozás vagy az adott kötelezettség címzettje",
+      "trigger": "Személyes adat közvetlen gyűjtése az érintettől.",
+      "requiredAction": "A 13. cikk (1)-(2) szerinti információk rendelkezésre bocsátása.",
       "deadline": "Az adat megszerzésének időpontja.",
-      "frequency": "Minden érintett adatgyűjtési helyzetben, a tényleges adatkezeléshez igazítva.",
-      "evidenceExpected": "Az alkalmazott tájékoztató és a közzétételi/átadási csatorna dokumentálása.",
+      "frequency": "Az adott eseményhez vagy folyamathoz igazodóan.",
+      "evidenceExpected": "Az alkalmazott tájékoztató és átadási/közzétételi mód.",
+      "sourceAnchors": [
+        "A-GDPR-13"
+      ],
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
-      "legalReviewNotes": "A tényleges jogalap, címzettek, megőrzés és automatizált döntés csak ügyletspecifikusan tölthető ki.",
-      "sourceAnchors": ["A-GDPR-13-1-2"]
+      "legalReviewNotes": "",
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED"
     },
     {
-      "requirementKey": "CONSUMER_COMPLAINT_RECORD_AND_RESPONSE",
-      "titleHu": "Fogyasztói panasz jegyzőkönyvezése, megválaszolása és megőrzése",
-      "summaryHu": "A vállalkozás a fogyasztói panaszt a 17/A. § szerint kezeli; meghatározott esetben jegyzőkönyvet vesz fel, az írásbeli panaszt határidőben érdemben megválaszolja, és az iratokat megőrzi.",
-      "domain": "fogyasztovedelem",
-      "subdomain": "panaszkezeles",
+      "requirementKey": "GDPR_BREACH_AUTHORITY_NOTIFICATION",
+      "titleHu": "Adatvédelmi incidens bejelentése a felügyeleti hatóságnak",
+      "summaryHu": "Bejelentés a felügyeleti hatóságnak a 33. cikk szerinti minimális tartalommal.",
+      "domain": "adatvedelem",
+      "subdomain": "adatvedelem",
+      "requirementType": "NOTIFICATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "vállalkozás vagy az adott kötelezettség címzettje",
+      "trigger": "Az adatvédelmi incidens valószínűsíthetően kockázattal jár az érintettek jogaira és szabadságaira nézve.",
+      "requiredAction": "Bejelentés a felügyeleti hatóságnak a 33. cikk szerinti minimális tartalommal.",
+      "deadline": "Ha lehetséges, legkésőbb 72 óra a tudomásszerzéstől.",
+      "frequency": "Az adott eseményhez vagy folyamathoz igazodóan.",
+      "evidenceExpected": "Bejelentés, késedelmi indok és incidens-értékelés.",
+      "sourceAnchors": [
+        "A-GDPR-33"
+      ],
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "",
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED"
+    },
+    {
+      "requirementKey": "GDPR_BREACH_RECORD",
+      "titleHu": "Adatvédelmi incidensek nyilvántartása",
+      "summaryHu": "Az incidenshez kapcsolódó tények, hatások és orvosló intézkedések nyilvántartása.",
+      "domain": "adatvedelem",
+      "subdomain": "adatvedelem",
       "requirementType": "RECORDKEEPING",
       "mandatoryLevel": "CONDITIONAL_MANDATORY",
-      "regulatedActor": "fogyasztóval szerződő vállalkozás",
-      "trigger": "Fogyasztó szóban vagy írásban panaszt közöl a vállalkozással.",
-      "requiredAction": "Jegyzőkönyv felvétele a törvényben meghatározott esetben; írásbeli panasz igazolható, indokolt megválaszolása; iratok megőrzése.",
-      "deadline": "Írásbeli panasz esetén főszabály szerint 30 nap; a megőrzés 3 év.",
-      "frequency": "Minden érintett panasz esetén.",
-      "evidenceExpected": "Panasz-jegyzőkönyv vagy írásbeli panasz, érdemi válasz másolata, megőrzési nyom.",
+      "regulatedActor": "vállalkozás vagy az adott kötelezettség címzettje",
+      "trigger": "Adatvédelmi incidens történik.",
+      "requiredAction": "Az incidenshez kapcsolódó tények, hatások és orvosló intézkedések nyilvántartása.",
+      "deadline": null,
+      "frequency": "Az adott eseményhez vagy folyamathoz igazodóan.",
+      "evidenceExpected": "Incidensnyilvántartás.",
+      "sourceAnchors": [
+        "A-GDPR-33"
+      ],
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
-      "legalReviewNotes": "Az EU közvetlenül alkalmazandó aktusa, illetve külön jogszabály eltérhet; a sablon ügyletspecifikus ellenőrzést kér.",
-      "sourceAnchors": ["A-CP-17A-3A-8"]
+      "legalReviewNotes": "",
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED"
+    },
+    {
+      "requirementKey": "GDPR_BREACH_SUBJECT_NOTICE",
+      "titleHu": "Érintett tájékoztatása adatvédelmi incidensről",
+      "summaryHu": "Világos és közérthető tájékoztatás az érintettnek.",
+      "domain": "adatvedelem",
+      "subdomain": "adatvedelem",
+      "requirementType": "NOTIFICATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "vállalkozás vagy az adott kötelezettség címzettje",
+      "trigger": "Az incidens valószínűsíthetően magas kockázattal jár, és a 34. cikk (3) szerinti kivétel nem áll fenn.",
+      "requiredAction": "Világos és közérthető tájékoztatás az érintettnek.",
+      "deadline": "Indokolatlan késedelem nélkül.",
+      "frequency": "Az adott eseményhez vagy folyamathoz igazodóan.",
+      "evidenceExpected": "Küldött vagy közzétett tájékoztatás és kivételi értékelés.",
+      "sourceAnchors": [
+        "A-GDPR-34"
+      ],
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "",
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED"
+    },
+    {
+      "requirementKey": "CONSUMER_COMPLAINT_INFORMATION",
+      "titleHu": "Panaszkezelési tájékoztatás",
+      "summaryHu": "A 17/A. § (1)-(1a) szerinti panaszkezelési és békéltető testületi tájékoztatás biztosítása.",
+      "domain": "fogyasztovedelem",
+      "subdomain": "fogyasztovedelem",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "vállalkozás vagy az adott kötelezettség címzettje",
+      "trigger": "A vállalkozás fogyasztóval áll kapcsolatban.",
+      "requiredAction": "A 17/A. § (1)-(1a) szerinti panaszkezelési és békéltető testületi tájékoztatás biztosítása.",
+      "deadline": null,
+      "frequency": "Az adott eseményhez vagy folyamathoz igazodóan.",
+      "evidenceExpected": "Közzétett/átadott tájékoztató.",
+      "sourceAnchors": [
+        "A-CP-17A"
+      ],
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "",
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED"
+    },
+    {
+      "requirementKey": "CONSUMER_COMPLAINT_RECORD",
+      "titleHu": "Fogyasztói panasz jegyzőkönyve",
+      "summaryHu": "A 17/A. § (5) szerinti jegyzőkönyv felvétele és másolat kezelése.",
+      "domain": "fogyasztovedelem",
+      "subdomain": "fogyasztovedelem",
+      "requirementType": "RECORDKEEPING",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "vállalkozás vagy az adott kötelezettség címzettje",
+      "trigger": "A szóbeli panasz azonnali kivizsgálása nem lehetséges vagy a fogyasztó nem ért egyet a kezeléssel.",
+      "requiredAction": "A 17/A. § (5) szerinti jegyzőkönyv felvétele és másolat kezelése.",
+      "deadline": "Haladéktalanul.",
+      "frequency": "Az adott eseményhez vagy folyamathoz igazodóan.",
+      "evidenceExpected": "Jegyzőkönyv és átadási nyom.",
+      "sourceAnchors": [
+        "A-CP-17A"
+      ],
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "",
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED"
+    },
+    {
+      "requirementKey": "CONSUMER_COMPLAINT_WRITTEN_RESPONSE",
+      "titleHu": "Írásbeli fogyasztói panasz érdemi megválaszolása",
+      "summaryHu": "Írásbeli, érdemi és igazolható válasz; elutasítás esetén indokolás.",
+      "domain": "fogyasztovedelem",
+      "subdomain": "fogyasztovedelem",
+      "requirementType": "DEADLINE",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "vállalkozás vagy az adott kötelezettség címzettje",
+      "trigger": "Írásbeli fogyasztói panasz érkezik.",
+      "requiredAction": "Írásbeli, érdemi és igazolható válasz; elutasítás esetén indokolás.",
+      "deadline": "Főszabály szerint 30 nap.",
+      "frequency": "Az adott eseményhez vagy folyamathoz igazodóan.",
+      "evidenceExpected": "Panasz és válasz másolata.",
+      "sourceAnchors": [
+        "A-CP-17A"
+      ],
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "",
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED"
+    },
+    {
+      "requirementKey": "CONSUMER_COMPLAINT_RETENTION",
+      "titleHu": "Fogyasztói panasz iratainak megőrzése",
+      "summaryHu": "Az iratok megőrzése és hatósági felhívásra bemutatása.",
+      "domain": "fogyasztovedelem",
+      "subdomain": "fogyasztovedelem",
+      "requirementType": "RECORDKEEPING",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "vállalkozás vagy az adott kötelezettség címzettje",
+      "trigger": "Szóbeli panaszról jegyzőkönyv vagy írásbeli panasz és válasz keletkezik.",
+      "requiredAction": "Az iratok megőrzése és hatósági felhívásra bemutatása.",
+      "deadline": "3 év.",
+      "frequency": "Az adott eseményhez vagy folyamathoz igazodóan.",
+      "evidenceExpected": "Megőrzött jegyzőkönyv/panasz/válasz.",
+      "sourceAnchors": [
+        "A-CP-17A"
+      ],
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "",
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED"
     },
     {
       "requirementKey": "WHISTLEBLOWING_INTERNAL_CHANNEL",
       "titleHu": "Belső visszaélés-bejelentési rendszer létrehozása",
-      "summaryHu": "Az 50 vagy több foglalkoztatottat foglalkoztató foglalkoztató belső visszaélés-bejelentési rendszert hoz létre; a törvény egyes esetekben létszámtól független kötelezettséget is meghatároz.",
+      "summaryHu": "Belső rendszer létrehozása és pártatlan működtető kijelölése vagy megfelelő külső működtető megbízása.",
       "domain": "governance",
-      "subdomain": "visszaeles-bejelentes",
+      "subdomain": "governance",
       "requirementType": "GOVERNANCE",
       "mandatoryLevel": "CONDITIONAL_MANDATORY",
-      "regulatedActor": "foglalkoztato",
-      "trigger": "Legalább 50 foglalkoztatott, vagy a 2023. évi XXV. törvény 18. § (2) szerinti különös kategória.",
-      "requiredAction": "Belső visszaélés-bejelentési rendszer létrehozása, pártatlan működtető kijelölése vagy megfelelő külső működtető megbízása.",
+      "regulatedActor": "vállalkozás vagy az adott kötelezettség címzettje",
+      "trigger": "Legalább 50 foglalkoztatott, vagy a 18. § (2) szerinti különös kategória.",
+      "requiredAction": "Belső rendszer létrehozása és pártatlan működtető kijelölése vagy megfelelő külső működtető megbízása.",
       "deadline": null,
-      "frequency": "Folyamatos működtetés.",
-      "evidenceExpected": "Eljárásrend, kijelölési vagy megbízási dokumentum, hozzáférhető tájékoztató.",
+      "frequency": "Az adott eseményhez vagy folyamathoz igazodóan.",
+      "evidenceExpected": "Eljárásrend, kijelölés/megbízás.",
+      "sourceAnchors": [
+        "A-WB-18-19"
+      ],
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
-      "legalReviewNotes": "A 18. § (2) szerinti szektoriális kivételekhez további tény- és jogforrásvizsgálat szükséges.",
-      "sourceAnchors": ["A-WB-18-19"]
+      "legalReviewNotes": "",
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED"
     },
     {
-      "requirementKey": "WHISTLEBLOWING_ACKNOWLEDGEMENT_AND_INVESTIGATION",
-      "titleHu": "Visszaélés-bejelentés visszaigazolása és kivizsgálása",
-      "summaryHu": "Az írásbeli bejelzésről hét napon belül visszaigazolást kell küldeni; a kivizsgálást a lehető legrövidebb időn belül, főszabály szerint legfeljebb 30 napon belül kell lefolytatni, meghosszabbítási garanciákkal.",
+      "requirementKey": "WHISTLEBLOWING_ACKNOWLEDGEMENT",
+      "titleHu": "Írásbeli visszaélés-bejelentés visszaigazolása",
+      "summaryHu": "Visszaigazolás és általános eljárási/adatkezelési tájékoztatás küldése.",
       "domain": "governance",
-      "subdomain": "visszaeles-bejelentes",
+      "subdomain": "governance",
       "requirementType": "DEADLINE",
       "mandatoryLevel": "CONDITIONAL_MANDATORY",
-      "regulatedActor": "belső visszaélés-bejelentési rendszer működtetője",
-      "trigger": "A belső rendszerben írásbeli bejelentés érkezik.",
-      "requiredAction": "Visszaigazolás küldése, kivizsgálás, majd az eredményről vagy mellőzésről tájékoztatás.",
-      "deadline": "Visszaigazolás: 7 nap; kivizsgálás: főszabály szerint 30 nap, meghosszabbítással legfeljebb 3 hónap.",
-      "frequency": "Minden érintett bejelentésnél.",
-      "evidenceExpected": "Visszaigazolás, vizsgálati irat, tájékoztató/eredményközlés.",
+      "regulatedActor": "vállalkozás vagy az adott kötelezettség címzettje",
+      "trigger": "Írásbeli bejelentés érkezik a belső rendszerben.",
+      "requiredAction": "Visszaigazolás és általános eljárási/adatkezelési tájékoztatás küldése.",
+      "deadline": "7 nap.",
+      "frequency": "Az adott eseményhez vagy folyamathoz igazodóan.",
+      "evidenceExpected": "Visszaigazolás.",
+      "sourceAnchors": [
+        "A-WB-21-25"
+      ],
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
-      "legalReviewNotes": "A mellőzés feltételeit, a hosszabbítás indokát és a személyesadat-kezelést külön jogi felülvizsgálatnak kell vizsgálnia.",
-      "sourceAnchors": ["A-WB-21-25"]
+      "legalReviewNotes": "",
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED"
+    },
+    {
+      "requirementKey": "WHISTLEBLOWING_INVESTIGATION_DEADLINE",
+      "titleHu": "Visszaélés-bejelentés kivizsgálása",
+      "summaryHu": "A bejelentés kivizsgálása.",
+      "domain": "governance",
+      "subdomain": "governance",
+      "requirementType": "DEADLINE",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "vállalkozás vagy az adott kötelezettség címzettje",
+      "trigger": "Belső rendszerben bejelentés érkezik, és a kivizsgálás nem mellőzhető.",
+      "requiredAction": "A bejelentés kivizsgálása.",
+      "deadline": "Főszabály szerint 30 nap.",
+      "frequency": "Az adott eseményhez vagy folyamathoz igazodóan.",
+      "evidenceExpected": "Vizsgálati irat.",
+      "sourceAnchors": [
+        "A-WB-21-25"
+      ],
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "",
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED"
+    },
+    {
+      "requirementKey": "WHISTLEBLOWING_INVESTIGATION_EXTENSION",
+      "titleHu": "Visszaélés-bejelentés kivizsgálási határidejének meghosszabbítása",
+      "summaryHu": "A bejelentő tájékoztatása a várható időpontról és a hosszabbítás indokáról.",
+      "domain": "governance",
+      "subdomain": "governance",
+      "requirementType": "NOTIFICATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "vállalkozás vagy az adott kötelezettség címzettje",
+      "trigger": "Különösen indokolt esetben a 30 napos határidő nem elegendő.",
+      "requiredAction": "A bejelentő tájékoztatása a várható időpontról és a hosszabbítás indokáról.",
+      "deadline": "A kivizsgálás és tájékoztatás összesen legfeljebb 3 hónap.",
+      "frequency": "Az adott eseményhez vagy folyamathoz igazodóan.",
+      "evidenceExpected": "Hosszabbítási tájékoztatás és indok.",
+      "sourceAnchors": [
+        "A-WB-21-25"
+      ],
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "",
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED"
+    },
+    {
+      "requirementKey": "WHISTLEBLOWING_OUTCOME_INFORMATION",
+      "titleHu": "Visszaélés-bejelentés eredményéről való tájékoztatás",
+      "summaryHu": "Írásbeli tájékoztatás a mellőzésről/indokáról, eredményről és intézkedésekről.",
+      "domain": "governance",
+      "subdomain": "governance",
+      "requirementType": "NOTIFICATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "vállalkozás vagy az adott kötelezettség címzettje",
+      "trigger": "A kivizsgálás lezárult vagy mellőzésre került.",
+      "requiredAction": "Írásbeli tájékoztatás a mellőzésről/indokáról, eredményről és intézkedésekről.",
+      "deadline": null,
+      "frequency": "Az adott eseményhez vagy folyamathoz igazodóan.",
+      "evidenceExpected": "Eredménytájékoztatás.",
+      "sourceAnchors": [
+        "A-WB-21-25"
+      ],
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "",
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED"
+    },
+    {
+      "requirementKey": "WHISTLEBLOWING_ACCESSIBLE_INFORMATION",
+      "titleHu": "Visszaélés-bejelentési rendszer hozzáférhető tájékoztatója",
+      "summaryHu": "Világos és könnyen hozzáférhető információ nyújtása a rendszer működéséről és eljárásáról.",
+      "domain": "governance",
+      "subdomain": "governance",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "vállalkozás vagy az adott kötelezettség címzettje",
+      "trigger": "Belső visszaélés-bejelentési rendszer működik.",
+      "requiredAction": "Világos és könnyen hozzáférhető információ nyújtása a rendszer működéséről és eljárásáról.",
+      "deadline": null,
+      "frequency": "Az adott eseményhez vagy folyamathoz igazodóan.",
+      "evidenceExpected": "Közzétett vagy átadott tájékoztató.",
+      "sourceAnchors": [
+        "A-WB-21-25"
+      ],
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "",
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED"
     }
   ],
   "anchors": {
-    "A-GDPR-30-1-5": {"sourceKey":"EU:EU_REGULATION:CELEX:32016R0679","sourceSha256":"50c4abba9befdf5615003b5105810fe0fdaf338c7e88a1e1ad71f0c86494a02b","sourceVersion":"2016-05-04","provisionReference":"30. cikk (1)-(5)","headingContext":"Az adatkezelési tevékenységek nyilvántartása","lineSpan":{"start":1694,"end":1755},"excerptSha256":"b5a876421fe23e4c361860c756b7fcc3ec926a34e3d22c3d66ba7520045a16c7","provenance":"STANDALONE_SOURCE"},
-    "A-GDPR-13-1-2": {"sourceKey":"EU:EU_REGULATION:CELEX:32016R0679","sourceSha256":"50c4abba9befdf5615003b5105810fe0fdaf338c7e88a1e1ad71f0c86494a02b","sourceVersion":"2016-05-04","provisionReference":"13. cikk (1)-(2)","headingContext":"Rendelkezésre bocsátandó információk, ha a személyes adatokat az érintettől gyűjtik","lineSpan":{"start":1130,"end":1187},"excerptSha256":"e25fbac8ba33df08a9d89a813050ab6ac6b1f82f860fd5a315eb1efd8fc52db0","provenance":"STANDALONE_SOURCE"},
-    "A-CP-17A-3A-8": {"sourceKey":"HU:ACT:1997:CLV","sourceSha256":"f874622e77cd465443a23f7f32393a694c85459881a82556edcfa944a1f8b812","sourceVersion":"2026-02-01","provisionReference":"17/A. § (3a)-(8)","headingContext":"Panaszkezelés, ügyfélszolgálat","lineSpan":{"start":267,"end":355},"excerptSha256":"b94948998a33079da8f97d4c279ffa3b917966747952791e692db19ceba4eb03","provenance":"STANDALONE_SOURCE"},
-    "A-WB-18-19": {"sourceKey":"HU:ACT:2023:XXV","sourceSha256":"c88a6c6b20a913e4194d127c60af9a321a0d8c9d0b94fac5c6fa23bcddd68055","sourceVersion":"2026-07-29","provisionReference":"18-19. §","headingContext":"A foglalkoztató által létrehozott belső visszaélés-bejelentési rendszer","lineSpan":{"start":421,"end":441},"excerptSha256":"a2b7fc891200524569797821a93bb7c3fc30cc4cec27ebe9235d59662da6ede8","provenance":"STANDALONE_SOURCE"},
-    "A-WB-21-25": {"sourceKey":"HU:ACT:2023:XXV","sourceSha256":"c88a6c6b20a913e4194d127c60af9a321a0d8c9d0b94fac5c6fa23bcddd68055","sourceVersion":"2026-07-29","provisionReference":"21-25. §","headingContext":"A foglalkoztató által létrehozott belső visszaélés-bejelentési rendszer","lineSpan":{"start":463,"end":515},"excerptSha256":"645d684971b9ae334f1904ad6bea3058b0bf4994d9fc24954c6f27a9e19426dc","provenance":"STANDALONE_SOURCE"}
+    "A-GDPR-30": {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32016R0679",
+      "sourceSha256": "50c4abba9befdf5615003b5105810fe0fdaf338c7e88a1e1ad71f0c86494a02b",
+      "sourceVersion": "2016-05-04",
+      "provisionReference": "30. cikk (1)-(5)",
+      "headingContext": "Az adatkezelési tevékenységek nyilvántartása",
+      "lineSpan": {
+        "start": 1694,
+        "end": 1755
+      },
+      "excerptSha256": "b5a876421fe23e4c361860c756b7fcc3ec926a34e3d22c3d66ba7520045a16c7",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-GDPR-13": {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32016R0679",
+      "sourceSha256": "50c4abba9befdf5615003b5105810fe0fdaf338c7e88a1e1ad71f0c86494a02b",
+      "sourceVersion": "2016-05-04",
+      "provisionReference": "13. cikk (1)-(2)",
+      "headingContext": "Közvetlen adatgyűjtésnél rendelkezésre bocsátandó információk",
+      "lineSpan": {
+        "start": 1130,
+        "end": 1187
+      },
+      "excerptSha256": "e25fbac8ba33df08a9d89a813050ab6ac6b1f82f860fd5a315eb1efd8fc52db0",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-GDPR-33": {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32016R0679",
+      "sourceSha256": "50c4abba9befdf5615003b5105810fe0fdaf338c7e88a1e1ad71f0c86494a02b",
+      "sourceVersion": "2016-05-04",
+      "provisionReference": "33. cikk (1)-(5)",
+      "headingContext": "Az adatvédelmi incidens bejelentése a felügyeleti hatóságnak",
+      "lineSpan": {
+        "start": 1810,
+        "end": 1859
+      },
+      "excerptSha256": "dae390aa02cc7be673017060f1736c1107e391bf260a20e37e483155ff28c802",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-GDPR-34": {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32016R0679",
+      "sourceSha256": "50c4abba9befdf5615003b5105810fe0fdaf338c7e88a1e1ad71f0c86494a02b",
+      "sourceVersion": "2016-05-04",
+      "provisionReference": "34. cikk (1)-(4)",
+      "headingContext": "Az érintett tájékoztatása az adatvédelmi incidensről",
+      "lineSpan": {
+        "start": 1861,
+        "end": 1897
+      },
+      "excerptSha256": "9aabff6f08c1234ca2d4c1df60cddcbedf811292cd44f3eab236b1d264a04b09",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-CP-17A": {
+      "sourceKey": "HU:ACT:1997:CLV",
+      "sourceSha256": "f874622e77cd465443a23f7f32393a694c85459881a82556edcfa944a1f8b812",
+      "sourceVersion": "2026-02-01",
+      "provisionReference": "17/A. § (1), (3a)-(8)",
+      "headingContext": "Panaszkezelés, ügyfélszolgálat",
+      "lineSpan": {
+        "start": 251,
+        "end": 355
+      },
+      "excerptSha256": "ca7fb0f3d00c1329b14ef7f88f1e23f9ab98dff639ed53bd2558bda52c0674a1",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-WB-18-19": {
+      "sourceKey": "HU:ACT:2023:XXV",
+      "sourceSha256": "c88a6c6b20a913e4194d127c60af9a321a0d8c9d0b94fac5c6fa23bcddd68055",
+      "sourceVersion": "2026-07-29",
+      "provisionReference": "18-19. §",
+      "headingContext": "A foglalkoztató által létrehozott belső visszaélés-bejelentési rendszer",
+      "lineSpan": {
+        "start": 421,
+        "end": 441
+      },
+      "excerptSha256": "a2b7fc891200524569797821a93bb7c3fc30cc4cec27ebe9235d59662da6ede8",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-WB-21-25": {
+      "sourceKey": "HU:ACT:2023:XXV",
+      "sourceSha256": "c88a6c6b20a913e4194d127c60af9a321a0d8c9d0b94fac5c6fa23bcddd68055",
+      "sourceVersion": "2026-07-29",
+      "provisionReference": "21-25. §",
+      "headingContext": "A foglalkoztató által létrehozott belső visszaélés-bejelentési rendszer",
+      "lineSpan": {
+        "start": 463,
+        "end": 515
+      },
+      "excerptSha256": "645d684971b9ae334f1904ad6bea3058b0bf4994d9fc24954c6f27a9e19426dc",
+      "provenance": "STANDALONE_SOURCE"
+    }
   }
 }
