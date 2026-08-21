@@ -380,14 +380,13 @@ jobs:
             set -euo pipefail
             STARTUP="$(az webapp config show --resource-group "${RESOURCE_GROUP}" --name "${FRONTEND_APP}" --query appCommandLine -o tsv)"
             [ "$STARTUP" = "node server.js" ] || { echo "Unexpected frontend startup command: ${STARTUP:-<empty>}"; exit 1; }
-            SETTINGS="$(az webapp config appsettings list --resource-group "${RESOURCE_GROUP}" --name "${FRONTEND_APP}" -o json)"
-            node - "$SETTINGS" <<'NODE'
-            const settings = JSON.parse(process.argv[2]);
-            const values = Object.fromEntries(settings.map(({name, value}) => [name, value]));
-            for (const name of ['SCM_DO_BUILD_DURING_DEPLOYMENT', 'ENABLE_ORYX_BUILD']) {
-              if (values[name] !== 'false') throw new Error(`${name} must be false for the standalone package`);
-            }
-            NODE
+            # Oryx-OFF contract check. Node is not available inside the azure/cli
+            # container, so query each setting directly with `az` (jmespath) — same
+            # semantics, no Node dependency.
+            for NAME in SCM_DO_BUILD_DURING_DEPLOYMENT ENABLE_ORYX_BUILD; do
+              VAL="$(az webapp config appsettings list --resource-group "${RESOURCE_GROUP}" --name "${FRONTEND_APP}" --query "[?name=='${NAME}'].value | [0]" -o tsv)"
+              [ "$VAL" = "false" ] || { echo "${NAME} must be false for the standalone package (got: ${VAL:-<empty>})"; exit 1; }
+            done
             echo "Frontend production contract verified: Oryx OFF, startup node server.js."
 
       - name: Deploy frontend (zip, Oryx OFF — app already runs `node server.js`)
