@@ -491,6 +491,291 @@
       "sourceAnchor": "A-WB-21-25",
       "missingFactOutcome": "REQUIRES_LEGAL_REVIEW",
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-AIA-LITERACY",
+      "requirementKey": "AIA_AI_LITERACY",
+      "logic": {
+        "OR": [
+          {
+            "ENUM_MATCH": {
+              "fact": "aiDevelopsOrCommissionsSystem",
+              "value": true
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "aiUsedUnderOrganisationAuthority",
+              "value": true
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "aiDevelopsOrCommissionsSystem",
+        "aiUsedUnderOrganisationAuthority"
+      ],
+      "sourceAnchor": "A-AIA-3-4",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-AIA-HIGH-RISK-OPERATION",
+      "requirementKey": "AIA_HIGH_RISK_DEPLOYER_OPERATION",
+      "logic": {
+        "AND": [
+          {
+            "ENUM_MATCH": {
+              "fact": "aiUsedUnderOrganisationAuthority",
+              "value": true
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "aiHighRiskClassification",
+              "value": "HIGH_RISK"
+            }
+          },
+          {
+            "OR": [
+              {
+                "AND": [
+                  {
+                    "ENUM_MATCH": {
+                      "fact": "aiHighRiskSystemLegalBasis",
+                      "value": "OTHER_HIGH_RISK"
+                    }
+                  },
+                  {
+                    "DATE_ON_OR_AFTER": {
+                      "fact": "assessmentDate",
+                      "value": "2026-08-02"
+                    }
+                  }
+                ]
+              },
+              {
+                "AND": [
+                  {
+                    "ENUM_MATCH": {
+                      "fact": "aiHighRiskSystemLegalBasis",
+                      "value": "ARTICLE_6_1"
+                    }
+                  },
+                  {
+                    "DATE_ON_OR_AFTER": {
+                      "fact": "assessmentDate",
+                      "value": "2027-08-02"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "requiredFacts": [
+        "aiUsedUnderOrganisationAuthority",
+        "aiHighRiskClassification",
+        "aiHighRiskSystemLegalBasis",
+        "assessmentDate"
+      ],
+      "sourceAnchor": "A-AIA-26",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-AIA-HIGH-RISK-LOGS",
+      "requirementKey": "AIA_HIGH_RISK_DEPLOYER_LOG_RETENTION",
+      "logic": {
+        "AND": [
+          {
+            "ENUM_MATCH": {
+              "fact": "aiUsedUnderOrganisationAuthority",
+              "value": true
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "aiHighRiskClassification",
+              "value": "HIGH_RISK"
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "aiSystemGeneratesLogs",
+              "value": true
+            }
+          },
+          {
+            "OR": [
+              {
+                "AND": [
+                  {
+                    "ENUM_MATCH": {
+                      "fact": "aiHighRiskSystemLegalBasis",
+                      "value": "OTHER_HIGH_RISK"
+                    }
+                  },
+                  {
+                    "DATE_ON_OR_AFTER": {
+                      "fact": "assessmentDate",
+                      "value": "2026-08-02"
+                    }
+                  }
+                ]
+              },
+              {
+                "AND": [
+                  {
+                    "ENUM_MATCH": {
+                      "fact": "aiHighRiskSystemLegalBasis",
+                      "value": "ARTICLE_6_1"
+                    }
+                  },
+                  {
+                    "DATE_ON_OR_AFTER": {
+                      "fact": "assessmentDate",
+                      "value": "2027-08-02"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "requiredFacts": [
+        "aiUsedUnderOrganisationAuthority",
+        "aiHighRiskClassification",
+        "aiHighRiskSystemLegalBasis",
+        "aiSystemGeneratesLogs",
+        "assessmentDate"
+      ],
+      "sourceAnchor": "A-AIA-26",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-HU-CYBER-CLASSIFICATION",
+      "requirementKey": "HU_CYBER_SECURITY_CLASSIFICATION",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "hungarianCyberScopeClassification",
+          "value": "IN_SCOPE"
+        }
+      },
+      "requiredFacts": [
+        "hungarianCyberScopeClassification"
+      ],
+      "sourceAnchor": "A-HU-CYBER-1",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-HU-CYBER-RESPONSIBLE",
+      "requirementKey": "HU_CYBER_SECURITY_RESPONSIBLE",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "hungarianCyberScopeClassification",
+          "value": "IN_SCOPE"
+        }
+      },
+      "requiredFacts": [
+        "hungarianCyberScopeClassification"
+      ],
+      "sourceAnchor": "A-HU-CYBER-1",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-DORA-ICT-GOVERNANCE",
+      "requirementKey": "DORA_ICT_GOVERNANCE",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "doraFinancialEntityScope",
+          "value": "IN_SCOPE"
+        }
+      },
+      "requiredFacts": [
+        "doraFinancialEntityScope"
+      ],
+      "sourceAnchor": "A-DORA-2",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-DSA-AUTHORITY-CONTACT",
+      "requirementKey": "DSA_AUTHORITY_CONTACT_POINT",
+      "logic": {
+        "ENUM_MATCH": {
+          "fact": "dsaIntermediaryServiceClassification",
+          "value": "INTERMEDIARY_SERVICE"
+        }
+      },
+      "requiredFacts": [
+        "dsaIntermediaryServiceClassification"
+      ],
+      "sourceAnchor": "A-DSA-2",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-DSA-TERMS",
+      "requirementKey": "DSA_TERMS_CONTENT_MODERATION_TRANSPARENCY",
+      "logic": {
+        "AND": [
+          {
+            "ENUM_MATCH": {
+              "fact": "dsaIntermediaryServiceClassification",
+              "value": "INTERMEDIARY_SERVICE"
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "serviceUsageRestrictionsApplied",
+              "value": true
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "dsaIntermediaryServiceClassification",
+        "serviceUsageRestrictionsApplied"
+      ],
+      "sourceAnchor": "A-DSA-2",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-ECOM-ORDER-CONFIRMATION",
+      "requirementKey": "ECOM_ORDER_CONFIRMATION",
+      "logic": {
+        "AND": [
+          {
+            "ENUM_MATCH": {
+              "fact": "acceptsElectronicOrders",
+              "value": true
+            }
+          },
+          {
+            "ENUM_MATCH": {
+              "fact": "b2bOrderConfirmationDerogationAgreed",
+              "value": false
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "acceptsElectronicOrders",
+        "b2bOrderConfirmationDerogationAgreed"
+      ],
+      "sourceAnchor": "A-ECOM-5-6",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
     }
-  ]
+  ],
+  "operatorVocabulary": {
+    "DATE_ON_OR_AFTER": "Temporal gate used where a source gives staged application dates; prevents retrospective applicability."
+  }
 }

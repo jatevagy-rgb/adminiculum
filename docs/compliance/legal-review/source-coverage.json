@@ -10,14 +10,15 @@
       "sourceSha256": "7c02f6e8a051dad38d25356bcca50f629ba1ec16a969e1f7e5ae7c34ef6eb912",
       "version": "2022-12-27",
       "provenance": "STANDALONE_SOURCE",
-      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "coverageStatus": "IMPLEMENTATION_REQUIRED_NO_DIRECT_COMPANY_RULE",
       "domains": [],
       "requirementsExtracted": [],
-      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewNotes": "NIS2 irányelvként vizsgálva: közvetlen magyar vállalati szabály nem keletkezik belőle; a korpuszban jelen lévő 2024. évi LXIX. törvény és 418/2024. Korm. rendelet adja a nemzeti operatív réteget.",
       "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=296431"
+        "2. cikk"
       ],
-      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+      "unreviewedReason": null,
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "EU:EU_DIRECTIVE:CELEX:32022L2557",
@@ -146,14 +147,16 @@
       "sourceSha256": "f66b55501fdeb9a855fd173ce378a4fee8135bee713827f4c9f690923bcad9c1",
       "version": "2022-10-27",
       "provenance": "STANDALONE_SOURCE",
-      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
       "domains": [],
       "requirementsExtracted": [],
-      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewNotes": "Wave 3A tényleges rendelkezés-alapú review; csak a megjelölt candidate követelmények kerültek kinyerésre, mind LEGAL_REVIEW_REQUIRED.",
       "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=448020"
+        "2. cikk",
+        "11-14. cikk"
       ],
-      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+      "unreviewedReason": null,
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "EU:EU_REGULATION:CELEX:32022R2554",
@@ -162,14 +165,16 @@
       "sourceSha256": "9bf208b8f40648e9696e0d38cda4bcfec2a2d647204b9e406b85d54d4e068c67",
       "version": "2022-12-27",
       "provenance": "STANDALONE_SOURCE",
-      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
       "domains": [],
       "requirementsExtracted": [],
-      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewNotes": "Wave 3A tényleges rendelkezés-alapú review; csak a megjelölt candidate követelmények kerültek kinyerésre, mind LEGAL_REVIEW_REQUIRED.",
       "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=333020"
+        "2. cikk",
+        "5. cikk"
       ],
-      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+      "unreviewedReason": null,
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "EU:EU_REGULATION:CELEX:32023R0988",
@@ -194,14 +199,17 @@
       "sourceSha256": "ed0d639a76f475d535a2c4cbe0620e78459b86d8cba441c7439c10b31fc4f354",
       "version": "2024-07-12",
       "provenance": "STANDALONE_SOURCE",
-      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
       "domains": [],
       "requirementsExtracted": [],
-      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewNotes": "Wave 3A tényleges rendelkezés-alapú review; csak a megjelölt candidate követelmények kerültek kinyerésre, mind LEGAL_REVIEW_REQUIRED.",
       "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=639115"
+        "3-4. cikk",
+        "26. cikk",
+        "113. cikk"
       ],
-      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+      "unreviewedReason": null,
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "HU:ACT:1990:C",
@@ -409,14 +417,15 @@
       "sourceSha256": "8d6f0b1fc08ecbbb49a4ad05dae5449dcfda6737d8d030a69c3e88404eb41df0",
       "version": "2026-01-01",
       "provenance": "STANDALONE_SOURCE",
-      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
       "domains": [],
       "requirementsExtracted": [],
-      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewNotes": "Wave 3A tényleges rendelkezés-alapú review; csak a megjelölt candidate követelmények kerültek kinyerésre, mind LEGAL_REVIEW_REQUIRED.",
       "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=101234"
+        "5-6. §"
       ],
-      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+      "unreviewedReason": null,
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "HU:ACT:2004:XXXIV",
@@ -786,14 +795,16 @@
       "sourceSha256": "0d0ee727ccec321ff26361ec7e83ec9cb46accea16a289739fdfc1bbc997399c",
       "version": "2026-07-29",
       "provenance": "STANDALONE_SOURCE",
-      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
       "domains": [],
       "requirementsExtracted": [],
-      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewNotes": "Wave 3A tényleges rendelkezés-alapú review; csak a megjelölt candidate követelmények kerültek kinyerésre, mind LEGAL_REVIEW_REQUIRED.",
       "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=252222"
+        "1. §",
+        "9-11. §"
       ],
-      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+      "unreviewedReason": null,
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "HU:ACT:2024:LXXXIV",
@@ -914,14 +925,15 @@
       "sourceSha256": "bda82d65599013b145615ecb8e697aab268d75965eed6bdfb61d60350890eff9",
       "version": "2024-05-08",
       "provenance": "STANDALONE_SOURCE",
-      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
       "domains": [],
       "requirementsExtracted": [],
-      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewNotes": "Wave 3A tényleges rendelkezés-alapú review; csak a megjelölt candidate követelmények kerültek kinyerésre, mind LEGAL_REVIEW_REQUIRED.",
       "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=43598"
+        "1. §"
       ],
-      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+      "unreviewedReason": null,
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "HU:DECREE:418/2024:KORM",
@@ -930,14 +942,15 @@
       "sourceSha256": "4424221433f9dca241c81addcad211d7816077a9851625b005182cadad9adc8c",
       "version": "2025-10-10",
       "provenance": "STANDALONE_SOURCE",
-      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
       "domains": [],
       "requirementsExtracted": [],
-      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewNotes": "Wave 3A tényleges rendelkezés-alapú review; csak a megjelölt candidate követelmények kerültek kinyerésre, mind LEGAL_REVIEW_REQUIRED.",
       "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=186249"
+        "1. §"
       ],
-      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+      "unreviewedReason": null,
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "HU:DECREE:45/2014:KORM",

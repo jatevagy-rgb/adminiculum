@@ -316,6 +316,214 @@
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
       "legalReviewNotes": "",
       "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED"
+    },
+    {
+      "requirementKey": "AIA_AI_LITERACY",
+      "titleHu": "MI-jártassági intézkedések",
+      "summaryHu": "A személyzet és a szervezet nevében eljárók megfelelő MI-jártasságának elősegítésére arányos intézkedéseket hoz.",
+      "domain": "ai",
+      "subdomain": "ai",
+      "requirementType": "GOVERNANCE",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "A source-grounded role and scope rule szerint érintett szervezet",
+      "trigger": "A szervezet MI-rendszer szolgáltatója vagy szakmai alkalmazója.",
+      "requiredAction": "A személyzet és a szervezet nevében eljárók megfelelő MI-jártasságának elősegítésére arányos intézkedéseket hoz.",
+      "deadline": "2025. február 2-től alkalmazandó.",
+      "frequency": "Az adott eseményhez, rendszerhez vagy felülvizsgálati ciklushoz igazodóan.",
+      "evidenceExpected": "Képzési vagy egyéb intézkedési bizonyíték, ha a szervezet ilyen intézkedést alkalmaz.",
+      "sourceAnchors": [
+        "A-AIA-3-4",
+        "A-AIA-113"
+      ],
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED",
+      "effectiveDate": "2025-02-02",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "A cikk intézkedést ír elő, de önálló írásbeli AI-policyt nem nevesít; policy csak hasznos implementációs kontroll."
+    },
+    {
+      "requirementKey": "AIA_HIGH_RISK_DEPLOYER_OPERATION",
+      "titleHu": "Nagy kockázatú MI-rendszer alkalmazói működtetési kontrolljai",
+      "summaryHu": "Megfelelő technikai és szervezési intézkedésekkel, használati utasítás szerinti működtetéssel és képzett, felhatalmazott emberi felügyelettel működtet.",
+      "domain": "ai",
+      "subdomain": "ai",
+      "requirementType": "GOVERNANCE",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "A source-grounded role and scope rule szerint érintett szervezet",
+      "trigger": "A szervezet alkalmazóként nagy kockázatú MI-rendszert használ, és az adott kötelezettség már alkalmazandó.",
+      "requiredAction": "Megfelelő technikai és szervezési intézkedésekkel, használati utasítás szerinti működtetéssel és képzett, felhatalmazott emberi felügyelettel működtet.",
+      "deadline": "A 26. cikkre irányadó alkalmazási időpont szerint; a 6. cikk (1) rendszereknél 2027. augusztus 2-től.",
+      "frequency": "Az adott eseményhez, rendszerhez vagy felülvizsgálati ciklushoz igazodóan.",
+      "evidenceExpected": "Felügyeleti kijelölés, működtetési kontrollok és használati utasítás szerinti bizonyíték.",
+      "sourceAnchors": [
+        "A-AIA-26",
+        "A-AIA-113"
+      ],
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED",
+      "effectiveDate": "2026-08-02",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "A nagy kockázatú minősítéshez jogi/osztályozási vizsgálat szükséges; a szabály nem minden AI-eszközre vonatkozik."
+    },
+    {
+      "requirementKey": "AIA_HIGH_RISK_DEPLOYER_LOG_RETENTION",
+      "titleHu": "Nagy kockázatú MI-rendszer automatikus naplóinak megőrzése",
+      "summaryHu": "A naplókat a rendeltetésnek megfelelő, legalább hat hónapos időtartamig megőrzi, eltérő alkalmazandó jog hiányában.",
+      "domain": "ai",
+      "subdomain": "ai",
+      "requirementType": "RECORDKEEPING",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "A source-grounded role and scope rule szerint érintett szervezet",
+      "trigger": "Az alkalmazó ellenőrzése alatt álló nagy kockázatú MI-rendszer automatikus naplókat generál.",
+      "requiredAction": "A naplókat a rendeltetésnek megfelelő, legalább hat hónapos időtartamig megőrzi, eltérő alkalmazandó jog hiányában.",
+      "deadline": "Legalább 6 hónap.",
+      "frequency": "Az adott eseményhez, rendszerhez vagy felülvizsgálati ciklushoz igazodóan.",
+      "evidenceExpected": "Megőrzött automatikus naplók és megőrzési beállítás.",
+      "sourceAnchors": [
+        "A-AIA-26",
+        "A-AIA-113"
+      ],
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
+      "effectiveDate": "2026-08-02",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "A GDPR vagy más alkalmazandó jog eltérő megőrzési kötelezettséget eredményezhet; az összehangolás jogászi feladat."
+    },
+    {
+      "requirementKey": "HU_CYBER_SECURITY_CLASSIFICATION",
+      "titleHu": "Elektronikus információs rendszerek biztonsági osztályba sorolása",
+      "summaryHu": "Az érintett elektronikus információs rendszereket biztonsági osztályba sorolja; az eredményt nyilvántartásban vagy belső szabályzatban rögzíti és dokumentáltan felülvizsgálja.",
+      "domain": "cybersecurity",
+      "subdomain": "cybersecurity",
+      "requirementType": "RISK_ASSESSMENT",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "A source-grounded role and scope rule szerint érintett szervezet",
+      "trigger": "A szervezet a magyar kiberbiztonsági törvény személyi hatálya alá tartozik.",
+      "requiredAction": "Az érintett elektronikus információs rendszereket biztonsági osztályba sorolja; az eredményt nyilvántartásban vagy belső szabályzatban rögzíti és dokumentáltan felülvizsgálja.",
+      "deadline": "Legalább kétévente, valamint előírt változás esetén soron kívül.",
+      "frequency": "Az adott eseményhez, rendszerhez vagy felülvizsgálati ciklushoz igazodóan.",
+      "evidenceExpected": "Biztonsági osztályozási nyilvántartás/szabályzat és felülvizsgálati nyom.",
+      "sourceAnchors": [
+        "A-HU-CYBER-1",
+        "A-HU-CYBER-10-11",
+        "A-HU-CYBER-IMPL-1"
+      ],
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
+      "effectiveDate": "2026-07-29",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "A 2-3. mellékletben való ágazati besorolás és egyes kivételek külön jogi ellenőrzést igényelnek."
+    },
+    {
+      "requirementKey": "HU_CYBER_SECURITY_RESPONSIBLE",
+      "titleHu": "Elektronikus információs rendszer biztonságáért felelős személy kijelölése",
+      "summaryHu": "A vezető kijelöli a biztonságért felelős személyt vagy külső személlyel megállapodik a feladat ellátásáról.",
+      "domain": "cybersecurity",
+      "subdomain": "cybersecurity",
+      "requirementType": "GOVERNANCE",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "A source-grounded role and scope rule szerint érintett szervezet",
+      "trigger": "A szervezet a magyar kiberbiztonsági törvény személyi hatálya alá tartozik.",
+      "requiredAction": "A vezető kijelöli a biztonságért felelős személyt vagy külső személlyel megállapodik a feladat ellátásáról.",
+      "deadline": "A hatály alá kerüléskor és a felelős személy változásakor.",
+      "frequency": "Az adott eseményhez, rendszerhez vagy felülvizsgálati ciklushoz igazodóan.",
+      "evidenceExpected": "Kijelölés vagy megállapodás, valamint a felelősi szerep nyoma.",
+      "sourceAnchors": [
+        "A-HU-CYBER-1",
+        "A-HU-CYBER-10-11",
+        "A-HU-CYBER-IMPL-1"
+      ],
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED",
+      "effectiveDate": "2026-07-29",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "A képesítési és szerződéses részletszabályokhoz a teljes végrehajtási anyag és jogászi vizsgálat szükséges."
+    },
+    {
+      "requirementKey": "DORA_ICT_GOVERNANCE",
+      "titleHu": "DORA szerinti IKT-kockázat irányítás",
+      "summaryHu": "Belső irányítási és kontrollkeretet tart fenn; a vezető testület meghatározza, jóváhagyja és felügyeli az IKT-kockázatkezelési intézkedéseket.",
+      "domain": "financial_digital_resilience",
+      "subdomain": "financial_digital_resilience",
+      "requirementType": "GOVERNANCE",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "A source-grounded role and scope rule szerint érintett szervezet",
+      "trigger": "A szervezet a DORA 2. cikk szerinti pénzügyi szervezet.",
+      "requiredAction": "Belső irányítási és kontrollkeretet tart fenn; a vezető testület meghatározza, jóváhagyja és felügyeli az IKT-kockázatkezelési intézkedéseket.",
+      "deadline": "Folyamatos; időszakos felülvizsgálatokkal.",
+      "frequency": "Az adott eseményhez, rendszerhez vagy felülvizsgálati ciklushoz igazodóan.",
+      "evidenceExpected": "Jóváhagyott keret, vezető testületi döntési/felügyeleti nyom és kapcsolódó kontrollok.",
+      "sourceAnchors": [
+        "A-DORA-2",
+        "A-DORA-5"
+      ],
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED",
+      "effectiveDate": "2025-01-17",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "Nem pénzügyi szervezetnél ez a DORA-követelmény nem alkalmazandó; pénzügyi jogállás meghatározása jogi ellenőrzést igényelhet."
+    },
+    {
+      "requirementKey": "DSA_AUTHORITY_CONTACT_POINT",
+      "titleHu": "DSA hatósági kapcsolattartó pont",
+      "summaryHu": "Kijelöl és közzétesz egy, hatóságokkal, a Bizottsággal és a Testülettel közvetlen elektronikus kommunikációra alkalmas kapcsolattartó pontot; az adatokat naprakészen tartja.",
+      "domain": "digital_services",
+      "subdomain": "digital_services",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "A source-grounded role and scope rule szerint érintett szervezet",
+      "trigger": "A szervezet az Unióban igénybe vevőknek közvetítő szolgáltatást kínál.",
+      "requiredAction": "Kijelöl és közzétesz egy, hatóságokkal, a Bizottsággal és a Testülettel közvetlen elektronikus kommunikációra alkalmas kapcsolattartó pontot; az adatokat naprakészen tartja.",
+      "deadline": "Folyamatosan naprakész.",
+      "frequency": "Az adott eseményhez, rendszerhez vagy felülvizsgálati ciklushoz igazodóan.",
+      "evidenceExpected": "Közzétett kapcsolattartási információ és kijelölési bizonyíték.",
+      "sourceAnchors": [
+        "A-DSA-2",
+        "A-DSA-11-14"
+      ],
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
+      "effectiveDate": "2024-02-17",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "Közvetítő szolgáltatási minősítés szükséges; egy átlagos webshop önmagában nem feltétlenül közvetítő szolgáltatás."
+    },
+    {
+      "requirementKey": "DSA_TERMS_CONTENT_MODERATION_TRANSPARENCY",
+      "titleHu": "DSA szerinti szerződési feltétel és tartalommoderálási átláthatóság",
+      "summaryHu": "A feltételekben világos, könnyen hozzáférhető és géppel olvasható tájékoztatást ad a korlátozásokról, tartalommoderálási szabályokról, eljárásokról, eszközökről és belső panaszkezelésről.",
+      "domain": "digital_services",
+      "subdomain": "digital_services",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "A source-grounded role and scope rule szerint érintett szervezet",
+      "trigger": "A szervezet az Unióban igénybe vevőknek közvetítő szolgáltatást kínál és a szolgáltatás használatára korlátozásokat alkalmaz.",
+      "requiredAction": "A feltételekben világos, könnyen hozzáférhető és géppel olvasható tájékoztatást ad a korlátozásokról, tartalommoderálási szabályokról, eljárásokról, eszközökről és belső panaszkezelésről.",
+      "deadline": "Jelentős feltételváltozáskor tájékoztatás is szükséges.",
+      "frequency": "Az adott eseményhez, rendszerhez vagy felülvizsgálati ciklushoz igazodóan.",
+      "evidenceExpected": "Közzétett szerződési feltételek, változási nyom és releváns moderálási eljárás.",
+      "sourceAnchors": [
+        "A-DSA-2",
+        "A-DSA-11-14"
+      ],
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
+      "effectiveDate": "2024-02-17",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "A tényleges közvetítőszolgáltatási szerep és moderálási folyamat jogi/funkcionális felmérést igényel."
+    },
+    {
+      "requirementKey": "ECOM_ORDER_CONFIRMATION",
+      "titleHu": "Elektronikus megrendelés visszaigazolása",
+      "summaryHu": "Az igénybe vevő megrendelésének megérkezését elektronikus úton haladéktalanul visszaigazolja.",
+      "domain": "digital_services",
+      "subdomain": "digital_services",
+      "requirementType": "NOTIFICATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "A source-grounded role and scope rule szerint érintett szervezet",
+      "trigger": "A szolgáltató elektronikus úton fogad megrendelést, és nincs érvényes B2B eltérés.",
+      "requiredAction": "Az igénybe vevő megrendelésének megérkezését elektronikus úton haladéktalanul visszaigazolja.",
+      "deadline": "Legkésőbb 48 óra.",
+      "frequency": "Az adott eseményhez, rendszerhez vagy felülvizsgálati ciklushoz igazodóan.",
+      "evidenceExpected": "Visszaigazolási napló vagy üzenetbizonyíték.",
+      "sourceAnchors": [
+        "A-ECOM-5-6"
+      ],
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED",
+      "effectiveDate": "2026-01-01",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "A nem fogyasztó igénybevevővel kötött szerződésben az eltérés lehetősége forrásszövegben szerepel; szerződéses minősítés szükséges."
     }
   ],
   "anchors": {
@@ -408,6 +616,175 @@
         "end": 515
       },
       "excerptSha256": "645d684971b9ae334f1904ad6bea3058b0bf4994d9fc24954c6f27a9e19426dc",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-AIA-3-4": {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32024R1689",
+      "sourceSha256": "ed0d639a76f475d535a2c4cbe0620e78459b86d8cba441c7439c10b31fc4f354",
+      "sourceVersion": "2024-07-12",
+      "provisionReference": "3. cikk 3-4. pont; 4. cikk",
+      "headingContext": "AI szerepek és MI-jártasság",
+      "lineSpan": {
+        "start": 882,
+        "end": 920
+      },
+      "excerptSha256": "7c173ac90b039718240ff0f59ede7c7993607633cc52ccc8437c75b84df6ccf6",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-AIA-26": {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32024R1689",
+      "sourceSha256": "ed0d639a76f475d535a2c4cbe0620e78459b86d8cba441c7439c10b31fc4f354",
+      "sourceVersion": "2024-07-12",
+      "provisionReference": "26. cikk (1)-(7), (11)-(12)",
+      "headingContext": "Nagy kockázatú MI-rendszer alkalmazója",
+      "lineSpan": {
+        "start": 2048,
+        "end": 2138
+      },
+      "excerptSha256": "dce7a50f6380ff3d39c6c5aeaaa6b6bc8b7dfad371ec4ed9fcdef2ecf455440d",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-AIA-113": {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32024R1689",
+      "sourceSha256": "ed0d639a76f475d535a2c4cbe0620e78459b86d8cba441c7439c10b31fc4f354",
+      "sourceVersion": "2024-07-12",
+      "provisionReference": "113. cikk",
+      "headingContext": "Hatálybalépés és alkalmazás",
+      "lineSpan": {
+        "start": 4400,
+        "end": 4422
+      },
+      "excerptSha256": "5b4f7af972be00c7db642b0c62333ae181d453b3a54fadd4ddd4675f05c38d94",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-HU-CYBER-1": {
+      "sourceKey": "HU:ACT:2024:LXIX",
+      "sourceSha256": "0d0ee727ccec321ff26361ec7e83ec9cb46accea16a289739fdfc1bbc997399c",
+      "sourceVersion": "2026-07-29",
+      "provisionReference": "1. § (1)-(6); 2. §",
+      "headingContext": "Hatály, szervezeti kör és területi kapcsolódás",
+      "lineSpan": {
+        "start": 21,
+        "end": 171
+      },
+      "excerptSha256": "fed5983ede9a09278094a48b051e339a6525466ea8680e19004ca902e32cec9e",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-HU-CYBER-10-11": {
+      "sourceKey": "HU:ACT:2024:LXIX",
+      "sourceSha256": "0d0ee727ccec321ff26361ec7e83ec9cb46accea16a289739fdfc1bbc997399c",
+      "sourceVersion": "2026-07-29",
+      "provisionReference": "9-11. §",
+      "headingContext": "Adatosztályozás, biztonsági osztály és felelős személy",
+      "lineSpan": {
+        "start": 619,
+        "end": 675
+      },
+      "excerptSha256": "cfae01aef3fd1c9b5875a04822a89bf2536a19faf88b529a01927693cb0b16d0",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-HU-CYBER-IMPL-1": {
+      "sourceKey": "HU:DECREE:418/2024:KORM",
+      "sourceSha256": "4424221433f9dca241c81addcad211d7816077a9851625b005182cadad9adc8c",
+      "sourceVersion": "2025-10-10",
+      "provisionReference": "1. §",
+      "headingContext": "A végrehajtási rendelet személyi hatálya",
+      "lineSpan": {
+        "start": 65,
+        "end": 83
+      },
+      "excerptSha256": "2663a88101b26ab78a8ea4e8deee684c6e1f5c26de0d69ff497e6d2fa3326401",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-DORA-2": {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32022R2554",
+      "sourceSha256": "9bf208b8f40648e9696e0d38cda4bcfec2a2d647204b9e406b85d54d4e068c67",
+      "sourceVersion": "2022-12-27",
+      "provisionReference": "2. cikk (1)",
+      "headingContext": "DORA tételes pénzügyi szervezeti hatály",
+      "lineSpan": {
+        "start": 524,
+        "end": 584
+      },
+      "excerptSha256": "dcd77ea5e67b587416bc9ba5c8721c29ae9982d86c32c2e1ec13f4726b8a7b26",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-DORA-5": {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32022R2554",
+      "sourceSha256": "9bf208b8f40648e9696e0d38cda4bcfec2a2d647204b9e406b85d54d4e068c67",
+      "sourceVersion": "2022-12-27",
+      "provisionReference": "5. cikk (1)-(2)",
+      "headingContext": "IKT-kockázat irányítása és vezető testület",
+      "lineSpan": {
+        "start": 926,
+        "end": 970
+      },
+      "excerptSha256": "963352d762728963da1dd975f9c5ea03a9be90b38f667c3a6cce67690cf28f55",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-DSA-2": {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32022R2065",
+      "sourceSha256": "f66b55501fdeb9a855fd173ce378a4fee8135bee713827f4c9f690923bcad9c1",
+      "sourceVersion": "2022-10-27",
+      "provisionReference": "2. cikk",
+      "headingContext": "Közvetítő szolgáltatások tárgyi és területi hatálya",
+      "lineSpan": {
+        "start": 712,
+        "end": 750
+      },
+      "excerptSha256": "915822b1c4912edd65e5b5e1a3999061b8079f7a2e352b96f698ccfbc1e7469c",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-DSA-11-14": {
+      "sourceKey": "EU:EU_REGULATION:CELEX:32022R2065",
+      "sourceSha256": "f66b55501fdeb9a855fd173ce378a4fee8135bee713827f4c9f690923bcad9c1",
+      "sourceVersion": "2022-10-27",
+      "provisionReference": "11-14. cikk",
+      "headingContext": "Kapcsolattartó pont és szerződési feltételek",
+      "lineSpan": {
+        "start": 1084,
+        "end": 1160
+      },
+      "excerptSha256": "df7fc57f2666df453b1c1cb69287386939a8fe3ca1b09c57bc6059dc57745b8d",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-ECOM-5-6": {
+      "sourceKey": "HU:ACT:2001:CVIII",
+      "sourceSha256": "8d6f0b1fc08ecbbb49a4ad05dae5449dcfda6737d8d030a69c3e88404eb41df0",
+      "sourceVersion": "2026-01-01",
+      "provisionReference": "5-6. §",
+      "headingContext": "Elektronikus szerződéskötési információ és visszaigazolás",
+      "lineSpan": {
+        "start": 227,
+        "end": 251
+      },
+      "excerptSha256": "eaa83f46e2ddc36a8c7c368825cff2e3ba2a916f24549d14c89482e962bd23f5",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-DIGITAL-CONSUMER-1": {
+      "sourceKey": "HU:DECREE:373/2021:KORM",
+      "sourceSha256": "bda82d65599013b145615ecb8e697aab268d75965eed6bdfb61d60350890eff9",
+      "sourceVersion": "2024-05-08",
+      "provisionReference": "1. §",
+      "headingContext": "Digitális tartalom és digitális szolgáltatás fogyasztói szerződésben",
+      "lineSpan": {
+        "start": 23,
+        "end": 41
+      },
+      "excerptSha256": "55b651b73074d8100bffb5403be7c46033826cce1de735d3940d20a28da0d7a8",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-NIS2-2": {
+      "sourceKey": "EU:EU_DIRECTIVE:CELEX:32022L2555",
+      "sourceSha256": "7c02f6e8a051dad38d25356bcca50f629ba1ec16a969e1f7e5ae7c34ef6eb912",
+      "sourceVersion": "2022-12-27",
+      "provisionReference": "2. cikk",
+      "headingContext": "NIS2 hatály és nemzeti átültetési réteg",
+      "lineSpan": {
+        "start": 524,
+        "end": 600
+      },
+      "excerptSha256": "588e52a6070b0f70a8e1d116e9593178ba01e96d79c78801b12b20d71ed89d36",
       "provenance": "STANDALONE_SOURCE"
     }
   }

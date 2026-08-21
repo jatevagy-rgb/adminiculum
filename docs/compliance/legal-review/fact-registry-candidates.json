@@ -630,6 +630,250 @@
       "sensitive": false,
       "refreshPolicy": "USER_PROVIDED",
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "aiDevelopsOrCommissionsSystem",
+      "labelHu": "MI-rendszer fejlesztése vagy fejlesztetése",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "Fejleszt vagy fejlesztet egy MI-rendszert?",
+      "usedByRules": [
+        "APPL-AIA-LITERACY"
+      ],
+      "sourceBasis": [
+        "A-AIA-3-4"
+      ],
+      "collectionQuestionHu": "Fejleszt vagy fejlesztet egy MI-rendszert?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "aiUsedUnderOrganisationAuthority",
+      "labelHu": "MI-rendszer szakmai használata",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "Használnak a szervezet felügyelete alatt MI-rendszert szakmai célra?",
+      "usedByRules": [
+        "APPL-AIA-LITERACY",
+        "APPL-AIA-HIGH-RISK-OPERATION",
+        "APPL-AIA-HIGH-RISK-LOGS"
+      ],
+      "sourceBasis": [
+        "A-AIA-3-4",
+        "A-AIA-26"
+      ],
+      "collectionQuestionHu": "Használnak a szervezet felügyelete alatt MI-rendszert szakmai célra?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "aiHighRiskClassification",
+      "labelHu": "MI-rendszer kockázati minősítése",
+      "dataType": "enum",
+      "allowedValues": [
+        "HIGH_RISK",
+        "NOT_HIGH_RISK",
+        "UNKNOWN"
+      ],
+      "existingClientFactType": null,
+      "legalMeaning": "Az MI-rendszer nagy kockázatú minősítése csak jogi/osztályozási vizsgálat után adható meg.",
+      "usedByRules": [
+        "APPL-AIA-HIGH-RISK-OPERATION",
+        "APPL-AIA-HIGH-RISK-LOGS"
+      ],
+      "sourceBasis": [
+        "A-AIA-26"
+      ],
+      "collectionQuestionHu": "Az MI-rendszer nagy kockázatú minősítése csak jogi/osztályozási vizsgálat után adható meg.",
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "aiSystemGeneratesLogs",
+      "labelHu": "MI-rendszer automatikus naplózása",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "Az érintett MI-rendszer automatikusan generál naplókat?",
+      "usedByRules": [
+        "APPL-AIA-HIGH-RISK-LOGS"
+      ],
+      "sourceBasis": [
+        "A-AIA-26"
+      ],
+      "collectionQuestionHu": "Az érintett MI-rendszer automatikusan generál naplókat?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "assessmentDate",
+      "labelHu": "Értékelés dátuma",
+      "dataType": "date",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "Melyik dátumra vizsgáljuk a szabály alkalmazhatóságát?",
+      "usedByRules": [
+        "APPL-AIA-HIGH-RISK-OPERATION",
+        "APPL-AIA-HIGH-RISK-LOGS"
+      ],
+      "sourceBasis": [
+        "A-AIA-26"
+      ],
+      "collectionQuestionHu": "Melyik dátumra vizsgáljuk a szabály alkalmazhatóságát?",
+      "sensitive": false,
+      "refreshPolicy": "SYSTEM_OR_USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "hungarianCyberScopeClassification",
+      "labelHu": "Magyar kiberbiztonsági hatály",
+      "dataType": "enum",
+      "allowedValues": [
+        "IN_SCOPE",
+        "OUT_OF_SCOPE",
+        "UNKNOWN"
+      ],
+      "existingClientFactType": null,
+      "legalMeaning": "A melléklet, ágazat, küszöb, állami/hatósági azonosítás és kivétel alapján kialakított jogi minősítés.",
+      "usedByRules": [
+        "APPL-HU-CYBER-CLASSIFICATION",
+        "APPL-HU-CYBER-RESPONSIBLE"
+      ],
+      "sourceBasis": [
+        "A-HU-CYBER-1"
+      ],
+      "collectionQuestionHu": "A melléklet, ágazat, küszöb, állami/hatósági azonosítás és kivétel alapján kialakított jogi minősítés.",
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "doraFinancialEntityScope",
+      "labelHu": "DORA pénzügyi szervezeti hatály",
+      "dataType": "enum",
+      "allowedValues": [
+        "IN_SCOPE",
+        "OUT_OF_SCOPE",
+        "UNKNOWN"
+      ],
+      "existingClientFactType": null,
+      "legalMeaning": "A DORA 2. cikk tételes szervezeti körébe tartozás jogi minősítése.",
+      "usedByRules": [
+        "APPL-DORA-ICT-GOVERNANCE"
+      ],
+      "sourceBasis": [
+        "A-DORA-2"
+      ],
+      "collectionQuestionHu": "A DORA 2. cikk tételes szervezeti körébe tartozás jogi minősítése.",
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "dsaIntermediaryServiceClassification",
+      "labelHu": "DSA közvetítő szolgáltatási minősítés",
+      "dataType": "enum",
+      "allowedValues": [
+        "INTERMEDIARY_SERVICE",
+        "NOT_INTERMEDIARY_SERVICE",
+        "UNKNOWN"
+      ],
+      "existingClientFactType": null,
+      "legalMeaning": "Nyújt-e a szervezet közvetítő szolgáltatást, nem pusztán saját árut/szolgáltatást?",
+      "usedByRules": [
+        "APPL-DSA-AUTHORITY-CONTACT",
+        "APPL-DSA-TERMS"
+      ],
+      "sourceBasis": [
+        "A-DSA-2"
+      ],
+      "collectionQuestionHu": "Nyújt-e a szervezet közvetítő szolgáltatást, nem pusztán saját árut/szolgáltatást?",
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "serviceUsageRestrictionsApplied",
+      "labelHu": "Használati korlátozások alkalmazása",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "Alkalmaznak szabályokat vagy korlátozásokat a szolgáltatás igénybe vevői által megadott információkra?",
+      "usedByRules": [
+        "APPL-DSA-TERMS"
+      ],
+      "sourceBasis": [
+        "A-DSA-2"
+      ],
+      "collectionQuestionHu": "Alkalmaznak szabályokat vagy korlátozásokat a szolgáltatás igénybe vevői által megadott információkra?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "acceptsElectronicOrders",
+      "labelHu": "Elektronikus megrendelés fogadása",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "Fogad a szervezet elektronikus úton megrendelést?",
+      "usedByRules": [
+        "APPL-ECOM-ORDER-CONFIRMATION"
+      ],
+      "sourceBasis": [
+        "A-ECOM-5-6"
+      ],
+      "collectionQuestionHu": "Fogad a szervezet elektronikus úton megrendelést?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "b2bOrderConfirmationDerogationAgreed",
+      "labelHu": "B2B visszaigazolási eltérés",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "existingClientFactType": null,
+      "legalMeaning": "Van kifejezett B2B megállapodás a törvényi visszaigazolási szabálytól való eltérésről?",
+      "usedByRules": [
+        "APPL-ECOM-ORDER-CONFIRMATION"
+      ],
+      "sourceBasis": [
+        "A-ECOM-5-6"
+      ],
+      "collectionQuestionHu": "Van kifejezett B2B megállapodás a törvényi visszaigazolási szabálytól való eltérésről?",
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "aiHighRiskSystemLegalBasis",
+      "labelHu": "Magas kockázatú MI-rendszer időbeli kategóriája",
+      "dataType": "enum",
+      "allowedValues": [
+        "ARTICLE_6_1",
+        "OTHER_HIGH_RISK",
+        "UNKNOWN"
+      ],
+      "existingClientFactType": null,
+      "legalMeaning": "A 6. cikk (1) szerinti termékbiztonsági komponens vagy más magas kockázatú kategória jogi minősítése.",
+      "usedByRules": [
+        "APPL-AIA-HIGH-RISK-OPERATION",
+        "APPL-AIA-HIGH-RISK-LOGS"
+      ],
+      "sourceBasis": [
+        "A-AIA-26"
+      ],
+      "collectionQuestionHu": "A 6. cikk (1) szerinti termékbiztonsági komponens vagy más magas kockázatú kategória jogi minősítése.",
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
     }
   ]
 }

@@ -28,3 +28,32 @@ Státusz: `LEGAL_REVIEW_REQUIRED`. A táblák candidate tételek, nem jóváhagy
 | Visszaélés-bejelentés kivizsgálási határidejének meghosszabbítása | Különösen indokolt esetben a 30 napos határidő nem elegendő. | A bejelentő tájékoztatása a várható időpontról és a hosszabbítás indokáról. | DOCUMENTED_EVIDENCE_REQUIRED | Jogászi felülvizsgálat szükséges. |
 | Visszaélés-bejelentés eredményéről való tájékoztatás | A kivizsgálás lezárult vagy mellőzésre került. | Írásbeli tájékoztatás a mellőzésről/indokáról, eredményről és intézkedésekről. | DOCUMENTED_EVIDENCE_REQUIRED | Jogászi felülvizsgálat szükséges. |
 | Visszaélés-bejelentési rendszer hozzáférhető tájékoztatója | Belső visszaélés-bejelentési rendszer működik. | Világos és könnyen hozzáférhető információ nyújtása a rendszer működéséről és eljárásáról. | EXPLICIT_DOCUMENT_REQUIRED | Jogászi felülvizsgálat szükséges. |
+
+## Wave 3A - AI
+
+| Követelmény | Szereplő | Alkalmazás | Dokumentum/kontroll | Forrás | Nyitott kérdés |
+| --- | --- | --- | --- | --- | --- |
+| MI-jártassági intézkedések | A source-grounded role and scope rule szerint érintett szervezet | 2025-02-02 | DOCUMENTED_EVIDENCE_REQUIRED | A-AIA-3-4, A-AIA-113 | A cikk intézkedést ír elő, de önálló írásbeli AI-policyt nem nevesít; policy csak hasznos implementációs kontroll. |
+| Nagy kockázatú MI-rendszer alkalmazói működtetési kontrolljai | A source-grounded role and scope rule szerint érintett szervezet | 2026-08-02 | DOCUMENTED_EVIDENCE_REQUIRED | A-AIA-26, A-AIA-113 | A nagy kockázatú minősítéshez jogi/osztályozási vizsgálat szükséges; a szabály nem minden AI-eszközre vonatkozik. |
+| Nagy kockázatú MI-rendszer automatikus naplóinak megőrzése | A source-grounded role and scope rule szerint érintett szervezet | 2026-08-02 | EXPLICIT_DOCUMENT_REQUIRED | A-AIA-26, A-AIA-113 | A GDPR vagy más alkalmazandó jog eltérő megőrzési kötelezettséget eredményezhet; az összehangolás jogászi feladat. |
+
+## Wave 3A - Cybersecurity
+
+| Követelmény | Szereplő | Alkalmazás | Dokumentum/kontroll | Forrás | Nyitott kérdés |
+| --- | --- | --- | --- | --- | --- |
+| Elektronikus információs rendszerek biztonsági osztályba sorolása | A source-grounded role and scope rule szerint érintett szervezet | 2026-07-29 | EXPLICIT_DOCUMENT_REQUIRED | A-HU-CYBER-1, A-HU-CYBER-10-11, A-HU-CYBER-IMPL-1 | A 2-3. mellékletben való ágazati besorolás és egyes kivételek külön jogi ellenőrzést igényelnek. |
+| Elektronikus információs rendszer biztonságáért felelős személy kijelölése | A source-grounded role and scope rule szerint érintett szervezet | 2026-07-29 | DOCUMENTED_EVIDENCE_REQUIRED | A-HU-CYBER-1, A-HU-CYBER-10-11, A-HU-CYBER-IMPL-1 | A képesítési és szerződéses részletszabályokhoz a teljes végrehajtási anyag és jogászi vizsgálat szükséges. |
+
+## Wave 3A - Digital services
+
+| Követelmény | Szereplő | Alkalmazás | Dokumentum/kontroll | Forrás | Nyitott kérdés |
+| --- | --- | --- | --- | --- | --- |
+| DSA hatósági kapcsolattartó pont | A source-grounded role and scope rule szerint érintett szervezet | 2024-02-17 | EXPLICIT_DOCUMENT_REQUIRED | A-DSA-2, A-DSA-11-14 | Közvetítő szolgáltatási minősítés szükséges; egy átlagos webshop önmagában nem feltétlenül közvetítő szolgáltatás. |
+| DSA szerinti szerződési feltétel és tartalommoderálási átláthatóság | A source-grounded role and scope rule szerint érintett szervezet | 2024-02-17 | EXPLICIT_DOCUMENT_REQUIRED | A-DSA-2, A-DSA-11-14 | A tényleges közvetítőszolgáltatási szerep és moderálási folyamat jogi/funkcionális felmérést igényel. |
+| Elektronikus megrendelés visszaigazolása | A source-grounded role and scope rule szerint érintett szervezet | 2026-01-01 | DOCUMENTED_EVIDENCE_REQUIRED | A-ECOM-5-6 | A nem fogyasztó igénybevevővel kötött szerződésben az eltérés lehetősége forrásszövegben szerepel; szerződéses minősítés szükséges. |
+
+## Wave 3A - Financial digital resilience
+
+| Követelmény | Szereplő | Alkalmazás | Dokumentum/kontroll | Forrás | Nyitott kérdés |
+| --- | --- | --- | --- | --- | --- |
+| DORA szerinti IKT-kockázat irányítás | A source-grounded role and scope rule szerint érintett szervezet | 2025-01-17 | DOCUMENTED_EVIDENCE_REQUIRED | A-DORA-2, A-DORA-5 | Nem pénzügyi szervezetnél ez a DORA-követelmény nem alkalmazandó; pénzügyi jogállás meghatározása jogi ellenőrzést igényelhet. |

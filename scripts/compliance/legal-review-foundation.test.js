@@ -65,7 +65,7 @@ test('full corpus disposition is unique, complete and never an approval', () => 
   assert.strictEqual(coverage.coverage.length, 62);
   assert.strictEqual(new Set(coverage.coverage.map((entry) => entry.sourceKey)).size, 62);
   for (const entry of coverage.coverage) {
-    assert.ok(['REQUIREMENTS_EXTRACTED', 'REQUIRES_SPECIALIST_LEGAL_REVIEW', 'VERSION_AMBIGUOUS', 'REFERENCE_OR_PROMULGATION_ONLY', 'SOURCE_INCOMPLETE'].includes(entry.coverageStatus));
+    assert.ok(['REQUIREMENTS_EXTRACTED', 'REQUIRES_SPECIALIST_LEGAL_REVIEW', 'VERSION_AMBIGUOUS', 'REFERENCE_OR_PROMULGATION_ONLY', 'SOURCE_INCOMPLETE', 'IMPLEMENTATION_REQUIRED_NO_DIRECT_COMPANY_RULE'].includes(entry.coverageStatus));
     assert.notStrictEqual(entry.coverageStatus, 'APPROVED');
   }
 });
@@ -75,12 +75,32 @@ test('captured anchor excerpt hashes resolve against the read-only corpus', () =
     'EU:EU_REGULATION:CELEX:32016R0679': 'L_2016119HU.01000101.xml.txt',
     'HU:ACT:1997:CLV': '1997. évi CLV. törvény.txt',
     'HU:ACT:2023:XXV': '2023. évi XXV. törvény.txt',
+    'EU:EU_REGULATION:CELEX:32024R1689': 'L_202401689HU.000101.fmx.xml.txt',
+    'HU:ACT:2024:LXIX': '2024. évi LXIX. törvény.txt',
+    'HU:DECREE:418/2024:KORM': '418_2024. (XII. 23.) Korm. rendelet.txt',
+    'EU:EU_REGULATION:CELEX:32022R2554': 'L_2022333HU.01000101.xml.txt',
+    'EU:EU_REGULATION:CELEX:32022R2065': 'L_2022277HU.01000101.xml.txt',
+    'HU:ACT:2001:CVIII': '2001. évi CVIII. törvény.txt',
+    'HU:DECREE:373/2021:KORM': '373_2021. (VI. 30.) Korm. rendelet.txt',
+    'EU:EU_DIRECTIVE:CELEX:32022L2555': 'L_2022333HU.01008001.xml.txt',
   };
   for (const anchor of Object.values(requirements.anchors)) {
     const lines = fs.readFileSync(path.join(corpus, sourceFiles[anchor.sourceKey]), 'utf8').split(/\r?\n/);
     const excerpt = lines.slice(anchor.lineSpan.start - 1, anchor.lineSpan.end).join('\n');
     assert.strictEqual(compactHash(excerpt), anchor.excerptSha256);
   }
+});
+
+test('Wave 3A maintains role, temporal and directive implementation gates', () => {
+  const byKey = new Map(applicability.rules.map((rule) => [rule.ruleKey, rule]));
+  assert.ok(JSON.stringify(byKey.get('APPL-AIA-LITERACY').logic).includes('aiUsedUnderOrganisationAuthority'));
+  assert.ok(JSON.stringify(byKey.get('APPL-AIA-HIGH-RISK-OPERATION').logic).includes('DATE_ON_OR_AFTER'));
+  assert.ok(JSON.stringify(byKey.get('APPL-DORA-ICT-GOVERNANCE').logic).includes('doraFinancialEntityScope'));
+  assert.ok(JSON.stringify(byKey.get('APPL-DSA-AUTHORITY-CONTACT').logic).includes('dsaIntermediaryServiceClassification'));
+  const nis2 = coverage.coverage.find((entry) => entry.sourceKey === 'EU:EU_DIRECTIVE:CELEX:32022L2555');
+  assert.strictEqual(nis2.coverageStatus, 'IMPLEMENTATION_REQUIRED_NO_DIRECT_COMPANY_RULE');
+  assert.strictEqual(nis2.reviewMethod, 'SUBSTANTIVE_LEGAL_REVIEW');
+  for (const requirement of requirements.requirements.filter((item) => item.domain === 'ai')) assert.ok(requirement.effectiveDate);
 });
 
 test('template packages carry source basis, known fields and no automatic approval', () => {
