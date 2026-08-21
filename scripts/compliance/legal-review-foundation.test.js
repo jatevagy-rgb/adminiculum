@@ -88,6 +88,9 @@ test('captured anchor excerpt hashes resolve against the read-only corpus', () =
     'EU:EU_REGULATION:CELEX:32021R0821': 'Egységes szerkezetbe foglalt SZÖVEG_ 32021R0821 — HU — 15.11.2025.txt',
     'EU:EU_REGULATION:CELEX:32013R0952': 'L_2013269HU.01000101.xml.txt',
     'EU:EU_REGULATION:CELEX:32019R1020': 'L_2019169HU.01000101.xml.txt',
+    'HU:ACT:1993:XCIII': '1993. évi XCIII. törvény.txt',
+    'HU:DECREE:5/1993:MÜM': '5_1993. (XII. 26.) MüM rendelet.txt',
+    'HU:ACT:2012:I': '2012. évi I. törvény.txt',
   };
   for (const anchor of Object.values(requirements.anchors)) {
     const reachFirstCapture = anchor.sourceKey === 'EU:EU_REGULATION:CELEX:32006R1907' && anchor.sourceSha256 === '489f4181edde13eed8af1aeeb62c19665f54de600f8943caa014f4dd0171f873';
@@ -95,6 +98,28 @@ test('captured anchor excerpt hashes resolve against the read-only corpus', () =
     const lines = fs.readFileSync(path.join(corpus, sourceFile), 'utf8').split(/\r?\n/);
     const excerpt = lines.slice(anchor.lineSpan.start - 1, anchor.lineSpan.end).join('\n');
     assert.strictEqual(compactHash(excerpt), anchor.excerptSha256);
+  }
+});
+
+test('Wave 4A separates periodic, event-based, accident and employer-information duties', () => {
+  const requirementsByKey = new Map(requirements.requirements.map((item) => [item.requirementKey, item]));
+  const rulesByKey = new Map(applicability.rules.map((item) => [item.ruleKey, item]));
+  const factsByKey = new Map(facts.facts.map((item) => [item.factKey, item]));
+
+  assert.match(requirementsByKey.get('WORKPLACE_RISK_ASSESSMENT_INITIAL_PERIODIC').frequency, /5 évente/);
+  assert.notStrictEqual(requirementsByKey.get('WORKPLACE_RISK_ASSESSMENT_INITIAL_PERIODIC').requirementKey, requirementsByKey.get('WORKPLACE_RISK_ASSESSMENT_EVENT_REVIEW').requirementKey);
+  assert.match(requirementsByKey.get('EMPLOYER_WRITTEN_INFORMATION_INITIAL').deadline, /hét napon belül/);
+  assert.match(requirementsByKey.get('EMPLOYER_WRITTEN_INFORMATION_CHANGE').deadline, /hatálybalépés/);
+  assert.deepStrictEqual(rulesByKey.get('APPL-SERIOUS-ACCIDENT').logic, { AND: [{ ENUM_MATCH: { fact: 'seriousWorkAccidentClassification', value: 'SERIOUS' } }] });
+  assert.strictEqual(factsByKey.get('hasEmployees').scope, 'COMPANY');
+  assert.strictEqual(factsByKey.get('workplaceRiskAssessmentReviewTriggerOccurred').scope, 'WORKPLACE_SITE');
+  assert.strictEqual(factsByKey.get('workAccidentOccurred').scope, 'EVENT');
+  assert.strictEqual(factsByKey.get('employmentRelationshipStarted').scope, 'EMPLOYEE');
+  const wave4FactKeys = ['hasEmployees', 'workplaceRiskAssessmentReviewTriggerOccurred', 'workAccidentOccurred', 'seriousWorkAccidentClassification', 'employmentRelationshipStarted', 'employmentInformationChangeOccurred'];
+  const meanings = wave4FactKeys.map((key) => factsByKey.get(key).legalMeaning.replace(/[^a-z0-9]/gi, '').toLowerCase());
+  assert.strictEqual(new Set(meanings).size, meanings.length, 'Wave 4A facts must not duplicate one another semantically');
+  for (const key of ['WORKPLACE_RISK_ASSESSMENT_INITIAL_PERIODIC', 'WORKPLACE_RISK_ASSESSMENT_EVENT_REVIEW', 'WORK_ACCIDENT_INVESTIGATION_RECORD', 'SERIOUS_WORK_ACCIDENT_NOTIFICATION', 'EMPLOYER_WRITTEN_INFORMATION_INITIAL', 'EMPLOYER_WRITTEN_INFORMATION_CHANGE']) {
+    assert.strictEqual(requirementsByKey.get(key).legalReviewStatus, 'LEGAL_REVIEW_REQUIRED');
   }
 });
 

@@ -630,6 +630,132 @@
       "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED",
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
       "legalReviewNotes": "Termékjogszabályi hatály és megfelelőségértékelés termékspecifikus specialistai kérdés."
+    },
+    {
+      "requirementKey": "WORKPLACE_RISK_ASSESSMENT_INITIAL_PERIODIC",
+      "titleHu": "Munkavédelmi kockázatértékelés elkészítése és időszakos felülvizsgálata",
+      "summaryHu": "A tevékenység megkezdése előtt elkészíti és dokumentálja a kockázatértékelést, majd azt eltérő jogszabályi rendelkezés hiányában legalább öt évente elvégzi.",
+      "domain": "employment_hr_safety",
+      "subdomain": "employment_hr_safety",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Munkáltató",
+      "trigger": "A munkáltató szervezett munkavégzéshez tevékenységet kezd vagy munkahelyet működtet.",
+      "requiredAction": "A tevékenység megkezdése előtt elkészíti és dokumentálja a kockázatértékelést, majd azt eltérő jogszabályi rendelkezés hiányában legalább öt évente elvégzi.",
+      "deadline": "A tevékenység megkezdése előtt.",
+      "frequency": "Ezt követően indokolt esetben, de eltérő jogszabályi rendelkezés hiányában legalább 5 évente.",
+      "evidenceExpected": "Kockázatértékelés a forrás szerinti dokumentált tartalmi elemekkel.",
+      "sourceAnchors": [
+        "A-MVT-54"
+      ],
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "A legalább ötéves ciklus és az esemény-/változás-alapú felülvizsgálat külön kötelezettségként szerepel."
+    },
+    {
+      "requirementKey": "WORKPLACE_RISK_ASSESSMENT_EVENT_REVIEW",
+      "titleHu": "Munkavédelmi kockázatértékelés esemény- vagy változás-alapú felülvizsgálata",
+      "summaryHu": "Elvégzi és dokumentálja a kockázatértékelést, annak részeként a kockázatkezelést és a megelőző intézkedések meghatározását.",
+      "domain": "employment_hr_safety",
+      "subdomain": "employment_hr_safety",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Munkáltató",
+      "trigger": "A 54. § (3) szerinti tevékenység-, technológia-, munkaeszköz-, munkamód- vagy munkakörülmény-változás, illetve munkabaleset, fokozott expozíció vagy foglalkozási megbetegedés történik.",
+      "requiredAction": "Elvégzi és dokumentálja a kockázatértékelést, annak részeként a kockázatkezelést és a megelőző intézkedések meghatározását.",
+      "deadline": "Az indokolt eset bekövetkezésekor.",
+      "frequency": "Eseményhez vagy változáshoz kötötten.",
+      "evidenceExpected": "Felülvizsgált kockázatértékelés és a forrás szerinti dokumentált tartalmi elemek.",
+      "sourceAnchors": [
+        "A-MVT-54"
+      ],
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "Nem rövidíti le és nem helyettesíti a törvényi, legalább ötéves időszakos felülvizsgálatot."
+    },
+    {
+      "requirementKey": "WORK_ACCIDENT_INVESTIGATION_RECORD",
+      "titleHu": "Munkabaleset kivizsgálása és dokumentálása",
+      "summaryHu": "A munkabalesetet haladéktalanul kivizsgálja; a három munkanapot meghaladó munkaképtelenséggel járó esetet a forrás szerint nyilvántartásba veszi és bejelenti, a vizsgálat megállapításait részletesen rögzíti.",
+      "domain": "employment_hr_safety",
+      "subdomain": "employment_hr_safety",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Munkáltató",
+      "trigger": "Munkaképtelenséggel járó munkabaleset történik.",
+      "requiredAction": "A munkabalesetet haladéktalanul kivizsgálja; a három munkanapot meghaladó munkaképtelenséggel járó esetet a forrás szerint nyilvántartásba veszi és bejelenti, a vizsgálat megállapításait részletesen rögzíti.",
+      "deadline": "A bekövetkezést követően haladéktalanul.",
+      "frequency": "Minden érintett munkabalesetnél.",
+      "evidenceExpected": "Vizsgálati dokumentáció, jegyzőkönyv és a forrás szerinti nyilvántartási/bejelentési bizonyíték.",
+      "sourceAnchors": [
+        "A-MUM-5-8"
+      ],
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "A három munkanapot meghaladó munkaképtelenség tényének megállapítása és a további bejelentési részletszabályok specialistai ellenőrzést igényelnek."
+    },
+    {
+      "requirementKey": "SERIOUS_WORK_ACCIDENT_NOTIFICATION",
+      "titleHu": "Súlyos munkabaleset haladéktalan hatósági bejelentése és bizonyítékmegőrzése",
+      "summaryHu": "Haladéktalanul bejelenti a munkavédelmi hatóságnak, és a hatóság megérkezéséig megőrzi a baleseti helyszínt, vagy a forrás szerinti veszély/kár esetén dokumentálja annak állapotát.",
+      "domain": "employment_hr_safety",
+      "subdomain": "employment_hr_safety",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Munkáltató",
+      "trigger": "A munkabaleset súlyosnak minősül.",
+      "requiredAction": "Haladéktalanul bejelenti a munkavédelmi hatóságnak, és a hatóság megérkezéséig megőrzi a baleseti helyszínt, vagy a forrás szerinti veszély/kár esetén dokumentálja annak állapotát.",
+      "deadline": "Haladéktalanul.",
+      "frequency": "Minden súlyos munkabalesetnél.",
+      "evidenceExpected": "Bejelentési bizonyíték és helyszínmegőrzési vagy helyszíndokumentációs bizonyíték.",
+      "sourceAnchors": [
+        "A-MUM-5-8"
+      ],
+      "documentationNeed": "DOCUMENTED_EVIDENCE_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "A súlyos munkabaleset minősítése munkavédelmi és jogi specialistai kapu; a felhasználó nem minősít saját maga."
+    },
+    {
+      "requirementKey": "EMPLOYER_WRITTEN_INFORMATION_INITIAL",
+      "titleHu": "Munkáltatói írásbeli tájékoztatás új munkaviszony kezdetén",
+      "summaryHu": "A munkavállalót írásban tájékoztatja a 46. § (1) szerinti munkafeltételekről, a forrás szerinti kivételek figyelembevételével.",
+      "domain": "employment_hr_safety",
+      "subdomain": "employment_hr_safety",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Munkáltató",
+      "trigger": "Új munkaviszony kezdődik.",
+      "requiredAction": "A munkavállalót írásban tájékoztatja a 46. § (1) szerinti munkafeltételekről, a forrás szerinti kivételek figyelembevételével.",
+      "deadline": "Legkésőbb a munkaviszony kezdetétől számított hét napon belül.",
+      "frequency": "Minden új munkaviszonynál.",
+      "evidenceExpected": "Átadott írásbeli tájékoztató és átadási bizonyíték.",
+      "sourceAnchors": [
+        "A-MT-46"
+      ],
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "Nem munkaszerződés-generálás; a forrás szerinti kivételek és egyedi feltételek jogi ellenőrzést igényelnek."
+    },
+    {
+      "requirementKey": "EMPLOYER_WRITTEN_INFORMATION_CHANGE",
+      "titleHu": "Munkáltatói írásbeli tájékoztatás munkafeltétel-változáskor",
+      "summaryHu": "A munkavállalót a változásról írásban tájékoztatja, a forrás szerinti kivételek figyelembevételével.",
+      "domain": "employment_hr_safety",
+      "subdomain": "employment_hr_safety",
+      "requirementType": "DOCUMENTATION",
+      "mandatoryLevel": "CONDITIONAL_MANDATORY",
+      "regulatedActor": "Munkáltató",
+      "trigger": "A 46. § (1) vagy a 23. § (2) szerinti írásban közlendő feltétel megváltozik.",
+      "requiredAction": "A munkavállalót a változásról írásban tájékoztatja, a forrás szerinti kivételek figyelembevételével.",
+      "deadline": "Legkésőbb a változás hatálybalépésének időpontjában.",
+      "frequency": "Minden érintett változáskor.",
+      "evidenceExpected": "Változási írásbeli tájékoztató és átadási bizonyíték.",
+      "sourceAnchors": [
+        "A-MT-46"
+      ],
+      "documentationNeed": "EXPLICIT_DOCUMENT_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED",
+      "legalReviewNotes": "A 46. § (5) önálló, a kezdeti tájékoztatástól különböző kötelezettség."
     }
   ],
   "anchors": {
@@ -969,6 +1095,45 @@
         "end": 452
       },
       "excerptSha256": "14311e3194dcc63f88451cc670b04e74b51807c3d879e2f89c6753e1cedfe257",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-MVT-54": {
+      "sourceKey": "HU:ACT:1993:XCIII",
+      "sourceSha256": "b7cbae3e25952a041e25e74d216b4c3e347997de42dc9494a8f08ffc7a296088",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "54. § (2)-(5)",
+      "headingContext": "Wave 4A substantive review",
+      "lineSpan": {
+        "start": 369,
+        "end": 403
+      },
+      "excerptSha256": "f9e582cae8a2f9e6ba0a58fd6ec945ddb3455f826f868c20b124ac7633d6a50e",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-MUM-5-8": {
+      "sourceKey": "HU:DECREE:5/1993:MÜM",
+      "sourceSha256": "8d3f809bdcf6757c9e5af92193bea5553558f45d19ed15ad01f3be782cccf657",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "5-8. §",
+      "headingContext": "Wave 4A substantive review",
+      "lineSpan": {
+        "start": 148,
+        "end": 198
+      },
+      "excerptSha256": "22e2d379ca88a895965dc6c6e821cf11659aa75977436db8bfb7cf45afac9823",
+      "provenance": "STANDALONE_SOURCE"
+    },
+    "A-MT-46": {
+      "sourceKey": "HU:ACT:2012:I",
+      "sourceSha256": "0896a91665e2c6bf663dff863a2f06fd2ab6a4af48c6f8f69ff88c40f6f87400",
+      "sourceVersion": "CORPUS_CAPTURE",
+      "provisionReference": "46. § (1), (5)",
+      "headingContext": "Wave 4A substantive review",
+      "lineSpan": {
+        "start": 522,
+        "end": 558
+      },
+      "excerptSha256": "e11433a031269dcd0429fd5ef25d97ee6a9ddd01254858de0c2bddbb92cee718",
       "provenance": "STANDALONE_SOURCE"
     }
   }

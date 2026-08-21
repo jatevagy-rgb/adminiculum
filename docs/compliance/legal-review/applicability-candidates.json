@@ -892,6 +892,121 @@
       "sourceAnchor": "A-MARKET-4",
       "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-WORK-RISK-INITIAL-PERIODIC",
+      "requirementKey": "WORKPLACE_RISK_ASSESSMENT_INITIAL_PERIODIC",
+      "logic": {
+        "AND": [
+          {
+            "EXISTS": {
+              "fact": "hasEmployees"
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "hasEmployees"
+      ],
+      "sourceAnchor": "A-MVT-54",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-WORK-RISK-EVENT-REVIEW",
+      "requirementKey": "WORKPLACE_RISK_ASSESSMENT_EVENT_REVIEW",
+      "logic": {
+        "AND": [
+          {
+            "EXISTS": {
+              "fact": "workplaceRiskAssessmentReviewTriggerOccurred"
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "workplaceRiskAssessmentReviewTriggerOccurred"
+      ],
+      "sourceAnchor": "A-MVT-54",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-ACCIDENT-RECORD",
+      "requirementKey": "WORK_ACCIDENT_INVESTIGATION_RECORD",
+      "logic": {
+        "AND": [
+          {
+            "EXISTS": {
+              "fact": "workAccidentOccurred"
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "workAccidentOccurred"
+      ],
+      "sourceAnchor": "A-MUM-5-8",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-SERIOUS-ACCIDENT",
+      "requirementKey": "SERIOUS_WORK_ACCIDENT_NOTIFICATION",
+      "logic": {
+        "AND": [
+          {
+            "ENUM_MATCH": {
+              "fact": "seriousWorkAccidentClassification",
+              "value": "SERIOUS"
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "seriousWorkAccidentClassification"
+      ],
+      "sourceAnchor": "A-MUM-5-8",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-EMPLOYER-INFO-INITIAL",
+      "requirementKey": "EMPLOYER_WRITTEN_INFORMATION_INITIAL",
+      "logic": {
+        "AND": [
+          {
+            "EXISTS": {
+              "fact": "employmentRelationshipStarted"
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "employmentRelationshipStarted"
+      ],
+      "sourceAnchor": "A-MT-46",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "ruleKey": "APPL-EMPLOYER-INFO-CHANGE",
+      "requirementKey": "EMPLOYER_WRITTEN_INFORMATION_CHANGE",
+      "logic": {
+        "AND": [
+          {
+            "EXISTS": {
+              "fact": "employmentInformationChangeOccurred"
+            }
+          }
+        ]
+      },
+      "requiredFacts": [
+        "employmentInformationChangeOccurred"
+      ],
+      "sourceAnchor": "A-MT-46",
+      "missingFactOutcome": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
     }
   ],
   "operatorVocabulary": {

@@ -1021,6 +1021,106 @@
       "sensitive": false,
       "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
       "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "hasEmployees",
+      "labelHu": "Munkavállalók foglalkoztatása",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "scope": "COMPANY",
+      "legalMeaning": "Foglalkoztat munkavállalót?",
+      "collectionQuestionHu": "Foglalkoztat munkavállalót?",
+      "usedByRules": [
+        "APPL-WORK-RISK-INITIAL-PERIODIC"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "workplaceRiskAssessmentReviewTriggerOccurred",
+      "labelHu": "Kockázatértékelés felülvizsgálati kiváltó eseménye",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "scope": "WORKPLACE_SITE",
+      "legalMeaning": "Történt-e a munkahelyet vagy munkavégzést érintő olyan változás vagy esemény, amely a kockázatértékelés felülvizsgálatát kiválthatja?",
+      "collectionQuestionHu": "Történt-e a munkahelyet vagy munkavégzést érintő olyan változás vagy esemény, amely a kockázatértékelés felülvizsgálatát kiválthatja?",
+      "usedByRules": [
+        "APPL-WORK-RISK-EVENT-REVIEW"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "LEGAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "workAccidentOccurred",
+      "labelHu": "Munkabaleset bekövetkezése",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "scope": "EVENT",
+      "legalMeaning": "Történt munkabaleset?",
+      "collectionQuestionHu": "Történt munkabaleset?",
+      "usedByRules": [
+        "APPL-ACCIDENT-RECORD"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "seriousWorkAccidentClassification",
+      "labelHu": "Súlyos munkabaleset minősítése",
+      "dataType": "enum",
+      "allowedValues": [
+        "SERIOUS",
+        "NOT_SERIOUS",
+        "UNKNOWN"
+      ],
+      "scope": "EVENT",
+      "legalMeaning": "A munkabaleset súlyosságának munkavédelmi és jogi specialistai minősítése.",
+      "collectionQuestionHu": "A munkabaleset súlyosságának munkavédelmi és jogi specialistai minősítése.",
+      "usedByRules": [
+        "APPL-SERIOUS-ACCIDENT"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "TECHNICAL_CLASSIFICATION_REQUIRED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "employmentRelationshipStarted",
+      "labelHu": "Munkaviszony kezdete",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "scope": "EMPLOYEE",
+      "legalMeaning": "Kezdődött új munkaviszony?",
+      "collectionQuestionHu": "Kezdődött új munkaviszony?",
+      "usedByRules": [
+        "APPL-EMPLOYER-INFO-INITIAL"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
+    },
+    {
+      "factKey": "employmentInformationChangeOccurred",
+      "labelHu": "Írásbeli munkáltatói tájékoztatást érintő változás",
+      "dataType": "boolean",
+      "allowedValues": null,
+      "scope": "EMPLOYEE",
+      "legalMeaning": "Változtak a munkavállalónak írásban közölt munkafeltételek?",
+      "collectionQuestionHu": "Változtak a munkavállalónak írásban közölt munkafeltételek?",
+      "usedByRules": [
+        "APPL-EMPLOYER-INFO-CHANGE"
+      ],
+      "sourceBasis": [],
+      "sensitive": false,
+      "refreshPolicy": "USER_PROVIDED",
+      "legalReviewStatus": "LEGAL_REVIEW_REQUIRED"
     }
   ]
 }

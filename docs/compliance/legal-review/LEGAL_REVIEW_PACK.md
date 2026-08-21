@@ -69,3 +69,9 @@ Státusz: `LEGAL_REVIEW_REQUIRED`. A táblák candidate tételek, nem jóváhagy
 ## Corporate integrity / anti-bribery
 
 - **HU:ACT:2000:XXXVII**: Hungarian promulgation of the OECD Convention. Reviewed state-level criminalisation, legal-person liability and accounting-law measures. **No direct company compliance-template requirement extracted.** No foreign-law nexus rule was created because UK Bribery Act and FCPA primary source text are absent from the corpus.
+
+## Employment / workforce safety
+
+- **Munkavédelmi kockázatértékelés:** A munkáltató a tevékenység megkezdése előtt, majd eltérő jogszabályi rendelkezés hiányában legalább öt évente készíti és dokumentálja. A változás vagy esemény által kiváltott felülvizsgálat ettől külön kötelezettség.
+- **Munkabaleset:** A munkaképtelenséggel járó baleset kivizsgálása és dokumentálása külön candidate; a súlyos baleset haladéktalan hatósági bejelentése és a helyszín megőrzése külön, specialistai minősítési kapu mögötti candidate.
+- **Munkáltatói írásbeli tájékoztatás:** Az új munkaviszony utáni hét napos írásbeli tájékoztatás és a változás hatálybalépésekor esedékes tájékoztatás külön candidate. Nem készült munkaszerződés vagy más DOCX-sablon.

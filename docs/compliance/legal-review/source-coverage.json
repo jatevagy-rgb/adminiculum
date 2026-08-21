@@ -239,14 +239,20 @@
       "sourceSha256": "b7cbae3e25952a041e25e74d216b4c3e347997de42dc9494a8f08ffc7a296088",
       "version": "2026-01-01",
       "provenance": "STANDALONE_SOURCE",
-      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
-      "domains": [],
-      "requirementsExtracted": [],
-      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
-      "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=168152"
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
+      "domains": [
+        "employment_hr_safety"
       ],
-      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+      "requirementsExtracted": [
+        "WORKPLACE_RISK_ASSESSMENT_INITIAL_PERIODIC",
+        "WORKPLACE_RISK_ASSESSMENT_EVENT_REVIEW"
+      ],
+      "reviewNotes": "Wave 4A tényleges rendelkezés-alapú review; csak a megjelölt candidate követelmények kerültek kinyerésre, mind LEGAL_REVIEW_REQUIRED.",
+      "reviewedProvisions": [
+        "54. § (2)-(5)"
+      ],
+      "unreviewedReason": null,
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "HU:ACT:1995:CXVII",
@@ -555,14 +561,20 @@
       "sourceSha256": "0896a91665e2c6bf663dff863a2f06fd2ab6a4af48c6f8f69ff88c40f6f87400",
       "version": "2025-02-28",
       "provenance": "STANDALONE_SOURCE",
-      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
-      "domains": [],
-      "requirementsExtracted": [],
-      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
-      "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=241034"
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
+      "domains": [
+        "employment_hr_safety"
       ],
-      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+      "requirementsExtracted": [
+        "EMPLOYER_WRITTEN_INFORMATION_INITIAL",
+        "EMPLOYER_WRITTEN_INFORMATION_CHANGE"
+      ],
+      "reviewNotes": "Wave 4A tényleges rendelkezés-alapú review; csak a megjelölt candidate követelmények kerültek kinyerésre, mind LEGAL_REVIEW_REQUIRED.",
+      "reviewedProvisions": [
+        "46. § (1), (5)"
+      ],
+      "unreviewedReason": null,
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "HU:ACT:2013:V",
@@ -1000,14 +1012,20 @@
       "sourceSha256": "8d3f809bdcf6757c9e5af92193bea5553558f45d19ed15ad01f3be782cccf657",
       "version": "2025-05-01",
       "provenance": "STANDALONE_SOURCE",
-      "coverageStatus": "REQUIRES_SPECIALIST_LEGAL_REVIEW",
-      "domains": [],
-      "requirementsExtracted": [],
-      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
-      "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=31738"
+      "coverageStatus": "REQUIREMENTS_EXTRACTED",
+      "domains": [
+        "employment_hr_safety"
       ],
-      "unreviewedReason": "Ágazati, hatály-, definíció- vagy időbeli értelmezést igényel."
+      "requirementsExtracted": [
+        "WORK_ACCIDENT_INVESTIGATION_RECORD",
+        "SERIOUS_WORK_ACCIDENT_NOTIFICATION"
+      ],
+      "reviewNotes": "Wave 4A tényleges rendelkezés-alapú review; csak a megjelölt candidate követelmények kerültek kinyerésre, mind LEGAL_REVIEW_REQUIRED.",
+      "reviewedProvisions": [
+        "5-8. §"
+      ],
+      "unreviewedReason": null,
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "HU:DECREE:80/2023:KORM",
