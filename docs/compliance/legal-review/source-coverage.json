@@ -406,14 +406,18 @@
       "sourceSha256": "49079a50bc9dc82779ca0976368361c77d67663a8bafdf8c8e489c7bda7bc94b",
       "version": "2000-06-03",
       "provenance": "INCORPORATED_PROMULGATED",
-      "coverageStatus": "REFERENCE_OR_PROMULGATION_ONLY",
+      "coverageStatus": "NO_DIRECT_COMPANY_REQUIREMENT_IDENTIFIED",
       "domains": [],
       "requirementsExtracted": [],
-      "reviewNotes": "A teljes forrásszöveg mechanikus olvasása/strukturális és kötelezettség-kulcsszó vizsgálata lefutott; specialistai jogi értékelés nélkül nem keletkezett további candidate követelmény.",
+      "reviewNotes": "INCORPORATED_PROMULGATED source. The reviewed text establishes contracting-state criminalisation, legal-person liability and state accounting-law measures; it does not itself prescribe a generic company anti-bribery policy, gifts limit, training record or third-party due-diligence document.",
       "reviewedProvisions": [
-        "FULL_TEXT_SCAN chars=34359"
+        "1. §",
+        "OECD Egyezmény 1. cikk (state criminalisation)",
+        "2. cikk (legal-person liability)",
+        "8. cikk (state accounting measures)"
       ],
-      "unreviewedReason": null
+      "unreviewedReason": null,
+      "reviewMethod": "SUBSTANTIVE_LEGAL_REVIEW"
     },
     {
       "sourceKey": "HU:ACT:2001:CVIII",

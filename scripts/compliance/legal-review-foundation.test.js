@@ -65,7 +65,7 @@ test('full corpus disposition is unique, complete and never an approval', () => 
   assert.strictEqual(coverage.coverage.length, 62);
   assert.strictEqual(new Set(coverage.coverage.map((entry) => entry.sourceKey)).size, 62);
   for (const entry of coverage.coverage) {
-    assert.ok(['REQUIREMENTS_EXTRACTED', 'REQUIRES_SPECIALIST_LEGAL_REVIEW', 'VERSION_AMBIGUOUS', 'REFERENCE_OR_PROMULGATION_ONLY', 'SOURCE_INCOMPLETE', 'IMPLEMENTATION_REQUIRED_NO_DIRECT_COMPANY_RULE'].includes(entry.coverageStatus));
+    assert.ok(['REQUIREMENTS_EXTRACTED', 'REQUIRES_SPECIALIST_LEGAL_REVIEW', 'VERSION_AMBIGUOUS', 'REFERENCE_OR_PROMULGATION_ONLY', 'SOURCE_INCOMPLETE', 'IMPLEMENTATION_REQUIRED_NO_DIRECT_COMPANY_RULE', 'NO_DIRECT_COMPANY_REQUIREMENT_IDENTIFIED'].includes(entry.coverageStatus));
     assert.notStrictEqual(entry.coverageStatus, 'APPROVED');
   }
 });
