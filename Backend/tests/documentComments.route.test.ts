@@ -253,7 +253,10 @@ describe('document comments routes', () => {
   });
 
   it('returns safe not found for missing document', async () => {
-    mockPrisma.document.findUnique.mockResolvedValueOnce(null);
+    // The HR-confidential gate middleware runs before the handler and performs its
+    // own document lookup, so every document.findUnique call in this request must
+    // observe the missing document (not just the handler's lookup).
+    mockPrisma.document.findUnique.mockResolvedValue(null);
     const res = await requestJson(createApp(), 'GET', '/documents/missing/comments');
     expect(res.status).toBe(404);
     expect(res.body.code).toBe('DOCUMENT_NOT_FOUND');

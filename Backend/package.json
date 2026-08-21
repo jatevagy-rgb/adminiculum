@@ -44,7 +44,12 @@
     "test:membership-onboarding:db": "jest --runInBand tests/clientPortalMembershipOnboarding.integration.test.ts",
     "test:milestone:db": "jest --runInBand tests/clientMatterMilestonePublication.integration.test.ts",
     "test:workflow:db": "jest --runInBand tests/caseWorkflowTemplates.integration.test.ts",
-    "test:lifecycle:db": "jest --runInBand tests/caseLifecycleWorkflowCompletion.integration.test.ts"
+    "test:lifecycle:db": "jest --runInBand tests/caseLifecycleWorkflowCompletion.integration.test.ts",
+    "test:document-version:db": "jest --runInBand tests/documentVersionPersistence.integration.test.ts",
+    "test:task-lifecycle-schema:db": "jest --runInBand tests/taskLifecycleSchema.integration.test.ts",
+    "test:task-review-decision:db": "jest --runInBand tests/taskReviewDecision.integration.test.ts",
+    "test:task-submission:db": "jest --runInBand tests/taskSubmission.integration.test.ts",
+    "db:provision:task-document": "node scripts/ci-provision-task-document-dbs.mjs"
   },
   "dependencies": {
     "@azure/identity": "^4.13.1",

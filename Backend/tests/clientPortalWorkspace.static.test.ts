@@ -30,8 +30,8 @@ describe('client portal workspace projection', () => {
     const routes = read('Backend/src/routes/clientPortal.ts');
     const workspace = routes.slice(routes.indexOf('async function portalWorkspace'));
     expect(workspace).not.toMatch(/storageProvider|quarantineStorageReference|scanProvider|scanCodeSafe|reviewedById|acceptedDocumentVersionId/);
-    expect(workspace).toContain('({ rawStatus, ...request })');
-    expect(workspace).toContain('DOCUMENT_REQUEST_TYPES');
-    expect(workspace).toContain('CORRECTION_REQUEST');
+    expect(workspace).toContain('rawStatus: item.status');
+    expect(workspace).toContain('DOCUMENT_REQUEST_TYPES.has(request.type)');
+    expect(workspace).toContain("kind: request.type === 'CORRECTION_REQUEST'");
   });
 });

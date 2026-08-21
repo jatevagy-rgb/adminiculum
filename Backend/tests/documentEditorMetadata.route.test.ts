@@ -189,7 +189,7 @@ describe('document text route production-compatible projection', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('uses an explicit drift-safe document projection and returns a safe unavailable state', async () => {
-    (prisma as any).document.findUnique.mockResolvedValueOnce({
+    const textDocument = {
       id: 'doc-1',
       documentType: 'CLIENT_INPUT',
       workspaceText: null,
@@ -198,7 +198,11 @@ describe('document text route production-compatible projection', () => {
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       fileName: 'Szerződés.docx',
       name: 'Szerződés.docx',
-    });
+    };
+    // The HR-confidential gate middleware runs before the handler and performs its
+    // own document lookup, so every document.findUnique call in this request must
+    // return the document (the gate ignores it for STANDARD documents).
+    (prisma as any).document.findUnique.mockResolvedValue(textDocument);
 
     const res = await requestJson(createApp(), 'GET', '/documents/doc-1/text');
 
