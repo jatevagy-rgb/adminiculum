@@ -3,10 +3,10 @@ import { checkComparisonTypeCompatibility } from '../src/modules/compliance/type
 import type { FactDefinitionMap } from '../src/modules/compliance/types';
 
 const FACTS: FactDefinitionMap = {
-  regulated_activity: { type: 'boolean' },
-  employee_count: { type: 'number' },
-  incorporation_date: { type: 'date' },
-  entity_name: { type: 'string' },
+  regulated_activity: { key: 'regulated_activity', type: 'boolean' },
+  employee_count: { key: 'employee_count', type: 'number' },
+  incorporation_date: { key: 'incorporation_date', type: 'date' },
+  entity_name: { key: 'entity_name', type: 'string' },
 };
 
 function compare(partial: Partial<CompareNode> & Pick<CompareNode, 'left' | 'right'>): CompareNode {
@@ -94,5 +94,23 @@ describe('phase6 type-compatibility validation', () => {
       const result = checkComparisonTypeCompatibility(node, FACTS);
       expect(result.compatible).toBe(true);
     }
+  });
+
+  it('rejects operators outside the type matrix', () => {
+    const result = checkComparisonTypeCompatibility(
+      compare({ operator: 'CONTAINS', left: { kind: 'FACT', factKey: 'employee_count' }, right: { kind: 'LITERAL', valueType: 'number', value: 1 } }),
+      FACTS,
+    );
+    expect(result.compatible).toBe(false);
+    expect(result.errors.some((e) => e.code === 'UNSUPPORTED_OPERATOR_FOR_TYPE')).toBe(true);
+  });
+
+  it('requires FactDefinition.key to match the stable fact key', () => {
+    const result = checkComparisonTypeCompatibility(
+      compare({ left: { kind: 'FACT', factKey: 'employee_count' }, right: { kind: 'LITERAL', valueType: 'number', value: 1 } }),
+      { employee_count: { key: 'client-fact-id-123', type: 'number' } },
+    );
+    expect(result.compatible).toBe(false);
+    expect(result.errors[0].code).toBe('UNKNOWN_FACT');
   });
 });

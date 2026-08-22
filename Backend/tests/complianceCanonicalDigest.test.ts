@@ -31,12 +31,6 @@ describe('phase6 deterministic canonicalization + digest', () => {
     expect(() => canonicalStringify({ a: undefined })).toThrowError(CanonicalizationError);
   });
 
-  it('omits undefined members when nonJsonPolicy=omit', () => {
-    const withUndefined = canonicalStringify({ a: 1, b: undefined }, { nonJsonPolicy: 'omit' });
-    const without = canonicalStringify({ a: 1 });
-    expect(withUndefined).toBe(without);
-  });
-
   it('rejects non-JSON values: functions, symbols, bigint, Date, non-finite numbers', () => {
     expect(() => canonicalStringify({ f: () => 1 })).toThrowError(CanonicalizationError);
     expect(() => canonicalStringify({ s: Symbol('x') })).toThrowError(CanonicalizationError);
@@ -44,6 +38,15 @@ describe('phase6 deterministic canonicalization + digest', () => {
     expect(() => canonicalStringify({ d: new Date() })).toThrowError(CanonicalizationError);
     expect(() => canonicalStringify({ n: NaN })).toThrowError(CanonicalizationError);
     expect(() => canonicalStringify({ n: Infinity })).toThrowError(CanonicalizationError);
+    expect(() => canonicalStringify(new Map([['a', 1]]))).toThrowError(CanonicalizationError);
+    expect(() => canonicalStringify(new Set([1]))).toThrowError(CanonicalizationError);
+    expect(() => canonicalStringify(/x/)).toThrowError(CanonicalizationError);
+  });
+
+  it('rejects cycles instead of producing an ambiguous digest', () => {
+    const value: Record<string, unknown> = {};
+    value.self = value;
+    expect(() => canonicalStringify(value)).toThrowError(CanonicalizationError);
   });
 
   it('normalizes -0 to 0 for determinism', () => {

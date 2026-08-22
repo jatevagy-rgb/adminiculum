@@ -159,4 +159,20 @@ describe('phase6 rule AST structural validator', () => {
     expect(result.valid).toBe(false);
     expect(result.errors.some((e) => e.code === 'INVALID_LITERAL_TYPE')).toBe(true);
   });
+
+  it('rejects non-FACT left operands and nested right-hand nodes', () => {
+    const left = validateRuleAst(expression({ kind: 'COMPARE', operator: 'EQ', left: { kind: 'LITERAL', valueType: 'boolean', value: true }, right: { kind: 'LITERAL', valueType: 'boolean', value: true } }));
+    expect(left.errors.some((e) => e.code === 'MALFORMED_FACT_REF')).toBe(true);
+    const right = validateRuleAst(expression({ kind: 'COMPARE', operator: 'EQ', left: { kind: 'FACT', factKey: 'a' }, right: { kind: 'AND', children: [VALID_COMPARE, VALID_COMPARE] } }));
+    expect(right.errors.some((e) => e.path === '$.node.right' && e.code === 'NOT_OBJECT')).toBe(true);
+  });
+
+  it('rejects envelope extensions and impossible/non-ISO dates', () => {
+    const extra = validateRuleAst({ schemaVersion: RULE_AST_V1, node: VALID_COMPARE, metadata: 'nope' });
+    expect(extra.errors.some((e) => e.code === 'UNEXPECTED_FIELD')).toBe(true);
+    for (const value of ['March 4, 2024', '1', '2024-02-30']) {
+      const result = validateRuleAst(expression({ kind: 'COMPARE', operator: 'EQ', left: { kind: 'FACT', factKey: 'd' }, right: { kind: 'LITERAL', valueType: 'date', value } }));
+      expect(result.errors.some((e) => e.code === 'INVALID_LITERAL_TYPE')).toBe(true);
+    }
+  });
 });

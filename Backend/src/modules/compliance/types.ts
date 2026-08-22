@@ -48,6 +48,8 @@ export function isFactValueType(value: unknown): value is FactValueType {
 
 /** A single fact definition as declared by a later schema-backed slice. */
 export interface FactDefinition {
+  /** Stable FactDefinition.key; never a ClientFact id or display label. */
+  readonly key: string;
   /** The value type the fact carries. */
   readonly type: FactValueType;
 }

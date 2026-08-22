@@ -33,7 +33,7 @@ export interface TypeCompatibilityResult {
 
 function resolveFactType(factKey: string, facts: FactDefinitionMap): FactValueType | null {
   const definition = facts[factKey];
-  if (!definition) return null;
+  if (!definition || definition.key !== factKey) return null;
   return definition.type;
 }
 
@@ -66,6 +66,10 @@ export function checkComparisonTypeCompatibility(
   }
 
   if (UNARY_NULL_OPERATORS.has(node.operator)) {
+    if (node.right.kind !== 'LITERAL' || node.right.value !== null) {
+      errors.push({ path: '$.right', code: 'UNSUPPORTED_OPERATOR_FOR_TYPE', message: `${node.operator} requires a null literal right operand.` });
+      return { compatible: false, errors };
+    }
     return { compatible: true, errors };
   }
 
@@ -87,6 +91,14 @@ export function checkComparisonTypeCompatibility(
       });
       return { compatible: false, errors };
     }
+    const allowedOperators: Record<FactValueType, readonly string[]> = {
+      boolean: ['EQ', 'NEQ'], number: ['EQ', 'NEQ', 'GT', 'GTE', 'LT', 'LTE'],
+      date: ['EQ', 'NEQ', 'GT', 'GTE', 'LT', 'LTE'], string: ['EQ', 'NEQ', 'CONTAINS', 'NOT_CONTAINS'],
+    };
+    if (!allowedOperators[leftType].includes(node.operator)) {
+      errors.push({ path: '$.operator', code: 'UNSUPPORTED_OPERATOR_FOR_TYPE', message: `Operator ${node.operator} is not supported for ${leftType} values.` });
+      return { compatible: false, errors };
+    }
     return { compatible: true, errors };
   }
 
@@ -97,6 +109,15 @@ export function checkComparisonTypeCompatibility(
       code: 'CROSS_TYPE_FACT_LITERAL',
       message: `Cannot compare fact "${node.left.factKey}" (${leftType}) to a ${node.right.valueType} literal.`,
     });
+    return { compatible: false, errors };
+  }
+
+  const allowedOperators: Record<FactValueType, readonly string[]> = {
+    boolean: ['EQ', 'NEQ'], number: ['EQ', 'NEQ', 'GT', 'GTE', 'LT', 'LTE'],
+    date: ['EQ', 'NEQ', 'GT', 'GTE', 'LT', 'LTE'], string: ['EQ', 'NEQ', 'CONTAINS', 'NOT_CONTAINS'],
+  };
+  if (!allowedOperators[leftType].includes(node.operator)) {
+    errors.push({ path: '$.operator', code: 'UNSUPPORTED_OPERATOR_FOR_TYPE', message: `Operator ${node.operator} is not supported for ${leftType} values.` });
     return { compatible: false, errors };
   }
 

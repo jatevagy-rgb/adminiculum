@@ -16,12 +16,7 @@
 import { createHash } from 'node:crypto';
 
 export interface CanonicalizationOptions {
-  /**
-   * Policy for values that cannot be represented in the canonical JSON form.
-   * Default: 'reject' — throw. 'omit' — skip the key entirely (only valid for
-   * object members; array slots and roots cannot be omitted).
-   */
-  nonJsonPolicy?: 'reject' | 'omit';
+  /** Non-JSON values always reject; this option is reserved for future policy-free extensions. */
 }
 
 export class CanonicalizationError extends Error {
@@ -39,13 +34,12 @@ function makeError(message: string, path: string): CanonicalizationError {
   return new CanonicalizationError(message, path);
 }
 
-function canonicalize(value: unknown, path: string, options: Required<CanonicalizationOptions>): string {
+function canonicalize(value: unknown, path: string, active: WeakSet<object>, depth: number, nodes: { count: number }): string {
+  nodes.count += 1;
+  if (nodes.count > 4096) throw makeError('Canonical value exceeds the maximum node count.', path);
+  if (depth > 64) throw makeError('Canonical value exceeds the maximum depth.', path);
   if (value === null) return 'null';
   if (value === undefined) {
-    if (options.nonJsonPolicy === 'omit') {
-      // Undefined members are omitted by the caller via `hasOwn`.
-      throw makeError('Undefined must be handled by caller (omit).', path);
-    }
     throw makeError('Cannot canonicalize undefined (non-JSON value).', path);
   }
 
@@ -74,25 +68,29 @@ function canonicalize(value: unknown, path: string, options: Required<Canonicali
       }
       if (Array.isArray(value)) {
         // Array order is meaningful and preserved.
-        const parts = value.map((item, index) => canonicalize(item, `${path}[${index}]`, options));
-        return `[${parts.join(',')}]`;
+        if (active.has(value)) throw makeError('Cannot canonicalize cyclic value.', path);
+        active.add(value);
+        try {
+          const parts = value.map((item, index) => canonicalize(item, `${path}[${index}]`, active, depth + 1, nodes));
+          return `[${parts.join(',')}]`;
+        } finally { active.delete(value); }
       }
+      const prototype = Object.getPrototypeOf(value);
+      if (prototype !== Object.prototype && prototype !== null) throw makeError('Only plain objects can be canonicalized.', path);
+      if (active.has(value)) throw makeError('Cannot canonicalize cyclic value.', path);
+      active.add(value);
       // Plain object: sort keys lexicographically for deterministic output.
       const keys = Object.keys(value).sort();
       const parts: string[] = [];
-      for (const key of keys) {
-        const memberValue = (value as Record<string, unknown>)[key];
-        const memberPath = `${path}.${key}`;
-        if (memberValue === undefined) {
-          if (options.nonJsonPolicy === 'reject') {
-            throw makeError(`Cannot canonicalize undefined member "${key}".`, memberPath);
-          }
-          // 'omit': skip undefined members.
-          continue;
+      try {
+        for (const key of keys) {
+          const memberValue = (value as Record<string, unknown>)[key];
+          const memberPath = `${path}.${key}`;
+          if (memberValue === undefined) throw makeError(`Cannot canonicalize undefined member "${key}".`, memberPath);
+          parts.push(`${JSON.stringify(key)}:${canonicalize(memberValue, memberPath, active, depth + 1, nodes)}`);
         }
-        parts.push(`${JSON.stringify(key)}:${canonicalize(memberValue, memberPath, options)}`);
-      }
-      return `{${parts.join(',')}}`;
+        return `{${parts.join(',')}}`;
+      } finally { active.delete(value); }
     }
     default:
       throw makeError(`Cannot canonicalize value of type "${typeof value}".`, path);
@@ -109,10 +107,8 @@ function canonicalize(value: unknown, path: string, options: Required<Canonicali
  * @throws CanonicalizationError when a value cannot be represented.
  */
 export function canonicalStringify(value: unknown, options: CanonicalizationOptions = {}): string {
-  const opts: Required<CanonicalizationOptions> = {
-    nonJsonPolicy: options.nonJsonPolicy ?? 'reject',
-  };
-  return canonicalize(value, '$', opts);
+  void options;
+  return canonicalize(value, '$', new WeakSet<object>(), 0, { count: 0 });
 }
 
 /**
