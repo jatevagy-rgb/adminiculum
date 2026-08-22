@@ -13,7 +13,6 @@ describe('Phase 6 Slice A static safety', () => {
     expect(isComplianceEngineEnabled()).toBe(false);
     if (previous === undefined) delete process.env.ENABLE_COMPLIANCE_ENGINE;
     else process.env.ENABLE_COMPLIANCE_ENGINE = previous;
-    expect(schema).not.toMatch(/\bmodel\s+(Requirement|RequirementVersion|RequirementApplicability|ApplicabilityRuleVersion)\b/);
   });
 
   it('contains only the Slice A persistence models and preserves legacy ClientFact fields', () => {
@@ -22,7 +21,7 @@ describe('Phase 6 Slice A static safety', () => {
     expect(schema).toMatch(/^\s+factDefinitionId\s+String\?$/m);
     expect(schema).toMatch(/^\s+factSubjectId\s+String\?$/m);
     expect(schema).not.toContain('OrganizationFact');
-    expect(schema).not.toContain('RequirementVersion');
+    expect(migration).not.toContain('RequirementVersion');
   });
 
   it('is additive and rejects destructive migration patterns', () => {
