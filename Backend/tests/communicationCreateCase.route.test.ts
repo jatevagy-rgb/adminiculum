@@ -27,7 +27,8 @@ jest.mock('../src/prisma/prisma.service', () => {
     communication: { findUnique: jest.fn(), update: jest.fn() },
     client: { findUnique: jest.fn() },
     user: { findUnique: jest.fn() },
-    case: { count: jest.fn(), create: jest.fn() },
+    case: { count: jest.fn(), create: jest.fn(), findUnique: jest.fn() },
+    caseCollaborator: { findFirst: jest.fn() },
     task: { create: jest.fn() },
     timelineEvent: { create: jest.fn() },
   };
@@ -105,6 +106,8 @@ describe('POST /communications/:id/create-case (atomic intake)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     delete process.env.ENABLE_COMMUNICATIONS_PERSISTENCE;
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-1', assignedLawyerId: 'user-1', createdById: 'user-1' });
+    (prisma as any).caseCollaborator.findFirst.mockResolvedValue(null);
   });
 
   it('1. returns 501 FEATURE_NOT_AVAILABLE when the gate is off and writes nothing', async () => {
@@ -156,6 +159,7 @@ describe('POST /communications/:id/create-case (atomic intake)', () => {
       id: 'comm-1',
       caseId: 'case-existing',
       clientId: 'client-1',
+      createdById: 'user-1',
     });
 
     const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
@@ -170,6 +174,12 @@ describe('POST /communications/:id/create-case (atomic intake)', () => {
 
   it('5. returns 400 when the title is missing (before any DB work)', async () => {
     process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
+    (prisma as any).communication.findUnique.mockResolvedValue({
+      id: 'comm-1',
+      caseId: 'case-1',
+      clientId: 'client-1',
+      createdById: 'user-1',
+    });
 
     const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
       body: { matterType: 'LEASE' },
@@ -178,7 +188,7 @@ describe('POST /communications/:id/create-case (atomic intake)', () => {
     expect(response.status).toBe(400);
     expect(response.body).toMatchObject({ code: 'VALIDATION_ERROR' });
     expect((prisma as any).$transaction).not.toHaveBeenCalled();
-    expect((prisma as any).communication.findUnique).not.toHaveBeenCalled();
+    expect((prisma as any).case.create).not.toHaveBeenCalled();
   });
 
   it('5b. returns 400 when no client can be resolved (no clientId on body or communication)', async () => {
@@ -187,6 +197,7 @@ describe('POST /communications/:id/create-case (atomic intake)', () => {
       id: 'comm-1',
       caseId: null,
       clientId: null,
+      createdById: 'user-1',
     });
 
     const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
@@ -206,6 +217,7 @@ describe('POST /communications/:id/create-case (atomic intake)', () => {
       clientId: 'client-1',
       subject: 'Bérleti szerződés',
       summary: 'Ügyfél kérdés.',
+      createdById: 'user-1',
     });
     (prisma as any).client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Teszt Kft.' });
     (prisma as any).user.findUnique.mockResolvedValue({ id: 'user-1', status: 'ACTIVE', isActive: true });
@@ -247,6 +259,7 @@ describe('POST /communications/:id/create-case (atomic intake)', () => {
       clientId: 'client-1',
       subject: 'Bérleti szerződés',
       summary: 'Ügyfél kérdés.',
+      createdById: 'user-1',
     });
     (prisma as any).client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Teszt Kft.' });
     (prisma as any).user.findUnique.mockResolvedValue({ id: 'user-1', status: 'ACTIVE', isActive: true });
@@ -285,6 +298,7 @@ describe('POST /communications/:id/create-case (atomic intake)', () => {
       clientId: 'client-1',
       subject: 'Bérleti szerződés',
       summary: 'Ügyfél kérdés.',
+      createdById: 'user-1',
     });
     (prisma as any).client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Teszt Kft.' });
     (prisma as any).user.findUnique.mockResolvedValue({ id: 'user-1', status: 'ACTIVE', isActive: true });

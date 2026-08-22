@@ -114,6 +114,7 @@ describe('source-linked task creation', () => {
       id: 'comm-1',
       caseId: 'case-1',
       subject: 'Client email',
+      createdById: 'user-1',
     });
     mockPrisma.task.create.mockImplementation(async ({ data }: any) => {
       lastTaskData = data;
@@ -235,7 +236,7 @@ describe('source-linked task creation', () => {
   });
 
   it('blocks communication task creation until the communication is linked to a case', async () => {
-    mockPrisma.communication.findUnique.mockResolvedValueOnce({ id: 'comm-1', caseId: null, subject: 'Unlinked' });
+    mockPrisma.communication.findUnique.mockResolvedValue({ id: 'comm-1', caseId: null, subject: 'Unlinked', createdById: 'user-1' });
     const response = await requestJson(createApp(), 'POST', '/communications/comm-1/tasks', { kind: 'FOLLOW_UP' });
 
     expect(response.status).toBe(409);

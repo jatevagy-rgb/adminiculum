@@ -121,9 +121,8 @@ describe('outlookGraph.adapter', () => {
             // Fields Graph may return that must never be persisted or serialized:
             // @ts-expect-error contentBytes is intentionally not part of GraphAttachment
             contentBytes: 'JVBERi0xLjcncontent',
-            // @ts-expect-error unknown provider fields must not be spread through
+            // Unknown provider fields must not be spread through the adapter:
             '@odata.mediaContentType': 'application/pdf',
-            // @ts-expect-error unknown provider fields must not be spread through
             isInline: true,
           },
         ],
