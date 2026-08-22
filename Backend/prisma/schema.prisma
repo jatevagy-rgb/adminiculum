@@ -4588,7 +4588,7 @@ model LegalSourceVersion {
   status            LegalSourceVersionStatus @default(CANDIDATE)
   reviewStatus      LegalSourceReviewStatus  @default(UNREVIEWED)
   supersededById    String?
-  supersededBy      LegalSourceVersion?      @relation("LegalSourceVersionSupersession", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersededBy      LegalSourceVersion?      @relation("LegalSourceVersionSupersession", fields: [supersededById, legalSourceId], references: [id, legalSourceId], onDelete: NoAction)
   supersedes        LegalSourceVersion[]     @relation("LegalSourceVersionSupersession")
   createdAt         DateTime                 @default(now())
   approvedAt        DateTime?
@@ -4597,6 +4597,7 @@ model LegalSourceVersion {
   captures LegalSourceCapture[]
 
   @@unique([legalSourceId, legalVersionKey])
+  @@unique([id, legalSourceId])
   @@index([legalSourceId, effectiveFrom])
   @@index([status, reviewStatus])
   @@map("legal_source_versions")
