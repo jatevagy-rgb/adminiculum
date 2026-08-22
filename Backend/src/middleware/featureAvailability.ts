@@ -15,6 +15,11 @@ export function isDatabaseFoundationEnabled(environmentVariable: string): boolea
   return process.env[environmentVariable] === 'true';
 }
 
+/** Persistence may exist while compliance behavior remains explicitly off. */
+export function isComplianceEngineEnabled(): boolean {
+  return process.env.ENABLE_COMPLIANCE_ENGINE === 'true';
+}
+
 export function sendFeatureUnavailable(
   res: Response,
   options: FeatureUnavailableOptions
