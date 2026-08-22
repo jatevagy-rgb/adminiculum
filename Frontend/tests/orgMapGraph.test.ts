@@ -33,6 +33,7 @@ function map(persons: OrgMapPersonDTO[], groups: OrgMapDTO["groups"] = [], isOrg
     client: { id: "c1", name: "Acme", relationshipMode: "PORTAL_CENTRIC" },
     workspaceModes: isOrganizational ? ["ORGANIZATION"] : ["INDIVIDUAL"],
     isOrganizational,
+    organizationWorkspaceId: isOrganizational ? "ws1" : null,
     groups,
     persons,
   };

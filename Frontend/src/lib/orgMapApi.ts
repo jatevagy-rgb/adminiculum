@@ -52,6 +52,13 @@ export type OrgMapDTO = {
   workspaceModes: ('INDIVIDUAL' | 'ORGANIZATION' | 'CASE_RELAY')[];
   /** Whether any active workspace is ORGANIZATION or CASE_RELAY mode. */
   isOrganizational: boolean;
+  /**
+   * Safe explicit workspace context (future A2/PR21 integration). The id of the
+   * EXACTLY ONE eligible ACTIVE ORGANIZATION workspace, or null when zero or
+   * more than one. Strictly ORGANIZATION mode only (never CASE_RELAY/INDIVIDUAL).
+   * This is CONTEXT, not authorization.
+   */
+  organizationWorkspaceId: string | null;
   groups: OrgMapGroupDTO[];
   persons: OrgMapPersonDTO[];
 };

@@ -162,5 +162,107 @@ d('Org map (Szervezet) PostgreSQL INDIVIDUAL gate', () => {
     expect(dto.isOrganizational).toBe(false);
     expect(dto.groups).toEqual([]);
     expect(dto.persons).toEqual([]);
+    expect(dto.organizationWorkspaceId).toBeNull();
+  });
+});
+
+// Workspace-context resolution: organizationWorkspaceId is the safe EXPLICIT
+// context for future A2/PR21 integration. Strictly ORGANIZATION mode only,
+// ACTIVE, and only when EXACTLY ONE eligible workspace exists; null otherwise.
+
+// Workspace-context resolution: organizationWorkspaceId is the safe EXPLICIT
+// context for future A2/PR21 integration. Strictly ORGANIZATION mode only,
+// ACTIVE, and only when EXACTLY ONE eligible workspace exists; null otherwise.
+d('Org map (Szervezet) PostgreSQL organizationWorkspaceId resolution', () => {
+  let db: PrismaClient;
+  const suffix = crypto.randomUUID();
+  const adminId = crypto.randomUUID();
+  const admin = { userId: adminId, role: 'ADMIN' };
+
+  async function newClient(prisma: PrismaClient, name: string): Promise<string> {
+    const id = crypto.randomUUID();
+    await prisma.client.create({ data: { id, name: `${name} ${suffix}` } });
+    return id;
+  }
+  async function ws(prisma: PrismaClient, clientId: string, mode: string, status = 'ACTIVE'): Promise<string> {
+    const id = crypto.randomUUID();
+    await prisma.clientPortalWorkspace.create({ data: { id, clientId, name: `${mode} ${suffix}`, mode: mode as never, status: status as never, publicReference: `${mode.toLowerCase()}-${id.slice(0, 6)}-${suffix}`, createdById: adminId } } as never);
+    return id;
+  }
+
+  beforeAll(async () => {
+    process.env.DATABASE_URL = databaseUrl;
+    db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    await db.user.create({ data: { id: adminId, email: `orgmap-ws-admin-${suffix}@test.invalid`, name: 'Org Map WS Admin', role: 'ADMIN', status: 'ACTIVE', isActive: true, skills: [] } } as never);
+  });
+
+  afterAll(async () => {
+    if (db) await db.$disconnect();
+  });
+
+  it('exactly one ACTIVE ORGANIZATION workspace -> exact ID', async () => {
+    const c = await newClient(db, 'Single Org');
+    const org = await ws(db, c, 'ORGANIZATION');
+    const dto = await getOrganizationMap(admin, c);
+    expect(dto.organizationWorkspaceId).toBe(org);
+  });
+
+  it('zero ORGANIZATION workspaces -> null and not organizational', async () => {
+    const c = await newClient(db, 'No Org');
+    await ws(db, c, 'INDIVIDUAL');
+    const dto = await getOrganizationMap(admin, c);
+    expect(dto.organizationWorkspaceId).toBeNull();
+    expect(dto.isOrganizational).toBe(false);
+  });
+
+  it('two ACTIVE ORGANIZATION workspaces -> null (ambiguity explicit)', async () => {
+    const c = await newClient(db, 'Two Org');
+    await ws(db, c, 'ORGANIZATION');
+    await ws(db, c, 'ORGANIZATION');
+    const dto = await getOrganizationMap(admin, c);
+    expect(dto.organizationWorkspaceId).toBeNull();
+  });
+
+  it('one ORGANIZATION + one CASE_RELAY -> ORGANIZATION id (CASE_RELAY excluded)', async () => {
+    const c = await newClient(db, 'Org + Relay');
+    const org = await ws(db, c, 'ORGANIZATION');
+    await ws(db, c, 'CASE_RELAY');
+    const dto = await getOrganizationMap(admin, c);
+    expect(dto.organizationWorkspaceId).toBe(org);
+  });
+
+  it('CASE_RELAY only -> null (but still organizational for the map)', async () => {
+    const c = await newClient(db, 'Relay Only');
+    await ws(db, c, 'CASE_RELAY');
+    const dto = await getOrganizationMap(admin, c);
+    expect(dto.organizationWorkspaceId).toBeNull();
+    expect(dto.isOrganizational).toBe(true); // existing semantics unchanged
+  });
+
+  it('ORGANIZATION + INDIVIDUAL -> ORGANIZATION id', async () => {
+    const c = await newClient(db, 'Org + Indiv');
+    const org = await ws(db, c, 'ORGANIZATION');
+    await ws(db, c, 'INDIVIDUAL');
+    const dto = await getOrganizationMap(admin, c);
+    expect(dto.organizationWorkspaceId).toBe(org);
+  });
+
+  it('inactive ORGANIZATION + one active ORGANIZATION -> active exact ID only', async () => {
+    const c = await newClient(db, 'Mixed Active');
+    await ws(db, c, 'ORGANIZATION', 'ARCHIVED');
+    const active = await ws(db, c, 'ORGANIZATION');
+    const dto = await getOrganizationMap(admin, c);
+    expect(dto.organizationWorkspaceId).toBe(active);
+  });
+
+  it('cross-client workspace never enters resolution', async () => {
+    // Client A has its own ORG; Client B has an ORG too. A's id must be the
+    // ORG belonging to A only, never B's.
+    const a = await newClient(db, 'A');
+    const aOrg = await ws(db, a, 'ORGANIZATION');
+    const b = await newClient(db, 'B');
+    await ws(db, b, 'ORGANIZATION');
+    const dtoA = await getOrganizationMap(admin, a);
+    expect(dtoA.organizationWorkspaceId).toBe(aOrg);
   });
 });

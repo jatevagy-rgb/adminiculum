@@ -36,6 +36,10 @@ type Prisma = typeof defaultPrisma;
 const ACTIVE_GRANT_STATUS = 'ACTIVE';
 const ACTIVE_SCOPE_STATUS = 'ACTIVE';
 const ORGANIZATION_MODES = new Set(['ORGANIZATION', 'CASE_RELAY']);
+// Strictly ORGANIZATION mode only for the safe explicit workspace context.
+// CASE_RELAY / INDIVIDUAL are never eligible for `organizationWorkspaceId`.
+const ORGANIZATION_ONLY_MODE = 'ORGANIZATION';
+const WORKSPACE_ACTIVE_STATUS = 'ACTIVE';
 
 function mapPortalStatus(membershipStatus: string | null | undefined): 'ACTIVE' | 'SUSPENDED' | 'NONE' {
   if (!membershipStatus) return 'NONE';
@@ -65,10 +69,22 @@ export async function getOrganizationMap(actor: InternalActor, clientId: string,
   // INDIVIDUAL-only client (or one with no qualifying workspace) is not.
   const workspaces = await prisma.clientPortalWorkspace.findMany({
     where: { clientId, status: 'ACTIVE' },
-    select: { id: true, mode: true },
+    select: { id: true, mode: true, status: true },
   });
   const workspaceModes = [...new Set(workspaces.map((w) => w.mode))];
   const isOrganizational = workspaceModes.some((m) => ORGANIZATION_MODES.has(String(m)));
+
+  // organizationWorkspaceId — the SAFE explicit workspace context for future A2
+  // (PR21) integration. Strictly ORGANIZATION mode only, workspace ACTIVE, and
+  // ONLY when EXACTLY ONE eligible ACTIVE ORGANIZATION workspace exists.
+  //   - zero eligible          -> null
+  //   - more than one eligible -> null (ambiguity stays explicit)
+  // CASE_RELAY and INDIVIDUAL are never eligible. No first()/newest/ordering.
+  // This value is CONTEXT, not authorization: it never grants access.
+  const eligibleOrganizationIds = workspaces
+    .filter((w) => String(w.mode) === ORGANIZATION_ONLY_MODE && String(w.status) === WORKSPACE_ACTIVE_STATUS)
+    .map((w) => w.id);
+  const organizationWorkspaceId = eligibleOrganizationIds.length === 1 ? eligibleOrganizationIds[0] : null;
 
   // Backend fail-closed gate: a non-organizational client must not transmit
   // organizational rows even if organization data exists in the DB. Do not rely
@@ -78,6 +94,7 @@ export async function getOrganizationMap(actor: InternalActor, clientId: string,
       client: { id: client.id, name: client.name, relationshipMode: client.relationshipMode },
       workspaceModes,
       isOrganizational: false,
+      organizationWorkspaceId,
       groups: [],
       persons: [],
     };
@@ -202,6 +219,7 @@ export async function getOrganizationMap(actor: InternalActor, clientId: string,
     client: { id: client.id, name: client.name, relationshipMode: client.relationshipMode },
     workspaceModes,
     isOrganizational,
+    organizationWorkspaceId,
     groups: groups.map((g) => ({
       id: g.id,
       clientId: g.clientId,

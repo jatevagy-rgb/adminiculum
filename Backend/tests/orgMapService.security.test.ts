@@ -54,7 +54,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   prismaMock.client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Acme', relationshipMode: 'PORTAL_CENTRIC' });
   prismaMock.user.findUnique.mockResolvedValue({ id: ADMIN.userId, role: 'ADMIN', status: 'ACTIVE', isActive: true });
-  prismaMock.clientPortalWorkspace.findMany.mockResolvedValue([{ id: 'ws1', mode: 'ORGANIZATION' }]);
+  prismaMock.clientPortalWorkspace.findMany.mockResolvedValue([{ id: 'ws1', mode: 'ORGANIZATION', status: 'ACTIVE' }]);
   prismaMock.clientOrganizationGroup.findMany.mockResolvedValue([]);
   prismaMock.organizationPerson.findMany.mockResolvedValue([]);
   prismaMock.clientPortalWorkspaceMembership.findMany.mockResolvedValue([]);
@@ -83,6 +83,8 @@ describe('orgMapService — access summary derives ONLY from real principals', (
     expect(dto.persons[0].accessSummary.casesShared).toBe(0);
     expect(dto.persons[0].accessSummary.companySummaryVisible).toBe(false);
     expect(dto.persons[0].portalStatus).toBe('ACTIVE');
+    // Single ACTIVE ORGANIZATION workspace resolves as the explicit context.
+    expect(dto.organizationWorkspaceId).toBe('ws1');
   });
 
   it('group membership alone does NOT add case access', async () => {
@@ -178,12 +180,13 @@ describe('orgMapService — access summary derives ONLY from real principals', (
   });
 
   it('an INDIVIDUAL-only client is not organizational (backend fail-closed)', async () => {
-    prismaMock.clientPortalWorkspace.findMany.mockResolvedValue([{ id: 'ws1', mode: 'INDIVIDUAL' }]);
+    prismaMock.clientPortalWorkspace.findMany.mockResolvedValue([{ id: 'ws1', mode: 'INDIVIDUAL', status: 'ACTIVE' }]);
     prismaMock.organizationPerson.findMany.mockResolvedValue([personRow({ id: 'a', name: 'Anna' })]);
     prismaMock.clientOrganizationGroup.findMany.mockResolvedValue([{ id: 'g1', clientId: 'client-1', name: 'Vezetés' }]);
     const dto = await getOrganizationMap(ADMIN, 'client-1');
     expect(dto.isOrganizational).toBe(false);
     expect(dto.workspaceModes).toEqual(['INDIVIDUAL']);
+    expect(dto.organizationWorkspaceId).toBeNull();
     // Backend must not transmit org rows for an INDIVIDUAL client, even when
     // organization data exists in the DB (data minimization).
     expect(dto.groups).toEqual([]);
@@ -204,7 +207,7 @@ describe('orgMapService — access summary derives ONLY from real principals', (
     prismaMock.organizationPerson.findMany.mockResolvedValue([person]);
     // Foreign manager/deputy/group are NOT in the requested client's person/group maps.
     prismaMock.clientOrganizationGroup.findMany.mockResolvedValue([{ id: 'g1', clientId: 'client-1', name: 'Vezetés' }]);
-    prismaMock.clientPortalWorkspace.findMany.mockResolvedValue([{ id: 'ws1', mode: 'ORGANIZATION' }]);
+    prismaMock.clientPortalWorkspace.findMany.mockResolvedValue([{ id: 'ws1', mode: 'ORGANIZATION', status: 'ACTIVE' }]);
     prismaMock.clientPortalWorkspaceMembership.findMany.mockResolvedValue([]);
 
     const dto = await getOrganizationMap(ADMIN, 'client-1');
@@ -216,7 +219,7 @@ describe('orgMapService — access summary derives ONLY from real principals', (
   it('ignores a portal membership whose workspace belongs to another client', async () => {
     const person = personRow({ id: 'a', name: 'Anna', portalMembershipId: 'm-foreign' });
     prismaMock.organizationPerson.findMany.mockResolvedValue([person]);
-    prismaMock.clientPortalWorkspace.findMany.mockResolvedValue([{ id: 'ws1', mode: 'ORGANIZATION' }]);
+    prismaMock.clientPortalWorkspace.findMany.mockResolvedValue([{ id: 'ws1', mode: 'ORGANIZATION', status: 'ACTIVE' }]);
     // The membership references a workspace NOT owned by this client.
     prismaMock.clientPortalWorkspaceMembership.findMany.mockResolvedValue([
       { id: 'm-foreign', status: 'ACTIVE', clientPortalIdentityId: 'id-foreign', workspaceId: 'ws-other-client' },
@@ -238,7 +241,7 @@ describe('orgMapService — access summary derives ONLY from real principals', (
     const personA = personRow({ id: 'a', name: 'Anna', portalMembershipId: 'm1' });
     const personB = personRow({ id: 'b', name: 'Béla', portalMembershipId: 'm-foreign' });
     prismaMock.organizationPerson.findMany.mockResolvedValue([personA, personB]);
-    prismaMock.clientPortalWorkspace.findMany.mockResolvedValue([{ id: 'ws1', mode: 'ORGANIZATION' }]);
+    prismaMock.clientPortalWorkspace.findMany.mockResolvedValue([{ id: 'ws1', mode: 'ORGANIZATION', status: 'ACTIVE' }]);
     prismaMock.clientPortalWorkspaceMembership.findMany.mockResolvedValue([
       { id: 'm1', status: 'ACTIVE', clientPortalIdentityId: 'id-1', workspaceId: 'ws1' },
       { id: 'm-foreign', status: 'ACTIVE', clientPortalIdentityId: 'id-foreign', workspaceId: 'ws-other' },
