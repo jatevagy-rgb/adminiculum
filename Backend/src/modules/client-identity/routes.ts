@@ -44,6 +44,7 @@ import {
   unlinkUnitFromWorkspace,
   updateParticipant,
 } from '../client-workspace/organizationAdminService';
+import { getPersonAccess } from '../client-workspace/personAccessService';
 import {
   approveIntakeRequesterAccess,
   closeIntake,
@@ -304,3 +305,18 @@ for (const action of ['suspend', 'revoke'] as const) {
     catch (error) { fail(res, error); }
   });
 }
+
+// Read-only person access projection. Requires an EXPLICIT clientId + workspaceId
+// + personId so workspace context is never guessed. Workforce (ADMIN/PARTNER) only.
+clientIdentityRouter.get('/admin/person-access', async (req, res) => {
+  try {
+    const clientId = req.query.clientId ? String(req.query.clientId) : '';
+    const workspaceId = req.query.workspaceId ? String(req.query.workspaceId) : '';
+    const personId = req.query.personId ? String(req.query.personId) : '';
+    if (!clientId || !workspaceId || !personId) {
+      res.status(400).json({ status: 400, code: 'PERSON_ACCESS_CONTEXT_REQUIRED', message: 'clientId, workspaceId and personId are required.' });
+      return;
+    }
+    res.json(await getPersonAccess(internalActor(req), { clientId, workspaceId, personId }));
+  } catch (error) { fail(res, error); }
+});
