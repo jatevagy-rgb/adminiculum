@@ -1,7 +1,7 @@
 -- Phase 6 Slice B: global requirement, citation, and applicability-rule persistence.
 -- No seed data, client ownership, evaluator, or runtime activation is introduced.
 
-CREATE TYPE "RequirementStatus" AS ENUM ('CANDIDATE', 'IN_REVIEW', 'APPROVED', 'SUPERSEDED', 'RETIRED');
+CREATE TYPE "RequirementStatus" AS ENUM ('ACTIVE', 'DEPRECATED', 'RETIRED');
 CREATE TYPE "RequirementVersionStatus" AS ENUM ('CANDIDATE', 'IN_REVIEW', 'APPROVED', 'SUPERSEDED', 'RETIRED');
 CREATE TYPE "RequirementSourceSupportState" AS ENUM ('SUFFICIENT', 'INCOMPLETE', 'AMBIGUOUS', 'MISSING', 'LEGAL_REVIEW_REQUIRED');
 CREATE TYPE "RequirementSpecialistRequirement" AS ENUM ('NONE', 'LEGAL_ONLY', 'TECHNICAL_CLASSIFICATION_REQUIRED');
@@ -22,7 +22,7 @@ CREATE TABLE "requirements" (
     "key" TEXT NOT NULL,
     "jurisdictionCode" TEXT NOT NULL,
     "domainCode" TEXT NOT NULL,
-    "status" "RequirementStatus" NOT NULL DEFAULT 'CANDIDATE',
+    "status" "RequirementStatus" NOT NULL DEFAULT 'ACTIVE',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "retiredAt" TIMESTAMP(3),
     CONSTRAINT "requirements_pkey" PRIMARY KEY ("id")

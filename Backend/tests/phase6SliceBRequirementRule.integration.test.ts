@@ -75,6 +75,11 @@ describeWithDatabase('Phase 6 Slice B requirement/rule foundation (PostgreSQL)',
     await db.requirementVersion.update({ where: { requirementId_versionKey: { requirementId: overlapRequirementId, versionKey: 'O1' } }, data: { id: versionOverlap1 } });
     await createRequirementVersion({ requirementId: overlapRequirementId, versionKey: 'O2', title: 'O2', normativeStatement: 'O2 statement', effectiveFrom: new Date('2025-01-01T00:00:00Z'), sourceSupportState: 'SUFFICIENT', db });
     await db.requirementVersion.update({ where: { requirementId_versionKey: { requirementId: overlapRequirementId, versionKey: 'O2' } }, data: { id: versionOverlap2 } });
+    await db.requirementCitation.createMany({ data: [
+      { requirementVersionId: versionA1, legalSourceVersionId: sourceVersionOld, supportRole: 'PRIMARY' },
+      { requirementVersionId: versionOverlap1, legalSourceVersionId: sourceVersionOld, supportRole: 'PRIMARY' },
+      { requirementVersionId: versionOverlap2, legalSourceVersionId: sourceVersionOld, supportRole: 'PRIMARY' },
+    ] });
   });
 
   afterAll(async () => {
@@ -134,8 +139,9 @@ describeWithDatabase('Phase 6 Slice B requirement/rule foundation (PostgreSQL)',
   it('requires explicit approval and enforces one approved rule in the database', async () => {
     expect((await db.applicabilityRuleVersion.findUniqueOrThrow({ where: { id: ruleA1 } })).status).toBe('CANDIDATE');
     await db.requirementVersion.update({ where: { id: versionA1 }, data: { status: 'APPROVED', approvedAt: new Date() } });
-    await approveApplicabilityRuleVersion(ruleA1, db);
-    await expect(approveApplicabilityRuleVersion(ruleA2, db)).rejects.toThrow();
+    const approvedRule = await approveApplicabilityRuleVersion(ruleA1, ' rule-approver ', db);
+    expect(approvedRule.approvedById).toBe('rule-approver');
+    await expect(approveApplicabilityRuleVersion(ruleA2, 'rule-approver', db)).rejects.toThrow();
   });
 
   it('rejects rule self-supersession and cross-parent supersession', async () => {
@@ -149,17 +155,50 @@ describeWithDatabase('Phase 6 Slice B requirement/rule foundation (PostgreSQL)',
     await db.requirementVersion.update({ where: { id: versionA2 }, data: { status: 'APPROVED', approvedAt: new Date() } });
     const unsupported = await createApplicabilityRuleVersion({ requirementVersionId: versionA2, ruleVersionKey: 'MONEY', astJson: ast(`SLICE_B_MONEY_${suffix}`), db });
     await db.applicabilityRuleVersion.update({ where: { id: unsupported.id }, data: { id: unsupportedRule } });
-    await expect(approveApplicabilityRuleVersion(unsupportedRule, db)).rejects.toMatchObject({ code: 'UNSUPPORTED_FACT_TYPE' });
+    await expect(approveApplicabilityRuleVersion(unsupportedRule, 'rule-approver', db)).rejects.toMatchObject({ code: 'UNSUPPORTED_FACT_TYPE' });
     const unresolved = await createApplicabilityRuleVersion({ requirementVersionId: versionA2, ruleVersionKey: 'UNRESOLVED', astJson: ast('UNKNOWN_FACT'), db });
-    await expect(approveApplicabilityRuleVersion(unresolved.id, db)).rejects.toMatchObject({ code: 'UNRESOLVED_FACT_DEPENDENCY' });
+    await expect(approveApplicabilityRuleVersion(unresolved.id, 'rule-approver', db)).rejects.toMatchObject({ code: 'UNRESOLVED_FACT_DEPENDENCY' });
   });
 
   it('blocks insufficient source support, overlapping approval, and approved mutation', async () => {
     const incomplete = await createRequirementVersion({ requirementId, versionKey: 'INCOMPLETE', title: 'Incomplete', normativeStatement: 'Incomplete', effectiveFrom: new Date('2026-01-01T00:00:00Z'), sourceSupportState: 'INCOMPLETE', db });
-    await expect(approveRequirementVersion(incomplete.id, db)).rejects.toMatchObject({ code: 'SOURCE_SUPPORT_INSUFFICIENT' });
-    await approveRequirementVersion(versionOverlap1, db);
-    await expect(approveRequirementVersion(versionOverlap2, db)).rejects.toMatchObject({ code: 'EFFECTIVE_PERIOD_OVERLAP' });
+    await expect(approveRequirementVersion(incomplete.id, 'requirement-approver', db)).rejects.toMatchObject({ code: 'SOURCE_SUPPORT_INSUFFICIENT' });
+    const approved = await approveRequirementVersion(versionOverlap1, ' requirement-approver ', db);
+    expect(approved.approvedById).toBe('requirement-approver');
+    await expect(approveRequirementVersion(versionOverlap2, 'requirement-approver', db)).rejects.toMatchObject({ code: 'EFFECTIVE_PERIOD_OVERLAP' });
     await expect(updateRequirementVersion(versionA1, { title: 'mutated after approval' }, db)).rejects.toMatchObject({ code: 'APPROVED_VERSION_IMMUTABLE' });
+  });
+
+  it('closes the generic lifecycle bypass with a strict editable-content whitelist', async () => {
+    for (const field of ['status', 'approvedAt', 'approvedById', 'supersededById']) {
+      await expect(updateRequirementVersion(versionOverlap2, { [field]: 'APPROVED' }, db)).rejects.toMatchObject({ code: 'LIFECYCLE_FIELD_FORBIDDEN' });
+    }
+    expect((await db.requirementVersion.findUniqueOrThrow({ where: { id: versionOverlap2 } })).status).toBe('CANDIDATE');
+    await expect(updateRequirementVersion(versionOverlap2, { title: 'candidate edit' }, db)).resolves.toMatchObject({ title: 'candidate edit' });
+  });
+
+  it('rejects forbidden runtime create statuses for both version types', async () => {
+    await expect(createRequirementVersion({ requirementId, versionKey: 'RUNTIME_APPROVED', title: 'bad', normativeStatement: 'bad', effectiveFrom: new Date('2040-01-01T00:00:00Z'), status: 'APPROVED' as never, db })).rejects.toMatchObject({ code: 'LIFECYCLE_STATUS_FORBIDDEN' });
+    await expect(createApplicabilityRuleVersion({ requirementVersionId: versionA2, ruleVersionKey: 'RUNTIME_APPROVED', astJson: ast(`SLICE_B_BOOLEAN_${suffix}`), status: 'APPROVED' as never, db })).rejects.toMatchObject({ code: 'LIFECYCLE_STATUS_FORBIDDEN' });
+  });
+
+  it('requires an approval actor and a PRIMARY citation, while blocking supporting-only approval', async () => {
+    const noCitation = await createRequirementVersion({ requirementId, versionKey: 'NO_PRIMARY', title: 'No primary', normativeStatement: 'No primary', effectiveFrom: new Date('2041-01-01T00:00:00Z'), sourceSupportState: 'SUFFICIENT', db });
+    await expect(approveRequirementVersion(noCitation.id, ' ', db)).rejects.toMatchObject({ code: 'APPROVAL_ACTOR_REQUIRED' });
+    await expect(approveRequirementVersion(noCitation.id, 'approver', db)).rejects.toMatchObject({ code: 'PRIMARY_CITATION_REQUIRED' });
+
+    const supportingOnly = await createRequirementVersion({ requirementId, versionKey: 'SUPPORTING_ONLY', title: 'Supporting only', normativeStatement: 'Supporting only', effectiveFrom: new Date('2042-01-01T00:00:00Z'), sourceSupportState: 'SUFFICIENT', db });
+    await addRequirementCitation({ requirementVersionId: supportingOnly.id, legalSourceVersionId: sourceVersionOld, supportRole: 'SUPPORTING', db });
+    await expect(approveRequirementVersion(supportingOnly.id, 'approver', db)).rejects.toMatchObject({ code: 'PRIMARY_CITATION_REQUIRED' });
+  });
+
+  it('persists attributed RequirementVersion approval and freezes citations afterward', async () => {
+    const version = await createRequirementVersion({ requirementId: requirementBId, versionKey: 'ATTRIBUTED', title: 'Attributed', normativeStatement: 'Attributed', effectiveFrom: new Date('2043-01-01T00:00:00Z'), sourceSupportState: 'SUFFICIENT', db });
+    await addRequirementCitation({ requirementVersionId: version.id, legalSourceVersionId: sourceVersionOld, supportRole: 'PRIMARY', db });
+    const approved = await approveRequirementVersion(version.id, ' approver-42 ', db);
+    expect(approved.approvedAt).toBeInstanceOf(Date);
+    expect(approved.approvedById).toBe('approver-42');
+    await expect(addRequirementCitation({ requirementVersionId: version.id, legalSourceVersionId: sourceVersionNew, supportRole: 'SUPPORTING', db })).rejects.toMatchObject({ code: 'CITATION_VERSION_IMMUTABLE' });
   });
 
   it('persists specialist metadata independently from the compliance domain', async () => {
@@ -183,7 +222,7 @@ describeWithDatabase('Phase 6 Slice B requirement/rule foundation (PostgreSQL)',
   });
 
   it('preserves structured citation metadata without executable interpretation', async () => {
-    const citation = await addRequirementCitation({ requirementVersionId: versionA2, legalSourceVersionId: sourceVersionOld, supportRole: 'SUPPORTING', section: '2.1', metadata: { sourceLabel: 'archival' }, db });
+    const citation = await addRequirementCitation({ requirementVersionId: versionB1, legalSourceVersionId: sourceVersionOld, supportRole: 'SUPPORTING', section: '2.1', metadata: { sourceLabel: 'archival' }, db });
     const stored = await db.requirementCitation.findUniqueOrThrow({ where: { id: citation.id } });
     expect(stored.section).toBe('2.1');
     expect(stored.metadata).toEqual({ sourceLabel: 'archival' });

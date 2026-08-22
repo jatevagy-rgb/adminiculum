@@ -21,6 +21,14 @@ describe('Phase 6 Slice B static safety', () => {
     expect(schema).toContain('@@unique([requirementVersionId, ruleVersionKey])');
   });
 
+  it('keeps stable Requirement identity separate from version approval lifecycle', () => {
+    const requirementStatus = schema.match(/enum RequirementStatus \{([\s\S]*?)\n\}/)?.[1] ?? '';
+    expect(requirementStatus.match(/\b(ACTIVE|DEPRECATED|RETIRED)\b/g)).toEqual(['ACTIVE', 'DEPRECATED', 'RETIRED']);
+    expect(schema).toContain('status           RequirementStatus @default(ACTIVE)');
+    expect(migration).toContain('CREATE TYPE "RequirementStatus" AS ENUM (\'ACTIVE\', \'DEPRECATED\', \'RETIRED\')');
+    expect(migration).toContain('"status" "RequirementStatus" NOT NULL DEFAULT \'ACTIVE\'');
+  });
+
   it('wires the Slice B PostgreSQL suite into the package and tracked workflow step', () => {
     expect(packageJson.scripts['test:phase6-slice-b:db']).toBe('jest --runInBand tests/phase6SliceBRequirementRule.integration.test.ts');
     expect(workflow).toContain('phase6-slice-b=PENDING');

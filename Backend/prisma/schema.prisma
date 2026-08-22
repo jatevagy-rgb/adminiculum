@@ -4628,10 +4628,8 @@ model LegalSourceCapture {
 }
 
 enum RequirementStatus {
-  CANDIDATE
-  IN_REVIEW
-  APPROVED
-  SUPERSEDED
+  ACTIVE
+  DEPRECATED
   RETIRED
 }
 
@@ -4688,7 +4686,7 @@ model Requirement {
   jurisdictionCode String
   domainCode       String
   domain           ComplianceDomain  @relation(fields: [domainCode], references: [code], onDelete: Restrict)
-  status           RequirementStatus @default(CANDIDATE)
+  status           RequirementStatus @default(ACTIVE)
   createdAt        DateTime          @default(now())
   retiredAt        DateTime?
 

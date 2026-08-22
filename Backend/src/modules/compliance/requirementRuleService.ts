@@ -12,9 +12,7 @@ export class RequirementRuleError extends Error {
   }
 }
 
-const CONTENT_FIELDS = new Set([
-  'requirementId',
-  'versionKey',
+const EDITABLE_CONTENT_FIELDS = new Set([
   'title',
   'normativeStatement',
   'effectiveFrom',
@@ -23,6 +21,20 @@ const CONTENT_FIELDS = new Set([
   'specialistRequirement',
   'specialistDomainCode',
 ]);
+
+const REQUIREMENT_VERSION_CREATE_STATUSES = new Set(['CANDIDATE', 'IN_REVIEW']);
+
+function assertCreateStatus(status: unknown, entity: string): asserts status is 'CANDIDATE' | 'IN_REVIEW' | undefined {
+  if (status !== undefined && (typeof status !== 'string' || !REQUIREMENT_VERSION_CREATE_STATUSES.has(status))) {
+    throw new RequirementRuleError('LIFECYCLE_STATUS_FORBIDDEN', `${entity} may only be created as CANDIDATE or IN_REVIEW.`);
+  }
+}
+
+function assertApprovalActor(approvedById: unknown): asserts approvedById is string {
+  if (typeof approvedById !== 'string' || approvedById.trim().length === 0) {
+    throw new RequirementRuleError('APPROVAL_ACTOR_REQUIRED', 'Approval requires a non-empty approvedById.');
+  }
+}
 
 function assertValidRuleAst(ast: unknown): asserts ast is RuleExpression {
   const result = validateRuleAst(ast);
@@ -62,10 +74,13 @@ export async function createRequirement(input: {
   key: string;
   jurisdictionCode: string;
   domainCode: string;
-  status?: 'CANDIDATE' | 'IN_REVIEW' | 'APPROVED' | 'SUPERSEDED' | 'RETIRED';
+  status?: 'ACTIVE' | 'DEPRECATED' | 'RETIRED';
   db?: Db;
 }) {
   const { db = new PrismaClient(), ...data } = input;
+  if (data.status !== undefined && !['ACTIVE', 'DEPRECATED', 'RETIRED'].includes(data.status)) {
+    throw new RequirementRuleError('INVALID_REQUIREMENT_STATUS', 'Requirement status must be ACTIVE, DEPRECATED, or RETIRED.');
+  }
   return db.requirement.create({ data });
 }
 
@@ -84,6 +99,7 @@ export async function createRequirementVersion(input: {
   db?: Db;
 }) {
   const { db = new PrismaClient(), ...data } = input;
+  assertCreateStatus(data.status, 'RequirementVersion');
   if (data.effectiveTo && data.effectiveTo < data.effectiveFrom) {
     throw new RequirementRuleError('INVALID_EFFECTIVE_RANGE', 'effectiveTo must not precede effectiveFrom.');
   }
@@ -104,6 +120,11 @@ export async function addRequirementCitation(input: {
   db?: Db;
 }) {
   const { db = new PrismaClient(), ...data } = input;
+  const version = await db.requirementVersion.findUnique({ where: { id: data.requirementVersionId }, select: { status: true } });
+  if (!version) throw new RequirementRuleError('REQUIREMENT_VERSION_NOT_FOUND', 'RequirementVersion was not found.');
+  if (['APPROVED', 'SUPERSEDED', 'RETIRED'].includes(version.status)) {
+    throw new RequirementRuleError('CITATION_VERSION_IMMUTABLE', 'Citations cannot be changed after RequirementVersion approval or retirement.');
+  }
   return db.requirementCitation.create({ data: data as Prisma.RequirementCitationUncheckedCreateInput });
 }
 
@@ -117,6 +138,7 @@ export async function createApplicabilityRuleVersion(input: {
   db?: Db;
 }) {
   const { db = new PrismaClient(), astJson, canonicalDigest: suppliedDigest, ...data } = input;
+  assertCreateStatus(data.status, 'ApplicabilityRuleVersion');
   assertValidRuleAst(astJson);
   const digest = canonicalDigest(astJson);
   if (suppliedDigest !== undefined && suppliedDigest !== digest) {
@@ -142,18 +164,24 @@ export async function createApplicabilityRuleVersion(input: {
   return rule;
 }
 
-export async function approveRequirementVersion(id: string, db: Db = new PrismaClient()) {
+export async function approveRequirementVersion(id: string, approvedById: string, db: Db = new PrismaClient()) {
+  assertApprovalActor(approvedById);
+  const normalizedApprovedById = approvedById.trim();
   const approve = async (tx: Db) => {
   const version = await tx.requirementVersion.findUnique({ where: { id } });
   if (!version) throw new RequirementRuleError('REQUIREMENT_VERSION_NOT_FOUND', 'RequirementVersion was not found.');
   if (version.sourceSupportState !== 'SUFFICIENT') {
     throw new RequirementRuleError('SOURCE_SUPPORT_INSUFFICIENT', 'Only SUFFICIENT source support may be approved.');
   }
+  const primaryCitation = await tx.requirementCitation.findFirst({ where: { requirementVersionId: id, supportRole: 'PRIMARY' }, select: { id: true } });
+  if (!primaryCitation) {
+    throw new RequirementRuleError('PRIMARY_CITATION_REQUIRED', 'At least one PRIMARY citation is required before approval.');
+  }
   const approved = await tx.requirementVersion.findMany({ where: { requirementId: version.requirementId, status: 'APPROVED', id: { not: id } }, select: { effectiveFrom: true, effectiveTo: true } });
   if (approved.some((other) => rangesOverlap(version.effectiveFrom, version.effectiveTo, other.effectiveFrom, other.effectiveTo))) {
     throw new RequirementRuleError('EFFECTIVE_PERIOD_OVERLAP', 'Approved RequirementVersion effective periods may not overlap.');
   }
-  return tx.requirementVersion.update({ where: { id }, data: { status: 'APPROVED', approvedAt: new Date() } });
+  return tx.requirementVersion.update({ where: { id }, data: { status: 'APPROVED', approvedAt: new Date(), approvedById: normalizedApprovedById } });
   };
   if (db instanceof PrismaClient) {
     return db.$transaction((tx) => approve(tx), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -161,14 +189,16 @@ export async function approveRequirementVersion(id: string, db: Db = new PrismaC
   return approve(db);
 }
 
-export async function approveApplicabilityRuleVersion(id: string, db: Db = new PrismaClient()) {
+export async function approveApplicabilityRuleVersion(id: string, approvedById: string, db: Db = new PrismaClient()) {
+  assertApprovalActor(approvedById);
+  const normalizedApprovedById = approvedById.trim();
   const rule = await db.applicabilityRuleVersion.findUnique({ where: { id }, include: { requirementVersion: true, dependencies: { include: { resolvedFactDefinition: { select: { valueType: true } } } } } });
   if (!rule) throw new RequirementRuleError('RULE_VERSION_NOT_FOUND', 'ApplicabilityRuleVersion was not found.');
   if (rule.requirementVersion.status !== 'APPROVED') throw new RequirementRuleError('REQUIREMENT_VERSION_NOT_APPROVED', 'The parent RequirementVersion must be approved first.');
   if (rule.dependencies.some((dependency) => !dependency.resolvedFactDefinition)) throw new RequirementRuleError('UNRESOLVED_FACT_DEPENDENCY', 'Every approved rule dependency must resolve to a FactDefinition.');
   const unsupported = rule.dependencies.find((dependency) => !['BOOLEAN', 'NUMBER', 'DATE', 'STRING'].includes(dependency.resolvedFactDefinition!.valueType));
   if (unsupported) throw new RequirementRuleError('UNSUPPORTED_FACT_TYPE', `Fact dependency ${unsupported.factKey} has an unsupported approval type.`);
-  return db.applicabilityRuleVersion.update({ where: { id }, data: { status: 'APPROVED', approvedAt: new Date() } });
+  return db.applicabilityRuleVersion.update({ where: { id }, data: { status: 'APPROVED', approvedAt: new Date(), approvedById: normalizedApprovedById } });
 }
 
 export async function supersedeRequirementVersion(id: string, successorId: string, db: Db = new PrismaClient()) {
@@ -194,9 +224,16 @@ export async function supersedeApplicabilityRuleVersion(id: string, successorId:
 }
 
 export async function updateRequirementVersion(id: string, input: Record<string, unknown>, db: Db = new PrismaClient()) {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    throw new RequirementRuleError('LIFECYCLE_FIELD_FORBIDDEN', 'RequirementVersion updates must be an object containing editable content fields only.');
+  }
+  const keys = Object.keys(input);
+  if (keys.some((key) => !EDITABLE_CONTENT_FIELDS.has(key))) {
+    throw new RequirementRuleError('LIFECYCLE_FIELD_FORBIDDEN', 'RequirementVersion lifecycle and identity fields cannot be changed through the generic update path.');
+  }
   const current = await db.requirementVersion.findUnique({ where: { id } });
   if (!current) throw new RequirementRuleError('REQUIREMENT_VERSION_NOT_FOUND', 'RequirementVersion was not found.');
-  if (current.status === 'APPROVED' && Object.keys(input).some((key) => CONTENT_FIELDS.has(key))) {
+  if (current.status === 'APPROVED') {
     throw new RequirementRuleError('APPROVED_VERSION_IMMUTABLE', 'Approved RequirementVersion content is immutable; create a new version.');
   }
   return db.requirementVersion.update({ where: { id }, data: input as Prisma.RequirementVersionUncheckedUpdateInput });
