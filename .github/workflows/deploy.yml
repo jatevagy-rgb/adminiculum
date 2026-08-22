@@ -148,7 +148,6 @@ jobs:
           BODY="$(mktemp)"
           trap 'rm -f "$HEADERS" "$BODY"' EXIT
 
-          # Kudu's async publish response contains the exact deployment Location.
           # Keep the Entra token in memory only; never print it or use a publish profile.
           set +e
           HTTP_CODE="$(curl -sS -m 1200 -D "$HEADERS" -o "$BODY" -w '%{http_code}' \
@@ -181,12 +180,29 @@ jobs:
           }
           NODE
           )" || { echo "Unexpected Kudu deployment Location; refusing to poll it."; exit 1; }
+
+          # Kudu may complete this publish synchronously. HTTP 200 with a clean
+          # transport is terminal success; no Location or deployment-history
+          # lookup is needed. The health gate below remains the runtime gate.
+          if [ "$HTTP_CODE" = "200" ] && [ "$CURL_STATUS" -eq 0 ]; then
+            echo "Kudu publish completed synchronously; proceeding to backend health gate."
+            exit 0
+          fi
+
+          # Async/timeout responses are safe to continue only when Kudu gave us
+          # the exact execution identity. Never retry the POST or infer identity
+          # from deployment history, because that could overlap deployments.
           if [ -z "$LOCATION" ]; then
-            echo "Kudu did not return a deployment Location; refusing to infer identity from deployment history."
+            echo "Kudu publish did not provide an exact deployment identity; refusing to infer identity from deployment history."
             exit 1
           fi
-          NEW_ID="${LOCATION##*/}"
-          echo "This run's deployment id: $NEW_ID"
+          if { [ "$HTTP_CODE" = "202" ] || [ "$HTTP_CODE" = "504" ] || [ "$CURL_STATUS" -ne 0 ]; }; then
+            NEW_ID="${LOCATION##*/}"
+            echo "This run's deployment id: $NEW_ID"
+          else
+            echo "Unexpected Kudu publish HTTP response; refusing to poll it."
+            exit 1
+          fi
 
           # A CLI/curl timeout or non-zero status is not authoritative once a
           # deployment Location was returned; poll this exact server-side run.
