@@ -1,6 +1,7 @@
 "use client";
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { InteractionRequiredAuthError, InteractionStatus } from '@azure/msal-browser';
 import { useMsal } from '@azure/msal-react';
@@ -13,6 +14,7 @@ import { PortalWorkspaceSelector } from './PortalWorkspaceSelector';
 import { OrganizationPortalViews, type OrganizationPortalView } from './OrganizationPortalViews';
 import { OrgHomeView } from './OrgHomeView';
 import { CustomerInteractionCard } from './CustomerInteractionCard';
+import { isViewSupported, type PortalMode, type PortalView } from '@/lib/portalModeViews';
 import { ActionCard, Card, formatDate, MatterView, UpdateCard } from './MatterWorkspace';
 import {
   getPortalActionRequest,
@@ -36,8 +38,6 @@ import {
   type PortalIdentityContext,
 } from '@/lib/clientPortalApi';
 
-type PortalView = 'home' | 'matters' | 'tasks' | 'documents' | 'messages' | 'matter' | 'document' | 'action' | 'intakes' | 'new-intake' | 'leadership' | 'contracts' | 'company';
-
 type Props = { view: PortalView; resourceId?: string };
 
 type LoadState =
@@ -60,6 +60,22 @@ function SectionHeader({ kicker, title, link, linkLabel }: { kicker?: string; ti
       </div>
       {link && linkLabel ? <Link className="text-sm font-semibold text-[var(--adm-blue-700)] hover:underline" href={link}>{linkLabel} →</Link> : null}
     </div>
+  );
+}
+
+function ViewUnavailable({ onGoHome }: { onGoHome: () => void }) {
+  return (
+    <Card>
+      <p className="cp-kicker">Nem érhető el</p>
+      <h1 className="cp-title mt-2 text-3xl">Ez a funkció jelenleg nem érhető el</h1>
+      <p className="cp-subtitle mt-3">Ez a nézet az Ön ügyfélfelület-típusában nem támogatott.</p>
+      <button
+        className="mt-6 inline-flex rounded-full bg-[var(--adm-blue-950)] px-5 py-3 font-semibold text-white focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40"
+        onClick={onGoHome}
+      >
+        Vissza a főoldalra
+      </button>
+    </Card>
   );
 }
 
@@ -280,6 +296,7 @@ function ActionView({ action }: { action: PortalActionRequest }) {
 export function ClientPortalShell({ view, resourceId }: Props) {
   const { instance, accounts, inProgress } = useMsal();
   const account = pickAccountByTenant(accounts, customerTenantId);
+  const router = useRouter();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [selectedReference, setSelectedReference] = useState<string | null>(() => getStoredPortalWorkspace());
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -434,6 +451,9 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         {state.status === 'workspace-empty' ? <Card><h1 className="cp-title text-3xl">{state.context.selectedWorkspace?.name}</h1><p className="cp-subtitle mt-3">Az ügyfélfelülethez való hozzáférése aktív, de ezen a felületen jelenleg nincs elérhető tartalom.</p></Card> : null}
         {state.status === 'service-error' ? <Card><h1 className="cp-title text-3xl">A portál jelenleg nem érhető el</h1><p className="cp-subtitle mt-3">Kérjük, próbálja újra később.</p></Card> : null}
         {state.status === 'denied' ? <Card>{state.message}</Card> : null}
+        {state.status === 'ready' && state.context.selectedWorkspace && !isViewSupported(state.context.selectedWorkspace.mode as PortalMode, view) ? (
+          <ViewUnavailable onGoHome={() => router.push('/portal')} />
+        ) : null}
         {state.status === 'ready' && (state.context.selectedWorkspace?.mode === 'ORGANIZATION' || state.context.selectedWorkspace?.mode === 'CASE_RELAY') && view === 'home' && state.context.selectedWorkspace?.mode === 'ORGANIZATION' ? (
           <OrgHomeView workspaceId={state.context.selectedWorkspace.publicReference} />
         ) : null}
