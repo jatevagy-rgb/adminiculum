@@ -4473,7 +4473,8 @@ model FactDefinition {
   createdAt           DateTime                @default(now())
   retiredAt           DateTime?
 
-  facts ClientFact[]
+  facts                             ClientFact[]
+  applicabilityRuleFactDependencies ApplicabilityRuleFactDependency[]
 
   @@index([status, valueType])
   @@index([domainCode, status])
@@ -4594,7 +4595,8 @@ model LegalSourceVersion {
   approvedAt        DateTime?
   approvedById      String?
 
-  captures LegalSourceCapture[]
+  captures  LegalSourceCapture[]
+  citations RequirementCitation[]
 
   @@unique([legalSourceId, legalVersionKey])
   @@unique([id, legalSourceId])
@@ -4623,4 +4625,167 @@ model LegalSourceCapture {
   @@index([sourceSha256])
   @@index([legalSourceVersionId, captureStatus])
   @@map("legal_source_captures")
+}
+
+enum RequirementStatus {
+  ACTIVE
+  DEPRECATED
+  RETIRED
+}
+
+enum RequirementVersionStatus {
+  CANDIDATE
+  IN_REVIEW
+  APPROVED
+  SUPERSEDED
+  RETIRED
+}
+
+enum RequirementSourceSupportState {
+  SUFFICIENT
+  INCOMPLETE
+  AMBIGUOUS
+  MISSING
+  LEGAL_REVIEW_REQUIRED
+}
+
+enum RequirementSpecialistRequirement {
+  NONE
+  LEGAL_ONLY
+  TECHNICAL_CLASSIFICATION_REQUIRED
+}
+
+enum RequirementCitationSupportRole {
+  PRIMARY
+  SUPPORTING
+  CONTEXT
+}
+
+enum ApplicabilityRuleStatus {
+  CANDIDATE
+  IN_REVIEW
+  APPROVED
+  SUPERSEDED
+  RETIRED
+}
+
+model ComplianceDomain {
+  code         String        @id
+  label        String
+  active       Boolean       @default(true)
+  sortOrder    Int?
+  requirements Requirement[]
+
+  @@index([active, sortOrder])
+  @@map("compliance_domains")
+}
+
+model Requirement {
+  id               String            @id @default(uuid())
+  key              String            @unique
+  jurisdictionCode String
+  domainCode       String
+  domain           ComplianceDomain  @relation(fields: [domainCode], references: [code], onDelete: Restrict)
+  status           RequirementStatus @default(ACTIVE)
+  createdAt        DateTime          @default(now())
+  retiredAt        DateTime?
+
+  versions RequirementVersion[]
+
+  @@index([jurisdictionCode, domainCode, status])
+  @@index([status])
+  @@map("requirements")
+}
+
+model RequirementVersion {
+  id                    String                           @id @default(uuid())
+  requirementId         String
+  requirement           Requirement                      @relation(fields: [requirementId], references: [id], onDelete: Restrict)
+  versionKey            String
+  title                 String
+  normativeStatement    String
+  effectiveFrom         DateTime
+  effectiveTo           DateTime?
+  sourceSupportState    RequirementSourceSupportState    @default(MISSING)
+  specialistRequirement RequirementSpecialistRequirement @default(NONE)
+  specialistDomainCode  String?
+  status                RequirementVersionStatus         @default(CANDIDATE)
+  approvedAt            DateTime?
+  approvedById          String?
+  createdAt             DateTime                         @default(now())
+  createdById           String?
+  supersededById        String?
+  supersededBy          RequirementVersion?              @relation("RequirementVersionSupersession", fields: [supersededById, requirementId], references: [id, requirementId], onDelete: NoAction)
+  supersedes            RequirementVersion[]             @relation("RequirementVersionSupersession")
+
+  citations RequirementCitation[]
+  rules     ApplicabilityRuleVersion[]
+
+  @@unique([requirementId, versionKey])
+  @@unique([id, requirementId])
+  @@index([requirementId, status])
+  @@index([status, effectiveFrom])
+  @@map("requirement_versions")
+}
+
+model RequirementCitation {
+  id                   String                         @id @default(uuid())
+  requirementVersionId String
+  requirementVersion   RequirementVersion             @relation(fields: [requirementVersionId], references: [id], onDelete: Cascade)
+  legalSourceVersionId String
+  legalSourceVersion   LegalSourceVersion             @relation(fields: [legalSourceVersionId], references: [id], onDelete: Restrict)
+  supportRole          RequirementCitationSupportRole
+  locator              String?
+  article              String?
+  section              String?
+  paragraph            String?
+  page                 Int?
+  quotedText           String?
+  metadata             Json?
+  createdAt            DateTime                       @default(now())
+
+  @@index([requirementVersionId, supportRole])
+  @@index([legalSourceVersionId])
+  @@map("requirement_citations")
+}
+
+model ApplicabilityRuleVersion {
+  id                   String                     @id @default(uuid())
+  requirementVersionId String
+  requirementVersion   RequirementVersion         @relation(fields: [requirementVersionId], references: [id], onDelete: Restrict)
+  ruleVersionKey       String
+  schemaVersion        String
+  astJson              Json
+  canonicalDigest      String                     @db.VarChar(64)
+  status               ApplicabilityRuleStatus    @default(CANDIDATE)
+  createdAt            DateTime                   @default(now())
+  createdById          String?
+  reviewedAt           DateTime?
+  reviewedById         String?
+  approvedAt           DateTime?
+  approvedById         String?
+  supersededById       String?
+  supersededBy         ApplicabilityRuleVersion?  @relation("ApplicabilityRuleVersionSupersession", fields: [supersededById, requirementVersionId], references: [id, requirementVersionId], onDelete: NoAction)
+  supersedes           ApplicabilityRuleVersion[] @relation("ApplicabilityRuleVersionSupersession")
+
+  dependencies ApplicabilityRuleFactDependency[]
+
+  @@unique([requirementVersionId, ruleVersionKey])
+  @@unique([id, requirementVersionId])
+  @@index([requirementVersionId, status])
+  @@map("applicability_rule_versions")
+}
+
+model ApplicabilityRuleFactDependency {
+  id                         String                   @id @default(uuid())
+  applicabilityRuleVersionId String
+  applicabilityRuleVersion   ApplicabilityRuleVersion @relation(fields: [applicabilityRuleVersionId], references: [id], onDelete: Cascade)
+  factKey                    String
+  resolvedFactDefinitionId   String?
+  resolvedFactDefinition     FactDefinition?          @relation(fields: [resolvedFactDefinitionId], references: [id], onDelete: Restrict)
+  createdAt                  DateTime                 @default(now())
+
+  @@unique([applicabilityRuleVersionId, factKey])
+  @@index([factKey])
+  @@map("applicability_rule_fact_dependencies")
 }
