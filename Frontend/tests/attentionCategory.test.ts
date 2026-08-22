@@ -42,8 +42,8 @@ describe("estimate range formatting (presentation only)", () => {
     assert.equal(formatEstimateRange(25, 50), "kb. 25–50 perc");
   });
   it("formats one hour and above as óra", () => {
-    assert.equal(formatEstimateRange(60, 120), "kb. 1–2 óra");
-    assert.equal(formatEstimateRange(180, 360), "kb. 3–6 óra");
+    assert.equal(formatEstimateRange(60, 120), "kb. 1 óra–2 óra");
+    assert.equal(formatEstimateRange(180, 360), "kb. 3 óra–6 óra");
   });
   it("formats a mixed range", () => {
     assert.equal(formatEstimateRange(45, 120), "kb. 45 perc–2 óra");

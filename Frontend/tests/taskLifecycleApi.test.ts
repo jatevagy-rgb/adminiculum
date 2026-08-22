@@ -20,7 +20,10 @@ type FetchCall = {
 const originalFetch = globalThis.fetch;
 
 function installAuthenticatedBrowserGlobals(): void {
-  Object.defineProperty(globalThis, "window", { configurable: true, value: {} });
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { location: { pathname: "/" } },
+  });
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
     value: {
