@@ -8,6 +8,7 @@ import {
   type RuleExpression,
 } from '../src/modules/compliance/ruleAst';
 import { validateRuleAst } from '../src/modules/compliance/ruleAstValidator';
+import { MAX_RULE_AST_DEPTH, MAX_RULE_AST_NODES } from '../src/modules/compliance/ruleAstValidator';
 
 const VALID_COMPARE = {
   kind: 'COMPARE',
@@ -18,6 +19,12 @@ const VALID_COMPARE = {
 
 function expression(node: unknown): unknown {
   return { schemaVersion: RULE_AST_V1, node };
+}
+
+function nestedNot(depth: number): unknown {
+  let node: unknown = VALID_COMPARE;
+  for (let index = 0; index < depth; index += 1) node = { kind: 'NOT', child: node };
+  return node;
 }
 
 describe('phase6 rule AST v1 constants', () => {
@@ -172,6 +179,43 @@ describe('phase6 rule AST structural validator', () => {
     expect(extra.errors.some((e) => e.code === 'UNEXPECTED_FIELD')).toBe(true);
     for (const value of ['March 4, 2024', '1', '2024-02-30']) {
       const result = validateRuleAst(expression({ kind: 'COMPARE', operator: 'EQ', left: { kind: 'FACT', factKey: 'd' }, right: { kind: 'LITERAL', valueType: 'date', value } }));
+      expect(result.errors.some((e) => e.code === 'INVALID_LITERAL_TYPE')).toBe(true);
+    }
+  });
+
+  it('rejects ASTs beyond the maximum depth without throwing', () => {
+    const result = validateRuleAst(expression(nestedNot(MAX_RULE_AST_DEPTH)));
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.code === 'MAX_DEPTH_EXCEEDED')).toBe(true);
+  });
+
+  it('accepts the maximum-depth boundary', () => {
+    const result = validateRuleAst(expression(nestedNot(MAX_RULE_AST_DEPTH - 2)));
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
+  it('rejects ASTs beyond the maximum node count deterministically', () => {
+    const node = { kind: 'AND', children: Array.from({ length: MAX_RULE_AST_NODES }, () => VALID_COMPARE) };
+    const first = validateRuleAst(expression(node));
+    const second = validateRuleAst(expression(node));
+    expect(first.valid).toBe(false);
+    expect(first.errors.some((e) => e.code === 'MAX_NODE_COUNT_EXCEEDED')).toBe(true);
+    expect(second).toEqual(first);
+  });
+
+  it('accepts the maximum-node-count boundary', () => {
+    const result = validateRuleAst(expression({ kind: 'AND', children: Array.from({ length: Math.floor((MAX_RULE_AST_NODES - 1) / 2) }, () => VALID_COMPARE) }));
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
+  it('accepts leap-day dates and rejects invalid calendar boundaries', () => {
+    const valid = validateRuleAst(expression({ kind: 'COMPARE', operator: 'EQ', left: { kind: 'FACT', factKey: 'd' }, right: { kind: 'LITERAL', valueType: 'date', value: '2024-02-29' } }));
+    expect(valid.valid).toBe(true);
+    for (const value of ['2023-02-29', '2024-13-01']) {
+      const result = validateRuleAst(expression({ kind: 'COMPARE', operator: 'EQ', left: { kind: 'FACT', factKey: 'd' }, right: { kind: 'LITERAL', valueType: 'date', value } }));
+      expect(result.valid).toBe(false);
       expect(result.errors.some((e) => e.code === 'INVALID_LITERAL_TYPE')).toBe(true);
     }
   });

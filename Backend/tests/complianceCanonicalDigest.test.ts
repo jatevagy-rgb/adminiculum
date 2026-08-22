@@ -49,6 +49,18 @@ describe('phase6 deterministic canonicalization + digest', () => {
     expect(() => canonicalStringify(value)).toThrowError(CanonicalizationError);
   });
 
+  it('rejects non-plain objects and accepts null-prototype objects deterministically', () => {
+    class CustomValue { constructor(public value: number) {} }
+    expect(() => canonicalStringify(new Uint8Array([1, 2]))).toThrowError(CanonicalizationError);
+    expect(() => canonicalStringify(new CustomValue(1))).toThrowError(CanonicalizationError);
+
+    const a = Object.assign(Object.create(null), { z: 1, a: 'x' });
+    const b = Object.assign(Object.create(null), { a: 'x', z: 1 });
+    expect(canonicalStringify(a)).toBe('{"a":"x","z":1}');
+    expect(canonicalStringify(a)).toBe(canonicalStringify(b));
+    expect(canonicalDigest(a)).toBe(canonicalDigest(b));
+  });
+
   it('normalizes -0 to 0 for determinism', () => {
     expect(canonicalStringify({ n: -0 })).toBe(canonicalStringify({ n: 0 }));
   });
