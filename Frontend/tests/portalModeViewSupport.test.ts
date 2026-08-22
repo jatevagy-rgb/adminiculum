@@ -85,7 +85,7 @@ describe("Portal mode view support mapping (source structure)", () => {
 
   it("ViewUnavailable redirects to /portal via router.push", () => {
     const src = shell();
-    assert.match(src, /ViewUnavailable.*onGoHome.*router\.push\(.*\/portal.*\)/s);
+    assert.match(src, /ViewUnavailable[\s\S]*onGoHome[\s\S]*router\.push\([\s\S]*\/portal[\s\S]*\)/);
   });
 
   it("ClientPortalShell imports useRouter from next/navigation", () => {
