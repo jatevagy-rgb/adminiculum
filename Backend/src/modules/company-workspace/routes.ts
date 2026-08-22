@@ -12,6 +12,7 @@ import { Request, Response, Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { InteractionError } from '../client-interaction/base';
 import * as workspace from './service';
+import * as orgMap from './orgMapService';
 
 export const companyWorkspaceRouter = Router();
 
@@ -31,4 +32,12 @@ companyWorkspaceRouter.use(authenticate);
 
 companyWorkspaceRouter.get('/clients/:clientId/overview', async (req, res) => {
   try { res.json(await workspace.getWorkspaceOverview(actor(req), String(req.params.clientId))); } catch (e) { fail(res, e); }
+});
+
+// Narrow workforce-only organizational map (Szervezet). Read-only projection of
+// the canonical ClientOrganizationGroup tree + OrganizationPerson graph with a
+// principal-derived portal status / access summary. No write path, no customer
+// route, no new ACL.
+companyWorkspaceRouter.get('/clients/:clientId/organization-map', async (req, res) => {
+  try { res.json(await orgMap.getOrganizationMap(actor(req), String(req.params.clientId))); } catch (e) { fail(res, e); }
 });

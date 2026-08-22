@@ -502,6 +502,7 @@ function ClientDetailContent() {
             <div className="space-y-1">
               <button onClick={() => setShowNewCaseModal(true)} className="adm-link-button w-full px-3 py-2 text-left text-xs">Új ügy indítása</button>
               <Link href={`/clients/${clientId}/workgroups`} className="adm-link-button block px-3 py-2 text-xs">Munkacsoportok</Link>
+              <Link href={`/clients/${clientId}/szervezet`} className="adm-link-button block px-3 py-2 text-xs">Szervezet</Link>
             </div>
           </div>
 
