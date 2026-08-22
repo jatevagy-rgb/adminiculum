@@ -26,7 +26,6 @@ const VALUE_FIELDS = [
   'dateValue',
   'datetimeValue',
   'moneyAmount',
-  'moneyAmount',
   'enumValue',
   'jsonValue',
 ] as const;
@@ -86,7 +85,7 @@ export function validateTypedFactValue(
   }[valueType] || [];
 
   if (valueType === 'ENTITY_REFERENCE') invalid('ENTITY_REFERENCE values must use FactSubject.');
-  if (fields.length !== (valueType === 'MONEY' ? 1 : 1) || expected.length !== 1 || fields[0] !== expected[0]) {
+  if (fields.length !== 1 || expected.length !== 1 || fields[0] !== expected[0]) {
     invalid(`Exactly one typed value matching ${valueType} is required.`);
   }
 
@@ -129,4 +128,41 @@ export function assertFactSubjectScope(
     return;
   }
   if (!subject || subject.clientId !== clientId || subject.scopeType !== scopeType) invalid('FactSubject is invalid or belongs to another client.');
+}
+
+export interface FactSubjectLinkedEntityScopeInput {
+  clientId: string;
+  scopeType: string;
+  contractRecordId?: string | null;
+  organizationPersonId?: string | null;
+}
+
+export interface FactSubjectLinkedEntityScopeDatabase {
+  contractRecord: {
+    findUnique(args: { where: { id: string }; select: { clientId: true }}): Promise<{ clientId: string } | null>;
+  };
+  organizationPerson: {
+    findUnique(args: { where: { id: string }; select: { clientId: true }}): Promise<{ clientId: string } | null>;
+  };
+}
+
+/** Enforces same-client ownership for FactSubject's optional real-entity links. */
+export async function assertFactSubjectLinkedEntityScope(
+  db: FactSubjectLinkedEntityScopeDatabase,
+  input: FactSubjectLinkedEntityScopeInput,
+): Promise<void> {
+  const hasContract = Boolean(input.contractRecordId);
+  const hasPerson = Boolean(input.organizationPersonId);
+  if (hasContract === hasPerson && (hasContract || hasPerson)) invalid('FactSubject linked entity is invalid.');
+  if (hasContract && input.scopeType !== 'CONTRACT') invalid('FactSubject linked entity is invalid.');
+  if (hasPerson && input.scopeType !== 'EMPLOYEE') invalid('FactSubject linked entity is invalid.');
+
+  if (input.contractRecordId) {
+    const contract = await db.contractRecord.findUnique({ where: { id: input.contractRecordId }, select: { clientId: true } });
+    if (!contract || contract.clientId !== input.clientId) invalid('FactSubject linked entity is invalid.');
+  }
+  if (input.organizationPersonId) {
+    const person = await db.organizationPerson.findUnique({ where: { id: input.organizationPersonId }, select: { clientId: true } });
+    if (!person || person.clientId !== input.clientId) invalid('FactSubject linked entity is invalid.');
+  }
 }
