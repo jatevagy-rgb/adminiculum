@@ -22,5 +22,6 @@ ALTER TABLE "legal_source_versions" ADD CONSTRAINT "legal_source_versions_no_sel
   CHECK ("supersededById" IS NULL OR "id" <> "supersededById");
 ALTER TABLE "legal_source_versions" ADD CONSTRAINT "legal_source_versions_supersededById_legalSourceId_fkey"
   FOREIGN KEY ("supersededById", "legalSourceId")
-  REFERENCES "legal_source_versions"("id", "legalSourceId")
-  ON DELETE RESTRICT ON UPDATE CASCADE;
+REFERENCES "legal_source_versions"("id", "legalSourceId")
+  ON DELETE NO ACTION ON UPDATE CASCADE
+  DEFERRABLE INITIALLY DEFERRED;

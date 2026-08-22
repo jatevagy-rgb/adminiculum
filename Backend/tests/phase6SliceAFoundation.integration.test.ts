@@ -66,7 +66,6 @@ describeWithDatabase('Phase 6 Slice A foundation (PostgreSQL)', () => {
 
   afterAll(async () => {
     await db?.legalSourceCapture.deleteMany({ where: { id: { in: [captureA, captureB, captureC] } } });
-    await db?.legalSourceVersion.update({ where: { id: versionA }, data: { supersededById: null } }).catch(() => undefined);
     await db?.legalSourceVersion.deleteMany({ where: { id: { in: [versionA, versionB, versionB1] } } });
     await db?.legalSource.deleteMany({ where: { id: { in: [sourceId, sourceBId] } } });
     await db?.clientFact.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
@@ -156,5 +155,11 @@ describeWithDatabase('Phase 6 Slice A foundation (PostgreSQL)', () => {
     await expect(db.legalSourceVersion.update({ where: { id: versionA }, data: { supersededById: versionB } })).resolves.toMatchObject({ supersededById: versionB });
     await expect(db.legalSourceVersion.update({ where: { id: versionA }, data: { supersededById: versionA } })).rejects.toThrow();
     await expect(db.legalSourceVersion.update({ where: { id: versionA }, data: { supersededById: versionB1 } })).rejects.toThrow();
+
+    await expect(db.legalSourceVersion.delete({ where: { id: versionB } })).rejects.toThrow();
+
+    await db.legalSource.delete({ where: { id: sourceId } });
+    await expect(db.legalSourceVersion.findMany({ where: { id: { in: [versionA, versionB] } } })).resolves.toHaveLength(0);
+    await expect(db.legalSourceCapture.findMany({ where: { legalSourceVersionId: { in: [versionA, versionB] } } })).resolves.toHaveLength(0);
   });
 });
