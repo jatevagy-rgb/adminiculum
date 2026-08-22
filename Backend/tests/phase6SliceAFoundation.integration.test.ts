@@ -25,10 +25,13 @@ describeWithDatabase('Phase 6 Slice A foundation (PostgreSQL)', () => {
   const personB = crypto.randomUUID();
   const legacyFact = crypto.randomUUID();
   const sourceId = crypto.randomUUID();
+  const sourceBId = crypto.randomUUID();
   const versionA = crypto.randomUUID();
   const versionB = crypto.randomUUID();
+  const versionB1 = crypto.randomUUID();
   const captureA = crypto.randomUUID();
   const captureB = crypto.randomUUID();
+  const captureC = crypto.randomUUID();
 
   beforeAll(async () => {
     process.env.DATABASE_URL = databaseUrl;
@@ -58,12 +61,14 @@ describeWithDatabase('Phase 6 Slice A foundation (PostgreSQL)', () => {
     ] });
     await db.clientFact.create({ data: { id: legacyFact, clientId: clientA, type: 'LEGACY_SYNTHETIC', value: 'retained', validFrom: new Date('2026-01-01T00:00:00Z') } });
     await db.legalSource.create({ data: { id: sourceId, sourceKey: `synthetic-source-${suffix}`, jurisdictionCode: 'HU', instrumentType: 'LEGISLATION', status: 'CANDIDATE', updatedAt: new Date() } });
+    await db.legalSource.create({ data: { id: sourceBId, sourceKey: `synthetic-source-b-${suffix}`, jurisdictionCode: 'HU', instrumentType: 'LEGISLATION', status: 'CANDIDATE', updatedAt: new Date() } });
   });
 
   afterAll(async () => {
-    await db?.legalSourceCapture.deleteMany({ where: { id: { in: [captureA, captureB] } } });
-    await db?.legalSourceVersion.deleteMany({ where: { id: { in: [versionA, versionB] } } });
-    await db?.legalSource.deleteMany({ where: { id: sourceId } });
+    await db?.legalSourceCapture.deleteMany({ where: { id: { in: [captureA, captureB, captureC] } } });
+    await db?.legalSourceVersion.update({ where: { id: versionA }, data: { supersededById: null } }).catch(() => undefined);
+    await db?.legalSourceVersion.deleteMany({ where: { id: { in: [versionA, versionB, versionB1] } } });
+    await db?.legalSource.deleteMany({ where: { id: { in: [sourceId, sourceBId] } } });
     await db?.clientFact.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
     await db?.factSubject.deleteMany({ where: { id: { in: [subjectEmployee, subjectContractA, subjectPersonA] } } });
     await db?.organizationPerson.deleteMany({ where: { id: { in: [personA, personB] } } });
@@ -119,8 +124,11 @@ describeWithDatabase('Phase 6 Slice A foundation (PostgreSQL)', () => {
   });
 
   it('enforces money and temporal database CHECK constraints', async () => {
+    const validMoney = validateTypedFactValue({ valueType: 'MONEY', allowedScopeTypes: ['COMPANY'] }, { moneyAmount: '12.50', moneyCurrency: 'HUF' });
+    await expect(db.clientFact.create({ data: { clientId: clientA, type: 'PHASE6_MONEY_VALID', value: '12.50 HUF', validFrom: new Date(), factDefinitionId: definitionMoney, scopeType: 'COMPANY', ...validMoney } as never })).resolves.toBeDefined();
     await expect(db.clientFact.create({ data: { clientId: clientA, type: 'PHASE6_MONEY_AMOUNT_ONLY', value: '12.50', validFrom: new Date(), factDefinitionId: definitionMoney, scopeType: 'COMPANY', moneyAmount: '12.50' } as never })).rejects.toThrow();
     await expect(db.clientFact.create({ data: { clientId: clientA, type: 'PHASE6_MONEY_CURRENCY_ONLY', value: 'HUF', validFrom: new Date(), factDefinitionId: definitionMoney, scopeType: 'COMPANY', moneyCurrency: 'HUF' } as never })).rejects.toThrow();
+    await expect(db.clientFact.create({ data: { clientId: clientA, type: 'PHASE6_MONEY_LOWERCASE', value: '12.50 huf', validFrom: new Date(), factDefinitionId: definitionMoney, scopeType: 'COMPANY', moneyAmount: '12.50', moneyCurrency: 'huf' } as never })).rejects.toThrow();
     await expect(db.clientFact.create({ data: { clientId: clientA, type: 'PHASE6_PERIOD_INVALID', value: 'invalid', validFrom: new Date(), factDefinitionId: definitionNumber, scopeType: 'COMPANY', referencePeriodStart: new Date('2026-03-31T00:00:00Z'), referencePeriodEnd: new Date('2026-01-01T00:00:00Z') } as never })).rejects.toThrow();
   });
 
@@ -128,15 +136,25 @@ describeWithDatabase('Phase 6 Slice A foundation (PostgreSQL)', () => {
     await db.legalSourceVersion.createMany({ data: [
       { id: versionA, legalSourceId: sourceId, legalVersionKey: '2026-01', effectiveFrom: new Date('2026-01-01T00:00:00Z'), status: 'ACTIVE', reviewStatus: 'APPROVED' },
       { id: versionB, legalSourceId: sourceId, legalVersionKey: '2026-07', effectiveFrom: new Date('2026-07-01T00:00:00Z'), status: 'CANDIDATE', reviewStatus: 'VERSION_AMBIGUOUS' },
+      { id: versionB1, legalSourceId: sourceBId, legalVersionKey: '2026-01', effectiveFrom: new Date('2026-01-01T00:00:00Z'), status: 'ACTIVE', reviewStatus: 'APPROVED' },
     ] });
     await db.legalSourceCapture.createMany({ data: [
       { id: captureA, legalSourceVersionId: versionA, sourceSha256: 'a'.repeat(64), sourceUri: 'https://synthetic.invalid/a.txt', provenance: { format: 'TXT' }, completeness: 'COMPLETE', captureStatus: 'REVIEWED' },
       { id: captureB, legalSourceVersionId: versionA, sourceSha256: 'b'.repeat(64), sourceUri: 'https://synthetic.invalid/a.pdf', provenance: { format: 'PDF' }, completeness: 'PARTIAL', ambiguityStatus: 'POSSIBLE_DUPLICATE' },
+      { id: captureC, legalSourceVersionId: versionA, sourceSha256: '0123456789abcdef'.repeat(4), sourceUri: 'https://synthetic.invalid/a.bin', provenance: { format: 'BIN' }, completeness: 'COMPLETE', captureStatus: 'CAPTURED' },
     ] });
     await expect(db.legalSourceVersion.create({ data: { legalSourceId: sourceId, legalVersionKey: '2026-01', status: 'CANDIDATE', reviewStatus: 'UNREVIEWED' } })).rejects.toMatchObject({ code: 'P2002' });
     await expect(db.legalSourceCapture.create({ data: { legalSourceVersionId: versionA, sourceSha256: 'a'.repeat(64) } })).rejects.toMatchObject({ code: 'P2002' });
     const captures = await db.legalSourceCapture.findMany({ where: { legalSourceVersionId: versionA }, orderBy: { capturedAt: 'asc' } });
-    expect(captures).toHaveLength(2);
-    expect(captures.map((capture) => capture.sourceSha256)).toEqual(['a'.repeat(64), 'b'.repeat(64)]);
+    expect(captures).toHaveLength(3);
+    expect(captures.map((capture) => capture.sourceSha256)).toEqual(expect.arrayContaining(['a'.repeat(64), 'b'.repeat(64), '0123456789abcdef'.repeat(4)]));
+
+    for (const sourceSha256 of ['a'.repeat(63), 'a'.repeat(65), 'A'.repeat(64), 'g'.repeat(64), 'not-a-digest']) {
+      await expect(db.legalSourceCapture.create({ data: { legalSourceVersionId: versionA, sourceSha256 } })).rejects.toThrow();
+    }
+
+    await expect(db.legalSourceVersion.update({ where: { id: versionA }, data: { supersededById: versionB } })).resolves.toMatchObject({ supersededById: versionB });
+    await expect(db.legalSourceVersion.update({ where: { id: versionA }, data: { supersededById: versionA } })).rejects.toThrow();
+    await expect(db.legalSourceVersion.update({ where: { id: versionA }, data: { supersededById: versionB1 } })).rejects.toThrow();
   });
 });
