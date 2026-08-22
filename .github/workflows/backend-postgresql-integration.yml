@@ -67,7 +67,7 @@ jobs:
 
       - name: Initialize suite result tracking
         run: |
-          for s in comparison review publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture document-version task-lifecycle-schema task-review-decision task-submission; do
+          for s in comparison review publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture phase5b document-version task-lifecycle-schema task-review-decision task-submission; do
             echo "$s=PENDING" >> "$RUNNER_TEMP/ci-suite-results.txt"
           done
 
@@ -266,6 +266,20 @@ jobs:
           sed -i "s/^phase5-fixture=PENDING$/phase5-fixture=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit "$rc"
 
+      - name: Phase 5B org contract + company customer surface PG
+        working-directory: Backend
+        env:
+          CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+          CLIENT_PORTAL_READ_ENABLED: 'true'
+        run: |
+          if npm run test:phase5b:db; then
+            rc=0
+          else
+            rc=$?
+          fi
+          sed -i "s/^phase5b=PENDING$/phase5b=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit "$rc"
+
       - name: Document version persistence PG
         working-directory: Backend
         env:
@@ -341,6 +355,7 @@ jobs:
             [lifecycle]="Workflow completion / forced case-close"
             [zero-grant]="Organization zero-grant"
             [phase5-fixture]="Phase 5 org-portal fixture foundation"
+            [phase5b]="Phase 5B org contract + company customer surface"
             [document-version]="Document version persistence"
             [task-lifecycle-schema]="Task lifecycle additive schema"
             [task-review-decision]="Task review decision"
