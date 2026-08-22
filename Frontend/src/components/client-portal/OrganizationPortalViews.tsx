@@ -16,7 +16,6 @@ import {
   type PortalIdentityContext,
   type PortalLeadershipUnitAggregate,
   type PortalOrgCompany,
-  type PortalOrgCompanyPerson,
   type PortalOrgContract,
   type PortalOrganizationCase,
   type PortalOrganizationCaseDetail,
@@ -309,11 +308,6 @@ function OrganizationContracts({ contracts }: { contracts: PortalOrgContract[] }
 
 function OrganizationCompany({ company }: { company: PortalOrgCompany | null }) {
   if (!company) return <Section title="Vállalat" empty emptyText="Ehhez az ügyfélfelülethez jelenleg nincs közzétehető vállalati áttekintés." />;
-  const peopleByGroup = new Map<string, PortalOrgCompanyPerson[]>();
-  for (const person of company.persons) {
-    const key = person.organizationGroupId || "ungrouped";
-    peopleByGroup.set(key, [...(peopleByGroup.get(key) || []), person]);
-  }
   const areaActivity = company.visibleMattersByArea.filter((area) => area.visibleMatterCount > 0);
   return (
     <div className="space-y-5">
@@ -328,11 +322,6 @@ function OrganizationCompany({ company }: { company: PortalOrgCompany | null }) 
             <div key={group.id} className="rounded-2xl border border-stone-200 bg-white p-4">
               <h3 className="font-semibold text-stone-950">{group.name}</h3>
               {group.parentGroupId ? <p className="mt-1 text-sm text-stone-600">Része egy magasabb szintű egységnek.</p> : null}
-              {(peopleByGroup.get(group.id) || []).length ? (
-                <ul className="mt-3 space-y-1 text-sm text-stone-700">
-                  {peopleByGroup.get(group.id)!.map((person) => <li key={person.id}><b>{person.name}</b>{person.jobTitle ? ` · ${person.jobTitle}` : ""}</li>)}
-                </ul>
-              ) : null}
             </div>
           ))}
         </div>

@@ -446,15 +446,6 @@ export type PortalOrgCompanyGroup = {
   parentGroupId: string | null;
 };
 
-export type PortalOrgCompanyPerson = {
-  id: string;
-  name: string;
-  jobTitle: string | null;
-  organizationGroupId: string | null;
-  managerName: string | null;
-  deputyName: string | null;
-};
-
 export type PortalOrgCompanyVisibleArea = {
   areaName: string;
   visibleMatterCount: number;
@@ -464,7 +455,6 @@ export type PortalOrgCompany = {
   companyName: string;
   profileHeadline: string | null;
   groups: PortalOrgCompanyGroup[];
-  persons: PortalOrgCompanyPerson[];
   visibleMattersByArea: PortalOrgCompanyVisibleArea[];
   totalVisibleMatterCount: number;
   milestones: Array<{ id: string; title: string; date: string | null }>;

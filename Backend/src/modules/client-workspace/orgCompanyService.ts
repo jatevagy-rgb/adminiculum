@@ -5,28 +5,35 @@
  * ORGANIZATION workspace. Content is composed from canonical customer-safe
  * projectors only:
  *   - projectCompanyOverviewForCustomer (profile headline + safe milestones/
- *     initiatives, internal findings/notes/verification stripped);
- *   - projectOrganizationForCustomer (customer-owned groups + active persons);
+ *     initiatives, internal findings/notes/verification stripped) — ONLY after
+ *     the canonical ORGANIZATION summary-scope authorization succeeds;
+ *   - workspace-scoped client organization groups (ACTIVE, current workspace only);
  *   - listOrganizationalCases (visible matters per organizational area, so every
  *     count reflects ONLY granted/visible cases — never hidden ones).
  *
- * Authorization is the canonical org portal path: requireOrganizationWorkspace
- * then the customer's granted-cases resolver. No client/workspace/grant id is ever
- * accepted from the browser.
+ * AUTHORIZATION — the Phase 5B company gate:
+ *   1. workspace mode must be exactly ORGANIZATION (NOT CASE_RELAY);
+ *   2. the active portal membership must hold an ACTIVE ClientPortalSummaryScope
+ *      with scopeType=ORGANIZATION for the current workspace (reuses the canonical
+ *      canViewOrganizationSummary primitive).
+ *   Missing scope -> 403 CLIENT_SUMMARY_SCOPE_FORBIDDEN. Sensitive organization-
+ *   wide company data is never loaded before authorization.
  *
- * SAFETY BOUNDARY: internal responsibility assignments, lawyer ownership, skills,
- * HR data, internal departments not customer-owned, internal KPIs, compliance
- * findings, hidden cases/groups, raw ContractRecord and internal tasks are never
- * returned. Responsibilities are intentionally stripped from persons.
+ * SAFETY BOUNDARY: the customer person directory is NOT exposed (no OrganizationPerson
+ * names/jobTitle/manager/deputy/portalMembershipId/employmentStatus/responsibilities —
+ * there is no explicit customer-directory publication policy yet). Groups are
+ * restricted to the current workspace (workspaceId + ACTIVE), never derived from
+ * clientId alone. Internal findings/notes/verification state, lawyer ownership,
+ * skills, HR data, hidden cases/groups and internal tasks never cross.
  *
  * NO new persistence. Reuses existing canonical models + services.
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
-import { assertClientSafe } from '../client-interaction/base';
+import { assertClientSafe, InteractionError } from '../client-interaction/base';
 import { requireOrganizationWorkspace } from './organizationalAccessPolicy';
+import { canViewOrganizationSummary } from './leadershipSummaryService';
 import { listOrganizationalCases } from './organizationalCaseService';
 import { projectCompanyOverviewForCustomer } from '../client-company/projector';
-import { projectOrganizationForCustomer } from '../client-organization/service';
 
 type Prisma = typeof defaultPrisma;
 
@@ -34,15 +41,6 @@ export interface OrgCompanyGroup {
   id: string;
   name: string;
   parentGroupId: string | null;
-}
-
-export interface OrgCompanyPerson {
-  id: string;
-  name: string;
-  jobTitle: string | null;
-  organizationGroupId: string | null;
-  managerName: string | null;
-  deputyName: string | null;
 }
 
 export interface OrgCompanyVisibleArea {
@@ -54,7 +52,6 @@ export interface OrgCompanyDto {
   companyName: string;
   profileHeadline: string | null;
   groups: OrgCompanyGroup[];
-  persons: OrgCompanyPerson[];
   visibleMattersByArea: OrgCompanyVisibleArea[];
   totalVisibleMatterCount: number;
   milestones: Array<{ id: string; title: string; date: string | null }>;
@@ -69,9 +66,13 @@ const INITIATIVE_STATUS_LABELS: Record<string, string> = {
   CANCELLED: 'Törölve',
 };
 
+const ORG_CASE_LIST_LIMIT = 200;
+
 /**
- * Build the customer company overview DTO. Requires an active ORGANIZATION
- * workspace; all content comes from canonical customer-safe projections.
+ * Build the customer company overview DTO. Requires an ACTIVE ORGANIZATION
+ * workspace AND an ACTIVE ORGANIZATION summary scope; all content comes from
+ * canonical customer-safe projections. Sensitive org-wide data is loaded only
+ * after the authorization gate succeeds.
  */
 export async function getOrganizationalCompany(
   identityId: string,
@@ -79,16 +80,34 @@ export async function getOrganizationalCompany(
   prisma: Prisma = defaultPrisma,
 ): Promise<OrgCompanyDto> {
   const workspace = await requireOrganizationWorkspace(workspaceId, prisma);
+  // Phase 5B company overview is ORGANIZATION-mode only; CASE_RELAY is denied.
+  const modeRow = await prisma.clientPortalWorkspace.findFirst({ where: { id: workspace.id }, select: { mode: true } });
+  if (String(modeRow?.mode) !== 'ORGANIZATION') {
+    throw new InteractionError(403, 'CLIENT_SUMMARY_SCOPE_FORBIDDEN', 'A company overview is only available for organizational workspaces.');
+  }
+  // The canonical per-membership authorization gate for organization-wide content.
+  if (!(await canViewOrganizationSummary(identityId, workspaceId, prisma))) {
+    throw new InteractionError(403, 'CLIENT_SUMMARY_SCOPE_FORBIDDEN', 'An organization summary scope is required.');
+  }
+
   const client = await prisma.client.findUnique({ where: { id: workspace.clientId }, select: { name: true } });
 
-  const [overview, organization, cases] = await Promise.all([
+  // Organization-wide overview content is loaded only after authorization.
+  const [overview, cases] = await Promise.all([
     projectCompanyOverviewForCustomer(workspace.clientId, prisma),
-    projectOrganizationForCustomer(workspace.clientId, prisma),
-    listOrganizationalCases(identityId, workspaceId, { limit: 50 }, prisma),
+    listOrganizationalCases(identityId, workspaceId, { limit: ORG_CASE_LIST_LIMIT }, prisma),
   ]);
 
+  // Workspace-scoped ACTIVE groups only — never a client-wide directory, and never
+  // derived from clientId alone. Allowlisted fields: id, name, parentGroupId.
+  const groups = await prisma.clientOrganizationGroup.findMany({
+    where: { workspaceId: workspace.id, status: 'ACTIVE' },
+    select: { id: true, name: true, parentGroupId: true },
+    orderBy: { name: 'asc' },
+  });
+
   // Visible matter counts per organizational area derive ONLY from the customer's
-  // granted/visible cases (never hidden ones).
+  // granted/visible cases (never hidden ones). The per-area sum equals the total.
   const byArea = new Map<string, number>();
   for (const row of cases.items) {
     const area = row.organizationUnitName || 'Egyéb szervezeti terület';
@@ -98,19 +117,10 @@ export async function getOrganizationalCompany(
   const dto: OrgCompanyDto = {
     companyName: client?.name || 'Szervezet',
     profileHeadline: overview.profileHeadline,
-    groups: (organization.groups as any[]).map((group) => ({
-      id: String(group.id),
-      name: String(group.name),
+    groups: groups.map((group) => ({
+      id: group.id,
+      name: group.name,
       parentGroupId: group.parentGroupId ? String(group.parentGroupId) : null,
-    })),
-    // Responsibilities (internal role assignments) are intentionally stripped.
-    persons: (organization.persons as any[]).map((person) => ({
-      id: String(person.id),
-      name: String(person.name),
-      jobTitle: person.jobTitle ? String(person.jobTitle) : null,
-      organizationGroupId: person.organizationGroupId ? String(person.organizationGroupId) : null,
-      managerName: person.managerName ? String(person.managerName) : null,
-      deputyName: person.deputyName ? String(person.deputyName) : null,
     })),
     visibleMattersByArea: [...byArea.entries()].map(([areaName, visibleMatterCount]) => ({ areaName, visibleMatterCount })),
     totalVisibleMatterCount: cases.total,

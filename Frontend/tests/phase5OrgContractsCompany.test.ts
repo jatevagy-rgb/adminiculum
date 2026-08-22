@@ -48,12 +48,13 @@ describe("Phase 5B organizational customer contract + company surface", () => {
     assert.match(src, /Szervezeti egységek/);
     assert.match(src, /Aktív területek/);
     assert.match(src, /company\.profileHeadline/);
-    assert.match(src, /company\.persons/);
+    assert.match(src, /company\.groups\.map/);
     assert.match(src, /Közzétett ügy/);
     assert.doesNotMatch(src, /\/vallalati-mukodes/);
     assert.doesNotMatch(src, /getWorkspaceOverview/);
-    assert.doesNotMatch(src, /employmentStatus/);
-    assert.doesNotMatch(src, /responsibilities/);
+    // The customer person directory is intentionally not rendered.
+    assert.doesNotMatch(src, /company\.persons/);
+    assert.doesNotMatch(src, /jobTitle|managerName|deputyName|employmentStatus|responsibilities/);
   });
 
   it("empty states are human, never raw data markers", () => {
@@ -74,11 +75,12 @@ describe("Phase 5B organizational customer contract + company surface", () => {
       "/client-portal/org/contracts",
       "/client-portal/org/company",
       "PortalOrgContractPublishedDoc",
-      "PortalOrgCompanyPerson",
+      "PortalOrgCompanyGroup",
       "PortalOrgCompanyVisibleArea",
     ]) assert.match(src, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     assert.doesNotMatch(src, /prisma|storageProvider|scanProvider|quarantineStorageReference|spItemId/);
     assert.doesNotMatch(src, /internalNote|securityClassification|lawFirmOwnerUserId/);
+    assert.doesNotMatch(src, /PortalOrgCompanyPerson|portalMembershipId/);
   });
 
   it("no internal technical IDs or legal-workflow terminology in the customer surfaces", () => {

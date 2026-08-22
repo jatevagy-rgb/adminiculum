@@ -40,6 +40,16 @@ d('Phase 5B org contract + company customer surface (PostgreSQL)', () => {
     ids = await createOrganizationalPortalFixture(db, seed);
     // Link the published contract to its explicitly published canonical V1.
     await setCanonicalDocument({ userId: ids.adminId, role: 'ADMIN' }, ids.contractPublished, ids.docPublishedVersion, db);
+    // Grant the authorized identity an ACTIVE ORGANIZATION summary scope so the
+    // positive company assertions exercise the authorized path.
+    await db.clientPortalSummaryScope.create({
+      data: {
+        workspaceMembershipId: ids.authorizedMembership,
+        workspaceId: ids.orgWsA,
+        scopeType: 'ORGANIZATION',
+        approvedById: ids.adminId,
+      },
+    });
   });
 
   afterAll(async () => { await db.$disconnect(); });
@@ -159,26 +169,52 @@ d('Phase 5B org contract + company customer surface (PostgreSQL)', () => {
 
   /* ----------------------- Vállalat (company) ----------------------------- */
 
-  it('ORGANIZATION workspace required; INDIVIDUAL / CASE_RELAY handled canonically', async () => {
+  it('company overview requires an ORGANIZATION summary scope (fail closed without it)', async () => {
+    // noGrant has an ACTIVE workspace membership but NO ORGANIZATION summary
+    // scope -> the company surface must fail closed with the canonical error.
+    await expect(getOrganizationalCompany(ids.noGrantIdentity, ids.orgWsA, db))
+      .rejects.toMatchObject({ code: 'CLIENT_SUMMARY_SCOPE_FORBIDDEN' });
+  });
+
+  it('company overview succeeds once an ACTIVE ORGANIZATION summary scope exists', async () => {
+    // noGrant now receives an ACTIVE ORGANIZATION summary scope for the workspace.
+    await db.clientPortalSummaryScope.create({
+      data: { workspaceMembershipId: ids.noGrantMembership, workspaceId: ids.orgWsA, scopeType: 'ORGANIZATION', approvedById: ids.adminId },
+    });
+    const view = await getOrganizationalCompany(ids.noGrantIdentity, ids.orgWsA, db);
+    expect(view.companyName).toBe('Phase5 Org Client A');
+  });
+
+  it('company overview is ORGANIZATION-mode only; CASE_RELAY is denied', async () => {
+    // CASE_RELAY is an accepted org-style mode for other canonical routes, but the
+    // Phase 5B company overview must NOT be available to CASE_RELAY workspaces.
+    // The fixture seeds its own CASE_RELAY workspace + ACTIVE membership; the
+    // company surface is denied purely on mode (before any scope is even needed).
+    const caseRelayIds = await createOrganizationalPortalFixture(db, `${seed}:case-relay`, { clientAWorkspaceMode: 'CASE_RELAY' });
+    await expect(getOrganizationalCompany(caseRelayIds.authorizedIdentity, caseRelayIds.orgWsA, db))
+      .rejects.toMatchObject({ code: 'CLIENT_SUMMARY_SCOPE_FORBIDDEN' });
     // INDIVIDUAL-mode workspaces are rejected by requireOrganizationWorkspace.
     const individualIds = await createOrganizationalPortalFixture(db, `${seed}:individual`, { clientAWorkspaceMode: 'INDIVIDUAL' });
     await expect(getOrganizationalCompany(ids.authorizedIdentity, individualIds.orgWsA, db))
       .rejects.toMatchObject({ code: 'CLIENT_WORKSPACE_NOT_ORGANIZATION' });
-    // CASE_RELAY is an accepted org-style mode (no throw), per canonical policy.
-    const caseRelayIds = await createOrganizationalPortalFixture(db, `${seed}:case-relay`, { clientAWorkspaceMode: 'CASE_RELAY' });
-    const relay = await getOrganizationalCompany(ids.authorizedIdentity, caseRelayIds.orgWsA, db);
-    expect(relay.companyName).toBeTruthy();
   });
 
-  it('only own workspace/client organization is returned', async () => {
-    // orgWsB is a second ORG workspace on client A. The company view resolves
-    // clientId from the selected workspace, so it returns client A's org (same
-    // client), never client B.
+  it('only own workspace/client organization is returned (workspace group isolation)', async () => {
+    // orgWsB is a second ORG workspace on the SAME client A. Add an ACTIVE group
+    // to orgWsB; the authorized identity (workspace A only) must NOT see it.
+    const groupB = `${seed}:group-wsB`;
+    await db.clientOrganizationGroup.create({ data: { id: crypto.createHash('sha256').update(groupB).digest('hex').slice(0, 32), clientId: ids.clientA, workspaceId: ids.orgWsB, name: 'B munkaterület egység', status: 'ACTIVE', createdById: ids.adminId } });
     const view = await getOrganizationalCompany(ids.authorizedIdentity, ids.orgWsA, db);
     expect(view.companyName).toBe('Phase5 Org Client A');
     const json = JSON.stringify(view);
+    expect(json).not.toContain('B munkaterület egység');
     expect(json).not.toContain('Phase5 Org Client B');
     expect(json).not.toContain('B személy');
+    // The workspace-A group is present.
+    const names = view.groups.map((group) => group.name);
+    expect(names).toContain('Vezetőség');
+    expect(names).toContain('Pénzügy');
+    expect(names).not.toContain('B munkaterület egység');
   });
 
   it('hidden cases do not affect visible counts', async () => {
@@ -186,10 +222,8 @@ d('Phase 5B org contract + company customer surface (PostgreSQL)', () => {
     // (same workspace, no grant) must not influence visibleMattersByArea or total.
     const view = await getOrganizationalCompany(ids.authorizedIdentity, ids.orgWsA, db);
     const total = view.totalVisibleMatterCount;
-    // Only granted, published matters count; ungranted case does not appear.
     const json = JSON.stringify(view);
     expect(json).not.toContain('Phase5 ungranted');
-    // No area count exceeds the number of granted matters.
     expect(total).toBeGreaterThanOrEqual(0);
     const sum = view.visibleMattersByArea.reduce((acc, area) => acc + area.visibleMatterCount, 0);
     expect(sum).toBe(total);
@@ -198,16 +232,13 @@ d('Phase 5B org contract + company customer surface (PostgreSQL)', () => {
   it('hidden groups/resources do not leak', async () => {
     const view = await getOrganizationalCompany(ids.authorizedIdentity, ids.orgWsA, db);
     const json = JSON.stringify(view);
-    // Inactive persons and cross-client persons never appear.
     expect(json).not.toContain('Inaktív személy');
     expect(json).not.toContain('B személy');
-    // Internal-only resources never appear.
     expect(json).not.toContain('Hiányzó irányítás');
     expect(json).not.toContain('Bizalmas');
   });
 
   it('cross-client organization access fails closed', async () => {
-    // orgWsA belongs to client A; cross-client rows (client B) must never surface.
     const view = await getOrganizationalCompany(ids.authorizedIdentity, ids.orgWsA, db);
     const json = JSON.stringify(view);
     expect(json).not.toContain(ids.clientB);
@@ -215,40 +246,36 @@ d('Phase 5B org contract + company customer surface (PostgreSQL)', () => {
     expect(json).not.toContain(ids.contractCrossClient);
   });
 
-  it('internal workforce fields absent', async () => {
+  it('person directory is removed — no OrganizationPerson data is exposed', async () => {
     const view = await getOrganizationalCompany(ids.authorizedIdentity, ids.orgWsA, db);
     const json = JSON.stringify(view);
-    for (const forbidden of ['employmentStatus', 'responsibilities', 'responsibilitiesSummary', 'lawFirmOwnerUserId', 'verificationStatus', 'internalNote', 'sharePoint', 'spItemId', 'assessmentFinding']) {
+    // The customer person directory is intentionally not exposed.
+    for (const forbidden of ['Aktív felelős', 'Inaktív személy', 'B személy', 'Pénzügyi vezető', 'employmentStatus', 'responsibilities', 'responsibilitiesSummary', 'jobTitle', 'managerName', 'deputyName', 'portalMembershipId']) {
       expect(json.toLowerCase()).not.toContain(forbidden.toLowerCase());
     }
-    // Persons must not carry responsibility/role assignment data.
-    for (const person of view.persons) {
-      expect(Object.keys(person).sort()).toEqual(['deputyName', 'id', 'jobTitle', 'managerName', 'name', 'organizationGroupId']);
-    }
-  });
-
-  it('participant / customer contacts authorization is respected', async () => {
-    // The company view only returns the customer's own org persons (active), and
-    // active matter context only from granted cases. noGrant sees no visible cases.
-    const noGrant = await getOrganizationalCompany(ids.noGrantIdentity, ids.orgWsA, db);
-    expect(noGrant.totalVisibleMatterCount).toBe(0);
-    expect(noGrant.visibleMattersByArea).toEqual([]);
+    expect(view).not.toHaveProperty('persons');
   });
 
   it('company DTO never leaks raw internal data', async () => {
     const view = await getOrganizationalCompany(ids.authorizedIdentity, ids.orgWsA, db);
     const json = JSON.stringify(view);
-    for (const forbidden of ['workInstruction', 'internalOwner', 'reviewer', 'aiPrompt', 'aiResponse', 'auditEvent', 'sourceCaseId', 'canonicalDocumentVersionId', 'internalNote']) {
+    for (const forbidden of ['workInstruction', 'internalOwner', 'reviewer', 'aiPrompt', 'aiResponse', 'auditEvent', 'sourceCaseId', 'canonicalDocumentVersionId', 'internalNote', 'verificationStatus', 'lawFirmOwnerUserId', 'sharePoint', 'spItemId', 'assessmentFinding']) {
       expect(json.toLowerCase()).not.toContain(forbidden.toLowerCase());
     }
   });
 
   it('company visible counts respect only granted matters', async () => {
-    // Only granted/published matters contribute; the total equals the sum of
-    // per-area counts, and the grant-scoped sum never reflects hidden cases.
     const view = await getOrganizationalCompany(ids.authorizedIdentity, ids.orgWsA, db);
     expect(view.totalVisibleMatterCount).toBeGreaterThanOrEqual(0);
     const sum = view.visibleMattersByArea.reduce((acc, area) => acc + area.visibleMatterCount, 0);
     expect(sum).toBe(view.totalVisibleMatterCount);
+  });
+
+  it('CASE_RELAY membership cannot access the company surface', async () => {
+    // A valid CASE_RELAY workspace with an ACTIVE membership is denied because the
+    // company surface requires ORGANIZATION mode exactly (mode gate precedes scope).
+    const relayIds = await createOrganizationalPortalFixture(db, `${seed}:relay-denied`, { clientAWorkspaceMode: 'CASE_RELAY' });
+    await expect(getOrganizationalCompany(relayIds.authorizedIdentity, relayIds.orgWsA, db))
+      .rejects.toMatchObject({ code: 'CLIENT_SUMMARY_SCOPE_FORBIDDEN' });
   });
 });
