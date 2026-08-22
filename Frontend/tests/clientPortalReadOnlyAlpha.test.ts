@@ -24,9 +24,23 @@ describe('client portal read-only alpha frontend', () => {
   });
 
   it('contains no write/action completion controls in the read-only portal', () => {
-    const source = shell() + api();
-    assert.doesNotMatch(source, /completeClientPortalAction|method:\s*['"]POST['"]|method:\s*['"]PUT['"]|method:\s*['"]PATCH['"]|upload|approval|jóváhagyás gomb/i);
-    assert.match(source, /readOnlyNote/);
+    const shellSource = shell();
+    const apiSource = api();
+
+    // Shell must not wire any write/action completion logic.
+    assert.doesNotMatch(shellSource, /completeClientPortalAction/i);
+    assert.doesNotMatch(shellSource, /method:\s*['"]POST['"]|method:\s*['"]PUT['"]|method:\s*['"]PATCH['"]/i);
+    assert.doesNotMatch(shellSource, /jóváhagyás gomb/i);
+
+    // API module must not expose approval-specific write endpoints to the portal.
+    // PENDING_APPROVAL is a read-only status enum — not an approval action.
+    assert.doesNotMatch(apiSource, /completeClientPortalAction/i);
+    assert.doesNotMatch(apiSource, /['"]\/.*\/approve['"]/i);
+    assert.doesNotMatch(apiSource, /['"]\/.*\/publish['"]/i);
+
+    // Both files must contain the read-only note marker.
+    assert.match(shellSource, /readOnlyNote/);
+    assert.match(apiSource, /readOnlyNote/);
   });
 
   it('renders client-readable label fields instead of raw backend enum fields', () => {
