@@ -28,22 +28,27 @@ describe('production deploy workflow portability guards', () => {
     expect(step).toContain('TOKEN="$(az account get-access-token --query accessToken -o tsv)"');
   });
 
-  it('polls only the concrete backend deployment Location returned by Kudu', () => {
+  it('accepts synchronous 200 success without Location and validates async identity', () => {
     const step = stepBlock('Deploy via Kudu ZipDeploy and verify THIS deployment reaches SUCCESS');
 
+    expect(step).toContain('if [ "$HTTP_CODE" = "200" ] && [ "$CURL_STATUS" -eq 0 ]; then');
+    expect(step).toContain('Kudu publish completed synchronously; proceeding to backend health gate.');
+    expect(step).toContain('if [ -z "$LOCATION" ]; then');
+    expect(step).toContain('if { [ "$HTTP_CODE" = "202" ] || [ "$HTTP_CODE" = "504" ] || [ "$CURL_STATUS" -ne 0 ]; }; then');
     expect(step).toContain('const expectedHost = `${process.env.BACKEND_APP}.scm.azurewebsites.net`;');
     expect(step).toContain("const expectedPrefix = '/api/deployments/';");
     expect(step).toContain("url.protocol !== 'https:'");
     expect(step).toContain('url.hostname !== expectedHost');
     expect(step).toContain('!url.pathname.startsWith(expectedPrefix)');
     expect(step).toContain("!id || id.includes('/')");
-    expect(step).toContain('Kudu did not return a deployment Location; refusing to infer identity from deployment history.');
+    expect(step).toContain('Kudu publish did not provide an exact deployment identity; refusing to infer identity from deployment history.');
     expect(step).toContain('Unexpected Kudu deployment Location; refusing to poll it.');
+    expect(step).toContain('Unexpected Kudu publish HTTP response; refusing to poll it.');
     expect(step).toContain('curl -sS -m 25 -H "Authorization: Bearer ${TOKEN}" "$LOCATION"');
     expect(workflow).not.toContain('/api/deployments/latest');
   });
 
-  it('preserves 504-tolerant exact backend deployment status semantics', () => {
+  it('preserves exact backend deployment status semantics for 202/504/transport failure', () => {
     const step = stepBlock('Deploy via Kudu ZipDeploy and verify THIS deployment reaches SUCCESS');
 
     expect(step.indexOf('Kudu publish HTTP status=${HTTP_CODE:-<none>} curl_status=${CURL_STATUS}')).toBeLessThan(step.indexOf('LOCATION="$(HEADERS="$HEADERS"'));
@@ -52,8 +57,11 @@ describe('production deploy workflow portability guards', () => {
     expect(step).toContain('if [ "$ST" = "4" ]; then echo "Deployment $NEW_ID succeeded."; exit 0; fi');
     expect(step).toContain('if [ "$ST" = "3" ]; then echo "Deployment $NEW_ID failed server-side."; exit 1; fi');
     expect(step).toContain('Timed out waiting for deployment $NEW_ID to reach a terminal state.');
-    expect(step).not.toMatch(/if \[ "\$HTTP_CODE"/);
-    expect(step).not.toMatch(/if \[ "\$CURL_STATUS"/);
+    expect(step).not.toMatch(/if \[ "\$HTTP_CODE" !=/);
+    expect(step).not.toMatch(/if \[ "\$CURL_STATUS" !=/);
+    expect(step).toContain('Kudu publish did not provide an exact deployment identity; refusing to infer identity from deployment history.');
+    expect(step).toContain('HTTP 200 with a clean');
+    expect(workflow).toContain('Backend health gate (/health 200)');
   });
 
   it('runs migration WebJob polling on the host runner with exact run identity', () => {
