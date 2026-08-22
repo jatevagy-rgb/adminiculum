@@ -143,16 +143,22 @@ export async function createApplicabilityRuleVersion(input: {
 }
 
 export async function approveRequirementVersion(id: string, db: Db = new PrismaClient()) {
-  const version = await db.requirementVersion.findUnique({ where: { id } });
+  const approve = async (tx: Db) => {
+  const version = await tx.requirementVersion.findUnique({ where: { id } });
   if (!version) throw new RequirementRuleError('REQUIREMENT_VERSION_NOT_FOUND', 'RequirementVersion was not found.');
   if (version.sourceSupportState !== 'SUFFICIENT') {
     throw new RequirementRuleError('SOURCE_SUPPORT_INSUFFICIENT', 'Only SUFFICIENT source support may be approved.');
   }
-  const approved = await db.requirementVersion.findMany({ where: { requirementId: version.requirementId, status: 'APPROVED', id: { not: id } }, select: { effectiveFrom: true, effectiveTo: true } });
+  const approved = await tx.requirementVersion.findMany({ where: { requirementId: version.requirementId, status: 'APPROVED', id: { not: id } }, select: { effectiveFrom: true, effectiveTo: true } });
   if (approved.some((other) => rangesOverlap(version.effectiveFrom, version.effectiveTo, other.effectiveFrom, other.effectiveTo))) {
     throw new RequirementRuleError('EFFECTIVE_PERIOD_OVERLAP', 'Approved RequirementVersion effective periods may not overlap.');
   }
-  return db.requirementVersion.update({ where: { id }, data: { status: 'APPROVED', approvedAt: new Date() } });
+  return tx.requirementVersion.update({ where: { id }, data: { status: 'APPROVED', approvedAt: new Date() } });
+  };
+  if (db instanceof PrismaClient) {
+    return db.$transaction((tx) => approve(tx), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+  return approve(db);
 }
 
 export async function approveApplicabilityRuleVersion(id: string, db: Db = new PrismaClient()) {
