@@ -90,13 +90,14 @@ model User {
   automationTriggerEvents           AutomationTriggerEvent[]
   automationPreference              UserAutomationPreference?
   automationSuppressions            UserAutomationSuppression[]
-  verifiedCompanyFacts               ClientFact[]
-  createdCompanyMilestones           CompanyMilestone[]
-  createdAssessments                 Assessment[]
-  reviewedAssessmentItems            AssessmentItem[]
-  createdAssessmentFindings          AssessmentFinding[]
-  ownedDevelopmentInitiatives        DevelopmentInitiative[]
-  lawFirmOwnedContracts               ContractRecord[]
+  verifiedCompanyFacts              ClientFact[]
+  importedLegalSourceCaptures       LegalSourceCapture[]         @relation("LegalSourceCaptureImportedBy")
+  createdCompanyMilestones          CompanyMilestone[]
+  createdAssessments                Assessment[]
+  reviewedAssessmentItems           AssessmentItem[]
+  createdAssessmentFindings         AssessmentFinding[]
+  ownedDevelopmentInitiatives       DevelopmentInitiative[]
+  lawFirmOwnedContracts             ContractRecord[]
 
   @@map("users")
 }
@@ -157,23 +158,24 @@ model Client {
   updatedAt                 DateTime               @updatedAt
 
   // Relations
-  cases             Case[]
-  documents         Document[]
-  departments       Department[] // Client departments
-  matters           Matter[] // All matters for this client
-  workgroups        ClientWorkgroup[] // Client workgroups for workload tracking
-  redactorProfile   ClientRedactionProfile? // One-to-one relation for anonymization
-  houseStyleProfile ClientHouseStyleProfile? // One-to-one relation for document house style
-  operatingProfile  ClientOperatingProfile? // Company foundation (Phase 1)
-  facts             ClientFact[] // Company foundation (Phase 1)
-  companyMilestones CompanyMilestone[] // Company foundation (Phase 1)
-  assessments       Assessment[] // Company foundation (Phase 1)
-  assessmentFindings AssessmentFinding[] // Company foundation (Phase 1)
+  cases                  Case[]
+  documents              Document[]
+  departments            Department[] // Client departments
+  matters                Matter[] // All matters for this client
+  workgroups             ClientWorkgroup[] // Client workgroups for workload tracking
+  redactorProfile        ClientRedactionProfile? // One-to-one relation for anonymization
+  houseStyleProfile      ClientHouseStyleProfile? // One-to-one relation for document house style
+  operatingProfile       ClientOperatingProfile? // Company foundation (Phase 1)
+  facts                  ClientFact[] // Company foundation (Phase 1)
+  companyMilestones      CompanyMilestone[] // Company foundation (Phase 1)
+  assessments            Assessment[] // Company foundation (Phase 1)
+  assessmentFindings     AssessmentFinding[] // Company foundation (Phase 1)
   developmentInitiatives DevelopmentInitiative[] // Company foundation (Phase 1)
-  contractRecords ContractRecord[] // Contract library (Phase 2)
-  obligations ClientObligation[] // Contract library (Phase 2)
-  entitlements ContractEntitlement[] // Contract library (Phase 2)
-  organizationPersons OrganizationPerson[] // Organization (Phase 3)
+  contractRecords        ContractRecord[] // Contract library (Phase 2)
+  obligations            ClientObligation[] // Contract library (Phase 2)
+  entitlements           ContractEntitlement[] // Contract library (Phase 2)
+  organizationPersons    OrganizationPerson[] // Organization (Phase 3)
+  factSubjects           FactSubject[]
 
   @@map("clients")
 }
@@ -1064,25 +1066,25 @@ model DocumentVersion {
 
   // Relations
   documentId              String
-  document                Document                   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document                Document                         @relation(fields: [documentId], references: [id], onDelete: Cascade)
   previousVersionId       String?
-  previousVersion         DocumentVersion?           @relation("DocumentVersionLineage", fields: [previousVersionId], references: [id], onDelete: Restrict)
-  nextVersions            DocumentVersion[]          @relation("DocumentVersionLineage")
+  previousVersion         DocumentVersion?                 @relation("DocumentVersionLineage", fields: [previousVersionId], references: [id], onDelete: Restrict)
+  nextVersions            DocumentVersion[]                @relation("DocumentVersionLineage")
   reviews                 DocumentReview[]
   reviewSnapshots         ReviewSnapshot[]
   annotations             DocumentAnnotation[]
   reviewSuggestions       DocumentReviewSuggestion[]
   taskSubmissionDocuments TaskSubmissionDocument[]
-  comparisonsAsBase       DocumentComparison[]       @relation("ComparisonBaseVersion")
-  comparisonsAsTarget     DocumentComparison[]       @relation("ComparisonTargetVersion")
-  reviewRounds            DocumentReviewRound[]      @relation("DocumentReviewRoundVersion")
-  approvedReviews         DocumentReview[]           @relation("DocumentReviewApprovedVersion")
-  reviewDecisions         ReviewDecision[]           @relation("ReviewDecisionVersion")
-  clientFactSources        ClientFact[]
-  assessmentItemEvidence   AssessmentItem[]
-  canonicalContracts       ContractRecord[]
-  obligationEvidence       ClientObligation[]
-  personDocumentLinks      OrganizationPersonDocumentLink[]
+  comparisonsAsBase       DocumentComparison[]             @relation("ComparisonBaseVersion")
+  comparisonsAsTarget     DocumentComparison[]             @relation("ComparisonTargetVersion")
+  reviewRounds            DocumentReviewRound[]            @relation("DocumentReviewRoundVersion")
+  approvedReviews         DocumentReview[]                 @relation("DocumentReviewApprovedVersion")
+  reviewDecisions         ReviewDecision[]                 @relation("ReviewDecisionVersion")
+  clientFactSources       ClientFact[]
+  assessmentItemEvidence  AssessmentItem[]
+  canonicalContracts      ContractRecord[]
+  obligationEvidence      ClientObligation[]
+  personDocumentLinks     OrganizationPersonDocumentLink[]
 
   @@unique([documentId, version])
   @@unique([documentId, id])
@@ -1530,16 +1532,16 @@ model Task {
   documentId String?
 
   // Workflow Integration
-  caseId        String
-  case          Case    @relation(fields: [caseId], references: [id])
-  workflowEvent String? // Event that triggered this task
-  workflowInstanceId String?
-  workflowTemplateKey String?
-  workflowTemplateVersion Int?
-  workflowStepKey String?
-  workflowDependsOnKeys String[] @default([])
-  workflowPublicMilestoneCandidate Boolean @default(false)
-  workflowActivatedAt DateTime?
+  caseId                           String
+  case                             Case      @relation(fields: [caseId], references: [id])
+  workflowEvent                    String? // Event that triggered this task
+  workflowInstanceId               String?
+  workflowTemplateKey              String?
+  workflowTemplateVersion          Int?
+  workflowStepKey                  String?
+  workflowDependsOnKeys            String[]  @default([])
+  workflowPublicMilestoneCandidate Boolean   @default(false)
+  workflowActivatedAt              DateTime?
 
   // Matter reference (NEW)
   matterId String?
@@ -2414,7 +2416,7 @@ model ClientPortalIntakeRequest {
   createdAt               DateTime                  @default(now())
   updatedAt               DateTime                  @updatedAt
 
-  attachments        ClientPortalIntakeAttachment[]
+  attachments         ClientPortalIntakeAttachment[]
   informationRequests ClientRequest[]
 
   @@index([workspaceId, status])
@@ -2465,8 +2467,8 @@ model ClientOrganizationGroup {
   // Phase 3: optional org-chart hierarchy (same Client, no cycles enforced in
   // service). NULL workspaceId groups may nest; org workspace groups nest too.
   parentGroupId   String?
-  parentGroup     ClientOrganizationGroup?       @relation("ClientOrganizationGroupHierarchy", fields: [parentGroupId], references: [id], onDelete: SetNull)
-  childGroups     ClientOrganizationGroup[]      @relation("ClientOrganizationGroupHierarchy")
+  parentGroup     ClientOrganizationGroup?      @relation("ClientOrganizationGroupHierarchy", fields: [parentGroupId], references: [id], onDelete: SetNull)
+  childGroups     ClientOrganizationGroup[]     @relation("ClientOrganizationGroupHierarchy")
   persons         OrganizationPerson[]
 
   @@unique([clientId, workspaceId, name])
@@ -2541,22 +2543,22 @@ model ClientOrganizationMembership {
 }
 
 model ClientPortalInvitation {
-  id               String                       @id @default(uuid())
-  clientId         String
-  workspaceId      String?
-  groupId          String?
-  intendedEmail    String?
-  tokenHash        String
-  status           ClientPortalInvitationStatus @default(ACTIVE)
-  deliveryId       String?
-  deliveryStatus   ClientNotificationDeliveryStatus?
-  deliveryCodeSafe String?
+  id                  String                            @id @default(uuid())
+  clientId            String
+  workspaceId         String?
+  groupId             String?
+  intendedEmail       String?
+  tokenHash           String
+  status              ClientPortalInvitationStatus      @default(ACTIVE)
+  deliveryId          String?
+  deliveryStatus      ClientNotificationDeliveryStatus?
+  deliveryCodeSafe    String?
   deliveryAttemptedAt DateTime?
-  expiresAt        DateTime
-  createdById      String
-  usedByIdentityId String?
-  usedAt           DateTime?
-  createdAt        DateTime                     @default(now())
+  expiresAt           DateTime
+  createdById         String
+  usedByIdentityId    String?
+  usedAt              DateTime?
+  createdAt           DateTime                          @default(now())
 
   @@unique([tokenHash])
   @@index([deliveryId])
@@ -2568,29 +2570,29 @@ model ClientPortalInvitation {
 }
 
 model ClientMatterPublication {
-  id                String                  @id @default(uuid())
-  caseId            String
-  clientId          String
-  workspaceId       String?
-  status            ClientPublicationStatus @default(DRAFT)
-  currentRevisionId String?
-  preparedById      String
-  approvedById      String?
-  publishedById     String?
-  approvedAt        DateTime?
-  publishedAt       DateTime?
-  revokedAt         DateTime?
-  revokedById       String?
-  supersededAt      DateTime?
-  supersededById    String?
-  supersedesId      String?
+  id                     String                  @id @default(uuid())
+  caseId                 String
+  clientId               String
+  workspaceId            String?
+  status                 ClientPublicationStatus @default(DRAFT)
+  currentRevisionId      String?
+  preparedById           String
+  approvedById           String?
+  publishedById          String?
+  approvedAt             DateTime?
+  publishedAt            DateTime?
+  revokedAt              DateTime?
+  revokedById            String?
+  supersededAt           DateTime?
+  supersededById         String?
+  supersedesId           String?
   // Mutable workforce draft of customer-safe milestones (never customer-visible).
   // Publishing snapshots this into an immutable revision; drafting never affects
   // the customer portal.
   milestoneDraftSnapshot Json?
-  revision          Int                     @default(0)
-  createdAt         DateTime                @default(now())
-  updatedAt         DateTime                @updatedAt
+  revision               Int                     @default(0)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
 
   @@index([caseId, status])
   @@index([clientId, status])
@@ -2599,7 +2601,7 @@ model ClientMatterPublication {
 }
 
 model ClientMatterPublicationRevision {
-  id                         String   @id @default(uuid())
+  id                         String    @id @default(uuid())
   publicationId              String
   revisionNumber             Int
   clientSafeTitle            String
@@ -2621,7 +2623,7 @@ model ClientMatterPublicationRevision {
   milestonesSnapshot         Json?
   progressPercentage         Int?
   createdById                String
-  createdAt                  DateTime @default(now())
+  createdAt                  DateTime  @default(now())
 
   @@unique([publicationId, revisionNumber])
   @@index([publicationId])
@@ -3586,7 +3588,7 @@ enum ClientRequestStatus {
 }
 
 model ClientRequest {
-  id                     String              @id @default(uuid())
+  id                     String                     @id @default(uuid())
   clientId               String
   caseId                 String?
   intakeRequestId        String?
@@ -3594,20 +3596,20 @@ model ClientRequest {
   createdById            String
   assignedInternalUserId String?
   type                   ClientRequestType
-  status                 ClientRequestStatus @default(DRAFT)
+  status                 ClientRequestStatus        @default(DRAFT)
   clientSafeTitle        String
   clientSafeInstructions String?
   dueAt                  DateTime?
-  required               Boolean             @default(true)
+  required               Boolean                    @default(true)
   documentSpec           Json?
   audienceSnapshot       Json
   publishedAt            DateTime?
   completedAt            DateTime?
   cancelledAt            DateTime?
   expiresAt              DateTime?
-  revision               Int                 @default(0)
-  createdAt              DateTime            @default(now())
-  updatedAt              DateTime            @updatedAt
+  revision               Int                        @default(0)
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
 
   fields      ClientRequestField[]
   submissions ClientSubmission[]
@@ -3900,16 +3902,16 @@ model ClientNotificationDelivery {
 // ============================================================================
 
 model ClientOperatingProfile {
-  id             String   @id @default(uuid())
-  clientId       String   @unique
-  client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  id             String    @id @default(uuid())
+  clientId       String    @unique
+  client         Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   status         String?
   summary        String?
   internalNote   String?
   lastReviewedAt DateTime?
   nextReviewAt   DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@map("client_operating_profiles")
 }
@@ -3922,26 +3924,51 @@ enum ClientFactVerificationStatus {
 }
 
 model ClientFact {
-  id                       String                      @id @default(uuid())
-  clientId                 String
-  client                   Client                      @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  type                     String
-  value                    String
-  validFrom                DateTime
-  validTo                  DateTime?
-  sourceReference          String?
-  sourceDocumentVersionId  String?
-  sourceDocumentVersion    DocumentVersion?            @relation(fields: [sourceDocumentVersionId], references: [id], onDelete: SetNull)
-  verificationStatus       ClientFactVerificationStatus @default(UNVERIFIED)
-  verifiedById             String?
-  verifiedBy               User?                       @relation(fields: [verifiedById], references: [id], onDelete: SetNull)
-  verifiedAt               DateTime?
-  createdAt                DateTime                    @default(now())
-  updatedAt                DateTime                    @updatedAt
+  id                      String                       @id @default(uuid())
+  clientId                String
+  client                  Client                       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type                    String
+  value                   String
+  validFrom               DateTime
+  validTo                 DateTime?
+  sourceReference         String?
+  sourceDocumentVersionId String?
+  sourceDocumentVersion   DocumentVersion?             @relation(fields: [sourceDocumentVersionId], references: [id], onDelete: SetNull)
+  verificationStatus      ClientFactVerificationStatus @default(UNVERIFIED)
+  verifiedById            String?
+  verifiedBy              User?                        @relation(fields: [verifiedById], references: [id], onDelete: SetNull)
+  verifiedAt              DateTime?
+  createdAt               DateTime                     @default(now())
+  updatedAt               DateTime                     @updatedAt
+
+  // Additive Phase 6 typed projection. Legacy type/value remain intact.
+  factDefinitionId     String?
+  factDefinition       FactDefinition?          @relation(fields: [factDefinitionId], references: [id], onDelete: Restrict)
+  factSubjectId        String?
+  factSubject          FactSubject?             @relation(fields: [factSubjectId], references: [id], onDelete: Restrict)
+  scopeType            FactScopeType?
+  booleanValue         Boolean?
+  numberValue          Decimal?                 @db.Decimal(24, 8)
+  stringValue          String?
+  dateValue            DateTime?
+  datetimeValue        DateTime?
+  moneyAmount          Decimal?                 @db.Decimal(24, 8)
+  moneyCurrency        String?                  @db.VarChar(3)
+  enumValue            String?
+  jsonValue            Json?
+  observedAt           DateTime?
+  effectiveAt          DateTime?
+  referencePeriodStart DateTime?
+  referencePeriodEnd   DateTime?
+  determinationMethod  FactDeterminationMethod?
+  supersededAt         DateTime?
 
   @@index([clientId, type, validFrom])
   @@index([clientId, verificationStatus])
   @@index([sourceDocumentVersionId])
+  @@index([factDefinitionId, clientId, validFrom])
+  @@index([factSubjectId, validFrom])
+  @@index([clientId, scopeType, validFrom])
   @@map("client_facts")
 }
 
@@ -3952,21 +3979,21 @@ enum CompanyMilestoneStatus {
 }
 
 model CompanyMilestone {
-  id                       String                   @id @default(uuid())
-  clientId                 String
-  client                   Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  type                     String
-  title                    String
-  description              String?
-  milestoneDate            DateTime?
-  targetDate               DateTime?
-  status                   CompanyMilestoneStatus    @default(PLANNED)
-  developmentInitiativeId  String?
-  developmentInitiative    DevelopmentInitiative?    @relation(fields: [developmentInitiativeId], references: [id], onDelete: SetNull)
-  createdByUserId          String
-  createdBy                User                     @relation(fields: [createdByUserId], references: [id])
-  createdAt                DateTime                 @default(now())
-  updatedAt                DateTime                 @updatedAt
+  id                      String                 @id @default(uuid())
+  clientId                String
+  client                  Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type                    String
+  title                   String
+  description             String?
+  milestoneDate           DateTime?
+  targetDate              DateTime?
+  status                  CompanyMilestoneStatus @default(PLANNED)
+  developmentInitiativeId String?
+  developmentInitiative   DevelopmentInitiative? @relation(fields: [developmentInitiativeId], references: [id], onDelete: SetNull)
+  createdByUserId         String
+  createdBy               User                   @relation(fields: [createdByUserId], references: [id])
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
 
   @@index([clientId, status])
   @@index([clientId, milestoneDate])
@@ -3988,22 +4015,22 @@ enum AssessmentItemKind {
 }
 
 model Assessment {
-  id             String          @id @default(uuid())
-  clientId       String
-  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  type           String
-  title          String
-  status         AssessmentStatus @default(DRAFT)
-  methodRef      String?
-  startedAt      DateTime?
-  completedAt    DateTime?
-  reviewAt       DateTime?
+  id              String              @id @default(uuid())
+  clientId        String
+  client          Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type            String
+  title           String
+  status          AssessmentStatus    @default(DRAFT)
+  methodRef       String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  reviewAt        DateTime?
   createdByUserId String
-  createdBy      User            @relation(fields: [createdByUserId], references: [id])
-  items          AssessmentItem[]
-  findings       AssessmentFinding[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdBy       User                @relation(fields: [createdByUserId], references: [id])
+  items           AssessmentItem[]
+  findings        AssessmentFinding[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
 
   @@index([clientId, status])
   @@index([clientId, type])
@@ -4011,12 +4038,12 @@ model Assessment {
 }
 
 model AssessmentItem {
-  id                        String            @id @default(uuid())
+  id                        String              @id @default(uuid())
   assessmentId              String
-  assessment                Assessment        @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  assessment                Assessment          @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   key                       String
   label                     String
-  kind                      AssessmentItemKind @default(QUESTION)
+  kind                      AssessmentItemKind  @default(QUESTION)
   currentPractice           String?
   maturityLevel             Int?
   statusCode                String?
@@ -4024,11 +4051,11 @@ model AssessmentItem {
   comment                   String?
   targetState               String?
   reviewerUserId            String?
-  reviewer                  User?             @relation(fields: [reviewerUserId], references: [id], onDelete: SetNull)
+  reviewer                  User?               @relation(fields: [reviewerUserId], references: [id], onDelete: SetNull)
   evidenceDocumentVersionId String?
-  evidenceDocumentVersion   DocumentVersion?  @relation(fields: [evidenceDocumentVersionId], references: [id], onDelete: SetNull)
-  createdAt                 DateTime          @default(now())
-  updatedAt                 DateTime          @updatedAt
+  evidenceDocumentVersion   DocumentVersion?    @relation(fields: [evidenceDocumentVersionId], references: [id], onDelete: SetNull)
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
   findings                  AssessmentFinding[]
 
   @@unique([assessmentId, key])
@@ -4052,26 +4079,26 @@ enum AssessmentFindingStatus {
 }
 
 model AssessmentFinding {
-  id                       String                     @id @default(uuid())
-  clientId                 String
-  client                   Client                     @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  assessmentId             String
-  assessment               Assessment                 @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  assessmentItemId         String?
-  assessmentItem           AssessmentItem?            @relation(fields: [assessmentItemId], references: [id], onDelete: SetNull)
-  severity                 AssessmentFindingSeverity  @default(MEDIUM)
-  title                    String
-  description              String?
-  recommendation           String?
-  status                   AssessmentFindingStatus    @default(OPEN)
-  developmentInitiativeId  String?
-  developmentInitiative    DevelopmentInitiative?     @relation(fields: [developmentInitiativeId], references: [id], onDelete: SetNull)
-  remediationTaskId        String?
-  remediationTask          Task?                      @relation(fields: [remediationTaskId], references: [id], onDelete: SetNull)
-  createdByUserId          String
-  createdBy                User                       @relation(fields: [createdByUserId], references: [id])
-  createdAt                DateTime                   @default(now())
-  updatedAt                DateTime                   @updatedAt
+  id                      String                    @id @default(uuid())
+  clientId                String
+  client                  Client                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assessmentId            String
+  assessment              Assessment                @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  assessmentItemId        String?
+  assessmentItem          AssessmentItem?           @relation(fields: [assessmentItemId], references: [id], onDelete: SetNull)
+  severity                AssessmentFindingSeverity @default(MEDIUM)
+  title                   String
+  description             String?
+  recommendation          String?
+  status                  AssessmentFindingStatus   @default(OPEN)
+  developmentInitiativeId String?
+  developmentInitiative   DevelopmentInitiative?    @relation(fields: [developmentInitiativeId], references: [id], onDelete: SetNull)
+  remediationTaskId       String?
+  remediationTask         Task?                     @relation(fields: [remediationTaskId], references: [id], onDelete: SetNull)
+  createdByUserId         String
+  createdBy               User                      @relation(fields: [createdByUserId], references: [id])
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
 
   @@index([assessmentId])
   @@index([clientId, status])
@@ -4096,28 +4123,28 @@ enum DevelopmentInitiativeStatus {
 }
 
 model DevelopmentInitiative {
-  id                  String                         @id @default(uuid())
+  id                  String                        @id @default(uuid())
   clientId            String
-  client              Client                         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client              Client                        @relation(fields: [clientId], references: [id], onDelete: Cascade)
   title               String
   reason              String?
   currentState        String?
   targetState         String?
-  priority            DevelopmentInitiativePriority   @default(MEDIUM)
-  status              DevelopmentInitiativeStatus     @default(BACKLOG)
+  priority            DevelopmentInitiativePriority @default(MEDIUM)
+  status              DevelopmentInitiativeStatus   @default(BACKLOG)
   lawFirmOwnerUserId  String?
-  lawFirmOwner        User?                          @relation(fields: [lawFirmOwnerUserId], references: [id], onDelete: SetNull)
+  lawFirmOwner        User?                         @relation(fields: [lawFirmOwnerUserId], references: [id], onDelete: SetNull)
   caseId              String?
-  case                Case?                          @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  case                Case?                         @relation(fields: [caseId], references: [id], onDelete: SetNull)
   targetAt            DateTime?
   startedAt           DateTime?
   completedAt         DateTime?
   milestones          CompanyMilestone[]
   findings            AssessmentFinding[]
   clientOwnerPersonId String?
-  clientOwnerPerson   OrganizationPerson?             @relation(fields: [clientOwnerPersonId], references: [id], onDelete: SetNull)
-  createdAt           DateTime                       @default(now())
-  updatedAt           DateTime                       @updatedAt
+  clientOwnerPerson   OrganizationPerson?           @relation(fields: [clientOwnerPersonId], references: [id], onDelete: SetNull)
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
 
   @@index([clientId, status])
   @@index([caseId])
@@ -4155,41 +4182,42 @@ enum ContractSecurityClassification {
 }
 
 model ContractRecord {
-  id                         String                       @id @default(uuid())
+  id                         String                         @id @default(uuid())
   clientId                   String
-  client                     Client                       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client                     Client                         @relation(fields: [clientId], references: [id], onDelete: Cascade)
   title                      String
   contractType               String
-  status                     ContractLifecycleStatus       @default(DRAFT)
+  status                     ContractLifecycleStatus        @default(DRAFT)
   businessOwnerLabel         String?
   lawFirmOwnerUserId         String?
-  lawFirmOwner               User?                        @relation(fields: [lawFirmOwnerUserId], references: [id], onDelete: SetNull)
+  lawFirmOwner               User?                          @relation(fields: [lawFirmOwnerUserId], references: [id], onDelete: SetNull)
   sourceCaseId               String?
-  sourceCase                 Case?                        @relation(fields: [sourceCaseId], references: [id], onDelete: SetNull)
+  sourceCase                 Case?                          @relation(fields: [sourceCaseId], references: [id], onDelete: SetNull)
   canonicalDocumentVersionId String?
-  canonicalDocumentVersion   DocumentVersion?             @relation(fields: [canonicalDocumentVersionId], references: [id], onDelete: SetNull)
+  canonicalDocumentVersion   DocumentVersion?               @relation(fields: [canonicalDocumentVersionId], references: [id], onDelete: SetNull)
   signatureDate              DateTime?
   effectiveDate              DateTime?
   expiryDate                 DateTime?
   termType                   String?
   noticePeriodDays           Int?
-  autoRenewal                Boolean                      @default(false)
+  autoRenewal                Boolean                        @default(false)
   nextCriticalDate           DateTime?
   securityClassification     ContractSecurityClassification @default(STANDARD)
   internalNote               String?
   parentContractId           String?
-  parentContract             ContractRecord?              @relation("ContractFamily", fields: [parentContractId], references: [id], onDelete: SetNull)
-  amendments                 ContractRecord[]             @relation("ContractFamily")
+  parentContract             ContractRecord?                @relation("ContractFamily", fields: [parentContractId], references: [id], onDelete: SetNull)
+  amendments                 ContractRecord[]               @relation("ContractFamily")
   familyRootContractId       String?
-  familyRootContract         ContractRecord?              @relation("ContractFamilyRoot", fields: [familyRootContractId], references: [id], onDelete: SetNull)
-  rootFamilyMembers          ContractRecord[]             @relation("ContractFamilyRoot")
+  familyRootContract         ContractRecord?                @relation("ContractFamilyRoot", fields: [familyRootContractId], references: [id], onDelete: SetNull)
+  rootFamilyMembers          ContractRecord[]               @relation("ContractFamilyRoot")
   parties                    ContractParty[]
   obligations                ClientObligation[]
   entitlements               ContractEntitlement[]
+  factSubjects               FactSubject[]                  @relation("FactSubjectContract")
   businessOwnerPersonId      String?
-  businessOwnerPerson        OrganizationPerson?           @relation(fields: [businessOwnerPersonId], references: [id], onDelete: SetNull)
-  createdAt                  DateTime                     @default(now())
-  updatedAt                  DateTime                     @updatedAt
+  businessOwnerPerson        OrganizationPerson?            @relation(fields: [businessOwnerPersonId], references: [id], onDelete: SetNull)
+  createdAt                  DateTime                       @default(now())
+  updatedAt                  DateTime                       @updatedAt
 
   @@index([clientId, status])
   @@index([clientId, expiryDate])
@@ -4226,12 +4254,12 @@ enum ClientObligationStatus {
 }
 
 model ClientObligation {
-  id                        String                @id @default(uuid())
+  id                        String                 @id @default(uuid())
   clientId                  String
-  client                    Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client                    Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
   sourceType                String
   sourceContractId          String?
-  sourceContract            ContractRecord?       @relation(fields: [sourceContractId], references: [id], onDelete: SetNull)
+  sourceContract            ContractRecord?        @relation(fields: [sourceContractId], references: [id], onDelete: SetNull)
   sourceReference           String?
   title                     String
   description               String?
@@ -4241,13 +4269,13 @@ model ClientObligation {
   nextDueDate               DateTime?
   status                    ClientObligationStatus @default(OPEN)
   relatedTaskId             String?
-  relatedTask               Task?                 @relation(fields: [relatedTaskId], references: [id], onDelete: SetNull)
+  relatedTask               Task?                  @relation(fields: [relatedTaskId], references: [id], onDelete: SetNull)
   evidenceDocumentVersionId String?
-  evidenceDocumentVersion   DocumentVersion?      @relation(fields: [evidenceDocumentVersionId], references: [id], onDelete: SetNull)
+  evidenceDocumentVersion   DocumentVersion?       @relation(fields: [evidenceDocumentVersionId], references: [id], onDelete: SetNull)
   ownerPersonId             String?
-  ownerPerson               OrganizationPerson?   @relation(fields: [ownerPersonId], references: [id], onDelete: SetNull)
-  createdAt                 DateTime              @default(now())
-  updatedAt                 DateTime              @updatedAt
+  ownerPerson               OrganizationPerson?    @relation(fields: [ownerPersonId], references: [id], onDelete: SetNull)
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
 
   @@index([clientId, status])
   @@index([clientId, nextDueDate])
@@ -4265,19 +4293,19 @@ enum ContractEntitlementStatus {
 }
 
 model ContractEntitlement {
-  id              String                      @id @default(uuid())
+  id              String                    @id @default(uuid())
   contractId      String
-  contract        ContractRecord              @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contract        ContractRecord            @relation(fields: [contractId], references: [id], onDelete: Cascade)
   clientId        String
-  client          Client                      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client          Client                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   type            String
   title           String
   description     String?
   sourceReference String?
   exerciseByDate  DateTime?
-  status          ContractEntitlementStatus   @default(ACTIVE)
-  createdAt       DateTime                    @default(now())
-  updatedAt       DateTime                    @updatedAt
+  status          ContractEntitlementStatus @default(ACTIVE)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
 
   @@index([contractId, status])
   @@index([clientId, status])
@@ -4308,34 +4336,35 @@ enum OrganizationPersonStatus {
 }
 
 model OrganizationPerson {
-  id                       String                         @id @default(uuid())
-  clientId                 String
-  client                   Client                         @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  organizationGroupId      String?
-  organizationGroup        ClientOrganizationGroup?        @relation(fields: [organizationGroupId], references: [id], onDelete: SetNull)
-  managerPersonId          String?
-  managerPerson            OrganizationPerson?             @relation("PersonManager", fields: [managerPersonId], references: [id], onDelete: SetNull)
-  directReports            OrganizationPerson[]            @relation("PersonManager")
-  deputyPersonId           String?
-  deputyPerson             OrganizationPerson?             @relation("PersonDeputy", fields: [deputyPersonId], references: [id], onDelete: SetNull)
-  isDeputyFor              OrganizationPerson[]            @relation("PersonDeputy")
-  name                     String
-  jobTitle                 String?
-  employmentStatus         OrganizationPersonStatus        @default(ACTIVE)
-  startDate                DateTime?
-  endDate                  DateTime?
-  responsibilitiesSummary  String?
+  id                      String                             @id @default(uuid())
+  clientId                String
+  client                  Client                             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organizationGroupId     String?
+  organizationGroup       ClientOrganizationGroup?           @relation(fields: [organizationGroupId], references: [id], onDelete: SetNull)
+  managerPersonId         String?
+  managerPerson           OrganizationPerson?                @relation("PersonManager", fields: [managerPersonId], references: [id], onDelete: SetNull)
+  directReports           OrganizationPerson[]               @relation("PersonManager")
+  deputyPersonId          String?
+  deputyPerson            OrganizationPerson?                @relation("PersonDeputy", fields: [deputyPersonId], references: [id], onDelete: SetNull)
+  isDeputyFor             OrganizationPerson[]               @relation("PersonDeputy")
+  name                    String
+  jobTitle                String?
+  employmentStatus        OrganizationPersonStatus           @default(ACTIVE)
+  startDate               DateTime?
+  endDate                 DateTime?
+  responsibilitiesSummary String?
   // Optional portal-membership link. This is NOT an authorization principal:
   // linking does not grant Case/Document access. Stored as a plain reference to
   // avoid coupling; validated in the service against the same Client workspace.
-  portalMembershipId       String?
-  responsibilities         OrganizationPersonResponsibility[]
-  documentLinks            OrganizationPersonDocumentLink[]
-  ownedContracts           ContractRecord[]
-  ownedObligations         ClientObligation[]
-  ownedInitiatives         DevelopmentInitiative[]
-  createdAt                DateTime                       @default(now())
-  updatedAt                DateTime                       @updatedAt
+  portalMembershipId      String?
+  responsibilities        OrganizationPersonResponsibility[]
+  documentLinks           OrganizationPersonDocumentLink[]
+  ownedContracts          ContractRecord[]
+  factSubjects            FactSubject[]                      @relation("FactSubjectEmployee")
+  ownedObligations        ClientObligation[]
+  ownedInitiatives        DevelopmentInitiative[]
+  createdAt               DateTime                           @default(now())
+  updatedAt               DateTime                           @updatedAt
 
   @@index([clientId, employmentStatus])
   @@index([clientId, organizationGroupId])
@@ -4345,12 +4374,12 @@ model OrganizationPerson {
 }
 
 model OrganizationPersonResponsibility {
-  id                    String              @id @default(uuid())
-  organizationPersonId  String
-  organizationPerson    OrganizationPerson   @relation(fields: [organizationPersonId], references: [id], onDelete: Cascade)
-  type                  String
-  label                 String
-  createdAt             DateTime             @default(now())
+  id                   String             @id @default(uuid())
+  organizationPersonId String
+  organizationPerson   OrganizationPerson @relation(fields: [organizationPersonId], references: [id], onDelete: Cascade)
+  type                 String
+  label                String
+  createdAt            DateTime           @default(now())
 
   @@index([organizationPersonId])
   @@map("organization_person_responsibilities")
@@ -4362,11 +4391,235 @@ model OrganizationPersonDocumentLink {
   organizationPerson   OrganizationPerson @relation(fields: [organizationPersonId], references: [id], onDelete: Cascade)
   documentVersionId    String
   documentVersion      DocumentVersion    @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
-  documentRole          String
+  documentRole         String
   createdAt            DateTime           @default(now())
 
   @@unique([organizationPersonId, documentVersionId, documentRole])
   @@index([organizationPersonId])
   @@index([documentVersionId])
   @@map("organization_person_document_links")
+}
+
+// ============================================================================
+// PHASE 6 SLICE A — FACT + LEGAL SOURCE FOUNDATION
+// Persistence only. Runtime compliance evaluation and ingestion remain deferred.
+// ============================================================================
+
+enum FactValueType {
+  BOOLEAN
+  ENUM
+  NUMBER
+  MONEY
+  DATE
+  DATETIME
+  STRING
+  JURISDICTION
+  ENTITY_REFERENCE
+  MULTI_ENUM
+  PERIOD
+}
+
+enum FactScopeType {
+  COMPANY
+  WORKPLACE_SITE
+  EMPLOYEE
+  EVENT
+  SALES_CHANNEL
+  PRODUCT_SERVICE
+  CONTRACT
+  TAX_PERIOD
+  TRANSACTION
+  REPORTING_EVENT
+}
+
+enum FactDeterminationMethod {
+  USER_PROVIDED
+  DERIVED
+  LEGAL_CLASSIFICATION_REQUIRED
+  TECHNICAL_CLASSIFICATION_REQUIRED
+}
+
+enum FactOverlapPolicy {
+  ALLOW
+  DISALLOW
+}
+
+enum FactTemporalPolicy {
+  VALIDITY_INTERVAL
+  OBSERVATION
+  EFFECTIVE_INSTANT
+  REFERENCE_PERIOD
+  EVENT
+}
+
+enum FactDefinitionStatus {
+  ACTIVE
+  DEPRECATED
+  RETIRED
+}
+
+model FactDefinition {
+  id                  String                  @id @default(uuid())
+  key                 String                  @unique
+  domainCode          String
+  valueType           FactValueType
+  allowedEnumValues   Json?
+  allowedScopeTypes   FactScopeType[]
+  determinationMethod FactDeterminationMethod
+  overlapPolicy       FactOverlapPolicy
+  temporalPolicy      FactTemporalPolicy
+  questionKey         String?
+  status              FactDefinitionStatus    @default(ACTIVE)
+  createdAt           DateTime                @default(now())
+  retiredAt           DateTime?
+
+  facts ClientFact[]
+
+  @@index([status, valueType])
+  @@index([domainCode, status])
+  @@map("fact_definitions")
+}
+
+model FactSubject {
+  id                   String              @id @default(uuid())
+  clientId             String
+  client               Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  scopeType            FactScopeType
+  subjectKey           String
+  displayLabel         String?
+  contractRecordId     String?
+  contractRecord       ContractRecord?     @relation("FactSubjectContract", fields: [contractRecordId], references: [id], onDelete: SetNull)
+  organizationPersonId String?
+  organizationPerson   OrganizationPerson? @relation("FactSubjectEmployee", fields: [organizationPersonId], references: [id], onDelete: SetNull)
+  startsAt             DateTime?
+  endsAt               DateTime?
+  createdAt            DateTime            @default(now())
+  archivedAt           DateTime?
+
+  facts ClientFact[]
+
+  @@unique([clientId, scopeType, subjectKey])
+  @@unique([contractRecordId])
+  @@unique([organizationPersonId])
+  @@index([clientId, scopeType])
+  @@index([clientId, archivedAt])
+  @@map("fact_subjects")
+}
+
+enum LegalSourceStatus {
+  CANDIDATE
+  LEGAL_REVIEW_REQUIRED
+  APPROVED
+  RETIRED
+}
+
+enum LegalSourceInstrumentType {
+  LEGISLATION
+  REGULATION
+  GUIDANCE
+  STANDARD
+  CASE_LAW
+  OTHER
+}
+
+enum LegalSourceVersionStatus {
+  CANDIDATE
+  ACTIVE
+  SUPERSEDED
+  RETIRED
+}
+
+enum LegalSourceReviewStatus {
+  UNREVIEWED
+  IN_REVIEW
+  APPROVED
+  VERSION_AMBIGUOUS
+}
+
+enum LegalSourceCaptureCompleteness {
+  COMPLETE
+  PARTIAL
+  UNKNOWN
+}
+
+enum LegalSourceCaptureStatus {
+  CANDIDATE
+  CAPTURED
+  REVIEWED
+  REJECTED
+}
+
+enum LegalSourceCaptureAmbiguityStatus {
+  NONE
+  POSSIBLE_DUPLICATE
+  VERSION_AMBIGUOUS
+}
+
+model LegalSource {
+  id                String                    @id @default(uuid())
+  sourceKey         String                    @unique
+  jurisdictionCode  String
+  instrumentType    LegalSourceInstrumentType
+  canonicalCitation String?
+  title             String?
+  issuer            String?
+  status            LegalSourceStatus         @default(CANDIDATE)
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  versions LegalSourceVersion[]
+
+  @@index([jurisdictionCode, instrumentType])
+  @@index([status])
+  @@map("legal_sources")
+}
+
+model LegalSourceVersion {
+  id                String                   @id @default(uuid())
+  legalSourceId     String
+  legalSource       LegalSource              @relation(fields: [legalSourceId], references: [id], onDelete: Cascade)
+  legalVersionKey   String
+  versionLabel      String?
+  consolidationDate DateTime?
+  effectiveFrom     DateTime?
+  effectiveTo       DateTime?
+  publicationDate   DateTime?
+  adoptionDate      DateTime?
+  status            LegalSourceVersionStatus @default(CANDIDATE)
+  reviewStatus      LegalSourceReviewStatus  @default(UNREVIEWED)
+  supersededById    String?
+  supersededBy      LegalSourceVersion?      @relation("LegalSourceVersionSupersession", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes        LegalSourceVersion[]     @relation("LegalSourceVersionSupersession")
+  createdAt         DateTime                 @default(now())
+  approvedAt        DateTime?
+  approvedById      String?
+
+  captures LegalSourceCapture[]
+
+  @@unique([legalSourceId, legalVersionKey])
+  @@index([legalSourceId, effectiveFrom])
+  @@index([status, reviewStatus])
+  @@map("legal_source_versions")
+}
+
+model LegalSourceCapture {
+  id                   String                            @id @default(uuid())
+  legalSourceVersionId String
+  legalSourceVersion   LegalSourceVersion                @relation(fields: [legalSourceVersionId], references: [id], onDelete: Cascade)
+  sourceSha256         String                            @db.VarChar(64)
+  capturedAt           DateTime                          @default(now())
+  provenance           Json?
+  completeness         LegalSourceCaptureCompleteness    @default(UNKNOWN)
+  captureStatus        LegalSourceCaptureStatus          @default(CANDIDATE)
+  ambiguityStatus      LegalSourceCaptureAmbiguityStatus @default(NONE)
+  sourceUri            String?
+  importedById         String?
+  importedBy           User?                             @relation("LegalSourceCaptureImportedBy", fields: [importedById], references: [id], onDelete: SetNull)
+  selectedForReviewAt  DateTime?
+  createdAt            DateTime                          @default(now())
+
+  @@unique([legalSourceVersionId, sourceSha256])
+  @@index([sourceSha256])
+  @@index([legalSourceVersionId, captureStatus])
+  @@map("legal_source_captures")
 }
