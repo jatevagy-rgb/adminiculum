@@ -94,9 +94,11 @@ beforeEach(() => {
 });
 
 describe('personAccessService — read-only projection security', () => {
-  it('fails closed on a person from another client', async () => {
+  it('fails closed on a person from another client (generic not-found, no existence oracle)', async () => {
     prismaMock.organizationPerson.findUnique.mockResolvedValue(personRow({ clientId: 'client-2' }));
-    await rejectsWithCode(getPersonAccess(ADMIN, INPUT), 'CROSS_CLIENT_PERSON');
+    // Must be indistinguishable from a non-existent person (same 404 + code), so
+    // a caller cannot learn that the personId exists in another client.
+    await rejectsWithCode(getPersonAccess(ADMIN, INPUT), 'PERSON_NOT_FOUND');
   });
 
   it('fails closed on a workspace from another client', async () => {
@@ -128,16 +130,20 @@ describe('personAccessService — read-only projection security', () => {
     expect(dto.caseAccess).toEqual([]);
   });
 
-  it('suspended membership -> portalStatus SUSPENDED and no effective access', async () => {
+  it('suspended membership -> portalStatus SUSPENDED and NO access lists (empty, not a badge)', async () => {
     prismaMock.clientPortalWorkspaceMembership.findUnique.mockResolvedValue(membershipRow({ status: 'SUSPENDED' }));
-    // ACTIVE grant exists but membership is suspended => not effective.
+    // ACTIVE grant + scope exist, but membership is suspended => lists must be EMPTY.
     prismaMock.clientPortalGrant.findMany.mockResolvedValue([grantRow()]);
+    prismaMock.clientPortalSummaryScope.findMany.mockResolvedValue([
+      { id: 'sc1', scopeType: 'ORGANIZATION', organizationGroupId: null, status: 'ACTIVE', canViewCaseCounts: true, canViewStageCounts: true, canViewDeadlineCounts: true, canViewPublishedHours: false },
+    ]);
     const dto = await getPersonAccess(ADMIN, INPUT);
     expect(dto.person.portalStatus).toBe('SUSPENDED');
     expect(dto.membership?.status).toBe('SUSPENDED');
-    // caseAccess row is present (for staff visibility) but not effective.
-    expect(dto.caseAccess).toHaveLength(1);
-    expect(dto.caseAccess[0].effective).toBe(false);
+    // CHECK 4: inactive membership -> grant/scope/document lists become empty.
+    expect(dto.caseAccess).toEqual([]);
+    expect(dto.summaryScopes).toEqual([]);
+    expect(dto.documentAccess).toEqual([]);
   });
 
   it('an ACTIVE grant appears as effective case access', async () => {

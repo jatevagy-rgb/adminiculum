@@ -113,4 +113,21 @@ d('Person access (read-only projection) PostgreSQL', () => {
     expect(dto.summaryScopes).toEqual([]);
     expect(dto.documentAccess).toEqual([]);
   });
+
+  it('suspended membership yields EMPTY access lists even though grants/scopes exist', async () => {
+    // Suspend the membership; ACTIVE grant + ORGANIZATION scope still exist.
+    await db.clientPortalWorkspaceMembership.update({ where: { id: membershipA }, data: { status: 'SUSPENDED' } } as never);
+    try {
+      const dto = await getPersonAccess(admin, { clientId: clientA, workspaceId: workspaceA, personId: personA });
+      expect(dto.person.portalStatus).toBe('SUSPENDED');
+      expect(dto.membership?.status).toBe('SUSPENDED');
+      // CHECK 4: lists become EMPTY, not merely a status badge.
+      expect(dto.caseAccess).toEqual([]);
+      expect(dto.summaryScopes).toEqual([]);
+      expect(dto.documentAccess).toEqual([]);
+    } finally {
+      // Restore for other tests.
+      await db.clientPortalWorkspaceMembership.update({ where: { id: membershipA }, data: { status: 'ACTIVE' } } as never);
+    }
+  });
 });

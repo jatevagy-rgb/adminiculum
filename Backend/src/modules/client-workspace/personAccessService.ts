@@ -128,7 +128,9 @@ export async function getPersonAccess(actor: InternalActor, input: PersonAccessI
   // have client read access. A customer portal identity is never authorized here.
   await assertClientReadAccess(actor, clientId, prisma);
 
-  // Person must belong to the requested client.
+  // Person must belong to the requested client. A person that does not exist OR
+  // belongs to another client is treated identically (generic 404) so a caller
+  // cannot distinguish "no such person" from "person exists in another client".
   const person = await prisma.organizationPerson.findUnique({
     where: { id: personId },
     select: {
@@ -142,8 +144,9 @@ export async function getPersonAccess(actor: InternalActor, input: PersonAccessI
       organizationGroup: { select: { id: true, name: true } },
     },
   });
-  if (!person) throw new InteractionError(404, 'PERSON_NOT_FOUND', 'Organization person not found.');
-  if (person.clientId !== clientId) throw new InteractionError(403, 'CROSS_CLIENT_PERSON', 'Person belongs to another client.');
+  if (!person || person.clientId !== clientId) {
+    throw new InteractionError(404, 'PERSON_NOT_FOUND', 'Organization person not found.');
+  }
 
   // Workspace must belong to the requested client and be an ORGANIZATION workspace.
   const workspace = await prisma.clientPortalWorkspace.findUnique({
@@ -180,11 +183,12 @@ export async function getPersonAccess(actor: InternalActor, input: PersonAccessI
   const portalStatus = mapPortalStatus(membershipStatus);
   const membershipActive = membershipStatus === ACTIVE_MEMBERSHIP_STATUS && (!membershipExpiresAt || membershipExpiresAt > new Date());
 
-  // Grants are keyed by identity. We resolve them whenever a validated
-  // membership (belonging to the requested workspace) exists — so internal staff
-  // can see what grants exist even for a suspended membership — but each grant's
-  // `effective` flag reflects the membership state. Never combine workspaces.
-  const identityIdForGrants = identityId; // validated membership identity (workspace-scoped)
+  // CHECK 4: an inactive membership (missing/suspended/expired) must yield NO
+  // effective access. Case grants, summary scopes and document access lists are
+  // all EMPTY when the membership is not active — never merely flagged via a
+  // status badge. Only an active membership links to authorization principals.
+  const identityIdForGrants = membershipActive ? identityId : null;
+  const scopedMembershipId = membershipActive ? membershipId : null;
 
   // ---- Case access (ClientPortalGrant, workspace-scoped, active) -------------
   const caseGrants = identityIdForGrants
@@ -218,9 +222,9 @@ export async function getPersonAccess(actor: InternalActor, input: PersonAccessI
     }));
 
   // ---- Aggregate summary scopes (ClientPortalSummaryScope, membership-scoped) --
-  const scopes = membershipId
+  const scopes = scopedMembershipId
     ? await prisma.clientPortalSummaryScope.findMany({
-        where: { workspaceMembershipId: membershipId, workspaceId },
+        where: { workspaceMembershipId: scopedMembershipId, workspaceId },
         orderBy: { updatedAt: 'desc' },
         select: {
           id: true,
