@@ -63,12 +63,17 @@ describe("Phase 5A organizational customer portal shell + home journey", () => {
     assert.doesNotMatch(apiSrc, /prisma|storageProvider|scanProvider|quarantineStorageReference|spItemId/);
   });
 
-  it("Szerződések and Vállalat are prepared as coming-next routes, not raw data", () => {
+  it("Szerződések and Vállalat are functional customer surfaces, not placeholders", () => {
     const views = orgViews();
     assert.match(views, /view === "contracts"/);
     assert.match(views, /view === "company"/);
-    assert.match(views, /hamarosan ezen a felületen lesz elérhető/);
+    assert.match(views, /OrganizationContracts/);
+    assert.match(views, /OrganizationCompany/);
+    assert.match(views, /getPortalOrganizationContracts/);
+    assert.match(views, /getPortalOrganizationCompany/);
+    assert.doesNotMatch(views, /hamarosan ezen a felületen lesz elérhető/);
     assert.doesNotMatch(views, /ContractRecord|company-workspace|getWorkspaceOverview/);
+    assert.doesNotMatch(views, /ComingNext/);
   });
 
   it("Teendők uses customer action objects, not the internal Task list", () => {

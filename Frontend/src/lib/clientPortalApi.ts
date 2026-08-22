@@ -419,3 +419,62 @@ export async function getPortalOrgHome() {
 export async function getPortalUnitSummary(groupId: string) {
   return fetchApi<PortalLeadershipUnitAggregate>(`/client-portal/org/summary/unit/${encodeURIComponent(groupId)}`, { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
 }
+
+export type PortalOrgContractPublishedDoc = {
+  publicationId: string;
+  title: string | null;
+  versionLabel: string;
+  publishedAt: string | null;
+  downloadAvailable: boolean;
+};
+
+export type PortalOrgContract = {
+  reference: string;
+  title: string;
+  statusLabel: string;
+  lifecycle: "active" | "upcoming" | "terminating";
+  relatedMatterTitle: string | null;
+  nextStep: string | null;
+  customerActionRequired: boolean;
+  keyDate: string | null;
+  publishedDoc: PortalOrgContractPublishedDoc | null;
+};
+
+export type PortalOrgCompanyGroup = {
+  id: string;
+  name: string;
+  parentGroupId: string | null;
+};
+
+export type PortalOrgCompanyPerson = {
+  id: string;
+  name: string;
+  jobTitle: string | null;
+  organizationGroupId: string | null;
+  managerName: string | null;
+  deputyName: string | null;
+};
+
+export type PortalOrgCompanyVisibleArea = {
+  areaName: string;
+  visibleMatterCount: number;
+};
+
+export type PortalOrgCompany = {
+  companyName: string;
+  profileHeadline: string | null;
+  groups: PortalOrgCompanyGroup[];
+  persons: PortalOrgCompanyPerson[];
+  visibleMattersByArea: PortalOrgCompanyVisibleArea[];
+  totalVisibleMatterCount: number;
+  milestones: Array<{ id: string; title: string; date: string | null }>;
+  initiatives: Array<{ id: string; title: string; targetState: string | null; statusLabel: string; targetAt: string | null }>;
+};
+
+export async function getPortalOrganizationContracts() {
+  return fetchApi<{ items: PortalOrgContract[] }>('/client-portal/org/contracts', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
+}
+
+export async function getPortalOrganizationCompany() {
+  return fetchApi<PortalOrgCompany>('/client-portal/org/company', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
+}

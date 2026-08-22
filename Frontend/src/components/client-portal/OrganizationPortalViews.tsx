@@ -7,12 +7,17 @@ import {
   getPortalMatter,
   getPortalOrganizationCase,
   getPortalOrganizationCases,
+  getPortalOrganizationContracts,
+  getPortalOrganizationCompany,
   getPortalOrganizationIntakes,
   getPortalOrganizationSummary,
   getPortalOrganizationUnits,
   submitPortalOrganizationIntake,
   type PortalIdentityContext,
   type PortalLeadershipUnitAggregate,
+  type PortalOrgCompany,
+  type PortalOrgCompanyPerson,
+  type PortalOrgContract,
   type PortalOrganizationCase,
   type PortalOrganizationCaseDetail,
   type PortalOrganizationIntake,
@@ -39,6 +44,8 @@ type OrgState = {
   cases: PortalOrganizationCase[];
   intakes: PortalOrganizationIntake[];
   leadership: PortalLeadershipUnitAggregate[] | null;
+  contracts: PortalOrgContract[];
+  company: PortalOrgCompany | null;
   detail: PortalOrganizationCaseDetail | null;
   matter: FullPortalMatter | null;
   matterLoading: boolean;
@@ -259,14 +266,100 @@ function OrganizationTasks({ workspace }: { workspace: PortalWorkspace }) {
   );
 }
 
-function ComingNext({ title, message }: { title: string; message: string }) {
+function OrganizationContracts({ contracts }: { contracts: PortalOrgContract[] }) {
+  if (!contracts.length) {
+    return (
+      <Section title="Szerződések" empty emptyText="Jelenleg nincs közzétett szerződéses áttekintés. Ha elkészül egy közzétehető szerződéses dokumentum, az itt fog megjelenni.">
+        <p className="text-sm text-stone-600" />
+      </Section>
+    );
+  }
   return (
     <div className="space-y-5">
       <section className={card}>
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#b95e4b]">{title}</p>
-        <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950">{title}</h1>
-        <p className="mt-3 max-w-2xl leading-7 text-stone-700">{message}</p>
+        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#b95e4b]">Szerződések</p>
+        <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950">Közzétett szerződéses dokumentumok</h1>
+        <p className="mt-2 text-sm text-stone-600">Csak azok a szerződéses dokumentumok láthatók, amelyeket az iroda közzétett az Ön számára.</p>
       </section>
+      <Section title="Közzétett szerződések">
+        {contracts.map((contract) => (
+          <article key={contract.reference} className="rounded-2xl border border-stone-200 bg-white p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="break-words text-lg font-semibold text-stone-950">{contract.title}</h3>
+                {contract.relatedMatterTitle ? <p className="mt-1 text-sm text-stone-600">Kapcsolódó ügy: {contract.relatedMatterTitle}</p> : null}
+              </div>
+              <span className="rounded-full bg-[#f3ead2] px-3 py-1 text-xs font-semibold text-[#6f5514]">{contract.statusLabel}</span>
+            </div>
+            <dl className="mt-3 grid gap-2 text-sm text-stone-600 sm:grid-cols-2">
+              <div><dt className="font-semibold text-stone-800">Kulcsdátum</dt><dd>{formatDate(contract.keyDate)}</dd></div>
+              <div><dt className="font-semibold text-stone-800">Közzétett dokumentum</dt><dd>{contract.publishedDoc ? `${contract.publishedDoc.title || contract.title} · ${contract.publishedDoc.versionLabel}` : "Nincs letölthető dokumentum"}</dd></div>
+            </dl>
+            {contract.publishedDoc?.downloadAvailable ? (
+              <Link className="mt-3 inline-flex rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white" href={`/portal/documents/${encodeURIComponent(contract.publishedDoc.publicationId)}`}>
+                Dokumentum megnyitása
+              </Link>
+            ) : null}
+          </article>
+        ))}
+      </Section>
+    </div>
+  );
+}
+
+function OrganizationCompany({ company }: { company: PortalOrgCompany | null }) {
+  if (!company) return <Section title="Vállalat" empty emptyText="Ehhez az ügyfélfelülethez jelenleg nincs közzétehető vállalati áttekintés." />;
+  const peopleByGroup = new Map<string, PortalOrgCompanyPerson[]>();
+  for (const person of company.persons) {
+    const key = person.organizationGroupId || "ungrouped";
+    peopleByGroup.set(key, [...(peopleByGroup.get(key) || []), person]);
+  }
+  const areaActivity = company.visibleMattersByArea.filter((area) => area.visibleMatterCount > 0);
+  return (
+    <div className="space-y-5">
+      <section className={card}>
+        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#b95e4b]">Vállalat</p>
+        <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950">{company.companyName}</h1>
+        {company.profileHeadline ? <p className="mt-2 max-w-2xl leading-7 text-stone-700">{company.profileHeadline}</p> : null}
+      </section>
+      <Section title="Szervezeti egységek" empty={!company.groups.length}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {company.groups.map((group) => (
+            <div key={group.id} className="rounded-2xl border border-stone-200 bg-white p-4">
+              <h3 className="font-semibold text-stone-950">{group.name}</h3>
+              {group.parentGroupId ? <p className="mt-1 text-sm text-stone-600">Része egy magasabb szintű egységnek.</p> : null}
+              {(peopleByGroup.get(group.id) || []).length ? (
+                <ul className="mt-3 space-y-1 text-sm text-stone-700">
+                  {peopleByGroup.get(group.id)!.map((person) => <li key={person.id}><b>{person.name}</b>{person.jobTitle ? ` · ${person.jobTitle}` : ""}</li>)}
+                </ul>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </Section>
+      <Section title="Aktív területek" empty={!areaActivity.length} emptyText="Jelenleg nincs olyan szervezeti terület, ahol közzétett ügye van.">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {areaActivity.map((area) => (
+            <div key={area.areaName} className="rounded-2xl border border-stone-200 bg-white p-4">
+              <b className="text-stone-950">{area.areaName}</b>
+              <span className="block text-sm text-stone-600">{area.visibleMatterCount} közzétett ügy</span>
+            </div>
+          ))}
+        </div>
+      </Section>
+      {company.initiatives.length ? (
+        <Section title="Fejlődési kezdeményezések">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {company.initiatives.map((initiative) => (
+              <div key={initiative.id} className="rounded-2xl border border-stone-200 bg-white p-4">
+                <div className="flex items-start justify-between gap-2"><b className="text-stone-950">{initiative.title}</b><span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">{initiative.statusLabel}</span></div>
+                {initiative.targetState ? <p className="mt-1 text-sm text-stone-600">{initiative.targetState}</p> : null}
+                {initiative.targetAt ? <p className="mt-1 text-sm text-stone-500">Cél: {formatDate(initiative.targetAt)}</p> : null}
+              </div>
+            ))}
+          </div>
+        </Section>
+      ) : null}
     </div>
   );
 }
@@ -370,24 +463,26 @@ function LeadershipSummary({ units, mode }: { units: PortalLeadershipUnitAggrega
 }
 
 export function OrganizationPortalViews({ view, resourceId, context, workspace }: Props) {
-  const [state, setState] = useState<OrgState>({ units: [], cases: [], intakes: [], leadership: null, detail: null, matter: null, matterLoading: false, matterError: null, loading: true, message: null });
+  const [state, setState] = useState<OrgState>({ units: [], cases: [], intakes: [], leadership: null, contracts: [], company: null, detail: null, matter: null, matterLoading: false, matterError: null, loading: true, message: null });
   const communicationDisabled = context.selectedWorkspace?.communicationMode === "EXTERNAL_ONLY";
   const isCaseRelay = context.selectedWorkspace?.mode === "CASE_RELAY";
 
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, message: null, detail: null, matter: null, matterError: null }));
     try {
-      const [unitsPage, casesPage, intakesPage, leadership] = await Promise.all([
+      const [unitsPage, casesPage, intakesPage, leadership, contractsPage, company] = await Promise.all([
         getPortalOrganizationUnits(),
         getPortalOrganizationCases({ limit: 50 }),
         isCaseRelay ? Promise.resolve({ items: [] }) : getPortalOrganizationIntakes({ limit: 20 }),
         getPortalOrganizationSummary().then((result) => result.units).catch(() => null),
+        getPortalOrganizationContracts().then((result) => result.items).catch(() => []),
+        getPortalOrganizationCompany().catch(() => null),
       ]);
       const caseReference = view === "matter" && resourceId
         ? (casesPage.items || []).find((item) => item.matterPublicationId === resourceId || item.publicReference === resourceId)?.publicReference || resourceId
         : null;
       const detail = caseReference ? await getPortalOrganizationCase(caseReference).catch(() => null) : null;
-      setState({ units: unitsPage.items || [], cases: casesPage.items || [], intakes: intakesPage.items || [], leadership, detail, matter: null, matterLoading: false, matterError: null, loading: false, message: null });
+      setState({ units: unitsPage.items || [], cases: casesPage.items || [], intakes: intakesPage.items || [], leadership, contracts: contractsPage, company, detail, matter: null, matterLoading: false, matterError: null, loading: false, message: null });
       if (detail?.matterPublicationId) {
         setState((current) => ({ ...current, matterLoading: true }));
         try {
@@ -420,8 +515,8 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
       {view === "documents" ? <OrganizationDocuments workspace={workspace} /> : null}
       {view === "messages" ? <OrganizationMessages workspace={workspace} cases={state.cases} /> : null}
       {view === "tasks" ? <OrganizationTasks workspace={workspace} /> : null}
-      {view === "contracts" ? <ComingNext title="Szerződések" message="A szerződéses áttekintés hamarosan ezen a felületen lesz elérhető. Jelenleg nincs közzétett szerződéses áttekintés." /> : null}
-      {view === "company" ? <ComingNext title="Vállalat" message="A vállalati áttekintés hamarosan ezen a felületen lesz elérhető." /> : null}
+      {view === "contracts" ? <OrganizationContracts contracts={state.contracts} /> : null}
+      {view === "company" ? <OrganizationCompany company={state.company} /> : null}
       {view === "intakes" && !isCaseRelay ? <Section title="Megkereséseim" empty={!state.intakes.length}>{state.intakes.map((item) => <IntakeRow key={item.reference} item={item} />)}</Section> : null}
       {view === "new-intake" && !isCaseRelay ? <NewIntake units={state.units} onCreated={load} /> : null}
       {view === "leadership" ? <LeadershipSummary units={state.leadership} mode={context.selectedWorkspace?.mode} /> : null}

@@ -42,6 +42,8 @@ import { resolveMemberUnits } from '../modules/client-workspace/organizationUnit
 import { getOrganizationalCaseDetail, listOrganizationalCases, OrganizationalCaseListParams } from '../modules/client-workspace/organizationalCaseService';
 import { organizationSummary, unitSummary } from '../modules/client-workspace/leadershipSummaryService';
 import { getOrganizationalHome } from '../modules/client-workspace/orgHomeService';
+import { getOrganizationalContracts } from '../modules/client-workspace/orgContractsService';
+import { getOrganizationalCompany } from '../modules/client-workspace/orgCompanyService';
 import { RelationshipToCase } from '../modules/client-workspace/organizationalAccessPolicy';
 import {
   createIntakeDraft,
@@ -490,6 +492,26 @@ router.get('/org/summary/organization', async (req, res) => {
     if (!(await portalRead(req, res))) return;
     const { identityId, workspaceId } = orgContext(req);
     res.json(await organizationSummary(identityId, workspaceId));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/contracts', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await getOrganizationalContracts(identityId, workspaceId));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/company', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await getOrganizationalCompany(identityId, workspaceId));
   } catch (error) {
     fail(res, error);
   }
