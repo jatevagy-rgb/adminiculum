@@ -31,7 +31,8 @@ uses `127.0.0.1` and `next start` so localhost dev-login behavior and Next
 development overlays are not part of the acceptance path. A clean context
 must contain zero `devin-hidden` attributes; any such attribute fails QA.
 
-The canonical release currently does not contain the 7C-A Compliance Overview
-component. The runner reports that coverage as unavailable on this base; once
-the component is canonical, its route-level contract can be added without
-changing the auth or fixture boundary.
+The runner exercises the canonical 7C-A Compliance Overview through the
+company workspace route. It covers populated, loading, empty, and unavailable
+states, scope labels, requirement grouping, manual-finding identity,
+applicability treatment, progressive disclosure, provenance guards, and the
+absence of 7B action controls without changing the auth or fixture boundary.

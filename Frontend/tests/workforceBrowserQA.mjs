@@ -53,7 +53,36 @@ function stopServer() {
   server = undefined;
 }
 
-function responseFor(url) {
+function complianceFindings() {
+  const scoped = WORKFORCE_FIXTURE.findings.map((finding, index) => ({
+    ...finding,
+    subjectLabel: null,
+    applicabilityStatus: ["APPLIES", "INSUFFICIENT_FACTS", "DOES_NOT_APPLY", null][index],
+    description: "Synthetic, unsourced QA data only.",
+    recommendation: "Review synthetic QA data.",
+  }));
+  return [
+    ...scoped,
+    {
+      id: "qa-finding-manual-a",
+      title: "QA manual finding",
+      scopeType: "FUTURE_SCOPE",
+      applicabilityStatus: "APPLIES",
+      description: "Synthetic manual finding A.",
+      recommendation: null,
+    },
+    {
+      id: "qa-finding-manual-b",
+      title: "QA manual finding",
+      scopeType: "FUTURE_SCOPE",
+      applicabilityStatus: null,
+      description: "Synthetic manual finding B.",
+      recommendation: null,
+    },
+  ];
+}
+
+function responseFor(url, mode = "populated") {
   if (url.includes("/auth/me")) return { status: 200, body: AUTH_ME };
   if (url.includes("/dashboard/stats")) return {
     status: 200,
@@ -87,9 +116,12 @@ function responseFor(url) {
       }],
     },
   };
-  if (url.includes(`/company-workspace/clients/${WORKFORCE_FIXTURE.client.id}/overview`)) return {
-    status: 200,
-    body: {
+  if (url.includes(`/company-workspace/clients/${WORKFORCE_FIXTURE.client.id}/overview`)) {
+    if (mode === "unavailable") return { status: 503, body: { status: 503, code: "QA_UNAVAILABLE" } };
+    const findings = complianceFindings();
+    return {
+      status: 200,
+      body: {
       client: WORKFORCE_FIXTURE.client,
       profile: null,
       factGroups: [],
@@ -102,8 +134,8 @@ function responseFor(url) {
         startedAt: null,
         completedAt: "2026-01-01T00:00:00.000Z",
         reviewAt: null,
-        findingCount: 0,
-        importantFindings: [],
+        findingCount: mode === "empty" ? 0 : findings.length,
+        importantFindings: mode === "empty" ? [] : findings,
       }],
       contracts: [],
       obligations: [],
@@ -115,8 +147,9 @@ function responseFor(url) {
       initiatives: [],
       milestones: [],
       attention: [],
-    },
-  };
+      },
+    };
+  }
   if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/operating-profile`)) return { status: 200, body: null };
   if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/assessments`)) return {
     status: 200,
@@ -163,8 +196,8 @@ function responseFor(url) {
   return { status: 404, body: { status: 404, code: "QA_UNMOCKED_ENDPOINT" } };
 }
 
-async function newPage(browser) {
-  const context = await browser.newContext({ viewport: VIEWPORTS[0] });
+async function newPage(browser, mode = "populated", viewport = VIEWPORTS[0]) {
+  const context = await browser.newContext({ viewport });
   const page = await context.newPage();
   const hardErrors = [];
   page.on("pageerror", (error) => hardErrors.push(error.message));
@@ -180,7 +213,10 @@ async function newPage(browser) {
     sessionStorage.setItem("adminiculum_auth_profile", JSON.stringify(profile));
   }, { profile: AUTH_ME });
   await page.route("**/api/v1/**", async (route) => {
-    const response = responseFor(route.request().url());
+    const response = responseFor(route.request().url(), mode);
+    if (mode === "loading" && route.request().url().includes("/company-workspace/")) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
     await route.fulfill({ status: response.status, contentType: "application/json", body: JSON.stringify(response.body) });
   });
   return { context, page, hardErrors };
@@ -224,6 +260,41 @@ async function checkPage(page, pathName, label) {
   return result.body;
 }
 
+async function assertComplianceMode(browser, mode, viewport) {
+  const qa = await newPage(browser, mode, viewport);
+  const target = `/clients/${WORKFORCE_FIXTURE.client.id}/vallalati-mukodes`;
+  await qa.page.goto(`${BASE_URL}${target}`, {
+    waitUntil: mode === "loading" ? "domcontentloaded" : "networkidle",
+  });
+  if (mode === "loading") {
+    await qa.page.getByText("Betöltés…").waitFor({ state: "visible", timeout: 5000 });
+    await qa.page.waitForLoadState("networkidle");
+  }
+  await checkPage(qa.page, target, `Compliance ${mode} ${viewport.width}`);
+  const body = await qa.page.locator("body").innerText();
+  if (mode === "populated") {
+    for (const label of ["Vállalat", "Munkavállaló", "Szerződés", "Munkahelyszín", "Nem azonosított hatókör"]) {
+      if (!body.includes(label)) throw new Error(`Missing compliance scope label: ${label}`);
+    }
+    if (!body.includes("Belső értékelés szerint releváns")) throw new Error("Missing APPLIES framing");
+    if (!body.includes("Nincs elég adat")) throw new Error("Missing insufficient-facts status");
+    if (!body.includes("5 belső értékelési megállapítás")) throw new Error("Null applicability was not included in attention");
+    const manualGroupCount = await qa.page.locator("button").filter({ hasText: "QA manual finding" }).count();
+    if (manualGroupCount !== 2) throw new Error("Same-title manual findings collapsed");
+    if (!body.includes("Nem releváns")) throw new Error("DOES_NOT_APPLY row missing after disclosure");
+    if (/cikk|joghatóság|citation|sourceVersion|reviewStatus|Teendő indítása/i.test(body)) {
+      throw new Error("Compliance output contains fake provenance or 7B actions");
+    }
+  }
+  if (mode === "empty" && !body.includes("Nincs megjeleníthető belső értékelési megállapítás")) {
+    throw new Error("Compliance empty state was not rendered");
+  }
+  if (mode === "unavailable" && !body.includes("A vállalati működés adatai jelenleg nem tölthetők be")) {
+    throw new Error("Compliance unavailable state was not rendered");
+  }
+  await qa.context.close();
+}
+
 async function main() {
   assertFixtureContract();
   fs.mkdirSync(SHOTS, { recursive: true });
@@ -245,9 +316,14 @@ async function main() {
       if (qa.hardErrors.length) throw new Error(`${target.label} browser errors: ${qa.hardErrors.join("; ")}`);
       await qa.context.close();
     }
+    for (const viewport of VIEWPORTS) {
+      for (const mode of ["populated", "loading", "empty", "unavailable"]) {
+        await assertComplianceMode(browser, mode, viewport);
+      }
+    }
     console.log("MOCK_WORKFORCE_QA=PASSED");
     console.log("SCREENSHOT_EVIDENCE=" + SHOTS);
-    console.log("COMPLIANCE_OVERVIEW=NOT_AVAILABLE_ON_CANONICAL_BASE");
+    console.log("COMPLIANCE_OVERVIEW=POPULATED_LOADING_EMPTY_UNAVAILABLE_PASSED");
   } finally {
     await browser.close();
     stopServer();
