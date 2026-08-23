@@ -254,6 +254,9 @@ app.use('/api/v1/client-organization', clientOrganizationRouter);
 import { companyWorkspaceRouter } from './modules/company-workspace/routes';
 app.use('/api/v1/company-workspace', companyWorkspaceRouter);
 
+import complianceProposalRoutes from './modules/compliance/complianceProposalRoutes';
+app.use('/api/v1/compliance/proposals', complianceProposalRoutes);
+
 import contractsRoutes from './modules/contracts/routes';
 app.use('/api/v1/contracts', contractsRoutes);
 

@@ -96,6 +96,9 @@ model User {
   createdAssessments                Assessment[]
   reviewedAssessmentItems           AssessmentItem[]
   createdAssessmentFindings         AssessmentFinding[]
+  createdComplianceProposals        ComplianceProposal[]         @relation("ComplianceProposalCreatedBy")
+  confirmedComplianceProposals      ComplianceProposal[]         @relation("ComplianceProposalConfirmedBy")
+  assignedComplianceProposals       ComplianceProposal[]         @relation("ComplianceProposalAssignee")
   ownedDevelopmentInitiatives       DevelopmentInitiative[]
   lawFirmOwnedContracts             ContractRecord[]
 
@@ -173,6 +176,7 @@ model Client {
   requirementApplicabilities RequirementApplicability[]
   developmentInitiatives     DevelopmentInitiative[] // Company foundation (Phase 1)
   contractRecords            ContractRecord[] // Contract library (Phase 2)
+  complianceProposals        ComplianceProposal[]
   obligations                ClientObligation[] // Contract library (Phase 2)
   entitlements               ContractEntitlement[] // Contract library (Phase 2)
   organizationPersons        OrganizationPerson[] // Organization (Phase 3)
@@ -773,6 +777,7 @@ model Case {
 
   documents                 Document[]
   tasks                     Task[]
+  complianceProposals       ComplianceProposal[]
   timelineEvents            TimelineEvent[]
   comments                  Comment[]
   documentReviewSuggestions DocumentReviewSuggestion[]
@@ -1580,6 +1585,7 @@ model Task {
   documentLinks         DocumentTaskLink[]
   reviewPoints          ReviewPoint[]
   remediationFindings   AssessmentFinding[]
+  complianceProposal    ComplianceProposal?
   obligationRelated     ClientObligation[]
 
   @@index([complexityScore], map: "tasks_complexityScore_idx")
@@ -4107,6 +4113,7 @@ model AssessmentFinding {
   createdBy                  User                             @relation(fields: [createdByUserId], references: [id])
   createdAt                  DateTime                         @default(now())
   updatedAt                  DateTime                         @updatedAt
+  complianceProposals        ComplianceProposal[]
 
   @@index([assessmentId])
   @@index([clientId, status])
@@ -4116,6 +4123,60 @@ model AssessmentFinding {
   @@index([clientId, requirementId, scopeType, factSubjectId])
   @@index([requirementApplicabilityId])
   @@map("assessment_findings")
+}
+
+enum ComplianceProposalStatus {
+  PROPOSED
+  CONFIRMED
+  REJECTED
+  STALE
+}
+
+enum ComplianceProposalKind {
+  REMEDIATION
+  DISCLOSURE
+  DOCUMENT_UPDATE
+  CONTROL_IMPLEMENTATION
+  REVIEW
+  OPEN_MATTER
+}
+
+model ComplianceProposal {
+  id                        String                   @id @default(uuid())
+  clientId                  String
+  client                    Client                   @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  findingId                 String
+  finding                   AssessmentFinding        @relation(fields: [findingId], references: [id], onDelete: Restrict)
+  proposalKind              ComplianceProposalKind
+  actionIntentKey           String
+  caseId                    String?
+  case                      Case?                    @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  title                     String
+  description               String?
+  suggestedAction           String?
+  assigneeId                String?
+  assignee                  User?                    @relation("ComplianceProposalAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  deadline                  DateTime?
+  status                    ComplianceProposalStatus @default(PROPOSED)
+  applicabilityIdAtProposal String
+  applicabilityAtProposal   RequirementApplicability @relation(fields: [applicabilityIdAtProposal, clientId], references: [id, clientId], onDelete: Restrict)
+  findingStatusAtProposal   AssessmentFindingStatus
+  taskId                    String?                  @unique
+  task                      Task?                    @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  createdByUserId           String
+  createdBy                 User                     @relation("ComplianceProposalCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  confirmedById             String?
+  confirmedBy               User?                    @relation("ComplianceProposalConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+  confirmedAt               DateTime?
+  confirmedCaseId           String?
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
+
+  @@index([clientId, status])
+  @@index([findingId, status])
+  @@index([caseId, status])
+  @@index([applicabilityIdAtProposal])
+  @@map("compliance_proposals")
 }
 
 enum DevelopmentInitiativePriority {
@@ -4836,8 +4897,9 @@ model RequirementApplicability {
   snapshotDigest        String                           @db.VarChar(64)
   createdAt             DateTime                         @default(now())
 
-  findings AssessmentFinding[]
-  facts    RequirementApplicabilityFact[]
+  findings            AssessmentFinding[]
+  complianceProposals ComplianceProposal[]
+  facts               RequirementApplicabilityFact[]
 
   @@unique([id, clientId])
   @@index([clientId, evaluationAt])
