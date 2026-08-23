@@ -2,6 +2,13 @@ import { Prisma, PrismaClient } from '@prisma/client';
 
 type Db = PrismaClient;
 
+export class FindingMaterializationIdentityConflictError extends Error {
+  constructor() {
+    super('Finding materialization lost an identity race.');
+    this.name = 'FindingMaterializationIdentityConflictError';
+  }
+}
+
 export interface FindingMaterializationInput {
   applicabilityId: string;
   assessmentId: string;
@@ -13,6 +20,8 @@ export interface FindingMaterializationResult {
     id: string;
     clientId: string;
     requirementId: string;
+    scopeType: string;
+    factSubjectId: string | null;
     requirementApplicabilityId: string;
     applicabilityOutcome: string;
     status: string;
@@ -57,6 +66,8 @@ const findingSelect = {
   id: true,
   clientId: true,
   requirementId: true,
+  scopeType: true,
+  factSubjectId: true,
   requirementApplicabilityId: true,
   applicabilityOutcome: true,
   status: true,
@@ -72,6 +83,8 @@ async function materializeRequirementApplicabilityFindingInTxImpl(
       id: true,
       clientId: true,
       outcome: true,
+      scopeType: true,
+      factSubjectId: true,
       evaluationAt: true,
       createdAt: true,
       requirementVersion: { select: { requirementId: true, title: true, normativeStatement: true } },
@@ -83,7 +96,12 @@ async function materializeRequirementApplicabilityFindingInTxImpl(
   if (!assessment) throw new Error('Assessment does not belong to the applicability client.');
   const requirementId = applicability.requirementVersion.requirementId;
   let finding = await tx.assessmentFinding.findFirst({
-    where: { clientId: applicability.clientId, requirementId },
+    where: {
+      clientId: applicability.clientId,
+      requirementId,
+      scopeType: applicability.scopeType,
+      factSubjectId: applicability.factSubjectId,
+    },
     orderBy: { createdAt: 'asc' },
     select: { ...findingSelect, requirementApplicability: { select: { id: true, evaluationAt: true, createdAt: true } } },
   });
@@ -110,12 +128,15 @@ async function materializeRequirementApplicabilityFindingInTxImpl(
     return { finding: updated as FindingMaterializationResult['finding'], outcome: applicability.outcome, created: false };
   }
 
+  let created;
   try {
-    const created = await tx.assessmentFinding.create({
+    created = await tx.assessmentFinding.create({
       data: {
         clientId: applicability.clientId,
         assessmentId: input.assessmentId,
         requirementId,
+        scopeType: applicability.scopeType,
+        factSubjectId: applicability.factSubjectId,
         requirementApplicabilityId: applicability.id,
         applicabilityOutcome: applicability.outcome,
         severity: 'MEDIUM',
@@ -127,22 +148,13 @@ async function materializeRequirementApplicabilityFindingInTxImpl(
       },
       select: findingSelect,
     });
-    return { finding: created as FindingMaterializationResult['finding'], outcome: applicability.outcome, created: true };
   } catch (error) {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
-    const retried = await tx.assessmentFinding.findFirst({
-      where: { clientId: applicability.clientId, requirementId },
-      select: { ...findingSelect, requirementApplicability: { select: { id: true, evaluationAt: true, createdAt: true } } },
-    });
-    if (!retried) throw error;
-    if (retried.requirementApplicability) {
-      const order = compareApplicabilityOrder(applicability, retried.requirementApplicability);
-      if (order === 'SAME' || order === 'OLDER') return { finding: retried as FindingMaterializationResult['finding'], outcome: retried.applicabilityOutcome ?? applicability.outcome, created: false };
-      if (order === 'AMBIGUOUS') throw new Error('Ambiguous applicability ordering; refusing to overwrite current finding evidence.');
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
+      throw new FindingMaterializationIdentityConflictError();
     }
-    const updated = await tx.assessmentFinding.update({ where: { id: retried.id }, data: { requirementApplicabilityId: applicability.id, applicabilityOutcome: applicability.outcome }, select: findingSelect });
-    return { finding: updated as FindingMaterializationResult['finding'], outcome: applicability.outcome, created: false };
+    throw error;
   }
+  return { finding: created as FindingMaterializationResult['finding'], outcome: applicability.outcome, created: true };
 }
 
 export async function materializeRequirementApplicabilityFindingInTx(
@@ -162,7 +174,10 @@ export async function materializeRequirementApplicabilityFinding(
     try {
       return await execute();
     } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2034' || attempt === 2) throw error;
+      const isPrismaError = error instanceof Prisma.PrismaClientKnownRequestError;
+      const retryable = error instanceof FindingMaterializationIdentityConflictError
+        || (isPrismaError && error.code === 'P2034');
+      if (!retryable || attempt === 2) throw error;
     }
   }
 
