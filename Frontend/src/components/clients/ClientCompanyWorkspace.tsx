@@ -136,6 +136,9 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
 
           {/* Felmérések — eredmények és fontos megállapítások */}
           <Panel title="Felmérések">
+            <p className="mb-3 text-xs text-[var(--adm-text-muted)]">
+              Belső értékelési megállapítások; nem igazolt jogi kötelezettségek.
+            </p>
             {overview.assessments.length ? (
               <ul className="space-y-2">
                 {overview.assessments.map((assessment) => (

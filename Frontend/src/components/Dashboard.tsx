@@ -686,7 +686,6 @@ export function Dashboard() {
     return items;
   }, [externalComms, reviewQueue, upcomingDeadlines]);
 
-  const watchedClientExamples = ["BlackBelt", "Saubermacher", "Bálintfy"];
   const clientLinkedComms = useMemo(
     () => communicationSignals.filter((s) => s.proposedClientName).slice(0, 4),
     [communicationSignals],
@@ -982,11 +981,6 @@ export function Dashboard() {
                 <Link href="/notifications?view=clients" className="adm-link-button px-2.5 py-1.5 text-[10.5px]">
                   Munkatér
                 </Link>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {watchedClientExamples.map((name) => (
-                  <span key={name} className="adm-watch-chip">{name}</span>
-                ))}
               </div>
               <div className="mt-3 space-y-1.5">
                 {clientLinkedComms.length === 0 ? (

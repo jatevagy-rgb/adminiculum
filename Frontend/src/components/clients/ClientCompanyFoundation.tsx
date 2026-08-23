@@ -103,6 +103,9 @@ export function ClientCompanyFoundation({ clientId }: { clientId: string }) {
           </Section>
 
           <Section title="Felmérések" empty={!assessments.length}>
+            <p className="mb-2 text-xs text-[var(--adm-text-muted)]">
+              Belső értékelési megállapítások; nem igazolt jogi kötelezettségek.
+            </p>
             <div className="grid gap-2">
               {assessments.map((assessment) => {
                 const assessmentFindings = findings.filter((finding) => finding.assessmentId === assessment.id);
