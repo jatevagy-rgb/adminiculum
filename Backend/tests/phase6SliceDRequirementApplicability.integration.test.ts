@@ -24,7 +24,7 @@ describeWithDatabase('Phase 6 Slice D immutable requirement applicability snapsh
   const applicabilityIds: string[] = [];
   const assessmentIds: string[] = [];
 
-  const comparison = (key: string, value: unknown = true, valueType = 'boolean') => ({ kind: 'COMPARE', operator: 'EQ', left: { kind: 'FACT', factKey: key }, right: { kind: 'LITERAL', valueType, value } });
+  const comparison = (key: string, value: unknown = true, valueType = 'boolean'): Record<string, unknown> => ({ kind: 'COMPARE', operator: 'EQ', left: { kind: 'FACT', factKey: key }, right: { kind: 'LITERAL', valueType, value } });
   const ast = (key: string, value: unknown = true, valueType = 'boolean') => ({ schemaVersion: 'rule-ast/v1', node: comparison(key, value, valueType) });
   const scope = { scopeType: 'COMPANY' as const, evaluationAt: new Date('2026-06-15T12:00:00.000Z') };
   const definitionKey = (key: string) => `D_${key}_${suffix}`;
