@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { addRequirementCitation, approveApplicabilityRuleVersion, approveRequirementVersion, createApplicabilityRuleVersion, createRequirement, createRequirementVersion } from '../src/modules/compliance/requirementRuleService';
 import { createRequirementApplicability } from '../src/modules/compliance/requirementApplicabilityService';
 import { materializeRequirementApplicabilityFinding, materializeRequirementApplicabilityFindingInTx } from '../src/modules/compliance/findingMaterializationService';
@@ -14,6 +14,8 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
   const clientA = crypto.randomUUID();
   const clientB = crypto.randomUUID();
   const userId = crypto.randomUUID();
+  const subjectA = crypto.randomUUID();
+  const subjectB = crypto.randomUUID();
   const sourceId = crypto.randomUUID();
   const sourceVersionId = crypto.randomUUID();
   const definitionId = crypto.randomUUID();
@@ -23,6 +25,7 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
   const applicabilityIds: string[] = [];
   const assessmentIds: string[] = [];
   const factIds: string[] = [];
+  const subjectIds: string[] = [];
 
   const ast = (factKey: string) => ({ schemaVersion: 'rule-ast/v1', node: { kind: 'COMPARE', operator: 'EQ', left: { kind: 'FACT', factKey }, right: { kind: 'LITERAL', valueType: 'boolean', value: true } } });
   const scope = { scopeType: 'COMPANY' as const, evaluationAt: new Date('2026-08-24T12:00:00.000Z') };
@@ -41,14 +44,14 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
     return { requirement, version, rule };
   }
 
-  async function fact(clientId: string, value: boolean, at = scope.evaluationAt) {
+  async function fact(clientId: string, value: boolean, at = scope.evaluationAt, factScope: 'COMPANY' | 'EMPLOYEE' = 'COMPANY', factSubjectId: string | null = null) {
     const id = crypto.randomUUID();
     factIds.push(id);
     await db.clientFact.updateMany({
-      where: { clientId, factDefinitionId: definitionId, supersededAt: null },
+      where: { clientId, factDefinitionId: definitionId, scopeType: factScope, factSubjectId, supersededAt: null },
       data: { supersededAt: at },
     });
-    await db.clientFact.create({ data: { id, clientId, type: factKey, value: 'legacy-unused', validFrom: new Date('2026-01-01T00:00:00Z'), factDefinitionId: definitionId, scopeType: 'COMPANY', observedAt: at, booleanValue: value } as never });
+    await db.clientFact.create({ data: { id, clientId, type: factKey, value: 'legacy-unused', validFrom: new Date('2026-01-01T00:00:00Z'), factDefinitionId: definitionId, scopeType: factScope, factSubjectId, observedAt: at, booleanValue: value } as never });
     return id;
   }
 
@@ -66,8 +69,8 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
     return id;
   }
 
-  async function applicability(versionId: string, ruleId: string, clientId: string, evaluationAt = scope.evaluationAt) {
-    const result = await createRequirementApplicability({ requirementVersionId: versionId, ruleVersionId: ruleId, clientId, scope: { ...scope, evaluationAt } }, db);
+  async function applicability(versionId: string, ruleId: string, clientId: string, evaluationAt = scope.evaluationAt, factScope: 'COMPANY' | 'EMPLOYEE' = 'COMPANY', factSubjectId: string | null = null) {
+    const result = await createRequirementApplicability({ requirementVersionId: versionId, ruleVersionId: ruleId, clientId, scope: { ...scope, evaluationAt, scopeType: factScope, factSubjectId: factScope === 'COMPANY' ? undefined : factSubjectId } }, db);
     applicabilityIds.push(result.applicability.id);
     return result;
   }
@@ -77,7 +80,12 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
     await db.complianceDomain.create({ data: { code: domainCode, label: 'Phase 7 Slice 7A' } });
     await db.client.createMany({ data: [{ id: clientA, name: `7A Client A ${suffix}` }, { id: clientB, name: `7A Client B ${suffix}` }] });
     await db.user.create({ data: { id: userId, email: `7a-${suffix}@example.invalid`, name: '7A Fixture', role: 'ADMIN' } });
-    await db.factDefinition.create({ data: { id: definitionId, key: factKey, domainCode, valueType: 'BOOLEAN', allowedScopeTypes: ['COMPANY'], determinationMethod: 'USER_PROVIDED', overlapPolicy: 'ALLOW', temporalPolicy: 'OBSERVATION' } });
+    await db.factDefinition.create({ data: { id: definitionId, key: factKey, domainCode, valueType: 'BOOLEAN', allowedScopeTypes: ['COMPANY', 'EMPLOYEE'], determinationMethod: 'USER_PROVIDED', overlapPolicy: 'ALLOW', temporalPolicy: 'OBSERVATION' } });
+    subjectIds.push(subjectA, subjectB);
+    await db.factSubject.createMany({ data: [
+      { id: subjectA, clientId: clientA, scopeType: 'EMPLOYEE', subjectKey: `employee-a-${suffix}` },
+      { id: subjectB, clientId: clientA, scopeType: 'EMPLOYEE', subjectKey: `employee-b-${suffix}` },
+    ] });
     await db.legalSource.create({ data: { id: sourceId, sourceKey: `7a-source-${suffix}`, jurisdictionCode: 'HU', instrumentType: 'LEGISLATION', status: 'APPROVED', updatedAt: new Date() } });
     await db.legalSourceVersion.create({ data: { id: sourceVersionId, legalSourceId: sourceId, legalVersionKey: 'V1', status: 'ACTIVE', reviewStatus: 'APPROVED' } });
   });
@@ -90,6 +98,7 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
     await db.requirementVersion.deleteMany({ where: { id: { in: versionIds } } });
     await db.requirement.deleteMany({ where: { id: { in: requirementIds } } });
     await db.clientFact.deleteMany({ where: { id: { in: factIds } } });
+    await db.factSubject.deleteMany({ where: { id: { in: subjectIds } } });
     await db.legalSourceVersion.deleteMany({ where: { id: sourceVersionId } });
     await db.legalSource.deleteMany({ where: { id: sourceId } });
     await db.factDefinition.deleteMany({ where: { id: definitionId } });
@@ -281,5 +290,131 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
     const assessmentId = await assessment(clientA);
     const result = await db.$transaction((tx) => materializeRequirementApplicabilityFindingInTx({ applicabilityId: app.applicability.id, assessmentId, createdByUserId: userId }, tx));
     expect(result.finding).toBeTruthy();
+  });
+
+  it('materializes independent findings for two employee subjects', async () => {
+    const selected = await pair('subject-independent');
+    const assessmentId = await assessment(clientA);
+    await fact(clientA, true, scope.evaluationAt, 'EMPLOYEE', subjectA);
+    await fact(clientA, true, scope.evaluationAt, 'EMPLOYEE', subjectB);
+    const appA = await applicability(selected.version.id, selected.rule.id, clientA, scope.evaluationAt, 'EMPLOYEE', subjectA);
+    const appB = await applicability(selected.version.id, selected.rule.id, clientA, scope.evaluationAt, 'EMPLOYEE', subjectB);
+    const findingA = await materializeRequirementApplicabilityFinding({ applicabilityId: appA.applicability.id, assessmentId, createdByUserId: userId }, db);
+    const findingB = await materializeRequirementApplicabilityFinding({ applicabilityId: appB.applicability.id, assessmentId, createdByUserId: userId }, db);
+    expect(findingA.finding?.id).not.toBe(findingB.finding?.id);
+    expect(findingA.finding?.factSubjectId).toBe(subjectA);
+    expect(findingB.finding?.factSubjectId).toBe(subjectB);
+  });
+
+  it('does not let one employee subject DOES_NOT_APPLY resolve another subject', async () => {
+    const selected = await pair('subject-does-not-apply-isolation');
+    const assessmentId = await assessment(clientA);
+    await fact(clientA, true, scope.evaluationAt, 'EMPLOYEE', subjectA);
+    await fact(clientA, false, scope.evaluationAt, 'EMPLOYEE', subjectB);
+    const appA = await applicability(selected.version.id, selected.rule.id, clientA, scope.evaluationAt, 'EMPLOYEE', subjectA);
+    const appB = await applicability(selected.version.id, selected.rule.id, clientA, scope.evaluationAt, 'EMPLOYEE', subjectB);
+    const findingA = await materializeRequirementApplicabilityFinding({ applicabilityId: appA.applicability.id, assessmentId, createdByUserId: userId }, db);
+    const findingB = await materializeRequirementApplicabilityFinding({ applicabilityId: appB.applicability.id, assessmentId, createdByUserId: userId }, db);
+    expect(findingA.finding?.status).toBe('OPEN');
+    expect(findingA.finding?.applicabilityOutcome).toBe('APPLIES');
+    expect(findingB.finding).toBeNull();
+  });
+
+  it('resolves only the subject whose later applicability is DOES_NOT_APPLY', async () => {
+    const selected = await pair('subject-resolve-isolation');
+    const assessmentId = await assessment(clientA);
+    const at = new Date('2026-08-24T16:00:00.000Z');
+    await fact(clientA, true, at, 'EMPLOYEE', subjectA);
+    await fact(clientA, true, at, 'EMPLOYEE', subjectB);
+    const appA = await applicability(selected.version.id, selected.rule.id, clientA, at, 'EMPLOYEE', subjectA);
+    const appB = await applicability(selected.version.id, selected.rule.id, clientA, at, 'EMPLOYEE', subjectB);
+    const findingA = await materializeRequirementApplicabilityFinding({ applicabilityId: appA.applicability.id, assessmentId, createdByUserId: userId }, db);
+    const findingB = await materializeRequirementApplicabilityFinding({ applicabilityId: appB.applicability.id, assessmentId, createdByUserId: userId }, db);
+    await fact(clientA, false, new Date('2026-08-24T17:00:00.000Z'), 'EMPLOYEE', subjectB);
+    const appBDoesNotApply = await applicability(selected.version.id, selected.rule.id, clientA, new Date('2026-08-24T17:00:00.000Z'), 'EMPLOYEE', subjectB);
+    const resolvedB = await materializeRequirementApplicabilityFinding({ applicabilityId: appBDoesNotApply.applicability.id, assessmentId, createdByUserId: userId }, db);
+    expect(resolvedB.finding?.id).toBe(findingB.finding?.id);
+    expect(resolvedB.finding?.status).toBe('RESOLVED');
+    expect((await db.assessmentFinding.findUniqueOrThrow({ where: { id: findingA.finding!.id } })).status).toBe('OPEN');
+  });
+
+  it('keeps company and employee findings separate', async () => {
+    const selected = await pair('company-employee-scope');
+    const assessmentId = await assessment(clientA);
+    await fact(clientA, true);
+    await fact(clientA, true, scope.evaluationAt, 'EMPLOYEE', subjectA);
+    const company = await applicability(selected.version.id, selected.rule.id, clientA);
+    const employee = await applicability(selected.version.id, selected.rule.id, clientA, scope.evaluationAt, 'EMPLOYEE', subjectA);
+    const companyFinding = await materializeRequirementApplicabilityFinding({ applicabilityId: company.applicability.id, assessmentId, createdByUserId: userId }, db);
+    const employeeFinding = await materializeRequirementApplicabilityFinding({ applicabilityId: employee.applicability.id, assessmentId, createdByUserId: userId }, db);
+    expect(companyFinding.finding?.id).not.toBe(employeeFinding.finding?.id);
+    expect(companyFinding.finding?.scopeType).toBe('COMPANY');
+    expect(employeeFinding.finding?.scopeType).toBe('EMPLOYEE');
+  });
+
+  it('reconciles a newer applicability onto the same scoped finding row', async () => {
+    const selected = await pair('subject-reconcile');
+    const assessmentId = await assessment(clientA);
+    const firstAt = new Date('2026-08-24T18:00:00.000Z');
+    const secondAt = new Date('2026-08-24T19:00:00.000Z');
+    await fact(clientA, true, firstAt, 'EMPLOYEE', subjectA);
+    const first = await applicability(selected.version.id, selected.rule.id, clientA, firstAt, 'EMPLOYEE', subjectA);
+    const firstFinding = await materializeRequirementApplicabilityFinding({ applicabilityId: first.applicability.id, assessmentId, createdByUserId: userId }, db);
+    await fact(clientA, true, secondAt, 'EMPLOYEE', subjectA);
+    const second = await applicability(selected.version.id, selected.rule.id, clientA, secondAt, 'EMPLOYEE', subjectA);
+    const secondFinding = await materializeRequirementApplicabilityFinding({ applicabilityId: second.applicability.id, assessmentId, createdByUserId: userId }, db);
+    expect(secondFinding.finding?.id).toBe(firstFinding.finding?.id);
+  });
+
+  it('enforces subjectless uniqueness while permitting different subjects', async () => {
+    const selected = await pair('db-identity');
+    const assessmentId = await assessment(clientA);
+    await fact(clientA, true);
+    await fact(clientA, true, scope.evaluationAt, 'EMPLOYEE', subjectA);
+    const company = await applicability(selected.version.id, selected.rule.id, clientA);
+    const employee = await applicability(selected.version.id, selected.rule.id, clientA, scope.evaluationAt, 'EMPLOYEE', subjectA);
+    const companyFinding = await materializeRequirementApplicabilityFinding({ applicabilityId: company.applicability.id, assessmentId, createdByUserId: userId }, db);
+    const employeeFinding = await materializeRequirementApplicabilityFinding({ applicabilityId: employee.applicability.id, assessmentId, createdByUserId: userId }, db);
+    await expect(db.assessmentFinding.create({ data: {
+      clientId: clientA, assessmentId, requirementId: selected.requirement.id, scopeType: 'COMPANY', factSubjectId: null,
+      requirementApplicabilityId: company.applicability.id, applicabilityOutcome: 'APPLIES', severity: 'MEDIUM', title: 'duplicate', status: 'OPEN', createdByUserId: userId,
+    } })).rejects.toMatchObject({ code: 'P2002' });
+    expect(employeeFinding.finding?.id).not.toBe(companyFinding.finding?.id);
+  });
+
+  it('retries a same-target uniqueness race in a fresh standalone transaction', async () => {
+    const selected = await pair('same-target-race');
+    const assessmentId = await assessment(clientA);
+    await fact(clientA, true);
+    const first = await applicability(selected.version.id, selected.rule.id, clientA);
+    const second = await applicability(selected.version.id, selected.rule.id, clientA);
+    const results = await Promise.all([
+      materializeRequirementApplicabilityFinding({ applicabilityId: first.applicability.id, assessmentId, createdByUserId: userId }, db),
+      materializeRequirementApplicabilityFinding({ applicabilityId: second.applicability.id, assessmentId, createdByUserId: userId }, db),
+    ]);
+    expect(new Set(results.map((result) => result.finding?.id)).size).toBe(1);
+    expect(await db.assessmentFinding.count({ where: { clientId: clientA, requirementId: selected.requirement.id, scopeType: 'COMPANY', factSubjectId: null } })).toBe(1);
+  });
+
+  it('leaves caller-owned InTx conflicts to the caller for whole-transaction retry', async () => {
+    const selected = await pair('intx-conflict-ownership');
+    const assessmentId = await assessment(clientA);
+    await fact(clientA, true);
+    const first = await applicability(selected.version.id, selected.rule.id, clientA);
+    const second = await applicability(selected.version.id, selected.rule.id, clientA);
+    const run = (applicabilityId: string) => db.$transaction(
+      (tx) => materializeRequirementApplicabilityFindingInTx({ applicabilityId, assessmentId, createdByUserId: userId }, tx),
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+    const results = await Promise.allSettled([run(first.applicability.id), run(second.applicability.id)]);
+    const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (rejected) {
+      const retry = await db.$transaction(
+        (tx) => materializeRequirementApplicabilityFindingInTx({ applicabilityId: second.applicability.id, assessmentId, createdByUserId: userId }, tx),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+      expect(retry.finding).toBeTruthy();
+    }
+    expect(await db.assessmentFinding.count({ where: { clientId: clientA, requirementId: selected.requirement.id, scopeType: 'COMPANY', factSubjectId: null } })).toBe(1);
   });
 });
