@@ -21,6 +21,7 @@ import {
   safeText,
 } from '../client-interaction/base';
 import { isCompanyAssessmentType, isCompanyFactType, isCompanyMilestoneType } from './registry';
+import { createTypedFactAndEvaluate } from '../compliance/typedFactMutationService';
 
 type Prisma = typeof defaultPrisma;
 
@@ -160,11 +161,31 @@ export async function upsertOperatingProfile(actor: InternalActor, clientId: str
 /* -------------------------------------------------------------------------- */
 
 export function toFactDTO(row: any): any {
+  const definitionType = row.factDefinition?.valueType ? String(row.factDefinition.valueType) : null;
+  const typedValue = definitionType ? {
+    valueType: definitionType,
+    value: definitionType === 'BOOLEAN' ? row.booleanValue
+      : definitionType === 'NUMBER' ? (row.numberValue === null ? null : Number(row.numberValue))
+      : definitionType === 'DATE' ? (row.dateValue ? row.dateValue.toISOString().slice(0, 10) : null)
+      : definitionType === 'DATETIME' ? (row.datetimeValue ? row.datetimeValue.toISOString() : null)
+      : definitionType === 'MONEY' ? { amount: row.moneyAmount === null ? null : String(row.moneyAmount), currency: row.moneyCurrency }
+      : definitionType === 'ENUM' || definitionType === 'JURISDICTION' ? row.enumValue
+      : row.jsonValue,
+  } : null;
+  const displayValue = typedValue ? (definitionType === 'MONEY'
+    ? `${typedValue.value.amount} ${typedValue.value.currency}`
+    : typeof typedValue.value === 'object' ? JSON.stringify(typedValue.value) : String(typedValue.value)) : row.value;
   const dto = {
     id: row.id,
     clientId: row.clientId,
     type: row.type,
-    value: row.value,
+    value: displayValue,
+    legacyValue: row.value,
+    displayValue,
+    factDefinitionId: row.factDefinitionId ?? null,
+    scopeType: row.scopeType ?? null,
+    factSubjectId: row.factSubjectId ?? null,
+    typedValue,
     validFrom: row.validFrom.toISOString(),
     validTo: row.validTo ? row.validTo.toISOString() : null,
     sourceReference: row.sourceReference,
@@ -183,6 +204,7 @@ export async function listFacts(actor: InternalActor, clientId: string, opts: { 
   const rows = await prisma.clientFact.findMany({
     where: { clientId, ...(opts.type ? { type: opts.type } : {}), ...(opts.status ? { verificationStatus: opts.status as any } : {}) },
     orderBy: [{ validFrom: 'desc' }, { createdAt: 'desc' }],
+    include: { factDefinition: { select: { valueType: true } } },
   });
   const dto = rows.map(toFactDTO);
   assertClientSafe(dto);
@@ -192,6 +214,14 @@ export async function listFacts(actor: InternalActor, clientId: string, opts: { 
 export async function createFact(actor: InternalActor, clientId: string, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
   requireManager(actor);
   await assertClientReadAccess(actor, clientId, prisma);
+  if (input.factDefinitionId) {
+    return toFactDTO((await createTypedFactAndEvaluate({
+      clientId,
+      factDefinitionId: String(input.factDefinitionId),
+      actorUserId: actor.userId,
+      input,
+    }, prisma)).fact);
+  }
   const type = String(input.type || '');
   if (!isCompanyFactType(type)) throw new InteractionError(400, 'FACT_TYPE_UNKNOWN', 'Unknown company fact type.');
   const value = safeText(input.value, 'value', 2000, true)!;
@@ -220,6 +250,15 @@ export async function updateFact(actor: InternalActor, factId: string, input: Re
   const row = await prisma.clientFact.findUnique({ where: { id: factId } });
   if (!row) throw new InteractionError(404, 'FACT_NOT_FOUND', 'Fact not found.');
   await assertClientReadAccess(actor, row.clientId, prisma);
+  if (row.factDefinitionId && Object.keys(input).some((key) => [
+    'value', 'validFrom', 'validTo', 'sourceReference', 'sourceDocumentVersionId',
+    'factDefinitionId', 'scopeType', 'factSubjectId', 'booleanValue', 'numberValue',
+    'stringValue', 'dateValue', 'datetimeValue', 'moneyAmount', 'moneyCurrency',
+    'enumValue', 'jsonValue', 'observedAt', 'effectiveAt', 'referencePeriodStart',
+    'referencePeriodEnd', 'determinationMethod', 'supersededAt',
+  ].includes(key))) {
+    throw new InteractionError(409, 'TYPED_FACT_IMMUTABLE', 'Typed fact meaning and provenance are immutable; create a new fact instead.');
+  }
   const data: any = {};
   if (input.value !== undefined) data.value = safeText(input.value, 'value', 2000, true)!;
   if (input.validFrom !== undefined) data.validFrom = new Date(String(input.validFrom));

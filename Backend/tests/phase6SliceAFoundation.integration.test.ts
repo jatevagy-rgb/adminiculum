@@ -103,7 +103,7 @@ describeWithDatabase('Phase 6 Slice A foundation (PostgreSQL)', () => {
   it('validates MONEY and representative enum/temporal value types', () => {
     const money = validateTypedFactValue({ valueType: 'MONEY', allowedScopeTypes: ['COMPANY'] }, { moneyAmount: '12.50', moneyCurrency: 'HUF' });
     expect(Object.keys(money).sort()).toEqual(['moneyAmount', 'moneyCurrency']);
-    expect(() => validateTypedFactValue({ valueType: 'MONEY', allowedScopeTypes: ['COMPANY'] }, { moneyAmount: '12.50' })).toThrow('ISO 4217');
+    expect(() => validateTypedFactValue({ valueType: 'MONEY', allowedScopeTypes: ['COMPANY'] }, { moneyAmount: '12.50', moneyCurrency: 'HU' })).toThrow('ISO 4217');
     expect(() => validateTypedFactValue({ valueType: 'MONEY', allowedScopeTypes: ['COMPANY'] }, { moneyCurrency: 'HUF' })).toThrow('Exactly one typed value');
     expect(() => validateTypedFactValue({ valueType: 'MONEY', allowedScopeTypes: ['COMPANY'] }, { moneyAmount: '12.50', moneyCurrency: 'huf' })).toThrow('ISO 4217');
     expect(() => validateTypedFactValue({ valueType: 'MONEY', allowedScopeTypes: ['COMPANY'] }, { moneyAmount: '12.50', moneyCurrency: 'HUF', numberValue: 1 })).toThrow('Exactly one typed value');

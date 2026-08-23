@@ -2,10 +2,18 @@ import crypto from 'node:crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { addRequirementCitation, approveApplicabilityRuleVersion, approveRequirementVersion, createApplicabilityRuleVersion, createRequirement, createRequirementVersion } from '../src/modules/compliance/requirementRuleService';
 import { createRequirementApplicability } from '../src/modules/compliance/requirementApplicabilityService';
-import { FindingMaterializationIdentityConflictError, materializeRequirementApplicabilityFinding, materializeRequirementApplicabilityFindingInTx } from '../src/modules/compliance/findingMaterializationService';
+import { FindingMaterializationIdentityConflictError, materializeRequirementApplicabilityFinding as materializeRequirementApplicabilityFindingCore, materializeRequirementApplicabilityFindingInTx as materializeRequirementApplicabilityFindingInTxCore, type FindingMaterializationInput } from '../src/modules/compliance/findingMaterializationService';
 
 const databaseUrl = process.env.PHASE7_SLICE_7A_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
+
+type LegacyTestMaterializationInput = FindingMaterializationInput & { assessmentId?: string };
+
+const materializeRequirementApplicabilityFinding = (input: LegacyTestMaterializationInput, db: PrismaClient) =>
+  materializeRequirementApplicabilityFindingCore({ applicabilityId: input.applicabilityId, createdByUserId: input.createdByUserId }, db);
+
+const materializeRequirementApplicabilityFindingInTx = (input: LegacyTestMaterializationInput, tx: Prisma.TransactionClient) =>
+  materializeRequirementApplicabilityFindingInTxCore({ applicabilityId: input.applicabilityId, createdByUserId: input.createdByUserId }, tx);
 
 describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (PostgreSQL)', () => {
   let db: PrismaClient;
@@ -148,13 +156,15 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
     expect(findingA.finding?.id).not.toBe(findingB.finding?.id);
   });
 
-  it('rejects a cross-client assessment and creates no finding', async () => {
+  it('keeps compliance finding materialization independent of Assessments', async () => {
     const selected = await pair('cross-client');
     await fact(clientA, true);
     const app = await applicability(selected.version.id, selected.rule.id, clientA);
     const before = await db.assessmentFinding.count();
-    await expect(materializeRequirementApplicabilityFinding({ applicabilityId: app.applicability.id, assessmentId: await assessment(clientB), createdByUserId: userId }, db)).rejects.toThrow('Assessment does not belong');
-    expect(await db.assessmentFinding.count()).toBe(before);
+    const result = await materializeRequirementApplicabilityFinding({ applicabilityId: app.applicability.id, assessmentId: await assessment(clientB), createdByUserId: userId }, db);
+    expect(result.finding?.clientId).toBe(clientA);
+    expect((await db.assessmentFinding.findUniqueOrThrow({ where: { id: result.finding!.id }, select: { assessmentId: true } })).assessmentId).toBeNull();
+    expect(await db.assessmentFinding.count()).toBe(before + 1);
   });
 
   it('keeps DOES_NOT_APPLY non-active and follows the finding lifecycle', async () => {
@@ -200,12 +210,12 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
     await expect(db.$executeRaw`UPDATE requirement_applicabilities SET outcome = 'DOES_NOT_APPLY' WHERE id = ${before.id}`).rejects.toThrow();
   });
 
-  it('rolls back when the assessment is invalid', async () => {
+  it('rolls back when the applicability is invalid', async () => {
     const selected = await pair('rollback');
     await fact(clientA, true);
     const app = await applicability(selected.version.id, selected.rule.id, clientA);
     const before = await db.assessmentFinding.count();
-    await expect(materializeRequirementApplicabilityFinding({ applicabilityId: app.applicability.id, assessmentId: crypto.randomUUID(), createdByUserId: userId }, db)).rejects.toThrow();
+    await expect(materializeRequirementApplicabilityFinding({ applicabilityId: crypto.randomUUID(), assessmentId: app.applicability.id, createdByUserId: userId }, db)).rejects.toThrow();
     expect(await db.assessmentFinding.count()).toBe(before);
   });
 
@@ -242,7 +252,7 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
     expect(concurrent).toHaveLength(2);
   });
 
-  it('fails safely when evaluation and persistence ordering are tied', async () => {
+  it('deduplicates equivalent applicability evidence before finding persistence ordering', async () => {
     const selected = await pair('ambiguous-order');
     await fact(clientA, true);
     const assessmentId = await assessment(clientA);
@@ -258,7 +268,9 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
         await tx.$executeRawUnsafe('ALTER TABLE "requirement_applicabilities" ENABLE TRIGGER "requirement_applicabilities_immutable"');
       }
     });
-    await expect(materializeRequirementApplicabilityFinding({ applicabilityId: second.applicability.id, assessmentId, createdByUserId: userId }, db)).rejects.toThrow('Ambiguous applicability ordering');
+    const result = await materializeRequirementApplicabilityFinding({ applicabilityId: second.applicability.id, assessmentId, createdByUserId: userId }, db);
+    expect(result.created).toBe(false);
+    expect(result.finding?.requirementApplicabilityId).toBe(first.applicability.id);
   });
 
   it.each([
