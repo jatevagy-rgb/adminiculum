@@ -17,6 +17,7 @@ import {
   type CompanyMilestone,
   type DevelopmentInitiative,
 } from "@/lib/clientCompanyApi";
+import { ComplianceOverviewPanel } from "@/components/clients/compliance/ComplianceOverview";
 
 const emptyText = "Nincs megjeleníthető elem.";
 
@@ -119,27 +120,23 @@ export function ClientCompanyFoundation({ clientId }: { clientId: string }) {
                       <span className={labelCls}>{assessmentStatusLabel(assessment.status)}</span>
                     </div>
                     {assessment.itemCount != null ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Tételek: {assessment.itemCount}</p> : null}
-                    {assessmentFindings.length ? (
-                      <>
-                        <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Megállapítások: {assessmentFindings.length}</p>
-                        <div className="mt-2 space-y-1">
-                          {assessmentFindings.map((finding) => (
-                            <div key={finding.id} className="rounded bg-[var(--adm-ivory-100)] p-2">
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <b className="text-[var(--adm-text)]">{finding.title}</b>
-                                <span className={labelCls}>{companyFindingSeverityLabel(finding.severity)}</span>
-                              </div>
-                              <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Státusz: {companyFindingStatusLabel(finding.status)}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    ) : null}
+                    {assessmentFindings.length ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Megállapítások: {assessmentFindings.length}</p> : null}
                   </div>
                 );
               })}
             </div>
           </Section>
+
+          <ComplianceOverviewPanel
+            findings={findings.map((finding) => ({
+              id: finding.id,
+              title: finding.title,
+              description: finding.description,
+              recommendation: finding.recommendation,
+              severity: companyFindingSeverityLabel(finding.severity),
+              operationalStatus: companyFindingStatusLabel(finding.status),
+            }))}
+          />
 
           <Section title="Fejlődési terv" empty={!initiatives.length && !milestones.length}>
             {initiatives.length ? (

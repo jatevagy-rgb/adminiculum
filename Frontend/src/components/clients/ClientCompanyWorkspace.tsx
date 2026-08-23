@@ -14,13 +14,13 @@ import {
   factVerificationLabel,
   assessmentTypeLabel,
   assessmentStatusLabel,
-  companyFindingSeverityLabel,
   companyFindingStatusLabel,
   initiativeStatusLabel,
   companyMilestoneStatusLabel,
 } from "@/lib/clientCompanyApi";
 import { contractStatusLabel, contractTypeLabel, obligationStatusLabel } from "@/lib/clientContractsApi";
 import { personStatusLabel } from "@/lib/clientOrganizationApi";
+import { ComplianceOverviewPanel } from "@/components/clients/compliance/ComplianceOverview";
 
 const labelCls = "rounded bg-white border border-[var(--adm-border)] px-2 py-1 text-xs text-[var(--adm-text-muted)]";
 
@@ -58,6 +58,12 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
 
   const activeContracts = (overview?.contracts || []).filter((c) => c.status === 'ACTIVE');
   const openObligations = (overview?.obligations || []).filter((o) => o.status === 'OPEN' || o.status === 'IN_PROGRESS');
+  const complianceFindings = (overview?.assessments || []).flatMap((assessment) =>
+    assessment.importantFindings.map((finding) => ({
+      ...finding,
+      operationalStatus: companyFindingStatusLabel(finding.status),
+    })),
+  );
 
   return (
     <div className="space-y-5" data-testid="client-company-workspace">
@@ -155,18 +161,6 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
                       {assessment.completedAt ? ` · lezárva: ${formatWorkspaceDate(assessment.completedAt)}` : ''}
                       {assessment.reviewAt ? ` · felülvizsgálat: ${formatWorkspaceDate(assessment.reviewAt)}` : ''}
                     </p>
-                    {assessment.importantFindings.length ? (
-                      <ul className="mt-2 space-y-1">
-                        {assessment.importantFindings.map((finding) => (
-                          <li key={finding.id} className="rounded bg-white px-2 py-1.5 text-sm">
-                            <span className="text-[var(--adm-text)]">{finding.title}</span>
-                            <span className="ml-2 text-xs text-[var(--adm-text-muted)]">
-                              {companyFindingSeverityLabel(finding.severity)} · {companyFindingStatusLabel(finding.status)}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -174,6 +168,8 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
               <p className="text-sm text-[var(--adm-text-muted)]">Még nincs aktív felmérés.</p>
             )}
           </Panel>
+
+          <ComplianceOverviewPanel findings={complianceFindings} />
 
           {/* Szerződések és kötelezettségek */}
           <Panel title="Szerződések és kötelezettségek">

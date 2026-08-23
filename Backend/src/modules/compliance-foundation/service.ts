@@ -1,6 +1,7 @@
 import { InteractionError } from '../client-interaction/base';
 
 export interface FactDefinitionForValidation {
+  key?: string;
   valueType: string;
   allowedEnumValues?: unknown;
   allowedScopeTypes: string[];
@@ -26,6 +27,7 @@ const VALUE_FIELDS = [
   'dateValue',
   'datetimeValue',
   'moneyAmount',
+  'moneyCurrency',
   'enumValue',
   'jsonValue',
 ] as const;
@@ -79,13 +81,13 @@ export function validateTypedFactValue(
 ): Record<string, unknown> {
   const fields = VALUE_FIELDS.filter((field) => present(input, field));
   const valueType = String(definition.valueType);
-  const expected = valueType === 'MONEY' ? ['moneyAmount'] : valueType === 'MULTI_ENUM' || valueType === 'PERIOD' ? ['jsonValue'] : {
+  const expected = valueType === 'MONEY' ? ['moneyAmount', 'moneyCurrency'] : valueType === 'MULTI_ENUM' || valueType === 'PERIOD' ? ['jsonValue'] : {
     BOOLEAN: ['booleanValue'], NUMBER: ['numberValue'], STRING: ['stringValue'], DATE: ['dateValue'],
     DATETIME: ['datetimeValue'], ENUM: ['enumValue'], JURISDICTION: ['enumValue'], ENTITY_REFERENCE: [],
   }[valueType] || [];
 
   if (valueType === 'ENTITY_REFERENCE') invalid('ENTITY_REFERENCE values must use FactSubject.');
-  if (fields.length !== 1 || expected.length !== 1 || fields[0] !== expected[0]) {
+  if (fields.length !== expected.length || fields.some((field, index) => field !== expected[index])) {
     invalid(`Exactly one typed value matching ${valueType} is required.`);
   }
 
@@ -114,6 +116,50 @@ export function validateTypedFactValue(
     output.moneyCurrency = input.moneyCurrency;
   }
   return output;
+}
+
+function canonicalDecimal(value: unknown, field: string): string {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) invalid(`${field} must be a finite number.`);
+  return numeric.toString();
+}
+
+function canonicalDateString(value: unknown, field: string): string {
+  const parsed = new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) invalid(`${field} must be a valid date.`);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function canonicalDateTimeString(value: unknown, field: string): string {
+  const parsed = new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) invalid(`${field} must be a valid datetime.`);
+  return parsed.toISOString();
+}
+
+/**
+ * One compatibility bridge for typed facts. Typed columns remain authoritative;
+ * this value is only retained for legacy readers and audit-friendly exports.
+ */
+export function serializeFactValue(
+  definition: Pick<FactDefinitionForValidation, 'valueType'>,
+  typed: Record<string, unknown>,
+): string {
+  switch (String(definition.valueType)) {
+    case 'BOOLEAN': return typed.booleanValue === true ? 'true' : 'false';
+    case 'NUMBER': return canonicalDecimal(typed.numberValue, 'numberValue');
+    case 'STRING': return String(typed.stringValue);
+    case 'DATE': return canonicalDateString(typed.dateValue, 'dateValue');
+    case 'DATETIME': return canonicalDateTimeString(typed.datetimeValue, 'datetimeValue');
+    case 'ENUM':
+    case 'JURISDICTION': return String(typed.enumValue);
+    case 'MONEY': return `${canonicalDecimal(typed.moneyAmount, 'moneyAmount')} ${String(typed.moneyCurrency)}`;
+    case 'MULTI_ENUM': return JSON.stringify([...new Set((typed.jsonValue as string[]).map(String))].sort());
+    case 'PERIOD': {
+      const period = typed.jsonValue as { start: unknown; end: unknown };
+      return `${canonicalDateTimeString(period.start, 'period.start')}/${canonicalDateTimeString(period.end, 'period.end')}`;
+    }
+    default: invalid(`Cannot serialize ${String(definition.valueType)} as a generic typed fact.`);
+  }
 }
 
 export function assertFactSubjectScope(

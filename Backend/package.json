@@ -46,6 +46,7 @@
     "test:phase6-slice-c2:db": "jest --runInBand tests/phase6SliceC2Evaluation.integration.test.ts",
     "test:phase6-slice-d:db": "jest --runInBand tests/phase6SliceDRequirementApplicability.integration.test.ts",
     "test:phase7-slice-7a:db": "jest --runInBand tests/phase7Slice7AFindingMaterialization.integration.test.ts",
+    "test:phase7d:db": "jest --runInBand tests/phase7DTypedFactFinding.integration.test.ts",
     "test:phase5b:db": "jest --runInBand tests/phase5OrgPortalContractsCompany.integration.test.ts",
     "test:cp1-external-communication-docs:db": "jest --runInBand tests/clientPortalExternalCommunicationDocumentAccess.integration.test.ts",
     "test:intake:db": "jest --runInBand tests/clientPortalIntakeTriage.integration.test.ts",
