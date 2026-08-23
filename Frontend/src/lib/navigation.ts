@@ -1,0 +1,15 @@
+export const navItems = [
+  { id: "dashboard", label: "Műszerfal", icon: "grid" },
+  { id: "cases", label: "Ügyek", icon: "folder" },
+  { id: "clause-library", label: "Clause Library", icon: "file" },
+  { id: "tasks", label: "Feladatok", icon: "cat" },
+  { id: "reviews", label: "Review sor", icon: "file" },
+  { id: "documents-compare", label: "Verzió-összevetés", icon: "file" },
+  { id: "notifications", label: "Kommunikáció", icon: "bell" },
+  { id: "communications", label: "Ügykommunikáció", icon: "bell" },
+  { id: "time-entries", label: "Munkaórák", icon: "clock" },
+  { id: "clients", label: "Ügyfelek", icon: "file" },
+  { id: "calendar", label: "Határidők", icon: "calendar" },
+  { id: "client-portal-admin", label: "Ügyfélportál", icon: "file" },
+  { id: "settings", label: "Beállítások", icon: "settings" },
+];

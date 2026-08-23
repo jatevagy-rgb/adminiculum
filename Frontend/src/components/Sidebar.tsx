@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { navItems } from "@/lib/mockData";
+import { navItems } from "@/lib/navigation";
 import { useRouter } from "next/navigation";
 import type { UiPackId } from "@/lib/uiPack";
 import { getUnreadNotificationsCount } from "@/lib/api";
