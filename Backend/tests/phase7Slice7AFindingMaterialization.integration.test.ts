@@ -421,22 +421,132 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
     await fact(clientA, true);
     const first = await applicability(selected.version.id, selected.rule.id, clientA);
     const second = await applicability(selected.version.id, selected.rule.id, clientA);
-    const run = (applicabilityId: string) => db.$transaction(
-      (tx) => materializeRequirementApplicabilityFindingInTx({ applicabilityId, assessmentId, createdByUserId: userId }, tx),
+    const firstFinding = await materializeRequirementApplicabilityFinding({ applicabilityId: first.applicability.id, assessmentId, createdByUserId: userId }, db);
+    let findCalls = 0;
+    let createAttempted = false;
+    let updatesAfterCreate = 0;
+    await expect(db.$transaction((tx) => {
+      const findingDelegate = new Proxy(tx.assessmentFinding, {
+        get(target, property, receiver) {
+          if (property === 'findFirst') {
+            return async () => {
+              findCalls += 1;
+              return null;
+            };
+          }
+          if (property === 'create') {
+            return (...args: any[]) => {
+              createAttempted = true;
+              return Reflect.apply((target as any)[property], target, args);
+            };
+          }
+          if (property === 'update') {
+            return (...args: any[]) => {
+              if (createAttempted) updatesAfterCreate += 1;
+              return Reflect.apply((target as any)[property], target, args);
+            };
+          }
+          const value = Reflect.get(target, property, receiver);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+      const conflictTx = new Proxy(tx, {
+        get(target, property, receiver) {
+          return property === 'assessmentFinding' ? findingDelegate : Reflect.get(target, property, receiver);
+        },
+      });
+      return materializeRequirementApplicabilityFindingInTx({ applicabilityId: second.applicability.id, assessmentId, createdByUserId: userId }, conflictTx as typeof tx);
+    })).rejects.toBeInstanceOf(FindingMaterializationIdentityConflictError);
+    expect(findCalls).toBe(1);
+    expect(createAttempted).toBe(true);
+    expect(updatesAfterCreate).toBe(0);
+    const retry = await db.$transaction(
+      (tx) => materializeRequirementApplicabilityFindingInTx({ applicabilityId: second.applicability.id, assessmentId, createdByUserId: userId }, tx),
     );
-    const results = await Promise.allSettled([run(first.applicability.id), run(second.applicability.id)]);
-    const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-    if (rejected) {
-      expect(rejected.reason).toBeInstanceOf(FindingMaterializationIdentityConflictError);
-      const retry = await db.$transaction(
-        (tx) => materializeRequirementApplicabilityFindingInTx({ applicabilityId: second.applicability.id, assessmentId, createdByUserId: userId }, tx),
-      );
-      expect(retry.finding).toBeTruthy();
-    }
+    expect(retry.finding?.id).toBe(firstFinding.finding?.id);
     expect(await db.assessmentFinding.count({ where: { clientId: clientA, requirementId: selected.requirement.id, scopeType: 'COMPANY', factSubjectId: null } })).toBe(1);
   });
 
   it('leaves an unrelated PostgreSQL P2002 outside finding identity classification', async () => {
     await expect(db.client.create({ data: { id: clientA, name: `duplicate-client-${suffix}` } })).rejects.toMatchObject({ code: 'P2002' });
+  });
+
+  it('retries the entire standalone transaction after a deterministic P2034', async () => {
+    const selected = await pair('forced-p2034-ordering');
+    const assessmentId = await assessment(clientA);
+    const olderAt = new Date('2026-08-24T20:00:00.000Z');
+    const newerAt = new Date('2026-08-24T21:00:00.000Z');
+    await fact(clientA, false, olderAt);
+    const older = await applicability(selected.version.id, selected.rule.id, clientA, olderAt);
+    await fact(clientA, true, newerAt);
+    const newer = await applicability(selected.version.id, selected.rule.id, clientA, newerAt);
+    let attempts = 0;
+    const p2034 = () => new Prisma.PrismaClientKnownRequestError('forced serialization failure', {
+      code: 'P2034',
+      clientVersion: Prisma.prismaVersion.client,
+    });
+    const faultInjectedDb = {
+      $transaction: async (callback: any, options: any) => {
+        attempts += 1;
+        if (attempts === 1) {
+          return db.$transaction(async (tx) => {
+            await callback(tx);
+            throw p2034();
+          }, options);
+        }
+        return db.$transaction(callback, options);
+      },
+    } as unknown as PrismaClient;
+
+    const result = await materializeRequirementApplicabilityFinding({ applicabilityId: newer.applicability.id, assessmentId, createdByUserId: userId }, faultInjectedDb);
+    expect(attempts).toBe(2);
+    expect(result.finding?.requirementApplicabilityId).toBe(newer.applicability.id);
+    expect(result.finding?.requirementApplicabilityId).not.toBe(older.applicability.id);
+    expect(await db.assessmentFinding.count({ where: { clientId: clientA, requirementId: selected.requirement.id, scopeType: 'COMPANY', factSubjectId: null } })).toBe(1);
+  });
+
+  it('stops after three deterministic P2034 failures and commits no finding', async () => {
+    const selected = await pair('forced-p2034-exhaustion');
+    const assessmentId = await assessment(clientA);
+    await fact(clientA, true);
+    const app = await applicability(selected.version.id, selected.rule.id, clientA);
+    const before = await db.assessmentFinding.count({ where: { clientId: clientA, requirementId: selected.requirement.id } });
+    let attempts = 0;
+    const p2034 = () => new Prisma.PrismaClientKnownRequestError('forced serialization failure', {
+      code: 'P2034',
+      clientVersion: Prisma.prismaVersion.client,
+    });
+    const faultInjectedDb = {
+      $transaction: async (callback: any, options: any) => {
+        attempts += 1;
+        return db.$transaction(async (tx) => {
+          await callback(tx);
+          throw p2034();
+        }, options);
+      },
+    } as unknown as PrismaClient;
+
+    await expect(materializeRequirementApplicabilityFinding({ applicabilityId: app.applicability.id, assessmentId, createdByUserId: userId }, faultInjectedDb)).rejects.toMatchObject({ code: 'P2034' });
+    expect(attempts).toBe(3);
+    expect(await db.assessmentFinding.count({ where: { clientId: clientA, requirementId: selected.requirement.id } })).toBe(before);
+  });
+
+  it('stops after three deterministic identity-conflict failures', async () => {
+    const selected = await pair('forced-identity-exhaustion');
+    const assessmentId = await assessment(clientA);
+    await fact(clientA, true);
+    const app = await applicability(selected.version.id, selected.rule.id, clientA);
+    const before = await db.assessmentFinding.count({ where: { clientId: clientA, requirementId: selected.requirement.id } });
+    let attempts = 0;
+    const faultInjectedDb = {
+      $transaction: async () => {
+        attempts += 1;
+        throw new FindingMaterializationIdentityConflictError();
+      },
+    } as unknown as PrismaClient;
+
+    await expect(materializeRequirementApplicabilityFinding({ applicabilityId: app.applicability.id, assessmentId, createdByUserId: userId }, faultInjectedDb)).rejects.toBeInstanceOf(FindingMaterializationIdentityConflictError);
+    expect(attempts).toBe(3);
+    expect(await db.assessmentFinding.count({ where: { clientId: clientA, requirementId: selected.requirement.id } })).toBe(before);
   });
 });
