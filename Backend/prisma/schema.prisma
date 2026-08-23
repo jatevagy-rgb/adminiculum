@@ -4083,8 +4083,8 @@ model AssessmentFinding {
   id                         String                           @id @default(uuid())
   clientId                   String
   client                     Client                           @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  assessmentId               String
-  assessment                 Assessment                       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  assessmentId               String?
+  assessment                 Assessment?                      @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   assessmentItemId           String?
   assessmentItem             AssessmentItem?                  @relation(fields: [assessmentItemId], references: [id], onDelete: SetNull)
   severity                   AssessmentFindingSeverity        @default(MEDIUM)

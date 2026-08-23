@@ -48,8 +48,8 @@ describeWithDatabase('Phase 6 Slice D immutable requirement applicability snapsh
     return id;
   }
 
-  async function createSnapshot(name: string, key = 'bool', inputScope: { scopeType: 'COMPANY'; evaluationAt: Date; referencePeriod?: { start: Date; end: Date } } = scope, specialist: 'NONE' | 'LEGAL_ONLY' | 'TECHNICAL_CLASSIFICATION_REQUIRED' = 'NONE') {
-    const selected = await pair(name, key, specialist);
+  async function createSnapshot(name: string, key = 'bool', inputScope: { scopeType: 'COMPANY'; evaluationAt: Date; referencePeriod?: { start: Date; end: Date } } = scope, specialist: 'NONE' | 'LEGAL_ONLY' | 'TECHNICAL_CLASSIFICATION_REQUIRED' = 'NONE', ruleAst = ast(definitionKey(key))) {
+    const selected = await pair(name, key, specialist, ruleAst);
     const result = await createRequirementApplicability({ requirementVersionId: selected.version.id, ruleVersionId: selected.rule.id, clientId: clientA, scope: inputScope }, db);
     applicabilityIds.push(result.applicability.id);
     return { ...selected, ...result };
@@ -210,13 +210,17 @@ describeWithDatabase('Phase 6 Slice D immutable requirement applicability snapsh
 
   it('stores a deterministic snapshot and normalized value digest', async () => {
     await fact('number', { numberValue: '12.50' });
-    const result = await createSnapshot('number', 'number');
-    const again = await createSnapshot('number-again', 'number');
+    const numberAst = ast(definitionKey('number'), 12.5, 'number');
+    const selected = await pair('number', 'number', 'NONE', numberAst);
+    const result = await createRequirementApplicability({ requirementVersionId: selected.version.id, ruleVersionId: selected.rule.id, clientId: clientA, scope }, db);
+    applicabilityIds.push(result.applicability.id);
+    const again = await createRequirementApplicability({ requirementVersionId: selected.version.id, ruleVersionId: selected.rule.id, clientId: clientA, scope: { ...scope, evaluationAt: new Date('2026-06-15T13:00:00.000Z') } }, db);
     expect(result.applicability.snapshotDigest).toMatch(/^[0-9a-f]{64}$/);
     expect(result.applicability.snapshotDigest).not.toBe('');
     expect(result.applicability.facts[0].normalizedValueDigest).toMatch(/^[0-9a-f]{64}$/);
     expect((result.applicability.snapshotJson as any).normalizedValues[0].normalizedValue).toBe(12.5);
-    expect(again.applicability.snapshotDigest).not.toBe(result.applicability.snapshotDigest);
+    expect(again.applicability.id).toBe(result.applicability.id);
+    expect(again.applicability.snapshotDigest).toBe(result.applicability.snapshotDigest);
   });
 
   it('rejects invalid approval pairs without creating a snapshot', async () => {

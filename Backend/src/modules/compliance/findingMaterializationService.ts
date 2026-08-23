@@ -11,7 +11,6 @@ export class FindingMaterializationIdentityConflictError extends Error {
 
 export interface FindingMaterializationInput {
   applicabilityId: string;
-  assessmentId: string;
   createdByUserId: string;
 }
 
@@ -92,8 +91,6 @@ async function materializeRequirementApplicabilityFindingInTxImpl(
   });
   if (!applicability) throw new Error('RequirementApplicability not found.');
 
-  const assessment = await tx.assessment.findFirst({ where: { id: input.assessmentId, clientId: applicability.clientId }, select: { id: true } });
-  if (!assessment) throw new Error('Assessment does not belong to the applicability client.');
   const requirementId = applicability.requirementVersion.requirementId;
   let finding = await tx.assessmentFinding.findFirst({
     where: {
@@ -133,7 +130,7 @@ async function materializeRequirementApplicabilityFindingInTxImpl(
     created = await tx.assessmentFinding.create({
       data: {
         clientId: applicability.clientId,
-        assessmentId: input.assessmentId,
+        assessmentId: null,
         requirementId,
         scopeType: applicability.scopeType,
         factSubjectId: applicability.factSubjectId,
