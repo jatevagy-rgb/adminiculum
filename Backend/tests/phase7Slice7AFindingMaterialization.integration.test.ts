@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { addRequirementCitation, approveApplicabilityRuleVersion, approveRequirementVersion, createApplicabilityRuleVersion, createRequirement, createRequirementVersion } from '../src/modules/compliance/requirementRuleService';
 import { createRequirementApplicability } from '../src/modules/compliance/requirementApplicabilityService';
-import { materializeRequirementApplicabilityFinding } from '../src/modules/compliance/findingMaterializationService';
+import { materializeRequirementApplicabilityFinding, materializeRequirementApplicabilityFindingInTx } from '../src/modules/compliance/findingMaterializationService';
 
 const databaseUrl = process.env.PHASE7_SLICE_7A_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -28,10 +28,10 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
   const scope = { scopeType: 'COMPANY' as const, evaluationAt: new Date('2026-08-24T12:00:00.000Z') };
   const factKey = `seven_a_fact_${suffix}`;
 
-  async function pair(name: string) {
+  async function pair(name: string, specialistRequirement: 'NONE' | 'LEGAL_ONLY' | 'TECHNICAL_CLASSIFICATION_REQUIRED' = 'NONE', sourceSupportState: 'SUFFICIENT' | 'INCOMPLETE' = 'SUFFICIENT') {
     const requirement = await createRequirement({ key: `REQ_7A_${name}_${suffix}`, jurisdictionCode: 'HU', domainCode, db });
     requirementIds.push(requirement.id);
-    const version = await createRequirementVersion({ requirementId: requirement.id, versionKey: 'V1', title: `7A ${name}`, normativeStatement: `Normative ${name}`, effectiveFrom: new Date('2026-01-01T00:00:00Z'), sourceSupportState: 'SUFFICIENT', db });
+    const version = await createRequirementVersion({ requirementId: requirement.id, versionKey: 'V1', title: `7A ${name}`, normativeStatement: `Normative ${name}`, effectiveFrom: new Date('2026-01-01T00:00:00Z'), sourceSupportState: sourceSupportState === 'INCOMPLETE' ? 'SUFFICIENT' : sourceSupportState, specialistRequirement, db });
     versionIds.push(version.id);
     await addRequirementCitation({ requirementVersionId: version.id, legalSourceVersionId: sourceVersionId, supportRole: 'PRIMARY', db });
     await approveRequirementVersion(version.id, userId, db);
@@ -41,14 +41,14 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
     return { requirement, version, rule };
   }
 
-  async function fact(clientId: string, value: boolean) {
+  async function fact(clientId: string, value: boolean, at = scope.evaluationAt) {
     const id = crypto.randomUUID();
     factIds.push(id);
     await db.clientFact.updateMany({
       where: { clientId, factDefinitionId: definitionId, supersededAt: null },
-      data: { supersededAt: scope.evaluationAt },
+      data: { supersededAt: at },
     });
-    await db.clientFact.create({ data: { id, clientId, type: factKey, value: 'legacy-unused', validFrom: new Date('2026-01-01T00:00:00Z'), factDefinitionId: definitionId, scopeType: 'COMPANY', observedAt: scope.evaluationAt, booleanValue: value } as never });
+    await db.clientFact.create({ data: { id, clientId, type: factKey, value: 'legacy-unused', validFrom: new Date('2026-01-01T00:00:00Z'), factDefinitionId: definitionId, scopeType: 'COMPANY', observedAt: at, booleanValue: value } as never });
     return id;
   }
 
@@ -66,8 +66,8 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
     return id;
   }
 
-  async function applicability(versionId: string, ruleId: string, clientId: string) {
-    const result = await createRequirementApplicability({ requirementVersionId: versionId, ruleVersionId: ruleId, clientId, scope }, db);
+  async function applicability(versionId: string, ruleId: string, clientId: string, evaluationAt = scope.evaluationAt) {
+    const result = await createRequirementApplicability({ requirementVersionId: versionId, ruleVersionId: ruleId, clientId, scope: { ...scope, evaluationAt } }, db);
     applicabilityIds.push(result.applicability.id);
     return result;
   }
@@ -198,5 +198,88 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
     const before = await db.assessmentFinding.count();
     await expect(materializeRequirementApplicabilityFinding({ applicabilityId: app.applicability.id, assessmentId: crypto.randomUUID(), createdByUserId: userId }, db)).rejects.toThrow();
     expect(await db.assessmentFinding.count()).toBe(before);
+  });
+
+  it('never regresses from newer evidence to delayed older evidence', async () => {
+    const selected = await pair('ordering');
+    const assessmentId = await assessment(clientA);
+    const olderAt = new Date('2026-08-24T11:00:00.000Z');
+    const newerAt = new Date('2026-08-24T13:00:00.000Z');
+    await fact(clientA, false, olderAt);
+    const older = await applicability(selected.version.id, selected.rule.id, clientA, olderAt);
+    await fact(clientA, true, newerAt);
+    const newer = await applicability(selected.version.id, selected.rule.id, clientA, newerAt);
+    const current = await materializeRequirementApplicabilityFinding({ applicabilityId: newer.applicability.id, assessmentId, createdByUserId: userId }, db);
+    const delayed = await materializeRequirementApplicabilityFinding({ applicabilityId: older.applicability.id, assessmentId, createdByUserId: userId }, db);
+    expect(current.finding?.requirementApplicabilityId).toBe(newer.applicability.id);
+    expect(delayed.finding?.requirementApplicabilityId).toBe(newer.applicability.id);
+    expect(delayed.finding?.applicabilityOutcome).toBe('APPLIES');
+  });
+
+  it('reconciles older then newer evidence and keeps the newer result under concurrency', async () => {
+    const selected = await pair('concurrency-order');
+    const assessmentId = await assessment(clientA);
+    const olderAt = new Date('2026-08-24T14:00:00.000Z');
+    const newerAt = new Date('2026-08-24T15:00:00.000Z');
+    await fact(clientA, false, olderAt);
+    const older = await applicability(selected.version.id, selected.rule.id, clientA, olderAt);
+    await fact(clientA, true, newerAt);
+    const newer = await applicability(selected.version.id, selected.rule.id, clientA, newerAt);
+    const concurrent = await Promise.all([
+      materializeRequirementApplicabilityFinding({ applicabilityId: older.applicability.id, assessmentId, createdByUserId: userId }, db),
+      materializeRequirementApplicabilityFinding({ applicabilityId: newer.applicability.id, assessmentId, createdByUserId: userId }, db),
+    ]);
+    expect(await db.assessmentFinding.findFirstOrThrow({ where: { clientId: clientA, requirementId: selected.requirement.id } })).toMatchObject({ requirementApplicabilityId: newer.applicability.id, applicabilityOutcome: 'APPLIES' });
+    expect(concurrent).toHaveLength(2);
+  });
+
+  it('fails safely when evaluation and persistence ordering are tied', async () => {
+    const selected = await pair('ambiguous-order');
+    await fact(clientA, true);
+    const assessmentId = await assessment(clientA);
+    const first = await applicability(selected.version.id, selected.rule.id, clientA);
+    const second = await applicability(selected.version.id, selected.rule.id, clientA);
+    await materializeRequirementApplicabilityFinding({ applicabilityId: first.applicability.id, assessmentId, createdByUserId: userId }, db);
+    const persisted = await db.requirementApplicability.findUniqueOrThrow({ where: { id: first.applicability.id }, select: { createdAt: true } });
+    await db.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('ALTER TABLE "requirement_applicabilities" DISABLE TRIGGER "requirement_applicabilities_immutable"');
+      try {
+        await tx.requirementApplicability.update({ where: { id: second.applicability.id }, data: { createdAt: persisted.createdAt } });
+      } finally {
+        await tx.$executeRawUnsafe('ALTER TABLE "requirement_applicabilities" ENABLE TRIGGER "requirement_applicabilities_immutable"');
+      }
+    });
+    await expect(materializeRequirementApplicabilityFinding({ applicabilityId: second.applicability.id, assessmentId, createdByUserId: userId }, db)).rejects.toThrow('Ambiguous applicability ordering');
+  });
+
+  it.each([
+    ['LEGAL_REVIEW_REQUIRED', 'LEGAL_ONLY', 'SUFFICIENT'],
+    ['TECHNICAL_REVIEW_REQUIRED', 'TECHNICAL_CLASSIFICATION_REQUIRED', 'SUFFICIENT'],
+    ['SOURCE_SUPPORT_INSUFFICIENT', 'NONE', 'INCOMPLETE'],
+  ] as const)('preserves specialist outcome %s', async (expected, specialist, sourceSupportState) => {
+    const selected = await pair(`specialist-${expected}`, specialist);
+    const created = await applicability(selected.version.id, selected.rule.id, clientA);
+    if (sourceSupportState === 'INCOMPLETE') {
+      await db.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('ALTER TABLE "requirement_applicabilities" DISABLE TRIGGER "requirement_applicabilities_immutable"');
+        try {
+          await tx.requirementApplicability.update({ where: { id: created.applicability.id }, data: { outcome: expected, sourceSupportState: 'INCOMPLETE' } });
+        } finally {
+          await tx.$executeRawUnsafe('ALTER TABLE "requirement_applicabilities" ENABLE TRIGGER "requirement_applicabilities_immutable"');
+        }
+      });
+    }
+    const result = await materializeRequirementApplicabilityFinding({ applicabilityId: created.applicability.id, assessmentId: await assessment(clientA), createdByUserId: userId }, db);
+    expect(result.finding?.applicabilityOutcome).toBe(expected);
+    expect(result.finding?.applicabilityOutcome).not.toBe('DOES_NOT_APPLY');
+  });
+
+  it('supports composition inside an existing Prisma transaction', async () => {
+    const selected = await pair('composable');
+    await fact(clientA, true);
+    const app = await applicability(selected.version.id, selected.rule.id, clientA);
+    const assessmentId = await assessment(clientA);
+    const result = await db.$transaction((tx) => materializeRequirementApplicabilityFindingInTx({ applicabilityId: app.applicability.id, assessmentId, createdByUserId: userId }, tx));
+    expect(result.finding).toBeTruthy();
   });
 });
