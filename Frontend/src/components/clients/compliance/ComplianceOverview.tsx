@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 
 export type ComplianceApplicabilityStatus =
   | "APPLIES"
@@ -41,26 +41,45 @@ const statusClass: Record<ComplianceApplicabilityStatus, string> = {
   SOURCE_SUPPORT_INSUFFICIENT: "border-[#DCCCA6] bg-[#FFF3D8] text-[#735D16]",
 };
 
-function scopeLabel(finding: ComplianceFindingView): string {
+const scopeLabels: Record<string, string> = {
+  COMPANY: "Vállalat",
+  EMPLOYEE: "Munkavállaló",
+  CONTRACT: "Szerződés",
+  WORKPLACE_SITE: "Munkahelyszín",
+  EVENT: "Esemény",
+  SALES_CHANNEL: "Értékesítési csatorna",
+  PRODUCT_SERVICE: "Termék vagy szolgáltatás",
+  TAX_PERIOD: "Adóidőszak",
+  TRANSACTION: "Tranzakció",
+  REPORTING_EVENT: "Jelentési esemény",
+};
+
+export function getComplianceScopeLabel(finding: ComplianceFindingView): string {
   if (finding.subjectLabel?.trim()) return finding.subjectLabel;
-  if (finding.scopeType === "EMPLOYEE") return "Munkavállaló";
-  if (finding.scopeType === "CONTRACT") return "Szerződés";
-  return "Vállalat";
+  return scopeLabels[finding.scopeType || ""] || "Nem azonosított hatókör";
 }
 
-function findingStatus(finding: ComplianceFindingView): ComplianceApplicabilityStatus | null {
+export function getComplianceFindingStatus(finding: ComplianceFindingView): ComplianceApplicabilityStatus | null {
   return finding.applicabilityStatus ?? null;
 }
 
 export function groupComplianceFindings(findings: ComplianceFindingView[]): Array<{ key: string; title: string; findings: ComplianceFindingView[] }> {
   const groups = new Map<string, { key: string; title: string; findings: ComplianceFindingView[] }>();
   for (const finding of findings) {
-    const key = finding.requirementKey || finding.title;
+    const key = finding.requirementKey?.trim() ? `requirement:${finding.requirementKey}` : `manual:${finding.id}`;
     const group = groups.get(key);
     if (group) group.findings.push(finding);
     else groups.set(key, { key, title: finding.title, findings: [finding] });
   }
   return Array.from(groups.values());
+}
+
+export function getComplianceAttentionFindings(findings: ComplianceFindingView[]): ComplianceFindingView[] {
+  return findings.filter((finding) => getComplianceFindingStatus(finding) !== "DOES_NOT_APPLY");
+}
+
+export function isComplianceGroupInitiallyOpen(findings: ComplianceFindingView[]): boolean {
+  return findings.length <= 1;
 }
 
 export function ComplianceState({
@@ -87,28 +106,28 @@ export function ComplianceState({
 }
 
 export function ComplianceAttentionSummary({ findings }: { findings: ComplianceFindingView[] }) {
-  const attention = findings.filter((finding) => findingStatus(finding) !== "DOES_NOT_APPLY");
+  const attention = getComplianceAttentionFindings(findings);
   const highest = attention.find((finding) => {
-    const status = findingStatus(finding);
+    const status = getComplianceFindingStatus(finding);
     return status === "LEGAL_REVIEW_REQUIRED" || status === "TECHNICAL_REVIEW_REQUIRED" || status === "SOURCE_SUPPORT_INSUFFICIENT";
   });
   if (!attention.length) return <p className="text-sm text-[var(--adm-text-muted)]">Nincs külön figyelmet igénylő belső értékelési tétel.</p>;
   return (
     <div className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
       <p className="text-sm text-[var(--adm-text)]">{attention.length} belső értékelési megállapítás igényel áttekintést.</p>
-      {highest ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Legmagasabb figyelem: {statusLabels[findingStatus(highest) as ComplianceApplicabilityStatus]}</p> : null}
+      {highest ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Legmagasabb figyelem: {statusLabels[getComplianceFindingStatus(highest) as ComplianceApplicabilityStatus]}</p> : null}
     </div>
   );
 }
 
 export function ComplianceFindingRow({ finding }: { finding: ComplianceFindingView }) {
-  const status = findingStatus(finding);
+  const status = getComplianceFindingStatus(finding);
   return (
     <li className="rounded border border-[var(--adm-border)] bg-white p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-medium text-[var(--adm-text)]">{finding.title}</p>
-          <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Hatókör: {scopeLabel(finding)}</p>
+          <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Hatókör: {getComplianceScopeLabel(finding)}</p>
         </div>
         {status ? <span className={`rounded border px-2 py-1 text-xs ${statusClass[status]}`}>{statusLabels[status]}</span> : null}
       </div>
@@ -120,7 +139,7 @@ export function ComplianceFindingRow({ finding }: { finding: ComplianceFindingVi
 }
 
 export function ComplianceRequirementGroup({ title, findings }: { title: string; findings: ComplianceFindingView[] }) {
-  const [open, setOpen] = useState(findings.length <= 1);
+  const [open, setOpen] = useState(isComplianceGroupInitiallyOpen(findings));
   return (
     <section className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
       <button type="button" className="flex w-full items-start justify-between gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)]" aria-expanded={open} onClick={() => setOpen((value) => !value)}>

@@ -42,7 +42,8 @@ describe('7C-A compliance overview foundation (structural)', () => {
 
   it('does not let DOES_NOT_APPLY dominate attention', () => {
     const src = component();
-    assert.match(src, /findingStatus\(finding\) !== "DOES_NOT_APPLY"/);
+    assert.match(src, /getComplianceAttentionFindings/);
+    assert.match(src, /getComplianceFindingStatus\(finding\) !== "DOES_NOT_APPLY"/);
     assert.match(src, /Nem releváns/);
     assert.match(src, /text-\[var\(--adm-text-muted\)\]/);
   });
