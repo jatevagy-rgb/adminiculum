@@ -68,6 +68,18 @@ function ownerDisplay(personName: string | null | undefined, legacyLabel: string
   return null;
 }
 
+function factDisplayValue(fact: any): string {
+  const type = fact.factDefinition?.valueType ? String(fact.factDefinition.valueType) : null;
+  if (!type) return fact.value;
+  if (type === 'BOOLEAN') return fact.booleanValue ? 'true' : 'false';
+  if (type === 'NUMBER') return fact.numberValue === null ? '' : String(fact.numberValue);
+  if (type === 'DATE') return fact.dateValue ? fact.dateValue.toISOString().slice(0, 10) : '';
+  if (type === 'DATETIME') return fact.datetimeValue ? fact.datetimeValue.toISOString() : '';
+  if (type === 'MONEY') return `${fact.moneyAmount === null ? '' : fact.moneyAmount} ${fact.moneyCurrency || ''}`.trim();
+  if (type === 'ENUM' || type === 'JURISDICTION') return fact.enumValue || '';
+  return fact.jsonValue == null ? '' : JSON.stringify(fact.jsonValue);
+}
+
 /**
  * Deterministic party summary for a contract's recorded parties. Adminiculum
  * contracts span many types (lease, NDA, supply, financing, ...), so there is NO
@@ -103,7 +115,7 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
   const [client, profile, facts, assessments, contracts, openObligations, groups, persons, initiatives, milestones] = await Promise.all([
     prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true } }),
     prisma.clientOperatingProfile.findUnique({ where: { clientId } }),
-    prisma.clientFact.findMany({ where: { clientId }, orderBy: [{ validFrom: 'desc' }, { createdAt: 'desc' }] }),
+    prisma.clientFact.findMany({ where: { clientId }, orderBy: [{ validFrom: 'desc' }, { createdAt: 'desc' }], include: { factDefinition: { select: { valueType: true } } } }),
     prisma.assessment.findMany({
       where: { clientId },
       orderBy: { createdAt: 'desc' },
@@ -173,7 +185,11 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
     grouped[key].push({
       id: fact.id,
       type: fact.type,
-      value: fact.value,
+      value: factDisplayValue(fact),
+      legacyValue: fact.value,
+      factDefinitionId: fact.factDefinitionId,
+      scopeType: fact.scopeType,
+      factSubjectId: fact.factSubjectId,
       verificationStatus: String(fact.verificationStatus),
       validFrom: fact.validFrom.toISOString(),
       validTo: fact.validTo ? fact.validTo.toISOString() : null,
