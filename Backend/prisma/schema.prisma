@@ -4098,6 +4098,8 @@ model AssessmentFinding {
   remediationTask            Task?                            @relation(fields: [remediationTaskId], references: [id], onDelete: SetNull)
   requirementId              String?
   requirement                Requirement?                     @relation(fields: [requirementId], references: [id], onDelete: Restrict)
+  scopeType                  FactScopeType?
+  factSubjectId              String?
   requirementApplicabilityId String?
   requirementApplicability   RequirementApplicability?        @relation(fields: [requirementApplicabilityId, clientId], references: [id, clientId], onDelete: NoAction)
   applicabilityOutcome       RequirementApplicabilityOutcome?
@@ -4111,6 +4113,7 @@ model AssessmentFinding {
   @@index([developmentInitiativeId])
   @@index([remediationTaskId])
   @@index([clientId, requirementId])
+  @@index([clientId, requirementId, scopeType, factSubjectId])
   @@index([requirementApplicabilityId])
   @@map("assessment_findings")
 }
