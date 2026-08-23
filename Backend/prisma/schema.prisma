@@ -158,24 +158,25 @@ model Client {
   updatedAt                 DateTime               @updatedAt
 
   // Relations
-  cases                  Case[]
-  documents              Document[]
-  departments            Department[] // Client departments
-  matters                Matter[] // All matters for this client
-  workgroups             ClientWorkgroup[] // Client workgroups for workload tracking
-  redactorProfile        ClientRedactionProfile? // One-to-one relation for anonymization
-  houseStyleProfile      ClientHouseStyleProfile? // One-to-one relation for document house style
-  operatingProfile       ClientOperatingProfile? // Company foundation (Phase 1)
-  facts                  ClientFact[] // Company foundation (Phase 1)
-  companyMilestones      CompanyMilestone[] // Company foundation (Phase 1)
-  assessments            Assessment[] // Company foundation (Phase 1)
-  assessmentFindings     AssessmentFinding[] // Company foundation (Phase 1)
-  developmentInitiatives DevelopmentInitiative[] // Company foundation (Phase 1)
-  contractRecords        ContractRecord[] // Contract library (Phase 2)
-  obligations            ClientObligation[] // Contract library (Phase 2)
-  entitlements           ContractEntitlement[] // Contract library (Phase 2)
-  organizationPersons    OrganizationPerson[] // Organization (Phase 3)
-  factSubjects           FactSubject[]
+  cases                      Case[]
+  documents                  Document[]
+  departments                Department[] // Client departments
+  matters                    Matter[] // All matters for this client
+  workgroups                 ClientWorkgroup[] // Client workgroups for workload tracking
+  redactorProfile            ClientRedactionProfile? // One-to-one relation for anonymization
+  houseStyleProfile          ClientHouseStyleProfile? // One-to-one relation for document house style
+  operatingProfile           ClientOperatingProfile? // Company foundation (Phase 1)
+  facts                      ClientFact[] // Company foundation (Phase 1)
+  companyMilestones          CompanyMilestone[] // Company foundation (Phase 1)
+  assessments                Assessment[] // Company foundation (Phase 1)
+  assessmentFindings         AssessmentFinding[] // Company foundation (Phase 1)
+  requirementApplicabilities RequirementApplicability[]
+  developmentInitiatives     DevelopmentInitiative[] // Company foundation (Phase 1)
+  contractRecords            ContractRecord[] // Contract library (Phase 2)
+  obligations                ClientObligation[] // Contract library (Phase 2)
+  entitlements               ContractEntitlement[] // Contract library (Phase 2)
+  organizationPersons        OrganizationPerson[] // Organization (Phase 3)
+  factSubjects               FactSubject[]
 
   @@map("clients")
 }
@@ -4079,31 +4080,34 @@ enum AssessmentFindingStatus {
 }
 
 model AssessmentFinding {
-  id                      String                    @id @default(uuid())
-  clientId                String
-  client                  Client                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  assessmentId            String
-  assessment              Assessment                @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  assessmentItemId        String?
-  assessmentItem          AssessmentItem?           @relation(fields: [assessmentItemId], references: [id], onDelete: SetNull)
-  severity                AssessmentFindingSeverity @default(MEDIUM)
-  title                   String
-  description             String?
-  recommendation          String?
-  status                  AssessmentFindingStatus   @default(OPEN)
-  developmentInitiativeId String?
-  developmentInitiative   DevelopmentInitiative?    @relation(fields: [developmentInitiativeId], references: [id], onDelete: SetNull)
-  remediationTaskId       String?
-  remediationTask         Task?                     @relation(fields: [remediationTaskId], references: [id], onDelete: SetNull)
-  createdByUserId         String
-  createdBy               User                      @relation(fields: [createdByUserId], references: [id])
-  createdAt               DateTime                  @default(now())
-  updatedAt               DateTime                  @updatedAt
+  id                         String                    @id @default(uuid())
+  clientId                   String
+  client                     Client                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assessmentId               String
+  assessment                 Assessment                @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  assessmentItemId           String?
+  assessmentItem             AssessmentItem?           @relation(fields: [assessmentItemId], references: [id], onDelete: SetNull)
+  severity                   AssessmentFindingSeverity @default(MEDIUM)
+  title                      String
+  description                String?
+  recommendation             String?
+  status                     AssessmentFindingStatus   @default(OPEN)
+  developmentInitiativeId    String?
+  developmentInitiative      DevelopmentInitiative?    @relation(fields: [developmentInitiativeId], references: [id], onDelete: SetNull)
+  remediationTaskId          String?
+  remediationTask            Task?                     @relation(fields: [remediationTaskId], references: [id], onDelete: SetNull)
+  requirementApplicabilityId String?
+  requirementApplicability   RequirementApplicability? @relation(fields: [requirementApplicabilityId, clientId], references: [id, clientId], onDelete: NoAction)
+  createdByUserId            String
+  createdBy                  User                      @relation(fields: [createdByUserId], references: [id])
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
 
   @@index([assessmentId])
   @@index([clientId, status])
   @@index([developmentInitiativeId])
   @@index([remediationTaskId])
+  @@index([requirementApplicabilityId])
   @@map("assessment_findings")
 }
 
@@ -4718,8 +4722,9 @@ model RequirementVersion {
   supersededBy          RequirementVersion?              @relation("RequirementVersionSupersession", fields: [supersededById, requirementId], references: [id, requirementId], onDelete: NoAction)
   supersedes            RequirementVersion[]             @relation("RequirementVersionSupersession")
 
-  citations RequirementCitation[]
-  rules     ApplicabilityRuleVersion[]
+  citations              RequirementCitation[]
+  rules                  ApplicabilityRuleVersion[]
+  applicabilitySnapshots RequirementApplicability[]
 
   @@unique([requirementId, versionKey])
   @@unique([id, requirementId])
@@ -4768,7 +4773,8 @@ model ApplicabilityRuleVersion {
   supersededBy         ApplicabilityRuleVersion?  @relation("ApplicabilityRuleVersionSupersession", fields: [supersededById, requirementVersionId], references: [id, requirementVersionId], onDelete: NoAction)
   supersedes           ApplicabilityRuleVersion[] @relation("ApplicabilityRuleVersionSupersession")
 
-  dependencies ApplicabilityRuleFactDependency[]
+  dependencies           ApplicabilityRuleFactDependency[]
+  applicabilitySnapshots RequirementApplicability[]
 
   @@unique([requirementVersionId, ruleVersionKey])
   @@unique([id, requirementVersionId])
@@ -4788,4 +4794,62 @@ model ApplicabilityRuleFactDependency {
   @@unique([applicabilityRuleVersionId, factKey])
   @@index([factKey])
   @@map("applicability_rule_fact_dependencies")
+}
+
+enum RequirementApplicabilityOutcome {
+  APPLIES
+  DOES_NOT_APPLY
+  INSUFFICIENT_FACTS
+  LEGAL_REVIEW_REQUIRED
+  TECHNICAL_REVIEW_REQUIRED
+  SOURCE_SUPPORT_INSUFFICIENT
+}
+
+model RequirementApplicability {
+  id                    String                           @id @default(uuid())
+  clientId              String
+  client                Client                           @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  requirementVersionId  String
+  requirementVersion    RequirementVersion               @relation(fields: [requirementVersionId], references: [id], onDelete: Restrict)
+  ruleVersionId         String
+  ruleVersion           ApplicabilityRuleVersion         @relation(fields: [ruleVersionId], references: [id], onDelete: Restrict)
+  ruleDigest            String                           @db.VarChar(64)
+  outcome               RequirementApplicabilityOutcome
+  scopeType             FactScopeType
+  factSubjectId         String?
+  evaluationAt          DateTime
+  referencePeriodStart  DateTime?
+  referencePeriodEnd    DateTime?
+  sourceSupportState    RequirementSourceSupportState
+  specialistRequirement RequirementSpecialistRequirement
+  specialistDomainCode  String?
+  schemaVersion         String
+  snapshotJson          Json
+  snapshotDigest        String                           @db.VarChar(64)
+  createdAt             DateTime                         @default(now())
+
+  findings AssessmentFinding[]
+  facts    RequirementApplicabilityFact[]
+
+  @@unique([id, clientId])
+  @@index([clientId, evaluationAt])
+  @@index([requirementVersionId, ruleVersionId])
+  @@map("requirement_applicabilities")
+}
+
+model RequirementApplicabilityFact {
+  id                    String                   @id @default(uuid())
+  applicabilityId       String
+  applicability         RequirementApplicability @relation(fields: [applicabilityId], references: [id], onDelete: Cascade)
+  clientFactId          String
+  factDefinitionId      String
+  factKey               String
+  normalizedValueDigest String                   @db.VarChar(64)
+  createdAt             DateTime                 @default(now())
+
+  @@unique([applicabilityId, factKey, clientFactId])
+  @@index([applicabilityId, factKey])
+  @@index([applicabilityId])
+  @@index([clientFactId])
+  @@map("requirement_applicability_facts")
 }
