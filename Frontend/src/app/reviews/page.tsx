@@ -10,6 +10,12 @@ import { TaskReviewWorkspace } from "@/components/tasks/TaskReviewWorkspace";
 import { listTaskReviewQueue, type TaskReviewQueueItem } from "@/lib/taskLifecycleApi";
 import { ClientAccent } from "@/components/clients/ClientAccent";
 import {
+  REVIEW_QUEUE_COPY,
+  deriveReviewQueueView,
+  reviewQueueCountLabel,
+  type ReviewQueueStatus,
+} from "@/lib/reviewQueueState";
+import {
   ATTENTION_LABELS,
   URGENCY_LABELS,
   formatDate,
@@ -18,7 +24,6 @@ import {
   reviewUrgency,
   sortReviewQueue,
   submissionStatusLabel,
-  taskWorkflowErrorMessage,
   type ReviewUrgency,
 } from "@/lib/taskWorkflowPresentation";
 
@@ -47,6 +52,17 @@ export default function ReviewsPage() {
   );
 }
 
+function ReviewQueueSkeleton({ title }: { title: string }) {
+  return (
+    <div className="mt-3 space-y-2" aria-busy="true">
+      <p className="text-[11px] text-[var(--adm-text-muted)]">{title}</p>
+      {[0, 1, 2].map((row) => (
+        <div key={row} className="h-[104px] animate-pulse rounded border border-[var(--adm-border)] bg-[var(--adm-surface)]" />
+      ))}
+    </div>
+  );
+}
+
 function ReviewsPageContent() {
   const searchParams = useSearchParams();
   const deepLinkedTaskId = searchParams?.get("taskId") || null;
@@ -58,14 +74,12 @@ function ReviewsPageContent() {
   const [submitterFilter, setSubmitterFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<ReviewQueueStatus>("loading");
 
   const keyFor = (item: TaskReviewQueueItem) => `${item.taskId}:${item.submissionId || "legacy"}`;
 
   const loadQueue = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+    setStatus("loading");
     try {
       const items = await listTaskReviewQueue();
       setQueue(sortReviewQueue(items));
@@ -73,10 +87,11 @@ function ReviewsPageContent() {
         const deepLinked = items.find((item) => item.taskId === deepLinkedTaskId && (!deepLinkedSubmissionId || item.submissionId === deepLinkedSubmissionId));
         if (deepLinked) setSelectedKey(keyFor(deepLinked));
       }
-    } catch (loadError) {
-      setError(taskWorkflowErrorMessage(loadError));
-    } finally {
-      setIsLoading(false);
+      setStatus("ready");
+    } catch {
+      setQueue([]);
+      setSelectedKey(null);
+      setStatus("failed");
     }
   }, [deepLinkedSubmissionId, deepLinkedTaskId]);
 
@@ -101,15 +116,16 @@ function ReviewsPageContent() {
   const selected = useMemo(() => queue.find((item) => keyFor(item) === selectedKey) || null, [queue, selectedKey]);
   const activeSubmittedCount = queue.filter((item) => item.source === "TASK_SUBMISSION").length;
   const legacyCount = queue.length - activeSubmittedCount;
+  const view = useMemo(() => deriveReviewQueueView({ status, totalCount: queue.length, filteredCount: filtered.length }), [filtered.length, queue.length, status]);
 
   return (
     <div className="adm-board-page flex-1 overflow-y-auto">
       <div className="adm-board-container space-y-4">
-        <OperationalPageHeader title="Review" count={`${activeSubmittedCount} Leadás`} subtitle="Beküldött revisionök operatív munkatere. A figyelmi kategória és a határidőből számított sürgősség külön jelzés." secondaryActions={<Link href="/tasks" className="adm-link-button px-3 py-2 text-[11px]">Feladatok</Link>} />
+        <OperationalPageHeader title="Review" count={`${reviewQueueCountLabel(status, activeSubmittedCount)} Leadás`} subtitle="Beküldött revisionök operatív munkatere. A figyelmi kategória és a határidőből számított sürgősség külön jelzés." secondaryActions={<Link href="/tasks" className="adm-link-button px-3 py-2 text-[11px]">Feladatok</Link>} />
 
         <section className="rounded-[var(--adm-radius-lg)] border border-[var(--adm-border)] bg-white p-3">
           <div className="flex flex-wrap gap-2" aria-label="Review figyelmi kategóriák">
-            <button type="button" onClick={() => setAttentionFilter("all")} className={`rounded border px-3 py-2 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${attentionFilter === "all" ? "border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-white" : "border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>Összes <span className="ml-1 opacity-70">{activeSubmittedCount}</span></button>
+            <button type="button" onClick={() => setAttentionFilter("all")} className={`rounded border px-3 py-2 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${attentionFilter === "all" ? "border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-white" : "border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>Összes <span className="ml-1 opacity-70">{reviewQueueCountLabel(status, activeSubmittedCount)}</span></button>
             {ATTENTION_ORDER.map((attention) => { const config = ATTENTION_MARKS[attention]; return <button key={attention} type="button" onClick={() => setAttentionFilter(attention)} className={`inline-flex items-center gap-2 rounded border px-3 py-2 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${attentionFilter === attention ? "border-[var(--adm-green-800)] bg-[var(--adm-sage-100)] text-[var(--adm-green-900)]" : "border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}><span aria-hidden="true" className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-current text-[11px]">{config.mark}</span>{ATTENTION_LABELS[attention]} <span className="opacity-60">{categoryCounts[attention]}</span></button>; })}
           </div>
           <div className="mt-3 grid gap-2 md:grid-cols-[minmax(240px,2fr)_minmax(170px,1fr)_minmax(170px,1fr)]">
@@ -120,12 +136,10 @@ function ReviewsPageContent() {
           <details className="mt-2 rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2"><summary className="cursor-pointer text-[11px] font-semibold text-[var(--adm-text)]">További szűrők</summary><div className="mt-2 max-w-xs"><select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)} aria-label="Prioritás szűrő" className="adm-board-field w-full px-3 py-2 text-[11px]"><option value="all">Minden prioritás</option><option value="URGENT">Magas</option><option value="HIGH">Magas</option><option value="MEDIUM">Közepes</option><option value="LOW">Alacsony</option></select></div></details>
         </section>
 
-        {error ? <div role="alert"><CompactState tone="error" title="A review sor nem tölthető be." detail={error} action={<AdminButton size="sm" variant="neutral" onClick={() => void loadQueue()}>Újratöltés</AdminButton>} /></div> : null}
-
         <div className={`grid min-h-0 gap-4 ${selected?.source === "TASK_SUBMISSION" ? "xl:grid-cols-[minmax(330px,0.72fr)_minmax(580px,1.35fr)]" : ""}`}>
           <section className="min-w-0 rounded-[var(--adm-radius-lg)] border border-[var(--adm-border)] bg-white p-3" aria-labelledby="review-queue-title">
-            <div className="flex items-center justify-between gap-3 border-b border-[var(--adm-border)] pb-3"><div><h2 id="review-queue-title" className="font-serif text-[20px] text-[var(--adm-text)]">Review sor</h2><p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">Lejárt határidő, majd legkorábbi határidő és régebbi beküldés szerint.</p></div><span className="text-[11px] font-semibold text-[var(--adm-text-muted)]">{filtered.length} tétel</span></div>
-            {isLoading ? <div className="mt-3"><CompactState title="Review tételek betöltése…" /></div> : filtered.length === 0 ? <div className="mt-3"><CompactState title={queue.length === 0 ? "Nincs review-ra váró Leadás." : "Nincs találat a szűrőkkel."} detail={queue.length === 0 ? "A backend által review-ra küldött revisionök itt jelennek meg." : "Módosítsa a keresést vagy a szűrőket."} /></div> : <div className="mt-3 space-y-2">{filtered.map((item) => { const attention = item.requestedAttention || ""; const urgency = reviewUrgency(item); const active = keyFor(item) === selectedKey; const content = <><ClientAccent colorKey={item.case.clientColorKey} className="absolute inset-y-0 left-0 w-1" /><div className="flex flex-wrap items-center gap-1.5"><AdminStatusPill tone={ATTENTION_MARKS[attention]?.tone || "neutral"}>{ATTENTION_LABELS[attention] || "Nincs review típus"}</AdminStatusPill><AdminStatusPill tone={urgencyTone(urgency)}>{URGENCY_LABELS[urgency]}</AdminStatusPill></div><h3 className="mt-2 text-[13px] font-semibold text-[var(--adm-text)]">{item.title}</h3><p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{item.case.caseNumber} · {item.case.clientName} · {item.case.matterType}</p><div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-[var(--adm-text-muted)]"><span>Beküldő: {item.submittedBy?.displayName || "Nincs adat"}</span><span>{formatDateTime(item.submittedAt)}</span><span>{item.submissionDocumentCount || 0} dokumentum</span><span>{formatMinutes(item.linkedTimeMinutes)}</span></div>{item.workSummaryPreview ? <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-[var(--adm-text-muted)]">{item.workSummaryPreview}</p> : null}</>; return item.source === "TASK_SUBMISSION" && item.submissionId ? <button key={keyFor(item)} type="button" onClick={() => setSelectedKey(keyFor(item))} className={`relative w-full rounded border p-3 pl-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${active ? "border-[var(--adm-green-800)] bg-[var(--adm-sage-100)]/30" : "border-[var(--adm-border)] bg-white hover:bg-[var(--adm-surface)]"}`}>{content}</button> : <div key={keyFor(item)} className="relative rounded border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 pl-4">{content}<Link href={`/tasks?taskId=${encodeURIComponent(item.taskId)}`} className="mt-3 inline-flex text-[10px] font-semibold text-[var(--adm-blue-700)] hover:underline">Korábbi feladat megnyitása</Link></div>; })}</div>}
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--adm-border)] pb-3"><div><h2 id="review-queue-title" className="font-serif text-[20px] text-[var(--adm-text)]">Review sor</h2><p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">Lejárt határidő, majd legkorábbi határidő és régebbi beküldés szerint.</p></div><span className="text-[11px] font-semibold text-[var(--adm-text-muted)]">{reviewQueueCountLabel(status, filtered.length)} tétel</span></div>
+            {view.kind === "loading" ? <ReviewQueueSkeleton title={view.title} /> : view.kind === "unavailable" ? <div className="mt-3" role="alert"><CompactState tone="error" title={view.title} detail={view.detail} action={<AdminButton size="sm" variant="neutral" onClick={() => void loadQueue()}>{REVIEW_QUEUE_COPY.retry}</AdminButton>} /></div> : view.kind !== "populated" ? <div className="mt-3"><CompactState title={view.title} detail={view.detail} /></div> : <div className="mt-3 space-y-2">{filtered.map((item) => { const attention = item.requestedAttention || ""; const urgency = reviewUrgency(item); const active = keyFor(item) === selectedKey; const content = <><ClientAccent colorKey={item.case.clientColorKey} className="absolute inset-y-0 left-0 w-1" /><div className="flex flex-wrap items-center gap-1.5"><AdminStatusPill tone={ATTENTION_MARKS[attention]?.tone || "neutral"}>{ATTENTION_LABELS[attention] || "Nincs review típus"}</AdminStatusPill><AdminStatusPill tone={urgencyTone(urgency)}>{URGENCY_LABELS[urgency]}</AdminStatusPill></div><h3 className="mt-2 text-[13px] font-semibold text-[var(--adm-text)]">{item.title}</h3><p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{item.case.caseNumber} · {item.case.clientName} · {item.case.matterType}</p><div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-[var(--adm-text-muted)]"><span>Beküldő: {item.submittedBy?.displayName || "Nincs adat"}</span><span>{formatDateTime(item.submittedAt)}</span><span>{item.submissionDocumentCount || 0} dokumentum</span><span>{formatMinutes(item.linkedTimeMinutes)}</span></div>{item.workSummaryPreview ? <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-[var(--adm-text-muted)]">{item.workSummaryPreview}</p> : null}</>; return item.source === "TASK_SUBMISSION" && item.submissionId ? <button key={keyFor(item)} type="button" onClick={() => setSelectedKey(keyFor(item))} className={`relative w-full rounded border p-3 pl-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${active ? "border-[var(--adm-green-800)] bg-[var(--adm-sage-100)]/30" : "border-[var(--adm-border)] bg-white hover:bg-[var(--adm-surface)]"}`}>{content}</button> : <div key={keyFor(item)} className="relative rounded border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 pl-4">{content}<Link href={`/tasks?taskId=${encodeURIComponent(item.taskId)}`} className="mt-3 inline-flex text-[10px] font-semibold text-[var(--adm-blue-700)] hover:underline">Korábbi feladat megnyitása</Link></div>; })}</div>}
             {legacyCount > 0 ? <p className="mt-3 border-t border-[var(--adm-border)] pt-3 text-[10px] text-[var(--adm-text-muted)]">{legacyCount} korábbi, submission nélküli review tétel csak feladatként nyitható meg; döntési gombot nem kap.</p> : null}
           </section>
 
