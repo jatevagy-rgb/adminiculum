@@ -33,6 +33,13 @@ describe('Phase 6 C2 deterministic fact selection', () => {
     expect(run(definition('s', 's', 'STRING'), [baseFact('s1', 's', { stringValue: 'yes' })]).factMap.s).toEqual({ type: 'string', value: 'yes' });
   });
 
+  it('returns consumed typed payload separately from the content-light selection result', () => {
+    const result = run(definition('b', 'b'), [baseFact('b1', 'b', { booleanValue: true })]);
+    expect(result.consumedFacts.b).toEqual({
+      factDefinitionId: 'b', factKey: 'b', valueType: 'BOOLEAN', normalizedValue: true, clientFactIds: ['b1'],
+    });
+  });
+
   it('returns missing facts without legacy fallback and sorts trace IDs', () => {
     const result = run(definition('b', 'b'), [baseFact('z', 'b', { booleanValue: true }), baseFact('a', 'b', { booleanValue: true })]);
     expect(result.selectedClientFactIds).toEqual(['a', 'z']);

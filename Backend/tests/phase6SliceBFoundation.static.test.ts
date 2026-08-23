@@ -51,7 +51,9 @@ describe('Phase 6 Slice B static safety', () => {
   });
 
   it('keeps the compliance engine disabled and excludes evaluator/runtime routes', () => {
-    expect(schema).not.toMatch(/model (RequirementApplicability|EvaluationSnapshot)\b/);
+    // Slice D owns RequirementApplicability persistence; Slice B still must not
+    // expose evaluator/runtime routes or enable the compliance engine itself.
+    expect(schema).not.toMatch(/model EvaluationSnapshot\b/);
     expect(fs.readFileSync(path.join(root, 'src', 'middleware', 'featureAvailability.ts'), 'utf8')).toContain("=== 'true'");
     expect(workflow).not.toContain('test:phase6-slice-b:db\n          rc=$?');
   });

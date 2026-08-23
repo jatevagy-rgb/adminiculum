@@ -1,7 +1,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { canonicalDigest } from './canonicalDigest';
 import { evaluateRule, type EvaluatorResult } from './evaluator';
-import { selectFacts, type EvaluationScope, type FactDefinitionForSelection, type ClientFactForSelection, type FactSubjectForSelection } from './factSelection';
+import { selectFacts, type EvaluationScope, type FactDefinitionForSelection, type ClientFactForSelection, type FactSubjectForSelection, type ConsumedFactPayload } from './factSelection';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -36,6 +36,10 @@ export interface ComplianceEvaluationResult {
   trace: ComplianceEvaluationTrace;
 }
 
+export interface ComplianceEvaluationInternalResult extends ComplianceEvaluationResult {
+  consumedFacts: Record<string, ConsumedFactPayload>;
+}
+
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort();
 }
@@ -58,8 +62,8 @@ function finish(trace: ComplianceEvaluationTrace, outcome: ComplianceEvaluationR
   return { outcome, trace: { ...trace, outcome, reasonCodes: uniqueSorted(reasons) } };
 }
 
-export async function evaluateCompliance(input: ComplianceEvaluationInput, db: Db = new PrismaClient()): Promise<ComplianceEvaluationResult> {
-  const requirementVersion = await db.requirementVersion.findUnique({ where: { id: input.requirementVersionId }, select: { id: true, status: true, sourceSupportState: true, specialistRequirement: true } });
+export async function evaluateComplianceWithConsumedFacts(input: ComplianceEvaluationInput, db: Db = new PrismaClient()): Promise<ComplianceEvaluationInternalResult> {
+  const requirementVersion = await db.requirementVersion.findUnique({ where: { id: input.requirementVersionId }, select: { id: true, status: true, sourceSupportState: true, specialistRequirement: true, specialistDomainCode: true } });
   if (!requirementVersion) throw new ComplianceEvaluationError('REQUIREMENT_VERSION_NOT_FOUND', 'RequirementVersion was not found.');
   if (requirementVersion.status !== 'APPROVED') throw new ComplianceEvaluationError('REQUIREMENT_VERSION_NOT_APPROVED', 'RequirementVersion must be approved.');
 
@@ -74,9 +78,9 @@ export async function evaluateCompliance(input: ComplianceEvaluationInput, db: D
   const definitions = rule.dependencies.map((dependency) => dependency.resolvedFactDefinition as FactDefinitionForSelection | null);
   const keys = rule.dependencies.map((dependency) => dependency.factKey);
   const trace = traceBase(input, rule.canonicalDigest || canonicalDigest(rule.astJson), keys);
-  if (requirementVersion.sourceSupportState !== 'SUFFICIENT') return finish(trace, 'SOURCE_SUPPORT_INSUFFICIENT', ['SOURCE_SUPPORT_INSUFFICIENT']);
-  if (requirementVersion.specialistRequirement === 'LEGAL_ONLY') return finish(trace, 'LEGAL_REVIEW_REQUIRED', ['LEGAL_REVIEW_REQUIRED']);
-  if (requirementVersion.specialistRequirement === 'TECHNICAL_CLASSIFICATION_REQUIRED') return finish(trace, 'TECHNICAL_REVIEW_REQUIRED', ['TECHNICAL_REVIEW_REQUIRED']);
+  if (requirementVersion.sourceSupportState !== 'SUFFICIENT') return { ...finish(trace, 'SOURCE_SUPPORT_INSUFFICIENT', ['SOURCE_SUPPORT_INSUFFICIENT']), consumedFacts: {} };
+  if (requirementVersion.specialistRequirement === 'LEGAL_ONLY') return { ...finish(trace, 'LEGAL_REVIEW_REQUIRED', ['LEGAL_REVIEW_REQUIRED']), consumedFacts: {} };
+  if (requirementVersion.specialistRequirement === 'TECHNICAL_CLASSIFICATION_REQUIRED') return { ...finish(trace, 'TECHNICAL_REVIEW_REQUIRED', ['TECHNICAL_REVIEW_REQUIRED']), consumedFacts: {} };
 
   const subject = input.scope.factSubjectId
     ? await db.factSubject.findUnique({ where: { id: input.scope.factSubjectId }, select: { id: true, clientId: true, scopeType: true, startsAt: true, endsAt: true, archivedAt: true } }) as FactSubjectForSelection | null
@@ -94,8 +98,13 @@ export async function evaluateCompliance(input: ComplianceEvaluationInput, db: D
   }));
   const selection = selectFacts({ clientId: input.clientId, scope: input.scope, dependencies, subject });
   if (selection.reasonCodes.length > 0 || selection.missingFactKeys.length > 0) {
-    return finish({ ...trace, selectedClientFactIds: selection.selectedClientFactIds, missingFactKeys: selection.missingFactKeys }, 'INSUFFICIENT_FACTS', [...selection.reasonCodes, ...selection.warningCodes]);
+    return { ...finish({ ...trace, selectedClientFactIds: selection.selectedClientFactIds, missingFactKeys: selection.missingFactKeys }, 'INSUFFICIENT_FACTS', [...selection.reasonCodes, ...selection.warningCodes]), consumedFacts: selection.consumedFacts };
   }
   const evaluatorResult = evaluateRule(rule.astJson, selection.factMap);
-  return finish({ ...trace, selectedClientFactIds: selection.selectedClientFactIds, missingFactKeys: evaluatorResult.missingFactKeys, evaluatorResult }, evaluatorResult.result, selection.warningCodes);
+  return { ...finish({ ...trace, selectedClientFactIds: selection.selectedClientFactIds, missingFactKeys: evaluatorResult.missingFactKeys, evaluatorResult }, evaluatorResult.result, selection.warningCodes), consumedFacts: selection.consumedFacts };
+}
+
+export async function evaluateCompliance(input: ComplianceEvaluationInput, db: Db = new PrismaClient()): Promise<ComplianceEvaluationResult> {
+  const { consumedFacts: _consumedFacts, ...result } = await evaluateComplianceWithConsumedFacts(input, db);
+  return result;
 }

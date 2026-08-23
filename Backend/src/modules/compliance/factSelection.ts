@@ -52,6 +52,17 @@ export interface FactSelectionResult {
   missingFactKeys: string[];
   reasonCodes: string[];
   warningCodes: string[];
+  consumedFacts: Record<string, ConsumedFactPayload>;
+}
+
+export type ConsumedFactValue = boolean | number | string;
+
+export interface ConsumedFactPayload {
+  factDefinitionId: string;
+  factKey: string;
+  valueType: 'BOOLEAN' | 'NUMBER' | 'DATE' | 'STRING';
+  normalizedValue: ConsumedFactValue;
+  clientFactIds: string[];
 }
 
 function canonicalDate(value: Date): string | null {
@@ -107,6 +118,7 @@ export function selectFacts(input: {
   const missingFactKeys: string[] = [];
   const reasonCodes: string[] = [];
   const warningCodes: string[] = [];
+  const consumedFacts: Record<string, ConsumedFactPayload> = {};
 
   for (const dependency of [...input.dependencies].sort((a, b) => a.factKey.localeCompare(b.factKey))) {
     const definition = dependency.definition;
@@ -169,7 +181,15 @@ export function selectFacts(input: {
       continue;
     }
     factMap[dependency.factKey] = first;
-    selectedClientFactIds.push(...eligible.map((fact) => fact.id));
+    const contributingIds = eligible.map((fact) => fact.id);
+    selectedClientFactIds.push(...contributingIds);
+    consumedFacts[dependency.factKey] = {
+      factDefinitionId: definition.id,
+      factKey: dependency.factKey,
+      valueType: definition.valueType as ConsumedFactPayload['valueType'],
+      normalizedValue: first.value,
+      clientFactIds: [...new Set(contributingIds)].sort(),
+    };
   }
 
   return {
@@ -178,5 +198,6 @@ export function selectFacts(input: {
     missingFactKeys: [...new Set(missingFactKeys)].sort(),
     reasonCodes: [...new Set(reasonCodes)].sort(),
     warningCodes: [...new Set(warningCodes)].sort(),
+    consumedFacts,
   };
 }
