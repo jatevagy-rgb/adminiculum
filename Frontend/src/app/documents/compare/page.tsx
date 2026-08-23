@@ -60,6 +60,7 @@ import {
   type TaskItem,
   type TimelineEvent,
 } from "@/lib/api";
+import { DEMO_WARNING, isDemoMode } from "@/lib/demoPolicy";
 
 type CompareDocument = {
   id: string;
@@ -183,7 +184,6 @@ const workspaceClauseCatalogue: WorkspaceClauseItem[] = [
   { id: "clause-illetekesseg-joghatosag", type: "clause", title: "Illetékesség / joghatóság", description: "Jogvita rendezésére szolgáló fórumkijelölés.", tags: ["jogvita", "forum"], text: "A felek a szerződésből eredő vitáikat elsősorban tárgyalás útján rendezik; ennek sikertelensége esetén a hatáskörrel és illetékességgel rendelkező magyar bíróság jár el." },
   { id: "clause-vis-maior", type: "clause", title: "Vis maior", description: "Elháríthatatlan külső okokra vonatkozó mentesülési szöveg.", tags: ["kockazat", "teljesites"], text: "Vis maior esemény esetén az érintett fél a teljesítés akadályáról haladéktalanul értesíti a másik felet, és az akadály fennállása alatt a késedelem jogkövetkezményei alól mentesül." },
   { id: "clause-szerzodesszeges-kovetkezmenyei", type: "clause", title: "Szerződésszegés következményei", description: "Szerződésszegés kezelésének rövid kerete.", tags: ["szerzodesszeges", "jogkovetkezmeny"], text: "Szerződésszegés esetén a sérelmet szenvedett fél jogosult a szerződésszegés megszüntetését, kára megtérítését, valamint a szerződésben meghatározott egyéb jogkövetkezményeket érvényesíteni." },
-  { id: "clause-adatkezelesi-rendelkezes", type: "clause", title: "Adatkezelési rendelkezés", description: "Személyes adatok kezelésére figyelmeztető indító klauzula.", tags: ["adatkezeles", "gdpr"], text: "A felek a szerződés teljesítése során kezelt személyes adatokat a vonatkozó adatvédelmi jogszabályokkal összhangban kezelik." },
   { id: "clause-kesedelmi-kamat", type: "clause", title: "Késedelmi kamat", description: "Fizetési késedelem esetére szóló starter rendelkezés.", tags: ["fizetes", "kesedelem"], text: "Fizetési késedelem esetén a késedelembe eső fél a Ptk. szerinti késedelmi kamat megfizetésére köteles." },
   { id: "clause-teljesitesi-hatarido", type: "clause", title: "Teljesítési határidő", description: "Teljesítés időpontját rögzítő alapmondat.", tags: ["teljesites", "hatarido"], text: "A teljesítés határideje a szerződés hatálybalépésétől számított, a felek által rögzített időtartam." },
   { id: "clause-birtokbaadas", type: "clause", title: "Birtokbaadás", description: "Ingatlan birtokbaadásához használható rövid klauzula.", tags: ["ingatlan", "birtok"], text: "Az eladó az ingatlant a teljes vételár megfizetését követően, jegyzőkönyv felvétele mellett adja a vevő birtokába." },
@@ -420,6 +420,7 @@ export default function DocumentsComparePage() {
 function DocumentsComparePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const demoMode = isDemoMode();
   const requestedCaseId = searchParams?.get("caseId") || "";
   const requestedDocumentId = searchParams?.get("documentId") || "";
   const requestedBaselineId = searchParams?.get("baselineId") || "";
@@ -1247,8 +1248,9 @@ function DocumentsComparePageContent() {
     return paragraphCount > 80;
   }, [activeDraftText]);
 
-const filteredClauseTools = useMemo(() => {
-    return workspaceClauseCatalogue.filter((tool) => {
+  const filteredClauseTools = useMemo(() => {
+    const catalogue = demoMode ? workspaceClauseCatalogue : [];
+    return catalogue.filter((tool) => {
       const text = toolSearch.trim().toLowerCase();
       if (!text) return true;
       return (
@@ -1257,7 +1259,7 @@ const filteredClauseTools = useMemo(() => {
         tool.tags.some((tag) => tag.toLowerCase().includes(text))
       );
     });
-  }, [toolSearch]);
+  }, [demoMode, toolSearch]);
 
   const activeWorkspaceModeId: WorkspaceModeId = "CONTRACT_REVIEW";
   const activeWorkspaceMode =
@@ -2954,6 +2956,11 @@ return (
 
                   {workspaceMainTab === "clauses" ? (
                     <>
+                      {demoMode ? (
+                        <p className="rounded-[6px] border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
+                          {DEMO_WARNING}
+                        </p>
+                      ) : null}
                       <input
                         ref={toolSearchRef}
                         value={toolSearch}
@@ -3670,4 +3677,3 @@ return (
     </div>
   );
 }
-

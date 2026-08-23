@@ -244,7 +244,7 @@ describe('internal portal-admin UI', () => {
     const sidebar = read('src/components/Sidebar.tsx');
     assert.match(sidebar, /"client-portal-admin": "\/client-portal-admin"/);
     assert.match(sidebar, /client-portal-admin/);
-    const nav = read('src/lib/mockData.ts');
-    assert.match(nav, /id: 'client-portal-admin'/);
+    const nav = read('src/lib/navigation.ts');
+    assert.match(nav, /id: ["']client-portal-admin["']/);
   });
 });
