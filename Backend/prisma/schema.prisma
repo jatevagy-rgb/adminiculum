@@ -4845,8 +4845,10 @@ model RequirementApplicabilityFact {
   factDefinitionId      String
   factKey               String
   normalizedValueDigest String                   @db.VarChar(64)
+  createdAt             DateTime                 @default(now())
 
-  @@unique([applicabilityId, clientFactId])
+  @@unique([applicabilityId, factKey, clientFactId])
+  @@index([applicabilityId, factKey])
   @@index([applicabilityId])
   @@index([clientFactId])
   @@map("requirement_applicability_facts")

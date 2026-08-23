@@ -46,10 +46,12 @@ CREATE TABLE "requirement_applicability_facts" (
   "factDefinitionId" TEXT NOT NULL,
   "factKey" TEXT NOT NULL,
   "normalizedValueDigest" VARCHAR(64) NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "requirement_applicability_facts_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "requirement_applicability_facts_digest_check" CHECK ("normalizedValueDigest" ~ '^[0-9a-f]{64}$')
 );
-CREATE UNIQUE INDEX "requirement_applicability_facts_applicabilityId_clientFactId_key" ON "requirement_applicability_facts"("applicabilityId", "clientFactId");
+CREATE UNIQUE INDEX "requirement_applicability_facts_applicabilityId_factKey_clientFactId_key" ON "requirement_applicability_facts"("applicabilityId", "factKey", "clientFactId");
+CREATE INDEX "requirement_applicability_facts_applicabilityId_factKey_idx" ON "requirement_applicability_facts"("applicabilityId", "factKey");
 CREATE INDEX "requirement_applicability_facts_applicabilityId_idx" ON "requirement_applicability_facts"("applicabilityId");
 CREATE INDEX "requirement_applicability_facts_clientFactId_idx" ON "requirement_applicability_facts"("clientFactId");
 

@@ -23,4 +23,14 @@ describe('Phase 6 Slice D static wiring', () => {
     expect(service).not.toContain('router.');
     expect(fs.existsSync(path.join(backendRoot, 'prisma', 'migrations'))).toBe(true);
   });
+
+  it('preserves N-provenance cardinality per fact key and client fact', () => {
+    const schema = fs.readFileSync(path.join(backendRoot, 'prisma', 'schema.prisma'), 'utf8');
+    const migration = fs.readFileSync(path.join(backendRoot, 'prisma', 'migrations', '20260823130000_phase6_slice_d_requirement_applicability_snapshot', 'migration.sql'), 'utf8');
+    expect(schema).toContain('@@unique([applicabilityId, factKey, clientFactId])');
+    expect(schema).toContain('@@index([applicabilityId, factKey])');
+    expect(migration).toContain('"applicabilityId", "factKey", "clientFactId"');
+    expect(migration).toContain('"applicabilityId", "factKey"');
+    expect(migration).not.toContain('applicabilityId_clientFactId_key');
+  });
 });

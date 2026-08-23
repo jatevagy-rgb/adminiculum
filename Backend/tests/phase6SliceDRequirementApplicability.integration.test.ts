@@ -24,18 +24,19 @@ describeWithDatabase('Phase 6 Slice D immutable requirement applicability snapsh
   const applicabilityIds: string[] = [];
   const assessmentIds: string[] = [];
 
-  const ast = (key: string, value: unknown = true, valueType = 'boolean') => ({ schemaVersion: 'rule-ast/v1', node: { kind: 'COMPARE', operator: 'EQ', left: { kind: 'FACT', factKey: key }, right: { kind: 'LITERAL', valueType, value } } });
+  const comparison = (key: string, value: unknown = true, valueType = 'boolean') => ({ kind: 'COMPARE', operator: 'EQ', left: { kind: 'FACT', factKey: key }, right: { kind: 'LITERAL', valueType, value } });
+  const ast = (key: string, value: unknown = true, valueType = 'boolean') => ({ schemaVersion: 'rule-ast/v1', node: comparison(key, value, valueType) });
   const scope = { scopeType: 'COMPANY' as const, evaluationAt: new Date('2026-06-15T12:00:00.000Z') };
   const definitionKey = (key: string) => `D_${key}_${suffix}`;
 
-  async function pair(name: string, key = 'bool', specialistRequirement: 'NONE' | 'LEGAL_ONLY' | 'TECHNICAL_CLASSIFICATION_REQUIRED' = 'NONE') {
+  async function pair(name: string, key = 'bool', specialistRequirement: 'NONE' | 'LEGAL_ONLY' | 'TECHNICAL_CLASSIFICATION_REQUIRED' = 'NONE', ruleAst = ast(definitionKey(key))) {
     const requirement = await createRequirement({ key: `REQ_${name}_${suffix}`, jurisdictionCode: 'HU', domainCode, db });
     requirementIds.push(requirement.id);
     const version = await createRequirementVersion({ requirementId: requirement.id, versionKey: 'V1', title: name, normativeStatement: name, effectiveFrom: new Date('2026-01-01T00:00:00Z'), sourceSupportState: 'SUFFICIENT', specialistRequirement, db });
     versionIds.push(version.id);
     await addRequirementCitation({ requirementVersionId: version.id, legalSourceVersionId: sourceVersionId, supportRole: 'PRIMARY', db });
     await approveRequirementVersion(version.id, userId, db);
-    const rule = await createApplicabilityRuleVersion({ requirementVersionId: version.id, ruleVersionKey: 'R1', astJson: ast(definitionKey(key)), db });
+    const rule = await createApplicabilityRuleVersion({ requirementVersionId: version.id, ruleVersionKey: 'R1', astJson: ruleAst, db });
     ruleIds.push(rule.id);
     await approveApplicabilityRuleVersion(rule.id, userId, db);
     return { version, rule };
@@ -162,7 +163,49 @@ describeWithDatabase('Phase 6 Slice D immutable requirement applicability snapsh
     const first = await fact();
     const second = await fact();
     const result = await createSnapshot('duplicates');
-    expect(result.applicability.facts.map((item) => item.clientFactId).sort()).toEqual([first, second].sort());
+    const provenance = result.applicability.facts.sort((left, right) => left.clientFactId.localeCompare(right.clientFactId));
+    expect(provenance.map((item) => item.clientFactId)).toEqual([first, second].sort());
+    expect(provenance.map((item) => item.factKey)).toEqual([definitionKey('bool'), definitionKey('bool')]);
+    expect(provenance[0].normalizedValueDigest).toBe(provenance[1].normalizedValueDigest);
+    const snapshotBefore = result.applicability.snapshotJson;
+    await expect(db.$executeRaw`UPDATE requirement_applicabilities SET snapshotJson = '{"tampered":true}'::jsonb WHERE id = ${result.applicability.id}`).rejects.toThrow();
+    expect((await db.requirementApplicability.findUniqueOrThrow({ where: { id: result.applicability.id } })).snapshotJson).toEqual(snapshotBefore);
+  });
+
+  it('rejects a duplicate provenance triple', async () => {
+    const first = await fact();
+    const result = await createSnapshot('provenance-triple');
+    const row = result.applicability.facts[0];
+    await expect(db.requirementApplicabilityFact.create({ data: {
+      applicabilityId: result.applicability.id,
+      clientFactId: first,
+      factDefinitionId: row.factDefinitionId,
+      factKey: row.factKey,
+      normalizedValueDigest: row.normalizedValueDigest,
+    } })).rejects.toThrow();
+  });
+
+  it('preserves provenance across different fact keys', async () => {
+    await fact('bool', { booleanValue: true });
+    await fact('number', { numberValue: '42.00' });
+    const selected = await pair('multi-key', 'bool', 'NONE', {
+      schemaVersion: 'rule-ast/v1',
+      node: { kind: 'AND', children: [comparison(definitionKey('bool')), comparison(definitionKey('number'), 42, 'number')] },
+    });
+    const result = await createRequirementApplicability({ requirementVersionId: selected.version.id, ruleVersionId: selected.rule.id, clientId: clientA, scope }, db);
+    applicabilityIds.push(result.applicability.id);
+    expect(result.applicability.facts.map((item) => item.factKey).sort()).toEqual([definitionKey('bool'), definitionKey('number')].sort());
+    expect(result.applicability.facts).toHaveLength(2);
+  });
+
+  it('keeps conflicting values out of APPLIES and DOES_NOT_APPLY snapshots', async () => {
+    await fact('bool', { booleanValue: true });
+    await fact('bool', { booleanValue: false });
+    const result = await createSnapshot('conflicting');
+    expect(result.evaluation.outcome).toBe('INSUFFICIENT_FACTS');
+    expect(result.applicability.outcome).toBe('INSUFFICIENT_FACTS');
+    expect(result.applicability.outcome).not.toBe('APPLIES');
+    expect(result.applicability.outcome).not.toBe('DOES_NOT_APPLY');
   });
 
   it('stores a deterministic snapshot and normalized value digest', async () => {
