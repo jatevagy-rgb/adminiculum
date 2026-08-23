@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { addRequirementCitation, approveApplicabilityRuleVersion, approveRequirementVersion, createApplicabilityRuleVersion, createRequirement, createRequirementVersion } from '../src/modules/compliance/requirementRuleService';
 import { createRequirementApplicability } from '../src/modules/compliance/requirementApplicabilityService';
-import { materializeRequirementApplicabilityFinding, materializeRequirementApplicabilityFindingInTx } from '../src/modules/compliance/findingMaterializationService';
+import { FindingMaterializationIdentityConflictError, materializeRequirementApplicabilityFinding, materializeRequirementApplicabilityFindingInTx } from '../src/modules/compliance/findingMaterializationService';
 
 const databaseUrl = process.env.PHASE7_SLICE_7A_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -382,6 +382,25 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
     expect(employeeFinding.finding?.id).not.toBe(companyFinding.finding?.id);
   });
 
+  it('rejects a materialized finding without scopeType at the database boundary', async () => {
+    const selected = await pair('scope-check');
+    const assessmentId = await assessment(clientA);
+    const app = await applicability(selected.version.id, selected.rule.id, clientA);
+    await expect(db.assessmentFinding.create({ data: {
+      clientId: clientA,
+      assessmentId,
+      requirementId: selected.requirement.id,
+      scopeType: null,
+      factSubjectId: null,
+      requirementApplicabilityId: app.applicability.id,
+      applicabilityOutcome: 'APPLIES',
+      severity: 'MEDIUM',
+      title: 'invalid scope',
+      status: 'OPEN',
+      createdByUserId: userId,
+    } })).rejects.toThrow();
+  });
+
   it('retries a same-target uniqueness race in a fresh standalone transaction', async () => {
     const selected = await pair('same-target-race');
     const assessmentId = await assessment(clientA);
@@ -404,17 +423,20 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
     const second = await applicability(selected.version.id, selected.rule.id, clientA);
     const run = (applicabilityId: string) => db.$transaction(
       (tx) => materializeRequirementApplicabilityFindingInTx({ applicabilityId, assessmentId, createdByUserId: userId }, tx),
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
     const results = await Promise.allSettled([run(first.applicability.id), run(second.applicability.id)]);
     const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
     if (rejected) {
+      expect(rejected.reason).toBeInstanceOf(FindingMaterializationIdentityConflictError);
       const retry = await db.$transaction(
         (tx) => materializeRequirementApplicabilityFindingInTx({ applicabilityId: second.applicability.id, assessmentId, createdByUserId: userId }, tx),
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
       expect(retry.finding).toBeTruthy();
     }
     expect(await db.assessmentFinding.count({ where: { clientId: clientA, requirementId: selected.requirement.id, scopeType: 'COMPANY', factSubjectId: null } })).toBe(1);
+  });
+
+  it('leaves an unrelated PostgreSQL P2002 outside finding identity classification', async () => {
+    await expect(db.client.create({ data: { id: clientA, name: `duplicate-client-${suffix}` } })).rejects.toMatchObject({ code: 'P2002' });
   });
 });

@@ -2,6 +2,13 @@ import { Prisma, PrismaClient } from '@prisma/client';
 
 type Db = PrismaClient;
 
+export class FindingMaterializationIdentityConflictError extends Error {
+  constructor() {
+    super('Finding materialization lost an identity race.');
+    this.name = 'FindingMaterializationIdentityConflictError';
+  }
+}
+
 export interface FindingMaterializationInput {
   applicabilityId: string;
   assessmentId: string;
@@ -121,24 +128,32 @@ async function materializeRequirementApplicabilityFindingInTxImpl(
     return { finding: updated as FindingMaterializationResult['finding'], outcome: applicability.outcome, created: false };
   }
 
-  const created = await tx.assessmentFinding.create({
-    data: {
-      clientId: applicability.clientId,
-      assessmentId: input.assessmentId,
-      requirementId,
-      scopeType: applicability.scopeType,
-      factSubjectId: applicability.factSubjectId,
-      requirementApplicabilityId: applicability.id,
-      applicabilityOutcome: applicability.outcome,
-      severity: 'MEDIUM',
-      title: applicability.requirementVersion.title,
-      description: applicability.requirementVersion.normativeStatement,
-      recommendation: applicability.outcome === 'APPLIES' ? 'Review and address this applicable requirement.' : 'Resolve the applicability evidence before treating this requirement as determined.',
-      status: 'OPEN',
-      createdByUserId: input.createdByUserId,
-    },
-    select: findingSelect,
-  });
+  let created;
+  try {
+    created = await tx.assessmentFinding.create({
+      data: {
+        clientId: applicability.clientId,
+        assessmentId: input.assessmentId,
+        requirementId,
+        scopeType: applicability.scopeType,
+        factSubjectId: applicability.factSubjectId,
+        requirementApplicabilityId: applicability.id,
+        applicabilityOutcome: applicability.outcome,
+        severity: 'MEDIUM',
+        title: applicability.requirementVersion.title,
+        description: applicability.requirementVersion.normativeStatement,
+        recommendation: applicability.outcome === 'APPLIES' ? 'Review and address this applicable requirement.' : 'Resolve the applicability evidence before treating this requirement as determined.',
+        status: 'OPEN',
+        createdByUserId: input.createdByUserId,
+      },
+      select: findingSelect,
+    });
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
+      throw new FindingMaterializationIdentityConflictError();
+    }
+    throw error;
+  }
   return { finding: created as FindingMaterializationResult['finding'], outcome: applicability.outcome, created: true };
 }
 
@@ -160,20 +175,11 @@ export async function materializeRequirementApplicabilityFinding(
       return await execute();
     } catch (error) {
       const isPrismaError = error instanceof Prisma.PrismaClientKnownRequestError;
-      const retryable = isPrismaError && (error.code === 'P2034' || (error.code === 'P2002' && isFindingIdentityConflict(error)));
+      const retryable = error instanceof FindingMaterializationIdentityConflictError
+        || (isPrismaError && error.code === 'P2034');
       if (!retryable || attempt === 2) throw error;
     }
   }
 
   throw new Error('Finding materialization transaction exhausted its retry budget.');
-}
-
-function isFindingIdentityConflict(error: Prisma.PrismaClientKnownRequestError): boolean {
-  const target = error.meta?.target;
-  if (typeof target === 'string') return target.includes('assessment_findings_client_requirement_scope_');
-  if (Array.isArray(target)) {
-    const fields = new Set(target.map(String));
-    return fields.has('clientId') && fields.has('requirementId') && fields.has('scopeType');
-  }
-  return false;
 }

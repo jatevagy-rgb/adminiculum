@@ -44,8 +44,15 @@ describe('Phase 7 Slice 7A static wiring', () => {
     expect(migration).toContain('assessment_findings_client_requirement_scope_subject_materialized_key');
     expect(migration).toContain('assessment_findings_client_requirement_scope_subjectless_materialized_key');
     expect(migration).toContain('SET "scopeType" = applicability."scopeType"');
+    expect(migration).toContain('Phase 7A.1 backfill failed closed');
+    expect(migration).toContain('assessment_findings_materialized_scope_required_check');
+    expect(migration).toContain('"requirementId" IS NULL OR "scopeType" IS NOT NULL');
     expect(service).toContain('scopeType: applicability.scopeType');
     expect(service).toContain('factSubjectId: applicability.factSubjectId');
+    expect(service).toContain('FindingMaterializationIdentityConflictError');
+    expect(service).toContain("error.code === 'P2002'");
+    expect(service).not.toContain('meta?.target');
+    expect(service).not.toContain('assessment_findings_client_requirement_scope_');
     expect(service).not.toContain('const retried = await tx.assessmentFinding.findFirst');
   });
 });
