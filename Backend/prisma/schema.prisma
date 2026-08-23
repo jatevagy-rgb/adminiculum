@@ -4080,33 +4080,37 @@ enum AssessmentFindingStatus {
 }
 
 model AssessmentFinding {
-  id                         String                    @id @default(uuid())
+  id                         String                           @id @default(uuid())
   clientId                   String
-  client                     Client                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client                     Client                           @relation(fields: [clientId], references: [id], onDelete: Cascade)
   assessmentId               String
-  assessment                 Assessment                @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  assessment                 Assessment                       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   assessmentItemId           String?
-  assessmentItem             AssessmentItem?           @relation(fields: [assessmentItemId], references: [id], onDelete: SetNull)
-  severity                   AssessmentFindingSeverity @default(MEDIUM)
+  assessmentItem             AssessmentItem?                  @relation(fields: [assessmentItemId], references: [id], onDelete: SetNull)
+  severity                   AssessmentFindingSeverity        @default(MEDIUM)
   title                      String
   description                String?
   recommendation             String?
-  status                     AssessmentFindingStatus   @default(OPEN)
+  status                     AssessmentFindingStatus          @default(OPEN)
   developmentInitiativeId    String?
-  developmentInitiative      DevelopmentInitiative?    @relation(fields: [developmentInitiativeId], references: [id], onDelete: SetNull)
+  developmentInitiative      DevelopmentInitiative?           @relation(fields: [developmentInitiativeId], references: [id], onDelete: SetNull)
   remediationTaskId          String?
-  remediationTask            Task?                     @relation(fields: [remediationTaskId], references: [id], onDelete: SetNull)
+  remediationTask            Task?                            @relation(fields: [remediationTaskId], references: [id], onDelete: SetNull)
+  requirementId              String?
+  requirement                Requirement?                     @relation(fields: [requirementId], references: [id], onDelete: Restrict)
   requirementApplicabilityId String?
-  requirementApplicability   RequirementApplicability? @relation(fields: [requirementApplicabilityId, clientId], references: [id, clientId], onDelete: NoAction)
+  requirementApplicability   RequirementApplicability?        @relation(fields: [requirementApplicabilityId, clientId], references: [id, clientId], onDelete: NoAction)
+  applicabilityOutcome       RequirementApplicabilityOutcome?
   createdByUserId            String
-  createdBy                  User                      @relation(fields: [createdByUserId], references: [id])
-  createdAt                  DateTime                  @default(now())
-  updatedAt                  DateTime                  @updatedAt
+  createdBy                  User                             @relation(fields: [createdByUserId], references: [id])
+  createdAt                  DateTime                         @default(now())
+  updatedAt                  DateTime                         @updatedAt
 
   @@index([assessmentId])
   @@index([clientId, status])
   @@index([developmentInitiativeId])
   @@index([remediationTaskId])
+  @@index([clientId, requirementId])
   @@index([requirementApplicabilityId])
   @@map("assessment_findings")
 }
@@ -4695,6 +4699,7 @@ model Requirement {
   retiredAt        DateTime?
 
   versions RequirementVersion[]
+  findings AssessmentFinding[]
 
   @@index([jurisdictionCode, domainCode, status])
   @@index([status])
