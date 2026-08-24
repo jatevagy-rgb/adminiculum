@@ -120,7 +120,7 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     await answerCompanyProfileQuestion(representativeId, workspaceA, 'employee_count', { status: 'UNKNOWN' }, db);
     const outcomes = await db.requirementApplicability.findMany({ where: { clientId: clientA, requirementVersionId }, select: { outcome: true } });
     expect(outcomes.map((row) => row.outcome)).toContain('INSUFFICIENT_FACTS');
-    expect(await db.clientFact.count({ where: { clientId: clientA } })).toBe(3);
+    expect(await db.clientFact.count({ where: { clientId: clientA } })).toBe(4);
   });
 
   it('enforces representative authority and client isolation', async () => {
