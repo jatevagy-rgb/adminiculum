@@ -142,7 +142,7 @@ async function main() {
 
     // 11. 7C-B availability (check if it's in canonical branch)
     // 7C-B is not yet in release/editor-ops-workflow-1 — this is expected
-    warn('Phase 7C-B org profile write API', 'NOT in current canonical (release/editor-ops-workflow-1). Expected — see PR #38.');
+    warn('Organizational company-profile write API', 'not implemented yet');
 
     // 12. Backend config present
     const backendEnv = path.join(__dirname, '..', '.env');

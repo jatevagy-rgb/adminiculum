@@ -22,9 +22,24 @@ import {
   DEMO_IDS,
 } from './helpers/presentationDemoFixture';
 
-const databaseUrl =
+const baseDbUrl =
   process.env.DEMO_PRESENTATION_TEST_DATABASE_URL ||
-  process.env.MIGRATION_REPLAY_DATABASE_URL;
+  process.env.MIGRATION_REPLAY_DATABASE_URL ||
+  process.env.DATABASE_URL;
+
+let databaseUrl = baseDbUrl;
+if (baseDbUrl) {
+  try {
+    const urlObj = new URL(baseDbUrl);
+    if (urlObj.pathname !== '/adminiculum_presentation_demo_ci') {
+      urlObj.pathname = '/adminiculum_presentation_demo_ci';
+      databaseUrl = urlObj.toString();
+    }
+  } catch (err) {
+    // Keep as is
+  }
+}
+
 const d = databaseUrl ? describe : describe.skip;
 
 // ---------------------------------------------------------------------------
@@ -130,6 +145,15 @@ d('Presentation demo fixture (PostgreSQL)', () => {
   const controlSuffix = crypto.randomUUID().slice(0, 8);
 
   beforeAll(async () => {
+    if (!databaseUrl) {
+      throw new Error('Database URL is not defined.');
+    }
+    const parsed = new URL(databaseUrl);
+    // Safety Loopback Guard
+    expect(['127.0.0.1', 'localhost', '::1']).toContain(parsed.hostname);
+    // Database Name Guard — must target the dedicated disposable test database only!
+    expect(parsed.pathname.replace(/^\//, '')).toBe('adminiculum_presentation_demo_ci');
+
     process.env.DATABASE_URL = databaseUrl;
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
 
