@@ -33,4 +33,27 @@ describe('Phase 7D typed fact to finding wiring', () => {
     expect(workflow).toContain('phase7d');
     expect(workflow).toContain('Phase 7D typed fact to finding automation PG');
   });
+
+  it('preserves enrollment migration semantics and exposes only manager diagnostics', () => {
+    const migration = read('prisma/migrations/20260824150000_phase7d1_temporal_scope_enrollment/migration.sql');
+    const replay = read('scripts/verify-migration-replay.mjs');
+    const diagnostics = read('src/modules/compliance/complianceOverviewService.ts');
+    const routes = read('src/modules/compliance/complianceOverviewRoutes.ts');
+    const portal = read('src/routes/clientPortal.ts');
+    expect(migration).toContain('SET "complianceEnrollmentStatus" = \'ENROLLED\'');
+    expect(migration).not.toContain('INSERT INTO "client_operating_profiles"');
+    expect(replay).toContain('seedPhase7D1EnrollmentFixture');
+    expect(replay).toContain('phase7d1-bare-client');
+    expect(diagnostics).toContain('COMPLIANCE_DIAGNOSTICS_FORBIDDEN');
+    expect(diagnostics).toContain("status: 'APPROVED', supersededById: null, evaluationScopeType: null");
+    expect(routes).toContain("/diagnostics/unresolved-rule-scopes");
+    expect(portal).not.toContain('unresolved-rule-scopes');
+  });
+
+  it('gates only compliance enrollment mutation behind manager authority', () => {
+    const service = read('src/modules/client-company/service.ts');
+    expect(service).toContain('await assertClientReadAccess(actor, clientId, prisma);');
+    expect(service).toContain("if (input.complianceEnrollmentStatus !== undefined)");
+    expect(service).toContain('requireManager(actor);');
+  });
 });
