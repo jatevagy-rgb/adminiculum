@@ -231,7 +231,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
             </div>
           </div>
           {/* Primary actions — secondary links must not compete with these. */}
-          <div className="flex shrink-0 flex-wrap gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             <AdminButton variant="primary" size="sm" onClick={() => setModal({ type: "task-create" })}>Új feladat</AdminButton>
             <AdminButton variant="neutral" size="sm" onClick={() => setModal({ type: "case-comment" })}>Kommunikáció hozzáadása</AdminButton>
             <AdminButton variant="neutral" size="sm" onClick={() => setModal({ type: "doc-upload" })}>Dokumentum feltöltése</AdminButton>
