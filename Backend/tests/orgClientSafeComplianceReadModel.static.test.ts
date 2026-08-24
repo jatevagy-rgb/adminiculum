@@ -140,4 +140,17 @@ describe('Org client safe compliance read model contract', () => {
     expect(registry).toContain('portal/demo-sample-topic');
     expect(registry).toContain('demo?: boolean');
   });
+
+  it('requires ORGANIZATION workspace mode', () => {
+    const route = read(routeFile);
+    expect(route).toContain("workspace.mode !== 'ORGANIZATION'");
+    expect(route).toContain('CLIENT_ORGANIZATION_WORKSPACE_REQUIRED');
+    expect(route).toContain('InteractionError(403');
+  });
+
+  it('denies INDIVIDUAL and CASE_RELAY workspace modes', () => {
+    const route = read(routeFile);
+    expect(route).toContain("workspace.mode !== 'ORGANIZATION'");
+    expect(route).not.toMatch(/mode.*===.*'INDIVIDUAL'|mode.*===.*'CASE_RELAY'/);
+  });
 });

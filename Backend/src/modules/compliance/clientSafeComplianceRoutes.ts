@@ -64,6 +64,9 @@ router.get('/', async (req, res: Response) => {
   try {
     const workspace = await portalAuth(req, res);
     if (!workspace) return;
+    if (workspace.mode !== 'ORGANIZATION') {
+      throw new InteractionError(403, 'CLIENT_ORGANIZATION_WORKSPACE_REQUIRED', 'Compliance overview is only available in an organizational workspace.');
+    }
     const isProduction = process.env.NODE_ENV === 'production';
     const demoEnabled = !isProduction && process.env.ADMINICULUM_DEMO_CONTENT_ENABLED === 'true';
     const result = await getClientSafeComplianceReadModel(workspace.clientId, isProduction, demoEnabled);
