@@ -10,6 +10,7 @@ import {
   FindingMaterializationIdentityConflictError,
   materializeRequirementApplicabilityFindingInTx,
 } from './findingMaterializationService';
+import { EffectiveRequirementRuleError, resolveEffectiveRequirementRuleVersion } from './effectiveRequirementRuleResolver';
 
 type TransactionClient = Prisma.TransactionClient;
 
@@ -100,6 +101,14 @@ async function assertSourceDocumentInClient(tx: TransactionClient, clientId: str
   if (!found) throw new InteractionError(400, 'EVIDENCE_CROSS_CLIENT', 'Referenced document version does not belong to this client.');
 }
 
+async function isClientEnrolledForCompliance(tx: TransactionClient, clientId: string): Promise<boolean> {
+  const profile = await tx.clientOperatingProfile.findUnique({
+    where: { clientId },
+    select: { complianceEnrollmentStatus: true },
+  });
+  return profile?.complianceEnrollmentStatus === 'ENROLLED';
+}
+
 async function createTypedFactInTx(input: TypedFactMutationInput, tx: TransactionClient) {
   const definition = await tx.factDefinition.findUnique({ where: { id: input.factDefinitionId } });
   if (!definition) throw new InteractionError(404, 'FACT_DEFINITION_NOT_FOUND', 'FactDefinition was not found.');
@@ -158,19 +167,24 @@ async function createTypedFactInTx(input: TypedFactMutationInput, tx: Transactio
     include: { factDefinition: { select: { valueType: true } } },
   });
 
+  if (!(await isClientEnrolledForCompliance(tx, input.clientId))) {
+    return { fact, evaluations: [] };
+  }
+
   const dependencies = await tx.applicabilityRuleFactDependency.findMany({
     where: {
       resolvedFactDefinitionId: definition.id,
       applicabilityRuleVersion: {
         status: 'APPROVED',
-        requirementVersion: { status: 'APPROVED' },
+        supersededById: null,
+        requirementVersion: { status: 'APPROVED', requirementId: { not: '' } },
       },
     },
     select: {
-      applicabilityRuleVersion: { select: { id: true, requirementVersionId: true } },
+      applicabilityRuleVersion: { select: { requirementVersion: { select: { requirementId: true } } } },
     },
   });
-  const rules = [...new Map(dependencies.map((row) => [row.applicabilityRuleVersion.id, row.applicabilityRuleVersion])).values()];
+  const requirementIds = [...new Set(dependencies.map((row) => row.applicabilityRuleVersion.requirementVersion.requirementId))];
   const context: TypedFactMutationContext = {
     tx,
     clientId: input.clientId,
@@ -182,10 +196,23 @@ async function createTypedFactInTx(input: TypedFactMutationInput, tx: Transactio
     actorUserId: input.actorUserId,
   };
   const evaluations = [] as Array<{ ruleVersionId: string; applicabilityId: string; findingId: string | null; outcome: string }>;
-  for (const rule of rules) {
+  for (const requirementId of requirementIds) {
+    let rule;
+    try {
+      rule = await resolveEffectiveRequirementRuleVersion(requirementId, temporal.evaluationAt, tx);
+    } catch (error) {
+      if (error instanceof EffectiveRequirementRuleError && ['NO_EFFECTIVE_REQUIREMENT_VERSION', 'NO_CURRENT_APPROVED_RULE_VERSION', 'RULE_SCOPE_UNRESOLVED'].includes(error.code)) continue;
+      throw error;
+    }
+    if (rule.evaluationScopeType !== scopeType) continue;
+    const dependsOnMutatedFact = await tx.applicabilityRuleFactDependency.findFirst({
+      where: { applicabilityRuleVersionId: rule.ruleVersionId, resolvedFactDefinitionId: definition.id },
+      select: { id: true },
+    });
+    if (!dependsOnMutatedFact) continue;
     const snapshot = await createRequirementApplicabilityInTx({
       requirementVersionId: rule.requirementVersionId,
-      ruleVersionId: rule.id,
+      ruleVersionId: rule.ruleVersionId,
       clientId: context.clientId,
       scope: {
         scopeType: scopeType as any,
@@ -201,7 +228,7 @@ async function createTypedFactInTx(input: TypedFactMutationInput, tx: Transactio
       createdByUserId: input.actorUserId,
     }, tx);
     evaluations.push({
-      ruleVersionId: rule.id,
+      ruleVersionId: rule.ruleVersionId,
       applicabilityId: snapshot.applicability.id,
       findingId: materialized.finding?.id ?? null,
       outcome: materialized.outcome,
