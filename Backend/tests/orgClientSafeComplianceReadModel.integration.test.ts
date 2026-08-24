@@ -15,64 +15,84 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
   const domainCode = `ORGSafe_${suiteSuffix}`;
   const adminId = crypto.randomUUID();
 
-  /** Shared requirement chain — registered key "GDPR_DATA_PROCESSING" */
   let sharedReqId: string;
   let sharedVersionId: string;
   let sharedRuleId: string;
 
-  /** Shared DEMO requirement chain — registered key "DEMO_SAMPLE_TOPIC" */
   let demoReqId: string;
   let demoVersionId: string;
   let demoRuleId: string;
 
-  /** Per-test clients (unique per test to avoid materialized-finding collisions). */
   const testClients: string[] = [];
+  const createdVersionIds: string[] = [];
+  const createdRuleIds: string[] = [];
+  const createdRequirementIds: string[] = [];
+
+  async function ensureRequirementChain(key: string, title: string, ruleDigestSeed: string) {
+    let req = await db.requirement.findFirst({ where: { key } });
+    if (!req) {
+      req = await db.requirement.create({ data: { id: crypto.randomUUID(), key, jurisdictionCode: 'HU', domainCode } });
+      createdRequirementIds.push(req.id);
+    }
+
+    let version = await db.requirementVersion.findFirst({
+      where: { requirementId: req.id, versionKey: 'V1' },
+    });
+    if (!version) {
+      version = await db.requirementVersion.create({
+        data: { id: crypto.randomUUID(), requirementId: req.id, versionKey: 'V1', title, normativeStatement: 'Test', effectiveFrom: new Date('2026-01-01T00:00:00Z') },
+      });
+      createdVersionIds.push(version.id);
+    }
+
+    let rule = await db.applicabilityRuleVersion.findFirst({
+      where: { requirementVersionId: version.id, ruleVersionKey: 'R1' },
+    });
+    if (!rule) {
+      rule = await db.applicabilityRuleVersion.create({
+        data: { id: crypto.randomUUID(), requirementVersionId: version.id, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: hex64(ruleDigestSeed) },
+      });
+      createdRuleIds.push(rule.id);
+    }
+
+    return { reqId: req.id, versionId: version.id, ruleId: rule.id };
+  }
 
   beforeAll(async () => {
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
-    await db.complianceDomain.create({ data: { code: domainCode, label: 'Org Safe Test' } });
-    await db.user.create({ data: { id: adminId, email: `orgsafe-admin-${suiteSuffix}@example.invalid`, name: 'OrgSafe Admin', role: 'ADMIN' } });
+    await db.complianceDomain.create({ data: { code: domainCode, label: 'Org Safe Test' } }).catch(() => {});
+    await db.user.upsert({ where: { id: adminId }, create: { id: adminId, email: `orgsafe-admin-${suiteSuffix}@example.invalid`, name: 'OrgSafe Admin', role: 'ADMIN' }, update: {} });
 
-    // Shared requirement chain (registered in safe topic registry)
-    sharedReqId = crypto.randomUUID();
-    sharedVersionId = crypto.randomUUID();
-    sharedRuleId = crypto.randomUUID();
-    await db.requirement.create({ data: { id: sharedReqId, key: 'GDPR_DATA_PROCESSING', jurisdictionCode: 'HU', domainCode } });
-    await db.requirementVersion.create({
-      data: { id: sharedVersionId, requirementId: sharedReqId, versionKey: 'V1', title: 'Adatvédelmi feldolgozás', normativeStatement: 'Test', effectiveFrom: new Date('2026-01-01T00:00:00Z') },
-    });
-    await db.applicabilityRuleVersion.create({
-      data: { id: sharedRuleId, requirementVersionId: sharedVersionId, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: hex64('shared-rule') },
-    });
+    const shared = await ensureRequirementChain('GDPR_DATA_PROCESSING', 'Adatvédelmi feldolgozás', 'shared-rule');
+    sharedReqId = shared.reqId;
+    sharedVersionId = shared.versionId;
+    sharedRuleId = shared.ruleId;
 
-    // DEMO requirement chain
-    demoReqId = crypto.randomUUID();
-    demoVersionId = crypto.randomUUID();
-    demoRuleId = crypto.randomUUID();
-    await db.requirement.create({ data: { id: demoReqId, key: 'DEMO_SAMPLE_TOPIC', jurisdictionCode: 'HU', domainCode } });
-    await db.requirementVersion.create({
-      data: { id: demoVersionId, requirementId: demoReqId, versionKey: 'V1', title: 'Demó téma', normativeStatement: 'Demo', effectiveFrom: new Date('2026-01-01T00:00:00Z') },
-    });
-    await db.applicabilityRuleVersion.create({
-      data: { id: demoRuleId, requirementVersionId: demoVersionId, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: hex64('demo-rule') },
-    });
+    const demo = await ensureRequirementChain('DEMO_SAMPLE_TOPIC', 'Demó téma', 'demo-rule');
+    demoReqId = demo.reqId;
+    demoVersionId = demo.versionId;
+    demoRuleId = demo.ruleId;
   });
 
   afterAll(async () => {
-    // Delete all test clients (cascades findings, applicabilities)
     if (testClients.length > 0) {
+      await db.requirementApplicability.deleteMany({ where: { clientId: { in: testClients } } });
       await db.client.deleteMany({ where: { id: { in: testClients } } });
     }
-    // Delete shared requirement chains
-    await db.applicabilityRuleVersion.deleteMany({ where: { id: { in: [sharedRuleId, demoRuleId] } } });
-    await db.requirementVersion.deleteMany({ where: { id: { in: [sharedVersionId, demoVersionId] } } });
-    await db.requirement.deleteMany({ where: { id: { in: [sharedReqId, demoReqId] } } });
-    await db.user.deleteMany({ where: { id: adminId } });
-    await db.complianceDomain.deleteMany({ where: { code: domainCode } });
+    if (createdRuleIds.length > 0) {
+      await db.applicabilityRuleVersion.deleteMany({ where: { id: { in: createdRuleIds } } });
+    }
+    if (createdVersionIds.length > 0) {
+      await db.requirementVersion.deleteMany({ where: { id: { in: createdVersionIds } } });
+    }
+    if (createdRequirementIds.length > 0) {
+      await db.requirement.deleteMany({ where: { id: { in: createdRequirementIds } } });
+    }
+    await db.user.delete({ where: { id: adminId } }).catch(() => {});
+    await db.complianceDomain.delete({ where: { code: domainCode } }).catch(() => {});
     await db.$disconnect();
   });
 
-  /** Create a unique client for a test. */
   async function createTestClient(label: string): Promise<string> {
     const clientId = crypto.randomUUID();
     testClients.push(clientId);
@@ -80,27 +100,26 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     return clientId;
   }
 
-  /** Create applicability + finding for the shared requirement. */
-  async function createSharedFinding(clientId: string, outcome: string, title: string) {
+  async function createFinding(clientId: string, outcome: string, title: string, opts: { reqId: string; versionId: string; ruleId: string; scopeType?: string }) {
     const applicabilityId = crypto.randomUUID();
     await db.requirementApplicability.create({
       data: {
-        id: applicabilityId, clientId, requirementVersionId: sharedVersionId, ruleVersionId: sharedRuleId,
-        ruleDigest: hex64(`app-${applicabilityId}`), outcome: outcome as never, scopeType: 'COMPANY', evaluationAt: new Date(),
+        id: applicabilityId, clientId, requirementVersionId: opts.versionId, ruleVersionId: opts.ruleId,
+        ruleDigest: hex64(`app-${applicabilityId}`), outcome: outcome as never, scopeType: (opts.scopeType || 'COMPANY') as never, evaluationAt: new Date(),
         sourceSupportState: 'SUFFICIENT', specialistRequirement: 'NONE', schemaVersion: 'phase6-requirement-applicability/v1',
         snapshotJson: {}, snapshotDigest: hex64(`snap-${applicabilityId}`),
       },
     });
     const findingId = crypto.randomUUID();
     await db.assessmentFinding.create({
-      data: { id: findingId, clientId, title, description: 'Description', status: 'OPEN', severity: 'HIGH', createdByUserId: adminId, requirementId: sharedReqId, requirementApplicabilityId: applicabilityId, scopeType: 'COMPANY' },
+      data: { id: findingId, clientId, title, description: 'Description', status: 'OPEN', severity: 'HIGH', createdByUserId: adminId, requirementId: opts.reqId, requirementApplicabilityId: applicabilityId, scopeType: (opts.scopeType || 'COMPANY') as never },
     });
     return { applicabilityId, findingId };
   }
 
   it('returns configured COMPANY requirement-backed topic as safe DTO', async () => {
     const clientId = await createTestClient('basic');
-    const { applicabilityId, findingId } = await createSharedFinding(clientId, 'APPLIES', 'Basic finding');
+    await createFinding(clientId, 'APPLIES', 'Basic finding', { reqId: sharedReqId, versionId: sharedVersionId, ruleId: sharedRuleId });
     const result = await getClientSafeComplianceReadModel(clientId, true, false, db);
     expect(result.topics.length).toBeGreaterThanOrEqual(1);
     const topic = result.topics.find((t) => t.topicLabel === 'Adatvédelmi feldolgozás');
@@ -111,7 +130,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
 
   it('topicId is opaque registry key, not a DB UUID', async () => {
     const clientId = await createTestClient('opaque');
-    const { applicabilityId } = await createSharedFinding(clientId, 'APPLIES', 'Opaque finding');
+    const { applicabilityId } = await createFinding(clientId, 'APPLIES', 'Opaque finding', { reqId: sharedReqId, versionId: sharedVersionId, ruleId: sharedRuleId });
     const result = await getClientSafeComplianceReadModel(clientId, true, false, db);
     const topic = result.topics.find((t) => t.topicLabel === 'Adatvédelmi feldolgozás');
     expect(topic).toBeDefined();
@@ -136,7 +155,6 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
 
   it('omits unregistered requirement keys', async () => {
     const clientId = await createTestClient('unreg');
-    // Create a requirement with a key NOT in the safe registry
     const unregReqId = crypto.randomUUID();
     const unregVersionId = crypto.randomUUID();
     const unregRuleId = crypto.randomUUID();
@@ -175,7 +193,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
 
   it('omits DOES_NOT_APPLY findings', async () => {
     const clientId = await createTestClient('dna');
-    await createSharedFinding(clientId, 'DOES_NOT_APPLY', 'DNA finding');
+    await createFinding(clientId, 'DOES_NOT_APPLY', 'DNA finding', { reqId: sharedReqId, versionId: sharedVersionId, ruleId: sharedRuleId });
     const result = await getClientSafeComplianceReadModel(clientId, true, false, db);
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('DNA finding');
@@ -183,18 +201,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
 
   it('omits EMPLOYEE scope findings (COMPANY scope only)', async () => {
     const clientId = await createTestClient('emp');
-    const applicabilityId = crypto.randomUUID();
-    await db.requirementApplicability.create({
-      data: {
-        id: applicabilityId, clientId, requirementVersionId: sharedVersionId, ruleVersionId: sharedRuleId,
-        ruleDigest: hex64(`emp-app-${applicabilityId}`), outcome: 'APPLIES', scopeType: 'EMPLOYEE', evaluationAt: new Date(),
-        sourceSupportState: 'SUFFICIENT', specialistRequirement: 'NONE', schemaVersion: 'phase6-requirement-applicability/v1',
-        snapshotJson: {}, snapshotDigest: hex64(`emp-snap-${applicabilityId}`),
-      },
-    });
-    await db.assessmentFinding.create({
-      data: { id: crypto.randomUUID(), clientId, title: 'Employee finding', description: 'Desc', status: 'OPEN', severity: 'HIGH', createdByUserId: adminId, requirementId: sharedReqId, requirementApplicabilityId: applicabilityId, scopeType: 'EMPLOYEE' },
-    });
+    await createFinding(clientId, 'APPLIES', 'Employee finding', { reqId: sharedReqId, versionId: sharedVersionId, ruleId: sharedRuleId, scopeType: 'EMPLOYEE' });
     const result = await getClientSafeComplianceReadModel(clientId, true, false, db);
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('Employee finding');
@@ -202,7 +209,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
 
   it('maps INSUFFICIENT_FACTS to MORE_INFORMATION_NEEDED', async () => {
     const clientId = await createTestClient('insuff');
-    await createSharedFinding(clientId, 'INSUFFICIENT_FACTS', 'Insufficient finding');
+    await createFinding(clientId, 'INSUFFICIENT_FACTS', 'Insufficient finding', { reqId: sharedReqId, versionId: sharedVersionId, ruleId: sharedRuleId });
     const result = await getClientSafeComplianceReadModel(clientId, true, false, db);
     const topic = result.topics.find((t) => t.topicLabel === 'Adatvédelmi feldolgozás');
     expect(topic).toBeDefined();
@@ -212,7 +219,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
 
   it('maps LEGAL_REVIEW_REQUIRED to LAWYER_REVIEW_REQUIRED', async () => {
     const clientId = await createTestClient('legal');
-    await createSharedFinding(clientId, 'LEGAL_REVIEW_REQUIRED', 'Legal review finding');
+    await createFinding(clientId, 'LEGAL_REVIEW_REQUIRED', 'Legal review finding', { reqId: sharedReqId, versionId: sharedVersionId, ruleId: sharedRuleId });
     const result = await getClientSafeComplianceReadModel(clientId, true, false, db);
     const topic = result.topics.find((t) => t.topicLabel === 'Adatvédelmi feldolgozás');
     expect(topic).toBeDefined();
@@ -222,18 +229,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
 
   it('DEMO flag matrix: production + flag true → hidden', async () => {
     const clientId = await createTestClient('demo');
-    const applicabilityId = crypto.randomUUID();
-    await db.requirementApplicability.create({
-      data: {
-        id: applicabilityId, clientId, requirementVersionId: demoVersionId, ruleVersionId: demoRuleId,
-        ruleDigest: hex64(`demo-app-${applicabilityId}`), outcome: 'APPLIES', scopeType: 'COMPANY', evaluationAt: new Date(),
-        sourceSupportState: 'SUFFICIENT', specialistRequirement: 'NONE', schemaVersion: 'phase6-requirement-applicability/v1',
-        snapshotJson: {}, snapshotDigest: hex64(`demo-snap-${applicabilityId}`),
-      },
-    });
-    await db.assessmentFinding.create({
-      data: { id: crypto.randomUUID(), clientId, title: 'Demó', status: 'OPEN', severity: 'LOW', createdByUserId: adminId, requirementId: demoReqId, requirementApplicabilityId: applicabilityId, scopeType: 'COMPANY' },
-    });
+    await createFinding(clientId, 'APPLIES', 'Demó', { reqId: demoReqId, versionId: demoVersionId, ruleId: demoRuleId });
 
     const prodTrue = await getClientSafeComplianceReadModel(clientId, true, true, db);
     expect(prodTrue.topics.find((t) => t.topicLabel === 'Demó téma')).toBeUndefined();
@@ -250,7 +246,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
 
   it('DTO contains only allowed fields and no internal ids', async () => {
     const clientId = await createTestClient('dto');
-    const { applicabilityId, findingId } = await createSharedFinding(clientId, 'APPLIES', 'DTO finding');
+    const { applicabilityId, findingId } = await createFinding(clientId, 'APPLIES', 'DTO finding', { reqId: sharedReqId, versionId: sharedVersionId, ruleId: sharedRuleId });
     const result = await getClientSafeComplianceReadModel(clientId, true, false, db);
     const serialized = JSON.stringify(result);
 
@@ -269,7 +265,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
 
   it('raw questionKey never appears in serialized output', async () => {
     const clientId = await createTestClient('qkey');
-    await createSharedFinding(clientId, 'INSUFFICIENT_FACTS', 'QuestionKey finding');
+    await createFinding(clientId, 'INSUFFICIENT_FACTS', 'QuestionKey finding', { reqId: sharedReqId, versionId: sharedVersionId, ruleId: sharedRuleId });
     const result = await getClientSafeComplianceReadModel(clientId, true, false, db);
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('company_data_processing_purpose');
@@ -279,7 +275,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
 
   it('neutral copy: no overclaiming legal certainty', async () => {
     const clientId = await createTestClient('neutral');
-    await createSharedFinding(clientId, 'APPLIES', 'Neutral copy finding');
+    await createFinding(clientId, 'APPLIES', 'Neutral copy finding', { reqId: sharedReqId, versionId: sharedVersionId, ruleId: sharedRuleId });
     const result = await getClientSafeComplianceReadModel(clientId, true, false, db);
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('követelmény teljesítve van');
@@ -289,23 +285,27 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
 
   it('bounded queries: batch loading regardless of topic count', async () => {
     const clientId = await createTestClient('bounded');
-    // Use the shared requirement for all 5 findings — each has a unique clientId
-    // so the materialized-finding constraint (clientId, requirementId, scopeType) is satisfied.
-    for (let i = 0; i < 5; i++) {
-      const applicabilityId = crypto.randomUUID();
-      await db.requirementApplicability.create({
-        data: {
-          id: applicabilityId, clientId, requirementVersionId: sharedVersionId, ruleVersionId: sharedRuleId,
-          ruleDigest: hex64(`bounded-app-${i}-${applicabilityId}`), outcome: 'APPLIES', scopeType: 'COMPANY', evaluationAt: new Date(),
-          sourceSupportState: 'SUFFICIENT', specialistRequirement: 'NONE', schemaVersion: 'phase6-requirement-applicability/v1',
-          snapshotJson: {}, snapshotDigest: hex64(`bounded-snap-${i}-${applicabilityId}`),
-        },
-      });
-      await db.assessmentFinding.create({
-        data: { id: crypto.randomUUID(), clientId, title: `Bounded finding ${i}`, description: 'Desc', status: 'OPEN', severity: 'HIGH', createdByUserId: adminId, requirementId: sharedReqId, requirementApplicabilityId: applicabilityId, scopeType: 'COMPANY' },
-      });
+
+    const keys = ['GDPR_DATA_SUBJECT_RIGHTS', 'LABOR_SAFETY_REGULATION', 'ANTI_MONEY_LAUNDERING'];
+    const labels = ['Érintetti jogok', 'Munkavédelmi előírások', 'Pénzmosás megelőzése'];
+    const chains = await Promise.all(
+      keys.map((k, i) => ensureRequirementChain(k, labels[i], `bounded-${k}`)),
+    );
+
+    const expectedLabels = ['Adatvédelmi feldolgozás', ...labels];
+    const allChains = [
+      { reqId: sharedReqId, versionId: sharedVersionId, ruleId: sharedRuleId },
+      ...chains,
+    ];
+
+    for (const chain of allChains) {
+      await createFinding(clientId, 'APPLIES', `Bounded ${chain.reqId}`, chain);
     }
+
     const result = await getClientSafeComplianceReadModel(clientId, true, false, db);
-    expect(result.topics.length).toBe(5);
+    expect(result.topics.length).toBe(allChains.length);
+    for (const label of expectedLabels) {
+      expect(result.topics.find((t) => t.topicLabel === label)).toBeDefined();
+    }
   });
 });
