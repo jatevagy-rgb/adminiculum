@@ -400,8 +400,10 @@ export async function addResponsibility(actor: InternalActor, personId: string, 
 
 /** Portal-safe responsibility assignment.  Portal membership authority is
  * deliberately distinct from internal manager authority. */
-export async function addPortalResponsibility(actor: InternalActor, clientId: string, personId: string, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
-  if (String(actor.role || '') !== 'APPROVER') throw new InteractionError(403, 'ORGANIZATION_RESPONSIBILITY_FORBIDDEN', 'Only an approved organization approver may assign responsibility.');
+export async function addPortalResponsibility(clientId: string, personId: string, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
+  // Authorization is proven by the portal workspace boundary before this
+  // low-level persistence helper is called; no portal identity is normalized
+  // into the internal workforce actor type.
   const person = await prisma.organizationPerson.findFirst({ where: { id: personId, clientId } });
   if (!person) throw new InteractionError(404, 'PERSON_NOT_FOUND', 'Organization person not found.');
   const type = String(input.type || '');

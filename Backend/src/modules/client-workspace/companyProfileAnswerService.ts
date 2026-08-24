@@ -1,6 +1,6 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
-import { createTypedFactInTx } from '../compliance/typedFactMutationService';
+import { createTypedFactInTx, reevaluateTypedFactInTx } from '../compliance/typedFactMutationService';
 import { getCompanyProfileQuestion, COMPANY_PROFILE_QUESTIONS } from './companyProfileQuestionRegistry';
 import { addPortalResponsibility } from '../client-organization/service';
 
@@ -78,19 +78,20 @@ async function answerInTx(identityId: string, workspaceId: string, questionKey: 
     // created so DISALLOW overlap policy cannot turn first discovery into a
     // false conflict.
     await tx.clientFact.updateMany({ where: { clientId: workspace.clientId, factDefinitionId: definition.id, scopeType: 'COMPANY', factSubjectId: null, supersededAt: null }, data: { supersededAt: new Date() } });
-    const created = await createTypedFactInTx({ clientId: workspace.clientId, factDefinitionId: definition.id, actorUserId: workspace.createdById, verificationStatus: 'CLIENT_PROVIDED', input: { scopeType: 'COMPANY', numberValue, validFrom: new Date().toISOString(), observedAt: new Date().toISOString(), evaluationAt: new Date().toISOString() } }, tx);
+    const evaluationAt = new Date();
+    // AssessmentFinding currently requires an internal creator. The existing
+    // workspace creator is an explicit on-behalf operational actor; the
+    // sourceReference remains the authoritative portal identity.
+    const created = await createTypedFactInTx({ clientId: workspace.clientId, factDefinitionId: definition.id, actorUserId: workspace.createdById, verificationStatus: 'CLIENT_PROVIDED', input: { scopeType: 'COMPANY', numberValue, validFrom: evaluationAt.toISOString(), observedAt: evaluationAt.toISOString(), evaluationAt: evaluationAt.toISOString(), sourceReference: `CLIENT_PORTAL_IDENTITY:${identityId}` } }, tx);
     return state
       ? tx.clientFactAnswerState.update({ where: { id: state.id }, data: { status: 'ANSWERED', currentFactId: created.fact.id } })
       : tx.clientFactAnswerState.create({ data: { clientId: workspace.clientId, factDefinitionId: definition.id, scopeType: 'COMPANY', status: 'ANSWERED', currentFactId: created.fact.id } });
   }
-  if (state?.currentFactId) await tx.clientFact.update({ where: { id: state.currentFactId }, data: { supersededAt: new Date() } });
+  await tx.clientFact.updateMany({ where: { clientId: workspace.clientId, factDefinitionId: definition.id, scopeType: 'COMPANY', factSubjectId: null, supersededAt: null }, data: { supersededAt: new Date() } });
+  await reevaluateTypedFactInTx({ clientId: workspace.clientId, factDefinitionId: definition.id, actorUserId: workspace.createdById, scopeType: 'COMPANY', factSubjectId: null, evaluationAt: new Date() }, tx);
   return state
     ? tx.clientFactAnswerState.update({ where: { id: state.id }, data: { status: 'UNKNOWN', currentFactId: null } })
     : tx.clientFactAnswerState.create({ data: { clientId: workspace.clientId, factDefinitionId: definition.id, scopeType: 'COMPANY', status: 'UNKNOWN' } });
-}
-
-function retryable(errorValue: unknown): boolean {
-  return errorValue instanceof Prisma.PrismaClientKnownRequestError && ['P2034', 'P2002'].includes(errorValue.code);
 }
 
 export async function answerCompanyProfileQuestion(identityId: string, workspaceId: string, questionKey: string, body: Record<string, unknown>, db: Db = defaultPrisma) {
@@ -99,7 +100,9 @@ export async function answerCompanyProfileQuestion(identityId: string, workspace
       const state = await db.$transaction((tx) => answerInTx(identityId, workspaceId, questionKey, body, tx), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
       return { questionKey, status: state.status, answered: state.status === 'ANSWERED' };
     } catch (caught) {
-      if (!retryable(caught) || attempt === 2) throw caught;
+      if (caught instanceof Prisma.PrismaClientKnownRequestError && caught.code === 'P2034' && attempt < 2) continue;
+      if (caught instanceof Prisma.PrismaClientKnownRequestError && caught.code === 'P2002') error(409, 'CLIENT_PROFILE_CONCURRENT_UPDATE', 'The company profile changed concurrently; retry the answer.');
+      throw caught;
     }
   }
   throw new Error('Company profile answer transaction exhausted its retry budget.');
@@ -110,5 +113,5 @@ export async function assignCompanyProfileResponsibility(identityId: string, wor
   if (workspace.membershipRole !== 'APPROVER') error(403, 'ORGANIZATION_RESPONSIBILITY_FORBIDDEN', 'Only an approved organization approver may assign responsibility.');
   const personId = String(body.organizationPersonId || '');
   if (!personId) error(400, 'PERSON_REQUIRED', 'organizationPersonId is required.');
-  return addPortalResponsibility({ userId: identityId, role: 'APPROVER' }, workspace.clientId, personId, body, db);
+  return addPortalResponsibility(workspace.clientId, personId, body, db);
 }
