@@ -48,9 +48,19 @@ describe('7C-A compliance overview foundation (structural)', () => {
     assert.match(src, /text-\[var\(--adm-text-muted\)\]/);
   });
 
-  it('has no mutation or future 7B action implementation', () => {
+  it('keeps the read-only overview separate from the 7B proposal surface', () => {
     const src = component();
-    assert.doesNotMatch(src, /fetch\(|POST|PATCH|DELETE|Teendő indítása|transitionFinding/);
+    assert.match(src, /ComplianceProposalPanel/);
+    assert.match(src, /Megerősítés/);
+  });
+
+  it('keeps proposal eligibility as a small frontend hint and renders explicit no-case help', () => {
+    const src = component();
+    assert.match(src, /isComplianceProposalCandidate/);
+    assert.match(src, /eligibleProposalFindings/);
+    assert.match(src, /Jelenleg nincs olyan követelményhez kapcsolt megállapítás/);
+    assert.match(src, /A megerősítéshez előbb ügyet kell hozzárendelni/);
+    assert.match(src, /aria-describedby=/);
   });
 
   it('is registered and used by both company-level surfaces', () => {

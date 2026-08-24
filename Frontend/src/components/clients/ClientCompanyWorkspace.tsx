@@ -20,7 +20,7 @@ import {
 } from "@/lib/clientCompanyApi";
 import { contractStatusLabel, contractTypeLabel, obligationStatusLabel } from "@/lib/clientContractsApi";
 import { personStatusLabel } from "@/lib/clientOrganizationApi";
-import { ComplianceOverviewPanel } from "@/components/clients/compliance/ComplianceOverview";
+import { ComplianceOverviewPanel, ComplianceProposalPanel } from "@/components/clients/compliance/ComplianceOverview";
 
 const labelCls = "rounded bg-white border border-[var(--adm-border)] px-2 py-1 text-xs text-[var(--adm-text-muted)]";
 
@@ -170,6 +170,7 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
           </Panel>
 
           <ComplianceOverviewPanel findings={complianceFindings} />
+          <ComplianceProposalPanel clientId={clientId} findings={complianceFindings} />
 
           {/* Szerződések és kötelezettségek */}
           <Panel title="Szerződések és kötelezettségek">

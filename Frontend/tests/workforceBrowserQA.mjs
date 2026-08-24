@@ -150,6 +150,45 @@ function responseFor(url, mode = "populated") {
       },
     };
   }
+  if (url.includes(`/compliance/proposals?clientId=${WORKFORCE_FIXTURE.client.id}`)) return {
+    status: 200,
+    body: [
+      { id: "qa-proposed-no-case", clientId: WORKFORCE_FIXTURE.client.id, findingId: "qa-finding-company", proposalKind: "REMEDIATION", actionIntentKey: "REMEDIATE_COMPLIANCE_GAP", title: "QA javaslat ügy nélkül", status: "PROPOSED", case: null, taskId: null },
+      { id: "qa-proposed-case", clientId: WORKFORCE_FIXTURE.client.id, findingId: "qa-finding-employee", proposalKind: "REVIEW", actionIntentKey: "REVIEW_APPLICABILITY", title: "QA javaslat ügyhöz kötve", status: "PROPOSED", case: WORKFORCE_FIXTURE.case, taskId: null },
+      { id: "qa-stale", clientId: WORKFORCE_FIXTURE.client.id, findingId: "qa-finding-contract", proposalKind: "DOCUMENT_UPDATE", actionIntentKey: "UPDATE_DOCUMENTATION", title: "QA elavult javaslat", status: "STALE", case: WORKFORCE_FIXTURE.case, taskId: null },
+      { id: "qa-rejected", clientId: WORKFORCE_FIXTURE.client.id, findingId: "qa-finding-workplace", proposalKind: "DISCLOSURE", actionIntentKey: "DISCLOSE_REQUIREMENT", title: "QA elutasított javaslat", status: "REJECTED", case: WORKFORCE_FIXTURE.case, taskId: null },
+      { id: "qa-confirmed", clientId: WORKFORCE_FIXTURE.client.id, findingId: "qa-finding-company", proposalKind: "REMEDIATION", actionIntentKey: "REMEDIATE_COMPLIANCE_GAP", title: "QA megerősített javaslat", status: "CONFIRMED", case: WORKFORCE_FIXTURE.case, taskId: WORKFORCE_FIXTURE.task.id, task: WORKFORCE_FIXTURE.task },
+    ],
+  };
+  if (url.includes(`/cases/${WORKFORCE_FIXTURE.case.id}/collaborators`)) return { status: 200, body: [] };
+  if (url.includes(`/cases/${WORKFORCE_FIXTURE.case.id}/workflow-summary`)) return {
+    status: 200,
+    body: {
+      caseId: WORKFORCE_FIXTURE.case.id,
+      generatedAt: "2026-01-01T00:00:00.000Z",
+      case: { displayName: WORKFORCE_FIXTURE.case.title, reference: WORKFORCE_FIXTURE.case.caseNumber, status: WORKFORCE_FIXTURE.case.status },
+      nextAction: null, waitingOn: null, nextDeadline: null,
+      taskStats: { open: 1, overdue: 0, dueSoon: 0, blocked: 0, review: 0 },
+      latestCommunication: null, activeReview: null,
+      responsibility: { responsibleLawyer: { id: AUTH_ME.id, displayName: AUTH_ME.name }, collaborators: [] },
+      handoff: null,
+      availability: { tasks: true, deadlines: true, communications: true, reviews: true, collaborators: true, handoff: true },
+    },
+  };
+  if (url.includes(`/cases/${WORKFORCE_FIXTURE.case.id}/work-items`)) return {
+    status: 200,
+    body: {
+      caseId: WORKFORCE_FIXTURE.case.id, generatedAt: "2026-01-01T00:00:00.000Z",
+      summary: { open: 1, mine: 1, overdue: 0, dueSoon: 0, blocked: 0, waiting: 0, reviewRequired: 0, handoffRequired: 0, completedRecently: 0 },
+      items: [],
+      availability: { taskTransitions: true, blockerState: true, waitingState: true, reviewWorkflow: true, handoffWorkflow: true },
+    },
+  };
+  if (url.includes(`/cases/${WORKFORCE_FIXTURE.case.id}/workflow-graph`)) return { status: 200, body: { caseId: WORKFORCE_FIXTURE.case.id, nodes: [], edges: [], currentStatus: "ACTIVE", possibleTransitions: [] } };
+  if (url.includes(`/cases/${WORKFORCE_FIXTURE.case.id}/workflow-history`)) return { status: 200, body: [] };
+  if (url.includes("/users")) return { status: 200, body: { data: [AUTH_ME] } };
+  if (url.includes(`/tasks?`)) return { status: 200, body: [WORKFORCE_FIXTURE.task] };
+  if (url.includes("/cases?")) return { status: 200, body: { data: [WORKFORCE_FIXTURE.case], page: 1, limit: 100, total: 1, totalPages: 1 } };
   if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/operating-profile`)) return { status: 200, body: null };
   if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/assessments`)) return {
     status: 200,
@@ -173,7 +212,7 @@ function responseFor(url, mode = "populated") {
   if (url.includes(`/cases/${WORKFORCE_FIXTURE.case.id}/workspace`)) return {
     status: 200,
     body: {
-      case: { ...WORKFORCE_FIXTURE.case, client: { id: WORKFORCE_FIXTURE.client.id, name: WORKFORCE_FIXTURE.client.name, colorKey: null } },
+      case: { ...WORKFORCE_FIXTURE.case, client: { id: WORKFORCE_FIXTURE.client.id, name: WORKFORCE_FIXTURE.client.name, colorKey: null }, startingContext: { originReason: null, currentSituation: null, clientExpectation: null, urgentAction: null, nextStep: null } },
       tasks: [{ ...WORKFORCE_FIXTURE.task, priority: "NORMAL", attentionCategory: null, estimatedMinutes: null, dueDate: null, assignee: { id: AUTH_ME.id, name: AUTH_ME.name }, documentId: null, workflowStepKey: null, blockedPredecessors: null }],
       documents: [], deadlines: [], communications: [], activity: [], comments: [],
       time: { available: true, loggedMinutes: 0, billableMinutes: null },
@@ -272,7 +311,7 @@ async function assertComplianceMode(browser, mode, viewport) {
   }
   await checkPage(qa.page, target, `Compliance ${mode} ${viewport.width}`);
   const body = await qa.page.locator("body").innerText();
-  if (mode === "populated") {
+    if (mode === "populated") {
     for (const label of ["Vállalat", "Munkavállaló", "Szerződés", "Munkahelyszín", "Nem azonosított hatókör"]) {
       if (!body.includes(label)) throw new Error(`Missing compliance scope label: ${label}`);
     }
@@ -282,9 +321,21 @@ async function assertComplianceMode(browser, mode, viewport) {
     const manualGroupCount = await qa.page.locator("button").filter({ hasText: "QA manual finding" }).count();
     if (manualGroupCount !== 2) throw new Error("Same-title manual findings collapsed");
     if (!body.includes("Nem releváns")) throw new Error("DOES_NOT_APPLY row missing after disclosure");
-    if (/cikk|joghatóság|citation|sourceVersion|reviewStatus|Teendő indítása/i.test(body)) {
-      throw new Error("Compliance output contains fake provenance or 7B actions");
-    }
+      if (/cikk|joghatóság|citation|sourceVersion|reviewStatus|Teendő indítása/i.test(body)) {
+        throw new Error("Compliance output contains fake provenance or 7B actions");
+      }
+      const proposalRoot = qa.page.getByTestId("compliance-proposals");
+      if (await proposalRoot.count()) {
+        const findingSelect = proposalRoot.getByLabel("Megállapítás");
+        if (await findingSelect.count() !== 1) throw new Error("Proposal finding selector missing");
+        const options = await findingSelect.locator("option", {}).allTextContents({ timeoutMs: 5000 });
+        if (options.some((option) => option.includes("QA manual"))) throw new Error("Manual finding offered as proposal candidate");
+        if (!body.includes("A megerősítéshez előbb ügyet kell hozzárendelni.")) throw new Error("Missing no-case confirmation explanation");
+        const confirm = proposalRoot.getByRole("button", { name: "Megerősítés" }).first();
+        if (await confirm.count() !== 1 || await confirm.isEnabled()) throw new Error("No-case confirmation is not disabled");
+        if (!body.includes("Elavult") || !body.includes("Elutasítva") || !body.includes("Megerősítve")) throw new Error("Proposal terminal statuses missing");
+        if (await proposalRoot.getByText("Kapcsolt feladat megnyitása →").count() !== 1) throw new Error("Confirmed Task link missing");
+      }
   }
   if (mode === "empty" && !body.includes("Nincs megjeleníthető belső értékelési megállapítás")) {
     throw new Error("Compliance empty state was not rendered");
