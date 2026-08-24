@@ -123,11 +123,18 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
 
     // Diagnostic: verify the finding chain exists in the database
     const diagFinding = await db.assessmentFinding.findFirst({ where: { clientId }, include: { requirementApplicability: { include: { requirementVersion: { include: { requirement: true } } } } } });
-    console.log('[DIAG] finding:', diagFinding?.id, 'applicabilityId:', diagFinding?.requirementApplicabilityId, 'outcome:', diagFinding?.requirementApplicability?.outcome, 'reqKey:', diagFinding?.requirementApplicability?.requirementVersion?.requirement?.key, 'scopeType:', diagFinding?.scopeType);
-
-    const result = await getClientSafeComplianceReadModel(clientId, true, false, db);
-    console.log('[DIAG] topics count:', result.topics.length, 'topics:', JSON.stringify(result.topics));
-    expect(result.topics.length).toBeGreaterThanOrEqual(1);
+    const diagTopics = await getClientSafeComplianceReadModel(clientId, true, false, db);
+    const diagMsg = JSON.stringify({
+      clientId,
+      findingId: diagFinding?.id,
+      applicabilityId: diagFinding?.requirementApplicabilityId,
+      outcome: diagFinding?.requirementApplicability?.outcome,
+      reqKey: diagFinding?.requirementApplicability?.requirementVersion?.requirement?.key,
+      scopeType: diagFinding?.scopeType,
+      topicsCount: diagTopics.topics.length,
+    });
+    expect(diagMsg).toContain('"reqKey":"GDPR_DATA_PROCESSING"');
+    expect(diagTopics.topics.length).toBeGreaterThanOrEqual(1);
     const topic = result.topics.find((t) => t.topicLabel === 'Adatvédelmi feldolgozás');
     expect(topic).toBeDefined();
     expect(topic!.state).toBe('REVIEW_RECOMMENDED');
