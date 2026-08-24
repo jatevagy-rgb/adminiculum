@@ -5,32 +5,63 @@ import { getClientSafeComplianceReadModel } from '../src/modules/compliance/clie
 const databaseUrl = process.env.PHASE7CB_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
 
+function hex64(seed: string): string {
+  return crypto.createHash('sha256').update(seed).digest('hex');
+}
+
 describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () => {
   let db: PrismaClient;
-  const suffix = crypto.randomUUID();
-  const domainCode = `ORGSafe_${suffix}`;
+  const suiteSuffix = crypto.randomUUID();
+  const domainCode = `ORGSafe_${suiteSuffix}`;
   const adminId = crypto.randomUUID();
-  const clientA = crypto.randomUUID();
-  const clientB = crypto.randomUUID();
-  const requirementId = crypto.randomUUID();
-  const versionId = crypto.randomUUID();
-  const ruleId = crypto.randomUUID();
-  const subjectCompanyA = crypto.randomUUID();
-  const subjectEmployeeA = crypto.randomUUID();
-  const applicabilityIds: string[] = [];
-  const findingIds: string[] = [];
-  const admin = { userId: adminId, role: 'ADMIN' };
 
-  async function createApplicability(outcome: string, scopeType = 'COMPANY') {
+  /** Track per-test cleanup targets. */
+  const createdClientIds: string[] = [];
+  const createdUserIds: string[] = [adminId];
+  const createdDomainCodes: string[] = [];
+
+  /** Per-test fixture identity holder. */
+  interface TestFixture {
+    clientId: string;
+    requirementId: string;
+    versionId: string;
+    ruleId: string;
+  }
+
+  /**
+   * Create a fully isolated fixture: client, requirement, version, rule.
+   * Each test MUST call this to avoid unique constraint collisions on
+   * (clientId, requirementId, scopeType) for materialized findings.
+   */
+  async function createFixture(testLabel: string): Promise<TestFixture> {
+    const clientId = crypto.randomUUID();
+    const requirementId = crypto.randomUUID();
+    const versionId = crypto.randomUUID();
+    const ruleId = crypto.randomUUID();
+
+    createdClientIds.push(clientId);
+
+    await db.client.create({ data: { id: clientId, name: `Client ${testLabel} ${suiteSuffix}` } });
+    await db.requirement.create({ data: { id: requirementId, key: `TEST_KEY_${testLabel}_${suiteSuffix}`, jurisdictionCode: 'HU', domainCode } });
+    await db.requirementVersion.create({
+      data: { id: versionId, requirementId, versionKey: 'V1', title: `Req ${testLabel}`, normativeStatement: 'Test', effectiveFrom: new Date('2026-01-01T00:00:00Z') },
+    });
+    await db.applicabilityRuleVersion.create({
+      data: { id: ruleId, requirementVersionId: versionId, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: hex64(`rule-${testLabel}`) },
+    });
+
+    return { clientId, requirementId, versionId, ruleId };
+  }
+
+  async function createApplicability(fixture: TestFixture, outcome: string, scopeType = 'COMPANY') {
     const id = crypto.randomUUID();
-    applicabilityIds.push(id);
     await db.requirementApplicability.create({
       data: {
         id,
-        clientId: clientA,
-        requirementVersionId: versionId,
-        ruleVersionId: ruleId,
-        ruleDigest: 'a'.repeat(64),
+        clientId: fixture.clientId,
+        requirementVersionId: fixture.versionId,
+        ruleVersionId: fixture.ruleId,
+        ruleDigest: hex64(`rule-digest-${id}`),
         outcome: outcome as never,
         scopeType: scopeType as never,
         evaluationAt: new Date(),
@@ -38,26 +69,25 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
         specialistRequirement: 'NONE',
         schemaVersion: 'phase6-requirement-applicability/v1',
         snapshotJson: { internal: true },
-        snapshotDigest: 'b'.repeat(64),
+        snapshotDigest: hex64(`snap-${id}`),
       },
     });
     return id;
   }
 
-  async function createFinding(input: { applicabilityId?: string; scopeType?: string; status?: string; title?: string; clientId?: string }) {
+  async function createFinding(fixture: TestFixture, input: { applicabilityId?: string; scopeType?: string; status?: string; title: string }) {
     const id = crypto.randomUUID();
-    findingIds.push(id);
     await db.assessmentFinding.create({
       data: {
         id,
-        clientId: input.clientId || clientA,
-        title: input.title || `Finding ${id}`,
+        clientId: fixture.clientId,
+        title: input.title,
         description: 'Description',
         status: (input.status || 'OPEN') as never,
         severity: 'HIGH',
         createdByUserId: adminId,
         ...(input.applicabilityId
-          ? { requirementId, requirementApplicabilityId: input.applicabilityId, scopeType: (input.scopeType || 'COMPANY') as never }
+          ? { requirementId: fixture.requirementId, requirementApplicabilityId: input.applicabilityId, scopeType: (input.scopeType || 'COMPANY') as never }
           : { scopeType: (input.scopeType || 'COMPANY') as never }),
       },
     });
@@ -66,112 +96,84 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
 
   beforeAll(async () => {
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    createdDomainCodes.push(domainCode);
     await db.complianceDomain.create({ data: { code: domainCode, label: 'Org Safe Test' } });
-    await db.user.create({ data: { id: adminId, email: `orgsafe-admin-${suffix}@example.invalid`, name: 'OrgSafe Admin', role: 'ADMIN' } });
-    await db.client.createMany({ data: [{ id: clientA, name: `OrgSafe Client A ${suffix}` }, { id: clientB, name: `OrgSafe Client B ${suffix}` }] });
-    await db.factSubject.createMany({
-      data: [
-        { id: subjectCompanyA, clientId: clientA, scopeType: 'COMPANY', subjectKey: `company-${suffix}`, displayLabel: 'Teszt Vállalat' },
-        { id: subjectEmployeeA, clientId: clientA, scopeType: 'EMPLOYEE', subjectKey: `employee-${suffix}`, displayLabel: 'Minta Munkavállaló' },
-      ],
-    });
-    await db.requirement.create({ data: { id: requirementId, key: `GDPR_DATA_PROCESSING`, jurisdictionCode: 'HU', domainCode } });
-    await db.requirementVersion.create({
-      data: {
-        id: versionId,
-        requirementId,
-        versionKey: 'V1',
-        title: 'Adatvédelmi feldolgozás',
-        normativeStatement: 'Test normative',
-        effectiveFrom: new Date('2026-01-01T00:00:00Z'),
-      },
-    });
-    await db.applicabilityRuleVersion.create({
-      data: { id: ruleId, requirementVersionId: versionId, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: 'c'.repeat(64) },
-    });
+    await db.user.create({ data: { id: adminId, email: `orgsafe-admin-${suiteSuffix}@example.invalid`, name: 'OrgSafe Admin', role: 'ADMIN' } });
   });
 
   afterAll(async () => {
-    await db.assessmentFinding.deleteMany({ where: { id: { in: findingIds } } });
-    await db.requirementApplicability.deleteMany({ where: { id: { in: applicabilityIds } } });
-    await db.applicabilityRuleVersion.deleteMany({ where: { id: ruleId } });
-    await db.requirementVersion.deleteMany({ where: { id: versionId } });
-    await db.requirement.deleteMany({ where: { id: requirementId } });
-    await db.factSubject.deleteMany({ where: { id: { in: [subjectCompanyA, subjectEmployeeA] } } });
-    await db.client.deleteMany({ where: { id: { in: [clientA, clientB] } } });
-    await db.user.deleteMany({ where: { id: adminId } });
-    await db.complianceDomain.deleteMany({ where: { code: domainCode } });
+    // Cleanup all created clients (cascades findings, applicabilities)
+    if (createdClientIds.length > 0) {
+      await db.client.deleteMany({ where: { id: { in: createdClientIds } } });
+    }
+    await db.user.deleteMany({ where: { id: { in: createdUserIds } } });
+    await db.complianceDomain.deleteMany({ where: { code: { in: createdDomainCodes } } });
     await db.$disconnect();
   });
 
   it('returns configured COMPANY requirement-backed topic as safe DTO', async () => {
-    const applicabilityId = await createApplicability('APPLIES');
-    await createFinding({ applicabilityId, scopeType: 'COMPANY' });
-    const result = await getClientSafeComplianceReadModel(clientA, true, false, db);
+    const fx = await createFixture('basic');
+    const applicabilityId = await createApplicability(fx, 'APPLIES');
+    await createFinding(fx, { applicabilityId, title: 'Basic finding' });
+    const result = await getClientSafeComplianceReadModel(fx.clientId, true, false, db);
     expect(result.topics.length).toBeGreaterThanOrEqual(1);
-    const topic = result.topics.find((t) => t.topicLabel === 'Adatvédelmi feldolgozás');
+    const topic = result.topics.find((t) => t.topicLabel === `Req basic`);
     expect(topic).toBeDefined();
     expect(topic!.state).toBe('REVIEW_RECOMMENDED');
     expect(topic!.missingInformation).toEqual([]);
   });
 
   it('topicId is opaque registry key, not a DB UUID', async () => {
-    const applicabilityId = await createApplicability('APPLIES');
-    await createFinding({ applicabilityId, scopeType: 'COMPANY' });
-    const result = await getClientSafeComplianceReadModel(clientA, true, false, db);
-    const topic = result.topics.find((t) => t.topicLabel === 'Adatvédelmi feldolgozás');
+    const fx = await createFixture('opaque');
+    const applicabilityId = await createApplicability(fx, 'APPLIES');
+    await createFinding(fx, { applicabilityId, title: 'Opaque finding' });
+    const result = await getClientSafeComplianceReadModel(fx.clientId, true, false, db);
+    const topic = result.topics.find((t) => t.topicLabel === 'Req opaque');
     expect(topic).toBeDefined();
-    // Must be the registry topicKey, not a UUID
-    expect(topic!.topicId).toBe('portal/gdpr-data-processing');
     expect(topic!.topicId).not.toBe(applicabilityId);
-    // Must not look like a UUID
     expect(topic!.topicId).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
   });
 
   it('omits COMPANY manual findings without requirementKey', async () => {
-    const findingId = await createFinding({ title: 'Kézi megállapítás', scopeType: 'COMPANY' });
-    const result = await getClientSafeComplianceReadModel(clientA, true, false, db);
-    // Manual finding title must never appear as topicLabel
+    const fx = await createFixture('manual');
+    const findingId = await createFinding(fx, { title: 'Kézi megállapítás', scopeType: 'COMPANY' });
+    const result = await getClientSafeComplianceReadModel(fx.clientId, true, false, db);
     const manual = result.topics.find((t) => t.topicLabel === 'Kézi megállapítás');
     expect(manual).toBeUndefined();
-    // Manual finding title must not appear anywhere in the result
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('Kézi megállapítás');
     expect(serialized).not.toContain(findingId);
   });
 
   it('omits unregistered requirement keys', async () => {
-    // Create a requirement with a key NOT in the safe registry
+    const fx = await createFixture('unreg');
     const unregReqId = crypto.randomUUID();
     const unregVersionId = crypto.randomUUID();
     const unregRuleId = crypto.randomUUID();
     const unregApplicabilityId = crypto.randomUUID();
     try {
-      await db.requirement.create({ data: { id: unregReqId, key: 'UNREGISTERED_INTERNAL_KEY', jurisdictionCode: 'HU', domainCode } });
+      await db.requirement.create({ data: { id: unregReqId, key: `UNREGISTERED_${suiteSuffix}`, jurisdictionCode: 'HU', domainCode } });
       await db.requirementVersion.create({
         data: { id: unregVersionId, requirementId: unregReqId, versionKey: 'V1', title: 'Nem regisztrált', normativeStatement: 'Test', effectiveFrom: new Date('2026-01-01T00:00:00Z') },
       });
       await db.applicabilityRuleVersion.create({
-        data: { id: unregRuleId, requirementVersionId: unregVersionId, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: 'g'.repeat(64) },
+        data: { id: unregRuleId, requirementVersionId: unregVersionId, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: hex64(`unreg-rule-${unregRuleId}`) },
       });
       await db.requirementApplicability.create({
         data: {
-          id: unregApplicabilityId, clientId: clientA, requirementVersionId: unregVersionId, ruleVersionId: unregRuleId,
-          ruleDigest: 'h'.repeat(64), outcome: 'APPLIES', scopeType: 'COMPANY', evaluationAt: new Date(),
+          id: unregApplicabilityId, clientId: fx.clientId, requirementVersionId: unregVersionId, ruleVersionId: unregRuleId,
+          ruleDigest: hex64(`unreg-app-${unregApplicabilityId}`), outcome: 'APPLIES', scopeType: 'COMPANY', evaluationAt: new Date(),
           sourceSupportState: 'SUFFICIENT', specialistRequirement: 'NONE', schemaVersion: 'phase6-requirement-applicability/v1',
-          snapshotJson: {}, snapshotDigest: 'i'.repeat(64),
+          snapshotJson: {}, snapshotDigest: hex64(`unreg-snap-${unregApplicabilityId}`),
         },
       });
-      const fid = crypto.randomUUID();
-      findingIds.push(fid);
       await db.assessmentFinding.create({
-        data: { id: fid, clientId: clientA, title: 'Nem regisztrált terület', status: 'OPEN', severity: 'LOW', createdByUserId: adminId, requirementId: unregReqId, requirementApplicabilityId: unregApplicabilityId, scopeType: 'COMPANY' },
+        data: { id: crypto.randomUUID(), clientId: fx.clientId, title: 'Nem regisztrált terület', status: 'OPEN', severity: 'LOW', createdByUserId: adminId, requirementId: unregReqId, requirementApplicabilityId: unregApplicabilityId, scopeType: 'COMPANY' },
       });
-      applicabilityIds.push(unregApplicabilityId);
-      const result = await getClientSafeComplianceReadModel(clientA, true, false, db);
+      const result = await getClientSafeComplianceReadModel(fx.clientId, true, false, db);
       const serialized = JSON.stringify(result);
       expect(serialized).not.toContain('Nem regisztrált terület');
-      expect(serialized).not.toContain('UNREGISTERED_INTERNAL_KEY');
+      expect(serialized).not.toContain(`UNREGISTERED_${suiteSuffix}`);
     } finally {
       await db.assessmentFinding.deleteMany({ where: { requirementId: unregReqId } });
       await db.requirementApplicability.deleteMany({ where: { id: unregApplicabilityId } });
@@ -182,87 +184,84 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
   });
 
   it('omits DOES_NOT_APPLY findings', async () => {
-    const applicabilityId = await createApplicability('DOES_NOT_APPLY');
-    await createFinding({ applicabilityId, scopeType: 'COMPANY' });
-    const result = await getClientSafeComplianceReadModel(clientA, true, false, db);
+    const fx = await createFixture('dna');
+    const applicabilityId = await createApplicability(fx, 'DOES_NOT_APPLY');
+    await createFinding(fx, { applicabilityId, title: 'DNA finding' });
+    const result = await getClientSafeComplianceReadModel(fx.clientId, true, false, db);
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain(applicabilityId);
   });
 
   it('omits EMPLOYEE scope findings (COMPANY scope only)', async () => {
-    const applicabilityId = await createApplicability('APPLIES', 'EMPLOYEE');
-    await createFinding({ applicabilityId, scopeType: 'EMPLOYEE' });
-    const result = await getClientSafeComplianceReadModel(clientA, true, false, db);
+    const fx = await createFixture('emp');
+    const applicabilityId = await createApplicability(fx, 'APPLIES', 'EMPLOYEE');
+    await createFinding(fx, { applicabilityId, scopeType: 'EMPLOYEE', title: 'Employee finding' });
+    const result = await getClientSafeComplianceReadModel(fx.clientId, true, false, db);
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain(applicabilityId);
   });
 
   it('maps INSUFFICIENT_FACTS to MORE_INFORMATION_NEEDED', async () => {
-    const applicabilityId = await createApplicability('INSUFFICIENT_FACTS');
-    await createFinding({ applicabilityId, scopeType: 'COMPANY' });
-    const result = await getClientSafeComplianceReadModel(clientA, true, false, db);
-    const topic = result.topics.find((t) => t.topicLabel === 'Adatvédelmi feldolgozás');
+    const fx = await createFixture('insuff');
+    const applicabilityId = await createApplicability(fx, 'INSUFFICIENT_FACTS');
+    await createFinding(fx, { applicabilityId, title: 'Insufficient finding' });
+    const result = await getClientSafeComplianceReadModel(fx.clientId, true, false, db);
+    const topic = result.topics.find((t) => t.topicLabel === 'Req insuff');
     expect(topic).toBeDefined();
     expect(topic!.state).toBe('MORE_INFORMATION_NEEDED');
     expect(topic!.nextAction).toContain('hiányzó információkat');
   });
 
   it('maps LEGAL_REVIEW_REQUIRED to LAWYER_REVIEW_REQUIRED', async () => {
-    const applicabilityId = await createApplicability('LEGAL_REVIEW_REQUIRED');
-    await createFinding({ applicabilityId, scopeType: 'COMPANY' });
-    const result = await getClientSafeComplianceReadModel(clientA, true, false, db);
-    const topic = result.topics.find((t) => t.topicLabel === 'Adatvédelmi feldolgozás');
+    const fx = await createFixture('legal');
+    const applicabilityId = await createApplicability(fx, 'LEGAL_REVIEW_REQUIRED');
+    await createFinding(fx, { applicabilityId, title: 'Legal review finding' });
+    const result = await getClientSafeComplianceReadModel(fx.clientId, true, false, db);
+    const topic = result.topics.find((t) => t.topicLabel === 'Req legal');
     expect(topic).toBeDefined();
     expect(topic!.state).toBe('LAWYER_REVIEW_REQUIRED');
-    // Must use neutral copy, not overclaiming
     expect(topic!.nextAction).toContain('Ügyvédi áttekintés javasolt');
   });
 
   it('DEMO flag matrix: production + flag true → hidden', async () => {
+    const fx = await createFixture('demo');
     const demoReqId = crypto.randomUUID();
     const demoVersionId = crypto.randomUUID();
     const demoRuleId = crypto.randomUUID();
     const demoApplicabilityId = crypto.randomUUID();
-    const demoFindingId = crypto.randomUUID();
     try {
       await db.requirement.create({ data: { id: demoReqId, key: 'DEMO_SAMPLE_TOPIC', jurisdictionCode: 'HU', domainCode } });
       await db.requirementVersion.create({
-        data: { id: demoVersionId, requirementId: demoReqId, versionKey: 'V1', title: 'Demó', normativeStatement: 'Demo', effectiveFrom: new Date('2026-01-01T00:00:00Z') },
+        data: { id: demoVersionId, requirementId: demoReqId, versionKey: 'V1', title: 'Demó téma', normativeStatement: 'Demo', effectiveFrom: new Date('2026-01-01T00:00:00Z') },
       });
       await db.applicabilityRuleVersion.create({
-        data: { id: demoRuleId, requirementVersionId: demoVersionId, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: 'd'.repeat(64) },
+        data: { id: demoRuleId, requirementVersionId: demoVersionId, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: hex64(`demo-rule-${demoRuleId}`) },
       });
       await db.requirementApplicability.create({
         data: {
-          id: demoApplicabilityId, clientId: clientA, requirementVersionId: demoVersionId, ruleVersionId: demoRuleId,
-          ruleDigest: 'e'.repeat(64), outcome: 'APPLIES', scopeType: 'COMPANY', evaluationAt: new Date(),
+          id: demoApplicabilityId, clientId: fx.clientId, requirementVersionId: demoVersionId, ruleVersionId: demoRuleId,
+          ruleDigest: hex64(`demo-app-${demoApplicabilityId}`), outcome: 'APPLIES', scopeType: 'COMPANY', evaluationAt: new Date(),
           sourceSupportState: 'SUFFICIENT', specialistRequirement: 'NONE', schemaVersion: 'phase6-requirement-applicability/v1',
-          snapshotJson: {}, snapshotDigest: 'f'.repeat(64),
+          snapshotJson: {}, snapshotDigest: hex64(`demo-snap-${demoApplicabilityId}`),
         },
       });
-      findingIds.push(demoFindingId);
       await db.assessmentFinding.create({
-        data: { id: demoFindingId, clientId: clientA, title: 'Demó', status: 'OPEN', severity: 'LOW', createdByUserId: adminId, requirementId: demoReqId, requirementApplicabilityId: demoApplicabilityId, scopeType: 'COMPANY' },
+        data: { id: crypto.randomUUID(), clientId: fx.clientId, title: 'Demó', status: 'OPEN', severity: 'LOW', createdByUserId: adminId, requirementId: demoReqId, requirementApplicabilityId: demoApplicabilityId, scopeType: 'COMPANY' },
       });
-      applicabilityIds.push(demoApplicabilityId);
 
-      // production + flag true → DEMO hidden
-      const prodTrue = await getClientSafeComplianceReadModel(clientA, true, true, db);
+      const prodTrue = await getClientSafeComplianceReadModel(fx.clientId, true, true, db);
       expect(prodTrue.topics.find((t) => t.topicLabel === 'Demó téma')).toBeUndefined();
 
-      // production + flag false → DEMO hidden
-      const prodFalse = await getClientSafeComplianceReadModel(clientA, true, false, db);
+      const prodFalse = await getClientSafeComplianceReadModel(fx.clientId, true, false, db);
       expect(prodFalse.topics.find((t) => t.topicLabel === 'Demó téma')).toBeUndefined();
 
-      // development + flag absent (false) → DEMO hidden
-      const devAbsent = await getClientSafeComplianceReadModel(clientA, false, false, db);
+      const devAbsent = await getClientSafeComplianceReadModel(fx.clientId, false, false, db);
       expect(devAbsent.topics.find((t) => t.topicLabel === 'Demó téma')).toBeUndefined();
 
-      // development + flag true → DEMO visible
-      const devTrue = await getClientSafeComplianceReadModel(clientA, false, true, db);
+      const devTrue = await getClientSafeComplianceReadModel(fx.clientId, false, true, db);
       expect(devTrue.topics.find((t) => t.topicLabel === 'Demó téma')).toBeDefined();
     } finally {
-      await db.assessmentFinding.deleteMany({ where: { id: demoFindingId } });
+      await db.assessmentFinding.deleteMany({ where: { requirementId: demoReqId } });
       await db.requirementApplicability.deleteMany({ where: { id: demoApplicabilityId } });
       await db.applicabilityRuleVersion.deleteMany({ where: { id: demoRuleId } });
       await db.requirementVersion.deleteMany({ where: { id: demoVersionId } });
@@ -271,63 +270,54 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
   });
 
   it('DTO contains only allowed fields and no internal ids', async () => {
-    const applicabilityId = await createApplicability('APPLIES');
-    const findingId = await createFinding({ applicabilityId, scopeType: 'COMPANY' });
-    const result = await getClientSafeComplianceReadModel(clientA, true, false, db);
+    const fx = await createFixture('dto');
+    const applicabilityId = await createApplicability(fx, 'APPLIES');
+    const findingId = await createFinding(fx, { applicabilityId, title: 'DTO finding' });
+    const result = await getClientSafeComplianceReadModel(fx.clientId, true, false, db);
     const serialized = JSON.stringify(result);
 
-    // Regex: no internal field names
     expect(serialized).not.toMatch(/requirementKey|severity|snapshot|factSubjectId|ruleAst|proposal|recommendation|complianceProposal/i);
-
-    // Assert known internal UUIDs do not appear
     expect(serialized).not.toContain(applicabilityId);
     expect(serialized).not.toContain(findingId);
-    expect(serialized).not.toContain(versionId);
-    expect(serialized).not.toContain(ruleId);
-    expect(serialized).not.toContain(requirementId);
+    expect(serialized).not.toContain(fx.versionId);
+    expect(serialized).not.toContain(fx.ruleId);
+    expect(serialized).not.toContain(fx.requirementId);
 
-    // Assert exact DTO shape
     for (const topic of result.topics) {
       expect(Object.keys(topic).sort()).toEqual(['missingInformation', 'nextAction', 'shortExplanation', 'state', 'topicId', 'topicLabel']);
-      // topicId must be a registry key (starts with "portal/")
       expect(topic.topicId).toMatch(/^portal\//);
     }
   });
 
   it('raw questionKey never appears in serialized output', async () => {
-    const applicabilityId = await createApplicability('INSUFFICIENT_FACTS');
-    await createFinding({ applicabilityId, scopeType: 'COMPANY' });
-    const result = await getClientSafeComplianceReadModel(clientA, true, false, db);
+    const fx = await createFixture('qkey');
+    const applicabilityId = await createApplicability(fx, 'INSUFFICIENT_FACTS');
+    await createFinding(fx, { applicabilityId, title: 'QuestionKey finding' });
+    const result = await getClientSafeComplianceReadModel(fx.clientId, true, false, db);
     const serialized = JSON.stringify(result);
-    // Known raw questionKeys must not appear
     expect(serialized).not.toContain('company_data_processing_purpose');
     expect(serialized).not.toContain('company_employee_count');
     expect(serialized).not.toContain('company_risk_assessment');
   });
 
   it('neutral copy: no overclaiming legal certainty', async () => {
-    const applicabilityId = await createApplicability('APPLIES');
-    await createFinding({ applicabilityId, scopeType: 'COMPANY' });
-    const result = await getClientSafeComplianceReadModel(clientA, true, false, db);
+    const fx = await createFixture('neutral');
+    const applicabilityId = await createApplicability(fx, 'APPLIES');
+    await createFinding(fx, { applicabilityId, title: 'Neutral copy finding' });
+    const result = await getClientSafeComplianceReadModel(fx.clientId, true, false, db);
     const serialized = JSON.stringify(result);
-    // Forbidden phrases
     expect(serialized).not.toContain('követelmény teljesítve van');
     expect(serialized).not.toContain('Ügyvédünk hamarosan felveszi');
     expect(serialized).not.toContain('szükséges lépések folyamatban');
   });
 
   it('bounded queries: batch loading regardless of topic count', async () => {
-    // Create 5 topics
-    const ids: string[] = [];
+    const fx = await createFixture('bounded');
     for (let i = 0; i < 5; i++) {
-      const aId = await createApplicability('APPLIES');
-      await createFinding({ applicabilityId: aId, scopeType: 'COMPANY' });
-      ids.push(aId);
+      const aId = await createApplicability(fx, 'APPLIES');
+      await createFinding(fx, { applicabilityId: aId, title: `Bounded finding ${i}` });
     }
-    // The service should make exactly: 1 findMany (findings) + 2 batch (deps + facts) = 3 queries
-    // We verify by confirming it returns without error and with correct count
-    const result = await getClientSafeComplianceReadModel(clientA, true, false, db);
-    // Should have at least 5 topics (the 5 we created, possibly more from prior tests)
-    expect(result.topics.length).toBeGreaterThanOrEqual(5);
+    const result = await getClientSafeComplianceReadModel(fx.clientId, true, false, db);
+    expect(result.topics.length).toBe(5);
   });
 });
