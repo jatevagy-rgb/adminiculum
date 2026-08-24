@@ -389,6 +389,9 @@ export interface CaseWorkspace {
   case: {
     id: string; caseNumber: string; title: string; status: string; priority: string;
     matterType: string | null;
+    clientRole: string | null;
+    matterId: string | null;
+    deadline: string | null;
     client: { id: string; name: string; colorKey: string | null } | null;
     assignedLawyer: { id: string; name: string } | null;
     description: string | null; nextStep: string | null;
