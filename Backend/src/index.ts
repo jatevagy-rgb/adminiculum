@@ -194,6 +194,9 @@ app.get('/openapi.json', handleOpenApiJson);
 import authRoutes from './modules/auth/routes';
 app.use('/api/v1/auth', authRoutes);
 
+import timeEconomicsRoutes from './modules/time-economics/routes';
+app.use('/api/v1', timeEconomicsRoutes);
+
 import usersRoutes from './modules/users/routes';
 app.use('/api/v1/users', usersRoutes);
 
