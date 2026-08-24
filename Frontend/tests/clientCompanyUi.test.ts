@@ -17,9 +17,9 @@ describe('Company foundation internal UI (structural)', () => {
     assert.match(component(), /Vállalati működés/);
   });
 
-  it('renders profile, facts, assessments, findings, initiatives and milestones sections', () => {
+  it('renders profile, assessments, a single compliance overview link, initiatives and milestones', () => {
     const src = component();
-    for (const label of ['Profil', 'Felmérések', 'Fejlődési terv', 'Vállalati mérföldkövek', 'Megállapítások']) {
+    for (const label of ['Profil', 'Felmérések', 'Compliance áttekintés', 'Fejlődési terv', 'Vállalati mérföldkövek']) {
       assert.match(src, new RegExp(label));
     }
   });
@@ -38,11 +38,12 @@ describe('Company foundation internal UI (structural)', () => {
     assert.doesNotMatch(src, /verificationStatus\}|LAW_FIRM_VERIFIED\}|DIGITAL_MATURITY\}/);
   });
 
-  it('calls the internal workforce company endpoints', () => {
-    const src = api() + component();
-    for (const token of ['/client-company/clients/', '/operating-profile', '/facts', '/milestones', '/assessments', '/findings', '/initiatives']) {
+  it('does not load the full finding feed in the client detail', () => {
+    const src = component();
+    for (const token of ['getProfile', 'listFacts', 'listMilestones', 'listAssessments', 'listInitiatives']) {
       assert.match(src, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     }
+    assert.doesNotMatch(src, /listFindings/);
   });
 
   it('is registered and type-safe (component exists)', () => {

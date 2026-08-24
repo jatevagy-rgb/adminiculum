@@ -90,7 +90,12 @@ export function groupComplianceFindings(findings: ComplianceFindingView[]): Arra
 }
 
 export function getComplianceAttentionFindings(findings: ComplianceFindingView[]): ComplianceFindingView[] {
-  return findings.filter((finding) => getComplianceFindingStatus(finding) !== "DOES_NOT_APPLY");
+  return findings.filter((finding) => {
+    const applicability = getComplianceFindingStatus(finding);
+    if (applicability === "DOES_NOT_APPLY") return false;
+    if (applicability === null) return finding.operationalStatus !== "RESOLVED";
+    return true;
+  });
 }
 
 export function isComplianceGroupInitiallyOpen(findings: ComplianceFindingView[]): boolean {
@@ -173,11 +178,13 @@ export function ComplianceOverviewPanel({
   findings,
   loading = false,
   error = null,
+  onRetry,
   title = "Compliance áttekintés",
 }: {
   findings: ComplianceFindingView[];
   loading?: boolean;
   error?: string | null;
+  onRetry?: () => void;
   title?: string;
 }) {
   const groups = useMemo(() => groupComplianceFindings(findings), [findings]);
@@ -186,7 +193,7 @@ export function ComplianceOverviewPanel({
       <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">{title}</h2>
       <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Belső értékelési megállapítások; nem igazolt jogi kötelezettségek.</p>
       {loading ? <div className="mt-3"><ComplianceState state="loading" /></div> : null}
-      {!loading && error ? <div className="mt-3"><ComplianceState state="unavailable" detail={error} /></div> : null}
+      {!loading && error ? <div className="mt-3"><ComplianceState state="unavailable" detail={error} /><button type="button" onClick={onRetry} className="mt-3 rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]">Újrapróbálás</button></div> : null}
       {!loading && !error && !findings.length ? <div className="mt-3"><ComplianceState state="empty" /></div> : null}
       {!loading && !error && findings.length ? (
         <div className="mt-4 space-y-4">
