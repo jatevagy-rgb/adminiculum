@@ -29,8 +29,11 @@ function portalRoleLabel(role: string | null | undefined): string {
 function groupPath(groups: OrgGroupDTO[], groupId: string | null): string {
   const byId = new Map(groups.map((group) => [group.id, group]));
   const names: string[] = [];
+  const seen = new Set<string>();
   let current = groupId ? byId.get(groupId) : undefined;
   while (current) {
+    if (seen.has(current.id)) return `${names.join(" / ")} / Körkörös hierarchia`;
+    seen.add(current.id);
     names.unshift(current.name);
     current = current.parentGroupId ? byId.get(current.parentGroupId) : undefined;
   }
@@ -122,7 +125,11 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
   };
 
   const roots = groups.filter((group) => !group.parentGroupId);
-  const renderGroup = (group: OrgGroupDTO, depth = 0): ReactNode => {
+  const renderGroup = (group: OrgGroupDTO, depth = 0, ancestors = new Set<string>()): ReactNode => {
+    if (ancestors.has(group.id)) {
+      return <p key={`${group.id}-cycle`} className="mt-2 text-sm text-[var(--adm-text-muted)]">Körkörös hierarchia észlelve.</p>;
+    }
+    const nextAncestors = new Set(ancestors).add(group.id);
     const children = groups.filter((candidate) => candidate.parentGroupId === group.id);
     const members = personsByGroup.get(group.id) || [];
     return (
@@ -148,7 +155,7 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
             ))}
           </div>
         ) : null}
-        {children.map((child) => renderGroup(child, depth + 1))}
+        {children.map((child) => renderGroup(child, depth + 1, nextAncestors))}
       </div>
     );
   };
