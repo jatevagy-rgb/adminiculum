@@ -118,7 +118,7 @@ describe('contract workspace document version foundation', () => {
     expect(uploadNewVersion).toContain('orderBy: { version:');
     expect(uploadNewVersion).toContain('data: { isCurrent: false }');
     expect(uploadNewVersion).toContain('isCurrent: true');
-    expect(uploadNewVersion).toContain('getDocumentStorage().delete');
+    expect(uploadNewVersion).toContain('compensateFailedUpload(');
     expect(uploadNewVersion).toContain("eventType: 'DOCUMENT_VERSION_CREATED'");
     expect(uploadNewVersion).toContain(".catch(() => undefined)");
   });

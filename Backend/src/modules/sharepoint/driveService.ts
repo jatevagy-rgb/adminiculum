@@ -439,14 +439,17 @@ class DriveService {
   }
 
   /**
-   * Delete document from SharePoint
+   * Delete document from SharePoint.
+   *
+   * Microsoft Graph removes a drive item with the HTTP DELETE verb against the
+   * item itself — `DELETE /sites/{siteId}/drive/items/{itemId}`. A POST to a
+   * `/delete` suffix is not a Graph endpoint and would always 404.
    */
   async deleteDocument(documentId: string): Promise<boolean> {
     try {
       const siteId = await this.getSiteId();
-      await graphClient.post<any>(
-        `/sites/${siteId}/drive/items/${documentId}/delete`,
-        {},
+      await graphClient.delete(
+        `/sites/${siteId}/drive/items/${documentId}`,
         { siteId }
       );
       return true;

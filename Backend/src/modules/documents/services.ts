@@ -32,12 +32,6 @@ const SHAREPOINT_FOLDER_BY_PRISMA_FOLDER: Record<string, SharePointFolderType> =
   INTERNAL_NOTES: 'Internal',
 };
 
-const normalizeSharePointItemId = (itemId: unknown): string | null => {
-  if (typeof itemId !== 'string') return null;
-  const trimmed = itemId.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
-
 const isSpItemIdUniqueConflict = (error: unknown): boolean => {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
     return false;
@@ -164,37 +158,55 @@ const isFilesystemStorageProvider = (): boolean =>
   (process.env.DW0_STORAGE_PROVIDER || 'sharepoint').toLowerCase() === 'filesystem';
 
 /**
- * Put exact version bytes.
+ * Compensation: remove a just-uploaded storage object when the DB write failed.
+ * A compensation failure must NOT be silent — it is logged loudly with
+ * structured context so a leftover object is visible. The original error stays
+ * the primary failure and is rethrown by the caller.
+ */
+async function compensateFailedUpload(
+  reference: string | null | undefined,
+  context: { operation: string; documentId?: string },
+): Promise<void> {
+  if (!reference) return;
+  try {
+    await getDocumentStorage().delete(reference);
+  } catch (error) {
+    console.error(
+      `[DW0] upload compensation FAILED to remove stored object ` +
+        `(operation=${context.operation}, documentId=${context.documentId || 'n/a'}, reference=${reference}):`,
+      error instanceof Error ? error.message : error,
+    );
+  }
+}
+
+/**
+ * Put exact version bytes through the provider-neutral BinaryObjectStorage
+ * interface.
  *
- * DW0 provider-neutral path: when the filesystem provider is active (tests),
- * bytes go through the BinaryObjectStorage interface and the returned opaque
- * reference is authoritative. In production the SharePoint placement (case /
- * folder) is preserved by delegating to driveService, and the SharePoint item
- * id doubles as the opaque storage reference.
+ * DW0 contract: production and tests both call `getDocumentStorage().put(...)`,
+ * so the byte path and the opaque-reference contract are identical everywhere.
+ * The provider returns a reference it generated; the caller never supplies a
+ * path. SharePoint placement (case / folder) is passed as advisory placement
+ * meta that only the SharePoint adapter honors. For the SharePoint provider the
+ * opaque reference is the SharePoint DriveItem id, which also populates the
+ * legacy spItemId column.
  */
 async function putDocumentBytes(
   input: { caseId: string; folder: string; fileName: string; mimeType: string; content: Buffer },
 ): Promise<PutDocumentBytesResult> {
-  if (isFilesystemStorageProvider()) {
-    const put = await getDocumentStorage().put(input.content, { mimeType: input.mimeType, size: input.content.length });
-    return { storageReference: put.reference, spItemId: null, webUrl: null, versionLabel: null };
-  }
-  const uploadResult = await driveService.uploadDocument({
-    caseId: input.caseId,
-    fileName: input.fileName,
-    content: input.content,
+  const put = await getDocumentStorage().put(input.content, {
     mimeType: input.mimeType,
+    size: input.content.length,
+    caseRef: input.caseId,
     folder: input.folder,
+    fileName: input.fileName,
   });
-  if (!uploadResult.success || !uploadResult.item) {
-    throw new Error(uploadResult.error || 'SharePoint upload failed');
-  }
-  const sharePointItemId = normalizeSharePointItemId(uploadResult.item.id);
+  const sharePointItemId = isFilesystemStorageProvider() ? null : put.reference;
   return {
-    storageReference: sharePointItemId,
+    storageReference: put.reference,
     spItemId: sharePointItemId,
-    webUrl: uploadResult.webUrl || null,
-    versionLabel: uploadResult.version || null,
+    webUrl: put.webUrl || null,
+    versionLabel: put.versionLabel || null,
   };
 }
 
@@ -317,7 +329,7 @@ class DocumentsService {
           });
         } else {
           if (putBytes.storageReference) {
-            await getDocumentStorage().delete(putBytes.storageReference).catch(() => false);
+            await compensateFailedUpload(putBytes.storageReference, { operation: 'createDocument', documentId });
           }
           throw error;
         }
@@ -408,7 +420,11 @@ class DocumentsService {
    * delete fails AFTER the DB delete succeeds, the bytes are orphaned (harmless)
    * and logged with a safe orphan reference — never a broken DB pointer.
    */
-  async deleteDocument(documentId: string, userId?: string): Promise<void> {
+  async deleteDocument(
+    documentId: string,
+    userId?: string,
+    options?: { forceHistoryDelete?: boolean },
+  ): Promise<void> {
     const document = await prisma.document.findUnique({
       where: { id: documentId },
       select: {
@@ -424,6 +440,19 @@ class DocumentsService {
 
     if (!document) {
       throw new DocumentDeleteError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
+    }
+
+    // Hard-delete history guard: a hard delete irreversibly destroys the
+    // immutable version lineage. When more than one preserved version exists,
+    // block by default and require an explicit force to proceed.
+    const versionHistoryCount = (document.versions || []).length;
+    if (versionHistoryCount > 1 && !options?.forceHistoryDelete) {
+      throw new DocumentDeleteError(
+        409,
+        'DOCUMENT_DELETE_CONFLICT',
+        'A dokumentum több megőrzött verziót tartalmaz. A végleges törlés elpusztítaná a verziótörténetet.',
+        'VERSION_HISTORY_PRESERVED'
+      );
     }
 
     const storageReferences: string[] = [];
@@ -709,7 +738,7 @@ class DocumentsService {
           break;
         } catch (error) {
           if (putBytes.storageReference) {
-            await getDocumentStorage().delete(putBytes.storageReference).catch(() => false);
+            await compensateFailedUpload(putBytes.storageReference, { operation: 'uploadNewVersion', documentId });
           }
           if (attempt < 3 && isSerializationConflict(error)) {
             continue;

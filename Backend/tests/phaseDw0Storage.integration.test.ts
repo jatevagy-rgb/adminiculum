@@ -121,6 +121,38 @@ describeWithDatabase('Phase DW0 — storage foundation (real PostgreSQL + filesy
     expect(sha256(download.content)).toBe(sha256(zipBytes));
   });
 
+  it('certifies explicit PDF byte fidelity via SHA-256 roundtrip', async () => {
+    // A minimal but real PDF header/footer so the bytes are PDF-shaped while the
+    // SHA-256 roundtrip remains the authoritative byte-fidelity assertion.
+    const pdfBytes = Buffer.concat([
+      Buffer.from('%PDF-1.4\n', 'binary'),
+      Buffer.from('1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n', 'binary'),
+      Buffer.from('trailer<</Root 1 0 R>>\n%%EOF\n', 'binary'),
+      Buffer.from([0x00, 0xff, 0x80, 0x01]), // non-text binary tail
+    ]);
+    const created = await documentsService.createDocument({
+      caseId: ids.caseB,
+      fileName: 'szerzodes_pdf_v1.pdf',
+      fileContent: pdfBytes,
+      mimeType: 'application/pdf',
+      documentType: 'CONTRACT',
+      createdById: ids.lawyerA,
+    });
+    const versions = await documentsService.listDocumentVersions(created.id);
+    const v1 = versions.find((v) => v.isCurrent) || versions[0];
+    expect(v1!.mimeType).toBe('application/pdf');
+
+    const download = await documentsService.downloadDocumentVersion(created.id, v1!.id);
+    expect(download).not.toBeNull();
+    if (!download || 'error' in download) throw new Error('download failed');
+
+    // Explicit SHA-256 certification: exact bytes in / exact bytes out.
+    expect(sha256(download.content)).toBe(sha256(pdfBytes));
+    const stored = await storage.get(v1!.storageReference as string);
+    expect(stored).not.toBeNull();
+    expect(sha256(stored!)).toBe(sha256(pdfBytes));
+  });
+
   it('upload V2 keeps V1 byte-identical and makes V2 current', async () => {
     const v1Bytes = Buffer.from('DW0_DOCX_V1_ORIGINAL_BYTES', 'binary');
     const created = await documentsService.createDocument({

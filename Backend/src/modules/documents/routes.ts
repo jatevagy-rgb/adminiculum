@@ -18,6 +18,7 @@ import {
   sendWorkContextError,
 } from './workContext.service';
 import reviewSuggestionsRoutes from './reviewSuggestions.routes';
+import { DW0_BASE64_ENVELOPE_BYTES } from '../storage/policy';
 import { authenticate } from '../../middleware/auth';
 import { prisma } from '../../prisma/prisma.service';
 import { requireDocumentReadAccess, requireDocumentManageAccess, requireHrConfidentialReadAccess } from './authorization';
@@ -126,6 +127,16 @@ function decodeBase64FileContent(value: unknown): Buffer | null {
 }
 
 /**
+ * DW0 pre-decode size rejection. Refuse an oversized base64 payload from its
+ * STRING length before Buffer expansion (see storage/policy). The decoded cap
+ * (25 MiB) corresponds to DW0_BASE64_ENVELOPE_BYTES of base64 text; rejecting
+ * at the envelope bound guarantees the decoded binary cannot exceed the cap.
+ */
+function base64PayloadTooLarge(value: unknown): boolean {
+  return typeof value === 'string' && value.length > DW0_BASE64_ENVELOPE_BYTES;
+}
+
+/**
  * GET /api/v1/documents/search
  * Metadata search for documents (file name, type, case/client linkage)
  */
@@ -212,6 +223,15 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
 
     let fileContentBuffer: Buffer;
     try {
+      // DW0 pre-decode size rejection: reject before Buffer expansion.
+      if (base64PayloadTooLarge(req.body.fileContent)) {
+        res.status(413).json({
+          status: 413,
+          code: 'DOCUMENT_TOO_LARGE',
+          message: 'A fájl mérete meghaladja a 25 MB-os korlátot.',
+        });
+        return;
+      }
       fileContentBuffer = Buffer.from(req.body.fileContent as string, 'base64');
       if (!fileContentBuffer.length) {
         throw new Error('Empty decoded buffer');
@@ -345,7 +365,9 @@ router.post('/:id/tasks', authenticate, requireDocumentReadAccess, async (req: R
 router.delete('/:id', authenticate, requireDocumentManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
-    await documentsService.deleteDocument(String(req.params.id || ''), userId);
+    await documentsService.deleteDocument(String(req.params.id || ''), userId, {
+      forceHistoryDelete: req.query.forceHistoryDelete === 'true',
+    });
     res.status(204).send();
   } catch (error) {
     if (error instanceof DocumentDeleteError) {
@@ -514,6 +536,14 @@ router.post('/:id/versions', authenticate, requireDocumentManageAccess, async (r
       return;
     }
 
+    if (base64PayloadTooLarge(req.body?.fileContent)) {
+      res.status(413).json({
+        status: 413,
+        code: 'DOCUMENT_TOO_LARGE',
+        message: 'A fájl mérete meghaladja a 25 MB-os korlátot.',
+      });
+      return;
+    }
     const fileBuffer = decodeBase64FileContent(req.body?.fileContent);
     if (!fileBuffer) {
       res.status(400).json({
@@ -759,6 +789,14 @@ router.post('/:id/version', authenticate, async (req: Request, res: Response): P
     }
 
     const { id } = req.params as { id: string };
+    if (base64PayloadTooLarge(fileContent)) {
+      res.status(413).json({
+        status: 413,
+        code: 'DOCUMENT_TOO_LARGE',
+        message: 'A fájl mérete meghaladja a 25 MB-os korlátot.',
+      });
+      return;
+    }
     const fileBuffer = decodeBase64FileContent(fileContent);
     if (!fileBuffer) {
       res.status(400).json({

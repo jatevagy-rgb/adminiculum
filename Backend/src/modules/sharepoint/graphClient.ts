@@ -211,6 +211,32 @@ class GraphClientService {
     return (await response.json()) as T;
   }
 
+  async delete<T = unknown>(endpoint: string, options?: GraphClientRequestOptions): Promise<T> {
+    const token = await this.getAccessToken();
+    const url = this.resolveUrl(endpoint, options);
+
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+        ...(options?.headers || {}),
+      },
+    });
+
+    if (!response.ok) {
+      await this.handleErrorResponse(response, 'delete', endpoint);
+    }
+
+    if (response.status === 204) {
+      return undefined as unknown as T;
+    }
+    if (response.headers.get('content-type')?.includes('application/json')) {
+      return (await response.json()) as T;
+    }
+    return (await response.text()) as unknown as T;
+  }
+
   async patch<T = any>(endpoint: string, body: unknown, options?: GraphClientRequestOptions): Promise<T> {
     const token = await this.getAccessToken();
     const url = this.resolveUrl(endpoint, options);

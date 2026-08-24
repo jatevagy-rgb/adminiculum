@@ -146,4 +146,62 @@ describe('document delete service', () => {
     // ... and a storage delete that fails is isolated as an orphan warning.
     expect(storageDelete).toHaveBeenCalledWith('ref-1');
   });
+
+  it('surfaces a truthful residual when a storage delete THROWS after the DB delete', async () => {
+    mockPrisma.document.findUnique.mockResolvedValueOnce({
+      ...baseDocument,
+      versions: [{ storageReference: 'ref-throw', spItemId: 'server-item-throw' }],
+    });
+    storageDelete.mockRejectedValueOnce(new Error('graph down'));
+
+    await expect(documentsService.deleteDocument('doc-1', 'user-1')).rejects.toMatchObject({
+      statusCode: 202,
+      code: 'DOCUMENT_DELETED_WITH_ORPHANED_STORAGE',
+      reason: 'STORAGE_ORPHANED',
+    } satisfies Partial<DocumentDeleteError>);
+
+    // DB delete still ran first (DB-first, compensation-safe) ...
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(txMock.document.delete).toHaveBeenCalled();
+    // ... and the throw is not silently swallowed into a 204.
+    expect(storageDelete).toHaveBeenCalledWith('ref-throw');
+  });
+
+  it('blocks hard delete when preserved version history exists unless forced', async () => {
+    mockPrisma.document.findUnique.mockResolvedValueOnce({
+      ...baseDocument,
+      versions: [
+        { storageReference: 'ref-1', spItemId: 'item-1' },
+        { storageReference: 'ref-2', spItemId: 'item-2' },
+      ],
+    });
+
+    await expect(documentsService.deleteDocument('doc-1', 'user-1')).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'DOCUMENT_DELETE_CONFLICT',
+      reason: 'VERSION_HISTORY_PRESERVED',
+    } satisfies Partial<DocumentDeleteError>);
+
+    // No storage delete, no DB mutation: the lineage is preserved.
+    expect(storageDelete).not.toHaveBeenCalled();
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('allows hard delete of version history when explicitly forced', async () => {
+    mockPrisma.document.findUnique.mockResolvedValueOnce({
+      ...baseDocument,
+      versions: [
+        { storageReference: 'ref-1', spItemId: 'ref-1' },
+        { storageReference: 'ref-2', spItemId: 'ref-2' },
+      ],
+    });
+
+    await documentsService.deleteDocument('doc-1', 'user-1', { forceHistoryDelete: true });
+
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(txMock.document.delete).toHaveBeenCalled();
+    expect(storageDelete).toHaveBeenCalledTimes(2);
+    expect(storageDelete).toHaveBeenCalledWith('ref-1');
+    expect(storageDelete).toHaveBeenCalledWith('ref-2');
+  });
 });

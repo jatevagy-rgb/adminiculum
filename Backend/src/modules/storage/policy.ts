@@ -52,3 +52,17 @@ export const DW0_ALLOWED_UPLOAD_EXTENSIONS: Record<string, Set<string>> = {
 };
 
 export const DW0_MAX_UPLOAD_FILENAME_LENGTH = 180;
+
+/**
+ * Pre-decode size rejection. A base64 payload of length L decodes to at most
+ * floor(L * 3/4) bytes, so the payload may be rejected from its STRING length
+ * before any Buffer expansion. Returns true when the string is safe to decode
+ * (its decoded binary cannot exceed the binary cap), false when it would
+ * overflow the envelope.
+ */
+export function base64EnvelopeWithinLimit(
+  value: unknown,
+  envelopeBytes = DW0_BASE64_ENVELOPE_BYTES,
+): boolean {
+  return typeof value === 'string' && value.length <= envelopeBytes;
+}

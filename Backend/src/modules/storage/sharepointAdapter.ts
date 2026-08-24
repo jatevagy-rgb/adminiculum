@@ -48,18 +48,25 @@ export class SharePointObjectStorage implements BinaryObjectStorage {
   ) {}
 
   async put(data: Buffer, meta?: StorageObjectMeta): Promise<PutResult> {
-    const fileName = `dw0-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.bin`;
+    const fileName = meta?.fileName && meta.fileName.trim()
+      ? meta.fileName.trim()
+      : `dw0-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.bin`;
     const result = await this.drive.uploadDocument({
-      caseId: this.caseRef,
+      caseId: meta?.caseRef || this.caseRef,
       fileName,
       content: data,
       mimeType: meta?.mimeType || 'application/octet-stream',
-      folder: this.folder,
+      folder: meta?.folder || this.folder,
     });
     if (!result.success || !result.item?.id) {
       throw new StorageWriteError('put', result.error || 'SharePoint upload failed.', result.error);
     }
-    return { reference: result.item.id, size: data.length };
+    return {
+      reference: result.item.id,
+      size: data.length,
+      webUrl: result.webUrl || null,
+      versionLabel: result.version || null,
+    };
   }
 
   async get(reference: string): Promise<Buffer | null> {

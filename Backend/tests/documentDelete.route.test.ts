@@ -185,7 +185,7 @@ describe('document delete route', () => {
     const res = await requestJson(createApp(), 'DELETE', '/documents/doc-1', { headers: { 'x-user-id': 'admin-user', 'x-role': 'ADMIN' } });
 
     expect(res.status).toBe(204);
-    expect(deleteDocumentMock).toHaveBeenCalledWith('doc-1', 'admin-user');
+    expect(deleteDocumentMock).toHaveBeenCalledWith('doc-1', 'admin-user', { forceHistoryDelete: false });
   });
 
   it('returns 204 for authorized deletion without response body', async () => {
@@ -193,7 +193,7 @@ describe('document delete route', () => {
 
     expect(res.status).toBe(204);
     expect(res.text).toBe('');
-    expect(deleteDocumentMock).toHaveBeenCalledWith('doc-1', 'user-1');
+    expect(deleteDocumentMock).toHaveBeenCalledWith('doc-1', 'user-1', { forceHistoryDelete: false });
   });
 
   it('returns safe 409 conflict reasons from dependency preflight', async () => {

@@ -19,12 +19,24 @@
 export interface StorageObjectMeta {
   mimeType?: string | null;
   size?: number | null;
+  /**
+   * Provider placement hints. These are advisory and provider-opaque: a
+   * provider MAY use them to place an object (e.g. a SharePoint case/folder
+   * path), and MUST ignore them if it has no such concept. They are NEVER used
+   * to derive the returned storage reference.
+   */
+  caseRef?: string | null;
+  folder?: string | null;
+  fileName?: string | null;
 }
 
 export interface PutResult {
   /** Opaque storage reference; never caller-controlled. */
   reference: string;
   size: number;
+  /** Provider-specific enrichment; null when the provider has none. */
+  webUrl?: string | null;
+  versionLabel?: string | null;
 }
 
 export interface BinaryObjectStorage {
