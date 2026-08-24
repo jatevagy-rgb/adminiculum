@@ -49,7 +49,8 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     ] });
     await db.organizationPerson.create({ data: { id: personId, clientId: clientA, name: 'Portal responsibility person', jobTitle: 'Director' } });
     await db.factDefinition.create({ data: { id: definitionId, key: 'employee_count', domainCode: `ANSWER_STATE_${suffix}`, valueType: 'NUMBER', allowedScopeTypes: ['COMPANY'], determinationMethod: 'USER_PROVIDED', overlapPolicy: 'DISALLOW', temporalPolicy: 'OBSERVATION' } });
-    await db.legalSource.create({ data: { id: sourceId, sourceKey: `answer-state-source-${suffix}`, jurisdictionCode: 'HU', instrumentType: 'LEGISLATION', status: 'APPROVED' } });
+    await db.complianceDomain.create({ data: { code: `ANSWER_STATE_${suffix}`, label: 'Answer state acceptance domain' } });
+    await db.legalSource.create({ data: { id: sourceId, sourceKey: `answer-state-source-${suffix}`, jurisdictionCode: 'HU', instrumentType: 'LEGISLATION', status: 'CANDIDATE' } });
     await db.legalSourceVersion.create({ data: { id: sourceVersionId, legalSourceId: sourceId, legalVersionKey: 'V1', status: 'ACTIVE', reviewStatus: 'APPROVED' } });
     const requirement = await createRequirement({ key: `ANSWER_STATE_THRESHOLD_${suffix}`, jurisdictionCode: 'HU', domainCode: `ANSWER_STATE_${suffix}`, db });
     await db.requirement.update({ where: { id: requirement.id }, data: { id: requirementId } });
@@ -73,6 +74,7 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     await db.requirement.deleteMany({ where: { id: requirementId } });
     await db.legalSourceVersion.deleteMany({ where: { id: sourceVersionId } });
     await db.legalSource.deleteMany({ where: { id: sourceId } });
+    await db.complianceDomain.deleteMany({ where: { code: `ANSWER_STATE_${suffix}` } });
     await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId: { in: [workspaceA, workspaceB] } } });
     await db.clientPortalIdentity.deleteMany({ where: { id: { in: [memberId, representativeId, approverId, otherClientIdentityId] } } });
     await db.clientPortalWorkspace.deleteMany({ where: { id: { in: [workspaceA, workspaceB] } } });
