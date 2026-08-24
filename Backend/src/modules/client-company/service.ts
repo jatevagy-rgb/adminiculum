@@ -27,6 +27,7 @@ type Prisma = typeof defaultPrisma;
 
 const MANAGER_ROLES = new Set(['ADMIN', 'PARTNER']);
 const FACT_VERIFICATION = new Set(['CLIENT_PROVIDED', 'DOCUMENT_VERIFIED', 'LAW_FIRM_VERIFIED']);
+const COMPLIANCE_ENROLLMENT = new Set(['ENROLLED', 'NOT_ENROLLED', 'SUSPENDED']);
 
 const ASSESSMENT_TRANSITIONS: Record<string, string[]> = {
   DRAFT: ['IN_PROGRESS'],
@@ -125,6 +126,7 @@ export function toOperatingProfileDTO(row: any): any {
     id: row.id,
     clientId: row.clientId,
     status: row.status,
+    complianceEnrollmentStatus: row.complianceEnrollmentStatus,
     summary: row.summary,
     lastReviewedAt: row.lastReviewedAt ? row.lastReviewedAt.toISOString() : null,
     nextReviewAt: row.nextReviewAt ? row.nextReviewAt.toISOString() : null,
@@ -145,6 +147,11 @@ export async function upsertOperatingProfile(actor: InternalActor, clientId: str
   await assertClientReadAccess(actor, clientId, prisma);
   const data: any = {};
   if (input.status !== undefined) data.status = safeText(input.status, 'status', 60, false);
+  if (input.complianceEnrollmentStatus !== undefined) {
+    const status = String(input.complianceEnrollmentStatus || '');
+    if (!COMPLIANCE_ENROLLMENT.has(status)) throw new InteractionError(400, 'COMPLIANCE_ENROLLMENT_STATUS_INVALID', 'Invalid compliance enrollment status.');
+    data.complianceEnrollmentStatus = status;
+  }
   if (input.summary !== undefined) data.summary = safeText(input.summary, 'summary', 2000, false);
   if (input.lastReviewedAt !== undefined) data.lastReviewedAt = input.lastReviewedAt ? new Date(String(input.lastReviewedAt)) : null;
   if (input.nextReviewAt !== undefined) data.nextReviewAt = input.nextReviewAt ? new Date(String(input.nextReviewAt)) : null;

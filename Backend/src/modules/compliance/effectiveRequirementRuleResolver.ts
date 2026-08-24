@@ -25,16 +25,22 @@ export async function resolveEffectiveRequirementRuleVersion(
     select: { id: true },
     take: 2,
   });
-  if (versions.length !== 1) {
-    throw new EffectiveRequirementRuleError('EFFECTIVE_REQUIREMENT_VERSION_UNRESOLVED', 'Exactly one approved RequirementVersion must be effective at evaluationAt.');
+  if (versions.length === 0) {
+    throw new EffectiveRequirementRuleError('NO_EFFECTIVE_REQUIREMENT_VERSION', 'No approved RequirementVersion is effective at evaluationAt.');
+  }
+  if (versions.length > 1) {
+    throw new EffectiveRequirementRuleError('AMBIGUOUS_EFFECTIVE_REQUIREMENT_VERSION', 'More than one approved RequirementVersion is effective at evaluationAt.');
   }
   const rules = await tx.applicabilityRuleVersion.findMany({
     where: { requirementVersionId: versions[0].id, status: 'APPROVED', supersededById: null },
     select: { id: true, requirementVersionId: true, evaluationScopeType: true },
     take: 2,
   });
-  if (rules.length !== 1) {
-    throw new EffectiveRequirementRuleError('EFFECTIVE_RULE_VERSION_UNRESOLVED', 'Exactly one current approved ApplicabilityRuleVersion is required.');
+  if (rules.length === 0) {
+    throw new EffectiveRequirementRuleError('NO_CURRENT_APPROVED_RULE_VERSION', 'No current approved ApplicabilityRuleVersion is available.');
+  }
+  if (rules.length > 1) {
+    throw new EffectiveRequirementRuleError('AMBIGUOUS_CURRENT_APPROVED_RULE_VERSION', 'More than one current approved ApplicabilityRuleVersion is available.');
   }
   if (!rules[0].evaluationScopeType) {
     throw new EffectiveRequirementRuleError('RULE_SCOPE_UNRESOLVED', 'Approved rule has no safely resolved evaluation scope.');

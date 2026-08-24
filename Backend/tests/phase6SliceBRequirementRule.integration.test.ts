@@ -112,9 +112,9 @@ describeWithDatabase('Phase 6 Slice B requirement/rule foundation (PostgreSQL)',
 
   it('allows multiple candidate rules and derives exact FACT dependencies', async () => {
     const key = `SLICE_B_BOOLEAN_${suffix}`;
-    const first = await createApplicabilityRuleVersion({ requirementVersionId: versionA1, ruleVersionKey: 'R1', astJson: ast(key), db });
+    const first = await createApplicabilityRuleVersion({ requirementVersionId: versionA1, ruleVersionKey: 'R1', astJson: ast(key), evaluationScopeType: 'COMPANY', db });
     const firstStored = await db.applicabilityRuleVersion.update({ where: { id: first.id }, data: { id: ruleA1 } });
-    const second = await createApplicabilityRuleVersion({ requirementVersionId: versionA1, ruleVersionKey: 'R2', astJson: ast(key), db });
+    const second = await createApplicabilityRuleVersion({ requirementVersionId: versionA1, ruleVersionKey: 'R2', astJson: ast(key), evaluationScopeType: 'COMPANY', db });
     await db.applicabilityRuleVersion.update({ where: { id: second.id }, data: { id: ruleA2 } });
     expect(await db.applicabilityRuleVersion.count({ where: { requirementVersionId: versionA1, status: 'CANDIDATE' } })).toBe(2);
     const dependencies = await db.applicabilityRuleFactDependency.findMany({ where: { applicabilityRuleVersionId: firstStored.id } });
@@ -146,18 +146,26 @@ describeWithDatabase('Phase 6 Slice B requirement/rule foundation (PostgreSQL)',
 
   it('rejects rule self-supersession and cross-parent supersession', async () => {
     await expect(supersedeApplicabilityRuleVersion(ruleA1, ruleA1, db)).rejects.toMatchObject({ code: 'SELF_SUPERSESSION' });
-    const other = await createApplicabilityRuleVersion({ requirementVersionId: versionB1, ruleVersionKey: 'B1', astJson: ast(`SLICE_B_BOOLEAN_${suffix}`), db });
+    const other = await createApplicabilityRuleVersion({ requirementVersionId: versionB1, ruleVersionKey: 'B1', astJson: ast(`SLICE_B_BOOLEAN_${suffix}`), evaluationScopeType: 'COMPANY', db });
     await db.applicabilityRuleVersion.update({ where: { id: other.id }, data: { id: ruleB1 } });
     await expect(supersedeApplicabilityRuleVersion(ruleA1, ruleB1, db)).rejects.toMatchObject({ code: 'CROSS_RULE_PARENT_SUPERSESSION' });
   });
 
   it('blocks approval for unsupported fact types and unresolved dependencies', async () => {
     await db.requirementVersion.update({ where: { id: versionA2 }, data: { status: 'APPROVED', approvedAt: new Date() } });
-    const unsupported = await createApplicabilityRuleVersion({ requirementVersionId: versionA2, ruleVersionKey: 'MONEY', astJson: ast(`SLICE_B_MONEY_${suffix}`), db });
+    const unsupported = await createApplicabilityRuleVersion({ requirementVersionId: versionA2, ruleVersionKey: 'MONEY', astJson: ast(`SLICE_B_MONEY_${suffix}`), evaluationScopeType: 'COMPANY', db });
     await db.applicabilityRuleVersion.update({ where: { id: unsupported.id }, data: { id: unsupportedRule } });
     await expect(approveApplicabilityRuleVersion(unsupportedRule, 'rule-approver', db)).rejects.toMatchObject({ code: 'UNSUPPORTED_FACT_TYPE' });
-    const unresolved = await createApplicabilityRuleVersion({ requirementVersionId: versionA2, ruleVersionKey: 'UNRESOLVED', astJson: ast('UNKNOWN_FACT'), db });
+    const unresolved = await createApplicabilityRuleVersion({ requirementVersionId: versionA2, ruleVersionKey: 'UNRESOLVED', astJson: ast('UNKNOWN_FACT'), evaluationScopeType: 'COMPANY', db });
     await expect(approveApplicabilityRuleVersion(unresolved.id, 'rule-approver', db)).rejects.toMatchObject({ code: 'UNRESOLVED_FACT_DEPENDENCY' });
+  });
+
+  it('requires an explicit compatible evaluation scope before rule approval', async () => {
+    const missingScope = await createApplicabilityRuleVersion({ requirementVersionId: versionA2, ruleVersionKey: 'MISSING_SCOPE', astJson: ast(`SLICE_B_BOOLEAN_${suffix}`), db });
+    await expect(approveApplicabilityRuleVersion(missingScope.id, 'rule-approver', db)).rejects.toMatchObject({ code: 'RULE_SCOPE_UNRESOLVED' });
+
+    const wrongScope = await createApplicabilityRuleVersion({ requirementVersionId: versionA2, ruleVersionKey: 'WRONG_SCOPE', astJson: ast(`SLICE_B_BOOLEAN_${suffix}`), evaluationScopeType: 'EMPLOYEE', db });
+    await expect(approveApplicabilityRuleVersion(wrongScope.id, 'rule-approver', db)).rejects.toMatchObject({ code: 'RULE_SCOPE_DEPENDENCY_MISMATCH' });
   });
 
   it('blocks insufficient source support, overlapping approval, and approved mutation', async () => {
