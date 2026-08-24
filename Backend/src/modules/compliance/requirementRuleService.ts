@@ -1,4 +1,4 @@
-import { Prisma, PrismaClient } from '@prisma/client';
+import { FactScopeType, Prisma, PrismaClient } from '@prisma/client';
 import { canonicalDigest } from './canonicalDigest';
 import { RULE_AST_V1, type RuleExpression, type RuleNode } from './ruleAst';
 import { validateRuleAst } from './ruleAstValidator';
@@ -133,7 +133,7 @@ export async function createApplicabilityRuleVersion(input: {
   ruleVersionKey: string;
   astJson: unknown;
   canonicalDigest?: string;
-  evaluationScopeType?: Prisma.FactScopeType | null;
+  evaluationScopeType?: FactScopeType | null;
   status?: 'CANDIDATE' | 'IN_REVIEW';
   createdById?: string | null;
   db?: Db;
