@@ -30,6 +30,7 @@ export interface TypedFactMutationInput {
   factDefinitionId: string;
   actorUserId: string;
   input: Record<string, unknown>;
+  verificationStatus?: 'UNVERIFIED' | 'CLIENT_PROVIDED' | 'DOCUMENT_VERIFIED' | 'LAW_FIRM_VERIFIED';
 }
 
 const SCOPE_TYPES = new Set([
@@ -109,7 +110,7 @@ async function isClientEnrolledForCompliance(tx: TransactionClient, clientId: st
   return profile?.complianceEnrollmentStatus === 'ENROLLED';
 }
 
-async function createTypedFactInTx(input: TypedFactMutationInput, tx: TransactionClient) {
+export async function createTypedFactInTx(input: TypedFactMutationInput, tx: TransactionClient) {
   const definition = await tx.factDefinition.findUnique({ where: { id: input.factDefinitionId } });
   if (!definition) throw new InteractionError(404, 'FACT_DEFINITION_NOT_FOUND', 'FactDefinition was not found.');
   if (definition.status === 'RETIRED') throw new InteractionError(409, 'FACT_DEFINITION_RETIRED', 'Retired FactDefinitions cannot receive new facts.');
@@ -162,7 +163,7 @@ async function createTypedFactInTx(input: TypedFactMutationInput, tx: Transactio
       determinationMethod: definition.determinationMethod,
       sourceReference: input.input.sourceReference ? String(input.input.sourceReference) : null,
       sourceDocumentVersionId,
-      verificationStatus: 'UNVERIFIED',
+      verificationStatus: input.verificationStatus ?? 'UNVERIFIED',
     },
     include: { factDefinition: { select: { valueType: true } } },
   });
