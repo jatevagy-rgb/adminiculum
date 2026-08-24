@@ -120,7 +120,13 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
   it('returns configured COMPANY requirement-backed topic as safe DTO', async () => {
     const clientId = await createTestClient('basic');
     await createFinding(clientId, 'APPLIES', 'Basic finding', { reqId: sharedReqId, versionId: sharedVersionId, ruleId: sharedRuleId });
+
+    // Diagnostic: verify the finding chain exists in the database
+    const diagFinding = await db.assessmentFinding.findFirst({ where: { clientId }, include: { requirementApplicability: { include: { requirementVersion: { include: { requirement: true } } } } } });
+    console.log('[DIAG] finding:', diagFinding?.id, 'applicabilityId:', diagFinding?.requirementApplicabilityId, 'outcome:', diagFinding?.requirementApplicability?.outcome, 'reqKey:', diagFinding?.requirementApplicability?.requirementVersion?.requirement?.key, 'scopeType:', diagFinding?.scopeType);
+
     const result = await getClientSafeComplianceReadModel(clientId, true, false, db);
+    console.log('[DIAG] topics count:', result.topics.length, 'topics:', JSON.stringify(result.topics));
     expect(result.topics.length).toBeGreaterThanOrEqual(1);
     const topic = result.topics.find((t) => t.topicLabel === 'Adatvédelmi feldolgozás');
     expect(topic).toBeDefined();
