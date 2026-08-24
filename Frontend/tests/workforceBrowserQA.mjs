@@ -309,7 +309,7 @@ async function assertComplianceMode(browser, mode, viewport) {
     waitUntil: mode === "loading" ? "domcontentloaded" : "networkidle",
   });
   if (mode === "loading") {
-    await qa.page.getByText("Betöltés…").waitFor({ state: "visible", timeout: 5000 });
+    await qa.page.getByText("Megállapítások betöltése…").waitFor({ state: "visible", timeout: 5000 });
     await qa.page.waitForLoadState("networkidle");
   }
   await checkPage(qa.page, target, `Compliance ${mode} ${viewport.width}`);
