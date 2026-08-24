@@ -15,12 +15,19 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
   const domainCode = `ORGSafe_${suiteSuffix}`;
   const adminId = crypto.randomUUID();
 
-  /** Track per-test cleanup targets. */
   const createdClientIds: string[] = [];
   const createdUserIds: string[] = [adminId];
   const createdDomainCodes: string[] = [];
 
-  /** Per-test fixture identity holder. */
+  /** Track all created IDs for proper teardown order. */
+  const teardown = {
+    findings: [] as string[],
+    applicabilities: [] as string[],
+    ruleVersions: [] as string[],
+    requirementVersions: [] as string[],
+    requirements: [] as string[],
+  };
+
   interface TestFixture {
     clientId: string;
     requirementId: string;
@@ -28,11 +35,6 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     ruleId: string;
   }
 
-  /**
-   * Create a fully isolated fixture: client, requirement, version, rule.
-   * Each test MUST call this to avoid unique constraint collisions on
-   * (clientId, requirementId, scopeType) for materialized findings.
-   */
   async function createFixture(testLabel: string): Promise<TestFixture> {
     const clientId = crypto.randomUUID();
     const requirementId = crypto.randomUUID();
@@ -40,6 +42,9 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     const ruleId = crypto.randomUUID();
 
     createdClientIds.push(clientId);
+    teardown.requirements.push(requirementId);
+    teardown.requirementVersions.push(versionId);
+    teardown.ruleVersions.push(ruleId);
 
     await db.client.create({ data: { id: clientId, name: `Client ${testLabel} ${suiteSuffix}` } });
     await db.requirement.create({ data: { id: requirementId, key: `TEST_KEY_${testLabel}_${suiteSuffix}`, jurisdictionCode: 'HU', domainCode } });
@@ -53,8 +58,31 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     return { clientId, requirementId, versionId, ruleId };
   }
 
+  /** Create a requirement+version+rule chain (for multi-requirement tests). */
+  async function createRequirementChain(testLabel: string): Promise<TestFixture> {
+    const clientId = createdClientIds[0]; // Use first client
+    const requirementId = crypto.randomUUID();
+    const versionId = crypto.randomUUID();
+    const ruleId = crypto.randomUUID();
+
+    teardown.requirements.push(requirementId);
+    teardown.requirementVersions.push(versionId);
+    teardown.ruleVersions.push(ruleId);
+
+    await db.requirement.create({ data: { id: requirementId, key: `MULTI_${testLabel}_${suiteSuffix}`, jurisdictionCode: 'HU', domainCode } });
+    await db.requirementVersion.create({
+      data: { id: versionId, requirementId, versionKey: 'V1', title: `Req ${testLabel}`, normativeStatement: 'Test', effectiveFrom: new Date('2026-01-01T00:00:00Z') },
+    });
+    await db.applicabilityRuleVersion.create({
+      data: { id: ruleId, requirementVersionId: versionId, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: hex64(`rule-multi-${testLabel}`) },
+    });
+
+    return { clientId, requirementId, versionId, ruleId };
+  }
+
   async function createApplicability(fixture: TestFixture, outcome: string, scopeType = 'COMPANY') {
     const id = crypto.randomUUID();
+    teardown.applicabilities.push(id);
     await db.requirementApplicability.create({
       data: {
         id,
@@ -77,6 +105,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
 
   async function createFinding(fixture: TestFixture, input: { applicabilityId?: string; scopeType?: string; status?: string; title: string }) {
     const id = crypto.randomUUID();
+    teardown.findings.push(id);
     await db.assessmentFinding.create({
       data: {
         id,
@@ -102,7 +131,22 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
   });
 
   afterAll(async () => {
-    // Cleanup all created clients (cascades findings, applicabilities)
+    // Teardown in FK-safe order (children before parents)
+    if (teardown.findings.length > 0) {
+      await db.assessmentFinding.deleteMany({ where: { id: { in: teardown.findings } } });
+    }
+    if (teardown.applicabilities.length > 0) {
+      await db.requirementApplicability.deleteMany({ where: { id: { in: teardown.applicabilities } } });
+    }
+    if (teardown.ruleVersions.length > 0) {
+      await db.applicabilityRuleVersion.deleteMany({ where: { id: { in: teardown.ruleVersions } } });
+    }
+    if (teardown.requirementVersions.length > 0) {
+      await db.requirementVersion.deleteMany({ where: { id: { in: teardown.requirementVersions } } });
+    }
+    if (teardown.requirements.length > 0) {
+      await db.requirement.deleteMany({ where: { id: { in: teardown.requirements } } });
+    }
     if (createdClientIds.length > 0) {
       await db.client.deleteMany({ where: { id: { in: createdClientIds } } });
     }
@@ -117,7 +161,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     await createFinding(fx, { applicabilityId, title: 'Basic finding' });
     const result = await getClientSafeComplianceReadModel(fx.clientId, true, false, db);
     expect(result.topics.length).toBeGreaterThanOrEqual(1);
-    const topic = result.topics.find((t) => t.topicLabel === `Req basic`);
+    const topic = result.topics.find((t) => t.topicLabel === 'Req basic');
     expect(topic).toBeDefined();
     expect(topic!.state).toBe('REVIEW_RECOMMENDED');
     expect(topic!.missingInformation).toEqual([]);
@@ -151,6 +195,10 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     const unregVersionId = crypto.randomUUID();
     const unregRuleId = crypto.randomUUID();
     const unregApplicabilityId = crypto.randomUUID();
+    teardown.requirements.push(unregReqId);
+    teardown.requirementVersions.push(unregVersionId);
+    teardown.ruleVersions.push(unregRuleId);
+    teardown.applicabilities.push(unregApplicabilityId);
     try {
       await db.requirement.create({ data: { id: unregReqId, key: `UNREGISTERED_${suiteSuffix}`, jurisdictionCode: 'HU', domainCode } });
       await db.requirementVersion.create({
@@ -167,19 +215,17 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
           snapshotJson: {}, snapshotDigest: hex64(`unreg-snap-${unregApplicabilityId}`),
         },
       });
+      const unregFindingId = crypto.randomUUID();
+      teardown.findings.push(unregFindingId);
       await db.assessmentFinding.create({
-        data: { id: crypto.randomUUID(), clientId: fx.clientId, title: 'Nem regisztrált terület', status: 'OPEN', severity: 'LOW', createdByUserId: adminId, requirementId: unregReqId, requirementApplicabilityId: unregApplicabilityId, scopeType: 'COMPANY' },
+        data: { id: unregFindingId, clientId: fx.clientId, title: 'Nem regisztrált terület', status: 'OPEN', severity: 'LOW', createdByUserId: adminId, requirementId: unregReqId, requirementApplicabilityId: unregApplicabilityId, scopeType: 'COMPANY' },
       });
       const result = await getClientSafeComplianceReadModel(fx.clientId, true, false, db);
       const serialized = JSON.stringify(result);
       expect(serialized).not.toContain('Nem regisztrált terület');
       expect(serialized).not.toContain(`UNREGISTERED_${suiteSuffix}`);
     } finally {
-      await db.assessmentFinding.deleteMany({ where: { requirementId: unregReqId } });
-      await db.requirementApplicability.deleteMany({ where: { id: unregApplicabilityId } });
-      await db.applicabilityRuleVersion.deleteMany({ where: { id: unregRuleId } });
-      await db.requirementVersion.deleteMany({ where: { id: unregVersionId } });
-      await db.requirement.deleteMany({ where: { id: unregReqId } });
+      await db.assessmentFinding.deleteMany({ where: { id: teardown.findings.filter((id) => id.startsWith ? false : true) } });
     }
   });
 
@@ -229,6 +275,10 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     const demoVersionId = crypto.randomUUID();
     const demoRuleId = crypto.randomUUID();
     const demoApplicabilityId = crypto.randomUUID();
+    teardown.requirements.push(demoReqId);
+    teardown.requirementVersions.push(demoVersionId);
+    teardown.ruleVersions.push(demoRuleId);
+    teardown.applicabilities.push(demoApplicabilityId);
     try {
       await db.requirement.create({ data: { id: demoReqId, key: 'DEMO_SAMPLE_TOPIC', jurisdictionCode: 'HU', domainCode } });
       await db.requirementVersion.create({
@@ -245,8 +295,10 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
           snapshotJson: {}, snapshotDigest: hex64(`demo-snap-${demoApplicabilityId}`),
         },
       });
+      const demoFindingId = crypto.randomUUID();
+      teardown.findings.push(demoFindingId);
       await db.assessmentFinding.create({
-        data: { id: crypto.randomUUID(), clientId: fx.clientId, title: 'Demó', status: 'OPEN', severity: 'LOW', createdByUserId: adminId, requirementId: demoReqId, requirementApplicabilityId: demoApplicabilityId, scopeType: 'COMPANY' },
+        data: { id: demoFindingId, clientId: fx.clientId, title: 'Demó', status: 'OPEN', severity: 'LOW', createdByUserId: adminId, requirementId: demoReqId, requirementApplicabilityId: demoApplicabilityId, scopeType: 'COMPANY' },
       });
 
       const prodTrue = await getClientSafeComplianceReadModel(fx.clientId, true, true, db);
@@ -261,11 +313,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
       const devTrue = await getClientSafeComplianceReadModel(fx.clientId, false, true, db);
       expect(devTrue.topics.find((t) => t.topicLabel === 'Demó téma')).toBeDefined();
     } finally {
-      await db.assessmentFinding.deleteMany({ where: { requirementId: demoReqId } });
-      await db.requirementApplicability.deleteMany({ where: { id: demoApplicabilityId } });
-      await db.applicabilityRuleVersion.deleteMany({ where: { id: demoRuleId } });
-      await db.requirementVersion.deleteMany({ where: { id: demoVersionId } });
-      await db.requirement.deleteMany({ where: { id: demoReqId } });
+      // Already tracked in teardown arrays
     }
   });
 
@@ -313,9 +361,17 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
 
   it('bounded queries: batch loading regardless of topic count', async () => {
     const fx = await createFixture('bounded');
+    // Each finding must have a unique (clientId, requirementId, scopeType).
+    // Create 5 separate requirement chains to avoid unique constraint violations.
+    const chains: TestFixture[] = [];
     for (let i = 0; i < 5; i++) {
-      const aId = await createApplicability(fx, 'APPLIES');
-      await createFinding(fx, { applicabilityId: aId, title: `Bounded finding ${i}` });
+      const chain = await createRequirementChain(`bounded-${i}`);
+      chains.push({ ...chain, clientId: fx.clientId });
+    }
+    for (let i = 0; i < 5; i++) {
+      const chain = chains[i];
+      const aId = await createApplicability(chain, 'APPLIES');
+      await createFinding(chain, { applicabilityId: aId, title: `Bounded finding ${i}` });
     }
     const result = await getClientSafeComplianceReadModel(fx.clientId, true, false, db);
     expect(result.topics.length).toBe(5);
