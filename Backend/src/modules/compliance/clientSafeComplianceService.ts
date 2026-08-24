@@ -13,6 +13,15 @@
  * - complianceProposalService (7B proposal mutation)
  * - createProposal / bindProposal / confirmProposal
  * - createTask
+ *
+ * HARDENING:
+ * - topicId uses opaque product topicKey from registry (never DB UUIDs)
+ * - manual findings (no requirementKey) are omitted entirely
+ * - unregistered requirement keys are omitted
+ * - missingInformation.label maps questionKey to safe product label
+ * - DEMO requires PORTAL_DEMO_ENABLED=true AND non-production
+ * - No overclaiming legal certainty in client copy
+ * - Batched dependency/fact queries (no N+1)
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { assertClientSafe, InteractionError } from '../client-interaction/base';
@@ -25,14 +34,14 @@ type Prisma = typeof defaultPrisma;
 /* ------------------------------------------------------------------ */
 
 export interface MissingInformationItem {
-  /** Safe portal question label (never a FactDefinition key). */
+  /** Safe portal product label (never a raw FactDefinition key or questionKey). */
   label: string;
   /** Whether this dependency can be answered through the portal. */
   portalAnswerable: boolean;
 }
 
 export interface ClientSafeComplianceTopicDto {
-  /** Stable opaque identifier: `requirementVersionId:factsSubjectId` or finding id. */
+  /** Opaque product topic identity from the safe registry (never a DB id). */
   topicId: string;
   /** Human-readable topic label from the safe topic registry. */
   topicLabel: string;
@@ -56,23 +65,39 @@ export interface ClientSafeComplianceReadModel {
 }
 
 /* ------------------------------------------------------------------ */
-/*  State mapping — deterministic, no AI, no fabrication                */
+/*  Safe question label mapping                                        */
 /* ------------------------------------------------------------------ */
 
-const APPLICABILITY_STATE_MAP: Record<string, string> = {
-  APPLIES: 'REVIEW_RECOMMENDED',
-  INSUFFICIENT_FACTS: 'MORE_INFORMATION_NEEDED',
-  LEGAL_REVIEW_REQUIRED: 'LAWYER_REVIEW_REQUIRED',
-  TECHNICAL_REVIEW_REQUIRED: 'LAWYER_REVIEW_REQUIRED',
-  SOURCE_SUPPORT_INSUFFICIENT: 'LAWYER_REVIEW_REQUIRED',
+/**
+ * Maps internal FactDefinition questionKey values to safe, human-readable
+ * portal product labels. Raw questionKeys must never reach the client.
+ *
+ * Unknown questionKeys fall back to "Ügyvédi pontosítás szükséges."
+ */
+const SAFE_QUESTION_LABELS: Record<string, string> = {
+  company_data_processing_purpose: 'Adatfeldolgozás céljának megadása',
+  company_data_categories: 'Kezelt adatkategóriák megadása',
+  company_legal_basis: 'Adatkezelés jogalapjának megjelölése',
+  company_dpo_appointed: 'Adatvédelmi tisztviselő kijelölése',
+  company_retention_period: 'Adatmegőrzési időszak megadása',
+  company_third_country_transfer: 'Harmadik országi adattovábbítás',
+  company_security_measures: 'Biztonsági intézkedések leírása',
+  company_employee_count: 'Munkavállalók számának megadása',
+  company_workplace_sites: 'Munkahelyek felsorolása',
+  company_safety_officer: 'Munkavédelmi felelős kijelölése',
+  company_risk_assessment: 'Kockázatértékelés elvégzése',
+  company_aml_program: 'Pénzmosás megelőzési program',
+  company_customer_due_diligence: 'Ügyfél-átvilágítás eljárásrend',
 };
 
-const FINDING_STATE_MAP: Record<string, string> = {
-  OPEN: 'REVIEW_RECOMMENDED',
-  ACKNOWLEDGED: 'ACTION_IN_PROGRESS',
-  ACTION_PLANNED: 'ACTION_IN_PROGRESS',
-  RESOLVED: 'RESOLVED',
-};
+function safeQuestionLabel(questionKey: string | null | undefined): string {
+  if (!questionKey) return 'Ügyvédi pontosítás szükséges.';
+  return SAFE_QUESTION_LABELS[questionKey] || 'Ügyvédi pontosítás szükséges.';
+}
+
+/* ------------------------------------------------------------------ */
+/*  State mapping — deterministic, no AI, no fabrication                */
+/* ------------------------------------------------------------------ */
 
 function mapClientState(
   applicabilityOutcome: string | null,
@@ -82,9 +107,8 @@ function mapClientState(
   if (applicabilityOutcome === 'LEGAL_REVIEW_REQUIRED' || applicabilityOutcome === 'TECHNICAL_REVIEW_REQUIRED' || applicabilityOutcome === 'SOURCE_SUPPORT_INSUFFICIENT') {
     return 'LAWYER_REVIEW_REQUIRED';
   }
-  if (findingStatus && FINDING_STATE_MAP[findingStatus]) {
-    return FINDING_STATE_MAP[findingStatus] as ClientSafeComplianceTopicDto['state'];
-  }
+  if (findingStatus === 'ACKNOWLEDGED' || findingStatus === 'ACTION_PLANNED') return 'ACTION_IN_PROGRESS';
+  if (findingStatus === 'RESOLVED') return 'RESOLVED';
   return 'REVIEW_RECOMMENDED';
 }
 
@@ -95,15 +119,15 @@ function buildShortExplanation(
   if (topic.shortExplanation) return topic.shortExplanation;
   switch (state) {
     case 'MORE_INFORMATION_NEEDED':
-      return 'További információk szükségesek a követelmény teljesítéséhez.';
+      return 'További információ segíthet a terület pontosabb áttekintésében.';
     case 'LAWYER_REVIEW_REQUIRED':
-      return 'Ügyvédi értékelés szükséges.';
+      return 'Ügyvédi áttekintés javasolt.';
     case 'ACTION_IN_PROGRESS':
-      return 'A szükséges lépések folyamatban vannak.';
+      return 'A terület áttekintése folyamatban van.';
     case 'RESOLVED':
-      return 'A követelmény teljesítve van.';
+      return 'A jelenlegi állapot szerint nincs további portálos teendő.';
     default:
-      return 'Felülvizsgálat javasolt.';
+      return 'Ezt a területet érdemes áttekinteni.';
   }
 }
 
@@ -115,47 +139,96 @@ function buildNextAction(
     return 'Kérjük, töltse ki a hiányzó információkat a portálon.';
   }
   if (state === 'LAWYER_REVIEW_REQUIRED') {
-    return 'Ügyvédünk hamarosan felveszi Önnel a kapcsolatot.';
+    return 'Ügyvédi áttekintés javasolt.';
   }
   if (state === 'RESOLVED') return null;
-  if (state === 'ACTION_IN_PROGRESS') return 'A folyamat állapotáról a portálon tájékozódhat.';
+  if (state === 'ACTION_IN_PROGRESS') return 'A terület állapota a portálon nyomon követhető.';
   return 'Kérjük, tekintse át a jelenlegi állapotot.';
 }
 
 /* ------------------------------------------------------------------ */
-/*  Missing information resolution                                      */
+/*  Batched missing information resolution                             */
 /* ------------------------------------------------------------------ */
 
-async function resolveMissingInformation(
-  applicabilityId: string,
-  clientId: string,
+interface BatchedDependency {
+  applicabilityId: string;
+  factKey: string;
+  questionKey: string | null;
+}
+
+interface BatchedConsumedFact {
+  applicabilityId: string;
+  factKey: string;
+}
+
+/**
+ * Batch-load all applicability dependencies and consumed facts for the
+ * given applicability IDs. Eliminates the N+1 query pattern.
+ *
+ * Total Prisma calls: exactly 2 (dependencies + consumed facts),
+ * regardless of topic count.
+ */
+async function batchLoadDependencyData(
+  applicabilityIds: string[],
   prisma: Prisma,
-): Promise<MissingInformationItem[]> {
-  const dependencies = await prisma.applicabilityRuleFactDependency.findMany({
-    where: { applicabilityRuleVersion: { applicabilitySnapshots: { some: { id: applicabilityId } } } },
-    select: { factKey: true, resolvedFactDefinition: { select: { key: true, questionKey: true } } },
-  });
+): Promise<{ dependencies: BatchedDependency[]; consumedFacts: BatchedConsumedFact[] }> {
+  if (applicabilityIds.length === 0) return { dependencies: [], consumedFacts: [] };
 
-  if (dependencies.length === 0) return [];
+  const [rawDependencies, rawConsumedFacts] = await Promise.all([
+    prisma.applicabilityRuleFactDependency.findMany({
+      where: { applicabilityRuleVersion: { applicabilitySnapshots: { some: { id: { in: applicabilityIds } } } } },
+      select: {
+        factKey: true,
+        resolvedFactDefinition: { select: { questionKey: true } },
+        applicabilityRuleVersion: {
+          select: {
+            applicabilitySnapshots: { select: { id: true } },
+          },
+        },
+      },
+    }),
+    prisma.requirementApplicabilityFact.findMany({
+      where: { applicabilityId: { in: applicabilityIds } },
+      select: { applicabilityId: true, factKey: true },
+    }),
+  ]);
 
-  const consumedFactKeys = new Set(
-    (
-      await prisma.requirementApplicabilityFact.findMany({
-        where: { applicabilityId },
-        select: { factKey: true },
-      })
-    ).map((f) => f.factKey),
+  // Flatten dependencies: each dependency may match multiple applicability snapshots.
+  const dependencies: BatchedDependency[] = [];
+  for (const raw of rawDependencies) {
+    const questionKey = raw.resolvedFactDefinition?.questionKey ?? null;
+    for (const snapshot of raw.applicabilityRuleVersion.applicabilitySnapshots) {
+      dependencies.push({ applicabilityId: snapshot.id, factKey: raw.factKey, questionKey });
+    }
+  }
+
+  const consumedFacts: BatchedConsumedFact[] = rawConsumedFacts.map((f) => ({
+    applicabilityId: f.applicabilityId,
+    factKey: f.factKey,
+  }));
+
+  return { dependencies, consumedFacts };
+}
+
+/**
+ * Compute missing information for a single applicability from pre-batched data.
+ */
+function computeMissingInformation(
+  applicabilityId: string,
+  allDependencies: BatchedDependency[],
+  allConsumedFacts: BatchedConsumedFact[],
+): MissingInformationItem[] {
+  const deps = allDependencies.filter((d) => d.applicabilityId === applicabilityId);
+  if (deps.length === 0) return [];
+
+  const consumedKeys = new Set(
+    allConsumedFacts.filter((f) => f.applicabilityId === applicabilityId).map((f) => f.factKey),
   );
 
   const missing: MissingInformationItem[] = [];
-  for (const dep of dependencies) {
-    if (consumedFactKeys.has(dep.factKey)) continue;
-    const questionKey = dep.resolvedFactDefinition?.questionKey;
-    if (questionKey) {
-      missing.push({ label: questionKey, portalAnswerable: true });
-    } else {
-      missing.push({ label: 'Ügyvédi pontosítás szükséges.', portalAnswerable: false });
-    }
+  for (const dep of deps) {
+    if (consumedKeys.has(dep.factKey)) continue;
+    missing.push({ label: safeQuestionLabel(dep.questionKey), portalAnswerable: dep.questionKey != null });
   }
   return missing;
 }
@@ -166,18 +239,23 @@ async function resolveMissingInformation(
 
 /**
  * Produce a client-safe compliance read model for the given organizational
- * client. Only COMPANY-scope, topic-registry-filtered, non-DOES_NOT_APPLY
- * findings are projected.
+ * client. Only requirement-backed, registry-registered, COMPANY-scope,
+ * non-DOES_NOT_APPLY findings are projected.
+ *
+ * Manual findings (no requirementKey) are omitted.
+ * Unregistered requirement keys are omitted.
  *
  * @param clientId  Derived from workspace membership — never from browser input.
  * @param isProduction  When true, DEMO topics are excluded.
+ * @param demoEnabled  When true AND non-production, DEMO topics are included.
  */
 export async function getClientSafeComplianceReadModel(
   clientId: string,
   isProduction: boolean,
+  demoEnabled = false,
   prisma: Prisma = defaultPrisma,
 ): Promise<ClientSafeComplianceReadModel> {
-  const visibleKeys = portalVisibleKeys(isProduction);
+  const visibleKeys = portalVisibleKeys(isProduction, demoEnabled);
 
   const findings = await prisma.assessmentFinding.findMany({
     where: { clientId, scopeType: 'COMPANY' },
@@ -201,16 +279,27 @@ export async function getClientSafeComplianceReadModel(
     orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
   });
 
+  // Collect applicability IDs for batch loading.
+  const applicabilityIds = findings
+    .map((f) => f.requirementApplicability?.id)
+    .filter((id): id is string => Boolean(id));
+
+  const { dependencies, consumedFacts } = await batchLoadDependencyData(applicabilityIds, prisma);
+
   const topics: ClientSafeComplianceTopicDto[] = [];
 
   for (const finding of findings) {
     const applicability = finding.requirementApplicability;
     const requirementKey = applicability?.requirementVersion?.requirement?.key || null;
 
-    if (requirementKey && !visibleKeys.has(requirementKey)) continue;
+    // Guard: manual findings (no requirementKey) are never portal content.
+    if (!requirementKey) continue;
 
-    const topic = requirementKey ? lookupSafeTopic(requirementKey, isProduction) : null;
-    const topicLabel = topic?.portalLabel || finding.title;
+    // Guard: unregistered requirement keys are omitted.
+    if (!visibleKeys.has(requirementKey)) continue;
+
+    const topic = lookupSafeTopic(requirementKey, isProduction, demoEnabled);
+    if (!topic) continue;
 
     const applicabilityOutcome = applicability?.outcome ? String(applicability.outcome) : null;
     if (applicabilityOutcome === 'DOES_NOT_APPLY') continue;
@@ -218,15 +307,15 @@ export async function getClientSafeComplianceReadModel(
     const state = mapClientState(applicabilityOutcome, finding.status ? String(finding.status) : null);
 
     const missingInformation = applicability?.id
-      ? await resolveMissingInformation(applicability.id, clientId, prisma)
+      ? computeMissingInformation(applicability.id, dependencies, consumedFacts)
       : [];
 
-    const shortExplanation = buildShortExplanation(state, topic || { internalKey: '', portalLabel: topicLabel });
+    const shortExplanation = buildShortExplanation(state, topic);
     const nextAction = buildNextAction(state, missingInformation);
 
     topics.push({
-      topicId: applicability?.id || finding.id,
-      topicLabel,
+      topicId: topic.topicKey,
+      topicLabel: topic.portalLabel,
       state,
       shortExplanation,
       missingInformation,

@@ -56,13 +56,17 @@ async function portalAuth(req: Request, res: Response): Promise<ResolvedPortalWo
  *
  * Returns the client-safe compliance read model for the authenticated
  * organizational client. The clientId is derived from workspace membership.
+ *
+ * DEMO gate: requires BOTH non-production AND ADMINICULUM_DEMO_CONTENT_ENABLED=true.
+ * Production hard-denies DEMO content regardless of flag.
  */
 router.get('/', async (req, res: Response) => {
   try {
     const workspace = await portalAuth(req, res);
     if (!workspace) return;
     const isProduction = process.env.NODE_ENV === 'production';
-    const result = await getClientSafeComplianceReadModel(workspace.clientId, isProduction);
+    const demoEnabled = !isProduction && process.env.ADMINICULUM_DEMO_CONTENT_ENABLED === 'true';
+    const result = await getClientSafeComplianceReadModel(workspace.clientId, isProduction, demoEnabled);
     res.json(result);
   } catch (error) {
     fail(res, error);
