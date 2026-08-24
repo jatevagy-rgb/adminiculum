@@ -3913,6 +3913,7 @@ model ClientOperatingProfile {
   clientId       String    @unique
   client         Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   status         String?
+  complianceEnrollmentStatus ComplianceEnrollmentStatus @default(NOT_ENROLLED)
   summary        String?
   internalNote   String?
   lastReviewedAt DateTime?
@@ -4504,6 +4505,12 @@ enum FactScopeType {
   REPORTING_EVENT
 }
 
+enum ComplianceEnrollmentStatus {
+  ENROLLED
+  NOT_ENROLLED
+  SUSPENDED
+}
+
 enum FactDeterminationMethod {
   USER_PROVIDED
   DERIVED
@@ -4831,6 +4838,7 @@ model ApplicabilityRuleVersion {
   schemaVersion        String
   astJson              Json
   canonicalDigest      String                     @db.VarChar(64)
+  evaluationScopeType  FactScopeType?
   status               ApplicabilityRuleStatus    @default(CANDIDATE)
   createdAt            DateTime                   @default(now())
   createdById          String?

@@ -1,7 +1,7 @@
 import { Request, Response, Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { InteractionError } from '../client-interaction/base';
-import { getComplianceOverview } from './complianceOverviewService';
+import { getComplianceOverview, listUnresolvedRuleScopes } from './complianceOverviewService';
 
 const router = Router();
 
@@ -10,6 +10,18 @@ function actor(req: Request) {
 }
 
 router.use(authenticate);
+
+router.get('/diagnostics/unresolved-rule-scopes', async (req, res: Response) => {
+  try {
+    res.json({ items: await listUnresolvedRuleScopes(actor(req)) });
+  } catch (error) {
+    if (error instanceof InteractionError) {
+      res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
+      return;
+    }
+    res.status(500).json({ status: 500, code: 'COMPLIANCE_DIAGNOSTICS_INTERNAL_ERROR', message: 'Compliance diagnostics request failed.' });
+  }
+});
 
 router.get('/clients/:clientId/overview', async (req, res: Response) => {
   try {
