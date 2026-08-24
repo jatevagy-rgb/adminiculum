@@ -177,7 +177,6 @@ async function createTypedFactInTx(input: TypedFactMutationInput, tx: Transactio
       applicabilityRuleVersion: {
         status: 'APPROVED',
         supersededById: null,
-        evaluationScopeType: scopeType as any,
         requirementVersion: { status: 'APPROVED', requirementId: { not: '' } },
       },
     },

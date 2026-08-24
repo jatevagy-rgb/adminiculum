@@ -3,17 +3,6 @@ CREATE TYPE "ComplianceEnrollmentStatus" AS ENUM ('ENROLLED', 'NOT_ENROLLED', 'S
 ALTER TABLE "client_operating_profiles"
   ADD COLUMN "complianceEnrollmentStatus" "ComplianceEnrollmentStatus" NOT NULL DEFAULT 'NOT_ENROLLED';
 
-UPDATE "client_operating_profiles" SET "complianceEnrollmentStatus" = 'ENROLLED';
-
-INSERT INTO "client_operating_profiles" (
-  "id", "clientId", "complianceEnrollmentStatus", "createdAt", "updatedAt"
-)
-SELECT gen_random_uuid()::text, c."id", 'ENROLLED', now(), now()
-FROM "clients" c
-WHERE NOT EXISTS (
-  SELECT 1 FROM "client_operating_profiles" profile WHERE profile."clientId" = c."id"
-);
-
 ALTER TABLE "applicability_rule_versions"
   ADD COLUMN "evaluationScopeType" "FactScopeType";
 
