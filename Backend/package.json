@@ -59,7 +59,10 @@
     "test:task-lifecycle-schema:db": "jest --runInBand tests/taskLifecycleSchema.integration.test.ts",
     "test:task-review-decision:db": "jest --runInBand tests/taskReviewDecision.integration.test.ts",
     "test:task-submission:db": "jest --runInBand tests/taskSubmission.integration.test.ts",
-    "db:provision:task-document": "node scripts/ci-provision-task-document-dbs.mjs"
+    "db:provision:task-document": "node scripts/ci-provision-task-document-dbs.mjs",
+    "demo:presentation:reset": "node -r dotenv/config scripts/demo-presentation-reset.mjs",
+    "demo:presentation:check": "node -r dotenv/config scripts/demo-presentation-check.mjs",
+    "test:demo-fixture:db": "jest --runInBand tests/presentationDemoFixture.integration.test.ts"
   },
   "dependencies": {
     "@azure/identity": "^4.13.1",
