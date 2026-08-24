@@ -26,6 +26,7 @@ import {
 import { clientSafeError } from "@/lib/clientInteractionApi";
 import { CustomerInteractionCard } from "./CustomerInteractionCard";
 import { MatterView } from "./MatterWorkspace";
+import { ClientSafeResultCard, DemoContentBanner, PortalPersonHeader, PortalProfileCard } from "./PortalPresentationPrimitives";
 
 export type OrganizationPortalView = "home" | "matters" | "tasks" | "documents" | "messages" | "matter" | "intakes" | "new-intake" | "leadership" | "contracts" | "company";
 
@@ -92,7 +93,7 @@ function OrganizationContextHeader({ context, units }: { context: PortalIdentity
         <div className="min-w-0">
           <h1 className="break-words font-serif text-3xl font-semibold text-stone-950 sm:text-4xl">{workspace.clientDisplayName}</h1>
           <p className="mt-2 text-stone-700">{workspace.name}</p>
-          <p className="mt-2 text-sm text-stone-600">Bejelentkezve: {context.identity.displayName || context.identity.email}</p>
+          <div className="mt-3"><PortalPersonHeader identity={context.identity} /></div>
         </div>
         <div className="rounded-2xl bg-white/70 p-4 text-sm text-stone-700">
           <p className="font-semibold text-stone-950">{isCaseRelay ? "Áttekintési egységek" : "Szervezeti egységeim"}</p>
@@ -144,6 +145,9 @@ function OrganizationHome({ state, workspace, showIntakes = true }: { state: Org
   ];
   return (
     <div className="space-y-5">
+      <DemoContentBanner enabled={false} />
+      <PortalProfileCard available={false} />
+      <ClientSafeResultCard topicLabel="Szervezeti tájékoztató" stateLabel="Jelenleg nincs közzétett eredmény" explanation="Az iroda még nem tett közzé ügyfélnek szóló összefoglalót ezen a felületen." nextAction="A közzétett ügyinformációk itt jelennek meg, amikor elérhetővé válnak." />
       {attention.length ? <Section title="Figyelmet igényel">{attention.slice(0, 6).map((item) => <Link key={item.id} href={item.actionUrl} className="rounded-2xl border border-[#eadfbf] bg-[#fffaf0] p-4 text-sm"><b>{item.title}</b><span className="mt-1 block text-stone-700">{item.matterTitle} · {item.status}</span></Link>)}</Section> : null}
       <Section title="Saját aktív ügyeim" empty={!own.length}>{own.slice(0, 4).map((item) => <OrgCaseCard key={item.publicReference} item={item} />)}</Section>
       {shared.length ? <Section title="Nekem megosztott ügyek">{shared.slice(0, 4).map((item) => <OrgCaseCard key={item.publicReference} item={item} />)}</Section> : null}
