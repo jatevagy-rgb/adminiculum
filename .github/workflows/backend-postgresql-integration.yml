@@ -67,7 +67,7 @@ jobs:
 
       - name: Initialize suite result tracking
         run: |
-          for s in comparison review publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture phase6-slice-a phase6-slice-b phase6-slice-c2 phase6-slice-d phase7-slice-7a phase7d phase7b phase7cb phase5b document-version task-lifecycle-schema task-review-decision task-submission; do
+          for s in comparison review publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture phase6-slice-a phase6-slice-b phase6-slice-c2 phase6-slice-d phase7-slice-7a phase7d phase7b phase7cb phase5b document-version task-lifecycle-schema task-review-decision task-submission dw0; do
             echo "$s=PENDING" >> "$RUNNER_TEMP/ci-suite-results.txt"
           done
 
@@ -428,6 +428,18 @@ jobs:
           sed -i "s/^task-submission=PENDING$/task-submission=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit "$rc"
 
+      - name: Phase DW0 storage foundation PG
+        working-directory: Backend
+        env:
+          DW0_STORAGE_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: |
+          if npm run test:dw0:db; then
+            rc=0
+          else
+            rc=$?
+          fi
+          sed -i "s/^dw0=PENDING$/dw0=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit "$rc"
       - name: Backend PostgreSQL integration summary
         if: always()
         continue-on-error: true
@@ -464,6 +476,7 @@ jobs:
             [task-lifecycle-schema]="Task lifecycle additive schema"
             [task-review-decision]="Task review decision"
             [task-submission]="Task submission"
+            [dw0]="Phase DW0 storage foundation"
           )
           {
             echo "### Backend PostgreSQL Integration"

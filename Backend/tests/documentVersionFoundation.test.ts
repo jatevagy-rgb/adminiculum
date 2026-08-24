@@ -103,7 +103,7 @@ describe('contract workspace document version foundation', () => {
     const uploadNewVersion = service.slice(service.indexOf('async uploadNewVersion'), service.indexOf('async listDocumentVersions'));
 
     expect(uploadNewVersion).toContain('buildVersionStorageFileName');
-    expect(uploadNewVersion).toContain('driveService.uploadDocument');
+    expect(uploadNewVersion).toContain('putDocumentBytes');
     expect(uploadNewVersion).not.toContain('driveService.uploadNewVersion');
     expect(uploadNewVersion).toContain('previousVersionId');
   });
@@ -118,7 +118,7 @@ describe('contract workspace document version foundation', () => {
     expect(uploadNewVersion).toContain('orderBy: { version:');
     expect(uploadNewVersion).toContain('data: { isCurrent: false }');
     expect(uploadNewVersion).toContain('isCurrent: true');
-    expect(uploadNewVersion).toContain('driveService.deleteDocument');
+    expect(uploadNewVersion).toContain('getDocumentStorage().delete');
     expect(uploadNewVersion).toContain("eventType: 'DOCUMENT_VERSION_CREATED'");
     expect(uploadNewVersion).toContain(".catch(() => undefined)");
   });
@@ -154,7 +154,7 @@ describe('contract workspace document version foundation', () => {
 
     expect(downloadVersion).toContain('where: { id: versionId, documentId }');
     expect(downloadVersion).toContain('version.spItemId || version.storageReference');
-    expect(downloadVersion).toContain('downloadDocumentResult(storageId)');
+    expect(downloadVersion).toContain('getDocumentStorage().get(storageId)');
     expect(routes).toContain("router.get('/:id/versions/:versionId/download'");
     expect(routes).toContain('result.version.originalFileName');
   });

@@ -72,6 +72,7 @@ const ALLOWED_UPLOAD_TYPES: Record<string, Set<string>> = {
   '.pdf': new Set(['application/pdf']),
   '.doc': new Set(['application/msword', 'application/octet-stream']),
   '.docx': new Set(['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip', 'application/octet-stream']),
+  '.zip': new Set(['application/zip', 'application/x-zip-compressed', 'application/octet-stream']),
   '.txt': new Set(['text/plain', 'application/octet-stream']),
 };
 const ALLOWED_VERSION_UPLOAD_SOURCES = new Set([
@@ -195,7 +196,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
       res.status(400).json({
         status: 400,
         code: 'UNSUPPORTED_FILE_TYPE',
-        message: 'Nem támogatott fájltípus. Engedélyezett: PDF, DOC, DOCX vagy TXT.',
+        message: 'Nem támogatott fájltípus. Engedélyezett: PDF, DOC, DOCX, ZIP vagy TXT.',
       });
       return;
     }
@@ -482,7 +483,7 @@ router.post('/:id/versions', authenticate, requireDocumentManageAccess, async (r
       res.status(400).json({
         status: 400,
         code: 'UNSUPPORTED_FILE_TYPE',
-        message: 'Nem támogatott fájltípus. Engedélyezett: PDF, DOC, DOCX vagy TXT.',
+        message: 'Nem támogatott fájltípus. Engedélyezett: PDF, DOC, DOCX, ZIP vagy TXT.',
       });
       return;
     }

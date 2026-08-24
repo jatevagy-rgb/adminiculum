@@ -9,6 +9,9 @@ import { Prisma } from '@prisma/client';
 import { driveService } from '../sharepoint';
 import { hrConfidentialReadAllowed } from './authorization';
 import {
+  getDocumentStorage,
+} from '../storage';
+import {
   CreateDocumentInput,
   DocumentResponse,
   DocumentListItem,
@@ -148,6 +151,53 @@ export class DocumentDeleteError extends Error {
   }
 }
 
+export interface PutDocumentBytesResult {
+  /** Opaque storage reference (authoritative for DW0 download/delete). */
+  storageReference: string | null;
+  /** Legacy SharePoint item id (production only). */
+  spItemId: string | null;
+  webUrl: string | null;
+  versionLabel: string | null;
+}
+
+const isFilesystemStorageProvider = (): boolean =>
+  (process.env.DW0_STORAGE_PROVIDER || 'sharepoint').toLowerCase() === 'filesystem';
+
+/**
+ * Put exact version bytes.
+ *
+ * DW0 provider-neutral path: when the filesystem provider is active (tests),
+ * bytes go through the BinaryObjectStorage interface and the returned opaque
+ * reference is authoritative. In production the SharePoint placement (case /
+ * folder) is preserved by delegating to driveService, and the SharePoint item
+ * id doubles as the opaque storage reference.
+ */
+async function putDocumentBytes(
+  input: { caseId: string; folder: string; fileName: string; mimeType: string; content: Buffer },
+): Promise<PutDocumentBytesResult> {
+  if (isFilesystemStorageProvider()) {
+    const put = await getDocumentStorage().put(input.content, { mimeType: input.mimeType, size: input.content.length });
+    return { storageReference: put.reference, spItemId: null, webUrl: null, versionLabel: null };
+  }
+  const uploadResult = await driveService.uploadDocument({
+    caseId: input.caseId,
+    fileName: input.fileName,
+    content: input.content,
+    mimeType: input.mimeType,
+    folder: input.folder,
+  });
+  if (!uploadResult.success || !uploadResult.item) {
+    throw new Error(uploadResult.error || 'SharePoint upload failed');
+  }
+  const sharePointItemId = normalizeSharePointItemId(uploadResult.item.id);
+  return {
+    storageReference: sharePointItemId,
+    spItemId: sharePointItemId,
+    webUrl: uploadResult.webUrl || null,
+    versionLabel: uploadResult.version || null,
+  };
+}
+
 class DocumentsService {
   /**
    * Create document with SharePoint upload + TimelineEvent + Case update
@@ -171,25 +221,21 @@ class DocumentsService {
       // 3. Upload immutable v1 to SharePoint — use caseNumber (e.g. "2024-001") not CUID for SharePoint folder path
       const sharePointCaseRef = caseData.caseNumber || input.caseId;
       const storageFileName = buildVersionStorageFileName(input.fileName, documentId, 1);
-      const uploadResult = await driveService.uploadDocument({
+      const putBytes = await putDocumentBytes({
         caseId: sharePointCaseRef,
+        folder: folderType,
         fileName: storageFileName,
-        content: input.fileContent,
         mimeType: input.mimeType,
-        folder: folderType
+        content: input.fileContent,
       });
-
-      if (!uploadResult.success || !uploadResult.item) {
-        throw new Error(uploadResult.error || 'SharePoint upload failed');
-      }
 
       // 4. Create CaseDocument record in database
       // Fallback: original uploaded filename → stored filename → document title → generated fallback
       const uploadedFileName = input.fileName || '';
-      const storedFileName = uploadResult.item?.name || '';
+      const storedFileName = storageFileName;
       const documentTitle = (input as any).title || '';
       const nameField = uploadedFileName || storedFileName || documentTitle || `Uploaded document - ${new Date().toISOString()}`;
-      const sharePointItemId = normalizeSharePointItemId(uploadResult.item.id);
+      const sharePointItemId = putBytes.spItemId;
       const uploadSource = String(input.documentType || '') === 'CLIENT_INPUT' ? 'CLIENT_UPLOAD' : 'LAWYER_UPLOAD';
       const baseDocumentData = {
         id: documentId,
@@ -200,11 +246,11 @@ class DocumentsService {
         mimeType: input.mimeType,
         spItemId: sharePointItemId,
         spDriveId: '',
-        spPath: uploadResult.webUrl || '',
-        spWebUrl: uploadResult.webUrl || '',
+        spPath: putBytes.webUrl || '',
+        spWebUrl: putBytes.webUrl || '',
         fileName: uploadedFileName || storedFileName || null,
         folder: prismaFolder,
-        version: uploadResult.version || '1',
+        version: putBytes.versionLabel || '1',
         documentType: input.documentType,
         currentVersion: 1,
         currentVersionInt: 1,
@@ -225,16 +271,16 @@ class DocumentsService {
                 originalFileName: uploadedFileName || storedFileName || null,
                 mimeType: input.mimeType,
                 size: input.fileContent.length,
-                storageReference: sharePointItemId,
+                storageReference: putBytes.storageReference,
                 isCurrent: true,
                 reviewStatus: 'NOT_IN_REVIEW' as any,
                 publicationStatus: 'INTERNAL_ONLY' as any,
                 uploadSource: uploadSource as any,
                 versionType: 'ORIGINAL' as any,
-                spVersionLabel: uploadResult.version || '1',
-                spVersionId: uploadResult.version || null,
+                spVersionLabel: putBytes.versionLabel || '1',
+                spVersionId: putBytes.versionLabel || null,
                 spItemId: sharePointItemId,
-                spWebUrl: uploadResult.webUrl || null,
+                spWebUrl: putBytes.webUrl || null,
                 uploadedById: input.createdById,
               },
             },
@@ -254,24 +300,24 @@ class DocumentsService {
                   originalFileName: uploadedFileName || storedFileName || null,
                   mimeType: input.mimeType,
                   size: input.fileContent.length,
-                  storageReference: null,
+                  storageReference: putBytes.storageReference,
                   isCurrent: true,
                   reviewStatus: 'NOT_IN_REVIEW' as any,
                   publicationStatus: 'INTERNAL_ONLY' as any,
                   uploadSource: uploadSource as any,
                   versionType: 'ORIGINAL' as any,
-                  spVersionLabel: uploadResult.version || '1',
-                  spVersionId: uploadResult.version || null,
+                  spVersionLabel: putBytes.versionLabel || '1',
+                  spVersionId: putBytes.versionLabel || null,
                   spItemId: null,
-                  spWebUrl: uploadResult.webUrl || null,
+                  spWebUrl: putBytes.webUrl || null,
                   uploadedById: input.createdById,
                 },
               },
             },
           });
         } else {
-          if (sharePointItemId) {
-            await driveService.deleteDocument(sharePointItemId).catch(() => false);
+          if (putBytes.storageReference) {
+            await getDocumentStorage().delete(putBytes.storageReference).catch(() => false);
           }
           throw error;
         }
@@ -289,9 +335,9 @@ class DocumentsService {
             fileName: input.fileName,
             documentType: input.documentType,
             spItemId: persistedSpItemId,
-            spPath: uploadResult.webUrl,
+            spPath: putBytes.webUrl,
             folder: folderType,
-            version: uploadResult.version
+            version: putBytes.versionLabel
           }
         } as any
       });
@@ -348,10 +394,19 @@ class DocumentsService {
   /**
    * Permanently delete a document only after dependency checks pass.
    *
-   * The current schema has no soft-delete/archive field. Deletion therefore uses
-   * storage-first hard delete for SharePoint-backed files, then removes DB
-   * metadata in a transaction. Privacy-sensitive file names/content are not
-   * copied into the audit event.
+   * The current schema has no soft-delete/archive field. Deletion therefore:
+   *
+   *   1. validates all dependency/authorization guards FIRST,
+   *   2. removes the DB metadata in a transaction (the database Restrict
+   *      foreign keys — DocumentAnnotation, DocumentReview, DocumentReviewRound,
+   *      ReviewDecision, DocumentVersion lineage — block the delete if legal
+   *      workflow records still reference a version, BEFORE any storage delete),
+   *   3. only after the DB delete succeeds does it remove the binary objects.
+   *
+   * This is the compensation-safe order: no DocumentVersion row can ever remain
+   * pointing at binary bytes that were already irreversibly deleted. If a storage
+   * delete fails AFTER the DB delete succeeds, the bytes are orphaned (harmless)
+   * and logged with a safe orphan reference — never a broken DB pointer.
    */
   async deleteDocument(documentId: string, userId?: string): Promise<void> {
     const document = await prisma.document.findUnique({
@@ -363,12 +418,20 @@ class DocumentsService {
         category: true,
         folder: true,
         spItemId: true,
+        versions: { select: { storageReference: true, spItemId: true } },
       },
     });
 
     if (!document) {
       throw new DocumentDeleteError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
     }
+
+    const storageReferences: string[] = [];
+    for (const version of document.versions || []) {
+      if (version.storageReference) storageReferences.push(version.storageReference);
+      if (version.spItemId && version.spItemId !== version.storageReference) storageReferences.push(version.spItemId);
+    }
+    if (document.spItemId && !storageReferences.includes(document.spItemId)) storageReferences.push(document.spItemId);
 
     const [
       anonymizedCount,
@@ -417,18 +480,10 @@ class DocumentsService {
       );
     }
 
-    if (document.spItemId) {
-      const removedFromStorage = await driveService.deleteDocument(document.spItemId);
-      if (!removedFromStorage) {
-        throw new DocumentDeleteError(
-          502,
-          'DOCUMENT_STORAGE_DELETE_FAILED',
-          'A dokumentum SharePoint-törlése nem sikerült. Az adatbázis nem módosult.',
-          'STORAGE_DELETE_FAILED'
-        );
-      }
-    }
-
+    // DB delete FIRST: the Restrict foreign keys (annotations, reviews, review
+    // rounds, review decisions, version lineage) will reject this if any legal
+    // workflow record still references a version — before any storage object is
+    // deleted. This is what guarantees no DB row points at deleted bytes.
     await prisma.$transaction(async (tx) => {
       await tx.communication.updateMany({
         where: { documentId },
@@ -463,6 +518,33 @@ class DocumentsService {
         select: { id: true },
       });
     });
+
+    // Only AFTER the DB delete succeeded do we remove the binary objects. A
+    // storage delete failure here leaves ORPHANED bytes (harmless, no broken DB
+    // reference); it is logged with a safe orphan reference, never surfaced raw.
+    const orphanReferences: string[] = [];
+    const storage = getDocumentStorage();
+    for (const reference of storageReferences) {
+      try {
+        await storage.delete(reference);
+      } catch (error) {
+        orphanReferences.push(reference);
+        console.error(
+          'DW0 storage delete left an orphan object (document already removed from DB):',
+          reference,
+          error instanceof Error ? error.message : error,
+        );
+      }
+    }
+
+    if (orphanReferences.length > 0) {
+      throw new DocumentDeleteError(
+        202,
+        'DOCUMENT_DELETED_WITH_ORPHANED_STORAGE',
+        'A dokumentum törölve lett. Egyes tárolt bájtobjektumok nem törölhetők; a rendszer elkülönítette őket.',
+        'STORAGE_ORPHANED'
+      );
+    }
   }
 
   /**
@@ -560,19 +642,15 @@ class DocumentsService {
         const folderType = SHAREPOINT_FOLDER_BY_PRISMA_FOLDER[String(document.folder || '')] || DEFAULT_FOLDER;
         const storageFileName = buildVersionStorageFileName(originalFileName, randomUUID(), Date.now());
 
-        const uploadResult = await driveService.uploadDocument({
+        const putBytes = await putDocumentBytes({
           caseId: document.case?.caseNumber || document.caseId,
-          fileName: storageFileName,
-          content: fileContent,
-          mimeType: options?.mimeType || document.mimeType || 'application/octet-stream',
           folder: folderType,
+          fileName: storageFileName,
+          mimeType: options?.mimeType || document.mimeType || 'application/octet-stream',
+          content: fileContent,
         });
 
-        if (!uploadResult.success) {
-          throw new Error(uploadResult.error || 'Version upload failed');
-        }
-
-        const sharePointItemId = normalizeSharePointItemId(uploadResult.item?.id);
+        const sharePointItemId = putBytes.spItemId;
         try {
           updatedDoc = await prisma.$transaction(async (tx) => {
             await tx.$queryRaw`SELECT "id" FROM "documents" WHERE "id" = ${documentId} FOR UPDATE`;
@@ -596,16 +674,16 @@ class DocumentsService {
                 originalFileName,
                 mimeType: options?.mimeType || document.mimeType || 'application/octet-stream',
                 size: fileContent.length,
-                storageReference: sharePointItemId,
+                storageReference: putBytes.storageReference,
                 isCurrent: true,
                 reviewStatus: (options?.reviewStatus || 'NOT_IN_REVIEW') as any,
                 publicationStatus: (options?.publicationStatus || 'INTERNAL_ONLY') as any,
                 uploadSource: (options?.uploadSource || 'LAWYER_UPLOAD') as any,
                 versionType: (options?.versionType || 'WORKING_COPY') as any,
-                spVersionLabel: uploadResult.version || String(versionNumber),
-                spVersionId: uploadResult.version || null,
+                spVersionLabel: putBytes.versionLabel || String(versionNumber),
+                spVersionId: putBytes.versionLabel || null,
                 spItemId: sharePointItemId,
-                spWebUrl: uploadResult.webUrl || null,
+                spWebUrl: putBytes.webUrl || null,
                 uploadedById: userId,
                 documentId,
                 previousVersionId: latestVersion?.id || null,
@@ -619,8 +697,8 @@ class DocumentsService {
                 currentVersion: versionNumber,
                 currentVersionInt: versionNumber,
                 spItemId: sharePointItemId,
-                spPath: uploadResult.webUrl || document.spPath,
-                spWebUrl: uploadResult.webUrl || document.spWebUrl,
+                spPath: putBytes.webUrl || document.spPath,
+                spWebUrl: putBytes.webUrl || document.spWebUrl,
                 fileName: originalFileName,
                 mimeType: options?.mimeType || document.mimeType || 'application/octet-stream',
                 size: fileContent.length,
@@ -630,8 +708,8 @@ class DocumentsService {
           }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
           break;
         } catch (error) {
-          if (sharePointItemId) {
-            await driveService.deleteDocument(sharePointItemId).catch(() => false);
+          if (putBytes.storageReference) {
+            await getDocumentStorage().delete(putBytes.storageReference).catch(() => false);
           }
           if (attempt < 3 && isSerializationConflict(error)) {
             continue;
@@ -771,18 +849,28 @@ class DocumentsService {
       return { status: 400, code: 'NO_VERSION_STORAGE_REFERENCE', error: 'Document version has no storage reference.' };
     }
 
-    const downloadResult = await driveService.downloadDocumentResult(storageId);
-    if (downloadResult.success === false) {
+    let content: Buffer | null;
+    try {
+      content = await getDocumentStorage().get(storageId);
+    } catch (error) {
       return {
-        status: downloadResult.status || (downloadResult.code === 'SHAREPOINT_FILE_NOT_FOUND' ? 404 : 502),
-        code: downloadResult.code,
-        error: downloadResult.error,
+        status: 502,
+        code: 'STORAGE_READ_FAILED',
+        error: 'A dokumentum bájtjai jelenleg nem tölthetők le.',
+      };
+    }
+
+    if (content === null) {
+      return {
+        status: 404,
+        code: 'STORAGE_OBJECT_NOT_FOUND',
+        error: 'A dokumentum tárolt bájtjai nem találhatók.',
       };
     }
 
     return {
       version: mapDocumentVersion(version),
-      content: downloadResult.content,
+      content,
     };
   }
 

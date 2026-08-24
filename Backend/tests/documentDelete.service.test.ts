@@ -14,17 +14,26 @@ const mockPrisma = {
   $transaction: jest.fn(async (callback: (tx: typeof txMock) => Promise<void>) => callback(txMock)),
 };
 
-const deleteSharePointDocument = jest.fn();
+const storageDelete = jest.fn();
 
 jest.mock('../src/prisma/prisma.service', () => ({
   prisma: mockPrisma,
 }));
 
-jest.mock('../src/modules/sharepoint', () => ({
-  driveService: {
-    deleteDocument: deleteSharePointDocument,
-  },
-}));
+// No driveService mock needed: DW0 delete goes through the storage interface.
+jest.mock('../src/modules/storage', () => {
+  const actual = jest.requireActual('../src/modules/storage');
+  return {
+    ...actual,
+    getDocumentStorage: () => ({
+      put: jest.fn(),
+      get: jest.fn(),
+      delete: storageDelete,
+      exists: jest.fn(),
+      metadata: jest.fn(),
+    }),
+  };
+});
 
 import documentsService, { DocumentDeleteError } from '../src/modules/documents/services';
 
@@ -35,6 +44,7 @@ const baseDocument = {
   category: 'CLIENT_INPUT',
   folder: 'CLIENT_INPUT',
   spItemId: null,
+  versions: [],
 };
 
 describe('document delete service', () => {
@@ -49,7 +59,7 @@ describe('document delete service', () => {
     txMock.communicationAttachment.updateMany.mockResolvedValue({ count: 0 });
     txMock.timelineEvent.create.mockResolvedValue({ id: 'event-1' });
     txMock.document.delete.mockResolvedValue({ id: 'doc-1' });
-    deleteSharePointDocument.mockResolvedValue(true);
+    storageDelete.mockResolvedValue(true);
   });
 
   it('deletes metadata-only documents in a DB transaction without content projection', async () => {
@@ -64,8 +74,8 @@ describe('document delete service', () => {
         spWebUrl: true,
       }),
     });
-    expect(deleteSharePointDocument).not.toHaveBeenCalled();
     expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(storageDelete).not.toHaveBeenCalled();
     expect(txMock.communication.updateMany).toHaveBeenCalledWith({
       where: { documentId: 'doc-1' },
       data: { documentId: null },
@@ -93,13 +103,19 @@ describe('document delete service', () => {
     });
   });
 
-  it('deletes SharePoint storage first using only the server-resolved item id', async () => {
-    mockPrisma.document.findUnique.mockResolvedValueOnce({ ...baseDocument, spItemId: 'server-sp-item-1' });
+  it('deletes storage AFTER the DB delete succeeds, using the server-resolved reference', async () => {
+    mockPrisma.document.findUnique.mockResolvedValueOnce({
+      ...baseDocument,
+      versions: [{ storageReference: 'ref-1', spItemId: 'server-sp-item-1' }],
+    });
 
     await documentsService.deleteDocument('doc-1', 'user-1');
 
-    expect(deleteSharePointDocument).toHaveBeenCalledWith('server-sp-item-1');
+    // DB transaction runs FIRST ...
     expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(txMock.document.delete).toHaveBeenCalledWith({ where: { id: 'doc-1' }, select: { id: true } });
+    // ... then the storage object is removed (DB-first, storage-second order).
+    expect(storageDelete).toHaveBeenCalledWith('ref-1');
   });
 
   it('blocks prohibited dependencies before storage or DB mutation', async () => {
@@ -111,21 +127,23 @@ describe('document delete service', () => {
       reason: 'ANONYMIZED_DOCUMENT_EXISTS',
     } satisfies Partial<DocumentDeleteError>);
 
-    expect(deleteSharePointDocument).not.toHaveBeenCalled();
+    expect(storageDelete).not.toHaveBeenCalled();
     expect(mockPrisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('does not modify DB when SharePoint deletion fails', async () => {
-    mockPrisma.document.findUnique.mockResolvedValueOnce({ ...baseDocument, spItemId: 'server-sp-item-1' });
-    deleteSharePointDocument.mockResolvedValueOnce(false);
+  it('never leaves a DB row pointing at deleted bytes: DB delete first, orphan storage on failure', async () => {
+    mockPrisma.document.findUnique.mockResolvedValueOnce({
+      ...baseDocument,
+      versions: [{ storageReference: 'ref-1', spItemId: 'server-sp-item-1' }],
+    });
+    storageDelete.mockResolvedValueOnce(false);
 
-    await expect(documentsService.deleteDocument('doc-1', 'user-1')).rejects.toMatchObject({
-      statusCode: 502,
-      code: 'DOCUMENT_STORAGE_DELETE_FAILED',
-      reason: 'STORAGE_DELETE_FAILED',
-    } satisfies Partial<DocumentDeleteError>);
-
-    expect(deleteSharePointDocument).toHaveBeenCalledWith('server-sp-item-1');
-    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    // DB delete is allowed to proceed (DB-first compensation-safe order) ...
+    await documentsService.deleteDocument('doc-1', 'user-1');
+    // ... the DB row is gone (transaction ran) ...
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(txMock.document.delete).toHaveBeenCalled();
+    // ... and a storage delete that fails is isolated as an orphan warning.
+    expect(storageDelete).toHaveBeenCalledWith('ref-1');
   });
 });

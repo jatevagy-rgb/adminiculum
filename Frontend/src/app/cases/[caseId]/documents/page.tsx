@@ -1465,8 +1465,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
               </div>
             </header>
 
-            <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleFileUpload} className="hidden" />
-            <input ref={versionFileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleVersionFileUpload} className="hidden" />
+            <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.zip,.txt" onChange={handleFileUpload} className="hidden" />
+            <input ref={versionFileInputRef} type="file" accept=".pdf,.doc,.docx,.zip,.txt" onChange={handleVersionFileUpload} className="hidden" />
             {isUploading && uploadPhase ? <div className="rounded-[10px] border border-[#D8C58E] bg-[var(--adm-surface)] p-3 text-sm font-semibold text-[#6D5418]">{uploadPhase}</div> : null}
             {isRefreshing ? <div className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-4 py-2 text-xs text-[var(--adm-text-muted)]">Frissítés...</div> : null}
 

@@ -36,13 +36,14 @@ describe('document delete static safety', () => {
       'task.count',
       'legalAnalysis.count',
       'documentReviewSuggestion.count',
-      'driveService.deleteDocument',
+      'getDocumentStorage()',
+      'storage.delete(reference)',
       'communication.updateMany',
       'communicationAttachment.updateMany',
       'timelineEvent.create',
       'document.delete',
       'DOCUMENT_DELETE_CONFLICT',
-      'DOCUMENT_STORAGE_DELETE_FAILED',
+      'DOCUMENT_DELETED_WITH_ORPHANED_STORAGE',
     ]) {
       expect(deleteBody).toContain(required);
     }
