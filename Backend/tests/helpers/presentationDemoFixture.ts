@@ -24,6 +24,12 @@
 
 import { PrismaClient } from '@prisma/client';
 import crypto from 'node:crypto';
+import {
+  approveRequirementVersion,
+  approveApplicabilityRuleVersion,
+  createApplicabilityRuleVersion,
+  addRequirementCitation,
+} from '../../src/modules/compliance/requirementRuleService';
 
 export type Db = PrismaClient;
 
@@ -99,6 +105,12 @@ export const DEMO_IDS = {
   // FactDefinition for demo employee count (DEMO-namespaced, generic)
   factDefinitionId: stableId('demoFactDefinitionEmployeeCount'),
   factDefinitionKey: 'DEMO_PRESENTATION_COMPANY_EMPLOYEE_COUNT',
+
+  // Synthetic Legal Grounding
+  syntheticSourceId: 'DEMO_PRESENTATION_SYNTHETIC_SOURCE',
+  syntheticSourceVersionId: 'DEMO_PRESENTATION_SYNTHETIC_SOURCE_VERSION',
+  syntheticCitationId: 'DEMO_PRESENTATION_CITATION',
+  applicabilityRuleVersionId: stableId('demoApplicabilityRuleVersion'),
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -108,15 +120,10 @@ export interface PresentationDemoFixtureResult {
   ids: typeof DEMO_IDS;
   /** True if the compliance domain was created (not pre-existing). */
   complianceDomainCreated: boolean;
-  /** True if the demo RequirementVersion was seeded (candidate only). */
+  /** True if the demo RequirementVersion was seeded. */
   requirementCandidateSeeded: boolean;
-  /**
-   * Blocked: the demo ApplicabilityRuleVersion cannot be APPROVED via the
-   * canonical service because approveRequirementVersion requires a PRIMARY
-   * RequirementCitation linked to an actual LegalSource. We refuse to fake
-   * legal grounding. The candidate version is seeded for forward-compatibility.
-   */
-  DEMO_RULE_BLOCKED_BY_CURRENT_GROUNDING: true;
+  /** False as the demo rule is now grounded and approved. */
+  DEMO_RULE_BLOCKED_BY_CURRENT_GROUNDING: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +132,13 @@ export interface PresentationDemoFixtureResult {
 export async function seedPresentationDemoFixture(
   db: Db,
 ): Promise<PresentationDemoFixtureResult> {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('DEMO_REFUSED_PRODUCTION: Seeding demo content is forbidden in production.');
+  }
+  if (process.env.ADMINICULUM_DEMO_CONTENT_ENABLED !== 'true') {
+    throw new Error('DEMO_REFUSED_FLAG_MISSING: Seeding demo content requires ADMINICULUM_DEMO_CONTENT_ENABLED=true.');
+  }
+
   const ids = DEMO_IDS;
 
   // ---- Workforce users ----
@@ -394,7 +408,45 @@ export async function seedPresentationDemoFixture(
     complianceDomainCreated = true;
   }
 
-  // Requirement (DEMO — no real law citation)
+  // Synthetic LegalSource
+  const existingSource = await db.legalSource.findUnique({
+    where: { id: ids.syntheticSourceId },
+    select: { id: true },
+  });
+  if (!existingSource) {
+    await db.legalSource.create({
+      data: {
+        id: ids.syntheticSourceId,
+        sourceKey: ids.syntheticSourceId,
+        jurisdictionCode: 'HU',
+        instrumentType: 'OTHER',
+        canonicalCitation: '[DEMO — NEM JOGFORRÁS] Bemutató szabály',
+        title: 'Synthetic demonstration rule source — not legal authority',
+        issuer: 'Adminiculum Presentation Demo',
+        status: 'APPROVED',
+      },
+    });
+  }
+
+  // Synthetic LegalSourceVersion
+  const existingSourceVer = await db.legalSourceVersion.findUnique({
+    where: { id: ids.syntheticSourceVersionId },
+    select: { id: true },
+  });
+  if (!existingSourceVer) {
+    await db.legalSourceVersion.create({
+      data: {
+        id: ids.syntheticSourceVersionId,
+        legalSourceId: ids.syntheticSourceId,
+        legalVersionKey: 'V1-DEMO',
+        versionLabel: 'V1',
+        status: 'ACTIVE',
+        reviewStatus: 'APPROVED',
+      },
+    });
+  }
+
+  // Requirement (DEMO — grounded by synthetic citation)
   const existingReq = await db.requirement.findUnique({
     where: { id: ids.requirementId },
     select: { id: true },
@@ -410,11 +462,11 @@ export async function seedPresentationDemoFixture(
     });
   }
 
-  // RequirementVersion (CANDIDATE — cannot be approved without a real citation)
+  // RequirementVersion (seeding as SUFFICIENT source support)
   let requirementCandidateSeeded = false;
   const existingRv = await db.requirementVersion.findUnique({
     where: { id: ids.requirementVersionId },
-    select: { id: true },
+    select: { id: true, status: true },
   });
   if (!existingRv) {
     await db.requirementVersion.create({
@@ -428,19 +480,72 @@ export async function seedPresentationDemoFixture(
           'megjelenik a „Szervezeti növekedési áttekintés" téma. ' +
           'Ez kizárólag termékbemutatói logika, nem minősül jogi kötelezettségnek.',
         effectiveFrom: new Date('2026-01-01T00:00:00Z'),
-        sourceSupportState: 'MISSING',   // Cannot be SUFFICIENT without real source
-        status: 'CANDIDATE',             // Cannot be APPROVED without PRIMARY citation
+        sourceSupportState: 'SUFFICIENT',
+        status: 'CANDIDATE',
         specialistRequirement: 'NONE',
       },
     });
     requirementCandidateSeeded = true;
   }
 
+  // PRIMARY RequirementCitation linking version to synthetic legal source
+  const existingCitation = await db.requirementCitation.findFirst({
+    where: { requirementVersionId: ids.requirementVersionId, supportRole: 'PRIMARY' },
+    select: { id: true },
+  });
+  if (!existingCitation) {
+    await db.requirementCitation.create({
+      data: {
+        id: ids.syntheticCitationId,
+        requirementVersionId: ids.requirementVersionId,
+        legalSourceVersionId: ids.syntheticSourceVersionId,
+        supportRole: 'PRIMARY',
+        locator: 'N/A',
+        quotedText: 'Szintetikus bemutató szabály',
+      },
+    });
+  }
+
+  // Standard approval sequence for RequirementVersion
+  const rv = await db.requirementVersion.findUnique({
+    where: { id: ids.requirementVersionId },
+    select: { status: true },
+  });
+  if (rv && rv.status !== 'APPROVED') {
+    await approveRequirementVersion(ids.requirementVersionId, ids.adminUserId, db);
+  }
+
+  // Standard creation & approval sequence for ApplicabilityRuleVersion
+  const existingRule = await db.applicabilityRuleVersion.findFirst({
+    where: { requirementVersionId: ids.requirementVersionId, ruleVersionKey: 'V1-DEMO' },
+  });
+  if (!existingRule) {
+    const astJson = {
+      schemaVersion: 'rule-ast/v1',
+      node: {
+        kind: 'COMPARE',
+        operator: 'GTE',
+        left: { kind: 'FACT', factKey: ids.factDefinitionKey },
+        right: { kind: 'LITERAL', valueType: 'number', value: 52 },
+      },
+    };
+    const createdRule = await createApplicabilityRuleVersion({
+      requirementVersionId: ids.requirementVersionId,
+      ruleVersionKey: 'V1-DEMO',
+      astJson,
+      status: 'CANDIDATE',
+      db,
+    });
+    await approveApplicabilityRuleVersion(createdRule.id, ids.adminUserId, db);
+  } else if (existingRule.status !== 'APPROVED') {
+    await approveApplicabilityRuleVersion(existingRule.id, ids.adminUserId, db);
+  }
+
   return {
     ids,
     complianceDomainCreated,
     requirementCandidateSeeded: requirementCandidateSeeded || !existingRv,
-    DEMO_RULE_BLOCKED_BY_CURRENT_GROUNDING: true,
+    DEMO_RULE_BLOCKED_BY_CURRENT_GROUNDING: false,
   };
 }
 
@@ -448,6 +553,13 @@ export async function seedPresentationDemoFixture(
 // Teardown: delete ONLY demo-owned entities in FK-safe order.
 // ---------------------------------------------------------------------------
 export async function teardownPresentationDemoFixture(db: Db): Promise<void> {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('DEMO_REFUSED_PRODUCTION: Clearing demo content is forbidden in production.');
+  }
+  if (process.env.ADMINICULUM_DEMO_CONTENT_ENABLED !== 'true') {
+    throw new Error('DEMO_REFUSED_FLAG_MISSING: Clearing demo content requires ADMINICULUM_DEMO_CONTENT_ENABLED=true.');
+  }
+
   const ids = DEMO_IDS;
 
   // Tasks first (FK → Case)
@@ -509,6 +621,33 @@ export async function teardownPresentationDemoFixture(db: Db): Promise<void> {
   // Client
   await db.client.deleteMany({
     where: { id: ids.clientId },
+  });
+
+  // 1. Delete generated findings, applicability facts, and applicabilities first
+  await db.assessmentFinding.deleteMany({
+    where: { clientId: ids.clientId },
+  });
+  await db.requirementApplicabilityFact.deleteMany({
+    where: { applicability: { clientId: ids.clientId } },
+  });
+  await db.requirementApplicability.deleteMany({
+    where: { clientId: ids.clientId },
+  });
+
+  // 2. Delete rules and citations
+  await db.applicabilityRuleVersion.deleteMany({
+    where: { requirementVersionId: ids.requirementVersionId },
+  });
+  await db.requirementCitation.deleteMany({
+    where: { requirementVersionId: ids.requirementVersionId },
+  });
+
+  // 3. Delete legal sources and versions
+  await db.legalSourceVersion.deleteMany({
+    where: { id: ids.syntheticSourceVersionId },
+  });
+  await db.legalSource.deleteMany({
+    where: { id: ids.syntheticSourceId },
   });
 
   // DEMO compliance content (only if DEMO_PRESENTATION-namespaced)

@@ -17,6 +17,7 @@ import { PrismaClient } from '@prisma/client';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { approveRequirementVersion, approveApplicabilityRuleVersion, createApplicabilityRuleVersion, addRequirementCitation } from '../../src/modules/compliance/requirementRuleService';
 
 // ---- Production guard --------------------------------------------------------
 
@@ -100,12 +101,26 @@ const IDS = {
   requirementVersionId: stableId('demoRequirementVersion'),
   factDefinitionId: stableId('demoFactDefinitionEmployeeCount'),
   factDefinitionKey: 'DEMO_PRESENTATION_COMPANY_EMPLOYEE_COUNT',
+  // Synthetic compliance grounding identifiers
+  syntheticSourceId: stableId('syntheticLegalSource'),
+  syntheticSourceVersionId: stableId('syntheticLegalSourceVersion'),
+  syntheticCitationId: stableId('syntheticCitation'),
+  applicabilityRuleVersionId: stableId('demoApplicabilityRuleVersion'),
 };
 
 // ---- Teardown in FK-safe order -----------------------------------------------
 
 async function teardown(db) {
   console.log('🗑  Tearing down previous demo fixture...');
+
+  // Delete synthetic compliance data first (grounding, citations, rule versions, findings)
+  await db.assessmentFinding.deleteMany({ where: { clientId: IDS.clientId } });
+  await db.requirementApplicabilityFact.deleteMany({ where: { applicability: { clientId: IDS.clientId } } });
+  await db.requirementApplicability.deleteMany({ where: { clientId: IDS.clientId } });
+  await db.applicabilityRuleVersion.deleteMany({ where: { requirementVersionId: IDS.requirementVersionId } });
+  await db.requirementCitation.deleteMany({ where: { requirementVersionId: IDS.requirementVersionId } });
+  await db.legalSourceVersion.deleteMany({ where: { id: IDS.syntheticSourceVersionId } });
+  await db.legalSource.deleteMany({ where: { id: IDS.syntheticSourceId } });
 
   await db.task.deleteMany({ where: { id: { in: [IDS.taskOneId, IDS.taskTwoId, IDS.taskThreeId] } } });
   await db.complianceProposal.deleteMany({ where: { caseId: { in: [IDS.caseMainId, IDS.caseComplianceId] } } });
@@ -185,6 +200,86 @@ async function seed(db) {
   if (!existingRv) {
     await db.requirementVersion.create({ data: { id: IDS.requirementVersionId, requirementId: IDS.requirementId, versionKey: 'V1-DEMO', title: 'Szervezeti növekedési áttekintés [DEMO]', normativeStatement: '[DEMO — szintetikus tartalom] Ha a foglalkoztatottak száma eléri az 52 főt, megjelenik a „Szervezeti növekedési áttekintés" téma. Ez kizárólag termékbemutatói logika, nem minősül jogi kötelezettségnek.', effectiveFrom: new Date('2026-01-01T00:00:00Z'), sourceSupportState: 'MISSING', status: 'CANDIDATE', specialistRequirement: 'NONE' } });
   }
+
+    // Synthetic LegalSource (real entity required for citation)
+    const existingSource = await db.legalSource.findUnique({ where: { id: IDS.syntheticSourceId }, select: { id: true } });
+    if (!existingSource) {
+      await db.legalSource.create({
+        data: {
+          id: IDS.syntheticSourceId,
+          sourceKey: IDS.syntheticSourceId,
+          jurisdictionCode: 'HU',
+          instrumentType: 'OTHER',
+          canonicalCitation: '[DEMO — NEM JOGFORRÁS] Bemutató szabály',
+          title: 'Synthetic demonstration rule source — not legal authority',
+          issuer: 'Adminiculum Presentation Demo',
+          status: 'APPROVED',
+        },
+      });
+    }
+
+    // Synthetic LegalSourceVersion
+    const existingSourceVer = await db.legalSourceVersion.findUnique({ where: { id: IDS.syntheticSourceVersionId }, select: { id: true } });
+    if (!existingSourceVer) {
+      await db.legalSourceVersion.create({
+        data: {
+          id: IDS.syntheticSourceVersionId,
+          legalSourceId: IDS.syntheticSourceId,
+          legalVersionKey: 'V1-DEMO',
+          versionLabel: 'V1',
+          status: 'ACTIVE',
+          reviewStatus: 'APPROVED',
+        },
+      });
+    }
+
+    // PRIMARY RequirementCitation linking to synthetic source version
+    const existingCitation = await db.requirementCitation.findFirst({
+      where: { requirementVersionId: IDS.requirementVersionId, supportRole: 'PRIMARY' },
+      select: { id: true },
+    });
+    if (!existingCitation) {
+      await db.requirementCitation.create({
+        data: {
+          id: IDS.syntheticCitationId,
+          requirementVersionId: IDS.requirementVersionId,
+          legalSourceVersionId: IDS.syntheticSourceVersionId,
+          supportRole: 'PRIMARY',
+          locator: 'N/A',
+          quotedText: 'Synthetic demo citation',
+        },
+      });
+    }
+
+    // Approve RequirementVersion now that PRIMARY citation exists
+    await approveRequirementVersion(IDS.requirementVersionId, IDS.adminUserId, db);
+
+    // Create and approve ApplicabilityRuleVersion (AST GTE 52)
+    const existingRule = await db.applicabilityRuleVersion.findFirst({
+      where: { requirementVersionId: IDS.requirementVersionId, ruleVersionKey: 'V1-DEMO' },
+      select: { id: true, status: true },
+    });
+    if (!existingRule) {
+      const astJson = {
+        schemaVersion: 'rule-ast/v1',
+        node: {
+          kind: 'COMPARE',
+          operator: 'GTE',
+          left: { kind: 'FACT', factKey: IDS.factDefinitionKey },
+          right: { kind: 'LITERAL', valueType: 'number', value: 52 },
+        },
+      };
+      const createdRule = await createApplicabilityRuleVersion({
+        requirementVersionId: IDS.requirementVersionId,
+        ruleVersionKey: 'V1-DEMO',
+        astJson,
+        status: 'CANDIDATE',
+        db,
+      });
+      await approveApplicabilityRuleVersion(createdRule.id, IDS.adminUserId, db);
+    } else if (existingRule.status !== 'APPROVED') {
+      await approveApplicabilityRuleVersion(existingRule.id, IDS.adminUserId, db);
+    }
 
   // Portal identity (if DEMO_PORTAL_EMAIL is provided)
   await linkPortalIdentityIfConfigured(db);
