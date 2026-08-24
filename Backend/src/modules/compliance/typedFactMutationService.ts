@@ -10,6 +10,7 @@ import {
   FindingMaterializationIdentityConflictError,
   materializeRequirementApplicabilityFindingInTx,
 } from './findingMaterializationService';
+import { EffectiveRequirementRuleError, resolveEffectiveRequirementRuleVersion } from './effectiveRequirementRuleResolver';
 
 type TransactionClient = Prisma.TransactionClient;
 
@@ -161,16 +162,13 @@ async function createTypedFactInTx(input: TypedFactMutationInput, tx: Transactio
   const dependencies = await tx.applicabilityRuleFactDependency.findMany({
     where: {
       resolvedFactDefinitionId: definition.id,
-      applicabilityRuleVersion: {
-        status: 'APPROVED',
-        requirementVersion: { status: 'APPROVED' },
-      },
+      applicabilityRuleVersion: { requirementVersion: { requirementId: { not: '' } } },
     },
     select: {
-      applicabilityRuleVersion: { select: { id: true, requirementVersionId: true } },
+      applicabilityRuleVersion: { select: { requirementVersion: { select: { requirementId: true } } } },
     },
   });
-  const rules = [...new Map(dependencies.map((row) => [row.applicabilityRuleVersion.id, row.applicabilityRuleVersion])).values()];
+  const requirementIds = [...new Set(dependencies.map((row) => row.applicabilityRuleVersion.requirementVersion.requirementId))];
   const context: TypedFactMutationContext = {
     tx,
     clientId: input.clientId,
@@ -182,10 +180,23 @@ async function createTypedFactInTx(input: TypedFactMutationInput, tx: Transactio
     actorUserId: input.actorUserId,
   };
   const evaluations = [] as Array<{ ruleVersionId: string; applicabilityId: string; findingId: string | null; outcome: string }>;
-  for (const rule of rules) {
+  for (const requirementId of requirementIds) {
+    let rule;
+    try {
+      rule = await resolveEffectiveRequirementRuleVersion(requirementId, temporal.evaluationAt, tx);
+    } catch (error) {
+      if (error instanceof EffectiveRequirementRuleError && error.code !== 'RULE_SCOPE_UNRESOLVED') continue;
+      throw error;
+    }
+    if (rule.evaluationScopeType !== scopeType) continue;
+    const dependsOnMutatedFact = await tx.applicabilityRuleFactDependency.findFirst({
+      where: { applicabilityRuleVersionId: rule.ruleVersionId, resolvedFactDefinitionId: definition.id },
+      select: { id: true },
+    });
+    if (!dependsOnMutatedFact) continue;
     const snapshot = await createRequirementApplicabilityInTx({
       requirementVersionId: rule.requirementVersionId,
-      ruleVersionId: rule.id,
+      ruleVersionId: rule.ruleVersionId,
       clientId: context.clientId,
       scope: {
         scopeType: scopeType as any,
@@ -201,7 +212,7 @@ async function createTypedFactInTx(input: TypedFactMutationInput, tx: Transactio
       createdByUserId: input.actorUserId,
     }, tx);
     evaluations.push({
-      ruleVersionId: rule.id,
+      ruleVersionId: rule.ruleVersionId,
       applicabilityId: snapshot.applicability.id,
       findingId: materialized.finding?.id ?? null,
       outcome: materialized.outcome,
