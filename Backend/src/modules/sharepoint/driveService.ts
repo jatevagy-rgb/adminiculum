@@ -14,8 +14,7 @@ import {
   DocumentOperationResult,
   SHAREPOINT_FOLDERS,
   CaseFolderResult,
-  WorkflowToSPFolder,
-  SPFolderToWorkflow,
+  normalizeSharePointFolderPath,
 } from './types';
 
 // Canonical: SHAREPOINT_SITE_URL
@@ -23,21 +22,6 @@ import {
 const SITE_URL = process.env.SHAREPOINT_SITE_URL || process.env.SP_SITE_URL || '';
 
 class DriveService {
-  private normalizeFolderPath(folder?: string): string {
-    const requested = String(folder || '').trim();
-    const aliases: Record<string, string> = {
-      CLIENT_INPUT: '01_Client_Input',
-      DRAFTS: '02_Drafts',
-      REVIEW: '03_Review',
-      APPROVED: '04_Approved',
-      SENT_TO_CLIENT: '05_Sent_to_Client',
-      CLIENT_FEEDBACK: '06_Client_Feedback',
-      FINAL: '07_Final',
-      ANONYMIZED: '08_Anonymized',
-    };
-    return aliases[requested.toUpperCase()] || requested || 'Contracts';
-  }
-
   private siteId: string = '';
 
   private toSafeErrorMessage(operation: string, error: unknown): string {
@@ -114,7 +98,7 @@ class DriveService {
   async uploadDocument(options: UploadOptions): Promise<DocumentOperationResult> {
     try {
       const siteId = await this.getSiteId();
-      const folderPath = this.normalizeFolderPath(options.folder || SHAREPOINT_FOLDERS.CONTRACTS);
+      const folderPath = normalizeSharePointFolderPath(options.folder);
       const uploadPath = `/${options.caseId}/${folderPath}/${options.fileName}`.replace(/\/+/g, '/');
 
       const response = await graphClient.put<any>(`/sites/${siteId}/drive/root:${uploadPath}:/content`, options.content, {
