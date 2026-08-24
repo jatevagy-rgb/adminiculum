@@ -2,6 +2,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { createTypedFactInTx } from '../compliance/typedFactMutationService';
 import { getCompanyProfileQuestion, COMPANY_PROFILE_QUESTIONS } from './companyProfileQuestionRegistry';
+import { addPortalResponsibility } from '../client-organization/service';
 
 type Db = PrismaClient;
 type Tx = Prisma.TransactionClient;
@@ -102,4 +103,12 @@ export async function answerCompanyProfileQuestion(identityId: string, workspace
     }
   }
   throw new Error('Company profile answer transaction exhausted its retry budget.');
+}
+
+export async function assignCompanyProfileResponsibility(identityId: string, workspaceId: string, body: Record<string, unknown>, db: Db = defaultPrisma) {
+  const workspace = await workspaceContext(identityId, workspaceId, db, true);
+  if (workspace.membershipRole !== 'APPROVER') error(403, 'ORGANIZATION_RESPONSIBILITY_FORBIDDEN', 'Only an approved organization approver may assign responsibility.');
+  const personId = String(body.organizationPersonId || '');
+  if (!personId) error(400, 'PERSON_REQUIRED', 'organizationPersonId is required.');
+  return addPortalResponsibility({ userId: identityId, role: 'APPROVER' }, workspace.clientId, personId, body, db);
 }

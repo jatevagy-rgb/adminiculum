@@ -44,7 +44,7 @@ import { organizationSummary, unitSummary } from '../modules/client-workspace/le
 import { getOrganizationalHome } from '../modules/client-workspace/orgHomeService';
 import { getOrganizationalContracts } from '../modules/client-workspace/orgContractsService';
 import { getOrganizationalCompany } from '../modules/client-workspace/orgCompanyService';
-import { answerCompanyProfileQuestion, getCompanyProfileDiscovery } from '../modules/client-workspace/companyProfileAnswerService';
+import { answerCompanyProfileQuestion, assignCompanyProfileResponsibility, getCompanyProfileDiscovery } from '../modules/client-workspace/companyProfileAnswerService';
 import { RelationshipToCase } from '../modules/client-workspace/organizationalAccessPolicy';
 import {
   createIntakeDraft,
@@ -533,6 +533,16 @@ router.put('/org/company-profile/questions/:questionKey', async (req, res) => {
     if (!(await portalRead(req, res))) return;
     const { identityId, workspaceId } = orgContext(req);
     res.json(await answerCompanyProfileQuestion(identityId, workspaceId, String(req.params.questionKey), req.body || {}));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.put('/org/company-profile/responsibilities', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await assignCompanyProfileResponsibility(identityId, workspaceId, req.body || {}));
   } catch (error) {
     fail(res, error);
   }
