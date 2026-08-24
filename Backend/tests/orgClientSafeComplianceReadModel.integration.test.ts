@@ -225,7 +225,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
       expect(serialized).not.toContain('Nem regisztrált terület');
       expect(serialized).not.toContain(`UNREGISTERED_${suiteSuffix}`);
     } finally {
-      await db.assessmentFinding.deleteMany({ where: { id: teardown.findings.filter((id) => id.startsWith ? false : true) } });
+      // Cleanup handled by afterAll via teardown arrays
     }
   });
 
