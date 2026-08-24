@@ -40,10 +40,11 @@ describe('7C-A compliance overview foundation (structural)', () => {
     assert.doesNotMatch(src, /factSubjectId/);
   });
 
-  it('does not let DOES_NOT_APPLY dominate attention', () => {
+  it('keeps the canonical attention contract explicit', () => {
     const src = component();
     assert.match(src, /getComplianceAttentionFindings/);
-    assert.match(src, /getComplianceFindingStatus\(finding\) !== "DOES_NOT_APPLY"/);
+    assert.match(src, /applicability === "DOES_NOT_APPLY"/);
+    assert.match(src, /finding\.operationalStatus !== "RESOLVED"/);
     assert.match(src, /Nem releváns/);
     assert.match(src, /text-\[var\(--adm-text-muted\)\]/);
   });
@@ -63,9 +64,11 @@ describe('7C-A compliance overview foundation (structural)', () => {
     assert.match(src, /aria-describedby=/);
   });
 
-  it('is registered and used by both company-level surfaces', () => {
+  it('uses the dedicated overview API only in the full workspace surface', () => {
     assert.equal(existsSync(path.join(root, 'src/components/clients/compliance/ComplianceOverview.tsx')), true);
     assert.match(read('src/components/clients/ClientCompanyWorkspace.tsx'), /ComplianceOverviewPanel/);
-    assert.match(read('src/components/clients/ClientCompanyFoundation.tsx'), /ComplianceOverviewPanel/);
+    assert.match(read('src/components/clients/ClientCompanyWorkspace.tsx'), /complianceOverviewApi/);
+    assert.doesNotMatch(read('src/components/clients/ClientCompanyFoundation.tsx'), /ComplianceOverviewPanel|listFindings/);
+    assert.match(read('src/components/clients/ClientCompanyFoundation.tsx'), /Compliance áttekintés megnyitása/);
   });
 });

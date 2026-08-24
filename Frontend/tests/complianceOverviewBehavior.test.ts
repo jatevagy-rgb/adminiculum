@@ -66,10 +66,11 @@ describe("7C-A compliance overview behavior", () => {
     assert.deepEqual(groups[0].findings.map(({ id }) => id), ["company", "employee"]);
   });
 
-  it("excludes DOES_NOT_APPLY but keeps null applicability in attention", () => {
+  it("excludes DOES_NOT_APPLY and only keeps unresolved manual findings in attention", () => {
     const findings = [
       finding({ id: "quiet", applicabilityStatus: "DOES_NOT_APPLY" }),
-      finding({ id: "unknown", applicabilityStatus: null }),
+      finding({ id: "unknown", applicabilityStatus: null, operationalStatus: "OPEN" }),
+      finding({ id: "resolved-manual", applicabilityStatus: null, operationalStatus: "RESOLVED" }),
       finding({ id: "applies", applicabilityStatus: "APPLIES" }),
     ];
 

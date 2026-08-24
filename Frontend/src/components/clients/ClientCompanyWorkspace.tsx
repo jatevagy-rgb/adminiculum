@@ -14,13 +14,14 @@ import {
   factVerificationLabel,
   assessmentTypeLabel,
   assessmentStatusLabel,
-  companyFindingStatusLabel,
   initiativeStatusLabel,
   companyMilestoneStatusLabel,
 } from "@/lib/clientCompanyApi";
 import { contractStatusLabel, contractTypeLabel, obligationStatusLabel } from "@/lib/clientContractsApi";
 import { personStatusLabel } from "@/lib/clientOrganizationApi";
 import { ComplianceOverviewPanel, ComplianceProposalPanel } from "@/components/clients/compliance/ComplianceOverview";
+import { complianceOverviewApi } from "@/lib/complianceOverviewApi";
+import type { ComplianceFindingView } from "@/components/clients/compliance/ComplianceOverview";
 
 const labelCls = "rounded bg-white border border-[var(--adm-border)] px-2 py-1 text-xs text-[var(--adm-text-muted)]";
 
@@ -41,6 +42,9 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
   const [overview, setOverview] = useState<CompanyWorkspaceOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [complianceFindings, setComplianceFindings] = useState<ComplianceFindingView[]>([]);
+  const [complianceError, setComplianceError] = useState<string | null>(null);
+  const [complianceLoading, setComplianceLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,14 +60,18 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
 
   useEffect(() => { void load(); }, [load]);
 
+  const loadCompliance = useCallback(async () => {
+    setComplianceLoading(true);
+    setComplianceError(null);
+    try { setComplianceFindings((await complianceOverviewApi.getOverview(clientId)).findings); }
+    catch { setComplianceError("A compliance áttekintés jelenleg nem tölthető be."); }
+    finally { setComplianceLoading(false); }
+  }, [clientId]);
+
+  useEffect(() => { void loadCompliance(); }, [loadCompliance]);
+
   const activeContracts = (overview?.contracts || []).filter((c) => c.status === 'ACTIVE');
   const openObligations = (overview?.obligations || []).filter((o) => o.status === 'OPEN' || o.status === 'IN_PROGRESS');
-  const complianceFindings = (overview?.assessments || []).flatMap((assessment) =>
-    assessment.importantFindings.map((finding) => ({
-      ...finding,
-      operationalStatus: companyFindingStatusLabel(finding.status),
-    })),
-  );
 
   return (
     <div className="space-y-5" data-testid="client-company-workspace">
@@ -169,7 +177,7 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
             )}
           </Panel>
 
-          <ComplianceOverviewPanel findings={complianceFindings} />
+          <ComplianceOverviewPanel findings={complianceFindings} loading={complianceLoading} error={complianceError} onRetry={loadCompliance} />
           <ComplianceProposalPanel clientId={clientId} findings={complianceFindings} />
 
           {/* Szerződések és kötelezettségek */}

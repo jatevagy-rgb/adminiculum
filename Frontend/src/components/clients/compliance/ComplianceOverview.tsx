@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { getCases, type CaseListItem } from "@/lib/api";
 import { bindComplianceProposal, confirmComplianceProposal, createComplianceProposal, listComplianceProposals, proposalKinds, rejectComplianceProposal, updateComplianceProposal, type ComplianceProposal } from "@/lib/complianceProposalApi";
@@ -90,7 +90,12 @@ export function groupComplianceFindings(findings: ComplianceFindingView[]): Arra
 }
 
 export function getComplianceAttentionFindings(findings: ComplianceFindingView[]): ComplianceFindingView[] {
-  return findings.filter((finding) => getComplianceFindingStatus(finding) !== "DOES_NOT_APPLY");
+  return findings.filter((finding) => {
+    const applicability = getComplianceFindingStatus(finding);
+    if (applicability === "DOES_NOT_APPLY") return false;
+    if (applicability === null) return finding.operationalStatus !== "RESOLVED";
+    return true;
+  });
 }
 
 export function isComplianceGroupInitiallyOpen(findings: ComplianceFindingView[]): boolean {
@@ -173,11 +178,13 @@ export function ComplianceOverviewPanel({
   findings,
   loading = false,
   error = null,
+  onRetry,
   title = "Compliance áttekintés",
 }: {
   findings: ComplianceFindingView[];
   loading?: boolean;
   error?: string | null;
+  onRetry?: () => void;
   title?: string;
 }) {
   const groups = useMemo(() => groupComplianceFindings(findings), [findings]);
@@ -185,8 +192,8 @@ export function ComplianceOverviewPanel({
     <section className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-5" data-testid="compliance-overview">
       <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">{title}</h2>
       <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Belső értékelési megállapítások; nem igazolt jogi kötelezettségek.</p>
-      {loading ? <div className="mt-3"><ComplianceState state="loading" /></div> : null}
-      {!loading && error ? <div className="mt-3"><ComplianceState state="unavailable" detail={error} /></div> : null}
+      {loading ? <div className="mt-3 animate-pulse space-y-2" aria-busy="true"><div className="h-4 w-2/5 rounded bg-[var(--adm-surface)]" /><div className="h-3 w-4/5 rounded bg-[var(--adm-surface)]" /><ComplianceState state="loading" /></div> : null}
+      {!loading && error ? <div className="mt-3"><ComplianceState state="unavailable" detail={error} /><button type="button" onClick={onRetry} className="mt-3 rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]">Újrapróbálás</button></div> : null}
       {!loading && !error && !findings.length ? <div className="mt-3"><ComplianceState state="empty" /></div> : null}
       {!loading && !error && findings.length ? (
         <div className="mt-4 space-y-4">
@@ -208,6 +215,7 @@ export function ComplianceProposalPanel({ clientId, findings }: { clientId: stri
   const [form, setForm] = useState({ findingId: '', proposalKind: 'REMEDIATION', title: '', description: '', suggestedAction: '', deadline: '' });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
+  const actionLockRef = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -232,6 +240,8 @@ export function ComplianceProposalPanel({ clientId, findings }: { clientId: stri
 
   const selectedKind = proposalKinds.find((kind) => kind.value === form.proposalKind) || proposalKinds[0];
   const run = async (operation: () => Promise<unknown>) => {
+    if (actionLockRef.current) return;
+    actionLockRef.current = true;
     setBusy(true); setError(null);
     try { await operation(); await load(); } catch (caught) {
       const code = typeof caught === 'object' && caught && 'code' in caught ? String(caught.code) : '';
@@ -244,11 +254,11 @@ export function ComplianceProposalPanel({ clientId, findings }: { clientId: stri
         PROPOSAL_TERMINAL: 'Ez a javaslat már lezárt állapotban van.',
       };
       setError(messages[code] || 'A művelet nem sikerült. Ellenőrizd az adatokat, majd próbáld újra.');
-    } finally { setBusy(false); }
+    } finally { actionLockRef.current = false; setBusy(false); }
   };
 
   return (
-    <section className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-5" data-testid="compliance-proposals">
+    <section className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-5" data-testid="compliance-proposals" aria-busy={loading || busy}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div><h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Javasolt compliance műveletek</h2><p className="mt-2 text-xs text-[var(--adm-text-muted)]">A rendszer javaslatot készít; feladat csak ügyvédi megerősítés után jön létre.</p></div>
         <Link href={`/cases?newCase=1&clientId=${encodeURIComponent(clientId)}`} className="text-xs text-[var(--adm-ochre-500)] hover:underline">Új ügy indítása a normál intake-ben →</Link>
@@ -262,13 +272,13 @@ export function ComplianceProposalPanel({ clientId, findings }: { clientId: stri
           {proposal.description ? <p className="mt-2 text-sm text-[var(--adm-text)]">{proposal.description}</p> : null}
           {proposal.status === 'PROPOSED' && editingId === proposal.id ? <form className="mt-3 flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); void run(async () => { await updateComplianceProposal(proposal.id, { title: editTitle }); setEditingId(null); }); }}><input aria-label="Javaslat címének szerkesztése" required value={editTitle} onChange={(event) => setEditTitle(event.target.value)} className="min-w-0 flex-1 rounded border border-[var(--adm-border)] bg-white px-2 py-2 text-xs" /><button type="submit" disabled={busy} className="rounded border border-[var(--adm-green-800)] bg-white px-3 py-2 text-xs text-[var(--adm-green-800)] disabled:opacity-50">Mentés</button><button type="button" disabled={busy} onClick={() => setEditingId(null)} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]">Mégse</button></form> : null}
           {proposal.status === 'PROPOSED' ? <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto_auto]">
-            <select aria-label="Ügy kiválasztása" value={proposal.case?.id || ''} disabled={busy} onChange={(event) => event.target.value && void run(() => bindComplianceProposal(proposal.id, event.target.value))} className="rounded border border-[var(--adm-border)] bg-white px-2 py-2 text-xs"><option value="">Ügy hozzárendelése…</option>{cases.map((item) => <option key={item.id} value={item.id}>{item.caseNumber} · {item.title}</option>)}</select>
+            <select aria-label="Ügy kiválasztása" value={proposal.case?.id || ''} disabled={busy} onChange={(event) => event.target.value && void run(() => bindComplianceProposal(proposal.id, event.target.value))} className="rounded border border-[var(--adm-border)] bg-white px-2 py-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)]"><option value="">Ügy hozzárendelése · kapcsolódó ügy kiválasztása…</option>{cases.map((item) => <option key={item.id} value={item.id}>{item.caseNumber} · {item.title}</option>)}</select>
             <div className="flex flex-col gap-1">
-              <button type="button" disabled={busy || !proposal.case} aria-describedby={!proposal.case ? `proposal-case-help-${proposal.id}` : undefined} onClick={() => void run(() => confirmComplianceProposal(proposal.id))} className="rounded border border-[var(--adm-green-800)] bg-[var(--adm-green-800)] px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Megerősítés</button>
+              <button type="button" disabled={busy || !proposal.case} aria-describedby={!proposal.case ? `proposal-case-help-${proposal.id}` : undefined} onClick={() => void run(() => confirmComplianceProposal(proposal.id))} className="rounded border border-[var(--adm-green-800)] bg-[var(--adm-green-800)] px-3 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)] disabled:cursor-not-allowed disabled:opacity-50">Megerősítés</button>
               {!proposal.case ? <p id={`proposal-case-help-${proposal.id}`} className="max-w-[18rem] text-[11px] text-[var(--adm-text-muted)]">A megerősítéshez előbb ügyet kell hozzárendelni.</p> : null}
             </div>
-            <button type="button" disabled={busy} onClick={() => void run(() => rejectComplianceProposal(proposal.id))} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)] disabled:opacity-50">Elutasítás</button>
-            <button type="button" disabled={busy} onClick={() => { setEditingId(proposal.id); setEditTitle(proposal.title); }} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)] disabled:opacity-50">Szerkesztés</button>
+            <button type="button" disabled={busy} onClick={() => void run(() => rejectComplianceProposal(proposal.id))} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)] disabled:opacity-50">Elutasítás</button>
+            <button type="button" disabled={busy} onClick={() => { setEditingId(proposal.id); setEditTitle(proposal.title); }} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)] disabled:opacity-50">Szerkesztés</button>
           </div> : null}
           {proposal.taskId ? <Link href={`/tasks/${proposal.taskId}`} className="mt-2 inline-block text-xs text-[var(--adm-ochre-500)] hover:underline">Kapcsolt feladat megnyitása →</Link> : null}
         </li>
@@ -277,9 +287,9 @@ export function ComplianceProposalPanel({ clientId, findings }: { clientId: stri
         <h3 className="text-sm font-medium text-[var(--adm-text)]">Új javaslat</h3>
         {!eligibleProposalFindings.length ? <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Jelenleg nincs olyan követelményhez kapcsolt megállapítás, amelyből új munkajavaslat indítható.</p> : <form onSubmit={(event) => { event.preventDefault(); void run(async () => { await createComplianceProposal({ findingId: form.findingId, proposalKind: form.proposalKind, actionIntentKey: selectedKind.intent, title: form.title, description: form.description || undefined, suggestedAction: form.suggestedAction || undefined, deadline: form.deadline || undefined }); setForm((current) => ({ ...current, findingId: eligibleProposalFindings[0]?.id || '', title: '', description: '', suggestedAction: '', deadline: '' })); }); }}>
         <div className="mt-3 grid gap-2 md:grid-cols-2">
-          <select aria-label="Megállapítás" required value={form.findingId} onChange={(event) => setForm({ ...form, findingId: event.target.value })} className="rounded border border-[var(--adm-border)] bg-white px-2 py-2 text-xs"><option value="">Megállapítás kiválasztása…</option>{eligibleProposalFindings.map((finding) => <option key={finding.id} value={finding.id}>{finding.title}</option>)}</select>
-          <select aria-label="Javaslat típusa" value={form.proposalKind} onChange={(event) => setForm({ ...form, proposalKind: event.target.value })} className="rounded border border-[var(--adm-border)] bg-white px-2 py-2 text-xs">{proposalKinds.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select>
-          <input aria-label="Javaslat címe" required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Javaslat címe" className="rounded border border-[var(--adm-border)] px-2 py-2 text-xs" />
+          <select aria-label="Megállapítás" required value={form.findingId} onChange={(event) => setForm({ ...form, findingId: event.target.value })} className="rounded border border-[var(--adm-border)] bg-white px-2 py-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)]"><option value="">Megállapítás kiválasztása…</option>{eligibleProposalFindings.map((finding) => <option key={finding.id} value={finding.id}>{finding.title}</option>)}</select>
+          <select aria-label="Javaslat típusa" value={form.proposalKind} onChange={(event) => setForm({ ...form, proposalKind: event.target.value })} className="rounded border border-[var(--adm-border)] bg-white px-2 py-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)]">{proposalKinds.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select>
+          <input aria-label="Javaslat címe" required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Javaslat címe" className="rounded border border-[var(--adm-border)] px-2 py-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)]" />
           <input aria-label="Határidő" type="date" value={form.deadline} onChange={(event) => setForm({ ...form, deadline: event.target.value })} className="rounded border border-[var(--adm-border)] px-2 py-2 text-xs" />
           <textarea aria-label="Leírás" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Leírás" className="rounded border border-[var(--adm-border)] px-2 py-2 text-xs md:col-span-2" rows={2} />
           <textarea aria-label="Javasolt következő lépés" value={form.suggestedAction} onChange={(event) => setForm({ ...form, suggestedAction: event.target.value })} placeholder="Javasolt következő lépés" className="rounded border border-[var(--adm-border)] px-2 py-2 text-xs md:col-span-2" rows={2} />

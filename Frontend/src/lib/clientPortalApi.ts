@@ -231,7 +231,7 @@ export type PortalOnboarding = {
 };
 
 export type PortalIdentityContext = {
-  identity: { displayName: string; email: string; accountType: string };
+  identity: { displayName: string; email: string; accountType: string; jobTitle?: string | null; organizationUnitName?: string | null };
   state:
     | 'READY' | 'SELECTION_REQUIRED'
     | 'ONBOARDING_REQUIRED' | 'REQUEST_PENDING' | 'REQUEST_REJECTED'
