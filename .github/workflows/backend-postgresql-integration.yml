@@ -67,7 +67,7 @@ jobs:
 
       - name: Initialize suite result tracking
         run: |
-          for s in comparison review publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture phase6-slice-a phase6-slice-b phase6-slice-c2 phase6-slice-d phase7-slice-7a phase7d answer-state phase7b phase7cb phase5b document-version task-lifecycle-schema task-review-decision task-submission; do
+          for s in comparison review publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture phase6-slice-a phase6-slice-b phase6-slice-c2 phase6-slice-d phase7-slice-7a phase7d answer-state work-package-schema phase7b phase7cb phase5b document-version task-lifecycle-schema task-review-decision task-submission; do
             echo "$s=PENDING" >> "$RUNNER_TEMP/ci-suite-results.txt"
           done
 
@@ -353,6 +353,15 @@ jobs:
           sed -i "s/^answer-state=PENDING$/answer-state=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit "$rc"
 
+      - name: WP-1 work package schema foundation PG
+        working-directory: Backend
+        env:
+          WORK_PACKAGE_SCHEMA_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: |
+          if npm run test:work-package-schema:db; then rc=0; else rc=$?; fi
+          sed -i "s/^work-package-schema=PENDING$/work-package-schema=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit "$rc"
+
       - name: Phase 7B compliance proposal workflow PG
         working-directory: Backend
         env:
@@ -467,6 +476,7 @@ jobs:
             [phase7-slice-7a]="Phase 7 Slice 7A finding materialization"
             [phase7d]="Phase 7D typed fact to finding automation"
             [answer-state]="Organization client AnswerState / Discovery"
+            [work-package-schema]="WP-1 work package schema foundation"
             [phase7b]="Phase 7B compliance proposal workflow"
             [phase7cb]="Phase 7C-B compliance overview"
             [phase5b]="Phase 5B org contract + company customer surface"
