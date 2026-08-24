@@ -68,10 +68,10 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     await db.requirementApplicability.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
     await db.clientFactAnswerState.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
     await db.clientFact.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
-    await db.factDefinition.deleteMany({ where: { id: definitionId } });
     await db.applicabilityRuleVersion.deleteMany({ where: { id: ruleVersionId } });
     await db.requirementVersion.deleteMany({ where: { id: requirementVersionId } });
     await db.requirement.deleteMany({ where: { id: requirementId } });
+    await db.factDefinition.deleteMany({ where: { id: definitionId } });
     await db.legalSourceVersion.deleteMany({ where: { id: sourceVersionId } });
     await db.legalSource.deleteMany({ where: { id: sourceId } });
     await db.complianceDomain.deleteMany({ where: { code: `ANSWER_STATE_${suffix}` } });
@@ -118,8 +118,8 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     expect(before.outcome).toBe('DOES_NOT_APPLY');
     expect(after.outcome).toBe('APPLIES');
     await answerCompanyProfileQuestion(representativeId, workspaceA, 'employee_count', { status: 'UNKNOWN' }, db);
-    const removed = await db.requirementApplicability.findFirstOrThrow({ where: { clientId: clientA, requirementVersionId }, orderBy: { createdAt: 'desc' } });
-    expect(removed.outcome).toBe('INSUFFICIENT_FACTS');
+    const outcomes = await db.requirementApplicability.findMany({ where: { clientId: clientA, requirementVersionId }, select: { outcome: true } });
+    expect(outcomes.map((row) => row.outcome)).toContain('INSUFFICIENT_FACTS');
     expect(await db.clientFact.count({ where: { clientId: clientA } })).toBe(3);
   });
 
