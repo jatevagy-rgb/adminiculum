@@ -76,6 +76,7 @@ function complianceFindings() {
       title: "QA manual finding",
       scopeType: "FUTURE_SCOPE",
       applicabilityStatus: null,
+      operationalStatus: "RESOLVED",
       description: "Synthetic manual finding B.",
       recommendation: null,
     },
@@ -117,8 +118,6 @@ function responseFor(url, mode = "populated") {
     },
   };
   if (url.includes(`/company-workspace/clients/${WORKFORCE_FIXTURE.client.id}/overview`)) {
-    if (mode === "unavailable") return { status: 503, body: { status: 503, code: "QA_UNAVAILABLE" } };
-    const findings = complianceFindings();
     return {
       status: 200,
       body: {
@@ -134,8 +133,8 @@ function responseFor(url, mode = "populated") {
         startedAt: null,
         completedAt: "2026-01-01T00:00:00.000Z",
         reviewAt: null,
-        findingCount: mode === "empty" ? 0 : findings.length,
-        importantFindings: mode === "empty" ? [] : findings,
+        findingCount: 0,
+        importantFindings: [],
       }],
       contracts: [],
       obligations: [],
@@ -149,6 +148,10 @@ function responseFor(url, mode = "populated") {
       attention: [],
       },
     };
+  }
+  if (url.includes(`/compliance/clients/${WORKFORCE_FIXTURE.client.id}/overview`)) {
+    if (mode === "unavailable") return { status: 503, body: { status: 503, code: "QA_UNAVAILABLE" } };
+    return { status: 200, body: { findings: mode === "empty" ? [] : complianceFindings() } };
   }
   if (url.includes(`/compliance/proposals?clientId=${WORKFORCE_FIXTURE.client.id}`)) return {
     status: 200,
@@ -253,7 +256,7 @@ async function newPage(browser, mode = "populated", viewport = VIEWPORTS[0]) {
   }, { profile: AUTH_ME });
   await page.route("**/api/v1/**", async (route) => {
     const response = responseFor(route.request().url(), mode);
-    if (mode === "loading" && route.request().url().includes("/company-workspace/")) {
+    if (mode === "loading" && route.request().url().includes("/compliance/clients/")) {
       await new Promise((resolve) => setTimeout(resolve, 3000));
     }
     await route.fulfill({ status: response.status, contentType: "application/json", body: JSON.stringify(response.body) });
@@ -317,7 +320,7 @@ async function assertComplianceMode(browser, mode, viewport) {
     }
     if (!body.includes("Belső értékelés szerint releváns")) throw new Error("Missing APPLIES framing");
     if (!body.includes("Nincs elég adat")) throw new Error("Missing insufficient-facts status");
-    if (!body.includes("5 belső értékelési megállapítás")) throw new Error("Null applicability was not included in attention");
+    if (!body.includes("4 belső értékelési megállapítás")) throw new Error("Compliance attention contract was not applied");
     const manualGroupCount = await qa.page.locator("button").filter({ hasText: "QA manual finding" }).count();
     if (manualGroupCount !== 2) throw new Error("Same-title manual findings collapsed");
     if (!body.includes("Nem releváns")) throw new Error("DOES_NOT_APPLY row missing after disclosure");
@@ -340,7 +343,7 @@ async function assertComplianceMode(browser, mode, viewport) {
   if (mode === "empty" && !body.includes("Nincs megjeleníthető belső értékelési megállapítás")) {
     throw new Error("Compliance empty state was not rendered");
   }
-  if (mode === "unavailable" && !body.includes("A vállalati működés adatai jelenleg nem tölthetők be")) {
+  if (mode === "unavailable" && !body.includes("A compliance áttekintés jelenleg nem tölthető be")) {
     throw new Error("Compliance unavailable state was not rendered");
   }
   await qa.context.close();
