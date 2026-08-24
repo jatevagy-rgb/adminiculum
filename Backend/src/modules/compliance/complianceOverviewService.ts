@@ -1,7 +1,26 @@
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
-import { InternalActor, assertClientReadAccess, assertClientSafe } from '../client-interaction/base';
+import { InternalActor, assertClientReadAccess, assertClientSafe, InteractionError } from '../client-interaction/base';
 
 type Prisma = typeof defaultPrisma;
+
+function requireComplianceManager(actor: InternalActor): void {
+  if (!actor?.userId || !['ADMIN', 'PARTNER'].includes(String(actor.role || ''))) {
+    throw new InteractionError(403, 'COMPLIANCE_DIAGNOSTICS_FORBIDDEN', 'Compliance diagnostics require an authorized manager.');
+  }
+}
+
+export async function listUnresolvedRuleScopes(
+  actor: InternalActor,
+  prisma: Prisma = defaultPrisma,
+): Promise<Array<{ requirementVersionId: string; ruleVersionId: string; reason: 'RULE_SCOPE_UNRESOLVED' }>> {
+  requireComplianceManager(actor);
+  const rows = await prisma.applicabilityRuleVersion.findMany({
+    where: { status: 'APPROVED', supersededById: null, evaluationScopeType: null },
+    orderBy: [{ requirementVersionId: 'asc' }, { id: 'asc' }],
+    select: { requirementVersionId: true, id: true },
+  });
+  return rows.map((row) => ({ requirementVersionId: row.requirementVersionId, ruleVersionId: row.id, reason: 'RULE_SCOPE_UNRESOLVED' as const }));
+}
 
 export interface ComplianceOverviewFindingDto {
   id: string;

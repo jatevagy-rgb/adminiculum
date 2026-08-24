@@ -37,6 +37,8 @@ d('Company foundation (Phase 1) (PostgreSQL)', () => {
   const suffix = crypto.randomUUID();
   const adminId = crypto.randomUUID();
   const lawyerId = crypto.randomUUID();
+  const partnerId = crypto.randomUUID();
+  const collaboratorId = crypto.randomUUID();
   const externalLawyerId = crypto.randomUUID();
   const clientA = crypto.randomUUID();
   const clientB = crypto.randomUUID();
@@ -49,6 +51,8 @@ d('Company foundation (Phase 1) (PostgreSQL)', () => {
 
   const admin = { userId: adminId, role: 'ADMIN' };
   const lawyer = { userId: lawyerId, role: 'LAWYER' };
+  const partner = { userId: partnerId, role: 'PARTNER' };
+  const collaborator = { userId: collaboratorId, role: 'COLLAB_LAWYER' };
   const externalLawyer = { userId: externalLawyerId, role: 'LAWYER' };
 
   beforeAll(async () => {
@@ -57,6 +61,8 @@ d('Company foundation (Phase 1) (PostgreSQL)', () => {
     await db.user.createMany({ data: [
       { id: adminId, email: `admin-${suffix}@test.invalid`, name: 'Admin', role: 'ADMIN', status: 'ACTIVE' },
       { id: lawyerId, email: `lawyer-${suffix}@test.invalid`, name: 'Lawyer A', role: 'LAWYER', status: 'ACTIVE' },
+      { id: partnerId, email: `partner-${suffix}@test.invalid`, name: 'Partner', role: 'PARTNER', status: 'ACTIVE' },
+      { id: collaboratorId, email: `collab-${suffix}@test.invalid`, name: 'Collaborator', role: 'COLLAB_LAWYER', status: 'ACTIVE' },
       { id: externalLawyerId, email: `lawyer-b-${suffix}@test.invalid`, name: 'Lawyer B', role: 'LAWYER', status: 'ACTIVE' },
     ] as never });
     await db.client.createMany({ data: [
@@ -64,6 +70,7 @@ d('Company foundation (Phase 1) (PostgreSQL)', () => {
       { id: clientB, name: `Company Client B ${suffix}` },
     ] });
     await db.case.create({ data: { id: caseA, caseNumber: `CO-${suffix}`, title: 'Case A', caseType: 'CONTRACT_REVIEW', clientId: clientA, assignedLawyerId: lawyerId, createdById: adminId } as never });
+    await db.caseCollaborator.create({ data: { caseId: caseA, userId: collaboratorId } });
     await db.task.create({ data: { id: taskA, title: 'Remediation Task', taskType: 'OTHER', status: 'TODO', priority: 'MEDIUM', caseId: caseA, assignedToId: lawyerId, assignedById: adminId, requiredSkills: [] } as never });
     // Client B fixtures for cross-client relationship-security assertions.
     await db.case.create({ data: { id: caseB, caseNumber: `CO-B-${suffix}`, title: 'Case B', caseType: 'CONTRACT_REVIEW', clientId: clientB, assignedLawyerId: externalLawyerId, createdById: adminId } as never });
@@ -84,6 +91,14 @@ d('Company foundation (Phase 1) (PostgreSQL)', () => {
     expect(profile!.summary).toBe('Updated');
     const count = await db.clientOperatingProfile.count({ where: { clientId: clientA } });
     expect(count).toBe(1);
+  });
+
+  it('restricts only enrollment changes to managers while preserving ordinary profile updates', async () => {
+    await upsertOperatingProfile(lawyer, clientA, { summary: 'Lawyer update' });
+    await upsertOperatingProfile(collaborator, clientA, { summary: 'Collaborator update' });
+    await expect(upsertOperatingProfile(lawyer, clientA, { complianceEnrollmentStatus: 'SUSPENDED' })).rejects.toMatchObject({ code: 'COMPANY_MANAGE_FORBIDDEN' });
+    await expect(upsertOperatingProfile(collaborator, clientA, { complianceEnrollmentStatus: 'SUSPENDED' })).rejects.toMatchObject({ code: 'COMPANY_MANAGE_FORBIDDEN' });
+    await expect(upsertOperatingProfile(partner, clientA, { complianceEnrollmentStatus: 'ENROLLED' })).resolves.toMatchObject({ complianceEnrollmentStatus: 'ENROLLED' });
   });
 
   it('rejects unknown fact types and end-dates historical facts (validTo)', async () => {

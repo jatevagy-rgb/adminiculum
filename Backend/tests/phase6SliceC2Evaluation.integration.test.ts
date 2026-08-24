@@ -35,7 +35,7 @@ describeWithDatabase('Phase 6 Slice C2 evaluation orchestration (PostgreSQL)', (
     await addRequirementCitation({ requirementVersionId: version.id, legalSourceVersionId: sourceVersionId, supportRole: 'PRIMARY', db });
     if (options.approve !== false) await db.requirementVersion.update({ where: { id: version.id }, data: { status: 'APPROVED', approvedAt: new Date('2026-01-02T00:00:00Z'), approvedById: 'fixture-approver' } });
     if (options.sourceSupportState) await db.requirementVersion.update({ where: { id: version.id }, data: { sourceSupportState: options.sourceSupportState } });
-    const rule = await createApplicabilityRuleVersion({ requirementVersionId: version.id, ruleVersionKey: 'R1', astJson: ast(definitionKey(key)), db });
+    const rule = await createApplicabilityRuleVersion({ requirementVersionId: version.id, ruleVersionKey: 'R1', astJson: ast(definitionKey(key)), evaluationScopeType: 'COMPANY', db });
     ruleIds.push(rule.id);
     if (options.approve !== false) await db.applicabilityRuleVersion.update({ where: { id: rule.id }, data: { status: 'APPROVED', approvedAt: new Date('2026-01-02T00:00:00Z'), approvedById: 'fixture-approver' } });
     return { requirement, version, rule };
