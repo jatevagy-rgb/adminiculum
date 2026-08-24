@@ -3,6 +3,9 @@ CREATE TYPE "ComplianceEnrollmentStatus" AS ENUM ('ENROLLED', 'NOT_ENROLLED', 'S
 ALTER TABLE "client_operating_profiles"
   ADD COLUMN "complianceEnrollmentStatus" "ComplianceEnrollmentStatus" NOT NULL DEFAULT 'NOT_ENROLLED';
 
+UPDATE "client_operating_profiles"
+SET "complianceEnrollmentStatus" = 'ENROLLED';
+
 ALTER TABLE "applicability_rule_versions"
   ADD COLUMN "evaluationScopeType" "FactScopeType";
 

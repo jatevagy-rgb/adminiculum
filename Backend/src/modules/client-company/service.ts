@@ -143,11 +143,11 @@ export async function getOperatingProfile(actor: InternalActor, clientId: string
 }
 
 export async function upsertOperatingProfile(actor: InternalActor, clientId: string, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
-  requireManager(actor);
   await assertClientReadAccess(actor, clientId, prisma);
   const data: any = {};
   if (input.status !== undefined) data.status = safeText(input.status, 'status', 60, false);
   if (input.complianceEnrollmentStatus !== undefined) {
+    requireManager(actor);
     const status = String(input.complianceEnrollmentStatus || '');
     if (!COMPLIANCE_ENROLLMENT.has(status)) throw new InteractionError(400, 'COMPLIANCE_ENROLLMENT_STATUS_INVALID', 'Invalid compliance enrollment status.');
     data.complianceEnrollmentStatus = status;

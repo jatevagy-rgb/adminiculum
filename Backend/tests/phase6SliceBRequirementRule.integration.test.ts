@@ -12,6 +12,7 @@ import {
   supersedeRequirementVersion,
   updateRequirementVersion,
 } from '../src/modules/compliance/requirementRuleService';
+import { listUnresolvedRuleScopes } from '../src/modules/compliance/complianceOverviewService';
 
 const databaseUrl = process.env.COMPLIANCE_SLICE_B_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -163,6 +164,11 @@ describeWithDatabase('Phase 6 Slice B requirement/rule foundation (PostgreSQL)',
   it('requires an explicit compatible evaluation scope before rule approval', async () => {
     const missingScope = await createApplicabilityRuleVersion({ requirementVersionId: versionA2, ruleVersionKey: 'MISSING_SCOPE', astJson: ast(`SLICE_B_BOOLEAN_${suffix}`), db });
     await expect(approveApplicabilityRuleVersion(missingScope.id, 'rule-approver', db)).rejects.toMatchObject({ code: 'RULE_SCOPE_UNRESOLVED' });
+
+    await db.applicabilityRuleVersion.update({ where: { id: missingScope.id }, data: { status: 'APPROVED', approvedAt: new Date(), approvedById: 'legacy-approver' } });
+    await expect(listUnresolvedRuleScopes({ userId: 'lawyer', role: 'LAWYER' }, db)).rejects.toMatchObject({ code: 'COMPLIANCE_DIAGNOSTICS_FORBIDDEN' });
+    await expect(listUnresolvedRuleScopes({ userId: 'portal-identity', role: 'CLIENT_PORTAL' }, db)).rejects.toMatchObject({ code: 'COMPLIANCE_DIAGNOSTICS_FORBIDDEN' });
+    await expect(listUnresolvedRuleScopes({ userId: 'admin', role: 'ADMIN' }, db)).resolves.toContainEqual({ requirementVersionId: versionA2, ruleVersionId: missingScope.id, reason: 'RULE_SCOPE_UNRESOLVED' });
 
     const wrongScope = await createApplicabilityRuleVersion({ requirementVersionId: versionA2, ruleVersionKey: 'WRONG_SCOPE', astJson: ast(`SLICE_B_BOOLEAN_${suffix}`), evaluationScopeType: 'EMPLOYEE', db });
     await expect(approveApplicabilityRuleVersion(wrongScope.id, 'rule-approver', db)).rejects.toMatchObject({ code: 'RULE_SCOPE_DEPENDENCY_MISMATCH' });

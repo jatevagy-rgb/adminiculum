@@ -194,6 +194,25 @@ describeWithDatabase('Phase 7D typed fact to finding automation (PostgreSQL)', (
     expect(await db.requirementApplicability.count({ where: { clientId: clientA, facts: { some: { clientFactId: enrolled.id } } } })).toBe(1);
   });
 
+  it('keeps bare clients and NOT_ENROLLED profiles non-evaluable while enrolled profiles evaluate', async () => {
+    const { requirement } = await createBooleanRule('enrollment-states', `seven_d_enrollment_${suffix}`);
+    const bare = await createFact(actor, clientB, { factDefinitionId: enrollmentDefinitionId, scopeType: 'COMPANY', booleanValue: true, observedAt: '2026-08-24T14:00:00Z' }, db);
+    expect(await db.requirementApplicability.count({ where: { clientId: clientB, facts: { some: { clientFactId: bare.id } } } })).toBe(0);
+
+    await db.clientOperatingProfile.create({ data: { clientId: clientB, complianceEnrollmentStatus: 'NOT_ENROLLED' } });
+    const notEnrolled = await createFact(actor, clientB, { factDefinitionId: enrollmentDefinitionId, scopeType: 'COMPANY', booleanValue: true, observedAt: '2026-08-24T15:00:00Z' }, db);
+    expect(await db.requirementApplicability.count({ where: { clientId: clientB, facts: { some: { clientFactId: notEnrolled.id } } } })).toBe(0);
+
+    await db.clientOperatingProfile.update({ where: { clientId: clientB }, data: { complianceEnrollmentStatus: 'SUSPENDED' } });
+    const suspended = await createFact(actor, clientB, { factDefinitionId: enrollmentDefinitionId, scopeType: 'COMPANY', booleanValue: true, observedAt: '2026-08-24T16:00:00Z' }, db);
+    expect(await db.requirementApplicability.count({ where: { clientId: clientB, facts: { some: { clientFactId: suspended.id } } } })).toBe(0);
+
+    await db.clientOperatingProfile.update({ where: { clientId: clientB }, data: { complianceEnrollmentStatus: 'ENROLLED' } });
+    const enrolled = await createFact(actor, clientB, { factDefinitionId: enrollmentDefinitionId, scopeType: 'COMPANY', booleanValue: true, observedAt: '2026-08-24T17:00:00Z' }, db);
+    expect(await db.requirementApplicability.count({ where: { clientId: clientB, facts: { some: { clientFactId: enrolled.id } } } })).toBe(1);
+    expect(requirement.id).toBeDefined();
+  });
+
   it('evaluates only the approved requirement version effective at evaluationAt', async () => {
     const requirement = await createRequirement({ key: `REQ_7D_TEMPORAL_${suffix}`, jurisdictionCode: 'HU', domainCode, db });
     requirementIds.push(requirement.id);
