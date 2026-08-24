@@ -170,7 +170,6 @@ model Client {
   houseStyleProfile          ClientHouseStyleProfile? // One-to-one relation for document house style
   operatingProfile           ClientOperatingProfile? // Company foundation (Phase 1)
   facts                      ClientFact[] // Company foundation (Phase 1)
-  factAnswerStates           ClientFactAnswerState[]
   companyMilestones          CompanyMilestone[] // Company foundation (Phase 1)
   assessments                Assessment[] // Company foundation (Phase 1)
   assessmentFindings         AssessmentFinding[] // Company foundation (Phase 1)
@@ -3910,17 +3909,17 @@ model ClientNotificationDelivery {
 // ============================================================================
 
 model ClientOperatingProfile {
-  id                         String                     @id @default(uuid())
-  clientId                   String                     @unique
-  client                     Client                     @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  status                     String?
+  id             String    @id @default(uuid())
+  clientId       String    @unique
+  client         Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  status         String?
   complianceEnrollmentStatus ComplianceEnrollmentStatus @default(NOT_ENROLLED)
-  summary                    String?
-  internalNote               String?
-  lastReviewedAt             DateTime?
-  nextReviewAt               DateTime?
-  createdAt                  DateTime                   @default(now())
-  updatedAt                  DateTime                   @updatedAt
+  summary        String?
+  internalNote   String?
+  lastReviewedAt DateTime?
+  nextReviewAt   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@map("client_operating_profiles")
 }
@@ -3930,11 +3929,6 @@ enum ClientFactVerificationStatus {
   CLIENT_PROVIDED
   DOCUMENT_VERIFIED
   LAW_FIRM_VERIFIED
-}
-
-enum FactAnswerStatus {
-  ANSWERED
-  UNKNOWN
 }
 
 model ClientFact {
@@ -3976,7 +3970,6 @@ model ClientFact {
   referencePeriodEnd   DateTime?
   determinationMethod  FactDeterminationMethod?
   supersededAt         DateTime?
-  answerState          ClientFactAnswerState?   @relation("ClientFactAnswerStateCurrentFact")
 
   @@index([clientId, type, validFrom])
   @@index([clientId, verificationStatus])
@@ -3985,26 +3978,6 @@ model ClientFact {
   @@index([factSubjectId, validFrom])
   @@index([clientId, scopeType, validFrom])
   @@map("client_facts")
-}
-
-model ClientFactAnswerState {
-  id               String           @id @default(uuid())
-  clientId         String
-  client           Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  factDefinitionId String
-  factDefinition   FactDefinition   @relation(fields: [factDefinitionId], references: [id], onDelete: Restrict)
-  scopeType        FactScopeType
-  factSubjectId    String?
-  factSubject      FactSubject?     @relation(fields: [factSubjectId], references: [id], onDelete: Restrict)
-  currentFactId    String?          @unique
-  currentFact      ClientFact?      @relation("ClientFactAnswerStateCurrentFact", fields: [currentFactId], references: [id], onDelete: Restrict)
-  status           FactAnswerStatus
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-
-  @@index([clientId, status])
-  @@index([clientId, factDefinitionId, scopeType, factSubjectId])
-  @@map("client_fact_answer_states")
 }
 
 enum CompanyMilestoneStatus {
@@ -4580,7 +4553,6 @@ model FactDefinition {
   retiredAt           DateTime?
 
   facts                             ClientFact[]
-  answerStates                      ClientFactAnswerState[]
   applicabilityRuleFactDependencies ApplicabilityRuleFactDependency[]
 
   @@index([status, valueType])
@@ -4604,8 +4576,7 @@ model FactSubject {
   createdAt            DateTime            @default(now())
   archivedAt           DateTime?
 
-  facts        ClientFact[]
-  answerStates ClientFactAnswerState[]
+  facts ClientFact[]
 
   @@unique([clientId, scopeType, subjectKey])
   @@unique([contractRecordId])

@@ -265,29 +265,6 @@ async function seedRedactionRules() {
 async function main() {
   console.log('🌱 Starting Adminiculum database seed (V2)...');
 
-  await prisma.factDefinition.upsert({
-    where: { key: 'employee_count' },
-    update: {
-      status: 'ACTIVE',
-      questionKey: 'employee_count',
-      valueType: 'NUMBER',
-      allowedScopeTypes: ['COMPANY'],
-      determinationMethod: 'USER_PROVIDED',
-      overlapPolicy: 'DISALLOW',
-      temporalPolicy: 'OBSERVATION',
-    },
-    create: {
-      key: 'employee_count',
-      domainCode: 'ORGANIZATION_CLIENT_DISCOVERY',
-      valueType: 'NUMBER',
-      allowedScopeTypes: ['COMPANY'],
-      determinationMethod: 'USER_PROVIDED',
-      overlapPolicy: 'DISALLOW',
-      temporalPolicy: 'OBSERVATION',
-      questionKey: 'employee_count',
-    },
-  });
-
   await seedPracticeAreas();
   await seedSettings();
   await seedDocumentTemplates();
