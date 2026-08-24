@@ -135,8 +135,11 @@ function buildNextAction(
   state: ClientSafeComplianceTopicDto['state'],
   missingInformation: MissingInformationItem[],
 ): string | null {
-  if (state === 'MORE_INFORMATION_NEEDED' && missingInformation.length > 0) {
-    return 'Kérjük, töltse ki a hiányzó információkat a portálon.';
+  if (state === 'MORE_INFORMATION_NEEDED') {
+    if (missingInformation.length > 0) {
+      return 'Kérjük, töltse ki a hiányzó információkat a portálon.';
+    }
+    return 'Kérjük, egészítse ki a hiányzó információkat.';
   }
   if (state === 'LAWYER_REVIEW_REQUIRED') {
     return 'Ügyvédi áttekintés javasolt.';

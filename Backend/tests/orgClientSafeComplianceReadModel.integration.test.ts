@@ -76,6 +76,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
 
   afterAll(async () => {
     if (testClients.length > 0) {
+      await db.assessmentFinding.deleteMany({ where: { clientId: { in: testClients } } });
       await db.requirementApplicability.deleteMany({ where: { clientId: { in: testClients } } });
       await db.client.deleteMany({ where: { id: { in: testClients } } });
     }
