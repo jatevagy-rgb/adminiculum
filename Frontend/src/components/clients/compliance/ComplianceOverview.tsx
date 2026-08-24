@@ -73,6 +73,11 @@ export function getComplianceFindingStatus(finding: ComplianceFindingView): Comp
   return finding.applicabilityStatus ?? null;
 }
 
+/** UI hint only. The proposal API remains authoritative for eligibility. */
+export function isComplianceProposalCandidate(finding: ComplianceFindingView): boolean {
+  return Boolean(finding.requirementKey?.trim()) && finding.applicabilityStatus != null;
+}
+
 export function groupComplianceFindings(findings: ComplianceFindingView[]): Array<{ key: string; title: string; findings: ComplianceFindingView[] }> {
   const groups = new Map<string, { key: string; title: string; findings: ComplianceFindingView[] }>();
   for (const finding of findings) {
@@ -199,7 +204,8 @@ export function ComplianceProposalPanel({ clientId, findings }: { clientId: stri
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({ findingId: findings[0]?.id || '', proposalKind: 'REMEDIATION', title: '', description: '', suggestedAction: '', deadline: '' });
+  const eligibleProposalFindings = useMemo(() => findings.filter(isComplianceProposalCandidate), [findings]);
+  const [form, setForm] = useState({ findingId: '', proposalKind: 'REMEDIATION', title: '', description: '', suggestedAction: '', deadline: '' });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
 
@@ -216,6 +222,13 @@ export function ComplianceProposalPanel({ clientId, findings }: { clientId: stri
   }, [clientId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    const fallbackId = eligibleProposalFindings[0]?.id || '';
+    setForm((current) => eligibleProposalFindings.some((finding) => finding.id === current.findingId) || current.findingId === fallbackId
+      ? current
+      : { ...current, findingId: fallbackId });
+  }, [eligibleProposalFindings]);
 
   const selectedKind = proposalKinds.find((kind) => kind.value === form.proposalKind) || proposalKinds[0];
   const run = async (operation: () => Promise<unknown>) => {
@@ -250,17 +263,21 @@ export function ComplianceProposalPanel({ clientId, findings }: { clientId: stri
           {proposal.status === 'PROPOSED' && editingId === proposal.id ? <form className="mt-3 flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); void run(async () => { await updateComplianceProposal(proposal.id, { title: editTitle }); setEditingId(null); }); }}><input aria-label="Javaslat címének szerkesztése" required value={editTitle} onChange={(event) => setEditTitle(event.target.value)} className="min-w-0 flex-1 rounded border border-[var(--adm-border)] bg-white px-2 py-2 text-xs" /><button type="submit" disabled={busy} className="rounded border border-[var(--adm-green-800)] bg-white px-3 py-2 text-xs text-[var(--adm-green-800)] disabled:opacity-50">Mentés</button><button type="button" disabled={busy} onClick={() => setEditingId(null)} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]">Mégse</button></form> : null}
           {proposal.status === 'PROPOSED' ? <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto_auto]">
             <select aria-label="Ügy kiválasztása" value={proposal.case?.id || ''} disabled={busy} onChange={(event) => event.target.value && void run(() => bindComplianceProposal(proposal.id, event.target.value))} className="rounded border border-[var(--adm-border)] bg-white px-2 py-2 text-xs"><option value="">Ügy hozzárendelése…</option>{cases.map((item) => <option key={item.id} value={item.id}>{item.caseNumber} · {item.title}</option>)}</select>
-            <button type="button" disabled={busy || !proposal.case} onClick={() => void run(() => confirmComplianceProposal(proposal.id))} className="rounded border border-[var(--adm-green-800)] bg-[var(--adm-green-800)] px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Megerősítés</button>
+            <div className="flex flex-col gap-1">
+              <button type="button" disabled={busy || !proposal.case} aria-describedby={!proposal.case ? `proposal-case-help-${proposal.id}` : undefined} onClick={() => void run(() => confirmComplianceProposal(proposal.id))} className="rounded border border-[var(--adm-green-800)] bg-[var(--adm-green-800)] px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Megerősítés</button>
+              {!proposal.case ? <p id={`proposal-case-help-${proposal.id}`} className="max-w-[18rem] text-[11px] text-[var(--adm-text-muted)]">A megerősítéshez előbb ügyet kell hozzárendelni.</p> : null}
+            </div>
             <button type="button" disabled={busy} onClick={() => void run(() => rejectComplianceProposal(proposal.id))} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)] disabled:opacity-50">Elutasítás</button>
             <button type="button" disabled={busy} onClick={() => { setEditingId(proposal.id); setEditTitle(proposal.title); }} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)] disabled:opacity-50">Szerkesztés</button>
           </div> : null}
           {proposal.taskId ? <Link href={`/tasks/${proposal.taskId}`} className="mt-2 inline-block text-xs text-[var(--adm-ochre-500)] hover:underline">Kapcsolt feladat megnyitása →</Link> : null}
         </li>
       ))}</ul> : null}
-      <form className="mt-5 border-t border-[var(--adm-border)] pt-4" onSubmit={(event) => { event.preventDefault(); void run(async () => { await createComplianceProposal({ findingId: form.findingId, proposalKind: form.proposalKind, actionIntentKey: selectedKind.intent, title: form.title, description: form.description || undefined, suggestedAction: form.suggestedAction || undefined, deadline: form.deadline || undefined }); setForm((current) => ({ ...current, title: '', description: '', suggestedAction: '', deadline: '' })); }); }}>
+      <div className="mt-5 border-t border-[var(--adm-border)] pt-4">
         <h3 className="text-sm font-medium text-[var(--adm-text)]">Új javaslat</h3>
+        {!eligibleProposalFindings.length ? <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Jelenleg nincs olyan követelményhez kapcsolt megállapítás, amelyből új munkajavaslat indítható.</p> : <form onSubmit={(event) => { event.preventDefault(); void run(async () => { await createComplianceProposal({ findingId: form.findingId, proposalKind: form.proposalKind, actionIntentKey: selectedKind.intent, title: form.title, description: form.description || undefined, suggestedAction: form.suggestedAction || undefined, deadline: form.deadline || undefined }); setForm((current) => ({ ...current, findingId: eligibleProposalFindings[0]?.id || '', title: '', description: '', suggestedAction: '', deadline: '' })); }); }}>
         <div className="mt-3 grid gap-2 md:grid-cols-2">
-          <select aria-label="Megállapítás" required value={form.findingId} onChange={(event) => setForm({ ...form, findingId: event.target.value })} className="rounded border border-[var(--adm-border)] bg-white px-2 py-2 text-xs"><option value="">Megállapítás kiválasztása…</option>{findings.map((finding) => <option key={finding.id} value={finding.id}>{finding.title}</option>)}</select>
+          <select aria-label="Megállapítás" required value={form.findingId} onChange={(event) => setForm({ ...form, findingId: event.target.value })} className="rounded border border-[var(--adm-border)] bg-white px-2 py-2 text-xs"><option value="">Megállapítás kiválasztása…</option>{eligibleProposalFindings.map((finding) => <option key={finding.id} value={finding.id}>{finding.title}</option>)}</select>
           <select aria-label="Javaslat típusa" value={form.proposalKind} onChange={(event) => setForm({ ...form, proposalKind: event.target.value })} className="rounded border border-[var(--adm-border)] bg-white px-2 py-2 text-xs">{proposalKinds.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select>
           <input aria-label="Javaslat címe" required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Javaslat címe" className="rounded border border-[var(--adm-border)] px-2 py-2 text-xs" />
           <input aria-label="Határidő" type="date" value={form.deadline} onChange={(event) => setForm({ ...form, deadline: event.target.value })} className="rounded border border-[var(--adm-border)] px-2 py-2 text-xs" />
@@ -268,7 +285,8 @@ export function ComplianceProposalPanel({ clientId, findings }: { clientId: stri
           <textarea aria-label="Javasolt következő lépés" value={form.suggestedAction} onChange={(event) => setForm({ ...form, suggestedAction: event.target.value })} placeholder="Javasolt következő lépés" className="rounded border border-[var(--adm-border)] px-2 py-2 text-xs md:col-span-2" rows={2} />
         </div>
         <button type="submit" disabled={busy || !form.findingId} className="mt-3 rounded border border-[var(--adm-green-800)] bg-[var(--adm-green-800)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Javaslat mentése</button>
-      </form>
+        </form>}
+      </div>
     </section>
   );
 }

@@ -10,6 +10,7 @@ import {
   getComplianceAttentionFindings,
   getComplianceFindingStatus,
   getComplianceScopeLabel,
+  isComplianceProposalCandidate,
   groupComplianceFindings,
   isComplianceGroupInitiallyOpen,
   type ComplianceFindingView,
@@ -120,5 +121,12 @@ describe("7C-A compliance overview behavior", () => {
     assert.match(markup, /Belső értékelés szerint releváns/);
     assert.match(markup, /Tranzakció/);
     assert.doesNotMatch(markup, /cikk|joghatóság|citation|sourceVersion|reviewStatus|Teendő indítása/i);
+  });
+
+  it("offers proposal actions only as a requirement/applicability UI hint", () => {
+    assert.equal(isComplianceProposalCandidate(finding({ requirementKey: "req-1", applicabilityStatus: "DOES_NOT_APPLY" })), true);
+    assert.equal(isComplianceProposalCandidate(finding({ requirementKey: "req-1", applicabilityStatus: null })), false);
+    assert.equal(isComplianceProposalCandidate(finding({ requirementKey: null, applicabilityStatus: "APPLIES" })), false);
+    assert.equal(isComplianceProposalCandidate(finding({ requirementKey: "req-1", applicabilityStatus: "INSUFFICIENT_FACTS" })), true);
   });
 });

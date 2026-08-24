@@ -54,6 +54,15 @@ describe('7C-A compliance overview foundation (structural)', () => {
     assert.match(src, /Megerősítés/);
   });
 
+  it('keeps proposal eligibility as a small frontend hint and renders explicit no-case help', () => {
+    const src = component();
+    assert.match(src, /isComplianceProposalCandidate/);
+    assert.match(src, /eligibleProposalFindings/);
+    assert.match(src, /Jelenleg nincs olyan követelményhez kapcsolt megállapítás/);
+    assert.match(src, /A megerősítéshez előbb ügyet kell hozzárendelni/);
+    assert.match(src, /aria-describedby=/);
+  });
+
   it('is registered and used by both company-level surfaces', () => {
     assert.equal(existsSync(path.join(root, 'src/components/clients/compliance/ComplianceOverview.tsx')), true);
     assert.match(read('src/components/clients/ClientCompanyWorkspace.tsx'), /ComplianceOverviewPanel/);

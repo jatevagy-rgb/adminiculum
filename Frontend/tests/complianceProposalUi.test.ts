@@ -25,4 +25,20 @@ describe('7B workforce proposal surface', () => {
     assert.match(component, /\/cases\?newCase=1&clientId=/);
     assert.doesNotMatch(component, /\/api\/v1\/client-portal/);
   });
+
+  it('keeps terminal proposals read-only and preserves the normal Task link', () => {
+    const component = read('src/components/clients/compliance/ComplianceOverview.tsx');
+    assert.match(component, /proposal\.status === 'PROPOSED'/);
+    assert.match(component, /proposal\.taskId/);
+    assert.match(component, /proposalStatusLabels/);
+    assert.doesNotMatch(component, /proposal\.status === 'STALE'[\s\S]*Megerősítés/);
+    assert.doesNotMatch(component, /proposal\.status === 'REJECTED'[\s\S]*Szerkesztés/);
+  });
+
+  it('guards create and mutation actions with one shared busy state', () => {
+    const component = read('src/components/clients/compliance/ComplianceOverview.tsx');
+    assert.match(component, /setBusy\(true\)/);
+    assert.match(component, /disabled=\{busy \|\| !form\.findingId\}/);
+    assert.match(component, /disabled=\{busy\}/);
+  });
 });
