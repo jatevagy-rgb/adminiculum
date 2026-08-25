@@ -38,6 +38,7 @@ import {
   IntakeServiceError,
 } from './intakeService';
 import { getDashboardOperationalOverview } from './dashboardOperational';
+import { getCaseAttentionSummary, listCaseAttentionSummaries } from './attention.service';
 
 const router = Router();
 
@@ -148,7 +149,7 @@ router.post('/workflow-templates/:id/archive', authenticate, async (req: Request
 // ============================================================================
 // GET /cases
 // ============================================================================
-  router.get('/', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/', authenticate, async (req: Request, res: Response): Promise<void> => {
     try {
     const page = req.query.page ? parseInt(req.query.page as string) : 1;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
@@ -168,6 +169,14 @@ router.post('/workflow-templates/:id/archive', authenticate, async (req: Request
       res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
     }
   });
+
+router.get('/attention', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) { res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required.' }); return; }
+    res.json({ items: await listCaseAttentionSummaries({ userId, role: req.user?.role, clientId: req.query.clientId ? String(req.query.clientId) : undefined, limit: Number(req.query.limit) || 25, offset: Number(req.query.offset) || 0 }) });
+  } catch (error) { console.error('List case attention error:', error); res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Case attention could not be loaded.' }); }
+});
 
 // ============================================================================
 // GET /cases/dashboard/operational-overview
@@ -302,6 +311,14 @@ router.get('/:caseId/workspace', authenticate, requireCaseReadAccess, async (req
     console.error('Get case workspace error:', error);
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
+});
+
+router.get('/:caseId/attention', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const attention = await getCaseAttentionSummary(String(req.params.caseId));
+    if (!attention) { res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found.' }); return; }
+    res.json(attention);
+  } catch (error) { console.error('Get case attention error:', error); res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Case attention could not be loaded.' }); }
 });
 
 // ============================================================================
