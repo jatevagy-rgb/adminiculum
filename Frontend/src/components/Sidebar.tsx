@@ -134,7 +134,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
     dashboard: "Műszerfal",
     tasks: "Feladatok",
     notifications: "Kommunikáció",
-    communications: "Ügykommunikáció",
+    communications: "Bejövő kommunikáció",
     reviews: "Review sor",
     cases: "Ügyek",
     "clause-library": "Záradék könyvtár",

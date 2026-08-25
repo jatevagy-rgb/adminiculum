@@ -195,7 +195,7 @@ export default function CommunicationsOverview() {
           <div>
             <h1 className="font-serif text-2xl font-semibold text-[#1F2821]">Bejövő kommunikáció</h1>
             <p className="mt-1 text-xs text-[#7B776D]">
-              Outlook levelezés és rögzített kommunikáció áttekintése
+              Beérkező és rögzített kommunikáció áttekintése
               {needsAssignment > 0 ? ` · ${needsAssignment} feldolgozásra vár` : ""}
             </p>
           </div>
@@ -220,7 +220,7 @@ export default function CommunicationsOverview() {
             disabled={syncing}
             className="px-4 py-2 text-xs uppercase tracking-[0.12em] bg-[#1F4A33] text-[#FBF6E7] hover:bg-[#173824] disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {syncing ? "Szinkronizálás..." : "Outlook kommunikáció frissítése"}
+            {syncing ? "Frissítés..." : "Bejövő levelezés frissítése"}
           </button>
         </div>
 
@@ -262,7 +262,7 @@ export default function CommunicationsOverview() {
         ) : communications.length === 0 ? (
           <div className="rounded border border-[#DDD7CA] bg-white p-8 text-center">
             <p className="text-sm text-[#514D45]">Még nincs kommunikáció.</p>
-            <p className="mt-1 text-xs text-[#7B776D]">A „Outlook kommunikáció frissítése” gombbal importálhatod a bejövő levelezést.</p>
+            <p className="mt-1 text-xs text-[#7B776D]">A bejövő levelezés frissítésével új üzenetek kerülhetnek ide.</p>
           </div>
         ) : visibleCommunications.length === 0 ? (
           <div className="rounded border border-[#DDD7CA] bg-white p-8 text-center">

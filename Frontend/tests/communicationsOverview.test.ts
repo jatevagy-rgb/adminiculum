@@ -19,12 +19,12 @@ describe('Communications live-integration UI (structural)', () => {
     assert.match(page(), /CommunicationsOverview/);
     assert.match(page(), /AuthenticatedApp section="communications"/);
     assert.match(sidebar(), /communications: "\/communications"/);
-    assert.match(sidebar(), /Ügykommunikáció/);
+    assert.match(sidebar(), /Bejövő kommunikáció/);
   });
 
   it('offers the bounded Outlook refresh action in Hungarian without technical Graph terms', () => {
     const src = overview();
-    assert.match(src, /Outlook kommunikáció frissítése/);
+    assert.match(src, /Bejövő levelezés frissítése/);
     assert.match(src, /Importálva/);
     assert.match(src, /Már ismert/);
     assert.match(src, /Feldolgozásra vár/);
