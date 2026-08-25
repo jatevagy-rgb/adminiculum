@@ -1,4 +1,4 @@
-name: Presentation Demo PostgreSQL Acceptance
+﻿name: Presentation Demo PostgreSQL Acceptance
 
 on:
   workflow_dispatch:
@@ -22,7 +22,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: adminiculum_demo_ci
+          POSTGRES_DB: adminiculum_ci
         ports:
           - 5432:5432
         options: >-
@@ -47,13 +47,13 @@ jobs:
       - name: Provision schema (canonical empty migration replay)
         working-directory: Backend
         env:
-          MIGRATION_REPLAY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_demo_ci?schema=public
+          MIGRATION_REPLAY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
         run: npm run db:migrations:verify-replay
 
       - name: Verify production hard deny
         working-directory: Backend
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_demo_ci?schema=public
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
           NODE_ENV: production
           ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
         run: |
@@ -67,7 +67,7 @@ jobs:
       - name: Execute Harness Workflow
         working-directory: Backend
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_demo_ci?schema=public
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
           NODE_ENV: development
           ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
         run: |
@@ -130,7 +130,8 @@ jobs:
       - name: Run Focused Integration Tests
         working-directory: Backend
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_demo_ci?schema=public
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
           NODE_ENV: development
         run: |
           npm run test:demo-fixture:db
+
