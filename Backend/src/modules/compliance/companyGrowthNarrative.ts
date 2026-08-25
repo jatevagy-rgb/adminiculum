@@ -54,6 +54,13 @@ async function countApplicableFindings(db: PrismaClient, clientId: string): Prom
   return db.assessmentFinding.count({ where: { clientId } });
 }
 
+/** Canonical Decimal -> number conversion (null-safe). */
+function toNumber(value: { toString(): string } | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const n = Number(value.toString());
+  return Number.isFinite(n) ? n : null;
+}
+
 function narrative(
   before: number | null,
   current: number | null,
@@ -97,7 +104,7 @@ export async function getCompanyGrowthNarrative(
   const proposalAvailable = proposals.some((p) => String(p.status) === 'PROPOSED');
   const proposalConfirmed = proposals.some((p) => String(p.status) === 'CONFIRMED');
   return {
-    ...narrative(before?.numberValue ?? null, current?.numberValue ?? null, applicableFindingCount),
+    ...narrative(toNumber(before?.numberValue), toNumber(current?.numberValue), applicableFindingCount),
     proposalAvailable,
     proposalConfirmed,
   };
@@ -110,7 +117,7 @@ export async function getClientSafeGrowthNarrative(
 ): Promise<ClientSafeGrowthNarrative> {
   const { before, current } = await readFacts(db, clientId);
   const applicableFindingCount = await countApplicableFindings(db, clientId);
-  const n = narrative(before?.numberValue ?? null, current?.numberValue ?? null, applicableFindingCount);
+  const n = narrative(toNumber(before?.numberValue), toNumber(current?.numberValue), applicableFindingCount);
   return {
     beforeEmployeeCount: n.beforeEmployeeCount,
     currentEmployeeCount: n.currentEmployeeCount,

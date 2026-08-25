@@ -84,7 +84,7 @@ router.get('/', async (req, res: Response) => {
  * clientId derived from workspace membership. Never returns internal ids,
  * severity, ruleAst, requirementVersionId, findingId or proposalId.
  */
-router.get('/grow', async (req: res): Promise<void> => {
+router.get('/grow', async (req: Request, res: Response): Promise<void> => {
   try {
     const workspace = await portalAuth(req, res);
     if (!workspace) return;

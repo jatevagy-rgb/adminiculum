@@ -37,7 +37,7 @@ router.get('/clients/:clientId/overview', async (req, res: Response) => {
 });
 
 // Grow With Us — human change/development explanation over the real engine data.
-router.get('/clients/:clientId/grow', async (req: res): Promise<void> => {
+router.get('/clients/:clientId/grow', async (req: Request, res: Response): Promise<void> => {
   try {
     res.json(await getCompanyGrowthNarrative(actor(req), String(req.params.clientId)));
   } catch (error) {
