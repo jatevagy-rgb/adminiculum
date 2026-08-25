@@ -5,7 +5,7 @@ jest.mock('../src/modules/sharepoint', () => ({
   driveService: { createCaseFolders: jest.fn().mockResolvedValue(null) },
 }));
 
-import { casesService } from '../src/modules/cases/services';
+import casesService from '../src/modules/cases/services';
 
 const databaseUrl = process.env.WORK_PACKAGE_CASE_CREATION_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
