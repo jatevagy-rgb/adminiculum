@@ -153,4 +153,25 @@ describe('Org client safe compliance read model contract', () => {
     expect(route).toContain("workspace.mode !== 'ORGANIZATION'");
     expect(route).not.toMatch(/mode.*===.*'INDIVIDUAL'|mode.*===.*'CASE_RELAY'/);
   });
+
+  it('compliance route is mounted before portal catch-all', () => {
+    const src = read('src/index.ts');
+    const complianceLine = src.indexOf("app.use('/api/v1/client-portal/compliance'");
+    const portalLine = src.indexOf("app.use('/api/v1/client-portal', clientPortalRoutes)");
+    expect(complianceLine).toBeGreaterThan(0);
+    expect(portalLine).toBeGreaterThan(0);
+    expect(complianceLine).toBeLessThan(portalLine);
+  });
+
+  it('answerability derives from company-profile registry, not questionKey != null', () => {
+    const src = read(serviceFile);
+    expect(src).toContain('isCompanyProfileQuestion');
+    expect(src).not.toMatch(/portalAnswerable:\s*dep\.questionKey\s*!=\s*null/);
+    expect(src).not.toMatch(/portalAnswerable:\s*.*questionKey\s*!=\s*null/);
+  });
+
+  it('company-profile registry exports isCompanyProfileQuestion', () => {
+    const registry = read('src/modules/client-workspace/companyProfileQuestionRegistry.ts');
+    expect(registry).toContain('isCompanyProfileQuestion');
+  });
 });
