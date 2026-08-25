@@ -23,16 +23,20 @@ export interface AnonymousDocumentSummary {
  * Working DTO — anonymized content visible in workspace.
  * Contains redactedText and redactedItems (token→replacement mapping).
  * No PII mapping, no rehydrated content, no customPrompt.
+ *
+ * SECURITY: redactedItems are sanitized to safe fields only (type, replacement,
+ * position). The `original` field containing PII is NEVER included.
+ * customPrompt is NEVER included.
  */
 export interface AnonymousDocumentWorking extends AnonymousDocumentSummary {
   redactedText: string | null;
   redactedItems: unknown;
-  customPrompt: string | null;
 }
 
 /**
  * Sensitive DTO — full PII mapping, rehydrated content, original metadata.
  * Only for ADMIN/PARTNER/responsible lawyer/reviewer.
+ * Includes full redactedItems (with original) and customPrompt.
  */
 export interface AnonymousDocumentSensitive extends AnonymousDocumentWorking {
   rehydratedContent: string | null;
@@ -40,6 +44,8 @@ export interface AnonymousDocumentSensitive extends AnonymousDocumentWorking {
   rehydrationWarnings: unknown;
   originalDocId: string | null;
   redactionProfile: unknown;
+  redactedItemsFull: unknown;
+  customPrompt: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,12 +87,29 @@ export function toSummary(doc: AnyDoc): AnonymousDocumentSummary {
   };
 }
 
+/**
+ * Sanitize redactedItems for Working DTO exposure.
+ * Strips the `original` field (PII) from each item, keeping only safe fields:
+ * type, replacement, position.
+ */
+function sanitizeRedactedItems(items: unknown): unknown[] | null {
+  if (!items || !Array.isArray(items)) return null;
+  return items.map((item: any) => {
+    if (!item || typeof item !== 'object') return item;
+    const safe: Record<string, unknown> = {};
+    if (item.type != null) safe.type = item.type;
+    if (item.replacement != null) safe.replacement = item.replacement;
+    if (item.position != null) safe.position = item.position;
+    // `original` is NEVER included — it contains PII
+    return safe;
+  });
+}
+
 export function toWorking(doc: AnyDoc): AnonymousDocumentWorking {
   return {
     ...toSummary(doc),
     redactedText: doc.content ?? null,
-    redactedItems: doc.redactedItems ?? null,
-    customPrompt: doc.customPrompt ?? null,
+    redactedItems: sanitizeRedactedItems(doc.redactedItems),
   };
 }
 
@@ -98,5 +121,7 @@ export function toSensitive(doc: AnyDoc): AnonymousDocumentSensitive {
     rehydrationWarnings: doc.rehydrationWarnings ?? null,
     originalDocId: doc.originalDocId ?? null,
     redactionProfile: null, // caller should populate if needed
+    redactedItemsFull: doc.redactedItems ?? null, // full persisted items including original
+    customPrompt: doc.customPrompt ?? null, // full customPrompt — only behind sensitive access
   };
 }

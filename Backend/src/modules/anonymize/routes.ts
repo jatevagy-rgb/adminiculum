@@ -324,20 +324,22 @@ router.get(
 
       const docs = await anonymizeService.listAnonymousDocumentsBySource(sourceDocumentId);
 
-      const result = docs.map(doc => ({
-        id: doc.id,
-        name: doc.name,
-        sourceDocId: doc.sourceDocId,
-        caseId: doc.caseId,
-        aiTask: doc.aiTask,
-        customPrompt: doc.customPrompt,
-        rehydrationStatus: doc.rehydrationStatus,
-        rehydratedAt: doc.rehydratedAt,
-        createdAt: doc.createdAt,
-        // Include redactedText and redactedItems for workspace text loading
-        redactedText: doc.content,
-        redactedItems: doc.redactedItems,
-      }));
+      // Resolve case access for DTO level
+      const caseId = docs.length > 0 ? docs[0].caseId : null;
+      const user = (req as any).user;
+      let isSensitive = false;
+      if (caseId && user?.userId) {
+        const { prisma } = await import('../../prisma/prisma.service');
+        const caseRecord = await prisma.case.findUnique({
+          where: { id: caseId },
+          select: { assignedLawyerId: true, createdById: true },
+        });
+        if (caseRecord) {
+          isSensitive = hasSensitiveAccess(req, caseRecord);
+        }
+      }
+
+      const result = docs.map(doc => isSensitive ? toSensitive(doc) : toWorking(doc));
 
       res.json(result);
     } catch (error) {
