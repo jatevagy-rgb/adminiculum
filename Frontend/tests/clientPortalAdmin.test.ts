@@ -164,8 +164,6 @@ describe('internal portal-admin UI', () => {
     assert.match(shell, /'\/portal\/uzenetek'/);
     assert.match(shell, /Amit most érdemes elintézni/);
     assert.match(shell, /Kérdések és válaszok/);
-    assert.match(shell, /'Szerződések', '\/portal\/szerzodesek'/);
-    assert.match(shell, /'Vállalat', '\/portal\/vallalat'/);
     assert.match(shell, /OrgHomeView/);
     assert.match(read('src/lib/clientPortalApi.ts'), /intakes\?: boolean/);
     assert.match(read('src/lib/clientPortalApi.ts'), /leadership\?: boolean/);

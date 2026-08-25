@@ -11,11 +11,11 @@ describe("Phase 5B organizational customer contract + company surface", () => {
   const api = () => read("src/lib/clientPortalApi.ts");
   const shell = () => read("src/components/client-portal/ClientPortalShell.tsx");
 
-  it("keeps the exact Phase 5 IA navigation labels in order", () => {
+  it("keeps the compact organization IA navigation labels in order", () => {
     const src = shell();
     const orgIdx = src.indexOf("if (workspace.mode === 'ORGANIZATION')");
     const orgBlock = src.slice(orgIdx, src.indexOf("if (workspace.mode === 'CASE_RELAY')"));
-    const order = ["Főoldal", "Ügyek", "Szerződések", "Teendők", "Vállalat", "Dokumentumok", "Kapcsolat"];
+    const order = ["Főoldal", "Ügyeink", "Teendőim", "Dokumentumok", "Üzenetek"];
     let last = -1;
     for (const label of order) {
       const idx = orgBlock.indexOf(`'${label}'`);
