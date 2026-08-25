@@ -110,6 +110,10 @@ async function upsertClientWithProfile(core) {
   console.log(`upserted core client: ${client.name} (${client.id})`);
 }
 
+if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
+  throw new Error('seed-core-clients-house-style must NEVER run in production. Aborting.');
+}
+
 async function main() {
   for (const core of CORE_CLIENTS) {
     await upsertClientWithProfile(core);

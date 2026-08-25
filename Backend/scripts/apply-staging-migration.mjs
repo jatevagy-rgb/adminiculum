@@ -1,13 +1,22 @@
 import { execSync } from 'child_process';
-import path from 'path';
 
-// IMPORTANT: Set DATABASE_URL env var before running.
-// Example: DATABASE_URL='postgresql://user:pass@host:5432/db?sslmode=require' node apply-staging-migration.mjs
+// SEC-0A hardening: this is a DESTRUCTIVE script. It must never be able to
+// target production and must require an explicit opt-in. Use the canonical
+// migration WebJob for production.
 const DATABASE_URL = process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
   console.error('ERROR: DATABASE_URL env var is required.');
-  console.error('Example: DATABASE_URL=\'postgresql://user:pass@host:5432/db?sslmode=require\' node apply-staging-migration.mjs');
+  process.exit(1);
+}
+
+if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
+  console.error('ERROR: apply-staging-migration must NEVER run in production. Use the canonical migration WebJob.');
+  process.exit(1);
+}
+
+if (process.env.ALLOW_DESTRUCTIVE_RESET !== 'true') {
+  console.error('ERROR: destructive reset requires ALLOW_DESTRUCTIVE_RESET=true and a non-production target.');
   process.exit(1);
 }
 
@@ -15,7 +24,6 @@ console.log('=== Adminiculum Staging Migration Reset & Apply ===');
 console.log('Database:', DATABASE_URL.replace(/:[^:@]+@/, ':***@'));
 console.log('');
 
-// Use prisma migrate reset --force to reset the database and reapply all migrations
 console.log('Running prisma migrate reset --force...');
 try {
   const result = execSync('npx prisma migrate reset --force', {

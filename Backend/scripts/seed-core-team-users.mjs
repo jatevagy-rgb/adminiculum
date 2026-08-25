@@ -64,6 +64,10 @@ const isStalePilotTestUser = (user) => {
   );
 };
 
+if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
+  throw new Error('seed-core-team-users must NEVER run in production. Aborting.');
+}
+
 async function main() {
   for (const user of CORE_TEAM) {
     const saved = await prisma.user.upsert({

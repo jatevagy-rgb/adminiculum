@@ -1,64 +1,37 @@
 /**
- * Simple User Seed Script for Azure Deployment
+ * Simple User Seed Script (LOCAL/TEST ONLY)
  * Only creates users - no other dependencies
+ *
+ * SEC-0A: no hardcoded password. Workforce users authenticate via Azure AD
+ * (email-resolved role), so a random, unknown non-login hash is used.
+ * Production execution is refused.
  */
 
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const { randomUUID } = require('crypto');
 
 const prisma = new PrismaClient();
 
+if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
+  throw new Error('seed-users-only must NEVER run in production. Aborting.');
+}
+
 const USERS = [
-  {
-    email: 'admin@adminiculum.com',
-    name: 'Admin User',
-    role: 'ADMIN',
-    password: 'password123',
-    department: 'IT',
-    title: 'System Administrator',
-  },
-  {
-    email: 'lawyer@adminiculum.com',
-    name: 'Dr. Magyar Ügyvéd',
-    role: 'LAWYER',
-    password: 'password123',
-    department: 'Litigation',
-    title: 'Senior Attorney',
-  },
-  {
-    email: 'partner@adminiculum.com',
-    name: 'Dr. Kovács Partner',
-    role: 'PARTNER',
-    password: 'password123',
-    department: 'Corporate',
-    title: 'Managing Partner',
-  },
-  {
-    email: 'assistant@adminiculum.com',
-    name: 'Kiss Anna',
-    role: 'LEGAL_ASSISTANT',
-    password: 'password123',
-    department: 'Administration',
-    title: 'Legal Assistant',
-  },
-  {
-    email: 'trainee@adminiculum.com',
-    name: 'Nagy Péter',
-    role: 'TRAINEE',
-    password: 'password123',
-    department: 'Corporate',
-    title: 'Junior Associate',
-  },
+  { name: 'Admin User', email: 'admin@adminiculum.com', role: 'ADMIN', department: 'Admin' },
+  { name: 'Dr. Magyar Ügyvéd', email: 'lawyer@adminiculum.com', role: 'LAWYER', department: 'Legal' },
+  { name: 'Partner Ügyvéd', email: 'partner@adminiculum.com', role: 'PARTNER', department: 'Legal' },
+  { name: 'Jogi Asszisztens', email: 'assistant@adminiculum.com', role: 'LEGAL_ASSISTANT', department: 'Legal' },
+  { name: 'Ügyvédjelölt', email: 'trainee@adminiculum.com', role: 'TRAINEE', department: 'Legal' }
 ];
 
 async function main() {
-  console.log('🌱 Seeding users...\n');
+  // Non-login credential: a random, unknown hash. No shared/predictable password.
+  const hashedPassword = await bcrypt.hash(randomUUID(), 10);
 
   for (const user of USERS) {
-    const hashedPassword = await bcrypt.hash(user.password, 10);
-    
     try {
-      const created = await prisma.user.upsert({
+      await prisma.user.upsert({
         where: { email: user.email },
         update: {
           name: user.name,
@@ -74,22 +47,19 @@ async function main() {
           department: user.department,
           passwordHash: hashedPassword,
           isActive: true,
+          status: 'ACTIVE',
         },
       });
-      console.log(`✓ Created/Updated: ${created.email} (${created.role})`);
-    } catch (error) {
-      console.error(`✗ Failed to create ${user.email}:`, error.message);
+      console.log(`upserted user: ${user.email}`);
+    } catch (err) {
+      console.error(`Error with user ${user.email}:`, err.message);
     }
   }
 
-  console.log('\n✅ User seeding completed!');
+  await prisma.$disconnect();
 }
 
-main()
-  .catch((e) => {
-    console.error('❌ Seed failed:', e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+main().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});

@@ -22,6 +22,10 @@ import pg from 'pg';
 const { Client } = pg;
 
 async function runMigration() {
+  if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
+    console.error('ERROR: run-staging-migration must NEVER run in production. Use the canonical migration WebJob.');
+    process.exit(1);
+  }
   console.log('=== Adminiculum Staging DB Migration Script ===\n');
 
   let databaseUrl;

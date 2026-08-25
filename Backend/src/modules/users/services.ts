@@ -4,6 +4,7 @@
  * Matching Prisma Schema V2
  */
 
+import { randomUUID } from 'crypto';
 import { prisma } from '../../prisma/prisma.service';
 import bcrypt from 'bcryptjs';
 import type { UserStatus } from '@prisma/client';
@@ -166,7 +167,11 @@ class UsersService {
    * Create new user
    */
   async createUser(params: CreateUserInput): Promise<{ id: string; name: string; email: string; role: string }> {
-    const hashedPassword = await bcrypt.hash('password123', 10);
+    // Workforce users authenticate via Azure AD (email-resolved DB role). The
+    // passwordHash is never a usable login: provisioned users must sign in with
+    // their Azure identity, so a cryptographically random, unknown value is set
+    // here to prevent a fixed/predictable password and silent escalation.
+    const hashedPassword = await bcrypt.hash(randomUUID(), 10);
 
     const user = await prisma.user.create({
       data: {
