@@ -39,6 +39,7 @@ import {
 } from './intakeService';
 import { getDashboardOperationalOverview } from './dashboardOperational';
 import { CaseWorkPackageOperationalError, createTaskFromCaseWorkPackageItem, getCaseWorkPackage, mutateCaseWorkPackageItem } from './caseWorkPackageOperational.service';
+import { getCaseAttentionSummary, listCaseAttentionSummaries } from './attention.service';
 
 const router = Router();
 
@@ -149,7 +150,7 @@ router.post('/workflow-templates/:id/archive', authenticate, async (req: Request
 // ============================================================================
 // GET /cases
 // ============================================================================
-  router.get('/', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/', authenticate, async (req: Request, res: Response): Promise<void> => {
     try {
     const page = req.query.page ? parseInt(req.query.page as string) : 1;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
@@ -169,6 +170,14 @@ router.post('/workflow-templates/:id/archive', authenticate, async (req: Request
       res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
     }
   });
+
+router.get('/attention', authenticate, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) { res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required.' }); return; }
+    res.json({ items: await listCaseAttentionSummaries({ userId, role: req.user?.role, clientId: req.query.clientId ? String(req.query.clientId) : undefined, limit: Number(req.query.limit) || 25, offset: Number(req.query.offset) || 0 }) });
+  } catch (error) { console.error('List case attention error:', error); res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Case attention could not be loaded.' }); }
+});
 
 // ============================================================================
 // GET /cases/dashboard/operational-overview
@@ -327,6 +336,14 @@ router.post('/:caseId/work-package/items/:itemId/tasks', authenticate, requireCa
     const result = await createTaskFromCaseWorkPackageItem({ caseId: String(req.params.caseId), itemId: String(req.params.itemId), title: String(req.body?.title || ''), description: req.body?.description ? String(req.body.description) : undefined, assignedToId: req.body?.assignedToId === null ? null : (req.body?.assignedToId ? String(req.body.assignedToId) : null), assignedById: actorId, dueDate: req.body?.dueDate ? String(req.body.dueDate) : null });
     res.status(201).json(result);
   } catch (error) { if (error instanceof CaseWorkPackageOperationalError) { res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message }); return; } console.error('Create task from case work package item error:', error); res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Task could not be created.' }); }
+});
+
+router.get('/:caseId/attention', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const attention = await getCaseAttentionSummary(String(req.params.caseId));
+    if (!attention) { res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found.' }); return; }
+    res.json(attention);
+  } catch (error) { console.error('Get case attention error:', error); res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Case attention could not be loaded.' }); }
 });
 
 // ============================================================================
