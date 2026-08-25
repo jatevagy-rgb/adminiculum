@@ -218,6 +218,9 @@ app.use('/api/v1/intake', intakeRoutes);
 import settingsRoutes from './modules/settings/routes';
 app.use('/api/v1/settings', settingsRoutes);
 
+import workPackageAdminRoutes from './modules/work-package-admin/routes';
+app.use('/api/v1/work-package-admin', workPackageAdminRoutes);
+
 import anonymizeRoutes from './modules/anonymize/routes';
 app.use('/api/v1', anonymizeRoutes);
 
