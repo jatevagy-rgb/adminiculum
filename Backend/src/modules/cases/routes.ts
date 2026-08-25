@@ -38,6 +38,7 @@ import {
   IntakeServiceError,
 } from './intakeService';
 import { getDashboardOperationalOverview } from './dashboardOperational';
+import { CaseWorkPackageOperationalError, createTaskFromCaseWorkPackageItem, getCaseWorkPackage, mutateCaseWorkPackageItem } from './caseWorkPackageOperational.service';
 
 const router = Router();
 
@@ -302,6 +303,30 @@ router.get('/:caseId/workspace', authenticate, requireCaseReadAccess, async (req
     console.error('Get case workspace error:', error);
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
+});
+
+router.get('/:caseId/work-package', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const packageRow = await getCaseWorkPackage(String(req.params.caseId));
+    if (!packageRow) { res.status(404).json({ status: 404, code: 'WORK_PACKAGE_NOT_FOUND', message: 'Work package not found.' }); return; }
+    res.json(packageRow);
+  } catch (error) { console.error('Get case work package error:', error); res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Work package could not be loaded.' }); }
+});
+
+router.patch('/:caseId/work-package/items/:itemId', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await mutateCaseWorkPackageItem({ caseId: String(req.params.caseId), itemId: String(req.params.itemId), expectedRevision: Number(req.body?.expectedRevision), status: req.body?.status, responsibleId: req.body?.responsibleId === null ? null : (req.body?.responsibleId ? String(req.body.responsibleId) : undefined) });
+    res.json(result);
+  } catch (error) { if (error instanceof CaseWorkPackageOperationalError) { res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message }); return; } console.error('Mutate case work package item error:', error); res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Work package item could not be updated.' }); }
+});
+
+router.post('/:caseId/work-package/items/:itemId/tasks', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const actorId = req.user?.userId;
+    if (!actorId) { res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required.' }); return; }
+    const result = await createTaskFromCaseWorkPackageItem({ caseId: String(req.params.caseId), itemId: String(req.params.itemId), title: String(req.body?.title || ''), description: req.body?.description ? String(req.body.description) : undefined, assignedToId: req.body?.assignedToId === null ? null : (req.body?.assignedToId ? String(req.body.assignedToId) : null), assignedById: actorId, dueDate: req.body?.dueDate ? String(req.body.dueDate) : null });
+    res.status(201).json(result);
+  } catch (error) { if (error instanceof CaseWorkPackageOperationalError) { res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message }); return; } console.error('Create task from case work package item error:', error); res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Task could not be created.' }); }
 });
 
 // ============================================================================

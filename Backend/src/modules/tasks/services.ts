@@ -297,10 +297,13 @@ export async function createTask(data: {
   sourceCommunicationId?: string;
   attentionCategory?: AttentionCategory | null;
   estimatedMinutes?: number | null;
+  workPackageItemId?: string;
+  db?: PrismaClient | import('@prisma/client').Prisma.TransactionClient;
 }) {
   const prismaTaskType = mapAnyTaskTypeToPrisma((data.taskType as string | undefined) || (data.type as string | undefined));
 
-  const task = await prisma.task.create({
+  const db = data.db || prisma;
+  const task = await db.task.create({
     data: {
       caseId: data.caseId,
       title: data.title,
@@ -317,6 +320,7 @@ export async function createTask(data: {
       sourceCommunicationId: data.sourceCommunicationId,
       attentionCategory: data.attentionCategory ?? null,
       estimatedMinutes: data.estimatedMinutes ?? null,
+      workPackageItemId: data.workPackageItemId,
     } as any,
     include: {
       case: true,
