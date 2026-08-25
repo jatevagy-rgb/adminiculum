@@ -583,8 +583,9 @@ async function seed(db) {
       reviewId: IDS.reviewId,
       roundNumber: 1,
       reviewVersionId: IDS.version1Id,
-      status: 'OPEN',
+      status: 'IN_REVIEW',
       createdById: IDS.lawyerGyulaId,
+      startedAt: now,
     },
   });
   await db.documentReview.update({
