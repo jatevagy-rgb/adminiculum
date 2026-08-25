@@ -27,6 +27,7 @@ import { ClientContractLibrary } from "@/components/clients/ClientContractLibrar
 import { ClientOrganization } from "@/components/clients/ClientOrganization";
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
+import { listAdminWorkspaces, type AdminWorkspaceDTO } from "@/lib/clientPortalAdminApi";
 
 type DossierDocument = DocumentItem & { caseNumber: string; caseId: string };
 
@@ -102,6 +103,7 @@ function ClientDetailContent() {
   const [cases, setCases] = useState<CaseListItem[]>([]);
   const [documents, setDocuments] = useState<DossierDocument[]>([]);
   const [communications, setCommunications] = useState<CommunicationItem[]>([]);
+  const [portalWorkspace, setPortalWorkspace] = useState<AdminWorkspaceDTO | null>(null);
   const [savingPortal, setSavingPortal] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -142,9 +144,10 @@ function ClientDetailContent() {
     setError(null);
 
     try {
-      const [clientData, directClientComms] = await Promise.all([
+      const [clientData, directClientComms, portalWorkspaces] = await Promise.all([
         getClient(clientId),
         getCommunications({ clientId, limit: 15 }).catch(() => ({ communications: [], pagination: { total: 0, limit: 0, offset: 0 } })),
+        listAdminWorkspaces(clientId).catch(() => ({ items: [] })),
       ]);
 
       const casesResponse = await getCases(1, 100, undefined, clientId).catch(() => null);
@@ -156,6 +159,7 @@ function ClientDetailContent() {
 
       const relatedCases = casesResponse?.data || [];
       setClient(clientData);
+      setPortalWorkspace(portalWorkspaces.items.find((item) => item.status !== "ARCHIVED") || portalWorkspaces.items[0] || null);
       setCases(relatedCases);
 
       setCaseFormData((prev) => ({ ...prev, clientName: clientData.name, clientId: clientData.id }));
@@ -395,7 +399,11 @@ function ClientDetailContent() {
               <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.communications}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Friss kommunikáció</p></div>
             </div>
             <div className="mt-5">
-              <ClientWorkspaceTabs clientId={clientId} active="overview" />
+              <ClientWorkspaceTabs
+                clientId={clientId}
+                active="overview"
+                organizationMode={portalWorkspace?.mode === "ORGANIZATION" || portalWorkspace?.mode === "CASE_RELAY"}
+              />
             </div>
           </header>
 

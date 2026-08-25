@@ -210,6 +210,25 @@ export async function listTemplates(caseTypeDefinitionId: string, actor: Actor, 
   return rows.map(dto);
 }
 
+export async function listCaseCreationOptions(actor: Actor, db: Db = defaultPrisma) {
+  internal(actor);
+  const rows = await db.caseTypeDefinition.findMany({
+    where: { isActive: true, workPackageTemplates: { some: { status: 'ACTIVE' } } },
+    orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    select: {
+      id: true, slug: true, name: true, description: true, icon: true,
+      workPackageTemplates: {
+        where: { status: 'ACTIVE' }, orderBy: { version: 'desc' }, take: 1,
+        include: templateInclude,
+      },
+    },
+  });
+  return rows.map((row) => ({
+    caseTypeDefinition: { id: row.id, slug: row.slug, name: row.name, description: row.description, icon: row.icon },
+    template: row.workPackageTemplates[0] ? dto(row.workPackageTemplates[0]) : null,
+  }));
+}
+
 async function createTemplateRow(tx: Prisma.TransactionClient, actor: Actor, caseTypeDefinitionId: string, input: Record<string, unknown>, version: number, source?: any) {
   const type = await tx.caseTypeDefinition.findUnique({ where: { id: caseTypeDefinitionId }, select: { id: true } });
   if (!type) throw new WorkPackageAdminError(404, 'CASE_TYPE_NOT_FOUND', 'Case type not found.');
