@@ -16,6 +16,7 @@ import { resolvePortalWorkspace, ResolvedPortalWorkspace } from '../client-works
 import { InteractionError } from '../client-interaction/base';
 import { CLIENT_PUBLICATION_GATES } from '../client-publication/publicationService';
 import { getClientSafeComplianceReadModel } from './clientSafeComplianceService';
+import { getClientSafeGrowthNarrative } from './companyGrowthNarrative';
 
 const router = Router();
 
@@ -71,6 +72,26 @@ router.get('/', async (req, res: Response) => {
     const demoEnabled = !isProduction && process.env.ADMINICULUM_DEMO_CONTENT_ENABLED === 'true';
     const result = await getClientSafeComplianceReadModel(workspace.clientId, isProduction, demoEnabled);
     res.json(result);
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+/**
+ * GET /api/v1/client-portal/compliance/grow
+ *
+ * Client-safe Grow With Us narrative (before/current/next human copy). read-only.
+ * clientId derived from workspace membership. Never returns internal ids,
+ * severity, ruleAst, requirementVersionId, findingId or proposalId.
+ */
+router.get('/grow', async (req: res): Promise<void> => {
+  try {
+    const workspace = await portalAuth(req, res);
+    if (!workspace) return;
+    if (workspace.mode !== 'ORGANIZATION') {
+      throw new InteractionError(403, 'CLIENT_ORGANIZATION_WORKSPACE_REQUIRED', 'Grow With Us is only available in an organizational workspace.');
+    }
+    res.json(await getClientSafeGrowthNarrative(workspace.clientId));
   } catch (error) {
     fail(res, error);
   }
