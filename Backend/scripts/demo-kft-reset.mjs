@@ -92,6 +92,7 @@ const IDS = {
   version1Id: stableId('docVersion1'),
   version2Id: stableId('docVersion2'),
   reviewId: stableId('review'),
+  reviewRoundId: stableId('reviewRound'),
   reviewPointId: stableId('reviewPoint'),
   pubEmploymentId: stableId('pubEmployment'),
   pubSupplierId: stableId('pubSupplier'),
@@ -146,6 +147,7 @@ async function teardown(db) {
   await db.complianceDomain.deleteMany({ where: { code: 'DEMO_KFT_GROWTH' } });
 
   await db.reviewPoint.deleteMany({ where: { id: IDS.reviewPointId } });
+  await db.documentReviewRound.deleteMany({ where: { id: IDS.reviewRoundId } });
   await db.documentReview.deleteMany({ where: { id: IDS.reviewId } });
   await db.documentVersion.deleteMany({ where: { id: { in: [IDS.version1Id, IDS.version2Id] } } });
   await db.document.deleteMany({ where: { id: IDS.docEmploymentId } });
@@ -508,41 +510,156 @@ async function seed(db) {
   await db.document.upsert({
     where: { id: IDS.docEmploymentId },
     update: {},
-    create: { id: IDS.docEmploymentId, name: 'Munkaszerződés_minta.docx', fileName: 'Munkaszerződés_minta.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', category: 'CONTRACT', documentType: 'SOURCE', clientId: IDS.clientId, caseId: IDS.caseEmploymentId, title: 'Munkaszerződés minta', documentRole: 'SOURCE', workStatus: 'INTERNAL_REVIEW', responsibleId: IDS.lawyerGyulaId, reviewerId: IDS.lawyerCsanadId, workInstruction: 'Első körös felülvizsgálat, problémás kikötések jelölése.', nextStep: 'Felelős ügyvédi jóváhagyás', isLatest: true },
+    create: {
+      id: IDS.docEmploymentId,
+      name: 'Munkaszerződés_minta.docx',
+      fileName: 'Munkaszerződés_minta.docx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      category: 'CONTRACT',
+      documentType: 'SOURCE',
+      clientId: IDS.clientId,
+      caseId: IDS.caseEmploymentId,
+      title: 'Munkaszerződés minta',
+      documentRole: 'SOURCE',
+      workStatus: 'INTERNAL_REVIEW',
+      responsibleId: IDS.lawyerGyulaId,
+      reviewerId: IDS.lawyerCsanadId,
+      workInstruction: 'Első körös felülvizsgálat, problémás kikötések jelölése.',
+      nextStep: 'Felelős ügyvédi jóváhagyás',
+      isLatest: true,
+    },
   });
   // Immutable metadata-only versions (no storage assertion).
-  await db.documentVersion.upsert({ where: { id: IDS.version1Id }, update: {}, create: { id: IDS.version1Id, documentId: IDS.docEmploymentId, version: 1, name: 'Munkaszerződés_minta.docx', originalFileName: 'Munkaszerződés_minta.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', isCurrent: false, versionType: 'WORKING_COPY' } });
-  await db.documentVersion.upsert({ where: { id: IDS.version2Id }, update: {}, create: { id: IDS.version2Id, documentId: IDS.docEmploymentId, version: 2, name: 'Munkaszerződés_minta_belso_revizios_v2.docx', originalFileName: 'Munkaszerződés_minta_belso_revizios_v2.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', isCurrent: true, versionType: 'WORKING_COPY' } });
+  await db.documentVersion.upsert({
+    where: { id: IDS.version1Id },
+    update: {},
+    create: {
+      id: IDS.version1Id,
+      documentId: IDS.docEmploymentId,
+      version: 1,
+      name: 'Munkaszerződés_minta.docx',
+      originalFileName: 'Munkaszerződés_minta.docx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      isCurrent: false,
+      versionType: 'WORKING_COPY',
+      uploadedById: IDS.lawyerGyulaId,
+    },
+  });
+  await db.documentVersion.upsert({
+    where: { id: IDS.version2Id },
+    update: {},
+    create: {
+      id: IDS.version2Id,
+      documentId: IDS.docEmploymentId,
+      version: 2,
+      name: 'Munkaszerződés_minta_belso_revizios_v2.docx',
+      originalFileName: 'Munkaszerződés_minta_belso_revizios_v2.docx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      isCurrent: true,
+      versionType: 'WORKING_COPY',
+      uploadedById: IDS.lawyerGyulaId,
+      previousVersionId: IDS.version1Id,
+    },
+  });
 
-  // 14. Review + review point.
+  // 14. Review + round + review point.
   await db.documentReview.upsert({
     where: { id: IDS.reviewId },
     update: {},
-    create: { id: IDS.reviewId, documentId: IDS.docEmploymentId, status: 'IN_REVIEW', createdById: IDS.lawyerGyulaId, assignedReviewerId: IDS.lawyerCsanadId },
+    create: {
+      id: IDS.reviewId,
+      documentId: IDS.docEmploymentId,
+      documentVersionId: IDS.version1Id,
+      status: 'IN_REVIEW',
+      createdById: IDS.lawyerGyulaId,
+      assignedReviewerId: IDS.lawyerCsanadId,
+    },
+  });
+  await db.documentReviewRound.upsert({
+    where: { id: IDS.reviewRoundId },
+    update: {},
+    create: {
+      id: IDS.reviewRoundId,
+      reviewId: IDS.reviewId,
+      roundNumber: 1,
+      reviewVersionId: IDS.version1Id,
+      status: 'OPEN',
+      createdById: IDS.lawyerGyulaId,
+    },
+  });
+  await db.documentReview.update({
+    where: { id: IDS.reviewId },
+    data: { currentRoundId: IDS.reviewRoundId },
   });
   await db.reviewPoint.upsert({
     where: { id: IDS.reviewPointId },
     update: {},
-    create: { id: IDS.reviewPointId, reviewId: IDS.reviewId, type: 'WHOLE_DOCUMENT', status: 'OPEN', severity: 'NORMAL', body: 'A felmondási idő kikötése ellentmond a hatályos munkajogi szabályoknak.' },
+    create: {
+      id: IDS.reviewPointId,
+      reviewId: IDS.reviewId,
+      reviewRoundId: IDS.reviewRoundId,
+      type: 'WHOLE_DOCUMENT',
+      status: 'OPEN',
+      severity: 'NORMAL',
+      title: 'A felmondási idő kikötése ellentmond a hatályos munkajogi szabályoknak.',
+      internalRationale: 'A felmondási idő kikötése ellentmond a hatályos munkajogi szabályoknak.',
+      createdById: IDS.lawyerGyulaId,
+    },
   });
 
   // 15. Client-safe publications (customer-safe snapshots).
   await db.clientSafeUpdate.upsert({
     where: { id: IDS.pubEmploymentId },
     update: {},
-    create: { id: IDS.pubEmploymentId, clientId: IDS.clientId, caseId: IDS.caseEmploymentId, category: 'ACTION_REQUIRED', status: 'PUBLISHED', body: 'Az első jogi áttekintés elkészült. Következő lépés: felelős ügyvédi jóváhagyás.', createdAt: now },
+    create: {
+      id: IDS.pubEmploymentId,
+      clientId: IDS.clientId,
+      caseId: IDS.caseEmploymentId,
+      title: 'Munkajogi felülvizsgálati státusz',
+      body: 'Az első jogi áttekintés elkészült. Következő lépés: felelős ügyvédi jóváhagyás.',
+      category: 'ACTION_REQUIRED',
+      status: 'PUBLISHED',
+      audienceSnapshot: { grantCount: 1 },
+      preparedById: IDS.lawyerCsanadId,
+      publishedById: IDS.lawyerCsanadId,
+      publishedAt: now,
+      createdAt: now,
+    },
   });
   await db.clientSafeUpdate.upsert({
     where: { id: IDS.pubSupplierId },
     update: {},
-    create: { id: IDS.pubSupplierId, clientId: IDS.clientId, caseId: IDS.caseSupplierId, category: 'STATUS', status: 'PUBLISHED', body: 'Az első szerződéses áttekintés folyamatban van.', createdAt: now },
+    create: {
+      id: IDS.pubSupplierId,
+      clientId: IDS.clientId,
+      caseId: IDS.caseSupplierId,
+      title: 'Beszállítói szerződés státusz',
+      body: 'Az első szerződéses áttekintés folyamatban van.',
+      category: 'STATUS',
+      status: 'PUBLISHED',
+      audienceSnapshot: { grantCount: 1 },
+      preparedById: IDS.lawyerCsanadId,
+      publishedById: IDS.lawyerCsanadId,
+      publishedAt: now,
+      createdAt: now,
+    },
   });
 
   // 16. Portal identity + membership + grants (Péterfi János, executive/approver).
   await db.clientPortalIdentity.upsert({
     where: { id: IDS.identityId },
     update: {},
-    create: { id: IDS.identityId, normalizedEmail: 'demo-kft-uzletvezeto@fixture.invalid', status: 'ACTIVE', emailVerified: true },
+    create: {
+      id: IDS.identityId,
+      provider: 'ENTRA_EXTERNAL_ID',
+      issuer: 'https://login.microsoftonline.com/demo-kft',
+      subject: 'sub-peterfi',
+      normalizedEmail: 'demo-kft-uzletvezeto@fixture.invalid',
+      displayName: 'Péterfi János',
+      accountType: 'ORGANIZATION_MEMBER',
+      status: 'ACTIVE',
+      emailVerifiedAt: now,
+    },
   });
   await db.clientPortalWorkspaceMembership.upsert({
     where: { id: IDS.membershipId },
@@ -555,7 +672,25 @@ async function seed(db) {
     { id: stableId('grantSupplier'), caseId: IDS.caseSupplierId, permissions: ['MATTER_READ', 'DOCUMENT_READ', 'DOCUMENT_DOWNLOAD', 'ACTION_REQUEST_READ', 'UPDATE_READ'] },
     { id: stableId('grantCompliance'), caseId: IDS.caseComplianceId, permissions: ['MATTER_READ', 'UPDATE_READ'] },
   ];
-  for (const g of grantRows) await db.clientPortalGrant.upsert({ where: { id: g.id }, update: {}, create: { id: g.id, clientPortalIdentityId: IDS.identityId, workspaceId: IDS.workspaceId, clientId: IDS.clientId, caseId: g.caseId, status: 'ACTIVE', role: 'VIEWER', permissions: g.permissions, validFrom: now } });
+  for (const g of grantRows) {
+    await db.clientPortalGrant.upsert({
+      where: { id: g.id },
+      update: {},
+      create: {
+        id: g.id,
+        clientPortalIdentityId: IDS.identityId,
+        workspaceId: IDS.workspaceId,
+        clientId: IDS.clientId,
+        caseId: g.caseId,
+        status: 'ACTIVE',
+        role: 'VIEWER',
+        permissions: g.permissions,
+        validFrom: now,
+        invitedById: IDS.adminUserId,
+        activatedAt: now,
+      },
+    });
+  }
 
   console.log('\n✅ DEMO KFT fixture ready!');
   console.log('   Client:    Demo Kft. (id=[' + IDS.clientId + '])');
