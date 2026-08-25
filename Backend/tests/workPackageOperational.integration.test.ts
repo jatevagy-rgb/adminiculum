@@ -14,7 +14,7 @@ describeWithDatabase('WP-5A operational work package (PostgreSQL)', () => {
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
     await db.user.create({ data: { id: ids.user, email: `wp5a-${suffix}@example.invalid`, name: 'WP-5A User', role: 'ADMIN' } });
     await db.client.create({ data: { id: ids.client, name: `WP-5A Client ${suffix}` } });
-    await db.case.create({ data: { id: ids.case, caseNumber: `WP5A-${suffix.slice(0, 8)}`, title: 'WP-5A case', caseType: 'OTHER', clientId: ids.client, createdById: ids.user, assignedLawyerId: ids.user } as any);
+    await db.case.create({ data: { id: ids.case, caseNumber: `WP5A-${suffix.slice(0, 8)}`, title: 'WP-5A case', caseType: 'OTHER', clientId: ids.client, createdById: ids.user, assignedLawyerId: ids.user } as any });
     await db.caseWorkPackage.create({ data: { id: ids.pkg, caseId: ids.case, createdById: ids.user } });
     await db.caseWorkPackageItem.create({ data: { id: ids.item, caseWorkPackageId: ids.pkg, moduleType: 'RESEARCH', moduleKey: 'research', label: 'Research', createdById: ids.user, config: { estimatedMinutes: 60, internalOnly: 'redacted' } } });
   });
