@@ -12,7 +12,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getCaseWorkspace, startTask, submitTask, completeTask, type CaseWorkspace } from "@/lib/api";
+import { getCaseResponsibility, getCaseWorkspace, startTask, submitTask, completeTask, type CaseResponsibilityResponse, type CaseWorkspace } from "@/lib/api";
 import { getCaseStatusLabel } from "@/lib/caseLabels";
 import { taskStatusLabel } from "@/lib/taskWorkflowPresentation";
 import { attentionPresentation, type AttentionCategory } from "@/lib/attentionCategory";
@@ -55,6 +55,7 @@ const URGENCY_STYLE: Record<string, { label: string; accent: Accent }> = {
 export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   const router = useRouter();
   const [ws, setWs] = useState<CaseWorkspace | null>(null);
+  const [responsibility, setResponsibility] = useState<CaseResponsibilityResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +65,14 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
-    try { setWs(await getCaseWorkspace(caseId)); }
+    try {
+      const [workspace, caseResponsibility] = await Promise.all([
+        getCaseWorkspace(caseId),
+        getCaseResponsibility(caseId).catch(() => null),
+      ]);
+      setWs(workspace);
+      setResponsibility(caseResponsibility);
+    }
     catch { setError("Az ügy-munkatér most nem tölthető be."); }
     finally { setLoading(false); }
   }, [caseId]);
@@ -118,6 +126,14 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
     (w) => w.section === section && w.code !== "DOCUMENT_META_LIMITED" && w.code !== "CASE_TIME_NOT_ATTRIBUTABLE",
   );
   const urgency = URGENCY_STYLE[cp.urgency] || URGENCY_STYLE.STEADY;
+  const reviewer = responsibility?.collaborators.find((collaborator) => collaborator.role.toUpperCase() === "REVIEWER")?.user.name || null;
+  const priorityLabel = { URGENT: "Sürgős", HIGH: "Magas", MEDIUM: "Közepes", LOW: "Alacsony" }[c.priority.toUpperCase()] || c.priority;
+  const clientRoleLabel = {
+    CLIENT: "Ügyfél",
+    COUNTERPARTY: "Ellenérdekű fél",
+    OPPOSING_COUNSEL: "Ellenérdekű képviselő",
+    BENEFICIARY: "Kedvezményezett",
+  }[c.clientRole?.toUpperCase() || ""] || c.clientRole;
   const groupTasks = (ids: string[]) => ids.map((id) => tasksById.get(id)).filter(Boolean) as WorkspaceTask[];
   const immediate = groupTasks(cp.taskGroups.immediate);
   const today = groupTasks(cp.taskGroups.today);
@@ -191,9 +207,15 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
               <span className="font-semibold text-[var(--adm-text)]">{c.client?.name || "Nincs ügyfél"}</span>
               <span aria-hidden="true">·</span><span>{c.matterType || "Ügytípus nincs"}</span>
               <span aria-hidden="true">·</span><span>{getCaseStatusLabel(c.status)}</span>
-              <span aria-hidden="true">·</span>
-              <span>Felelős: <span className="font-semibold text-[var(--adm-text)]">{cp.responsible?.name || "Nincs kijelölve"}</span></span>
             </p>
+            <dl data-testid="case-summary-fields" className="mt-2.5 grid grid-cols-2 gap-x-5 gap-y-2 text-[11px] sm:grid-cols-3 xl:grid-cols-6">
+              <div><dt className="text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">Prioritás</dt><dd className="font-semibold">{priorityLabel}</dd></div>
+              <div><dt className="text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">Felelős</dt><dd className="truncate font-semibold">{cp.responsible?.name || "Nincs kijelölve"}</dd></div>
+              <div><dt className="text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">Ellenőrző</dt><dd className="truncate font-semibold">{reviewer || "Nincs adat"}</dd></div>
+              <div><dt className="text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">Határidő</dt><dd className="font-semibold">{fmtDate(c.deadline)}</dd></div>
+              <div><dt className="text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">Ügyfél szerepe</dt><dd className="truncate font-semibold">{clientRoleLabel || "Nincs adat"}</dd></div>
+              {c.matterId ? <div><dt className="text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">Matter</dt><dd><Link href={`/matters/${encodeURIComponent(c.matterId)}`} className="font-semibold text-[var(--adm-green-800)] hover:underline">Megnyitás</Link></dd></div> : null}
+            </dl>
             <div className="mt-2.5 flex flex-wrap gap-x-6 gap-y-1.5">
               <span className="min-w-0">
                 <span className="block text-[9.5px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Következő lépés</span>
@@ -210,7 +232,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
             </div>
           </div>
           {/* Primary actions — secondary links must not compete with these. */}
-          <div className="flex shrink-0 flex-wrap gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             <AdminButton variant="primary" size="sm" onClick={() => setModal({ type: "task-create" })}>Új feladat</AdminButton>
             <AdminButton variant="neutral" size="sm" onClick={() => setModal({ type: "case-comment" })}>Kommunikáció hozzáadása</AdminButton>
             <AdminButton variant="neutral" size="sm" onClick={() => setModal({ type: "doc-upload" })}>Dokumentum feltöltése</AdminButton>
@@ -248,7 +270,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         {/* -------- Left: work and time pressure -------- */}
         <div className="min-w-0 space-y-4">
-          <CockpitSection id="ck-tasks" title="Teendők most" accent="petrol" count={ws.tasks.length}
+          <CockpitSection id="ck-tasks" title="Aktív munka" accent="petrol" count={ws.tasks.length}
             action={<AdminButton variant="primary" size="xs" onClick={() => setModal({ type: "task-create" })}>+ Feladat</AdminButton>}>
             {warn("tasks") ? (
               <ActionableEmpty message="A feladatok most nem érhetők el." actionLabel="Újratöltés" onAction={() => void refresh()} />
@@ -435,6 +457,11 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
               </p>
             </div>
           )}
+          <div className="px-3 pb-3">
+            <Link href={`/time-entries?caseId=${encodeURIComponent(caseId)}`} className="text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">
+              Munkaidő rögzítése
+            </Link>
+          </div>
         </CockpitSection>
       </div>
 
