@@ -162,8 +162,10 @@ async function main() {
     const findingCount = await db.assessmentFinding.count({
       where: {
         clientId: IDS.clientId,
-        requirementVersionId: IDS.requirementVersionId,
-      }
+        requirementApplicability: {
+          requirementVersionId: IDS.requirementVersionId,
+        },
+      },
     });
 
     console.log('');
