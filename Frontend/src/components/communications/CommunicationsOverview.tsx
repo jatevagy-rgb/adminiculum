@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   getCommunications,
+  getCommunicationById,
   runOutlookSync,
   linkCommunicationToClient,
   linkCommunicationToCase,
@@ -12,6 +13,7 @@ import {
   getCases,
   getClients,
   type CommunicationItem,
+  type CommunicationDetail,
   type OutlookSyncSummary,
 } from "@/lib/api";
 
@@ -46,6 +48,10 @@ export default function CommunicationsOverview() {
   const [assignCase, setAssignCase] = useState<Record<string, string>>({});
   const [assignClient, setAssignClient] = useState<Record<string, string>>({});
   const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<CommunicationDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [filter, setFilter] = useState<"all" | "needs-assignment" | "unlinked">("all");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,6 +59,7 @@ export default function CommunicationsOverview() {
     try {
       const data = await getCommunications({ limit: 50 });
       setCommunications(data.communications);
+      setSelectedId((current) => current || data.communications[0]?.id || null);
     } catch {
       setError("A kommunikáció betöltése sikertelen.");
       setCommunications([]);
@@ -87,6 +94,18 @@ export default function CommunicationsOverview() {
     void load();
     void loadLookups();
   }, [load, loadLookups]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setSelected(null);
+      return;
+    }
+    setDetailLoading(true);
+    void getCommunicationById(selectedId)
+      .then(setSelected)
+      .catch(() => setSelected(null))
+      .finally(() => setDetailLoading(false));
+  }, [selectedId]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -163,17 +182,38 @@ export default function CommunicationsOverview() {
   };
 
   const needsAssignment = communications.filter((c) => c.triage === "NEEDS_ASSIGNMENT").length;
+  const visibleCommunications = communications.filter((communication) => {
+    if (filter === "needs-assignment") return communication.triage === "NEEDS_ASSIGNMENT";
+    if (filter === "unlinked") return !communication.caseId;
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-[var(--adm-ivory-50)]">
       <header className="border-b border-[#DDD7CA] bg-[#FAF8F2] px-6 py-4">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="font-serif text-2xl font-semibold text-[#1F2821]">Ügykommunikáció</h1>
+            <h1 className="font-serif text-2xl font-semibold text-[#1F2821]">Bejövő kommunikáció</h1>
             <p className="mt-1 text-xs text-[#7B776D]">
               Outlook levelezés és rögzített kommunikáció áttekintése
               {needsAssignment > 0 ? ` · ${needsAssignment} feldolgozásra vár` : ""}
             </p>
+          </div>
+          <div className="flex flex-wrap gap-2" aria-label="Kommunikáció szűrése">
+            {[
+              ["all", "Összes"],
+              ["needs-assignment", "Feldolgozásra vár"],
+              ["unlinked", "Nincs ügyhöz kapcsolva"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setFilter(value as typeof filter)}
+                className={`rounded border px-3 py-1.5 text-[11px] font-semibold ${filter === value ? "border-[#1F4A33] bg-[#1F4A33] text-white" : "border-[#DDD7CA] bg-white text-[#514D45]"}`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
           <button
             onClick={handleSync}
@@ -224,9 +264,14 @@ export default function CommunicationsOverview() {
             <p className="text-sm text-[#514D45]">Még nincs kommunikáció.</p>
             <p className="mt-1 text-xs text-[#7B776D]">A „Outlook kommunikáció frissítése” gombbal importálhatod a bejövő levelezést.</p>
           </div>
+        ) : visibleCommunications.length === 0 ? (
+          <div className="rounded border border-[#DDD7CA] bg-white p-8 text-center">
+            <p className="text-sm text-[#514D45]">Nincs a szűrésnek megfelelő kommunikáció.</p>
+          </div>
         ) : (
+          <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
           <div className="overflow-x-auto rounded border border-[#DDD7CA] bg-white">
-            <table className="w-full min-w-[900px] text-left text-sm">
+            <table className="w-full min-w-[680px] text-left text-sm">
               <thead>
                 <tr className="border-b border-[#DDD7CA] bg-[#F6F2E8]">
                   <th className="px-4 py-3 text-[10px] uppercase tracking-[0.14em] text-[#7B776D]">Feladó</th>
@@ -239,19 +284,18 @@ export default function CommunicationsOverview() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#EEE9DE]">
-                {communications.map((comm) => (
-                  <tr key={comm.id} className="align-top hover:bg-[#FAF8F2]">
+                {visibleCommunications.map((comm) => (
+                  <tr key={comm.id} className={`align-top hover:bg-[#FAF8F2] ${selectedId === comm.id ? "bg-[#FAF8F2]" : ""}`}>
                     <td className="px-4 py-3">
                       <p className="font-medium text-[#1F2821]">{comm.senderName || comm.senderEmail || "Ismeretlen feladó"}</p>
                       <p className="text-[11px] text-[#7B776D]">
                         {comm.direction === "INBOUND" ? "Bejövő" : comm.direction === "OUTBOUND" ? "Kimenő" : "Rögzített"}
-                        {comm.source === "OUTLOOK" ? " · Outlook" : ""}
-                        {comm.providerConversationId ? " · szál" : ""}
+                        {comm.source === "OUTLOOK" ? " · Külső levelezés" : ""}
                       </p>
                     </td>
                     <td className="max-w-[280px] px-4 py-3">
                       <button
-                        onClick={() => comm.caseId && router.push(`/cases/${comm.caseId}/communications`)}
+                        onClick={() => setSelectedId(comm.id)}
                         className="text-left text-[#1F2821] hover:text-[#C9A227] line-clamp-2"
                       >
                         {comm.subject || "(tárgy nélkül)"}
@@ -349,6 +393,38 @@ export default function CommunicationsOverview() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <aside className="min-w-0 rounded border border-[#DDD7CA] bg-white p-4" aria-live="polite">
+            {detailLoading ? (
+              <p className="text-sm text-[#7B776D]">Kommunikáció betöltése…</p>
+            ) : selected ? (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7B776D]">Kiválasztott kommunikáció</p>
+                  <h2 className="mt-1 break-words font-serif text-xl font-semibold text-[#1F2821]">{selected.subject || "Tárgy nélkül"}</h2>
+                  <p className="mt-1 text-xs text-[#7B776D]">{selected.senderName || selected.senderEmail || "Ismeretlen feladó"} · {formatDate(selected.receivedAt || selected.createdAt)}</p>
+                </div>
+                <div className="space-y-2 text-sm text-[#1F2821]">
+                  <p><strong>Ügyfél:</strong> {selected.client?.name || "Nincs ügyfélhez kapcsolva"}</p>
+                  <p><strong>Ügy:</strong> {selected.case ? `${selected.case.caseNumber} — ${selected.case.title}` : "Nincs ügyhöz kapcsolva"}</p>
+                  {selected.recipientName || selected.recipientEmail ? <p><strong>Címzett:</strong> {selected.recipientName || selected.recipientEmail}</p> : null}
+                </div>
+                <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[#3D4842]">{selected.content || selected.contentPreview || "Ehhez a kommunikációhoz nem érhető el tartalom."}</p>
+                <div className="flex flex-wrap gap-2">
+                  {selected.caseId ? <button type="button" onClick={() => router.push(`/cases/${selected.caseId}`)} className="rounded bg-[#1F4A33] px-3 py-2 text-xs font-semibold text-white">Ügy megnyitása</button> : null}
+                  {selected.attachments.length > 0 ? <span className="rounded border border-[#DDD7CA] px-3 py-2 text-xs text-[#514D45]">{selected.attachments.length} melléklet</span> : null}
+                </div>
+                {selected.relatedTasks.length > 0 ? (
+                  <div className="border-t border-[#EEE9DE] pt-3">
+                    <p className="text-xs font-semibold text-[#1F2821]">Kapcsolódó feladatok</p>
+                    <ul className="mt-2 space-y-1 text-xs text-[#514D45]">{selected.relatedTasks.map((task) => <li key={task.id}>{task.title}</li>)}</ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-sm text-[#7B776D]">Válassz kommunikációt a részletek megtekintéséhez.</p>
+            )}
+          </aside>
           </div>
         )}
       </main>
