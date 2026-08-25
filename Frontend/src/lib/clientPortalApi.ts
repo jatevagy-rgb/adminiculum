@@ -478,12 +478,8 @@ export type PortalCompanyProfileDiscovery = {
   }>;
 };
 export async function getPortalCompanyProfileDiscovery() {
-  return fetchPortalApi<PortalCompanyProfileDiscovery>('/org/company-profile');
+  return fetchApi<PortalCompanyProfileDiscovery>('/client-portal/org/company-profile', { authContext: 'customer' });
 }
 export async function answerPortalCompanyProfileQuestion(questionKey: string, payload: { status: string; numberValue?: number }) {
-  return fetchPortalApi<any>(`/org/company-profile/questions/${questionKey}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
+  return fetchApi<any>(`/client-portal/org/company-profile/questions/${questionKey}`, { authContext: 'customer', method: 'PUT', body: JSON.stringify(payload) });
 }
-

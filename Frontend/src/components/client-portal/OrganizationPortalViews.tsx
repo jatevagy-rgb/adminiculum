@@ -26,7 +26,7 @@ import {
 import { clientSafeError } from "@/lib/clientInteractionApi";
 import { CustomerInteractionCard } from "./CustomerInteractionCard";
 import { MatterView } from "./MatterWorkspace";
-import { PortalPersonHeader } from "./PortalPresentationPrimitives";
+import { ClientSafeResultCard, DemoContentBanner, PortalPersonHeader, PortalProfileCard } from "./PortalPresentationPrimitives";
 import { DemoCompanyPresentation } from "./DemoCompanyPresentation";
 
 export type OrganizationPortalView = "home" | "matters" | "tasks" | "documents" | "messages" | "matter" | "intakes" | "new-intake" | "leadership" | "contracts" | "company";
@@ -470,5 +470,6 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
     </div>
   );
 }
+
 
 

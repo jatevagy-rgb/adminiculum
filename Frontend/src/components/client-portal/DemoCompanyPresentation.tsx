@@ -10,7 +10,7 @@ function formatDate(dateString: string) {
   return new Intl.DateTimeFormat("hu-HU", { year: "numeric", month: "short", day: "numeric" }).format(new Date(dateString));
 }
 
-function Section({ title, empty, emptyText, children }: { title: string; empty?: boolean; emptyText?: string; children: React.ReactNode }) {
+function Section({ title, empty, emptyText, children }: { title: string; empty?: boolean; emptyText?: string; children?: React.ReactNode }) {
   return (
     <section className={card}>
       <h2 className="font-serif text-2xl font-semibold text-stone-950">{title}</h2>
@@ -31,7 +31,7 @@ export function DemoCompanyPresentation({ company }: { company: PortalOrgCompany
   useEffect(() => {
     getPortalCompanyProfileDiscovery().then((res) => {
       setDiscovery(res);
-      const q = res.questions.find((q) => q.questionKey === "employee_count");
+      const q = res.questions.find((q: any) => q.questionKey === "employee_count");
       if (q && typeof q.value === "number") {
         setEmployeeCount(q.value);
         if (q.value === 52) {
@@ -162,4 +162,6 @@ export function DemoCompanyPresentation({ company }: { company: PortalOrgCompany
     </div>
   );
 }
+
+
 
