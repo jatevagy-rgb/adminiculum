@@ -22,6 +22,7 @@ import { authenticate } from '../../middleware/auth';
 import { prisma } from '../../prisma/prisma.service';
 import { requireDocumentReadAccess, requireDocumentManageAccess, requireHrConfidentialReadAccess } from './authorization';
 import { userCanManageCase } from '../cases/authorization';
+import { validateWorkforceUpload } from '../upload-security/uploadValidationCore';
 import { createTaskFromDocumentSource, SourceLinkedTaskError } from '../tasks/services';
 import { getDocumentEditorMetadata } from '../documentEditor/service';
 import {
@@ -229,6 +230,22 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
         status: 413,
         code: 'DOCUMENT_TOO_LARGE',
         message: 'A fájl mérete meghaladja a 25 MB-os korlátot.',
+      });
+      return;
+    }
+
+    // SEC-2: Content validation — magic bytes, unsafe content, archive inspection
+    const contentValidation = await validateWorkforceUpload({
+      buffer: fileContentBuffer,
+      declaredMimeType: req.body.mimeType,
+      originalFileName: fileName,
+      inspectArchiveContent: true,
+    });
+    if (!contentValidation.ok) {
+      res.status(400).json({
+        status: 400,
+        code: 'CONTENT_VALIDATION_FAILED',
+        message: `File content validation failed: ${contentValidation.codeSafe}`,
       });
       return;
     }
@@ -527,6 +544,22 @@ router.post('/:id/versions', authenticate, requireDocumentManageAccess, async (r
         status: 413,
         code: 'DOCUMENT_TOO_LARGE',
         message: 'A fájl mérete meghaladja a 25 MB-os korlátot.',
+      });
+      return;
+    }
+
+    // SEC-2: Content validation — magic bytes, unsafe content, archive inspection
+    const contentValidation = await validateWorkforceUpload({
+      buffer: fileBuffer,
+      declaredMimeType: req.body?.mimeType,
+      originalFileName: fileName,
+      inspectArchiveContent: true,
+    });
+    if (!contentValidation.ok) {
+      res.status(400).json({
+        status: 400,
+        code: 'CONTENT_VALIDATION_FAILED',
+        message: `File content validation failed: ${contentValidation.codeSafe}`,
       });
       return;
     }

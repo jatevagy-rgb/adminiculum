@@ -11,6 +11,7 @@ import { ADASVETEL_VARIABLES, TemplateCategory } from './types';
 import multer from 'multer';
 import { isDatabaseFoundationEnabled, sendFeatureUnavailable } from '../../middleware/featureAvailability';
 import { getEditorTemplateCapabilities } from './templateCapabilities';
+import { validateWorkforceUpload, sanitizeUploadFileName, hasPathTraversal } from '../upload-security/uploadValidationCore';
 
 const router = Router();
 const isContractsEnabled = (): boolean =>
@@ -127,6 +128,33 @@ router.post('/templates', authenticate, upload.single('template'), async (req: R
         status: 400,
         code: 'VALIDATION_ERROR',
         message: 'Template file is required'
+      });
+      return;
+    }
+
+    // SEC-2: Validate file content before storage
+    const safeFileName = sanitizeUploadFileName(req.file.originalname);
+    if (hasPathTraversal(req.file.originalname)) {
+      res.status(400).json({
+        status: 400,
+        code: 'INVALID_FILENAME',
+        message: 'Template filename contains unsafe characters.'
+      });
+      return;
+    }
+
+    const validation = await validateWorkforceUpload({
+      buffer: req.file.buffer,
+      declaredMimeType: req.file.mimetype,
+      originalFileName: safeFileName,
+      inspectArchiveContent: true,
+    });
+
+    if (!validation.ok) {
+      res.status(400).json({
+        status: 400,
+        code: 'UPLOAD_VALIDATION_FAILED',
+        message: `File validation failed: ${validation.codeSafe}`,
       });
       return;
     }
