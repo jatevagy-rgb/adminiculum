@@ -1299,6 +1299,8 @@ export interface CreateCaseData {
   clientName: string;
   clientId?: string;
   matterType: string;
+  caseTypeDefinitionId?: string;
+  selectedModuleKeys?: string[];
   priority?: string;
   description?: string;
   clientRole?: string;
@@ -1312,12 +1314,21 @@ export interface CreateCaseResponse {
   caseNumber: string;
   status: string;
   createdAt: string;
+  workPackage?: {
+    id: string;
+    templateId: string;
+    templateVersion: number;
+    snapshotWorkflowTemplateId: string | null;
+    items: Array<{ moduleKey: string; moduleType: string; label: string; order: number }>;
+  } | null;
 }
 
 export async function createCase(data: CreateCaseData): Promise<CreateCaseResponse> {
-  const { clientName, clientId, matterType, description, clientRole, deadline, workflowTemplateKey, workflowAssignees } = data;
+  const { clientName, clientId, matterType, caseTypeDefinitionId, selectedModuleKeys, description, clientRole, deadline, workflowTemplateKey, workflowAssignees } = data;
   const payload: Record<string, unknown> = { clientName, matterType };
   if (clientId) payload.clientId = clientId;
+  if (caseTypeDefinitionId) payload.caseTypeDefinitionId = caseTypeDefinitionId;
+  if (selectedModuleKeys) payload.selectedModuleKeys = selectedModuleKeys;
   if (description) payload.description = description;
   if (clientRole) payload.clientRole = clientRole;
   if (deadline) payload.deadline = deadline;
@@ -5558,8 +5569,11 @@ export async function getClientList(): Promise<Client[]> {
 }
 
 export type WorkPackageCaseType = { id: string; slug: string; name: string; description: string | null; isActive: boolean; sortOrder: number };
-export type WorkPackageTemplate = { id: string; caseTypeDefinitionId: string; name: string; description: string | null; status: string; version: number; items: Array<{ id: string; moduleType: string; moduleLabel: string; moduleKey: string; label: string; description: string | null; order: number; isOptional: boolean; config: Record<string, unknown> }> };
+export type WorkPackageTemplateItem = { id: string; moduleType: string; moduleLabel: string; moduleKey: string; label: string; description: string | null; order: number; isOptional: boolean; config: Record<string, unknown> };
+export type WorkPackageTemplate = { id: string; caseTypeDefinitionId: string; name: string; description: string | null; status: string; version: number; defaultWorkflowTemplateId?: string | null; defaultWorkflowTemplate?: { id: string; key: string; name: string; version: number } | null; items: WorkPackageTemplateItem[] };
+export type WorkPackageCaseCreationOption = { caseTypeDefinition: WorkPackageCaseType & { icon?: string | null }; template: WorkPackageTemplate | null };
 export async function listWorkPackageCaseTypes() { return fetchApi<{ items: WorkPackageCaseType[] }>('/work-package-admin/case-types'); }
+export async function listWorkPackageCaseCreationOptions() { return fetchApi<{ items: WorkPackageCaseCreationOption[] }>('/work-package-admin/case-types/creation-options'); }
 export async function createWorkPackageCaseType(body: Record<string, unknown>) { return fetchApi<WorkPackageCaseType>('/work-package-admin/case-types', { method: 'POST', body: JSON.stringify(body) }); }
 export async function updateWorkPackageCaseType(id: string, body: Record<string, unknown>) { return fetchApi<WorkPackageCaseType>(`/work-package-admin/case-types/${id}`, { method: 'PATCH', body: JSON.stringify(body) }); }
 export async function setWorkPackageCaseTypeActive(id: string, active: boolean) { return fetchApi<WorkPackageCaseType>(`/work-package-admin/case-types/${id}/${active ? 'activate' : 'deactivate'}`, { method: 'POST' }); }
