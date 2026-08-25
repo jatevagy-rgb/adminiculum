@@ -26,6 +26,7 @@
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { assertClientSafe, InteractionError } from '../client-interaction/base';
 import { lookupSafeTopic, portalVisibleKeys, type SafeTopicEntry } from './safeTopicRegistry';
+import { isCompanyProfileQuestion } from '../client-workspace/companyProfileQuestionRegistry';
 
 type Prisma = typeof defaultPrisma;
 
@@ -231,7 +232,7 @@ function computeMissingInformation(
   const missing: MissingInformationItem[] = [];
   for (const dep of deps) {
     if (consumedKeys.has(dep.factKey)) continue;
-    missing.push({ label: safeQuestionLabel(dep.questionKey), portalAnswerable: dep.questionKey != null });
+    missing.push({ label: safeQuestionLabel(dep.questionKey), portalAnswerable: isCompanyProfileQuestion(dep.questionKey) });
   }
   return missing;
 }

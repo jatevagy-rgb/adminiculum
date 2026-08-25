@@ -28,3 +28,12 @@ export function getCompanyProfileQuestion(questionKey: string): CompanyProfileQu
   }
   return question;
 }
+
+/**
+ * Returns true if the given questionKey is registered in the canonical
+ * company-profile allowlist and is therefore portal-answerable.
+ */
+export function isCompanyProfileQuestion(questionKey: string | null | undefined): boolean {
+  if (!questionKey) return false;
+  return COMPANY_PROFILE_QUESTIONS.some((item) => item.questionKey === questionKey);
+}
