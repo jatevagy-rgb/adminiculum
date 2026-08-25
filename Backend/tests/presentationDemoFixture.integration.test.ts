@@ -21,6 +21,7 @@ import {
   teardownPresentationDemoFixture,
   DEMO_IDS,
 } from './helpers/presentationDemoFixture';
+import { createTypedFactAndEvaluate } from '../src/modules/compliance/typedFactMutationService';
 
 const baseDbUrl =
   process.env.DEMO_PRESENTATION_TEST_DATABASE_URL ||
@@ -280,6 +281,38 @@ d('Presentation demo fixture (PostgreSQL)', () => {
     expect(Number(fact!.numberValue)).toBe(47);
     const tasks = await db.task.count({ where: { caseId: { in: [DEMO_IDS.caseMainId, DEMO_IDS.caseComplianceId] } } });
     expect(tasks).toBe(3);
+  });
+
+  it('mutates employee count from 47 to 52 using OBSERVATION temporal input and evaluates finding', async () => {
+    await seedPresentationDemoFixture(db);
+    const now = new Date();
+    const result = await createTypedFactAndEvaluate(
+      {
+        clientId: DEMO_IDS.clientId,
+        factDefinitionId: DEMO_IDS.factDefinitionId,
+        actorUserId: DEMO_IDS.adminUserId,
+        input: {
+          scopeType: 'COMPANY',
+          factKey: DEMO_IDS.factDefinitionKey,
+          numberValue: 52,
+          validFrom: now,
+          observedAt: now,
+          evaluationAt: now,
+        },
+      },
+      db,
+    );
+    expect(Number(result.fact.numberValue)).toBe(52);
+
+    const finding = await db.assessmentFinding.findFirst({
+      where: {
+        clientId: DEMO_IDS.clientId,
+        requirementApplicability: {
+          requirementVersionId: DEMO_IDS.requirementVersionId,
+        },
+      },
+    });
+    expect(finding).not.toBeNull();
   });
 
   it('shared non-demo ComplianceDomains (if any) are not touched', async () => {

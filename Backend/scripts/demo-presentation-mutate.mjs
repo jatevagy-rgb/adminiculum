@@ -33,6 +33,7 @@ async function main() {
   const db = new PrismaClient();
   try {
     console.log('🚀 Running employee‑count mutation (47 → 52)...');
+    const now = new Date();
     await createTypedFactAndEvaluate(
       {
         clientId: DEMO_IDS.clientId,
@@ -42,7 +43,9 @@ async function main() {
           scopeType: 'COMPANY',
           factKey: DEMO_IDS.factDefinitionKey,
           numberValue: 52,
-          validFrom: new Date(),
+          validFrom: now,
+          observedAt: now,
+          evaluationAt: now,
         },
       },
       db,
