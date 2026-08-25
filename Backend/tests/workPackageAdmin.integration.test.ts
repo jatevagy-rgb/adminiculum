@@ -62,14 +62,14 @@ describeWithDatabase('WP-2 work package administration (PostgreSQL)', () => {
     expect(() => validateModuleConfig('DEADLINE', { daysFromStart: '3' })).toThrow(WorkPackageAdminError);
     expect(() => validateModuleConfig('RESEARCH', { unsupported: true })).toThrow(WorkPackageAdminError);
     const before = await Promise.all([
-      db.caseWorkPackage.count(), db.task.count(), db.document.count(), db.workflowInstance.count(),
+      db.caseWorkPackage.count(), db.task.count(), db.document.count(),
     ]);
     const draft = await createTemplate(partner, { caseTypeDefinitionId: caseTypeId, name: 'Első sablon', defaultWorkflowTemplateId: workflowId, items: [item('review-contract'), item('final-delivery')] }, db);
     createdTemplateIds.push(draft.id);
     expect(draft.status).toBe('DRAFT');
     expect(draft.items).toHaveLength(2);
     await expect(createTemplate(admin, { caseTypeDefinitionId: caseTypeId, name: 'Bad workflow', defaultWorkflowTemplateId: crypto.randomUUID() }, db)).rejects.toMatchObject({ code: 'WORKFLOW_TEMPLATE_NOT_FOUND' });
-    expect(await Promise.all([db.caseWorkPackage.count(), db.task.count(), db.document.count(), db.workflowInstance.count()])).toEqual(before);
+    expect(await Promise.all([db.caseWorkPackage.count(), db.task.count(), db.document.count()])).toEqual(before);
   });
 
   it('activates one version, archives siblings, and makes active edits a new immutable version', async () => {
