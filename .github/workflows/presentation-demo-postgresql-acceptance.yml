@@ -57,11 +57,23 @@ jobs:
           NODE_ENV: production
           ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
         run: |
-          if npm run demo:presentation:reset; then
-            echo "Production guard failed: reset succeeded in production mode!"
+          set +e
+          OUTPUT=$(npm run demo:presentation:reset 2>&1)
+          EXIT_CODE=$?
+          set -e
+          
+          if [ $EXIT_CODE -ne 2 ]; then
+            echo "Failed: Expected exit code 2, got $EXIT_CODE"
+            echo "Output: $OUTPUT"
             exit 1
-          else
+          fi
+          
+          if echo "$OUTPUT" | grep -q "ADMINICULUM_DEMO_PRODUCTION_DENY"; then
             echo "Production guard successfully blocked reset."
+          else
+            echo "Failed: Did not find ADMINICULUM_DEMO_PRODUCTION_DENY marker"
+            echo "Output was: $OUTPUT"
+            exit 1
           fi
 
       - name: Execute Harness Workflow
@@ -134,4 +146,5 @@ jobs:
           NODE_ENV: development
         run: |
           npm run test:demo-fixture:db
+
 

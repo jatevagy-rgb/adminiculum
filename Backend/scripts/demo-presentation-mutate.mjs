@@ -18,7 +18,7 @@ const DEMO_ENABLED = process.env.ADMINICULUM_DEMO_CONTENT_ENABLED || '';
 
 function refuseIfProduction() {
   if (NODE_ENV === 'production') {
-    console.error('❌ REFUSED: NODE_ENV=production. Demo mutation is forbidden in production.');
+    console.error('ADMINICULUM_DEMO_PRODUCTION_DENY');
     process.exit(2);
   }
   if (DEMO_ENABLED !== 'true') {

@@ -27,7 +27,7 @@ const DEMO_FIXTURE_NAMESPACE = 'DEMO_PRESENTATION_';
 
 function refuseIfProduction() {
   if (NODE_ENV === 'production') {
-    console.error('❌ REFUSED: NODE_ENV=production. Demo reset is forbidden in production.');
+    console.error('ADMINICULUM_DEMO_PRODUCTION_DENY');
     process.exit(2);
   }
   if (DEMO_ENABLED !== 'true') {
@@ -168,7 +168,7 @@ async function seed(db) {
   await db.clientPortalWorkspace.upsert({ where: { id: IDS.workspaceId }, update: {}, create: { id: IDS.workspaceId, clientId: IDS.clientId, name: 'Demo Kft. – Company Workspace', mode: 'ORGANIZATION', status: 'ACTIVE', communicationMode: 'PORTAL_PRIMARY', connectedSystemState: 'NOT_CONFIGURED', publicReference: IDS.publicRef, createdById: IDS.adminUserId } });
 
   // OperatingProfile with 7D.1 canonical enrollment
-  await db.clientOperatingProfile.upsert({ where: { id: IDS.operatingProfileId }, update: {}, create: { id: IDS.operatingProfileId, clientId: IDS.clientId, status: 'ACTIVE', complianceEnrollmentStatus: 'ENROLLED', summary: '[DEMO] Demo Kft. — szintetikus bemutató vállalat. Nem valós ügyfél.', internalNote: 'DEMO fixture — presentation use only.' } as any });
+  await db.clientOperatingProfile.upsert({ where: { id: IDS.operatingProfileId }, update: {}, create: { id: IDS.operatingProfileId, clientId: IDS.clientId, status: 'ACTIVE', complianceEnrollmentStatus: 'ENROLLED', summary: '[DEMO] Demo Kft. — szintetikus bemutató vállalat. Nem valós ügyfél.', internalNote: 'DEMO fixture — presentation use only.' } });
 
   await db.case.upsert({ where: { id: IDS.caseMainId }, update: {}, create: { id: IDS.caseMainId, caseNumber: stableRef('caseMain'), title: 'Munkajogi szerződéses áttekintés', caseType: 'EMPLOYMENT', status: 'IN_REVIEW', priority: 'HIGH', clientId: IDS.clientId, assignedLawyerId: IDS.lawyerUserId, createdById: IDS.adminUserId } });
   await db.case.upsert({ where: { id: IDS.caseComplianceId }, update: {}, create: { id: IDS.caseComplianceId, caseNumber: stableRef('caseCompliance'), title: 'Vállalati megfelelőségi áttekintés', caseType: 'CORPORATE', status: 'IN_REVIEW', priority: 'MEDIUM', clientId: IDS.clientId, assignedLawyerId: IDS.lawyerUserId, createdById: IDS.adminUserId } });

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { PortalOrgCompany, getPortalCompanyProfileDiscovery, answerPortalCompanyProfileQuestion, PortalCompanyProfileDiscovery } from "@/lib/clientPortalApi";
@@ -46,7 +46,7 @@ export function DemoCompanyPresentation({ company }: { company: PortalOrgCompany
 
   if (!company) return <Section title="Vállalat" empty emptyText="Ehhez az ügyfélfelülethez jelenleg nincs közzétett vállalati áttekintés." />;
 
-  const isDemo = company.companyName?.includes("Demo Kft") || process.env.NEXT_PUBLIC_ADMINICULUM_DEMO_CONTENT_ENABLED === "true";
+  const isDemo = process.env.NEXT_PUBLIC_ADMINICULUM_DEMO_CONTENT_ENABLED === "true";
   const areaActivity = company.visibleMattersByArea.filter((area) => area.visibleMatterCount > 0);
 
   async function handleSave() {
