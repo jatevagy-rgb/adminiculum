@@ -44,11 +44,11 @@ describeWithDatabase('case attention read model (PostgreSQL)', () => {
     const summary = await getCaseAttentionSummary(ids.caseA, db);
     expect(summary?.urgency).toBe('URGENT');
     expect(summary?.nextAction?.sourceId).toBe(ids.overdue);
-    await db.task.update({ where: { id: ids.overdue }, data: { status: 'DONE' } });
+    await db.task.updateMany({ where: { id: { in: [ids.overdue, ids.overdueTie] } }, data: { status: 'DONE' } });
     const after = await getCaseAttentionSummary(ids.caseA, db);
     expect(after?.nextAction?.sourceType).toBe('INTAKE_DEADLINE');
     expect((await getCaseAttentionSummary(ids.caseClosed, db))?.nextAction).toBeNull();
-    await db.task.update({ where: { id: ids.overdue }, data: { status: 'TODO' } });
+    await db.task.updateMany({ where: { id: { in: [ids.overdue, ids.overdueTie] } }, data: { status: 'TODO' } });
   });
 
   it('exposes explicit deadlines, keeps ordering deterministic, and scopes dashboard results', async () => {
