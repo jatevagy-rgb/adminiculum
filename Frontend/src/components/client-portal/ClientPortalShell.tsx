@@ -359,16 +359,12 @@ export function ClientPortalShell({ view, resourceId }: Props) {
     const workspace = state.context.selectedWorkspace;
     const communicationEnabled = workspace.communicationMode !== 'EXTERNAL_ONLY';
     if (workspace.mode === 'ORGANIZATION') {
-      // Phase 5 organizational IA (7 top-level items). Legacy org entries are
-      // relocated under their section or removed from the top level.
       return [
         ['Főoldal', '/portal'],
-        ['Ügyek', '/portal/ugyeim'],
-        ['Szerződések', '/portal/szerzodesek'],
-        ['Teendők', '/portal/teendoim'],
-        ['Vállalat', '/portal/vallalat'],
+        ['Ügyeink', '/portal/ugyeim'],
+        ['Teendőim', '/portal/teendoim'],
         ['Dokumentumok', '/portal/dokumentumok'],
-        ['Kapcsolat', '/portal/uzenetek'],
+        ['Üzenetek', '/portal/uzenetek'],
       ].filter(([, href]) => {
         if (href === '/portal/ugyeim' && !capabilities.matters) return false;
         if (href === '/portal/teendoim' && !capabilities.tasks) return false;
@@ -435,7 +431,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         {state.status === 'service-error' ? <Card><h1 className="cp-title text-3xl">A portál jelenleg nem érhető el</h1><p className="cp-subtitle mt-3">Kérjük, próbálja újra később.</p></Card> : null}
         {state.status === 'denied' ? <Card>{state.message}</Card> : null}
         {state.status === 'ready' && (state.context.selectedWorkspace?.mode === 'ORGANIZATION' || state.context.selectedWorkspace?.mode === 'CASE_RELAY') && view === 'home' && state.context.selectedWorkspace?.mode === 'ORGANIZATION' ? (
-          <OrgHomeView workspaceId={state.context.selectedWorkspace.publicReference} />
+          <OrgHomeView identity={state.context.identity} />
         ) : null}
         {state.status === 'ready' && (state.context.selectedWorkspace?.mode === 'ORGANIZATION' || state.context.selectedWorkspace?.mode === 'CASE_RELAY') && !(state.context.selectedWorkspace?.mode === 'ORGANIZATION' && view === 'home') ? (
           <OrganizationPortalViews
