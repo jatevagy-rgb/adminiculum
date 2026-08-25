@@ -1,4 +1,4 @@
-﻿# Adminiculum Presentation Demo Runbook
+# Adminiculum Presentation Demo Runbook
 
 This document provides exact instructions for operators and developers to safely run the Adminiculum presentation demo. 
 
@@ -26,6 +26,26 @@ To verify the baseline is properly seeded:
 npm run demo:presentation:check
 ```
 You should see: `Total employee count (baseline): 47`
+
+## AUTOMATED CI PATH VS. REAL PRESENTATION PATH
+
+It is crucial to distinguish between the **Automated CI Validation Path** and the **Real Presentation Path**:
+
+### 1. Real Presentation Path (Operator/Presenter)
+During a live presentation, you MUST use the **normal portal UI** to advance the scenario from 47 to 52 employees. 
+- Do NOT use the `mutate` CLI script during the live presentation.
+- Navigate to the Client Portal -> Company Profile and manually input `52`.
+- Show the visual transition and feedback to the audience.
+
+### 2. Automated CI Path (Testing only)
+The CI pipeline relies entirely on the CLI scripts for deterministic automation:
+- `npm run demo:presentation:reset` (sets baseline 47)
+- `npm run demo:presentation:check` (machine-readable healthcheck)
+- `npm run demo:presentation:mutate` (simulates the 47->52 write for the backend tests)
+
+These scripts ensure the backend logic and PostgreSQL schema are stable without requiring interactive browser automation.
+
+---
 
 ## PRESENTATION PERSONAS & TWO-WINDOW SETUP
 

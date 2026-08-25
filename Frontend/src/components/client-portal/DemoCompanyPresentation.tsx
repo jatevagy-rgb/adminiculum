@@ -84,6 +84,9 @@ export function DemoCompanyPresentation({ company }: { company: PortalOrgCompany
       </section>
 
       {isDemo && !loading && discovery ? (
+        // [DEMO] Synthetic presentation scaffolding
+        // This 8/12 value is hardcoded for the demo presentation visual.
+        // In a fully seeded environment, this would be computed from discovery.questions.
         <PortalProfileCard
           completed={8}
           total={12}
