@@ -21,6 +21,7 @@ describeWithDatabase('WP-5A operational work package (PostgreSQL)', () => {
 
   afterAll(async () => {
     await db.task.deleteMany({ where: { caseId: ids.case } });
+    await db.timelineEvent.deleteMany({ where: { caseId: ids.case } });
     await db.caseWorkPackageItem.deleteMany({ where: { caseWorkPackageId: ids.pkg } });
     await db.caseWorkPackage.deleteMany({ where: { id: ids.pkg } });
     await db.case.deleteMany({ where: { id: ids.case } });
