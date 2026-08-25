@@ -49,7 +49,7 @@ describeWithDatabase('case attention read model (PostgreSQL)', () => {
     const summary = await getCaseAttentionSummary(ids.caseA, db);
     expect(summary?.signals.some((signal) => signal.sourceType === 'INTAKE_DEADLINE')).toBe(true);
     const list = await listCaseAttentionSummaries({ userId: ids.user, role: 'LAWYER', clientId: ids.clientA, limit: 10 }, db);
-    expect(list.map((item) => item.case.id)).toEqual([ids.caseClosed, ids.caseA]);
+    expect(list.map((item) => item.case.id)).toEqual([ids.caseA]);
     expect(list.every((item) => item.case.client.id === ids.clientA)).toBe(true);
   });
 });

@@ -62,7 +62,7 @@ export async function getCaseAttentionSummary(caseId: string, db: Db = prisma): 
 
 export async function listCaseAttentionSummaries(params: { userId: string; role?: string | null; clientId?: string; limit?: number; offset?: number }, db: Db = prisma) {
   const privileged = new Set(['ADMIN', 'PARTNER']).has(String(params.role || '').toUpperCase());
-  const where: Prisma.CaseWhereInput = { ...(params.clientId ? { clientId: params.clientId } : {}), ...(privileged ? {} : { OR: [{ assignedLawyerId: params.userId }, { createdById: params.userId }, { collaborators: { some: { userId: params.userId } } }] }) };
+  const where: Prisma.CaseWhereInput = { status: { notIn: ['CANCELLED', 'ARCHIVED', 'FINAL'] }, ...(params.clientId ? { clientId: params.clientId } : {}), ...(privileged ? {} : { OR: [{ assignedLawyerId: params.userId }, { createdById: params.userId }, { collaborators: { some: { userId: params.userId } } }] }) };
   const limit = Math.min(Math.max(params.limit || 25, 1), 50);
   const cases = await db.case.findMany({ where, orderBy: { updatedAt: 'desc' }, skip: Math.max(params.offset || 0, 0), take: limit, select: { id: true, status: true, deadline: true, updatedAt: true, assignedLawyer: { select: { id: true, name: true } }, client: { select: { id: true, name: true } } } });
   const summaries = await getAttentionRows(cases.map((item) => item.id), db);
