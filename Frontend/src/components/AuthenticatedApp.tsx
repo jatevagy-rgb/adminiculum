@@ -75,6 +75,7 @@ type AuthenticatedAppProps = {
     | "generation"
     | "tasks"
     | "notifications"
+    | "communications"
     | "reviews"
     | "clients"
     | "documents-compare"

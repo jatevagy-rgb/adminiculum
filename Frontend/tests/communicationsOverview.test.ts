@@ -17,6 +17,7 @@ describe('Communications live-integration UI (structural)', () => {
     assert.equal(existsSync(path.join(root, 'src/app/communications/page.tsx')), true);
     assert.equal(existsSync(path.join(root, 'src/components/communications/CommunicationsOverview.tsx')), true);
     assert.match(page(), /CommunicationsOverview/);
+    assert.match(page(), /AuthenticatedApp section="communications"/);
     assert.match(sidebar(), /communications: "\/communications"/);
     assert.match(sidebar(), /Ügykommunikáció/);
   });
