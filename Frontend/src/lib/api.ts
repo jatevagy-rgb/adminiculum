@@ -5556,3 +5556,14 @@ export async function getClientList(): Promise<Client[]> {
   }
   return (response as { data: Client[] }).data;
 }
+
+export type WorkPackageCaseType = { id: string; slug: string; name: string; description: string | null; isActive: boolean; sortOrder: number };
+export type WorkPackageTemplate = { id: string; caseTypeDefinitionId: string; name: string; description: string | null; status: string; version: number; items: Array<{ id: string; moduleType: string; moduleLabel: string; moduleKey: string; label: string; description: string | null; order: number; isOptional: boolean; config: Record<string, unknown> }> };
+export async function listWorkPackageCaseTypes() { return fetchApi<{ items: WorkPackageCaseType[] }>('/work-package-admin/case-types'); }
+export async function createWorkPackageCaseType(body: Record<string, unknown>) { return fetchApi<WorkPackageCaseType>('/work-package-admin/case-types', { method: 'POST', body: JSON.stringify(body) }); }
+export async function updateWorkPackageCaseType(id: string, body: Record<string, unknown>) { return fetchApi<WorkPackageCaseType>(`/work-package-admin/case-types/${id}`, { method: 'PATCH', body: JSON.stringify(body) }); }
+export async function setWorkPackageCaseTypeActive(id: string, active: boolean) { return fetchApi<WorkPackageCaseType>(`/work-package-admin/case-types/${id}/${active ? 'activate' : 'deactivate'}`, { method: 'POST' }); }
+export async function listWorkPackageTemplates(caseTypeId: string) { return fetchApi<{ items: WorkPackageTemplate[] }>(`/work-package-admin/case-types/${caseTypeId}/templates`); }
+export async function createWorkPackageTemplate(body: Record<string, unknown>) { return fetchApi<WorkPackageTemplate>('/work-package-admin/templates', { method: 'POST', body: JSON.stringify(body) }); }
+export async function updateWorkPackageTemplate(id: string, body: Record<string, unknown>) { return fetchApi<WorkPackageTemplate>(`/work-package-admin/templates/${id}`, { method: 'PATCH', body: JSON.stringify(body) }); }
+export async function activateWorkPackageTemplate(id: string) { return fetchApi<WorkPackageTemplate>(`/work-package-admin/templates/${id}/activate`, { method: 'POST' }); }

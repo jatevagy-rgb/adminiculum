@@ -218,6 +218,9 @@ app.use('/api/v1/intake', intakeRoutes);
 import settingsRoutes from './modules/settings/routes';
 app.use('/api/v1/settings', settingsRoutes);
 
+import workPackageAdminRoutes from './modules/work-package-admin/routes';
+app.use('/api/v1/work-package-admin', workPackageAdminRoutes);
+
 import anonymizeRoutes from './modules/anonymize/routes';
 app.use('/api/v1', anonymizeRoutes);
 
@@ -226,6 +229,9 @@ app.use('/api/v1/matters', mattersRoutes);
 
 import timeEntriesRoutes from './routes/timeEntries';
 app.use('/api/v1/time-entries', timeEntriesRoutes);
+
+import clientSafeComplianceRoutes from './modules/compliance/clientSafeComplianceRoutes';
+app.use('/api/v1/client-portal/compliance', clientSafeComplianceRoutes);
 
 import clientPortalRoutes from './routes/clientPortal';
 app.use('/api/v1/client-portal', clientPortalRoutes);

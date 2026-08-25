@@ -68,6 +68,9 @@ describeWithDatabase('Phase 7D typed fact to finding automation (PostgreSQL)', (
   async function typed(definitionId: string, fields: Record<string, unknown>, extra: Record<string, unknown> = {}) {
     const input = { factDefinitionId: definitionId, scopeType: 'COMPANY', ...fields, ...extra } as Record<string, unknown>;
     if (input.observedAt && !input.evaluationAt) input.evaluationAt = '2026-08-24T23:00:00Z';
+    // Keep observation-based fixtures eligible at their fixed evaluation time;
+    // production intentionally defaults omitted validFrom to the wall clock.
+    if (input.observedAt && !input.validFrom) input.validFrom = input.observedAt;
     return createFact(actor, clientA, input, db);
   }
 
@@ -250,8 +253,8 @@ describeWithDatabase('Phase 7D typed fact to finding automation (PostgreSQL)', (
     await approveApplicabilityRuleVersion(firstRule.id, actorId, db);
     await approveApplicabilityRuleVersion(secondRule.id, actorId, db);
 
-    await createFact(actor, clientA, { factDefinitionId: temporalDefinitionId, scopeType: 'COMPANY', booleanValue: true, observedAt: '2026-08-24T12:00:00Z', evaluationAt: '2026-08-24T12:00:00Z' }, db);
-    await createFact(actor, clientA, { factDefinitionId: temporalDefinitionId, scopeType: 'COMPANY', booleanValue: true, observedAt: '2027-08-24T12:00:00Z', evaluationAt: '2027-08-24T12:00:00Z' }, db);
+    await createFact(actor, clientA, { factDefinitionId: temporalDefinitionId, scopeType: 'COMPANY', booleanValue: true, observedAt: '2026-08-24T12:00:00Z', validFrom: '2026-08-24T12:00:00Z', evaluationAt: '2026-08-24T12:00:00Z' }, db);
+    await createFact(actor, clientA, { factDefinitionId: temporalDefinitionId, scopeType: 'COMPANY', booleanValue: true, observedAt: '2027-08-24T12:00:00Z', validFrom: '2027-08-24T12:00:00Z', evaluationAt: '2027-08-24T12:00:00Z' }, db);
     expect(await db.requirementApplicability.count({ where: { clientId: clientA, requirementVersionId: firstVersion.id } })).toBe(1);
     expect(await db.requirementApplicability.count({ where: { clientId: clientA, requirementVersionId: secondVersion.id } })).toBe(1);
   });
@@ -280,7 +283,7 @@ describeWithDatabase('Phase 7D typed fact to finding automation (PostgreSQL)', (
 
   it('deduplicates logical applicability when only evaluationAt changes', async () => {
     await db.clientFact.deleteMany({ where: { clientId: clientA, factDefinitionId: boolDefinitionId } });
-    await typed(boolDefinitionId, { booleanValue: true, observedAt: '2026-08-24T19:00:00Z' });
+    await typed(boolDefinitionId, { booleanValue: true, validFrom: '2026-08-24T18:00:00Z', observedAt: '2026-08-24T19:00:00Z' });
     const before = await db.requirementApplicability.count({ where: { clientId: clientA, requirementVersionId: versionIds[0] } });
     const one = await createRequirementApplicability({ requirementVersionId: versionIds[0], ruleVersionId: ruleIds[0], clientId: clientA, scope: { scopeType: 'COMPANY', evaluationAt: new Date('2026-08-24T20:00:00Z') } }, db);
     const two = await createRequirementApplicability({ requirementVersionId: versionIds[0], ruleVersionId: ruleIds[0], clientId: clientA, scope: { scopeType: 'COMPANY', evaluationAt: new Date('2026-08-24T21:00:00Z') } }, db);
