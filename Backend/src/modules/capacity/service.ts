@@ -35,12 +35,12 @@ export async function getWorkloadForUser(userId: string, db: Db = defaultPrisma)
   const last7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const last30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  const openWhere = { assignedToId: userId, status: { notIn: CLOSED_STATUSES } };
+  const openWhere = { assignedToId: userId, status: { notIn: CLOSED_STATUSES as any } };
   const openTasks = await db.task.count({ where: openWhere });
-  const urgentTasks = await db.task.count({ where: { ...openWhere, priority: { in: URGENT_PRIORITIES } } });
+  const urgentTasks = await db.task.count({ where: { ...openWhere, priority: { in: URGENT_PRIORITIES as any } } });
   const overdueTasks = await db.task.count({ where: { ...openWhere, dueDate: { lt: now } } });
   const deadlinesNext7Days = await db.task.count({ where: { ...openWhere, dueDate: { gte: now, lt: sevenDays } } });
-  const reviewItems = await db.task.count({ where: { ...openWhere, status: { in: REVIEW_STATUSES } } });
+  const reviewItems = await db.task.count({ where: { ...openWhere, status: { in: REVIEW_STATUSES as any } } });
 
   const [timeAgg7, timeAgg30, taskAgg, wpAgg] = await Promise.all([
     db.timeEntry.aggregate({ where: { userId, workDate: { gte: last7, lt: now } }, _sum: { minutes: true } }),

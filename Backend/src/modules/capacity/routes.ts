@@ -32,7 +32,7 @@ router.get('/team', authenticate, requireRole('ADMIN', 'PARTNER'), async (req: R
     const workforce = await prisma.user.findMany({
       where: {
         ...(status ? { status: status as any } : {}),
-        role: { in: ['LAWYER', 'COLLAB_LAWYER', 'TRAINEE', 'LEGAL_ASSISTANT'] },
+        role: { in: ['LAWYER', 'COLLAB_LAWYER', 'TRAINEE', 'LEGAL_ASSISTANT'] as any },
       },
       select: { id: true },
       orderBy: { name: 'asc' },
