@@ -1,5 +1,8 @@
+// ============================================================================
+// LEGAL ANALYSIS ROUTES — SEC-0B1: Case-level authorization + DTO shaping
+// ============================================================================
+
 import { Router, Request, Response } from 'express';
-import { authenticate } from '../../middleware/auth';
 import legalAnalysesService, {
   LegalAnalysisServiceError,
   type LegalAnalysisSourceDocumentType,
@@ -8,6 +11,17 @@ import {
   isDatabaseFoundationEnabled,
   requireDatabaseFoundation,
 } from '../../middleware/featureAvailability';
+import { authenticate } from '../../middleware/auth';
+import {
+  requireCaseReadAccessFromBody,
+  requireCaseManageAccessFromBody,
+  resolveCaseFromDocumentId,
+  resolveCaseFromLegalAnalysisId,
+  hasSensitiveAccess,
+  checkCaseAccess,
+} from '../anonymize/caseAuthorization';
+import { toSummary, toWorking, toSensitive } from './dto';
+import { prisma } from '../../prisma/prisma.service';
 
 const router = Router();
 const requireLegalAnalysisFoundation = requireDatabaseFoundation({
@@ -38,7 +52,126 @@ function sendServiceError(res: Response, error: unknown): void {
   });
 }
 
-router.get('/documents/:documentId/legal-analyses', authenticate, requireLegalAnalysisFoundation, async (req: Request, res: Response): Promise<void> => {
+// ---------------------------------------------------------------------------
+// Middleware: require read access on a case resolved from document param
+// ---------------------------------------------------------------------------
+
+function requireReadAccessOnDocumentCase(
+  req: Request,
+  res: Response,
+  next: () => void,
+): void {
+  const documentId = String(req.params.documentId || '').trim();
+  if (!documentId) {
+    res.status(400).json({ status: 400, code: 'INVALID_PARAM', message: 'documentId is required' });
+    return;
+  }
+
+  resolveCaseFromDocumentId(documentId)
+    .then(async (caseId) => {
+      if (!caseId) {
+        res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+        return;
+      }
+      const access = await checkCaseAccess(req, caseId, 'read');
+      if (access === null) {
+        res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+        return;
+      }
+      if (!access) {
+        res.status(403).json({ status: 403, code: 'CASE_ACCESS_FORBIDDEN', message: 'You do not have access to this case.' });
+        return;
+      }
+      (req as any).__resolvedCaseId = caseId;
+      next();
+    })
+    .catch(() => {
+      res.status(500).json({ status: 500, code: 'CASE_AUTHORIZATION_ERROR', message: 'Case access could not be verified.' });
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Middleware: require read access on a case resolved from analysis id param
+// ---------------------------------------------------------------------------
+
+function requireReadAccessOnAnalysisCase(
+  req: Request,
+  res: Response,
+  next: () => void,
+): void {
+  const id = String(req.params.id || '').trim();
+  if (!id) {
+    res.status(400).json({ status: 400, code: 'INVALID_PARAM', message: 'id is required' });
+    return;
+  }
+
+  resolveCaseFromLegalAnalysisId(id)
+    .then(async (caseId) => {
+      if (!caseId) {
+        res.status(404).json({ status: 404, code: 'LEGAL_ANALYSIS_NOT_FOUND', message: 'Legal analysis not found' });
+        return;
+      }
+      const access = await checkCaseAccess(req, caseId, 'read');
+      if (access === null) {
+        res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+        return;
+      }
+      if (!access) {
+        res.status(403).json({ status: 403, code: 'CASE_ACCESS_FORBIDDEN', message: 'You do not have access to this case.' });
+        return;
+      }
+      (req as any).__resolvedCaseId = caseId;
+      next();
+    })
+    .catch(() => {
+      res.status(500).json({ status: 500, code: 'CASE_AUTHORIZATION_ERROR', message: 'Case access could not be verified.' });
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Middleware: require manage access on a case resolved from analysis id param
+// ---------------------------------------------------------------------------
+
+function requireManageAccessOnAnalysisCase(
+  req: Request,
+  res: Response,
+  next: () => void,
+): void {
+  const id = String(req.params.id || '').trim();
+  if (!id) {
+    res.status(400).json({ status: 400, code: 'INVALID_PARAM', message: 'id is required' });
+    return;
+  }
+
+  resolveCaseFromLegalAnalysisId(id)
+    .then(async (caseId) => {
+      if (!caseId) {
+        res.status(404).json({ status: 404, code: 'LEGAL_ANALYSIS_NOT_FOUND', message: 'Legal analysis not found' });
+        return;
+      }
+      const access = await checkCaseAccess(req, caseId, 'manage');
+      if (access === null) {
+        res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+        return;
+      }
+      if (!access) {
+        res.status(403).json({ status: 403, code: 'CASE_ACCESS_FORBIDDEN', message: 'You do not have access to this case.' });
+        return;
+      }
+      (req as any).__resolvedCaseId = caseId;
+      next();
+    })
+    .catch(() => {
+      res.status(500).json({ status: 500, code: 'CASE_AUTHORIZATION_ERROR', message: 'Case access could not be verified.' });
+    });
+}
+
+// ============================================================================
+// GET /api/v1/documents/:documentId/legal-analyses
+// Requires: read access on source document's case
+// Response: Summary DTO list (no analysis text, no PII)
+// ============================================================================
+router.get('/documents/:documentId/legal-analyses', authenticate, requireLegalAnalysisFoundation, requireReadAccessOnDocumentCase, async (req: Request, res: Response): Promise<void> => {
   try {
     const { documentId } = req.params as { documentId: string };
     const documentSourceType = req.query.documentSourceType
@@ -52,14 +185,19 @@ router.get('/documents/:documentId/legal-analyses', authenticate, requireLegalAn
       caseId,
     });
 
-    res.json(analyses);
+    // Summary DTO — no analysis text, no PII
+    res.json(analyses.map(toSummary));
   } catch (error) {
     console.error('listLegalAnalyses error:', error instanceof Error ? error.message : 'Unknown error');
     sendServiceError(res, error);
   }
 });
 
-router.post('/documents/:documentId/legal-analyses', authenticate, requireLegalAnalysisFoundation, async (req: Request, res: Response): Promise<void> => {
+// ============================================================================
+// POST /api/v1/documents/:documentId/legal-analyses
+// Requires: manage access on caseId from body
+// ============================================================================
+router.post('/documents/:documentId/legal-analyses', authenticate, requireLegalAnalysisFoundation, requireCaseManageAccessFromBody(), async (req: Request, res: Response): Promise<void> => {
   try {
     const { documentId } = req.params as { documentId: string };
     const { caseId, documentSourceType, title, analysisText, status, sourceType, aiToolName, anonymizedInputSnapshot } = req.body || {};
@@ -93,7 +231,12 @@ router.post('/documents/:documentId/legal-analyses', authenticate, requireLegalA
   }
 });
 
-router.get('/legal-analyses/:id', authenticate, requireLegalAnalysisFoundation, async (req: Request, res: Response): Promise<void> => {
+// ============================================================================
+// GET /api/v1/legal-analyses/:id
+// Requires: read access on analysis's case
+// Response: Working DTO (analysis text included, no PII)
+// ============================================================================
+router.get('/legal-analyses/:id', authenticate, requireLegalAnalysisFoundation, requireReadAccessOnAnalysisCase, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const analysis = await legalAnalysesService.getLegalAnalysis(id);
@@ -103,14 +246,33 @@ router.get('/legal-analyses/:id', authenticate, requireLegalAnalysisFoundation, 
       return;
     }
 
-    res.json(analysis);
+    // Determine DTO level based on user's sensitive access
+    const caseId = (req as any).__resolvedCaseId;
+    const user = (req as any).user;
+    let isSensitive = false;
+    if (caseId && user?.userId) {
+      const caseRecord = await prisma.case.findUnique({
+        where: { id: caseId },
+        select: { assignedLawyerId: true, createdById: true },
+      });
+      if (caseRecord) {
+        isSensitive = hasSensitiveAccess(req, caseRecord);
+      }
+    }
+
+    const response = isSensitive ? toSensitive(analysis) : toWorking(analysis);
+    res.json(response);
   } catch (error) {
     console.error('getLegalAnalysis error:', error instanceof Error ? error.message : 'Unknown error');
     sendServiceError(res, error);
   }
 });
 
-router.patch('/legal-analyses/:id', authenticate, requireLegalAnalysisFoundation, async (req: Request, res: Response): Promise<void> => {
+// ============================================================================
+// PATCH /api/v1/legal-analyses/:id
+// Requires: manage access on analysis's case
+// ============================================================================
+router.patch('/legal-analyses/:id', authenticate, requireLegalAnalysisFoundation, requireManageAccessOnAnalysisCase, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const { title, analysisText, status, aiToolName, anonymizedInputSnapshot } = req.body || {};
@@ -131,7 +293,11 @@ router.patch('/legal-analyses/:id', authenticate, requireLegalAnalysisFoundation
   }
 });
 
-router.delete('/legal-analyses/:id', authenticate, requireLegalAnalysisFoundation, async (req: Request, res: Response): Promise<void> => {
+// ============================================================================
+// DELETE /api/v1/legal-analyses/:id
+// Requires: manage access on analysis's case
+// ============================================================================
+router.delete('/legal-analyses/:id', authenticate, requireLegalAnalysisFoundation, requireManageAccessOnAnalysisCase, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     await legalAnalysesService.deleteLegalAnalysis(id, getUserId(req));
