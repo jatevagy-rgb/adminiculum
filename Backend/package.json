@@ -61,8 +61,9 @@
     "test:task-review-decision:db": "jest --runInBand tests/taskReviewDecision.integration.test.ts",
     "test:task-submission:db": "jest --runInBand tests/taskSubmission.integration.test.ts",
     "db:provision:task-document": "node scripts/ci-provision-task-document-dbs.mjs",
-    "demo:presentation:reset": "node -r dotenv/config scripts/demo-presentation-reset.mjs",
-    "demo:presentation:check": "node -r dotenv/config scripts/demo-presentation-check.mjs",
+    "demo:presentation:reset": "node -r dotenv/config ./node_modules/tsx/dist/cli.mjs scripts/demo-presentation-reset.mjs",
+    "demo:presentation:check": "node -r dotenv/config ./node_modules/tsx/dist/cli.mjs scripts/demo-presentation-check.mjs",
+    "demo:presentation:mutate": "node -r dotenv/config ./node_modules/tsx/dist/cli.mjs scripts/demo-presentation-mutate.mjs",
     "test:demo-fixture:db": "jest --runInBand tests/presentationDemoFixture.integration.test.ts"
   },
   "dependencies": {

@@ -130,9 +130,8 @@ async function main() {
     else fail('Demo compliance domain missing');
 
     const rv = await db.requirementVersion.findUnique({ where: { id: IDS.requirementVersionId }, select: { id: true, status: true, title: true } });
-    if (rv && rv.status === 'CANDIDATE') warn('Demo RequirementVersion is CANDIDATE (expected)', 'DEMO_RULE_BLOCKED_BY_CURRENT_GROUNDING — PRIMARY citation required for approval. This is correct and expected.');
-    else if (rv && rv.status === 'APPROVED') pass('Demo RequirementVersion APPROVED', '(future state after org discovery)');
-    else if (rv) warn('Demo RequirementVersion exists', `status: ${rv.status}`);
+    if (rv && rv.status === 'APPROVED') pass('Demo RequirementVersion is APPROVED', 'PRIMARY citation exists');
+    else if (rv) warn('Demo RequirementVersion exists but not APPROVED', `status: ${rv.status}`);
     else fail('Demo RequirementVersion missing');
 
     // 10. 7B compliance proposal surface (code presence check)

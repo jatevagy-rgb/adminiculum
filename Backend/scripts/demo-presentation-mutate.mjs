@@ -10,7 +10,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import { createTypedFactAndEvaluate } from '../../src/modules/compliance/typedFactMutationService';
+import { createTypedFactAndEvaluate } from '../src/modules/compliance/typedFactMutationService';
 import { DEMO_IDS } from '../tests/helpers/presentationDemoFixture';
 
 const NODE_ENV = process.env.NODE_ENV || '';

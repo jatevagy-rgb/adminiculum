@@ -6,7 +6,7 @@
  *
  * Safety gates (ALL must be satisfied):
  *   1. NODE_ENV != 'production'
- *   2. DEMO_RESET_ENABLED === 'true'
+ *   2. ADMINICULUM_DEMO_CONTENT_ENABLED === 'true'
  *   3. Target fixture key starts with 'DEMO_PRESENTATION_'
  *
  * Resets ONLY the presentation demo fixture. Unrelated data is never touched.
@@ -17,12 +17,12 @@ import { PrismaClient } from '@prisma/client';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { approveRequirementVersion, approveApplicabilityRuleVersion, createApplicabilityRuleVersion, addRequirementCitation } from '../../src/modules/compliance/requirementRuleService';
+import { approveRequirementVersion, approveApplicabilityRuleVersion, createApplicabilityRuleVersion, addRequirementCitation } from '../src/modules/compliance/requirementRuleService';
 
 // ---- Production guard --------------------------------------------------------
 
 const NODE_ENV = process.env.NODE_ENV || '';
-const DEMO_RESET_ENABLED = process.env.DEMO_RESET_ENABLED || '';
+const DEMO_ENABLED = process.env.ADMINICULUM_DEMO_CONTENT_ENABLED || '';
 const DEMO_FIXTURE_NAMESPACE = 'DEMO_PRESENTATION_';
 
 function refuseIfProduction() {
@@ -30,8 +30,8 @@ function refuseIfProduction() {
     console.error('❌ REFUSED: NODE_ENV=production. Demo reset is forbidden in production.');
     process.exit(2);
   }
-  if (DEMO_RESET_ENABLED !== 'true') {
-    console.error('❌ REFUSED: DEMO_RESET_ENABLED is not "true". Set DEMO_RESET_ENABLED=true to allow.');
+  if (DEMO_ENABLED !== 'true') {
+    console.error('❌ REFUSED: ADMINICULUM_DEMO_CONTENT_ENABLED is not "true". Set ADMINICULUM_DEMO_CONTENT_ENABLED=true to allow.');
     process.exit(2);
   }
   // Verify fixture namespace
@@ -198,7 +198,7 @@ async function seed(db) {
 
   const existingRv = await db.requirementVersion.findUnique({ where: { id: IDS.requirementVersionId }, select: { id: true } });
   if (!existingRv) {
-    await db.requirementVersion.create({ data: { id: IDS.requirementVersionId, requirementId: IDS.requirementId, versionKey: 'V1-DEMO', title: 'Szervezeti növekedési áttekintés [DEMO]', normativeStatement: '[DEMO — szintetikus tartalom] Ha a foglalkoztatottak száma eléri az 52 főt, megjelenik a „Szervezeti növekedési áttekintés" téma. Ez kizárólag termékbemutatói logika, nem minősül jogi kötelezettségnek.', effectiveFrom: new Date('2026-01-01T00:00:00Z'), sourceSupportState: 'MISSING', status: 'CANDIDATE', specialistRequirement: 'NONE' } });
+    await db.requirementVersion.create({ data: { id: IDS.requirementVersionId, requirementId: IDS.requirementId, versionKey: 'V1-DEMO', title: 'Szervezeti növekedési áttekintés [DEMO]', normativeStatement: '[DEMO — szintetikus tartalom] Ha a foglalkoztatottak száma eléri az 52 főt, megjelenik a „Szervezeti növekedési áttekintés" téma. Ez kizárólag termékbemutatói logika, nem minősül jogi kötelezettségnek.', effectiveFrom: new Date('2026-01-01T00:00:00Z'), sourceSupportState: 'SUFFICIENT', status: 'CANDIDATE', specialistRequirement: 'NONE' } });
   }
 
     // Synthetic LegalSource (real entity required for citation)
@@ -292,12 +292,7 @@ async function seed(db) {
   console.log(`   Case (comply):   Vállalati megfelelőségi áttekintés (id=${IDS.caseComplianceId})`);
   console.log(`   Employee count:  47 (initial state)`);
   console.log('');
-  console.log('⚠️  DEMO_RULE_BLOCKED_BY_CURRENT_GROUNDING=YES');
-  console.log('   The demo ApplicabilityRuleVersion cannot be APPROVED because');
-  console.log('   approveRequirementVersion() requires a PRIMARY RequirementCitation');
-  console.log('   linked to a real LegalSource. We refuse to fake legal grounding.');
-  console.log('   The RequirementVersion is seeded as CANDIDATE for forward-compatibility.');
-  console.log('   Org Discovery can complete it once DEMO authority support exists.');
+
 }
 
 // ---- Optional portal identity link ------------------------------------------

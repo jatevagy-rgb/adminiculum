@@ -12,14 +12,7 @@
  * Fixture namespace: DEMO_PRESENTATION_
  * No schema change. No migration. No compliance engine bypass.
  * Synthetic content is clearly labeled [DEMO].
- *
- * DEMO_RULE_BLOCKED:
- *   A full ApplicabilityRuleVersion cannot be approved via the canonical service
- *   because approveRequirementVersion requires a PRIMARY RequirementCitation
- *   pointing to a real LegalSource. We do NOT fake legal grounding.
- *   The fixture seeds the Requirement + RequirementVersion at CANDIDATE status
- *   (no citation, no approval) so future Org Discovery can complete it once
- *   DEMO authority support exists.
+ * Synthetic content is clearly labeled [DEMO].
  */
 
 import { PrismaClient } from '@prisma/client';

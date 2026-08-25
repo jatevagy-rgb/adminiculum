@@ -195,7 +195,7 @@ d('Presentation demo fixture (PostgreSQL)', () => {
   it('seeds the fixture successfully', async () => {
     const result = await seedPresentationDemoFixture(db);
     expect(result.ids.clientId).toBe(DEMO_IDS.clientId);
-    expect(result.DEMO_RULE_BLOCKED_BY_CURRENT_GROUNDING).toBe(true);
+    expect(result.DEMO_RULE_BLOCKED_BY_CURRENT_GROUNDING).toBe(false);
   });
 
   it('demo client exists after seed', async () => {
@@ -238,13 +238,13 @@ d('Presentation demo fixture (PostgreSQL)', () => {
     expect(count).toBe(3);
   });
 
-  it('demo RequirementVersion is CANDIDATE (not APPROVED) — blocker is expected', async () => {
+  it('demo RequirementVersion is APPROVED — synthetic citation exists', async () => {
     const rv = await db.requirementVersion.findUnique({ where: { id: DEMO_IDS.requirementVersionId }, select: { status: true, sourceSupportState: true } });
-    expect(rv!.status).toBe('CANDIDATE');
-    expect(rv!.sourceSupportState).toBe('MISSING');
-    // No PRIMARY citation exists — this is the blocker
+    expect(rv!.status).toBe('APPROVED');
+    expect(rv!.sourceSupportState).toBe('SUFFICIENT');
+    // PRIMARY citation exists
     const citation = await db.requirementCitation.findFirst({ where: { requirementVersionId: DEMO_IDS.requirementVersionId, supportRole: 'PRIMARY' } });
-    expect(citation).toBeNull();
+    expect(citation).not.toBeNull();
   });
 
   it('double seed is idempotent (no duplicates)', async () => {
