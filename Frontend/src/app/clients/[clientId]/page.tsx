@@ -369,6 +369,9 @@ function ClientDetailContent() {
                 <Link href={`/clients/${clientId}/vallalati-mukodes`} className="adm-link-button px-4 py-2 text-xs">
                   Vállalati működés
                 </Link>
+                <Link href={`/clients/${clientId}/szervezet`} className="adm-link-button px-4 py-2 text-xs">
+                  Szervezet
+                </Link>
                 <button onClick={openEditClient} className="adm-link-button px-4 py-2 text-xs">
                   Ügyfél szerkesztése
                 </button>
@@ -728,4 +731,3 @@ function ClientDetailContent() {
     </div>
   );
 }
-
