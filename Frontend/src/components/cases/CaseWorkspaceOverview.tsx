@@ -20,6 +20,7 @@ import { CompactState, SafePanelError } from "@/components/adminiculum/Operation
 import { AdminButton } from "@/components/adminiculum/ui";
 import { ClientAccent } from "@/components/clients/ClientAccent";
 import { DocumentWorkCard } from "@/components/documents/DocumentWorkCard";
+import { CaseWorkPackagePanel } from "@/components/cases/CaseWorkPackagePanel";
 import {
   TaskFormModal, DocumentUploadModal, CaseCommentModal, DocumentCommentsModal,
 } from "@/components/cases/CaseWorkspaceActions";
@@ -262,6 +263,8 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
         description={c.description}
         onAddContext={() => setModal({ type: "case-comment" })}
       />
+
+      <CaseWorkPackagePanel caseId={caseId} />
 
       {/* ---- 3. Two-column operational layout ------------------------------ */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
