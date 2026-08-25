@@ -24,25 +24,23 @@ export function createCorsOptions({
 }: CorsOptionsInput): CorsOptions {
   return {
     origin(origin, callback) {
+      // Requests with no Origin header (same-origin, server-to-server, curl)
+      // are not a cross-origin concern.
       if (!origin) {
         return callback(null, true);
       }
 
-      if (!isProduction) {
-        if (origin.match(/^http:\/\/localhost:\d+$/) || origin.match(/^https:\/\/localhost:\d+$/)) {
-          return callback(null, true);
-        }
-        if (frontendUrl && origin === frontendUrl) {
-          return callback(null, true);
-        }
-        return callback(null, true);
+      if (isProduction) {
+        // Production: only the configured allowlist.
+        return callback(null, productionAllowedOrigins.includes(origin));
       }
 
-      if (productionAllowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      return callback(null, false);
+      // Non-production: only localhost + the configured frontend origin. A
+      // blanket allow-all for arbitrary origins must never be used while
+      // credentials/authorization transport is enabled.
+      const localhost = /^https?:\/\/localhost:\d+$/.test(origin);
+      const frontend = Boolean(frontendUrl) && origin === frontendUrl;
+      return callback(null, localhost || frontend || productionAllowedOrigins.includes(origin));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
