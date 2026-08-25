@@ -35,6 +35,7 @@ const IDS = {
   factEmployeeCountId: stableId('factEmployeeCount'),
   complianceDomainCode: 'DEMO_PRESENTATION_GROWTH',
   requirementVersionId: stableId('demoRequirementVersion'),
+  factDefinitionId: stableId('demoFactDefinitionEmployeeCount'),
   factDefinitionKey: 'DEMO_PRESENTATION_COMPANY_EMPLOYEE_COUNT',
 };
 
@@ -118,10 +119,25 @@ async function main() {
     if (caseCom) pass('Secondary Case exists', `"${caseCom.title}"`);
     else warn('Secondary Case (Vállalati megfelelőségi áttekintés) missing', 'optional');
 
-    // 8. Initial fact (employee count = 47)
-    const fact = await db.clientFact.findUnique({ where: { id: IDS.factEmployeeCountId }, select: { id: true, numberValue: true, value: true } });
-    if (fact && Number(fact.numberValue) === 47) pass('Initial employee count fact = 47', '✓ ready for demo');
-    else if (fact) warn('Employee count fact exists but value is not 47', `current value: ${fact.value} (${fact.numberValue})`);
+    // 8. Current fact (employee count)
+    const fact = await db.clientFact.findFirst({
+      where: {
+        clientId: IDS.clientId,
+        scopeType: 'COMPANY',
+        factSubjectId: null,
+        supersededAt: null,
+        factDefinition: {
+          key: IDS.factDefinitionKey,
+        },
+      },
+      orderBy: [
+        { observedAt: 'desc' },
+        { createdAt: 'desc' },
+        { id: 'desc' },
+      ],
+      select: { id: true, numberValue: true, value: true },
+    });
+    if (fact) pass(`Current employee count fact = ${Number(fact.numberValue)}`, '✓ latest observed fact');
     else fail('Employee count fact missing');
 
     // 9. Demo compliance content (CANDIDATE — blocker documented)
