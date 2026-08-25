@@ -12,6 +12,7 @@
 import { Router, Request, Response } from 'express';
 import generationDraftService from './service';
 import { authenticate } from '../../middleware/auth';
+import { requireCaseReadAccess, requireCaseManageAccess } from '../cases/authorization';
 
 const router = Router();
 
@@ -33,7 +34,7 @@ function requireGenerationDraftEnabled(req: Request, res: Response, next: () => 
 // ============================================================================
 // GET /api/v1/generation-drafts/:caseId
 // ============================================================================
-router.get('/:caseId', authenticate, requireGenerationDraftEnabled, async (req: Request, res: Response) => {
+router.get('/:caseId', authenticate, requireGenerationDraftEnabled, requireCaseReadAccess, async (req: Request, res: Response) => {
   try {
     const caseId = String(req.params.caseId);
     const { templateId } = req.query;
@@ -59,7 +60,7 @@ router.get('/:caseId', authenticate, requireGenerationDraftEnabled, async (req: 
  * PUT /api/v1/generation-drafts/:caseId
  * Upsert (create or update) draft
  */
-router.put('/:caseId', authenticate, requireGenerationDraftEnabled, async (req: Request, res: Response) => {
+router.put('/:caseId', authenticate, requireGenerationDraftEnabled, requireCaseManageAccess, async (req: Request, res: Response) => {
   try {
     const caseId = String(req.params.caseId);
     const { templateId, templateName, documentFamily, draftData } = req.body;
@@ -92,7 +93,7 @@ router.put('/:caseId', authenticate, requireGenerationDraftEnabled, async (req: 
  * DELETE /api/v1/generation-drafts/:caseId
  * Delete draft(s) for a case
  */
-router.delete('/:caseId', authenticate, requireGenerationDraftEnabled, async (req: Request, res: Response) => {
+router.delete('/:caseId', authenticate, requireGenerationDraftEnabled, requireCaseManageAccess, async (req: Request, res: Response) => {
   try {
     const caseId = String(req.params.caseId);
     const { templateId } = req.query;
