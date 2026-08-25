@@ -138,8 +138,11 @@ async function teardown(db) {
   await db.requirementApplicabilityFact.deleteMany({ where: { applicability: { clientId: IDS.clientId } } });
   await db.requirementApplicability.deleteMany({ where: { clientId: IDS.clientId } });
   await db.applicabilityRuleVersion.deleteMany({ where: { requirementVersionId: IDS.requirementVersionId } });
+  await db.requirementCitation.deleteMany({ where: { requirementVersionId: IDS.requirementVersionId } });
   await db.requirementVersion.deleteMany({ where: { id: IDS.requirementVersionId } });
   await db.requirement.deleteMany({ where: { id: IDS.requirementId } });
+  await db.legalSourceVersion.deleteMany({ where: { id: IDS.legalSourceVersionId } });
+  await db.legalSource.deleteMany({ where: { id: IDS.legalSourceId } });
   await db.complianceDomain.deleteMany({ where: { code: 'DEMO_KFT_GROWTH' } });
 
   await db.reviewPoint.deleteMany({ where: { id: IDS.reviewPointId } });
@@ -261,7 +264,7 @@ async function seed(db) {
     },
   });
 
-  // 6. Compliance domain + synthetic requirement + APPROVED rule (threshold: 52).
+  // 6. Compliance domain + synthetic requirement + source provenance + APPROVED rule (threshold: 52).
   const existingDomain = await db.complianceDomain.findUnique({ where: { code: 'DEMO_KFT_GROWTH' }, select: { code: true } });
   if (!existingDomain) await db.complianceDomain.create({ data: { code: 'DEMO_KFT_GROWTH', label: 'Szervezeti növekedési áttekintés [DEMO_KFT]' } });
   const existingReq = await db.requirement.findUnique({ where: { key: IDS.requirementKey }, select: { id: true } });
@@ -272,22 +275,92 @@ async function seed(db) {
     createApplicabilityRuleVersion,
   } = await import('../src/modules/compliance/requirementRuleService.ts');
 
-  const requirementVersion = await db.requirementVersion.upsert({
+  // RequirementVersion in CANDIDATE state
+  const existingRv = await db.requirementVersion.findUnique({
     where: { id: IDS.requirementVersionId },
-    update: { status: 'CANDIDATE' },
-    create: {
-      id: IDS.requirementVersionId,
-      requirementId: IDS.requirementId,
-      versionKey: 'V1-DEMO-KFT',
-      title: 'Szervezeti növekedési áttekintés [DEMO_KFT]',
-      normativeStatement: '[DEMO — szintetikus] Ha a foglalkoztatottak száma eléri az 52 főt, új megfelelőségi terület jelenik meg. Csak termékbemutató, nem jogi kötelezettség.',
-      effectiveFrom: new Date('2026-01-01T00:00:00Z'),
-      sourceSupportState: 'SUFFICIENT',
-      status: 'CANDIDATE',
-      specialistRequirement: 'NONE',
-    },
+    select: { id: true, status: true },
   });
-  await approveRequirementVersion(IDS.requirementVersionId, IDS.adminUserId, db);
+  if (!existingRv) {
+    await db.requirementVersion.create({
+      data: {
+        id: IDS.requirementVersionId,
+        requirementId: IDS.requirementId,
+        versionKey: 'V1-DEMO-KFT',
+        title: 'Szervezeti növekedési áttekintés [DEMO_KFT]',
+        normativeStatement: '[DEMO — szintetikus] Ha a foglalkoztatottak száma eléri az 52 főt, új megfelelőségi terület jelenik meg. Csak termékbemutató, nem jogi kötelezettség.',
+        effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+        sourceSupportState: 'SUFFICIENT',
+        status: 'CANDIDATE',
+        specialistRequirement: 'NONE',
+      },
+    });
+  }
+
+  // Synthetic LegalSource
+  const existingSource = await db.legalSource.findUnique({
+    where: { id: IDS.legalSourceId },
+    select: { id: true },
+  });
+  if (!existingSource) {
+    await db.legalSource.create({
+      data: {
+        id: IDS.legalSourceId,
+        sourceKey: IDS.legalSourceId,
+        jurisdictionCode: 'HU',
+        instrumentType: 'OTHER',
+        canonicalCitation: '[DEMO — NEM JOGFORRÁS] Bemutató szabály',
+        title: 'Demo Kft. növekedési megfelelőségi szabály [DEMO]',
+        issuer: 'Adminiculum Demo Kft.',
+        status: 'APPROVED',
+      },
+    });
+  }
+
+  // Synthetic LegalSourceVersion
+  const existingSourceVer = await db.legalSourceVersion.findUnique({
+    where: { id: IDS.legalSourceVersionId },
+    select: { id: true },
+  });
+  if (!existingSourceVer) {
+    await db.legalSourceVersion.create({
+      data: {
+        id: IDS.legalSourceVersionId,
+        legalSourceId: IDS.legalSourceId,
+        legalVersionKey: 'V1-DEMO-KFT',
+        versionLabel: 'V1',
+        status: 'ACTIVE',
+        reviewStatus: 'APPROVED',
+      },
+    });
+  }
+
+  // PRIMARY RequirementCitation linking RequirementVersion -> LegalSourceVersion
+  const existingCitation = await db.requirementCitation.findFirst({
+    where: { requirementVersionId: IDS.requirementVersionId, supportRole: 'PRIMARY' },
+    select: { id: true },
+  });
+  if (!existingCitation) {
+    await db.requirementCitation.create({
+      data: {
+        id: IDS.citationId,
+        requirementVersionId: IDS.requirementVersionId,
+        legalSourceVersionId: IDS.legalSourceVersionId,
+        supportRole: 'PRIMARY',
+        locator: 'N/A',
+        quotedText: 'Szintetikus bemutató szabály',
+      },
+    });
+  }
+
+  // Standard approval sequence for RequirementVersion (requires PRIMARY citation)
+  const rv = await db.requirementVersion.findUnique({
+    where: { id: IDS.requirementVersionId },
+    select: { status: true },
+  });
+  if (rv && rv.status !== 'APPROVED') {
+    await approveRequirementVersion(IDS.requirementVersionId, IDS.adminUserId, db);
+  }
+
   // Deterministic, engine-valid rule AST: employee_count >= 52 -> applicable.
   const astJson = {
     schemaVersion: 'rule-ast/v1',
