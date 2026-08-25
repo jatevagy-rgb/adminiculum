@@ -5,11 +5,42 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import morgan from 'morgan';
+import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import { createCorsOptions } from './config/cors';
+import { prisma } from './prisma/prisma.service';
+
+/**
+ * Minimal structured request logger. NEVER logs Authorization/Cookie, request
+ * body, document/email text, PII values, or token query parameters. Route is
+ * logged as path-only (query string stripped) to avoid leaking identifiers.
+ */
+function requestLogger(req: Request, res: Response, next: NextFunction): void {
+  const requestId = crypto.randomUUID().slice(0, 8);
+  const startedAt = Date.now();
+  res.on('finish', () => {
+    try {
+      const durationMs = Date.now() - startedAt;
+      const pathOnly = req.originalUrl.split('?')[0] || req.path || '/';
+      // JSON-lines structured record. pathOnly contains no query params.
+      const line = JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info',
+        requestId,
+        method: req.method,
+        path: pathOnly,
+        status: res.statusCode,
+        durationMs,
+      });
+      console.log(line);
+    } catch {
+      // logging must never break the request
+    }
+  });
+  next();
+}
 
 type StartupConfigHealthStatus = {
   checkedAt: string;
@@ -145,16 +176,27 @@ const productionAllowedOrigins = configuredAllowedOrigins.length
   ? configuredAllowedOrigins
   : [frontendOrigin, frontendUrl].filter((entry): entry is string => Boolean(entry));
 
-if (isProduction && productionAllowedOrigins.length === 0) {
-  console.warn(
-    '[Startup Validation] Production CORS allowlist is empty. Configure CORS_ALLOWED_ORIGINS or FRONTEND_ORIGIN/FRONTEND_URL.'
-  );
+// OPS-1: production fail-closed. Omissions that would weaken auth, security or
+// availability must never silently start a permissive/degraded production
+// service. Optional integrations (SharePoint config) are NOT blockers.
+if (isProduction) {
+  if (!isPresent(process.env.DATABASE_URL)) {
+    throw new Error('[Startup Validation] Production requires DATABASE_URL. Aborting.');
+  }
+  if (!isPresent(process.env.JWT_SECRET)) {
+    throw new Error('[Startup Validation] Production requires JWT_SECRET. Aborting.');
+  }
+  if (productionAllowedOrigins.length === 0) {
+    throw new Error(
+      '[Startup Validation] Production requires a non-empty CORS allowlist (CORS_ALLOWED_ORIGINS or FRONTEND_ORIGIN/FRONTEND_URL). Aborting.'
+    );
+  }
 }
 
 // Middleware
 app.use(helmet());
 app.use(cors(createCorsOptions({ isProduction, productionAllowedOrigins, frontendUrl })));
-app.use(morgan('combined'));
+app.use(requestLogger);
 // Increase payload limits for normal DOC/DOCX base64 uploads from frontend
 // (base64 payloads are larger than binary source files)
 app.use(express.json({ limit: '50mb' }));
@@ -167,6 +209,39 @@ app.get('/health', (_req: Request, res: Response) => {
     status: configHealth.status,
     timestamp: new Date().toISOString(),
     startupConfigHealth: configHealth,
+  });
+});
+
+app.get('/health/db', async (_req: Request, res: Response) => {
+  try {
+    // Read-only connectivity probe; never mutates data.
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', database: 'reachable', timestamp: new Date().toISOString() });
+  } catch (error) {
+    res.status(503).json({
+      status: 'error',
+      database: 'unreachable',
+      timestamp: new Date().toISOString(),
+      message: 'Database is not reachable.',
+    });
+  }
+});
+
+app.get('/health/storage', (_req: Request, res: Response) => {
+  // Read-only configuration state; never creates/deletes remote data.
+  // SharePoint may legitimately be unconfigured in some environments, which is
+  // a safe "NOT_CONFIGURED" state rather than an error.
+  const sets = [
+    { name: 'SP_CLIENT_TRIPLET', keys: ['SP_CLIENT_ID', 'SP_CLIENT_SECRET', 'SP_TENANT_ID'] },
+    { name: 'LEGACY_SHAREPOINT_PAIR', keys: ['SHAREPOINT_CLIENT_ID', 'SHAREPOINT_SECRET'] },
+    { name: 'AZURE_APP_TRIPLET_LEGACY', keys: ['AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'AZURE_TENANT_ID'] },
+  ];
+  const matched = sets.filter((set) => set.keys.every((key) => isPresent(process.env[key])));
+  res.json({
+    status: matched.length ? 'configured' : 'not_configured',
+    storage: matched.length ? 'SharePoint' : 'none',
+    configuredSet: matched[0]?.name || null,
+    timestamp: new Date().toISOString(),
   });
 });
 
