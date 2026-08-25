@@ -146,14 +146,14 @@ jobs:
           node -e '
             const { PrismaClient } = require("@prisma/client");
             const crypto = require("node:crypto");
-            const PRESENTATION_SEED = "DEMO_PRESENTATION_2026";
+            const FIXTURE_KEY = "DEMO_KFT_2026";
             function stableId(name) {
-              return crypto.createHash("sha256").update(`${PRESENTATION_SEED}:${name}`).digest("hex").slice(0, 32);
+              return crypto.createHash("sha256").update(`${FIXTURE_KEY}:${name}`).digest("hex").slice(0, 32);
             }
             (async () => {
               const prisma = new PrismaClient();
               const clientId = stableId("demoClient");
-              const requirementVersionId = stableId("demoRequirementVersion");
+              const requirementVersionId = stableId("requirementVersion");
               const finding = await prisma.assessmentFinding.findFirst({
                 where: {
                   clientId,

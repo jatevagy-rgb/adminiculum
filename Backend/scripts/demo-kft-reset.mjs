@@ -21,7 +21,8 @@
  */
 import { PrismaClient } from '@prisma/client';
 import crypto from 'node:crypto';
-import { approveRequirementVersion, approveApplicabilityRuleVersion, createApplicabilityRuleVersion } from '../src/modules/compliance/requirementRuleService';
+import pkg from '../dist/modules/compliance/requirementRuleService.js';
+const { approveRequirementVersion, approveApplicabilityRuleVersion, createApplicabilityRuleVersion } = pkg;
 
 // ---- Production guard --------------------------------------------------------
 const NODE_ENV = String(process.env.NODE_ENV || '');
@@ -165,7 +166,7 @@ async function teardown(db) {
   await db.organizationPerson.deleteMany({ where: { clientId: IDS.clientId } });
   await db.clientOrganizationGroup.deleteMany({ where: { clientId: IDS.clientId } });
 
-  await db.clientFact.deleteMany({ where: { id: IDS.factEmployeeCountId } });
+  await db.clientFact.deleteMany({ where: { clientId: IDS.clientId } });
   await db.factDefinition.deleteMany({ where: { OR: [{ id: IDS.factDefinitionId }, { key: IDS.factDefinitionKey }] } });
   await db.clientOperatingProfile.deleteMany({ where: { id: IDS.operatingProfileId } });
   await db.clientPortalWorkspace.deleteMany({ where: { id: IDS.workspaceId } });

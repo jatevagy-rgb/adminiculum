@@ -18,7 +18,8 @@ import { createTypedFactAndEvaluate } from '../src/modules/compliance/typedFactM
 const databaseUrl =
   process.env.DEMO_KFT_TEST_DATABASE_URL ||
   process.env.MIGRATION_REPLAY_DATABASE_URL ||
-  process.env.CLIENT_IDENTITY_TEST_DATABASE_URL;
+  process.env.CLIENT_IDENTITY_TEST_DATABASE_URL ||
+  process.env.DATABASE_URL;
 const d = databaseUrl ? describe : describe.skip;
 
 // Mirror the reset script's stable IDs by importing the shared logic is not

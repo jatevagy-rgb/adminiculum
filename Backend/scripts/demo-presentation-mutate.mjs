@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 /**
- * ADMINICULUM — PRESENTATION DEMO MUTATION SCRIPT
+ * ADMINICULUM — DEMO KFT. EMPLOYEE-COUNT MUTATION SCRIPT
  *
  * npm run demo:presentation:mutate
+ *
+ * Mutates canonical Demo Kft. employee-count fact (47 → 52)
+ * using the real typed-fact write/evaluate path.
  *
  * Safety gates (ALL must be satisfied):
  *   1. NODE_ENV != 'production'
@@ -10,11 +13,25 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import { createTypedFactAndEvaluate } from '../src/modules/compliance/typedFactMutationService';
-import { DEMO_IDS } from '../tests/helpers/presentationDemoFixture';
+import crypto from 'node:crypto';
+import pkg from '../dist/modules/compliance/typedFactMutationService.js';
+const { createTypedFactAndEvaluate } = pkg;
 
 const NODE_ENV = process.env.NODE_ENV || '';
 const DEMO_ENABLED = process.env.ADMINICULUM_DEMO_CONTENT_ENABLED || '';
+const FIXTURE_KEY = 'DEMO_KFT_2026';
+
+function stableId(name) {
+  return crypto.createHash('sha256').update(`${FIXTURE_KEY}:${name}`).digest('hex').slice(0, 32);
+}
+
+const IDS = {
+  adminUserId: process.env.DEMO_ADMIN_USER_ID || stableId('adminUser'),
+  clientId: stableId('demoClient'),
+  identityId: stableId('portalIdentity'),
+  factDefinitionId: stableId('factDefinitionEmployeeCount'),
+  factDefinitionKey: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT',
+};
 
 function refuseIfProduction() {
   if (NODE_ENV === 'production') {
@@ -32,20 +49,22 @@ async function main() {
   refuseIfProduction();
   const db = new PrismaClient();
   try {
-    console.log('🚀 Running employee‑count mutation (47 → 52)...');
+    console.log('🚀 Running Demo Kft. employee‑count mutation (47 → 52)...');
     const now = new Date();
     await createTypedFactAndEvaluate(
       {
-        clientId: DEMO_IDS.clientId,
-        factDefinitionId: DEMO_IDS.factDefinitionId,
-        actorUserId: DEMO_IDS.adminUserId,
+        clientId: IDS.clientId,
+        factDefinitionId: IDS.factDefinitionId,
+        actorUserId: IDS.adminUserId,
+        verificationStatus: 'CLIENT_PROVIDED',
         input: {
           scopeType: 'COMPANY',
-          factKey: DEMO_IDS.factDefinitionKey,
+          factKey: IDS.factDefinitionKey,
           numberValue: 52,
-          validFrom: now,
-          observedAt: now,
-          evaluationAt: now,
+          validFrom: now.toISOString(),
+          observedAt: now.toISOString(),
+          evaluationAt: now.toISOString(),
+          sourceReference: `DEMO_KFT_FIXTURE:${IDS.identityId}`,
         },
       },
       db,

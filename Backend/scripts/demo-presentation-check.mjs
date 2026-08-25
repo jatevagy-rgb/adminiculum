@@ -17,26 +17,38 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PRESENTATION_SEED = 'DEMO_PRESENTATION_2026';
+const FIXTURE_KEY = 'DEMO_KFT_2026';
 function stableId(name) {
-  return crypto.createHash('sha256').update(`${PRESENTATION_SEED}:${name}`).digest('hex').slice(0, 32);
+  return crypto.createHash('sha256').update(`${FIXTURE_KEY}:${name}`).digest('hex').slice(0, 32);
 }
 
 const IDS = {
-  adminUserId: stableId('adminUser'),
-  lawyerUserId: stableId('lawyerUser'),
+  adminUserId: process.env.DEMO_ADMIN_USER_ID || stableId('adminUser'),
+  lawyerCsanadId: stableId('lawyerCsanad'),
+  lawyerGyulaId: stableId('lawyerGyula'),
   clientId: stableId('demoClient'),
-  groupRootId: stableId('groupRoot'),
-  personUgyvezetoId: stableId('personUgyvezeto'),
   workspaceId: stableId('orgWorkspace'),
-  caseMainId: stableId('caseMain'),
+  publicRef: 'DEMO-KFT-WORKSPACE',
+  mainGroupId: stableId('groupMain'),
+  personPeterfiId: stableId('personPeterfi'),
+  identityId: stableId('portalIdentity'),
+  membershipId: stableId('membership'),
+  matterEmploymentId: stableId('matterEmployment'),
+  matterSupplierId: stableId('matterSupplier'),
+  matterComplianceId: stableId('matterCompliance'),
+  caseEmploymentId: stableId('caseEmployment'),
+  caseSupplierId: stableId('caseSupplier'),
   caseComplianceId: stableId('caseCompliance'),
-  taskOneId: stableId('taskOne'),
+  wpId: stableId('workPackage'),
   factEmployeeCountId: stableId('factEmployeeCount'),
-  complianceDomainCode: 'DEMO_PRESENTATION_GROWTH',
-  requirementVersionId: stableId('demoRequirementVersion'),
-  factDefinitionId: stableId('demoFactDefinitionEmployeeCount'),
-  factDefinitionKey: 'DEMO_PRESENTATION_COMPANY_EMPLOYEE_COUNT',
+  factDefinitionId: stableId('factDefinitionEmployeeCount'),
+  factDefinitionKey: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT',
+  complianceDomainCode: 'DEMO_KFT_GROWTH',
+  requirementId: stableId('requirement'),
+  requirementVersionId: stableId('requirementVersion'),
+  requirementKey: 'DEMO_KFT_COMPANY_GROWTH_REVIEW',
+  pubEmploymentId: stableId('pubEmployment'),
+  pubSupplierId: stableId('pubSupplier'),
 };
 
 let passCount = 0;
@@ -59,7 +71,7 @@ function fail(label, detail = '') {
 async function main() {
   console.log('');
   console.log('══════════════════════════════════════════════════════════════');
-  console.log('  ADMINICULUM — PRESENTATION DEMO HEALTHCHECK');
+  console.log('  ADMINICULUM — DEMO KFT. PRESENTATION HEALTHCHECK');
   console.log('══════════════════════════════════════════════════════════════');
   console.log('');
 
@@ -68,20 +80,21 @@ async function main() {
     // 1. Demo client
     const client = await db.client.findUnique({ where: { id: IDS.clientId }, select: { id: true, name: true } });
     if (client) pass('Demo client exists', `"${client.name}"`);
-    else fail('Demo client missing', 'Run: npm run demo:presentation:reset');
+    else fail('Demo client missing', 'Run: npm run demo:kft:reset');
 
-    // 2. Lawyer (Dr. Kovács Péter)
-    const lawyer = await db.user.findUnique({ where: { id: IDS.lawyerUserId }, select: { id: true, name: true, role: true } });
-    if (lawyer) pass('Demo Lawyer exists', `${lawyer.name} (${lawyer.role})`);
-    else fail('Demo Lawyer missing');
+    // 2. Workforce Lawyers (Dr. Trugly Csanád, Dr. Hubay Gyula Máté)
+    const csanad = await db.user.findUnique({ where: { id: IDS.lawyerCsanadId }, select: { id: true, name: true, role: true } });
+    const gyula = await db.user.findUnique({ where: { id: IDS.lawyerGyulaId }, select: { id: true, name: true, role: true } });
+    if (csanad && gyula) pass('Workforce Lawyers exist', `${csanad.name}, ${gyula.name}`);
+    else fail('Workforce Lawyers missing');
 
-    // 3. Demo Ügyvezető (org person)
-    const ugyvezeto = await db.organizationPerson.findUnique({ where: { id: IDS.personUgyvezetoId }, select: { id: true, name: true } });
-    if (ugyvezeto) pass('Demo Ügyvezető (org person) exists', ugyvezeto.name);
-    else fail('Demo Ügyvezető (org person) missing');
+    // 3. Péterfi János (executive / approver)
+    const peterfi = await db.organizationPerson.findUnique({ where: { id: IDS.personPeterfiId }, select: { id: true, name: true, jobTitle: true } });
+    if (peterfi) pass('Portal Executive exists', `${peterfi.name} (${peterfi.jobTitle})`);
+    else fail('Portal Executive missing');
 
-    // 4. Organization group
-    const group = await db.clientOrganizationGroup.findUnique({ where: { id: IDS.groupRootId }, select: { id: true, name: true } });
+    // 4. Organization group (Ügyvezetés)
+    const group = await db.clientOrganizationGroup.findUnique({ where: { id: IDS.mainGroupId }, select: { id: true, name: true } });
     if (group) pass('Organization group exists', `"${group.name}"`);
     else fail('Organization group missing');
 
@@ -91,33 +104,19 @@ async function main() {
     else if (workspace) warn('Portal workspace exists but not ACTIVE', workspace.status);
     else fail('Portal workspace missing');
 
-    // 6. Portal identity (if DEMO_PORTAL_EMAIL configured)
-    const demoEmail = process.env.DEMO_PORTAL_EMAIL;
-    if (demoEmail && !demoEmail.includes('fixture.invalid')) {
-      const normalizedEmail = demoEmail.toLowerCase().trim();
-      const identity = await db.clientPortalIdentity.findUnique({ where: { normalizedEmail }, select: { id: true, status: true } });
-      if (!identity) fail('Portal identity not found for DEMO_PORTAL_EMAIL', '(email not printed)');
-      else {
-        const membership = await db.clientPortalWorkspaceMembership.findFirst({
-          where: { clientPortalIdentityId: identity.id, workspaceId: IDS.workspaceId },
-          select: { id: true, status: true },
-        });
-        if (membership && membership.status === 'ACTIVE') pass('Portal membership configured', 'identity linked to workspace');
-        else if (membership) warn('Portal membership exists but not ACTIVE', membership.status);
-        else fail('Portal identity found but workspace membership missing', 'Run: npm run demo:presentation:reset');
-      }
-    } else {
-      warn('Portal identity not checked', 'DEMO_PORTAL_EMAIL not set (optional for workforce-only demo)');
-    }
+    // 6. Portal identity & membership
+    const identity = await db.clientPortalIdentity.findUnique({ where: { id: IDS.identityId }, select: { id: true, status: true } });
+    const membership = await db.clientPortalWorkspaceMembership.findUnique({ where: { id: IDS.membershipId }, select: { id: true, status: true, role: true } });
+    if (identity && membership && membership.status === 'ACTIVE') pass('Portal identity & membership configured', `role: ${membership.role}`);
+    else fail('Portal identity/membership missing');
 
-    // 7. Presentation Cases
-    const caseMain = await db.case.findUnique({ where: { id: IDS.caseMainId }, select: { id: true, title: true, status: true } });
-    if (caseMain) pass('Main presentation Case exists', `"${caseMain.title}"`);
-    else fail('Main Case (Munkajogi szerződéses áttekintés) missing');
-
-    const caseCom = await db.case.findUnique({ where: { id: IDS.caseComplianceId }, select: { id: true, title: true } });
-    if (caseCom) pass('Secondary Case exists', `"${caseCom.title}"`);
-    else warn('Secondary Case (Vállalati megfelelőségi áttekintés) missing', 'optional');
+    // 7. Canonical Demo Kft Cases (3 matters / cases)
+    const cases = await db.case.findMany({
+      where: { id: { in: [IDS.caseEmploymentId, IDS.caseSupplierId, IDS.caseComplianceId] } },
+      select: { id: true, title: true, status: true },
+    });
+    if (cases.length === 3) pass('Canonical Demo Kft Cases exist', `3 cases (${cases.map((c) => c.title).join(' | ')})`);
+    else fail(`Expected 3 canonical cases, found ${cases.length}`);
 
     // 8. Current fact (employee count)
     const fact = await db.clientFact.findFirst({
@@ -140,7 +139,7 @@ async function main() {
     if (fact) pass(`Current employee count fact = ${Number(fact.numberValue)}`, '✓ latest observed fact');
     else fail('Employee count fact missing');
 
-    // 9. Demo compliance content (CANDIDATE — blocker documented)
+    // 9. Demo compliance content
     const domain = await db.complianceDomain.findUnique({ where: { code: IDS.complianceDomainCode }, select: { code: true, label: true } });
     if (domain) pass('Demo compliance domain exists', domain.label);
     else fail('Demo compliance domain missing');
@@ -150,30 +149,10 @@ async function main() {
     else if (rv) warn('Demo RequirementVersion exists but not APPROVED', `status: ${rv.status}`);
     else fail('Demo RequirementVersion missing');
 
-    // 10. 7B compliance proposal surface (code presence check)
-    const proposalService = path.join(__dirname, '..', 'src', 'modules', 'compliance', 'complianceProposalService.ts');
-    if (fs.existsSync(proposalService)) pass('Phase 7B proposal service present', 'complianceProposalService.ts');
-    else fail('Phase 7B proposal service missing', proposalService);
-
-    // 11. 7C-B availability (Organizational company-profile write API)
-    pass('Organizational company-profile write API', 'implemented');
-
-    // 12. Backend config present
-    const backendEnv = path.join(__dirname, '..', '.env');
-    if (fs.existsSync(backendEnv)) pass('Backend .env present');
-    else warn('Backend .env missing', 'Copy from .env.example and configure DATABASE_URL');
-
-    // 13. Frontend config
-    const frontendEnv = path.join(__dirname, '..', '..', 'Frontend', '.env.local');
-    const frontendEnv2 = path.join(__dirname, '..', '..', 'Frontend', '.env');
-    if (fs.existsSync(frontendEnv) || fs.existsSync(frontendEnv2)) pass('Frontend env present');
-    else warn('Frontend env not found', 'Configure Frontend/.env.local if needed');
-
-    // 14. Tasks pre-seeded (not the live-demo Task)
-    const taskCount = await db.task.count({ where: { caseId: { in: [IDS.caseMainId, IDS.caseComplianceId] } } });
-    if (taskCount >= 3) pass(`Pre-seeded tasks present`, `${taskCount} tasks (live-demo Task NOT seeded — correct)`);
-    else if (taskCount > 0) warn(`Only ${taskCount} tasks pre-seeded`, 'expected 3+');
-    else fail('No pre-seeded tasks found');
+    // 10. Tasks pre-seeded
+    const taskCount = await db.task.count({ where: { caseId: { in: [IDS.caseEmploymentId, IDS.caseSupplierId, IDS.caseComplianceId] } } });
+    if (taskCount >= 3) pass('Pre-seeded tasks present', `${taskCount} tasks`);
+    else fail(`Expected 3+ pre-seeded tasks, found ${taskCount}`);
 
     const findingCount = await db.assessmentFinding.count({
       where: {
@@ -209,7 +188,7 @@ async function main() {
   } else if (failCount === 0) {
     console.log('  ✅ No failures. Review warnings above.');
   } else {
-    console.log('  ❌ Failures found. Run: npm run demo:presentation:reset');
+    console.log('  ❌ Failures found. Run: npm run demo:kft:reset');
   }
   console.log('══════════════════════════════════════════════════════════════');
   console.log('');
