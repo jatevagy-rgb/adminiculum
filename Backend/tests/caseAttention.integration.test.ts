@@ -44,7 +44,7 @@ describeWithDatabase('case attention read model (PostgreSQL)', () => {
   it('prioritizes overdue open work and ignores completed/closed cases', async () => {
     const summary = await getCaseAttentionSummary(ids.caseA, db);
     expect(summary?.urgency).toBe('URGENT');
-    expect(summary?.nextAction?.sourceId).toBe(ids.overdue);
+    expect(summary?.nextAction?.sourceId).toBe([ids.overdue, ids.overdueTie].sort()[0]);
     await db.task.updateMany({ where: { id: { in: [ids.overdue, ids.overdueTie] } }, data: { status: 'DONE' } });
     const after = await getCaseAttentionSummary(ids.caseA, db);
     expect(after?.nextAction?.sourceType).toBe('INTAKE_DEADLINE');
