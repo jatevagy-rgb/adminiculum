@@ -36,7 +36,7 @@ describeWithDatabase('Phase 6 Slice D immutable requirement applicability snapsh
     versionIds.push(version.id);
     await addRequirementCitation({ requirementVersionId: version.id, legalSourceVersionId: sourceVersionId, supportRole: 'PRIMARY', db });
     await approveRequirementVersion(version.id, userId, db);
-    const rule = await createApplicabilityRuleVersion({ requirementVersionId: version.id, ruleVersionKey: 'R1', astJson: ruleAst, db });
+    const rule = await createApplicabilityRuleVersion({ requirementVersionId: version.id, ruleVersionKey: 'R1', astJson: ruleAst, evaluationScopeType: 'COMPANY', db });
     ruleIds.push(rule.id);
     await approveApplicabilityRuleVersion(rule.id, userId, db);
     return { version, rule };

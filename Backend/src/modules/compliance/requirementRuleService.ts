@@ -1,4 +1,4 @@
-import { Prisma, PrismaClient } from '@prisma/client';
+import { FactScopeType, Prisma, PrismaClient } from '@prisma/client';
 import { canonicalDigest } from './canonicalDigest';
 import { RULE_AST_V1, type RuleExpression, type RuleNode } from './ruleAst';
 import { validateRuleAst } from './ruleAstValidator';
@@ -133,6 +133,7 @@ export async function createApplicabilityRuleVersion(input: {
   ruleVersionKey: string;
   astJson: unknown;
   canonicalDigest?: string;
+  evaluationScopeType?: FactScopeType | null;
   status?: 'CANDIDATE' | 'IN_REVIEW';
   createdById?: string | null;
   db?: Db;
@@ -192,12 +193,15 @@ export async function approveRequirementVersion(id: string, approvedById: string
 export async function approveApplicabilityRuleVersion(id: string, approvedById: string, db: Db = new PrismaClient()) {
   assertApprovalActor(approvedById);
   const normalizedApprovedById = approvedById.trim();
-  const rule = await db.applicabilityRuleVersion.findUnique({ where: { id }, include: { requirementVersion: true, dependencies: { include: { resolvedFactDefinition: { select: { valueType: true } } } } } });
+  const rule = await db.applicabilityRuleVersion.findUnique({ where: { id }, include: { requirementVersion: true, dependencies: { include: { resolvedFactDefinition: { select: { valueType: true, allowedScopeTypes: true } } } } } });
   if (!rule) throw new RequirementRuleError('RULE_VERSION_NOT_FOUND', 'ApplicabilityRuleVersion was not found.');
   if (rule.requirementVersion.status !== 'APPROVED') throw new RequirementRuleError('REQUIREMENT_VERSION_NOT_APPROVED', 'The parent RequirementVersion must be approved first.');
+  if (!rule.evaluationScopeType) throw new RequirementRuleError('RULE_SCOPE_UNRESOLVED', 'A rule scope must be resolved before approval.');
   if (rule.dependencies.some((dependency) => !dependency.resolvedFactDefinition)) throw new RequirementRuleError('UNRESOLVED_FACT_DEPENDENCY', 'Every approved rule dependency must resolve to a FactDefinition.');
   const unsupported = rule.dependencies.find((dependency) => !['BOOLEAN', 'NUMBER', 'DATE', 'STRING'].includes(dependency.resolvedFactDefinition!.valueType));
   if (unsupported) throw new RequirementRuleError('UNSUPPORTED_FACT_TYPE', `Fact dependency ${unsupported.factKey} has an unsupported approval type.`);
+  const scopeMismatch = rule.dependencies.find((dependency) => !dependency.resolvedFactDefinition!.allowedScopeTypes.includes(rule.evaluationScopeType!));
+  if (scopeMismatch) throw new RequirementRuleError('RULE_SCOPE_DEPENDENCY_MISMATCH', `Fact dependency ${scopeMismatch.factKey} is not available in the rule evaluation scope.`);
   return db.applicabilityRuleVersion.update({ where: { id }, data: { status: 'APPROVED', approvedAt: new Date(), approvedById: normalizedApprovedById } });
 }
 

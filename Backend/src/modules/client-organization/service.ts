@@ -398,6 +398,23 @@ export async function addResponsibility(actor: InternalActor, personId: string, 
   return toResponsibilityDTO(row);
 }
 
+/** Portal-safe responsibility assignment.  Portal membership authority is
+ * deliberately distinct from internal manager authority. */
+export async function addPortalResponsibility(clientId: string, personId: string, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
+  // Authorization is proven by the portal workspace boundary before this
+  // low-level persistence helper is called; no portal identity is normalized
+  // into the internal workforce actor type.
+  const person = await prisma.organizationPerson.findFirst({ where: { id: personId, clientId } });
+  if (!person) throw new InteractionError(404, 'PERSON_NOT_FOUND', 'Organization person not found.');
+  const type = String(input.type || '');
+  if (!isResponsibilityType(type)) throw new InteractionError(400, 'RESPONSIBILITY_TYPE_UNKNOWN', 'Unknown responsibility type.');
+  const label = safeText(input.label, 'label', 180, true)!;
+  const existing = await prisma.organizationPersonResponsibility.findFirst({ where: { organizationPersonId: personId, type, label } });
+  if (existing) return toResponsibilityDTO(existing);
+  const row = await prisma.organizationPersonResponsibility.create({ data: { organizationPersonId: personId, type, label } });
+  return toResponsibilityDTO(row);
+}
+
 export async function removeResponsibility(actor: InternalActor, responsibilityId: string, prisma: Prisma = defaultPrisma) {
   requireManager(actor);
   const row = await prisma.organizationPersonResponsibility.findUnique({ where: { id: responsibilityId }, include: { organizationPerson: true } });

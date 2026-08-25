@@ -227,6 +227,9 @@ app.use('/api/v1/matters', mattersRoutes);
 import timeEntriesRoutes from './routes/timeEntries';
 app.use('/api/v1/time-entries', timeEntriesRoutes);
 
+import clientSafeComplianceRoutes from './modules/compliance/clientSafeComplianceRoutes';
+app.use('/api/v1/client-portal/compliance', clientSafeComplianceRoutes);
+
 import clientPortalRoutes from './routes/clientPortal';
 app.use('/api/v1/client-portal', clientPortalRoutes);
 

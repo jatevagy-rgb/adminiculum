@@ -46,7 +46,7 @@ describeWithDatabase('Phase 7 Slice 7A applicability finding materialization (Po
     versionIds.push(version.id);
     await addRequirementCitation({ requirementVersionId: version.id, legalSourceVersionId: sourceVersionId, supportRole: 'PRIMARY', db });
     await approveRequirementVersion(version.id, userId, db);
-    const rule = await createApplicabilityRuleVersion({ requirementVersionId: version.id, ruleVersionKey: 'R1', astJson: ast(factKey), db });
+    const rule = await createApplicabilityRuleVersion({ requirementVersionId: version.id, ruleVersionKey: 'R1', astJson: ast(factKey), evaluationScopeType: 'COMPANY', db });
     ruleIds.push(rule.id);
     await approveApplicabilityRuleVersion(rule.id, userId, db);
     return { requirement, version, rule };

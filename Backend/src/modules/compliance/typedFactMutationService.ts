@@ -10,6 +10,7 @@ import {
   FindingMaterializationIdentityConflictError,
   materializeRequirementApplicabilityFindingInTx,
 } from './findingMaterializationService';
+import { EffectiveRequirementRuleError, resolveEffectiveRequirementRuleVersion } from './effectiveRequirementRuleResolver';
 
 type TransactionClient = Prisma.TransactionClient;
 
@@ -29,6 +30,18 @@ export interface TypedFactMutationInput {
   factDefinitionId: string;
   actorUserId: string;
   input: Record<string, unknown>;
+  verificationStatus?: 'UNVERIFIED' | 'CLIENT_PROVIDED' | 'DOCUMENT_VERIFIED' | 'LAW_FIRM_VERIFIED';
+}
+
+export interface TypedFactReevaluationInput {
+  clientId: string;
+  factDefinitionId: string;
+  actorUserId: string;
+  scopeType: string;
+  factSubjectId: string | null;
+  evaluationAt: Date;
+  referencePeriodStart?: Date | null;
+  referencePeriodEnd?: Date | null;
 }
 
 const SCOPE_TYPES = new Set([
@@ -100,7 +113,54 @@ async function assertSourceDocumentInClient(tx: TransactionClient, clientId: str
   if (!found) throw new InteractionError(400, 'EVIDENCE_CROSS_CLIENT', 'Referenced document version does not belong to this client.');
 }
 
-async function createTypedFactInTx(input: TypedFactMutationInput, tx: TransactionClient) {
+async function isClientEnrolledForCompliance(tx: TransactionClient, clientId: string): Promise<boolean> {
+  const profile = await tx.clientOperatingProfile.findUnique({
+    where: { clientId },
+    select: { complianceEnrollmentStatus: true },
+  });
+  return profile?.complianceEnrollmentStatus === 'ENROLLED';
+}
+
+/** Rebuilds applicability/finding truth after a typed fact is removed or added. */
+export async function reevaluateTypedFactInTx(input: TypedFactReevaluationInput, tx: TransactionClient) {
+  if (!(await isClientEnrolledForCompliance(tx, input.clientId))) return [];
+  const definition = await tx.factDefinition.findUnique({ where: { id: input.factDefinitionId }, select: { id: true, key: true } });
+  if (!definition) throw new InteractionError(404, 'FACT_DEFINITION_NOT_FOUND', 'FactDefinition was not found.');
+  const dependencies = await tx.applicabilityRuleFactDependency.findMany({
+    where: { resolvedFactDefinitionId: definition.id, applicabilityRuleVersion: { status: 'APPROVED', supersededById: null, requirementVersion: { status: 'APPROVED', requirementId: { not: '' } } } },
+    select: { applicabilityRuleVersion: { select: { requirementVersion: { select: { requirementId: true } } } } },
+  });
+  const requirementIds = [...new Set(dependencies.map((row) => row.applicabilityRuleVersion.requirementVersion.requirementId))];
+  const evaluations = [] as Array<{ ruleVersionId: string; applicabilityId: string; findingId: string | null; outcome: string }>;
+  for (const requirementId of requirementIds) {
+    let rule;
+    try {
+      rule = await resolveEffectiveRequirementRuleVersion(requirementId, input.evaluationAt, tx);
+    } catch (caught) {
+      if (caught instanceof EffectiveRequirementRuleError && ['NO_EFFECTIVE_REQUIREMENT_VERSION', 'NO_CURRENT_APPROVED_RULE_VERSION', 'RULE_SCOPE_UNRESOLVED'].includes(caught.code)) continue;
+      throw caught;
+    }
+    if (rule.evaluationScopeType !== input.scopeType) continue;
+    const dependsOnMutatedFact = await tx.applicabilityRuleFactDependency.findFirst({ where: { applicabilityRuleVersionId: rule.ruleVersionId, resolvedFactDefinitionId: definition.id }, select: { id: true } });
+    if (!dependsOnMutatedFact) continue;
+    const snapshot = await createRequirementApplicabilityInTx({
+      requirementVersionId: rule.requirementVersionId,
+      ruleVersionId: rule.ruleVersionId,
+      clientId: input.clientId,
+      scope: {
+        scopeType: input.scopeType as any,
+        factSubjectId: input.factSubjectId ?? undefined,
+        evaluationAt: input.evaluationAt,
+        ...(input.referencePeriodStart && input.referencePeriodEnd ? { referencePeriod: { start: input.referencePeriodStart, end: input.referencePeriodEnd } } : {}),
+      },
+    }, tx);
+    const materialized = await materializeRequirementApplicabilityFindingInTx({ applicabilityId: snapshot.applicability.id, createdByUserId: input.actorUserId }, tx);
+    evaluations.push({ ruleVersionId: rule.ruleVersionId, applicabilityId: snapshot.applicability.id, findingId: materialized.finding?.id ?? null, outcome: materialized.outcome });
+  }
+  return evaluations;
+}
+
+export async function createTypedFactInTx(input: TypedFactMutationInput, tx: TransactionClient) {
   const definition = await tx.factDefinition.findUnique({ where: { id: input.factDefinitionId } });
   if (!definition) throw new InteractionError(404, 'FACT_DEFINITION_NOT_FOUND', 'FactDefinition was not found.');
   if (definition.status === 'RETIRED') throw new InteractionError(409, 'FACT_DEFINITION_RETIRED', 'Retired FactDefinitions cannot receive new facts.');
@@ -153,60 +213,16 @@ async function createTypedFactInTx(input: TypedFactMutationInput, tx: Transactio
       determinationMethod: definition.determinationMethod,
       sourceReference: input.input.sourceReference ? String(input.input.sourceReference) : null,
       sourceDocumentVersionId,
-      verificationStatus: 'UNVERIFIED',
+      verificationStatus: input.verificationStatus ?? 'UNVERIFIED',
     },
     include: { factDefinition: { select: { valueType: true } } },
   });
 
-  const dependencies = await tx.applicabilityRuleFactDependency.findMany({
-    where: {
-      resolvedFactDefinitionId: definition.id,
-      applicabilityRuleVersion: {
-        status: 'APPROVED',
-        requirementVersion: { status: 'APPROVED' },
-      },
-    },
-    select: {
-      applicabilityRuleVersion: { select: { id: true, requirementVersionId: true } },
-    },
-  });
-  const rules = [...new Map(dependencies.map((row) => [row.applicabilityRuleVersion.id, row.applicabilityRuleVersion])).values()];
-  const context: TypedFactMutationContext = {
-    tx,
-    clientId: input.clientId,
-    factDefinitionId: definition.id,
-    factKey: definition.key,
-    scopeType,
-    factSubjectId,
-    changeKind: 'CREATE',
-    actorUserId: input.actorUserId,
-  };
-  const evaluations = [] as Array<{ ruleVersionId: string; applicabilityId: string; findingId: string | null; outcome: string }>;
-  for (const rule of rules) {
-    const snapshot = await createRequirementApplicabilityInTx({
-      requirementVersionId: rule.requirementVersionId,
-      ruleVersionId: rule.id,
-      clientId: context.clientId,
-      scope: {
-        scopeType: scopeType as any,
-        factSubjectId: factSubjectId ?? undefined,
-        evaluationAt: temporal.evaluationAt,
-        ...(temporal.referencePeriodStart && temporal.referencePeriodEnd
-          ? { referencePeriod: { start: temporal.referencePeriodStart, end: temporal.referencePeriodEnd } }
-          : {}),
-      },
-    }, tx);
-    const materialized = await materializeRequirementApplicabilityFindingInTx({
-      applicabilityId: snapshot.applicability.id,
-      createdByUserId: input.actorUserId,
-    }, tx);
-    evaluations.push({
-      ruleVersionId: rule.id,
-      applicabilityId: snapshot.applicability.id,
-      findingId: materialized.finding?.id ?? null,
-      outcome: materialized.outcome,
-    });
+  if (!(await isClientEnrolledForCompliance(tx, input.clientId))) {
+    return { fact, evaluations: [] };
   }
+
+  const evaluations = await reevaluateTypedFactInTx({ clientId: input.clientId, factDefinitionId: definition.id, actorUserId: input.actorUserId, scopeType, factSubjectId, evaluationAt: temporal.evaluationAt, referencePeriodStart: temporal.referencePeriodStart, referencePeriodEnd: temporal.referencePeriodEnd }, tx);
   return { fact, evaluations };
 }
 

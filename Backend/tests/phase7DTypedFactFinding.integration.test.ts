@@ -24,8 +24,12 @@ describeWithDatabase('Phase 7D typed fact to finding automation (PostgreSQL)', (
   const periodDefinitionId = crypto.randomUUID();
   const multiEnumDefinitionId = crypto.randomUUID();
   const employeeDefinitionId = crypto.randomUUID();
+  const enrollmentDefinitionId = crypto.randomUUID();
+  const enrollmentStateDefinitionId = crypto.randomUUID();
+  const temporalDefinitionId = crypto.randomUUID();
   const employeeSubjectA = crypto.randomUUID();
   const employeeSubjectB = crypto.randomUUID();
+  const employeeSubjectC = crypto.randomUUID();
   const contractSubjectA = crypto.randomUUID();
   const requirementIds: string[] = [];
   const versionIds: string[] = [];
@@ -38,7 +42,8 @@ describeWithDatabase('Phase 7D typed fact to finding automation (PostgreSQL)', (
     node: { kind: 'COMPARE', operator: 'EQ', left: { kind: 'FACT', factKey }, right: { kind: 'LITERAL', valueType: 'boolean', value: true } },
   });
 
-  async function createBooleanRule(name: string, factKey: string) {
+  async function createBooleanRule(name: string, factKey: string, options: { scopeType?: 'COMPANY' | 'EMPLOYEE'; effectiveFrom?: string; effectiveTo?: string | null } = {}) {
+    const scopeType = options.scopeType ?? 'COMPANY';
     const requirement = await createRequirement({ key: `REQ_7D_${name}_${suffix}`, jurisdictionCode: 'HU', domainCode, db });
     requirementIds.push(requirement.id);
     const version = await createRequirementVersion({
@@ -46,14 +51,15 @@ describeWithDatabase('Phase 7D typed fact to finding automation (PostgreSQL)', (
       versionKey: 'V1',
       title: `7D ${name}`,
       normativeStatement: `7D normative ${name}`,
-      effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+      effectiveFrom: new Date(options.effectiveFrom ?? '2026-01-01T00:00:00Z'),
+      effectiveTo: options.effectiveTo === undefined ? undefined : options.effectiveTo ? new Date(options.effectiveTo) : null,
       sourceSupportState: 'SUFFICIENT',
       db,
     });
     versionIds.push(version.id);
     await addRequirementCitation({ requirementVersionId: version.id, legalSourceVersionId: sourceVersionId, supportRole: 'PRIMARY', db });
     await approveRequirementVersion(version.id, actorId, db);
-    const rule = await createApplicabilityRuleVersion({ requirementVersionId: version.id, ruleVersionKey: 'R1', astJson: ast(factKey), db });
+    const rule = await createApplicabilityRuleVersion({ requirementVersionId: version.id, ruleVersionKey: 'R1', astJson: ast(factKey), evaluationScopeType: scopeType as never, db });
     ruleIds.push(rule.id);
     await approveApplicabilityRuleVersion(rule.id, actorId, db);
     return { requirement, version, rule };
@@ -62,6 +68,9 @@ describeWithDatabase('Phase 7D typed fact to finding automation (PostgreSQL)', (
   async function typed(definitionId: string, fields: Record<string, unknown>, extra: Record<string, unknown> = {}) {
     const input = { factDefinitionId: definitionId, scopeType: 'COMPANY', ...fields, ...extra } as Record<string, unknown>;
     if (input.observedAt && !input.evaluationAt) input.evaluationAt = '2026-08-24T23:00:00Z';
+    // Keep observation-based fixtures eligible at their fixed evaluation time;
+    // production intentionally defaults omitted validFrom to the wall clock.
+    if (input.observedAt && !input.validFrom) input.validFrom = input.observedAt;
     return createFact(actor, clientA, input, db);
   }
 
@@ -69,6 +78,7 @@ describeWithDatabase('Phase 7D typed fact to finding automation (PostgreSQL)', (
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
     await db.complianceDomain.create({ data: { code: domainCode, label: 'Phase 7D test domain' } });
     await db.client.createMany({ data: [{ id: clientA, name: `7D Client A ${suffix}` }, { id: clientB, name: `7D Client B ${suffix}` }] });
+    await db.clientOperatingProfile.create({ data: { clientId: clientA, complianceEnrollmentStatus: 'ENROLLED' } });
     await db.user.create({ data: { id: actorId, email: `7d-${suffix}@example.invalid`, name: 'Phase 7D actor', role: 'ADMIN' } });
     await db.legalSource.create({ data: { id: sourceId, sourceKey: `7d-source-${suffix}`, jurisdictionCode: 'HU', instrumentType: 'LEGISLATION', status: 'APPROVED' } });
     await db.legalSourceVersion.create({ data: { id: sourceVersionId, legalSourceId: sourceId, legalVersionKey: 'V1', status: 'ACTIVE', reviewStatus: 'APPROVED' } });
@@ -80,10 +90,14 @@ describeWithDatabase('Phase 7D typed fact to finding automation (PostgreSQL)', (
       { id: periodDefinitionId, key: `seven_d_period_${suffix}`, domainCode, valueType: 'PERIOD', allowedScopeTypes: ['COMPANY'], determinationMethod: 'USER_PROVIDED', overlapPolicy: 'ALLOW', temporalPolicy: 'REFERENCE_PERIOD' },
       { id: multiEnumDefinitionId, key: `seven_d_multi_${suffix}`, domainCode, valueType: 'MULTI_ENUM', allowedEnumValues: ['A', 'B', 'C'], allowedScopeTypes: ['COMPANY'], determinationMethod: 'USER_PROVIDED', overlapPolicy: 'ALLOW', temporalPolicy: 'OBSERVATION' },
       { id: employeeDefinitionId, key: `seven_d_employee_${suffix}`, domainCode, valueType: 'BOOLEAN', allowedScopeTypes: ['EMPLOYEE'], determinationMethod: 'USER_PROVIDED', overlapPolicy: 'ALLOW', temporalPolicy: 'OBSERVATION' },
+      { id: enrollmentDefinitionId, key: `seven_d_enrollment_${suffix}`, domainCode, valueType: 'BOOLEAN', allowedScopeTypes: ['COMPANY'], determinationMethod: 'USER_PROVIDED', overlapPolicy: 'ALLOW', temporalPolicy: 'OBSERVATION' },
+      { id: enrollmentStateDefinitionId, key: `seven_d_enrollment_state_${suffix}`, domainCode, valueType: 'BOOLEAN', allowedScopeTypes: ['COMPANY'], determinationMethod: 'USER_PROVIDED', overlapPolicy: 'ALLOW', temporalPolicy: 'OBSERVATION' },
+      { id: temporalDefinitionId, key: `seven_d_temporal_${suffix}`, domainCode, valueType: 'BOOLEAN', allowedScopeTypes: ['COMPANY'], determinationMethod: 'USER_PROVIDED', overlapPolicy: 'ALLOW', temporalPolicy: 'OBSERVATION' },
     ] });
     await db.factSubject.createMany({ data: [
       { id: employeeSubjectA, clientId: clientA, scopeType: 'EMPLOYEE', subjectKey: `employee-a-${suffix}` },
       { id: employeeSubjectB, clientId: clientB, scopeType: 'EMPLOYEE', subjectKey: `employee-b-${suffix}` },
+      { id: employeeSubjectC, clientId: clientA, scopeType: 'EMPLOYEE', subjectKey: `employee-c-${suffix}` },
       { id: contractSubjectA, clientId: clientA, scopeType: 'CONTRACT', subjectKey: `contract-a-${suffix}` },
     ] });
     await createBooleanRule('boolean', `seven_d_boolean_${suffix}`);
@@ -97,11 +111,12 @@ describeWithDatabase('Phase 7D typed fact to finding automation (PostgreSQL)', (
     await db.requirementVersion.deleteMany({ where: { id: { in: versionIds } } });
     await db.requirement.deleteMany({ where: { id: { in: requirementIds } } });
     await db.clientFact.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
-    await db.factSubject.deleteMany({ where: { id: { in: [employeeSubjectA, employeeSubjectB, contractSubjectA] } } });
-    await db.factDefinition.deleteMany({ where: { id: { in: [boolDefinitionId, numberDefinitionId, enumDefinitionId, moneyDefinitionId, periodDefinitionId, multiEnumDefinitionId, employeeDefinitionId] } } });
+    await db.factSubject.deleteMany({ where: { id: { in: [employeeSubjectA, employeeSubjectB, employeeSubjectC, contractSubjectA] } } });
+    await db.factDefinition.deleteMany({ where: { id: { in: [boolDefinitionId, numberDefinitionId, enumDefinitionId, moneyDefinitionId, periodDefinitionId, multiEnumDefinitionId, employeeDefinitionId, enrollmentDefinitionId, enrollmentStateDefinitionId, temporalDefinitionId] } } });
     await db.legalSourceVersion.deleteMany({ where: { id: sourceVersionId } });
     await db.legalSource.deleteMany({ where: { id: sourceId } });
     await db.user.deleteMany({ where: { id: actorId } });
+    await db.clientOperatingProfile.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
     await db.client.deleteMany({ where: { id: { in: [clientA, clientB] } } });
     await db.complianceDomain.deleteMany({ where: { code: domainCode } });
     await db.$disconnect();
@@ -159,6 +174,91 @@ describeWithDatabase('Phase 7D typed fact to finding automation (PostgreSQL)', (
     expect(employee.factSubjectId).toBe(employeeSubjectA);
   });
 
+  it('materializes subject-scoped findings only for the mutated subject', async () => {
+    const { requirement } = await createBooleanRule('employee-scope', `seven_d_employee_${suffix}`, { scopeType: 'EMPLOYEE' });
+    const first = await createFact(actor, clientA, { factDefinitionId: employeeDefinitionId, scopeType: 'EMPLOYEE', factSubjectId: employeeSubjectA, booleanValue: true, observedAt: '2026-08-24T12:00:00Z' }, db);
+    expect(first.factSubjectId).toBe(employeeSubjectA);
+    const findingsAfterFirst = await db.assessmentFinding.findMany({ where: { clientId: clientA, requirementId: requirement.id } });
+    expect(findingsAfterFirst).toHaveLength(1);
+    expect(findingsAfterFirst[0].scopeType).toBe('EMPLOYEE');
+    expect(findingsAfterFirst[0].factSubjectId).toBe(employeeSubjectA);
+
+    await createFact(actor, clientA, { factDefinitionId: employeeDefinitionId, scopeType: 'EMPLOYEE', factSubjectId: employeeSubjectC, booleanValue: true, observedAt: '2026-08-24T13:00:00Z' }, db);
+    const findingsAfterSecond = await db.assessmentFinding.findMany({ where: { clientId: clientA, requirementId: requirement.id }, orderBy: { factSubjectId: 'asc' } });
+    expect(findingsAfterSecond.map((finding) => finding.factSubjectId).sort()).toEqual([employeeSubjectA, employeeSubjectC].sort());
+  });
+
+  it('stores typed facts without triggering compliance while the client is not enrolled', async () => {
+    await createBooleanRule('enrollment-gate', `seven_d_enrollment_${suffix}`);
+    await db.clientOperatingProfile.update({ where: { clientId: clientA }, data: { complianceEnrollmentStatus: 'SUSPENDED' } });
+    const suspended = await createFact(actor, clientA, { factDefinitionId: enrollmentDefinitionId, scopeType: 'COMPANY', booleanValue: true, observedAt: '2026-08-24T12:00:00Z' }, db);
+    expect(suspended.factDefinitionId).toBe(enrollmentDefinitionId);
+    expect(await db.requirementApplicability.count({ where: { clientId: clientA, facts: { some: { clientFactId: suspended.id } } } })).toBe(0);
+    await db.clientOperatingProfile.update({ where: { clientId: clientA }, data: { complianceEnrollmentStatus: 'ENROLLED' } });
+    const enrolled = await createFact(actor, clientA, { factDefinitionId: enrollmentDefinitionId, scopeType: 'COMPANY', booleanValue: true, observedAt: '2026-08-24T13:00:00Z' }, db);
+    expect(await db.requirementApplicability.count({ where: { clientId: clientA, facts: { some: { clientFactId: enrolled.id } } } })).toBe(1);
+  });
+
+  it('keeps bare clients and NOT_ENROLLED profiles non-evaluable while enrolled profiles evaluate', async () => {
+    const { requirement, version } = await createBooleanRule('enrollment-states', `seven_d_enrollment_state_${suffix}`);
+    const bare = await createFact(actor, clientB, { factDefinitionId: enrollmentStateDefinitionId, scopeType: 'COMPANY', booleanValue: true, observedAt: '2026-08-24T14:00:00Z' }, db);
+    expect(await db.requirementApplicability.count({ where: { clientId: clientB, facts: { some: { clientFactId: bare.id } } } })).toBe(0);
+
+    await db.clientOperatingProfile.create({ data: { clientId: clientB, complianceEnrollmentStatus: 'NOT_ENROLLED' } });
+    const notEnrolled = await createFact(actor, clientB, { factDefinitionId: enrollmentStateDefinitionId, scopeType: 'COMPANY', booleanValue: true, observedAt: '2026-08-24T15:00:00Z' }, db);
+    expect(await db.requirementApplicability.count({ where: { clientId: clientB, facts: { some: { clientFactId: notEnrolled.id } } } })).toBe(0);
+
+    await db.clientOperatingProfile.update({ where: { clientId: clientB }, data: { complianceEnrollmentStatus: 'SUSPENDED' } });
+    const suspended = await createFact(actor, clientB, { factDefinitionId: enrollmentStateDefinitionId, scopeType: 'COMPANY', booleanValue: true, observedAt: '2026-08-24T16:00:00Z' }, db);
+    expect(await db.requirementApplicability.count({ where: { clientId: clientB, facts: { some: { clientFactId: suspended.id } } } })).toBe(0);
+
+    await db.clientOperatingProfile.update({ where: { clientId: clientB }, data: { complianceEnrollmentStatus: 'ENROLLED' } });
+    const enrolled = await createFact(actor, clientB, { factDefinitionId: enrollmentStateDefinitionId, scopeType: 'COMPANY', booleanValue: true, observedAt: '2026-08-24T17:00:00Z' }, db);
+    expect(await db.requirementApplicability.count({ where: { clientId: clientB, facts: { some: { clientFactId: enrolled.id } } } })).toBe(1);
+    expect(requirement.id).toBeDefined();
+    await db.assessmentFinding.deleteMany({ where: { clientId: clientB, requirementId: requirement.id } });
+    await db.requirementApplicability.deleteMany({ where: { clientId: clientB, requirementVersionId: version.id } });
+  });
+
+  it('evaluates only the approved requirement version effective at evaluationAt', async () => {
+    const requirement = await createRequirement({ key: `REQ_7D_TEMPORAL_${suffix}`, jurisdictionCode: 'HU', domainCode, db });
+    requirementIds.push(requirement.id);
+    const firstVersion = await createRequirementVersion({
+      requirementId: requirement.id,
+      versionKey: 'V2026',
+      title: 'Temporal 2026',
+      normativeStatement: 'Temporal 2026 statement',
+      effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+      effectiveTo: new Date('2027-01-01T00:00:00Z'),
+      sourceSupportState: 'SUFFICIENT',
+      db,
+    });
+    const secondVersion = await createRequirementVersion({
+      requirementId: requirement.id,
+      versionKey: 'V2027',
+      title: 'Temporal 2027',
+      normativeStatement: 'Temporal 2027 statement',
+      effectiveFrom: new Date('2027-01-01T00:00:00Z'),
+      sourceSupportState: 'SUFFICIENT',
+      db,
+    });
+    versionIds.push(firstVersion.id, secondVersion.id);
+    await addRequirementCitation({ requirementVersionId: firstVersion.id, legalSourceVersionId: sourceVersionId, supportRole: 'PRIMARY', db });
+    await addRequirementCitation({ requirementVersionId: secondVersion.id, legalSourceVersionId: sourceVersionId, supportRole: 'PRIMARY', db });
+    await approveRequirementVersion(firstVersion.id, actorId, db);
+    await approveRequirementVersion(secondVersion.id, actorId, db);
+    const firstRule = await createApplicabilityRuleVersion({ requirementVersionId: firstVersion.id, ruleVersionKey: 'R1', astJson: ast(`seven_d_temporal_${suffix}`), evaluationScopeType: 'COMPANY', db });
+    const secondRule = await createApplicabilityRuleVersion({ requirementVersionId: secondVersion.id, ruleVersionKey: 'R1', astJson: ast(`seven_d_temporal_${suffix}`), evaluationScopeType: 'COMPANY', db });
+    ruleIds.push(firstRule.id, secondRule.id);
+    await approveApplicabilityRuleVersion(firstRule.id, actorId, db);
+    await approveApplicabilityRuleVersion(secondRule.id, actorId, db);
+
+    await createFact(actor, clientA, { factDefinitionId: temporalDefinitionId, scopeType: 'COMPANY', booleanValue: true, observedAt: '2026-08-24T12:00:00Z', validFrom: '2026-08-24T12:00:00Z', evaluationAt: '2026-08-24T12:00:00Z' }, db);
+    await createFact(actor, clientA, { factDefinitionId: temporalDefinitionId, scopeType: 'COMPANY', booleanValue: true, observedAt: '2027-08-24T12:00:00Z', validFrom: '2027-08-24T12:00:00Z', evaluationAt: '2027-08-24T12:00:00Z' }, db);
+    expect(await db.requirementApplicability.count({ where: { clientId: clientA, requirementVersionId: firstVersion.id } })).toBe(1);
+    expect(await db.requirementApplicability.count({ where: { clientId: clientA, requirementVersionId: secondVersion.id } })).toBe(1);
+  });
+
   it('leaves legacy facts non-evaluable and does not scan unrelated definitions', async () => {
     const before = await db.requirementApplicability.count({ where: { clientId: clientA } });
     const legacy = await createFact(actor, clientA, { type: 'EMPLOYEE_COUNT', value: '42' }, db);
@@ -183,7 +283,7 @@ describeWithDatabase('Phase 7D typed fact to finding automation (PostgreSQL)', (
 
   it('deduplicates logical applicability when only evaluationAt changes', async () => {
     await db.clientFact.deleteMany({ where: { clientId: clientA, factDefinitionId: boolDefinitionId } });
-    await typed(boolDefinitionId, { booleanValue: true, observedAt: '2026-08-24T19:00:00Z' });
+    await typed(boolDefinitionId, { booleanValue: true, validFrom: '2026-08-24T18:00:00Z', observedAt: '2026-08-24T19:00:00Z' });
     const before = await db.requirementApplicability.count({ where: { clientId: clientA, requirementVersionId: versionIds[0] } });
     const one = await createRequirementApplicability({ requirementVersionId: versionIds[0], ruleVersionId: ruleIds[0], clientId: clientA, scope: { scopeType: 'COMPANY', evaluationAt: new Date('2026-08-24T20:00:00Z') } }, db);
     const two = await createRequirementApplicability({ requirementVersionId: versionIds[0], ruleVersionId: ruleIds[0], clientId: clientA, scope: { scopeType: 'COMPANY', evaluationAt: new Date('2026-08-24T21:00:00Z') } }, db);

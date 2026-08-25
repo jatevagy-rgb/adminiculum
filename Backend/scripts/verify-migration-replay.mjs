@@ -11,6 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendRoot = path.resolve(__dirname, '..');
 const baselineName = '20260726000000_current_schema_baseline';
 const cp0MigrationName = '20260803190000_client_portal_workspace_foundation';
+const wp1MigrationName = '20260824200000_work_package_schema_foundation';
 
 if (!databaseUrl) {
   console.error('VERIFY FAILED: MIGRATION_REPLAY_DATABASE_URL is required.');
@@ -108,6 +109,8 @@ async function applyPostBaselineMigrations() {
   await ensurePrismaMigrationsTable();
   for (const migrationName of migrationNames) {
     if (migrationName === cp0MigrationName) await seedCp0CompatibilityFixture();
+    if (migrationName === '20260824150000_phase7d1_temporal_scope_enrollment') await seedPhase7D1EnrollmentFixture();
+    if (migrationName === wp1MigrationName) await seedWp1LegacyFixture();
     const migrationPath = path.join(migrationsRoot, migrationName, 'migration.sql');
     const sql = fs.readFileSync(migrationPath, 'utf8');
     const checksum = crypto.createHash('sha256').update(sql.replace(/\r\n/g, '\n')).digest('hex');
@@ -129,6 +132,43 @@ async function applyPostBaselineMigrations() {
   }
 }
 
+async function seedWp1LegacyFixture() {
+  await client.query(`INSERT INTO cases (id, "caseNumber", title, "caseType", "clientId", "createdById", "createdAt", "updatedAt")
+    VALUES ('wp1-legacy-case', 'WP1-LEGACY', 'WP-1 legacy case', 'OTHER', 'cp0-client', 'cp0-admin', now(), now())`);
+  await client.query(`INSERT INTO tasks (id, title, "taskType", "caseId", "requiredSkills", "createdAt", "updatedAt")
+    VALUES ('wp1-legacy-task', 'WP-1 legacy task', 'OTHER', 'wp1-legacy-case', ARRAY[]::text[], now(), now())`);
+  console.log('WP-1 legacy Case/Task fixture seeded before schema migration.');
+}
+
+async function verifyWp1LegacyPreservation() {
+  const legacyCase = await one(`SELECT "caseType"::text AS "caseType", "caseTypeDefinitionId" FROM cases WHERE id = 'wp1-legacy-case'`);
+  if (!legacyCase || legacyCase.caseType !== 'OTHER' || legacyCase.caseTypeDefinitionId !== null) throw new Error('WP-1 rewrote the legacy Case type or provenance column.');
+  const legacyTask = await one(`SELECT "workPackageItemId" FROM tasks WHERE id = 'wp1-legacy-task'`);
+  if (!legacyTask || legacyTask.workPackageItemId !== null) throw new Error('WP-1 rewrote the legacy Task provenance column.');
+  console.log('WP-1 legacy Case/Task preservation OK: caseType retained, new provenance columns NULL.');
+}
+
+async function seedPhase7D1EnrollmentFixture() {
+  await client.query(`INSERT INTO clients (id, name, "createdAt", "updatedAt") VALUES
+    ('phase7d1-existing-profile', 'Phase 7D1 Existing Profile', now(), now()),
+    ('phase7d1-bare-client', 'Phase 7D1 Bare Client', now(), now())`);
+  await client.query(`INSERT INTO client_operating_profiles (id, "clientId", "createdAt", "updatedAt")
+    VALUES ('phase7d1-existing-profile-row', 'phase7d1-existing-profile', now(), now())`);
+  console.log('Phase 7D1 fixture seeded before enrollment migration.');
+}
+
+async function verifyPhase7D1EnrollmentSemantics() {
+  const existing = await one(`SELECT "complianceEnrollmentStatus"::text AS status FROM client_operating_profiles WHERE "clientId"='phase7d1-existing-profile'`);
+  if (!existing || existing.status !== 'ENROLLED') throw new Error('Phase 7D1 existing profile was not backfilled to ENROLLED.');
+  const bare = await one(`SELECT count(*)::int AS count FROM client_operating_profiles WHERE "clientId"='phase7d1-bare-client'`);
+  if (bare.count !== 0) throw new Error('Phase 7D1 created a profile for a bare client.');
+  const created = await one(`INSERT INTO client_operating_profiles (id, "clientId", "createdAt", "updatedAt")
+    VALUES ('phase7d1-new-profile-row', 'phase7d1-bare-client', now(), now())
+    RETURNING "complianceEnrollmentStatus"::text AS status`);
+  if (created.status !== 'NOT_ENROLLED') throw new Error('Phase 7D1 new profile did not default to NOT_ENROLLED.');
+  console.log('Phase 7D1 enrollment semantics OK: existing=ENROLLED, bare remains bare, new=NOT_ENROLLED.');
+}
+
 async function verifySchemaShape() {
   const requiredTables = [
     'users',
@@ -147,10 +187,20 @@ async function verifySchemaShape() {
     'client_portal_workspaces',
     'client_portal_workspace_memberships',
     'client_portal_workspace_events',
+    'case_type_definitions',
+    'work_package_templates',
+    'work_package_template_items',
+    'case_work_packages',
+    'case_work_package_items',
   ];
   for (const table of requiredTables) {
     const row = await one('SELECT to_regclass($1) AS oid', [`public.${table}`]);
     if (!row.oid) throw new Error(`required table missing: ${table}`);
+  }
+
+  for (const enumName of ['WorkPackageModuleType', 'WorkPackageTemplateStatus', 'CaseWorkPackageItemStatus']) {
+    const row = await one('SELECT 1 FROM pg_type WHERE typname = $1 AND typtype = \'e\'', [enumName]);
+    if (!row) throw new Error(`required enum missing: ${enumName}`);
   }
 
   const failedRows = await one(`SELECT to_regclass('public._prisma_migrations') AS oid`);
@@ -221,6 +271,8 @@ async function main() {
   client = createClient();
   await client.connect();
   await applyPostBaselineMigrations();
+  await verifyPhase7D1EnrollmentSemantics();
+  await verifyWp1LegacyPreservation();
   await verifySchemaShape();
   await verifyCp0CompatibilityBackfill();
   await verifyRepresentativeWrites();
