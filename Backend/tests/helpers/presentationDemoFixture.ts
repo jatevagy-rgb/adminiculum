@@ -555,68 +555,7 @@ export async function teardownPresentationDemoFixture(db: Db): Promise<void> {
 
   const ids = DEMO_IDS;
 
-  // Tasks first (FK → Case)
-  await db.task.deleteMany({
-    where: { id: { in: [ids.taskOneId, ids.taskTwoId, ids.taskThreeId] } },
-  });
-
-  // ComplianceProposals linked to our Cases
-  await db.complianceProposal.deleteMany({
-    where: { caseId: { in: [ids.caseMainId, ids.caseComplianceId] } },
-  });
-
-  // Cases
-  await db.case.deleteMany({
-    where: { id: { in: [ids.caseMainId, ids.caseComplianceId] } },
-  });
-
-  // ClientFact
-  await db.clientFact.deleteMany({
-    where: { id: ids.factEmployeeCountId },
-  });
-
-  // ClientOperatingProfile
-  await db.clientOperatingProfile.deleteMany({
-    where: { id: ids.operatingProfileId },
-  });
-
-  // Portal workspace memberships (if any were created by DEMO_PORTAL_EMAIL flow)
-  await db.clientPortalWorkspaceMembership.deleteMany({
-    where: { workspaceId: ids.workspaceId },
-  });
-
-  // Portal workspace
-  await db.clientPortalWorkspace.deleteMany({
-    where: { id: ids.workspaceId },
-  });
-
-  // Organization people
-  await db.organizationPersonResponsibility.deleteMany({
-    where: {
-      organizationPersonId: {
-        in: [ids.personUgyvezetoId, ids.personKovacsId, ids.personBaloghId],
-      },
-    },
-  });
-  await db.organizationPerson.deleteMany({
-    where: {
-      id: {
-        in: [ids.personUgyvezetoId, ids.personKovacsId, ids.personBaloghId],
-      },
-    },
-  });
-
-  // Organization group
-  await db.clientOrganizationGroup.deleteMany({
-    where: { id: ids.groupRootId },
-  });
-
-  // Client
-  await db.client.deleteMany({
-    where: { id: ids.clientId },
-  });
-
-  // 1. Delete generated findings, applicability facts, and applicabilities first
+  // 1. Delete generated findings, applicability facts, and applicabilities first (FK → Client)
   await db.assessmentFinding.deleteMany({
     where: { clientId: ids.clientId },
   });
@@ -643,7 +582,68 @@ export async function teardownPresentationDemoFixture(db: Db): Promise<void> {
     where: { id: ids.syntheticSourceId },
   });
 
-  // DEMO compliance content (only if DEMO_PRESENTATION-namespaced)
+  // 4. Tasks (FK → Case)
+  await db.task.deleteMany({
+    where: { id: { in: [ids.taskOneId, ids.taskTwoId, ids.taskThreeId] } },
+  });
+
+  // 5. ComplianceProposals linked to our Cases
+  await db.complianceProposal.deleteMany({
+    where: { caseId: { in: [ids.caseMainId, ids.caseComplianceId] } },
+  });
+
+  // 6. Cases
+  await db.case.deleteMany({
+    where: { id: { in: [ids.caseMainId, ids.caseComplianceId] } },
+  });
+
+  // 7. ClientFact (scoped to demo client)
+  await db.clientFact.deleteMany({
+    where: { clientId: ids.clientId },
+  });
+
+  // 8. ClientOperatingProfile
+  await db.clientOperatingProfile.deleteMany({
+    where: { id: ids.operatingProfileId },
+  });
+
+  // 9. Portal workspace memberships
+  await db.clientPortalWorkspaceMembership.deleteMany({
+    where: { workspaceId: ids.workspaceId },
+  });
+
+  // 10. Portal workspace
+  await db.clientPortalWorkspace.deleteMany({
+    where: { id: ids.workspaceId },
+  });
+
+  // 11. Organization people responsibilities and people
+  await db.organizationPersonResponsibility.deleteMany({
+    where: {
+      organizationPersonId: {
+        in: [ids.personUgyvezetoId, ids.personKovacsId, ids.personBaloghId],
+      },
+    },
+  });
+  await db.organizationPerson.deleteMany({
+    where: {
+      id: {
+        in: [ids.personUgyvezetoId, ids.personKovacsId, ids.personBaloghId],
+      },
+    },
+  });
+
+  // 12. Organization group
+  await db.clientOrganizationGroup.deleteMany({
+    where: { id: ids.groupRootId },
+  });
+
+  // 13. Client (all children deleted first)
+  await db.client.deleteMany({
+    where: { id: ids.clientId },
+  });
+
+  // 14. DEMO compliance content (only if DEMO_PRESENTATION-namespaced)
   await db.requirementVersion.deleteMany({
     where: { id: ids.requirementVersionId },
   });
@@ -657,7 +657,7 @@ export async function teardownPresentationDemoFixture(db: Db): Promise<void> {
     where: { code: ids.complianceDomainCode },
   });
 
-  // Workforce users — only if created by this fixture
+  // 15. Workforce users — only if created by this fixture
   await db.user.deleteMany({
     where: { id: { in: [ids.adminUserId, ids.lawyerUserId] } },
   });

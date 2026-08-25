@@ -125,7 +125,7 @@ async function teardown(db) {
   await db.task.deleteMany({ where: { id: { in: [IDS.taskOneId, IDS.taskTwoId, IDS.taskThreeId] } } });
   await db.complianceProposal.deleteMany({ where: { caseId: { in: [IDS.caseMainId, IDS.caseComplianceId] } } });
   await db.case.deleteMany({ where: { id: { in: [IDS.caseMainId, IDS.caseComplianceId] } } });
-  await db.clientFact.deleteMany({ where: { id: IDS.factEmployeeCountId } });
+  await db.clientFact.deleteMany({ where: { clientId: IDS.clientId } });
   await db.clientOperatingProfile.deleteMany({ where: { id: IDS.operatingProfileId } });
   await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId: IDS.workspaceId } });
   await db.clientPortalWorkspace.deleteMany({ where: { id: IDS.workspaceId } });

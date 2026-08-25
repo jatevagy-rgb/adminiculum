@@ -315,6 +315,22 @@ d('Presentation demo fixture (PostgreSQL)', () => {
     expect(finding).not.toBeNull();
   });
 
+  it('teardown succeeds cleanly after mutation and finding generation and allows reseed', async () => {
+    await teardownPresentationDemoFixture(db);
+    const client = await db.client.findUnique({ where: { id: DEMO_IDS.clientId } });
+    expect(client).toBeNull();
+    const findings = await db.assessmentFinding.count({ where: { clientId: DEMO_IDS.clientId } });
+    expect(findings).toBe(0);
+    const applicabilities = await db.requirementApplicability.count({ where: { clientId: DEMO_IDS.clientId } });
+    expect(applicabilities).toBe(0);
+
+    // Reseed
+    const result = await seedPresentationDemoFixture(db);
+    expect(result.ids.clientId).toBe(DEMO_IDS.clientId);
+    const reseededClient = await db.client.findUnique({ where: { id: DEMO_IDS.clientId } });
+    expect(reseededClient).toBeTruthy();
+  });
+
   it('shared non-demo ComplianceDomains (if any) are not touched', async () => {
     // Demo domain is DEMO_PRESENTATION_ namespaced; any other domain survives.
     // This test proves no cross-domain deleteMany was called.
