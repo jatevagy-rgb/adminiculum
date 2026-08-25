@@ -55,6 +55,7 @@ import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePane
 import { AdminBadge, AdminButton, AdminDocumentRow, AdminPanel, AdminStatusPill } from "@/components/adminiculum/ui";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import { DocumentWorkspaceHeader } from "@/components/documents/workContext/DocumentWorkspaceHeader";
+import { DocumentWorkspaceTabs } from "@/components/documents/workContext/DocumentWorkspaceTabs";
 import { ComparisonWorkspace } from "@/components/documents/comparison/ComparisonWorkspace";
 import { DocumentReviewWorkflowPanel } from "@/components/documents/review/DocumentReviewWorkflowPanel";
 import { ClientPublicationPanel } from "@/components/documents/publication/ClientPublicationPanel";
@@ -1448,7 +1449,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
               <div className="flex flex-col gap-3 bg-white px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-3">
-                    <h1 className="font-serif text-[28px] font-semibold leading-tight text-[var(--adm-text)]">Contract Workspace</h1>
+                    <h1 className="font-serif text-[28px] font-semibold leading-tight text-[var(--adm-text)]">Dokumentum munkatér</h1>
                     <span className="rounded-full border border-[#D8C58E] bg-[var(--adm-sand-100)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[#6D5418]">
                       {totalLedgerDocuments} irat
                     </span>
@@ -1456,9 +1457,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <AdminButton variant="primary" onClick={() => fileInputRef.current?.click()} disabled={!caseRecord?.id || isUploading}>
-                    {isUploading ? "Feltöltés..." : "Dokumentum feltöltése"}
+                    {isUploading ? "Hozzáadás..." : "Dokumentum hozzáadása"}
                   </AdminButton>
                 </div>
+              </div>
+              <div className="border-t border-[var(--adm-border)] bg-white px-4 pt-2">
+                <DocumentWorkspaceTabs caseId={canonicalCaseId} active="overview" />
               </div>
               <div className="border-t border-[var(--adm-border)] bg-[var(--adm-sand-100)] px-4 py-2 text-[11px] text-[#3D4842]">
                 <span className="font-bold text-[var(--adm-green-800)]">Workspace fókusz:</span> {selectedDocumentActionLabel}
@@ -1599,7 +1603,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         <h3 className="font-serif text-2xl font-semibold text-[var(--adm-text)]">Nincs kiválasztott dokumentum</h3>
                         <p className="mx-auto mt-2 max-w-md text-sm text-[#3D4842]">Tölts fel egy dokumentumot, vagy válassz az iratlistából.</p>
                         <div className="mt-5 flex flex-wrap justify-center gap-2">
-                          <AdminButton variant="primary" onClick={() => fileInputRef.current?.click()} disabled={!caseRecord?.id || isUploading}>Dokumentum feltöltése</AdminButton>
+                          <AdminButton variant="primary" onClick={() => fileInputRef.current?.click()} disabled={!caseRecord?.id || isUploading}>Dokumentum hozzáadása</AdminButton>
                         </div>
                       </div>
                     ) : (
@@ -1617,7 +1621,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           </p>
                         </div>
 
-                        <div className="rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-4">
+                        <div id="document-overview" className="scroll-mt-24 rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-4">
                           <div className="flex flex-col gap-3">
                             <div>
                               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Dokumentum összefoglaló</p>
@@ -1628,7 +1632,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </div>
 
                         {selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY' ? (
-                          <div className="rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-4">
+                          <div id="document-versions" className="scroll-mt-24 rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-4">
                             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                               <div>
                                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Contract Workspace · verziók</p>
@@ -1707,8 +1711,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             )}
 
                             {selectedUploadedDocument && versions.length > 0 ? (
-                              <div className="mt-4">
-                                <DocumentReviewWorkflowPanel
+                            <div id="document-review" className="mt-4 scroll-mt-24">
+                              <DocumentReviewWorkflowPanel
                                   documentId={selectedUploadedDocument.id}
                                   selectedVersionId={selectedVersion?.id || null}
                                   versions={versions}
@@ -1729,7 +1733,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             ) : null}
 
                             {selectedVersion ? (
-                              <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
+                              <div id="document-changes" className="mt-4 scroll-mt-24 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
                                 <div className="min-w-0 rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-4">
                                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                     <div className="min-w-0">
