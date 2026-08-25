@@ -658,6 +658,8 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
     let deadline = req.body?.deadline || req.body?.['deadline'];
     let workflowTemplateKey = req.body?.workflowTemplateKey || req.body?.['workflowTemplateKey'];
     let workflowAssignees = req.body?.workflowAssignees || req.body?.['workflowAssignees'];
+    let caseTypeDefinitionId = req.body?.caseTypeDefinitionId || req.body?.['caseTypeDefinitionId'];
+    let selectedModuleKeys = req.body?.selectedModuleKeys || req.body?.['selectedModuleKeys'];
 
     if (!clientName && !clientId) {
       res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Missing required field: clientName or clientId' });
@@ -673,6 +675,8 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
       deadline: deadline || undefined,
       workflowTemplateKey: workflowTemplateKey || undefined,
       workflowAssignees: workflowAssignees && typeof workflowAssignees === 'object' ? workflowAssignees : undefined,
+      caseTypeDefinitionId: caseTypeDefinitionId || undefined,
+      selectedModuleKeys,
       createdById: userId
     });
 
