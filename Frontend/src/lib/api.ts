@@ -439,6 +439,31 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspace> {
   return fetchApi<CaseWorkspace>(`/cases/${encodeURIComponent(caseId)}/workspace`, { cache: 'no-store' });
 }
 
+export interface CaseWorkPackage {
+  id: string;
+  caseId: string;
+  revision: number;
+  updatedAt: string;
+  progress: { totalItems: number; completedItems: number; activeItems: number; blockedItems: number };
+  items: Array<{
+    id: string; moduleKey: string; moduleType: string; label: string; status: string;
+    responsible: { id: string; displayName: string } | null;
+    configuredMetadata: Record<string, unknown>;
+    taskSummary: { total: number; open: number; completed: number };
+    tasks: Array<{ id: string; title: string; status: string; dueAt: string | null; assignee: { id: string; displayName: string } | null }>;
+  }>;
+}
+
+export async function getCaseWorkPackage(caseId: string): Promise<CaseWorkPackage> {
+  return fetchApi<CaseWorkPackage>(`/cases/${encodeURIComponent(caseId)}/work-package`, { cache: 'no-store' });
+}
+export async function updateCaseWorkPackageItem(caseId: string, itemId: string, body: { expectedRevision: number; status?: string; responsibleId?: string | null }): Promise<CaseWorkPackage> {
+  return fetchApi<CaseWorkPackage>(`/cases/${encodeURIComponent(caseId)}/work-package/items/${encodeURIComponent(itemId)}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+export async function createCaseWorkPackageTask(caseId: string, itemId: string, body: { title: string; assignedToId?: string | null }): Promise<{ task: { id: string; title: string; status: string }; package: CaseWorkPackage }> {
+  return fetchApi(`/cases/${encodeURIComponent(caseId)}/work-package/items/${encodeURIComponent(itemId)}/tasks`, { method: 'POST', body: JSON.stringify(body) });
+}
+
 // ---- Case-level internal notes (Comment model, caseId set) ----
 export interface CaseCommentDto {
   id: string;
@@ -2440,6 +2465,7 @@ export interface User {
   name: string;
   email: string;
   role: string;
+  isActive?: boolean;
 }
 
 export async function getUsers(): Promise<User[]> {
