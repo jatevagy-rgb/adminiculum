@@ -184,3 +184,23 @@ export const SPFolderToWorkflow: Record<string, string> = {
   '06_Client_Feedback': 'CLIENT_FEEDBACK',
   '07_Final': 'FINAL',
 };
+
+const WORKFLOW_FOLDER_ALIASES: Record<string, string> = {
+  CLIENT_INPUT: WorkflowToSPFolder.CLIENT_INPUT,
+  CLIENTINPUT: WorkflowToSPFolder.CLIENT_INPUT,
+  DRAFT: WorkflowToSPFolder.DRAFT,
+  DRAFTS: WorkflowToSPFolder.DRAFT,
+  IN_REVIEW: WorkflowToSPFolder.IN_REVIEW,
+  REVIEW: WorkflowToSPFolder.IN_REVIEW,
+  APPROVED: WorkflowToSPFolder.APPROVED,
+  SENT_TO_CLIENT: WorkflowToSPFolder.SENT_TO_CLIENT,
+  CLIENT_FEEDBACK: WorkflowToSPFolder.CLIENT_FEEDBACK,
+  FINAL: WorkflowToSPFolder.FINAL,
+  ANONYMIZED: SHAREPOINT_FOLDERS.WORKFLOW_ANONYMIZED,
+};
+
+export function normalizeSharePointFolderPath(folder?: string): string {
+  const requested = String(folder || '').trim();
+  if (!requested) return SHAREPOINT_FOLDERS.CONTRACTS;
+  return WORKFLOW_FOLDER_ALIASES[requested.toUpperCase()] || requested;
+}
