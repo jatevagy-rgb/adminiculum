@@ -11,6 +11,7 @@
  */
 
 import * as path from 'path';
+import { getWorkforceScanner, shouldRejectWorkforceScan } from './scannerAdapter';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -346,6 +347,8 @@ export interface WorkforceUploadResult {
   codeSafe: string;
   /** Set when archive inspection finds issues. */
   archiveInspection?: ArchiveInspectionResult;
+  /** Set when scanner runs. Only CLEAN allows ok=true. */
+  scanOutcome?: string;
 }
 
 /**
@@ -426,7 +429,26 @@ export async function validateWorkforceUpload(
     }
   }
 
-  return { ok: true, detectedMimeType: detected, sizeBytes, codeSafe: 'OK' };
+  // 7. Malware scan — only CLEAN may continue
+  const scanner = getWorkforceScanner();
+  const scanResult = await scanner.scan({
+    buffer: buf,
+    detectedMimeType: detected,
+    sizeBytes,
+    fileName: input.originalFileName,
+  });
+
+  if (shouldRejectWorkforceScan(scanResult)) {
+    return {
+      ok: false,
+      detectedMimeType: detected,
+      sizeBytes,
+      codeSafe: `SCAN_${scanResult.outcome}`,
+      scanOutcome: scanResult.outcome,
+    };
+  }
+
+  return { ok: true, detectedMimeType: detected, sizeBytes, codeSafe: 'OK', scanOutcome: scanResult.outcome };
 }
 
 // ---------------------------------------------------------------------------

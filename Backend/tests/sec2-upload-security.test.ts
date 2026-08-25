@@ -270,6 +270,13 @@ describe('SEC-2: hasPathTraversal', () => {
 // ---------------------------------------------------------------------------
 
 describe('SEC-2: validateWorkforceUpload', () => {
+  beforeEach(() => {
+    setWorkforceScanner(new DevMockWorkforceScanner());
+  });
+  afterEach(() => {
+    setWorkforceScanner(null);
+  });
+
   it('rejects empty file', async () => {
     const result = await validateWorkforceUpload({
       buffer: Buffer.alloc(0),
@@ -587,27 +594,18 @@ describe('SEC-2: Upload validation + scanner integration', () => {
     setWorkforceScanner(null);
   });
 
-  it('full pipeline: valid PDF passes validation, mock scanner passes', async () => {
+  it('full pipeline: valid PDF passes validation with DevMock scanner', async () => {
+    setWorkforceScanner(new DevMockWorkforceScanner());
     const validation = await validateWorkforceUpload({
       buffer: PDF_BUFFER,
       originalFileName: 'contract.pdf',
     });
     expect(validation.ok).toBe(true);
-
-    // Scanner check (separate step in the route handler)
-    setWorkforceScanner(new DevMockWorkforceScanner());
-    const scanner = getWorkforceScanner();
-    const scanResult = await scanner.scan({
-      buffer: PDF_BUFFER,
-      detectedMimeType: validation.detectedMimeType,
-      sizeBytes: validation.sizeBytes,
-      fileName: 'contract.pdf',
-    });
-    expect(scanResult.outcome).toBe('CLEAN');
-    expect(shouldRejectWorkforceScan(scanResult)).toBe(false);
+    expect(validation.scanOutcome).toBe('CLEAN');
   });
 
   it('full pipeline: valid DOCX passes validation', async () => {
+    setWorkforceScanner(new DevMockWorkforceScanner());
     const JSZip = (await import('jszip')).default;
     const zip = new JSZip();
     zip.file('word/document.xml', '<w:document/>');
@@ -619,6 +617,7 @@ describe('SEC-2: Upload validation + scanner integration', () => {
       inspectArchiveContent: true,
     });
     expect(validation.ok).toBe(true);
+    expect(validation.scanOutcome).toBe('CLEAN');
   });
 
   it('full pipeline: invalid content fails validation before scanner runs', async () => {
@@ -628,6 +627,45 @@ describe('SEC-2: Upload validation + scanner integration', () => {
     });
     expect(validation.ok).toBe(false);
     expect(validation.codeSafe).toBe('UNSAFE_CONTENT');
-    // Scanner should never be reached
+    expect(validation.scanOutcome).toBeUndefined();
+  });
+
+  it('unconfigured scanner rejects valid content (fail-closed)', async () => {
+    // No scanner installed — UnconfiguredWorkforceScanner returns SCAN_FAILED
+    const validation = await validateWorkforceUpload({
+      buffer: PDF_BUFFER,
+      originalFileName: 'contract.pdf',
+    });
+    expect(validation.ok).toBe(false);
+    expect(validation.codeSafe).toBe('SCAN_SCAN_FAILED');
+    expect(validation.scanOutcome).toBe('SCAN_FAILED');
+  });
+
+  it('INFECTED scanner rejects valid content before storage', async () => {
+    setWorkforceScanner({
+      provider: 'TEST_INFECTED',
+      scan: async () => ({ outcome: 'INFECTED', provider: 'TEST_INFECTED', codeSafe: 'MALWARE_DETECTED' }),
+    });
+    const validation = await validateWorkforceUpload({
+      buffer: PDF_BUFFER,
+      originalFileName: 'contract.pdf',
+    });
+    expect(validation.ok).toBe(false);
+    expect(validation.codeSafe).toBe('SCAN_INFECTED');
+    expect(validation.scanOutcome).toBe('INFECTED');
+  });
+
+  it('SCAN_FAILED scanner rejects valid content before storage', async () => {
+    setWorkforceScanner({
+      provider: 'TEST_ERROR',
+      scan: async () => ({ outcome: 'SCAN_FAILED', provider: 'TEST_ERROR', codeSafe: 'SCANNER_TIMEOUT' }),
+    });
+    const validation = await validateWorkforceUpload({
+      buffer: PDF_BUFFER,
+      originalFileName: 'contract.pdf',
+    });
+    expect(validation.ok).toBe(false);
+    expect(validation.codeSafe).toBe('SCAN_SCAN_FAILED');
+    expect(validation.scanOutcome).toBe('SCAN_FAILED');
   });
 });
