@@ -447,9 +447,62 @@ async function seed(db) {
   for (const r of timeRows) await db.timeEntry.upsert({ where: { id: r.id }, update: {}, create: { id: r.id, matterId: r.matterId, userId: r.userId, minutes: r.minutes, workType: r.workType, billable: r.billable, description: r.description, workDate: now } });
 
   // 12. Communications.
-  await db.communication.upsert({ where: { id: COMM_IDS.incoming }, update: {}, create: { id: COMM_IDS.incoming, type: 'EMAIL', subject: 'Munkaszerződés-minták megküldése', body: 'Kérjük a munkaszerződés-minták és a kapcsolódó HR dokumentumok áttekintését.', senderName: 'Péterfi János', senderEmail: 'demo-kft-uzletvezeto@fixture.invalid', clientId: IDS.clientId, caseId: IDS.caseEmploymentId, direction: 'INBOUND', source: 'MANUAL', recipients: [] } });
-  await db.communication.upsert({ where: { id: COMM_IDS.handoff }, update: {}, create: { id: COMM_IDS.handoff, type: 'NOTE', subject: 'Belső felülvizsgálati megbízás', body: 'Első körös felülvizsgálat, problémás kikötések megjelölése.', senderName: 'Dr. Trugly Csanád', senderEmail: stableEmail('csanad'), recipientName: 'Dr. Hubay Gyula Máté', clientId: IDS.clientId, caseId: IDS.caseEmploymentId, direction: 'OUTBOUND', source: 'MANUAL', recipients: [] } });
-  await db.communication.upsert({ where: { id: COMM_IDS.clientUpdate }, update: {}, create: { id: COMM_IDS.clientUpdate, type: 'NOTE', subject: 'Ügy állapota', body: 'Az első jogi áttekintés elkészült, felelős ügyvédi jóváhagyás alatt.', senderName: 'Dr. Trugly Csanád', clientId: IDS.clientId, caseId: IDS.caseEmploymentId, direction: 'OUTBOUND', source: 'MANUAL', recipients: [] } });
+  await db.communication.upsert({
+    where: { id: COMM_IDS.incoming },
+    update: {},
+    create: {
+      id: COMM_IDS.incoming,
+      type: 'EMAIL',
+      subject: 'Munkaszerződés-minták megküldése',
+      content: 'Kérjük a munkaszerződés-minták és a kapcsolódó HR dokumentumok áttekintését.',
+      senderName: 'Péterfi János',
+      senderEmail: 'demo-kft-uzletvezeto@fixture.invalid',
+      clientId: IDS.clientId,
+      caseId: IDS.caseEmploymentId,
+      direction: 'INBOUND',
+      source: 'MANUAL',
+      recipients: [],
+      createdById: IDS.adminUserId,
+    },
+  });
+  await db.communication.upsert({
+    where: { id: COMM_IDS.handoff },
+    update: {},
+    create: {
+      id: COMM_IDS.handoff,
+      type: 'NOTE',
+      subject: 'Belső felülvizsgálati megbízás',
+      content: 'Első körös felülvizsgálat, problémás kikötések megjelölése.',
+      senderName: 'Dr. Trugly Csanád',
+      senderEmail: stableEmail('csanad'),
+      recipientName: 'Dr. Hubay Gyula Máté',
+      recipientEmail: stableEmail('gyula'),
+      clientId: IDS.clientId,
+      caseId: IDS.caseEmploymentId,
+      direction: 'OUTBOUND',
+      source: 'MANUAL',
+      recipients: [],
+      createdById: IDS.lawyerCsanadId,
+    },
+  });
+  await db.communication.upsert({
+    where: { id: COMM_IDS.clientUpdate },
+    update: {},
+    create: {
+      id: COMM_IDS.clientUpdate,
+      type: 'NOTE',
+      subject: 'Ügy állapota',
+      content: 'Az első jogi áttekintés elkészült, felelős ügyvédi jóváhagyás alatt.',
+      senderName: 'Dr. Trugly Csanád',
+      senderEmail: stableEmail('csanad'),
+      clientId: IDS.clientId,
+      caseId: IDS.caseEmploymentId,
+      direction: 'OUTBOUND',
+      source: 'MANUAL',
+      recipients: [],
+      createdById: IDS.lawyerCsanadId,
+    },
+  });
 
   // 13. Document metadata (NO live storage claim — storageReference/spItemId stay null).
   await db.document.upsert({
