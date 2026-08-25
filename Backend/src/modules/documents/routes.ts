@@ -6,7 +6,7 @@
 import { Router, Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import documentsService from './services';
-import { DocumentDeleteError } from './services';
+import { DocumentDeleteError, DocumentStorageUploadError } from './services';
 import { extractText } from './textExtractor';
 import annotationRoutes from './annotations.routes';
 import {
@@ -272,11 +272,11 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
       });
       return;
     }
-    if (message.toLowerCase().includes('sharepoint')) {
+    if (error instanceof DocumentStorageUploadError) {
       res.status(502).json({
         status: 502,
-        code: 'SHAREPOINT_UPLOAD_FAILED',
-        message
+        code: 'DOCUMENT_STORAGE_UNAVAILABLE',
+        message: 'A tárhelykapcsolat jelenleg nem érhető el.',
       });
       return;
     }

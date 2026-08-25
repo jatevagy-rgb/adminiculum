@@ -148,6 +148,13 @@ export class DocumentDeleteError extends Error {
   }
 }
 
+export class DocumentStorageUploadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DocumentStorageUploadError';
+  }
+}
+
 class DocumentsService {
   /**
    * Create document with SharePoint upload + TimelineEvent + Case update
@@ -180,7 +187,7 @@ class DocumentsService {
       });
 
       if (!uploadResult.success || !uploadResult.item) {
-        throw new Error(uploadResult.error || 'SharePoint upload failed');
+        throw new DocumentStorageUploadError(uploadResult.error || 'Document storage upload failed');
       }
 
       // 4. Create CaseDocument record in database
