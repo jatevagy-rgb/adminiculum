@@ -260,6 +260,9 @@ app.use('/api/v1/compliance/proposals', complianceProposalRoutes);
 import complianceOverviewRoutes from './modules/compliance/complianceOverviewRoutes';
 app.use('/api/v1/compliance', complianceOverviewRoutes);
 
+import clientSafeComplianceRoutes from './modules/compliance/clientSafeComplianceRoutes';
+app.use('/api/v1/client-portal/compliance', clientSafeComplianceRoutes);
+
 import contractsRoutes from './modules/contracts/routes';
 app.use('/api/v1/contracts', contractsRoutes);
 

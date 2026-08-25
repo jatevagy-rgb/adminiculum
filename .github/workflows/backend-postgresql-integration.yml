@@ -67,7 +67,7 @@ jobs:
 
       - name: Initialize suite result tracking
         run: |
-          for s in comparison review publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture phase6-slice-a phase6-slice-b phase6-slice-c2 phase6-slice-d phase7-slice-7a phase7d answer-state phase7b phase7cb phase5b document-version task-lifecycle-schema task-review-decision task-submission; do
+          for s in comparison review publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture phase6-slice-a phase6-slice-b phase6-slice-c2 phase6-slice-d phase7-slice-7a phase7d answer-state phase7b phase7cb org-client-safe phase5b document-version task-lifecycle-schema task-review-decision task-submission; do
             echo "$s=PENDING" >> "$RUNNER_TEMP/ci-suite-results.txt"
           done
 
@@ -371,6 +371,15 @@ jobs:
           sed -i "s/^phase7cb=PENDING$/phase7cb=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit "$rc"
 
+      - name: Org client safe compliance read model PG
+        working-directory: Backend
+        env:
+          PHASE7CB_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: |
+          if npm run test:org-client-safe:db; then rc=0; else rc=$?; fi
+          sed -i "s/^org-client-safe=PENDING$/org-client-safe=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit "$rc"
+
       - name: Phase 5B org contract + company customer surface PG
         working-directory: Backend
         env:
@@ -469,6 +478,7 @@ jobs:
             [answer-state]="Organization client AnswerState / Discovery"
             [phase7b]="Phase 7B compliance proposal workflow"
             [phase7cb]="Phase 7C-B compliance overview"
+            [org-client-safe]="Org client safe compliance read model"
             [phase5b]="Phase 5B org contract + company customer surface"
             [document-version]="Document version persistence"
             [task-lifecycle-schema]="Task lifecycle additive schema"
