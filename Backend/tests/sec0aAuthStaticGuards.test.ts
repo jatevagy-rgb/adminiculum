@@ -94,7 +94,11 @@ describe('SEC-0A static guards: auth / privilege / settings / secrets', () => {
       'prisma/seed_users.js',
       'prisma/seed_azure_users.js',
       'prisma/seed-users-only.js',
+      'prisma/seed.js',
       'scripts/apply-staging-migration.mjs',
+      'scripts/seed-core-team-users.mjs',
+      'scripts/seed-core-clients-house-style.mjs',
+      'scripts/add-attorney-user.mjs',
       path.join('..', 'scripts', 'run_migration.js'),
       path.join('..', 'scripts', 'seed_azure.ts'),
     ];
@@ -103,8 +107,26 @@ describe('SEC-0A static guards: auth / privilege / settings / secrets', () => {
       const content = read(f);
       expect(content).not.toContain('adminiculum.postgres.database.azure.com');
       expect(content).not.toContain('password123');
+      expect(content).not.toContain('Password123!');
       expect(content).not.toContain('Uborka444');
     }
+  });
+
+  // 7. P1-1: global UI settings writes require ADMIN/PARTNER.
+  it('requires ADMIN/PARTNER to write global UI settings', () => {
+    const routes = read('src/modules/settings/routes.ts');
+    expect(routes).toContain("router.patch('/ui', authenticate, requireRole('ADMIN', 'PARTNER'),");
+    expect(routes).toContain("router.get('/ui'"); // remains public-safe read-only
+  });
+
+  // 8. P1-2: destructive reset is bound to an explicit approved target.
+  it('binds destructive reset to an explicit approved target identity', () => {
+    const apply = read('scripts/apply-staging-migration.mjs');
+    expect(apply).toContain('ALLOW_DESTRUCTIVE_RESET');
+    expect(apply).toContain('APPROVED_DESTRUCTIVE_TARGET');
+    expect(apply).toContain('new URL(DATABASE_URL)');
+    expect(apply).toContain('.database.azure.com');
+    expect(apply).toContain('NODE_ENV');
   });
 
   // 6. No fixed-password leakage in the whole Backend source tree.

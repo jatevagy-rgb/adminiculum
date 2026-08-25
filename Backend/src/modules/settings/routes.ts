@@ -74,9 +74,11 @@ router.get('/ui', async (_req: Request, res: Response) => {
 
 /**
  * PATCH /api/v1/settings/ui
- * Update UI settings (authenticated workforce; only theme/app_config).
+ * Update UI settings. This writes GLOBAL UI configuration shared by all users,
+ * so it requires ADMIN/PARTNER (not merely an authenticated workforce user).
+ * GET /settings/ui remains public-safe read-only.
  */
-router.patch('/ui', authenticate, async (req: Request, res: Response) => {
+router.patch('/ui', authenticate, requireRole('ADMIN', 'PARTNER'), async (req: Request, res: Response) => {
   try {
     const updates = req.body || {};
     const allowed: Record<string, unknown> = {};
