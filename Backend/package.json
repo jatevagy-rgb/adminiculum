@@ -18,6 +18,8 @@
     "db:bootstrap:empty": "node scripts/db-bootstrap-empty.mjs",
     "db:migrations:verify-replay": "node scripts/verify-migration-replay.mjs",
     "test:migration:webjob": "node scripts/test-migration-webjob-runner.mjs",
+    "demo:kft:reset": "node scripts/demo-kft-reset.mjs",
+    "test:demo-kft:db": "set DOTENV_CONFIG_PATH=.env.test&& node -r dotenv/config ./node_modules/jest/bin/jest.js --runInBand tests/demoKftFixture.integration.test.ts",
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx prisma/seed.ts",
     "seed:pilot:users": "node scripts/seed-core-team-users.mjs",
