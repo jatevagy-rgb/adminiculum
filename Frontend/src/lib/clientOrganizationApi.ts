@@ -24,6 +24,8 @@ export type OrgPersonDTO = {
   startDate: string | null;
   endDate: string | null;
   responsibilitiesSummary: string | null;
+  portalMembershipId?: string | null;
+  portalMembershipRole?: string | null;
   responsibilities?: OrgResponsibilityDTO[];
   organizationGroupName?: string | null;
   managerName?: string | null;
@@ -52,6 +54,12 @@ export const clientOrganizationApi = {
   },
   getPerson(personId: string) {
     return fetchApi<OrgPersonDTO>(`/client-organization/persons/${encodeURIComponent(personId)}`);
+  },
+  updatePerson(personId: string, data: Partial<Pick<OrgPersonDTO, "jobTitle" | "organizationGroupId" | "managerPersonId" | "deputyPersonId">>) {
+    return fetchApi<OrgPersonDTO>(`/client-organization/persons/${encodeURIComponent(personId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
   },
   responsibilityGaps(clientId: string) {
     return fetchApi<ResponsibilityGaps>(url(clientId, '/gaps'));
