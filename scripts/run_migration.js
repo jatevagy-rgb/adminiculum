@@ -12,16 +12,23 @@ if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
 }
 
 async function runMigration() {
-  if (!process.env.DB_PASSWORD && !process.env.DATABASE_URL) {
-    throw new Error('DB_PASSWORD/DATABASE_URL is not configured; refusing to run.');
+  // Prefer DATABASE_URL when supplied; otherwise require the component variables
+  // that are actually consumed. Never accept configuration that is then ignored.
+  let client;
+  if (process.env.DATABASE_URL) {
+    client = new Client({ connectionString: process.env.DATABASE_URL });
+  } else {
+    if (!process.env.DB_PASSWORD) {
+      throw new Error('DB_PASSWORD is required when DATABASE_URL is not provided; refusing to run.');
+    }
+    client = new Client({
+      host: process.env.DB_HOST || 'localhost',
+      port: process.env.DB_PORT || 5432,
+      database: process.env.DATABASE_NAME || 'adminiculum',
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD,
+    });
   }
-  const client = new Client({
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
-    database: process.env.DATABASE_NAME || 'adminiculum',
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD,
-  });
 
   try {
     await client.connect();

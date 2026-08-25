@@ -5,7 +5,13 @@
 
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const { randomUUID } = require('crypto');
 const prisma = new PrismaClient();
+
+// SEC-0A: this seed creates workforce users and must never run in production.
+if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
+  throw new Error('seed.js must NEVER run in production. Aborting.');
+}
 
 // ============================================================================
 // CONSTANTS
@@ -223,7 +229,9 @@ async function seedDocumentTemplates() {
 
 async function seedUsers() {
   console.log('\n👥 Creating users...');
-  const hashedPassword = await bcrypt.hash('password123', 10);
+  // SEC-0A: non-login credential — a random, unknown hash. Workforce users
+  // authenticate via Azure AD (email-resolved role), never a fixed password.
+  const hashedPassword = await bcrypt.hash(randomUUID(), 10);
 
   for (const userData of USERS) {
     const { skills, ...userFields } = userData;
@@ -295,11 +303,7 @@ async function main() {
   await seedRedactionRules();
 
   console.log('\n✅ Seed completed successfully!');
-  console.log('\n📝 Test users created:');
-  console.log('   - lawyer@adminiculum.com (LAWYER) - password: password123');
-  console.log('   - associate@adminiculum.com (COLLAB_LAWYER) - password: password123');
-  console.log('   - trainee@adminiculum.com (TRAINEE) - password: password123');
-  console.log('   - assistant@adminiculum.com (LEGAL_ASSISTANT) - password: password123');
+  console.log('\n📝 Test users created (login via Azure AD, no local password).');
 }
 
 main()
