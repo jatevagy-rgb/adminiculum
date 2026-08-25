@@ -1,0 +1,137 @@
+name: Presentation Demo PostgreSQL Acceptance
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - release/editor-ops-workflow-1
+    paths:
+      - 'Backend/scripts/demo-presentation-*.mjs'
+      - 'Backend/tests/helpers/presentationDemoFixture.ts'
+      - 'Backend/tests/presentationDemoFixture.integration.test.ts'
+      - '.github/workflows/presentation-demo-postgresql-acceptance.yml'
+
+jobs:
+  presentation-demo-acceptance:
+    name: Presentation Demo DB Acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: adminiculum_demo_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: Backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: Backend
+        run: npm ci
+
+      - name: Provision schema (canonical empty migration replay)
+        working-directory: Backend
+        env:
+          MIGRATION_REPLAY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_demo_ci?schema=public
+        run: npm run db:migrations:verify-replay
+
+      - name: Verify production hard deny
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_demo_ci?schema=public
+          NODE_ENV: production
+          ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
+        run: |
+          if npm run demo:presentation:reset; then
+            echo "Production guard failed: reset succeeded in production mode!"
+            exit 1
+          else
+            echo "Production guard successfully blocked reset."
+          fi
+
+      - name: Execute Harness Workflow
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_demo_ci?schema=public
+          NODE_ENV: development
+          ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
+        run: |
+          set -e
+          
+          node -e '
+            const { Client } = require("pg");
+            (async () => {
+              const client = new Client({ connectionString: process.env.DATABASE_URL });
+              await client.connect();
+              await client.query(`INSERT INTO "Client" ("id", "name", "createdById", "status") VALUES ($1, $2, $3, $4)`, ["UNRELATED_ID", "Unrelated Client", "system", "ACTIVE"]);
+              await client.end();
+            })().catch(err => { console.error(err); process.exit(1); });
+          '
+          
+          echo "Running Reset 1..."
+          npm run demo:presentation:reset
+          
+          echo "Checking Employee Count (Expected 47)..."
+          npm run demo:presentation:check > check1.log
+          cat check1.log
+          grep -q "Total employee count (baseline): 47" check1.log || (echo "Failed check1" && exit 1)
+          
+          echo "Mutating Data (47 -> 52)..."
+          npm run demo:presentation:mutate
+          
+          echo "Checking Employee Count (Expected 52)..."
+          npm run demo:presentation:check > check2.log
+          cat check2.log
+          grep -q "Total employee count (baseline): 52" check2.log || (echo "Failed check2" && exit 1)
+          
+          echo "Running Reset 2..."
+          npm run demo:presentation:reset
+          
+          echo "Checking Employee Count (Expected 47)..."
+          npm run demo:presentation:check > check3.log
+          cat check3.log
+          grep -q "Total employee count (baseline): 47" check3.log || (echo "Failed check3" && exit 1)
+          
+          echo "Running Reset 3 (Double Reset)..."
+          npm run demo:presentation:reset
+          
+          echo "Checking Employee Count (Expected 47)..."
+          npm run demo:presentation:check > check4.log
+          cat check4.log
+          grep -q "Total employee count (baseline): 47" check4.log || (echo "Failed check4" && exit 1)
+          
+          echo "Verifying Unrelated Row Survival..."
+          node -e '
+            const { Client } = require("pg");
+            (async () => {
+              const client = new Client({ connectionString: process.env.DATABASE_URL });
+              await client.connect();
+              const res = await client.query(`SELECT id FROM "Client" WHERE id = $1`, ["UNRELATED_ID"]);
+              await client.end();
+              if (res.rows.length === 0) { console.error("Unrelated row deleted!"); process.exit(1); }
+              console.log("Unrelated row survived.");
+            })().catch(err => { console.error(err); process.exit(1); });
+          '
+
+      - name: Run Focused Integration Tests
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_demo_ci?schema=public
+          NODE_ENV: development
+        run: |
+          npm run test:demo-fixture:db

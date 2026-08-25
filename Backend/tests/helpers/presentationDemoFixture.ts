@@ -249,9 +249,7 @@ export async function seedPresentationDemoFixture(
   });
 
   // ---- ClientOperatingProfile ----
-  // ClientOperatingProfile has no "enrollment" field in the current schema.
-  // This is a forward-compatibility placeholder — once 7D.1 adds the field,
-  // update this upsert to set it. Reported as blocked step.
+  // Uses 7D.1 canonical schema fields
   await db.clientOperatingProfile.upsert({
     where: { id: ids.operatingProfileId },
     update: {},
@@ -259,10 +257,11 @@ export async function seedPresentationDemoFixture(
       id: ids.operatingProfileId,
       clientId: ids.clientId,
       status: 'ACTIVE',
+      complianceEnrollmentStatus: 'ENROLLED',
       summary:
         '[DEMO] Demo Kft. — szintetikus bemutató vállalat. Nem valós ügyfél.',
       internalNote: 'DEMO fixture — presentation use only.',
-    },
+    } as any,
   });
 
   // ---- Cases ----
@@ -527,6 +526,7 @@ export async function seedPresentationDemoFixture(
       ruleVersionKey: 'V1-DEMO',
       astJson,
       status: 'CANDIDATE',
+      evaluationScopeType: 'COMPANY',
       db,
     });
     await approveApplicabilityRuleVersion(createdRule.id, ids.adminUserId, db);
