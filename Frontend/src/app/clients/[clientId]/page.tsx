@@ -25,6 +25,7 @@ import { ClientColorSelector } from "@/components/clients/ClientColorSelector";
 import { ClientCompanyFoundation } from "@/components/clients/ClientCompanyFoundation";
 import { ClientContractLibrary } from "@/components/clients/ClientContractLibrary";
 import { ClientOrganization } from "@/components/clients/ClientOrganization";
+import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 
 type DossierDocument = DocumentItem & { caseNumber: string; caseId: string };
@@ -386,6 +387,9 @@ function ClientDetailContent() {
               <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.totalCases}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Összes ügy</p></div>
               <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.documents}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Friss dokumentum</p></div>
               <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.communications}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Friss kommunikáció</p></div>
+            </div>
+            <div className="mt-5">
+              <ClientWorkspaceTabs clientId={clientId} active="overview" />
             </div>
           </header>
 
