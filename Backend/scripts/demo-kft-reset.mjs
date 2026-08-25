@@ -21,8 +21,6 @@
  */
 import { PrismaClient } from '@prisma/client';
 import crypto from 'node:crypto';
-import pkg from '../dist/modules/compliance/requirementRuleService.js';
-const { approveRequirementVersion, approveApplicabilityRuleVersion, createApplicabilityRuleVersion } = pkg;
 
 // ---- Production guard --------------------------------------------------------
 const NODE_ENV = String(process.env.NODE_ENV || '');
@@ -50,6 +48,9 @@ function refuseIfProduction() {
   }
   console.log('✅ Safety checks passed.');
 }
+
+// Execute guard synchronously at module evaluation time
+refuseIfProduction();
 
 // ---- Stable IDs --------------------------------------------------------------
 function stableId(name) {
@@ -265,6 +266,12 @@ async function seed(db) {
   if (!existingDomain) await db.complianceDomain.create({ data: { code: 'DEMO_KFT_GROWTH', label: 'Szervezeti növekedési áttekintés [DEMO_KFT]' } });
   const existingReq = await db.requirement.findUnique({ where: { key: IDS.requirementKey }, select: { id: true } });
   if (!existingReq) await db.requirement.create({ data: { id: IDS.requirementId, key: IDS.requirementKey, jurisdictionCode: 'HU', domainCode: 'DEMO_KFT_GROWTH' } });
+  const {
+    approveRequirementVersion,
+    approveApplicabilityRuleVersion,
+    createApplicabilityRuleVersion,
+  } = await import('../src/modules/compliance/requirementRuleService.ts');
+
   const requirementVersion = await db.requirementVersion.upsert({
     where: { id: IDS.requirementVersionId },
     update: { status: 'CANDIDATE' },

@@ -12,26 +12,11 @@
  *   2. ADMINICULUM_DEMO_CONTENT_ENABLED === 'true'
  */
 
-import { PrismaClient } from '@prisma/client';
 import crypto from 'node:crypto';
-import pkg from '../dist/modules/compliance/typedFactMutationService.js';
-const { createTypedFactAndEvaluate } = pkg;
 
 const NODE_ENV = process.env.NODE_ENV || '';
 const DEMO_ENABLED = process.env.ADMINICULUM_DEMO_CONTENT_ENABLED || '';
 const FIXTURE_KEY = 'DEMO_KFT_2026';
-
-function stableId(name) {
-  return crypto.createHash('sha256').update(`${FIXTURE_KEY}:${name}`).digest('hex').slice(0, 32);
-}
-
-const IDS = {
-  adminUserId: process.env.DEMO_ADMIN_USER_ID || stableId('adminUser'),
-  clientId: stableId('demoClient'),
-  identityId: stableId('portalIdentity'),
-  factDefinitionId: stableId('factDefinitionEmployeeCount'),
-  factDefinitionKey: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT',
-};
 
 function refuseIfProduction() {
   if (NODE_ENV === 'production') {
@@ -45,8 +30,24 @@ function refuseIfProduction() {
   console.log('✅ Safety checks passed.');
 }
 
+// Execute guard synchronously at module evaluation time
+refuseIfProduction();
+
+function stableId(name) {
+  return crypto.createHash('sha256').update(`${FIXTURE_KEY}:${name}`).digest('hex').slice(0, 32);
+}
+
+const IDS = {
+  adminUserId: process.env.DEMO_ADMIN_USER_ID || stableId('adminUser'),
+  clientId: stableId('demoClient'),
+  identityId: stableId('portalIdentity'),
+  factDefinitionId: stableId('factDefinitionEmployeeCount'),
+  factDefinitionKey: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT',
+};
+
 async function main() {
-  refuseIfProduction();
+  const { PrismaClient } = await import('@prisma/client');
+  const { createTypedFactAndEvaluate } = await import('../src/modules/compliance/typedFactMutationService.ts');
   const db = new PrismaClient();
   try {
     console.log('🚀 Running Demo Kft. employee‑count mutation (47 → 52)...');
