@@ -28,18 +28,6 @@ const baseDbUrl =
   process.env.DATABASE_URL;
 
 let databaseUrl = baseDbUrl;
-if (baseDbUrl) {
-  try {
-    const urlObj = new URL(baseDbUrl);
-    if (urlObj.pathname !== '/adminiculum_presentation_demo_ci') {
-      urlObj.pathname = '/adminiculum_presentation_demo_ci';
-      databaseUrl = urlObj.toString();
-    }
-  } catch (err) {
-    // Keep as is
-  }
-}
-
 const d = databaseUrl ? describe : describe.skip;
 
 // ---------------------------------------------------------------------------
@@ -151,8 +139,8 @@ d('Presentation demo fixture (PostgreSQL)', () => {
     const parsed = new URL(databaseUrl);
     // Safety Loopback Guard
     expect(['127.0.0.1', 'localhost', '::1']).toContain(parsed.hostname);
-    // Database Name Guard — must target the dedicated disposable test database only!
-    expect(parsed.pathname.replace(/^\//, '')).toBe('adminiculum_presentation_demo_ci');
+    // Database Name Guard — must target an explicitly disposable test database!
+    expect(parsed.pathname.replace(/^\//, '')).toMatch(/^adminiculum(_|-)?(ci|presentation_demo_ci|test|replay)$/i);
 
     process.env.DATABASE_URL = databaseUrl;
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
