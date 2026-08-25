@@ -16,6 +16,7 @@ type AppShellProps = {
     | "generation"
     | "tasks"
     | "notifications"
+    | "communications"
     | "reviews"
     | "clients"
     | "documents-compare"
@@ -54,6 +55,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
     generation: "Dokumentum generálás",
     tasks: "Feladatok",
     notifications: "Kommunikáció",
+    communications: "Ügykommunikáció",
     reviews: "Review sor",
     clients: "Ügyfelek",
     "documents-compare": "Dokumentum összevetés",

@@ -45,6 +45,11 @@ model User {
   assignedByTasks                   Task[]                       @relation("AssignedBy") // Tasks assigned by this user
   createdCases                      Case[]                       @relation("CreatedBy")
   assignedCases                     Case[]                       @relation("AssignedLawyer")
+  createdCaseTypeDefinitions        CaseTypeDefinition[]         @relation("CaseTypeDefinitionCreatedBy")
+  createdWorkPackageTemplates       WorkPackageTemplate[]        @relation("WorkPackageTemplateCreatedBy")
+  createdCaseWorkPackages           CaseWorkPackage[]            @relation("CaseWorkPackageCreatedBy")
+  createdCaseWorkPackageItems       CaseWorkPackageItem[]        @relation("CaseWorkPackageItemCreatedBy")
+  responsibleCaseWorkPackageItems   CaseWorkPackageItem[]        @relation("CaseWorkPackageItemResponsible")
   timelineEvents                    TimelineEvent[]
   comments                          Comment[]
   documentReviewSuggestions         DocumentReviewSuggestion[]   @relation("DocumentReviewSuggestionAuthor")
@@ -170,6 +175,7 @@ model Client {
   houseStyleProfile          ClientHouseStyleProfile? // One-to-one relation for document house style
   operatingProfile           ClientOperatingProfile? // Company foundation (Phase 1)
   facts                      ClientFact[] // Company foundation (Phase 1)
+  factAnswerStates           ClientFactAnswerState[]
   companyMilestones          CompanyMilestone[] // Company foundation (Phase 1)
   assessments                Assessment[] // Company foundation (Phase 1)
   assessmentFindings         AssessmentFinding[] // Company foundation (Phase 1)
@@ -723,13 +729,14 @@ enum AutomationSuppressionType {
 // ============================================================================
 
 model Case {
-  id          String     @id @default(uuid())
-  caseNumber  String     @unique
-  title       String
-  description String?
-  caseType    CaseType
-  status      CaseStatus @default(CLIENT_INPUT)
-  priority    Priority   @default(MEDIUM)
+  id                   String     @id @default(uuid())
+  caseNumber           String     @unique
+  title                String
+  description          String?
+  caseType             CaseType
+  caseTypeDefinitionId String?
+  status               CaseStatus @default(CLIENT_INPUT)
+  priority             Priority   @default(MEDIUM)
 
   // Additional fields for code compatibility
   clientName     String? // Computed from client relation
@@ -753,8 +760,9 @@ model Case {
   updatedAt   DateTime  @updatedAt
 
   // Relations
-  clientId String
-  client   Client @relation(fields: [clientId], references: [id])
+  clientId           String
+  client             Client              @relation(fields: [clientId], references: [id])
+  caseTypeDefinition CaseTypeDefinition? @relation(fields: [caseTypeDefinitionId], references: [id], onDelete: SetNull)
 
   // Matter relation (NEW - cases belong to matters)
   matterId String?
@@ -788,6 +796,7 @@ model Case {
   intakeDeadlines           CaseIntakeDeadline[]
   developmentInitiatives    DevelopmentInitiative[]
   contractRecords           ContractRecord[]
+  workPackage               CaseWorkPackage?
 
   @@map("cases")
 }
@@ -872,6 +881,27 @@ enum CaseType {
   REAL_ESTATE
   MERGERS_ACQUISITIONS
   OTHER
+}
+
+model CaseTypeDefinition {
+  id                String   @id @default(uuid())
+  slug              String   @unique
+  name              String
+  description       String?
+  icon              String?
+  isActive          Boolean  @default(true)
+  sortOrder         Int      @default(0)
+  legacyCaseTypeKey String?
+  createdById       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  createdBy            User?                 @relation("CaseTypeDefinitionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  cases                Case[]
+  workPackageTemplates WorkPackageTemplate[]
+
+  @@index([isActive, sortOrder])
+  @@map("case_type_definitions")
 }
 
 enum CaseStatus {
@@ -1539,14 +1569,16 @@ model Task {
 
   // Workflow Integration
   caseId                           String
-  case                             Case      @relation(fields: [caseId], references: [id])
+  case                             Case                 @relation(fields: [caseId], references: [id])
+  workPackageItemId                String?
+  workPackageItem                  CaseWorkPackageItem? @relation(fields: [workPackageItemId], references: [id], onDelete: SetNull)
   workflowEvent                    String? // Event that triggered this task
   workflowInstanceId               String?
   workflowTemplateKey              String?
   workflowTemplateVersion          Int?
   workflowStepKey                  String?
-  workflowDependsOnKeys            String[]  @default([])
-  workflowPublicMilestoneCandidate Boolean   @default(false)
+  workflowDependsOnKeys            String[]             @default([])
+  workflowPublicMilestoneCandidate Boolean              @default(false)
   workflowActivatedAt              DateTime?
 
   // Matter reference (NEW)
@@ -1594,6 +1626,7 @@ model Task {
   @@index([stuckReason], map: "tasks_stuckReason_idx")
   @@index([workflowInstanceId])
   @@index([caseId, workflowInstanceId])
+  @@index([workPackageItemId])
   @@map("tasks")
 }
 
@@ -1621,6 +1654,34 @@ enum TaskStatus {
   TODO
   IN_REVIEW
   DONE
+}
+
+enum WorkPackageModuleType {
+  DOCUMENT_WORK
+  RESEARCH
+  CLIENT_REQUEST
+  AI_PREWORK
+  REVIEW
+  APPROVAL
+  COMMUNICATION
+  DEADLINE
+  COMPLIANCE
+  CLAUSE
+  DELIVERY
+  TASK_GROUP
+  CUSTOM
+}
+
+enum WorkPackageTemplateStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum CaseWorkPackageItemStatus {
+  ACTIVE
+  DISABLED
+  COMPLETED
 }
 
 enum TaskSubmissionStatus {
@@ -2838,10 +2899,105 @@ model WorkflowTemplate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  workPackageTemplates     WorkPackageTemplate[] @relation("WorkPackageTemplateDefaultWorkflow")
+  caseWorkPackageSnapshots CaseWorkPackage[]     @relation("CaseWorkPackageSnapshotWorkflow")
+
   @@unique([key, version])
   @@index([key])
   @@index([status])
   @@map("workflow_templates")
+}
+
+model WorkPackageTemplate {
+  id                        String                    @id @default(uuid())
+  caseTypeDefinitionId      String
+  name                      String
+  description               String?
+  status                    WorkPackageTemplateStatus @default(DRAFT)
+  version                   Int                       @default(1)
+  defaultWorkflowTemplateId String?
+  createdById               String?
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+
+  caseTypeDefinition      CaseTypeDefinition        @relation(fields: [caseTypeDefinitionId], references: [id], onDelete: Restrict)
+  defaultWorkflowTemplate WorkflowTemplate?         @relation("WorkPackageTemplateDefaultWorkflow", fields: [defaultWorkflowTemplateId], references: [id], onDelete: Restrict)
+  createdBy               User?                     @relation("WorkPackageTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  items                   WorkPackageTemplateItem[]
+  caseWorkPackages        CaseWorkPackage[]
+
+  @@unique([caseTypeDefinitionId, version])
+  @@index([caseTypeDefinitionId, status])
+  @@map("work_package_templates")
+}
+
+model WorkPackageTemplateItem {
+  id                    String                @id @default(uuid())
+  workPackageTemplateId String
+  moduleType            WorkPackageModuleType
+  moduleKey             String
+  label                 String
+  description           String?
+  order                 Int                   @default(0)
+  isOptional            Boolean               @default(false)
+  config                Json                  @default("{}")
+  createdAt             DateTime              @default(now())
+
+  workPackageTemplate  WorkPackageTemplate   @relation(fields: [workPackageTemplateId], references: [id], onDelete: Restrict)
+  caseWorkPackageItems CaseWorkPackageItem[]
+
+  @@unique([workPackageTemplateId, moduleKey])
+  @@index([workPackageTemplateId, order])
+  @@map("work_package_template_items")
+}
+
+model CaseWorkPackage {
+  id                         String   @id @default(uuid())
+  caseId                     String   @unique
+  workPackageTemplateId      String?
+  workPackageTemplateVersion Int?
+  snapshotWorkflowTemplateId String?
+  createdById                String?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  revision                   Int      @default(0)
+
+  case                     Case                  @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  workPackageTemplate      WorkPackageTemplate?  @relation(fields: [workPackageTemplateId], references: [id], onDelete: Restrict)
+  snapshotWorkflowTemplate WorkflowTemplate?     @relation("CaseWorkPackageSnapshotWorkflow", fields: [snapshotWorkflowTemplateId], references: [id], onDelete: Restrict)
+  createdBy                User?                 @relation("CaseWorkPackageCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  items                    CaseWorkPackageItem[]
+
+  @@index([workPackageTemplateId])
+  @@index([snapshotWorkflowTemplateId])
+  @@map("case_work_packages")
+}
+
+model CaseWorkPackageItem {
+  id                   String                    @id @default(uuid())
+  caseWorkPackageId    String
+  moduleType           WorkPackageModuleType
+  moduleKey            String
+  label                String
+  config               Json                      @default("{}")
+  order                Int                       @default(0)
+  status               CaseWorkPackageItemStatus @default(ACTIVE)
+  responsibleId        String?
+  sourceTemplateItemId String?
+  note                 String?
+  createdById          String?
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+
+  caseWorkPackage    CaseWorkPackage          @relation(fields: [caseWorkPackageId], references: [id], onDelete: Restrict)
+  responsible        User?                    @relation("CaseWorkPackageItemResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
+  sourceTemplateItem WorkPackageTemplateItem? @relation(fields: [sourceTemplateItemId], references: [id], onDelete: SetNull)
+  createdBy          User?                    @relation("CaseWorkPackageItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  tasks              Task[]
+
+  @@unique([caseWorkPackageId, moduleKey])
+  @@index([caseWorkPackageId, status])
+  @@map("case_work_package_items")
 }
 
 // ============================================================================
@@ -3909,17 +4065,17 @@ model ClientNotificationDelivery {
 // ============================================================================
 
 model ClientOperatingProfile {
-  id             String    @id @default(uuid())
-  clientId       String    @unique
-  client         Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  status         String?
+  id                         String                     @id @default(uuid())
+  clientId                   String                     @unique
+  client                     Client                     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  status                     String?
   complianceEnrollmentStatus ComplianceEnrollmentStatus @default(NOT_ENROLLED)
-  summary        String?
-  internalNote   String?
-  lastReviewedAt DateTime?
-  nextReviewAt   DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  summary                    String?
+  internalNote               String?
+  lastReviewedAt             DateTime?
+  nextReviewAt               DateTime?
+  createdAt                  DateTime                   @default(now())
+  updatedAt                  DateTime                   @updatedAt
 
   @@map("client_operating_profiles")
 }
@@ -3929,6 +4085,11 @@ enum ClientFactVerificationStatus {
   CLIENT_PROVIDED
   DOCUMENT_VERIFIED
   LAW_FIRM_VERIFIED
+}
+
+enum FactAnswerStatus {
+  ANSWERED
+  UNKNOWN
 }
 
 model ClientFact {
@@ -3970,6 +4131,7 @@ model ClientFact {
   referencePeriodEnd   DateTime?
   determinationMethod  FactDeterminationMethod?
   supersededAt         DateTime?
+  answerState          ClientFactAnswerState?   @relation("ClientFactAnswerStateCurrentFact")
 
   @@index([clientId, type, validFrom])
   @@index([clientId, verificationStatus])
@@ -3978,6 +4140,26 @@ model ClientFact {
   @@index([factSubjectId, validFrom])
   @@index([clientId, scopeType, validFrom])
   @@map("client_facts")
+}
+
+model ClientFactAnswerState {
+  id               String           @id @default(uuid())
+  clientId         String
+  client           Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  factDefinitionId String
+  factDefinition   FactDefinition   @relation(fields: [factDefinitionId], references: [id], onDelete: Restrict)
+  scopeType        FactScopeType
+  factSubjectId    String?
+  factSubject      FactSubject?     @relation(fields: [factSubjectId], references: [id], onDelete: Restrict)
+  currentFactId    String?          @unique
+  currentFact      ClientFact?      @relation("ClientFactAnswerStateCurrentFact", fields: [currentFactId], references: [id], onDelete: Restrict)
+  status           FactAnswerStatus
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([clientId, status])
+  @@index([clientId, factDefinitionId, scopeType, factSubjectId])
+  @@map("client_fact_answer_states")
 }
 
 enum CompanyMilestoneStatus {
@@ -4553,6 +4735,7 @@ model FactDefinition {
   retiredAt           DateTime?
 
   facts                             ClientFact[]
+  answerStates                      ClientFactAnswerState[]
   applicabilityRuleFactDependencies ApplicabilityRuleFactDependency[]
 
   @@index([status, valueType])
@@ -4576,7 +4759,8 @@ model FactSubject {
   createdAt            DateTime            @default(now())
   archivedAt           DateTime?
 
-  facts ClientFact[]
+  facts        ClientFact[]
+  answerStates ClientFactAnswerState[]
 
   @@unique([clientId, scopeType, subjectKey])
   @@unique([contractRecordId])
