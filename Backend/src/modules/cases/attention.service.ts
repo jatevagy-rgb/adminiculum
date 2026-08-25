@@ -3,12 +3,14 @@ import prisma from '../../config/database';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 type Urgency = 'NONE' | 'NORMAL' | 'ATTENTION' | 'URGENT';
-type Signal = { type: string; severity: Urgency; label: string; dueAt: string | null; sourceType: string; sourceId?: string };
+type SourceType = 'TASK' | 'CASE_DEADLINE' | 'INTAKE_DEADLINE' | 'DOCUMENT_REVIEW' | 'DOCUMENT' | 'COMPLIANCE_PROPOSAL';
+type Signal = { type: string; severity: Urgency; label: string; dueAt: string | null; sourceType: SourceType; sourceId?: string };
 
 const CLOSED_CASES = new Set(['CANCELLED', 'ARCHIVED', 'FINAL']);
 const CLOSED_TASKS = new Set(['COMPLETED', 'DONE', 'CANCELLED']);
 const ACTIVE_REVIEW = new Set(['DRAFT', 'ASSIGNED', 'IN_REVIEW', 'RESUBMITTED', 'READY_FOR_REVIEW', 'CHANGES_REQUESTED']);
 const SEVERITY_RANK: Record<Urgency, number> = { URGENT: 0, ATTENTION: 1, NORMAL: 2, NONE: 3 };
+const SOURCE_ORDER: Record<SourceType, number> = { TASK: 0, CASE_DEADLINE: 1, INTAKE_DEADLINE: 2, DOCUMENT_REVIEW: 3, DOCUMENT: 4, COMPLIANCE_PROPOSAL: 5 };
 
 export type CaseAttentionSummary = {
   caseId: string;
@@ -32,7 +34,7 @@ function taskSeverity(task: TaskRow, now: Date): Urgency {
   return 'NORMAL';
 }
 function deadlineSeverity(dueAt: Date, now: Date): Urgency { return dueAt.getTime() < now.getTime() ? 'URGENT' : daysFromNow(dueAt, now) <= 2 ? 'ATTENTION' : 'NORMAL'; }
-function sourceOrder(signal: Signal): number { return ['TASK', 'CASE_DEADLINE', 'INTAKE_DEADLINE', 'DOCUMENT_REVIEW', 'COMPLIANCE_PROPOSAL'].indexOf(signal.sourceType); }
+function sourceOrder(signal: Signal): number { return SOURCE_ORDER[signal.sourceType]; }
 
 function buildSummary(caseRow: CaseRow, tasks: TaskRow[], deadlines: DeadlineRow[], documents: DocumentRow[], proposals: ProposalRow[], now = new Date()): CaseAttentionSummary {
   if (CLOSED_CASES.has(String(caseRow.status).toUpperCase())) return { caseId: caseRow.id, urgency: 'NONE', nextAction: null, signals: [], lastMeaningfulChangeAt: iso(caseRow.updatedAt) };
@@ -66,7 +68,7 @@ export async function listCaseAttentionSummaries(params: { userId: string; role?
   const limit = Math.min(Math.max(params.limit || 25, 1), 50);
   const cases = await db.case.findMany({ where, orderBy: { updatedAt: 'desc' }, skip: Math.max(params.offset || 0, 0), take: limit, select: { id: true, status: true, deadline: true, updatedAt: true, assignedLawyer: { select: { id: true, name: true } }, client: { select: { id: true, name: true } } } });
   const summaries = await getAttentionRows(cases.map((item) => item.id), db);
-  return cases.map((item) => ({ case: { id: item.id, client: item.client, responsible: item.assignedLawyer }, attention: summaries.get(item.id)! })).sort((a, b) => SEVERITY_RANK[b.attention.urgency] - SEVERITY_RANK[a.attention.urgency]);
+  return cases.map((item) => ({ case: { id: item.id, client: item.client, responsible: item.assignedLawyer }, attention: summaries.get(item.id)! })).sort((a, b) => SEVERITY_RANK[a.attention.urgency] - SEVERITY_RANK[b.attention.urgency]);
 }
 
 async function getAttentionRows(caseIds: string[], db: Db): Promise<Map<string, CaseAttentionSummary>> {
