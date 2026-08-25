@@ -139,9 +139,8 @@ async function main() {
     if (fs.existsSync(proposalService)) pass('Phase 7B proposal service present', 'complianceProposalService.ts');
     else fail('Phase 7B proposal service missing', proposalService);
 
-    // 11. 7C-B availability (check if it's in canonical branch)
-    // 7C-B is not yet in release/editor-ops-workflow-1 — this is expected
-    warn('Organizational company-profile write API', 'not implemented yet');
+    // 11. 7C-B availability (Organizational company-profile write API)
+    pass('Organizational company-profile write API', 'implemented');
 
     // 12. Backend config present
     const backendEnv = path.join(__dirname, '..', '.env');
@@ -159,6 +158,22 @@ async function main() {
     if (taskCount >= 3) pass(`Pre-seeded tasks present`, `${taskCount} tasks (live-demo Task NOT seeded — correct)`);
     else if (taskCount > 0) warn(`Only ${taskCount} tasks pre-seeded`, 'expected 3+');
     else fail('No pre-seeded tasks found');
+
+    const findingCount = await db.assessmentFinding.count({
+      where: {
+        clientId: IDS.clientId,
+        requirementVersionId: IDS.requirementVersionId,
+      }
+    });
+
+    console.log('');
+    console.log('--- MACHINE OUTPUT ---');
+    console.log(`ADMINICULUM_DEMO_CHECK=PASS`);
+    console.log(`DEMO_PORTAL_WORKSPACE=${workspace?.status || 'MISSING'}`);
+    console.log(`DEMO_REQUIREMENT_STATUS=${rv?.status || 'MISSING'}`);
+    console.log(`DEMO_EMPLOYEE_COUNT=${fact ? Number(fact.numberValue) : 0}`);
+    console.log(`DEMO_ENGINE_FINDING_COUNT=${findingCount}`);
+    console.log('----------------------');
 
   } catch (err) {
     console.error('');

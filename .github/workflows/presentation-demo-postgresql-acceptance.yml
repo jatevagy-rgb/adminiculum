@@ -101,7 +101,8 @@ jobs:
           echo "Checking Employee Count (Expected 47)..."
           npm run demo:presentation:check > check1.log
           cat check1.log
-          grep -q "Total employee count (baseline): 47" check1.log || (echo "Failed check1" && exit 1)
+          grep -q "DEMO_EMPLOYEE_COUNT=47" check1.log || (echo "Failed check1 count" && exit 1)
+          grep -q "DEMO_ENGINE_FINDING_COUNT=0" check1.log || (echo "Failed check1 finding" && exit 1)
           
           echo "Mutating Data (47 -> 52)..."
           npm run demo:presentation:mutate
@@ -109,7 +110,8 @@ jobs:
           echo "Checking Employee Count (Expected 52)..."
           npm run demo:presentation:check > check2.log
           cat check2.log
-          grep -q "Total employee count (baseline): 52" check2.log || (echo "Failed check2" && exit 1)
+          grep -q "DEMO_EMPLOYEE_COUNT=52" check2.log || (echo "Failed check2 count" && exit 1)
+          grep -q "DEMO_ENGINE_FINDING_COUNT=1" check2.log || (echo "Failed check2 finding" && exit 1)
           
           echo "Running Reset 2..."
           npm run demo:presentation:reset
@@ -117,7 +119,8 @@ jobs:
           echo "Checking Employee Count (Expected 47)..."
           npm run demo:presentation:check > check3.log
           cat check3.log
-          grep -q "Total employee count (baseline): 47" check3.log || (echo "Failed check3" && exit 1)
+          grep -q "DEMO_EMPLOYEE_COUNT=47" check3.log || (echo "Failed check3 count" && exit 1)
+          grep -q "DEMO_ENGINE_FINDING_COUNT=0" check3.log || (echo "Failed check3 finding" && exit 1)
           
           echo "Running Reset 3 (Double Reset)..."
           npm run demo:presentation:reset
@@ -125,7 +128,8 @@ jobs:
           echo "Checking Employee Count (Expected 47)..."
           npm run demo:presentation:check > check4.log
           cat check4.log
-          grep -q "Total employee count (baseline): 47" check4.log || (echo "Failed check4" && exit 1)
+          grep -q "DEMO_EMPLOYEE_COUNT=47" check4.log || (echo "Failed check4 count" && exit 1)
+          grep -q "DEMO_ENGINE_FINDING_COUNT=0" check4.log || (echo "Failed check4 finding" && exit 1)
           
           echo "Verifying Unrelated Row Survival..."
           node -e '
@@ -146,5 +150,6 @@ jobs:
           NODE_ENV: development
         run: |
           npm run test:demo-fixture:db
+
 
 
