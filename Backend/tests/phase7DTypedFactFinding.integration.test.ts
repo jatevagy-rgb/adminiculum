@@ -280,7 +280,7 @@ describeWithDatabase('Phase 7D typed fact to finding automation (PostgreSQL)', (
 
   it('deduplicates logical applicability when only evaluationAt changes', async () => {
     await db.clientFact.deleteMany({ where: { clientId: clientA, factDefinitionId: boolDefinitionId } });
-    await typed(boolDefinitionId, { booleanValue: true, observedAt: '2026-08-24T19:00:00Z' });
+    await typed(boolDefinitionId, { booleanValue: true, validFrom: '2026-08-24T18:00:00Z', observedAt: '2026-08-24T19:00:00Z' });
     const before = await db.requirementApplicability.count({ where: { clientId: clientA, requirementVersionId: versionIds[0] } });
     const one = await createRequirementApplicability({ requirementVersionId: versionIds[0], ruleVersionId: ruleIds[0], clientId: clientA, scope: { scopeType: 'COMPANY', evaluationAt: new Date('2026-08-24T20:00:00Z') } }, db);
     const two = await createRequirementApplicability({ requirementVersionId: versionIds[0], ruleVersionId: ruleIds[0], clientId: clientA, scope: { scopeType: 'COMPANY', evaluationAt: new Date('2026-08-24T21:00:00Z') } }, db);
