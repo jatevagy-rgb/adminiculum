@@ -28,23 +28,46 @@ const DEMO_ENABLED = String(process.env.ADMINICULUM_DEMO_CONTENT_ENABLED || '');
 const FIXTURE_NAMESPACE = 'DEMO_KFT_';
 const FIXTURE_KEY = 'DEMO_KFT_2026';
 
+function refuse(message) {
+  console.error(`❌ REFUSED: ${message}`);
+  process.exit(2);
+}
+
+function isHostedRuntime() {
+  return Boolean(process.env.WEBSITE_SITE_NAME || process.env.AZURE_FUNCTIONS_ENVIRONMENT || process.env.K_SERVICE);
+}
+
 function refuseIfProduction() {
-  if (NODE_ENV === 'production') {
-    console.error('ADMINICULUM_DEMO_PRODUCTION_DENY');
-    process.exit(2);
-  }
-  if (DEMO_ENABLED !== 'true') {
-    console.error('❌ REFUSED: ADMINICULUM_DEMO_CONTENT_ENABLED must be "true".');
-    process.exit(2);
+  if (isHostedRuntime()) {
+    // HOSTED execution (an App Service / cloud runtime is present). A production
+    // Node build may run on a DEMO-DESIGNATED App Service ONLY when ALL explicit
+    // demo guards are true and the site matches the designated demo site. A
+    // production/customer runtime without explicit demo designation refuses.
+    if (process.env.ADMINICULUM_RUNTIME_ENVIRONMENT !== 'demo') {
+      refuse('ADMINICULUM_RUNTIME_ENVIRONMENT must be "demo" for hosted demo execution.');
+    }
+    if (DEMO_ENABLED !== 'true') {
+      refuse('ADMINICULUM_DEMO_CONTENT_ENABLED must be "true".');
+    }
+    if (process.env.ADMINICULUM_DEMO_RESET_ALLOWED !== 'true') {
+      refuse('ADMINICULUM_DEMO_RESET_ALLOWED must be "true".');
+    }
+    const expectedSite = process.env.DEMO_KFT_WEBJOB_EXPECTED_SITE || 'adminiculumbackend-b1-01';
+    if (String(process.env.WEBSITE_SITE_NAME || '') !== expectedSite) {
+      refuse('WEBSITE_SITE_NAME does not match the designated demo App Service.');
+    }
+  } else {
+    // LOCAL CI / dev execution: preserve the existing safe development path.
+    if (NODE_ENV === 'production') {
+      console.error('ADMINICULUM_DEMO_PRODUCTION_DENY');
+      process.exit(2);
+    }
+    if (DEMO_ENABLED !== 'true') {
+      refuse('ADMINICULUM_DEMO_CONTENT_ENABLED must be "true".');
+    }
   }
   if (!FIXTURE_KEY.startsWith(FIXTURE_NAMESPACE)) {
-    console.error('❌ REFUSED: fixture namespace mismatch.');
-    process.exit(2);
-  }
-  const prodMarkers = [process.env.WEBSITE_SITE_NAME, process.env.AZURE_FUNCTIONS_ENVIRONMENT, process.env.K_SERVICE].filter(Boolean);
-  if (prodMarkers.length > 0) {
-    console.error(`❌ REFUSED: production runtime marker detected: ${prodMarkers.join(', ')}`);
-    process.exit(2);
+    refuse('fixture namespace mismatch.');
   }
   console.log('✅ Safety checks passed.');
 }
