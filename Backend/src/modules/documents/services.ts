@@ -468,7 +468,12 @@ class DocumentsService {
   /**
    * Search documents by metadata (file name, type, case/client linkage)
    */
-  async searchDocuments(query: string, limit = 50, userRole?: string): Promise<DocumentSearchItem[]> {
+  async searchDocuments(
+    query: string,
+    limit: number,
+    userRole: string | undefined,
+    caseScope: Prisma.CaseWhereInput | null,
+  ): Promise<DocumentSearchItem[]> {
     const q = query.trim();
     if (!q) {
       return [];
@@ -478,6 +483,7 @@ class DocumentsService {
 
     const documents = await prisma.document.findMany({
       where: {
+        ...(caseScope ? { case: caseScope } : {}),
         // Phase 3: non-privileged users must not discover HR_CONFIDENTIAL
         // documents (title/filename/existence) through search.
         ...(userRole && !hrConfidentialReadAllowed(userRole) ? { securityClassification: { not: 'HR_CONFIDENTIAL' } } : {}),

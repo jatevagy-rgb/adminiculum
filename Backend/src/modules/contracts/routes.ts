@@ -6,6 +6,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import contractsService from './services';
 import { authenticate } from '../../middleware/auth';
+import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { prisma } from '../../prisma/prisma.service';
 import { ADASVETEL_VARIABLES, TemplateCategory } from './types';
 import multer from 'multer';
@@ -20,6 +21,7 @@ import {
 } from './contractAuthorization';
 
 const router = Router();
+router.use(authenticate, requireWorkforceUser);
 const isContractsEnabled = (): boolean =>
   isDatabaseFoundationEnabled('ENABLE_CONTRACT_GENERATION') &&
   isDatabaseFoundationEnabled('ENABLE_CONTRACT_GENERATION_STORAGE_MODEL');

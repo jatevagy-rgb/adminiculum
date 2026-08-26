@@ -12,9 +12,11 @@
 import { Router, Request, Response } from 'express';
 import generationDraftService from './service';
 import { authenticate } from '../../middleware/auth';
+import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { requireCaseReadAccess, requireCaseManageAccess } from '../cases/authorization';
 
 const router = Router();
+router.use(authenticate, requireWorkforceUser);
 
 // ============================================================================
 // FEATURE FLAG GUARD — Generation Draft

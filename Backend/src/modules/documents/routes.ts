@@ -19,10 +19,11 @@ import {
 } from './workContext.service';
 import reviewSuggestionsRoutes from './reviewSuggestions.routes';
 import { authenticate } from '../../middleware/auth';
+import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { prisma } from '../../prisma/prisma.service';
 import { requireDocumentReadAccess, requireDocumentManageAccess, requireHrConfidentialReadAccess } from './authorization';
 import { requireDocumentObjectReadAccess, requireDocumentObjectManageAccess } from './documentObjectAuthorization';
-import { userCanManageCase, requireCaseReadAccess } from '../cases/authorization';
+import { getCaseReadScope, userCanManageCase, requireCaseReadAccess } from '../cases/authorization';
 import { createTaskFromDocumentSource, SourceLinkedTaskError } from '../tasks/services';
 import { getDocumentEditorMetadata } from '../documentEditor/service';
 import {
@@ -34,6 +35,7 @@ import {
 } from './documentComments.service';
 
 const router = Router();
+router.use(authenticate, requireWorkforceUser);
 router.use('/:documentId/review-suggestions', reviewSuggestionsRoutes);
 router.use('/:documentId/versions/:versionId/annotations', annotationRoutes);
 
@@ -140,7 +142,12 @@ router.get('/search', authenticate, async (req: Request, res: Response): Promise
       return;
     }
 
-    const results = await documentsService.searchDocuments(q, limit, String((req as any).user?.role || ''));
+    const results = await documentsService.searchDocuments(
+      q,
+      limit,
+      String((req as any).user?.role || ''),
+      getCaseReadScope(req),
+    );
     res.json(results);
   } catch (error) {
     console.error('Search documents error:', error);

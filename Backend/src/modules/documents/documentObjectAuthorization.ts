@@ -160,7 +160,7 @@ export async function requireDocumentObjectReadAccess(
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  const documentId = String(req.params.id || '').trim();
+  const documentId = String(req.params.id || req.params.documentId || '').trim();
   if (!documentId) {
     res.status(400).json({ status: 400, code: 'DOCUMENT_ID_REQUIRED', message: 'Document ID is required' });
     return;
@@ -204,7 +204,7 @@ export async function requireDocumentObjectManageAccess(
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  const documentId = String(req.params.id || '').trim();
+  const documentId = String(req.params.id || req.params.documentId || '').trim();
   if (!documentId) {
     res.status(400).json({ status: 400, code: 'DOCUMENT_ID_REQUIRED', message: 'Document ID is required' });
     return;

@@ -38,6 +38,7 @@ jest.mock('../src/middleware/auth', () => ({
 // Mock Prisma
 // ---------------------------------------------------------------------------
 const mockPrisma = {
+  $transaction: jest.fn((operations: unknown[]) => Promise.all(operations as Promise<unknown>[])),
   case: {
     findUnique: jest.fn(),
     findMany: jest.fn(),
@@ -51,6 +52,7 @@ const mockPrisma = {
   },
   documentVersion: {
     findUnique: jest.fn(),
+    findFirst: jest.fn(),
     findMany: jest.fn(),
   },
   contractGeneration: {
@@ -63,6 +65,17 @@ const mockPrisma = {
   },
   comment: {
     findUnique: jest.fn(),
+    findFirst: jest.fn(),
+  },
+  documentReviewSuggestion: {
+    findMany: jest.fn(),
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+  },
+  documentAnnotation: {
+    findMany: jest.fn(),
+    count: jest.fn(),
   },
   user: {
     findUnique: jest.fn(),
@@ -97,6 +110,7 @@ jest.mock('../src/modules/documents/services', () => {
       }
       return Promise.resolve(null);
     }),
+    searchDocuments: jest.fn().mockResolvedValue([]),
     uploadNewVersion: jest.fn().mockResolvedValue({ id: 'ver-2' }),
     submitForReview: jest.fn().mockResolvedValue(true),
     approveDocument: jest.fn().mockResolvedValue(true),
@@ -214,7 +228,8 @@ function requestJson(
   app: Express,
   method: string,
   path: string,
-  headers: Record<string, string> = {}
+  headers: Record<string, string> = {},
+  body?: unknown,
 ): Promise<TestResponse> {
   return new Promise((resolve, reject) => {
     const server = app.listen(0, '127.0.0.1', () => {
@@ -229,6 +244,11 @@ function requestJson(
         authorization: 'Bearer test-token',
         ...headers,
       };
+      const encodedBody = body === undefined ? undefined : JSON.stringify(body);
+      if (encodedBody) {
+        reqHeaders['content-type'] = 'application/json';
+        reqHeaders['content-length'] = String(Buffer.byteLength(encodedBody));
+      }
 
       const request = http.request(
         {
@@ -250,7 +270,7 @@ function requestJson(
         }
       );
       request.on('error', (err) => { server.close(); reject(err); });
-      request.end();
+      request.end(encodedBody);
     });
   });
 }
@@ -277,7 +297,9 @@ const UNRELATED_LAWYER = 'unrelated-lawyer';
 const ADMIN_USER = 'admin-user';
 const STANDARD_DOC = 'doc-standard';
 const HR_DOC = 'doc-hr-confidential';
+const CASE_B_DOC = 'doc-case-b';
 const VERSION_1 = 'version-1';
+const VERSION_B = 'version-case-b';
 const CONTRACT_GEN_1 = 'contract-gen-1';
 
 /** Standard document in Case A */
@@ -302,6 +324,17 @@ function mockStandardDoc() {
         securityClassification: 'HR_CONFIDENTIAL',
         name: 'HR Confidential Doc',
         spItemId: 'sp-item-hr',
+        mimeType: 'application/pdf',
+      });
+    }
+    if (args.where.id === CASE_B_DOC) {
+      return Promise.resolve({
+        id: CASE_B_DOC,
+        caseId: CASE_B,
+        clientId: CLIENT_B,
+        securityClassification: 'STANDARD',
+        name: 'Case B Doc',
+        spItemId: 'sp-item-b',
         mimeType: 'application/pdf',
       });
     }
@@ -365,6 +398,32 @@ function mockVersion() {
     }
     return Promise.resolve(null);
   });
+  (prisma.documentVersion.findFirst as jest.Mock).mockImplementation((args: any) => {
+    const id = args.where?.id;
+    const documentId = args.where?.documentId;
+    if (id === VERSION_1 && documentId === STANDARD_DOC) {
+      return Promise.resolve({
+        id: VERSION_1,
+        documentId: STANDARD_DOC,
+        document: { caseId: CASE_A, securityClassification: 'STANDARD' },
+      });
+    }
+    if (id === VERSION_B && documentId === CASE_B_DOC) {
+      return Promise.resolve({
+        id: VERSION_B,
+        documentId: CASE_B_DOC,
+        document: { caseId: CASE_B, securityClassification: 'STANDARD' },
+      });
+    }
+    if (id === 'version-hr' && documentId === HR_DOC) {
+      return Promise.resolve({
+        id: 'version-hr',
+        documentId: HR_DOC,
+        document: { caseId: CASE_A, securityClassification: 'HR_CONFIDENTIAL' },
+      });
+    }
+    return Promise.resolve(null);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -380,6 +439,11 @@ beforeEach(() => {
   mockHrDoc();
   mockContractGen();
   mockVersion();
+  (prisma.documentReviewSuggestion.findMany as jest.Mock).mockResolvedValue([]);
+  (prisma.documentReviewSuggestion.findFirst as jest.Mock).mockResolvedValue(null);
+  (prisma.documentReviewSuggestion.create as jest.Mock).mockResolvedValue({ id: 'suggestion-1' });
+  (prisma.documentAnnotation.findMany as jest.Mock).mockResolvedValue([]);
+  (prisma.documentAnnotation.count as jest.Mock).mockResolvedValue(0);
 });
 
 // ===========================================================================
@@ -891,5 +955,89 @@ describe('SEC-1: Privileged access', () => {
     // Authorization passes (not 403/401); handler may 404 due to mock fs in test env
     expect(res.status).not.toBe(403);
     expect(res.status).not.toBe(401);
+  });
+});
+
+describe('SEC-1: P0/P1 adversarial authorization regressions', () => {
+  const lawyerAHeaders = { 'x-test-user-id': LAWYER_A, 'x-test-role': 'LAWYER' };
+
+  it('denies Case A lawyer from listing or creating Case B review suggestions', async () => {
+    const list = await requestJson(app, 'GET', `/api/v1/documents/${CASE_B_DOC}/review-suggestions`, lawyerAHeaders);
+    const create = await requestJson(app, 'POST', `/api/v1/documents/${CASE_B_DOC}/review-suggestions`, lawyerAHeaders, {
+      workspaceSource: 'CONTRACT_WORKSPACE', type: 'COMMENT', selectedTextPreview: 'private text',
+    });
+    expect(list.status).toBe(403);
+    expect(create.status).toBe(403);
+  });
+
+  it('fails closed when a suggestion or supplied version belongs to another document', async () => {
+    const patch = await requestJson(app, 'PATCH', `/api/v1/documents/${STANDARD_DOC}/review-suggestions/suggestion-case-b`, lawyerAHeaders, { status: 'ACCEPTED' });
+    const create = await requestJson(app, 'POST', `/api/v1/documents/${STANDARD_DOC}/review-suggestions`, lawyerAHeaders, {
+      workspaceSource: 'CONTRACT_WORKSPACE', type: 'COMMENT', selectedTextPreview: 'private text', documentVersionId: VERSION_B,
+    });
+    expect(patch.status).toBe(404);
+    expect(create.status).toBe(404);
+  });
+
+  it('adds the Case visibility predicate to the document search database query', async () => {
+    const documentsService = jest.requireActual('../src/modules/documents/services').default;
+    (prisma.document.findMany as jest.Mock).mockResolvedValue([]);
+    const scope = { OR: [{ assignedLawyerId: LAWYER_A }, { createdById: LAWYER_A }, { collaborators: { some: { userId: LAWYER_A } } }] };
+    await documentsService.searchDocuments('contract', 50, 'LAWYER', scope);
+    expect(prisma.document.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ case: scope, securityClassification: { not: 'HR_CONFIDENTIAL' } }),
+    }));
+  });
+
+  it('applies the authorized Case-only search scope on the route', async () => {
+    const documentsService = require('../src/modules/documents/services').default;
+    await requestJson(app, 'GET', '/api/v1/documents/search?q=contract', lawyerAHeaders);
+    expect(documentsService.searchDocuments).toHaveBeenCalledWith(
+      'contract',
+      50,
+      'LAWYER',
+      expect.objectContaining({ OR: expect.any(Array) }),
+    );
+  });
+
+  it('allows authorized annotation access for standard documents but denies HR documents to lawyers', async () => {
+    const standard = await requestJson(app, 'GET', `/api/v1/documents/${STANDARD_DOC}/versions/${VERSION_1}/annotations`, lawyerAHeaders);
+    const hr = await requestJson(app, 'GET', `/api/v1/documents/${HR_DOC}/versions/version-hr/annotations`, lawyerAHeaders);
+    expect(standard.status).toBe(200);
+    expect(hr.status).toBe(403);
+  });
+
+  it('allows HR annotation access only to privileged workforce with Case access', async () => {
+    const admin = await requestJson(app, 'GET', `/api/v1/documents/${HR_DOC}/versions/version-hr/annotations`, {
+      'x-test-user-id': ADMIN_USER,
+      'x-test-role': 'ADMIN',
+    });
+    expect(admin.status).toBe(200);
+  });
+
+  it('fails closed when a version UUID is substituted across documents', async () => {
+    const res = await requestJson(app, 'GET', `/api/v1/documents/${STANDARD_DOC}/versions/${VERSION_B}`, lawyerAHeaders);
+    expect(res.status).toBe(404);
+  });
+
+  it('retains service-level comment parent binding', async () => {
+    const comments = jest.requireActual('../src/modules/documents/documentComments.service');
+    (prisma.comment.findFirst as jest.Mock).mockResolvedValue(null);
+    await expect(comments.resolveDocumentComment(
+      { user: { userId: LAWYER_A, role: 'LAWYER' } } as Request,
+      STANDARD_DOC,
+      'comment-case-b',
+    )).rejects.toMatchObject({ code: 'COMMENT_NOT_FOUND', statusCode: 404 });
+  });
+
+  it('denies local CLIENT users across internal document, nested document, and contract routes', async () => {
+    const clientHeaders = { 'x-test-user-id': LAWYER_A, 'x-test-role': 'CLIENT' };
+    const [document, suggestions, annotations, templates] = await Promise.all([
+      requestJson(app, 'GET', `/api/v1/documents/${STANDARD_DOC}`, clientHeaders),
+      requestJson(app, 'GET', `/api/v1/documents/${STANDARD_DOC}/review-suggestions`, clientHeaders),
+      requestJson(app, 'GET', `/api/v1/documents/${STANDARD_DOC}/versions/${VERSION_1}/annotations`, clientHeaders),
+      requestJson(app, 'GET', '/api/v1/contracts/templates', clientHeaders),
+    ]);
+    expect([document.status, suggestions.status, annotations.status, templates.status]).toEqual([403, 403, 403, 403]);
   });
 });
