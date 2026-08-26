@@ -51,6 +51,8 @@ describe("Phase 5A organizational customer portal shell + home journey", () => {
     assert.match(src, /formatPortalWorkDuration\(summary\.totalMinutes\)/);
     assert.match(src, /Rögzített munka/);
     assert.match(src, /Ehhez az időszakhoz még nincs rögzített munka/);
+    assert.match(src, /getPortalWorkSummary\(\)\.catch\(\(\) => null\)/);
+    assert.doesNotMatch(src, /workSummary\s*=\s*0|totalMinutes\s*:\s*0/);
     assert.doesNotMatch(src, /progressPercentage|billing|számláz|óradíj|belső leírás/);
     assert.doesNotMatch(apiSrc, /billingRate|billingTotal|internalDescription|descriptionInternal/);
   });
@@ -61,6 +63,8 @@ describe("Phase 5A organizational customer portal shell + home journey", () => {
     assert.match(apiSrc, /minutes % 60/);
     assert.equal(formatPortalWorkDuration(875), "14 óra 35 perc");
     assert.equal(formatPortalWorkDuration(60), "1 óra");
+    assert.equal(formatPortalWorkDuration(61), "1 óra 1 perc");
+    assert.equal(formatPortalWorkDuration(119), "1 óra 59 perc");
     assert.equal(formatPortalWorkDuration(0), "0 perc");
     assert.doesNotMatch(srcWithOrgHomeAndApi(), /875|14 óra 35 perc|Demo Kft/);
   });
