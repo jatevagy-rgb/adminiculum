@@ -358,6 +358,25 @@ export async function getPortalOrganizationSummary() {
   return fetchApi<{ units: PortalLeadershipUnitAggregate[] }>('/client-portal/org/summary/organization', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
 }
 
+export type PortalWorkSummary = {
+  period: { from: string; to: string };
+  totalMinutes: number;
+  matters: Array<{ matterId: string; title: string; minutes: number }>;
+};
+
+export async function getPortalWorkSummary() {
+  return fetchApi<PortalWorkSummary>('/client-portal/org/work-summary', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
+}
+
+export function formatPortalWorkDuration(totalMinutes: number): string {
+  const minutes = Math.max(0, Math.floor(totalMinutes));
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  if (!hours) return `${remainder} perc`;
+  if (!remainder) return `${hours} óra`;
+  return `${hours} óra ${remainder} perc`;
+}
+
 export type PortalOrgHomeMatter = {
   publicationId: string;
   title: string;

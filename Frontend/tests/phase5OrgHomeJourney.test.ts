@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { formatPortalWorkDuration } from "../src/lib/clientPortalApi";
 
 const root = process.cwd();
 const read = (relative: string) => readFileSync(path.join(root, relative), "utf8");
@@ -39,6 +40,29 @@ describe("Phase 5A organizational customer portal shell + home journey", () => {
     assert.doesNotMatch(src, /timeSummary|progressPercentage/);
     // neutral next-step empty state
     assert.match(src, /Jelenleg nincs Önnek szóló teendő/);
+  });
+
+  it("renders the client-safe recorded-work summary from the canonical API", () => {
+    const src = orgHome();
+    const apiSrc = api();
+    assert.match(apiSrc, /PortalWorkSummary/);
+    assert.match(apiSrc, /\/client-portal\/org\/work-summary/);
+    assert.match(src, /getPortalWorkSummary/);
+    assert.match(src, /formatPortalWorkDuration\(summary\.totalMinutes\)/);
+    assert.match(src, /Rögzített munka/);
+    assert.match(src, /Ehhez az időszakhoz még nincs rögzített munka/);
+    assert.doesNotMatch(src, /progressPercentage|billing|számláz|óradíj|belső leírás/);
+    assert.doesNotMatch(apiSrc, /billingRate|billingTotal|internalDescription|descriptionInternal/);
+  });
+
+  it("keeps recorded-work formatting dynamic and truthful", () => {
+    const apiSrc = api();
+    assert.match(apiSrc, /Math\.floor\(totalMinutes\)/);
+    assert.match(apiSrc, /minutes % 60/);
+    assert.equal(formatPortalWorkDuration(875), "14 óra 35 perc");
+    assert.equal(formatPortalWorkDuration(60), "1 óra");
+    assert.equal(formatPortalWorkDuration(0), "0 perc");
+    assert.doesNotMatch(srcWithOrgHomeAndApi(), /875|14 óra 35 perc|Demo Kft/);
   });
 
   it("home empty states are human, never raw data markers", () => {
@@ -107,3 +131,7 @@ describe("Phase 5A organizational customer portal shell + home journey", () => {
     assert.doesNotMatch(views, /Outlook sync/);
   });
 });
+
+function srcWithOrgHomeAndApi() {
+  return read("src/components/client-portal/OrgHomeView.tsx") + read("src/lib/clientPortalApi.ts");
+}

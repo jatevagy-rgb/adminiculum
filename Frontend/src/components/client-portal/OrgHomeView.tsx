@@ -6,9 +6,12 @@ import {
   getPortalOrgHome,
   getPortalOrganizationCompany,
   getPortalOrganizationSummary,
+  getPortalWorkSummary,
+  formatPortalWorkDuration,
   type PortalOrgHome,
   type PortalOrgCompany,
   type PortalLeadershipUnitAggregate,
+  type PortalWorkSummary,
 } from "@/lib/clientPortalApi";
 import { clientSafeError } from "@/lib/clientInteractionApi";
 import { formatDate } from "./MatterWorkspace";
@@ -131,10 +134,28 @@ function CompanyStatus({ company, summaries }: { company: PortalOrgCompany | nul
   );
 }
 
+function WorkSummary({ summary }: { summary: PortalWorkSummary }) {
+  return (
+    <section className={card}>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Rögzített munka</p>
+      <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">Elvégzett munka</h2>
+      {summary.totalMinutes > 0 ? (
+        <>
+          <p className="mt-4 text-3xl font-semibold text-stone-950">{formatPortalWorkDuration(summary.totalMinutes)}</p>
+          <p className="mt-2 text-sm text-stone-600">Az Ön számára elérhető ügyekben rögzített jogi munka.</p>
+        </>
+      ) : (
+        <p className="mt-4 text-sm text-stone-600">Ehhez az időszakhoz még nincs rögzített munka.</p>
+      )}
+    </section>
+  );
+}
+
 export function OrgHomeView({ identity }: { identity: { displayName: string; jobTitle?: string | null } }) {
   const [home, setHome] = useState<PortalOrgHome | null>(null);
   const [company, setCompany] = useState<PortalOrgCompany | null>(null);
   const [summaries, setSummaries] = useState<PortalLeadershipUnitAggregate[]>([]);
+  const [workSummary, setWorkSummary] = useState<PortalWorkSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -142,14 +163,16 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
     setLoading(true);
     setError(null);
     try {
-      const [homeResult, companyResult, summaryResult] = await Promise.all([
+      const [homeResult, companyResult, summaryResult, workSummaryResult] = await Promise.all([
         getPortalOrgHome(),
         getPortalOrganizationCompany().catch(() => null),
         getPortalOrganizationSummary().catch(() => ({ units: [] })),
+        getPortalWorkSummary().catch(() => null),
       ]);
       setHome(homeResult);
       setCompany(companyResult);
       setSummaries(summaryResult.units);
+      setWorkSummary(workSummaryResult);
     } catch (e) {
       setError(clientSafeError(e));
     } finally {
@@ -196,6 +219,7 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
           <Link href="/portal/uzenetek" className="mt-3 inline-flex font-semibold text-[#7a5f18] hover:underline">Üzenetek megnyitása →</Link>
         </Section>
       </div>
+      {workSummary ? <WorkSummary summary={workSummary} /> : null}
     </div>
   );
 }
