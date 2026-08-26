@@ -90,6 +90,7 @@ export function listBuiltinWorkflowTemplates(): WorkflowTemplateSummary[] {
 export async function instantiateCaseWorkflow(input: {
   caseId: string;
   templateKey?: string | null;
+  templateId?: string | null;
   actor: Actor;
   assigneesByStepKey?: Record<string, string | null | undefined>;
   fallbackAssigneeId?: string | null;
@@ -98,8 +99,8 @@ export async function instantiateCaseWorkflow(input: {
   // DB-backed active template wins (latest ACTIVE version); otherwise the
   // built-in template. Resolved inline (no service import) to avoid a cycle.
   const dbRow = await (db as any).workflowTemplate.findFirst({
-    where: { key: templateKey, status: 'ACTIVE' },
-    orderBy: { version: 'desc' },
+    where: input.templateId ? { id: input.templateId } : { key: templateKey, status: 'ACTIVE' },
+    orderBy: input.templateId ? undefined : { version: 'desc' },
   }).catch(() => null);
   const template: { key: string; version: number; steps: WorkflowStep[]; templateId: string | null } = dbRow
     ? {
