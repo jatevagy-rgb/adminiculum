@@ -65,20 +65,6 @@ export async function resolveCaseFromLegalAnalysisId(
 }
 
 /**
- * Resolve first caseId associated with a Client (any case owned by that client).
- * Returns null if client has no cases.
- */
-export async function resolveCaseFromClientId(
-  clientId: string,
-): Promise<string | null> {
-  const caseRecord = await prisma.case.findFirst({
-    where: { clientId },
-    select: { id: true },
-  });
-  return caseRecord?.id ?? null;
-}
-
-/**
  * Resolve caseId from a Document's source document (for anonymous-documents/by-source).
  */
 export async function resolveCaseFromSourceDocumentId(
@@ -132,6 +118,14 @@ export function hasSensitiveAccess(
   if (caseRecord.createdById === user.userId) return true;
 
   return false;
+}
+
+export async function canAccessSensitiveCase(req: Request, caseId: string): Promise<boolean> {
+  const caseRecord = await prisma.case.findUnique({
+    where: { id: caseId },
+    select: { assignedLawyerId: true, createdById: true },
+  });
+  return Boolean(caseRecord && hasSensitiveAccess(req, caseRecord));
 }
 
 // ---------------------------------------------------------------------------
@@ -244,6 +238,80 @@ export function requireAnonymizeManageAccess(
 
       (req as any).__resolvedCaseId = caseId;
       next();
+    } catch {
+      sendAuthorizationError(res);
+    }
+  };
+}
+
+/**
+ * Requires normal case access plus the explicit sensitive-data gate.
+ */
+export function requireAnonymizeSensitiveAccess(
+  paramName: string,
+  resolver: (id: string) => Promise<string | null>,
+  level: AccessLevel = 'read',
+) {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = String(req.params[paramName] || '').trim();
+      if (!id) {
+        res.status(400).json({ status: 400, code: 'INVALID_PARAM', message: `${paramName} is required` });
+        return;
+      }
+      const caseId = await resolver(id);
+      if (!caseId) {
+        sendNotFound(res);
+        return;
+      }
+      const access = await checkCaseAccess(req, caseId, level);
+      if (access === null) {
+        sendNotFound(res);
+        return;
+      }
+      if (!access || !(await canAccessSensitiveCase(req, caseId))) {
+        sendForbidden(res);
+        return;
+      }
+      (req as any).__resolvedCaseId = caseId;
+      next();
+    } catch {
+      sendAuthorizationError(res);
+    }
+  };
+}
+
+/**
+ * Client redaction profiles are client-wide sensitive data. Authorize against
+ * a deterministic, explicitly accessible case relation; never pick an
+ * arbitrary first case for the client.
+ */
+export function requireClientSensitiveAccess(level: AccessLevel) {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const clientId = String(req.params.clientId || '').trim();
+      if (!clientId) {
+        res.status(400).json({ status: 400, code: 'INVALID_PARAM', message: 'clientId is required' });
+        return;
+      }
+      const cases = await prisma.case.findMany({
+        where: { clientId },
+        orderBy: { id: 'asc' },
+        select: { id: true, assignedLawyerId: true, createdById: true },
+      });
+      if (cases.length === 0) {
+        sendNotFound(res);
+        return;
+      }
+      for (const caseRecord of cases) {
+        const access = await checkCaseAccess(req, caseRecord.id, level);
+        if (access && hasSensitiveAccess(req, caseRecord)) {
+          (req as any).__resolvedCaseId = caseRecord.id;
+          next();
+          return;
+        }
+      }
+      sendForbidden(res);
     } catch {
       sendAuthorizationError(res);
     }

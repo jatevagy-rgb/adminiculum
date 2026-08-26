@@ -92,17 +92,50 @@ export function toSummary(doc: AnyDoc): AnonymousDocumentSummary {
  * Strips the `original` field (PII) from each item, keeping only safe fields:
  * type, replacement, position.
  */
-function sanitizeRedactedItems(items: unknown): unknown[] | null {
+export function sanitizeRedactedItems(items: unknown): unknown[] | null {
   if (!items || !Array.isArray(items)) return null;
   return items.map((item: any) => {
     if (!item || typeof item !== 'object') return item;
     const safe: Record<string, unknown> = {};
     if (item.type != null) safe.type = item.type;
     if (item.replacement != null) safe.replacement = item.replacement;
-    if (item.position != null) safe.position = item.position;
+    if (typeof item.position === 'number') {
+      safe.position = item.position;
+    } else if (item.position && typeof item.position === 'object' && !Array.isArray(item.position)) {
+      const position: Record<string, number> = {};
+      for (const key of ['start', 'end', 'line']) {
+        if (typeof item.position[key] === 'number') position[key] = item.position[key];
+      }
+      safe.position = position;
+    }
     // `original` is NEVER included — it contains PII
     return safe;
   });
+}
+
+export function toWorkingAnonymizationResult(result: {
+  success: boolean;
+  anonymizedDocumentId?: string;
+  redactedText?: string | null;
+  redactedItems?: unknown;
+}) {
+  return {
+    success: result.success,
+    anonymizedDocumentId: result.anonymizedDocumentId ?? null,
+    redactedText: result.redactedText ?? null,
+    redactedItems: sanitizeRedactedItems(result.redactedItems),
+  };
+}
+
+export function toSensitiveClientRedactionProfile(profile: Record<string, unknown>) {
+  const fields = [
+    'id', 'clientId', 'fullName', 'aliases', 'addresses', 'taxId', 'personalId',
+    'bankAccounts', 'phones', 'emails', 'patterns', 'personas', 'useLLM', 'llmPrompt',
+    'createdAt', 'updatedAt',
+  ];
+  return Object.fromEntries(fields
+    .filter((field) => Object.prototype.hasOwnProperty.call(profile, field))
+    .map((field) => [field, profile[field]]));
 }
 
 export function toWorking(doc: AnyDoc): AnonymousDocumentWorking {

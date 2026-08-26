@@ -12,16 +12,8 @@ import {
   requireDatabaseFoundation,
 } from '../../middleware/featureAvailability';
 import { authenticate } from '../../middleware/auth';
-import {
-  requireCaseReadAccessFromBody,
-  requireCaseManageAccessFromBody,
-  resolveCaseFromDocumentId,
-  resolveCaseFromLegalAnalysisId,
-  hasSensitiveAccess,
-  checkCaseAccess,
-} from '../anonymize/caseAuthorization';
+import { requireAnonymizeManageAccess, resolveCaseFromDocumentId, resolveCaseFromLegalAnalysisId, canAccessSensitiveCase, checkCaseAccess } from '../anonymize/caseAuthorization';
 import { toSummary, toWorking, toSensitive } from './dto';
-import { prisma } from '../../prisma/prisma.service';
 
 const router = Router();
 const requireLegalAnalysisFoundation = requireDatabaseFoundation({
@@ -50,6 +42,10 @@ function sendServiceError(res: Response, error: unknown): void {
     code: 'INTERNAL_ERROR',
     message: 'Internal server error',
   });
+}
+
+async function analysisDto(req: Request, caseId: string, analysis: any) {
+  return await canAccessSensitiveCase(req, caseId) ? toSensitive(analysis) : toWorking(analysis);
 }
 
 // ---------------------------------------------------------------------------
@@ -195,15 +191,20 @@ router.get('/documents/:documentId/legal-analyses', authenticate, requireLegalAn
 
 // ============================================================================
 // POST /api/v1/documents/:documentId/legal-analyses
-// Requires: manage access on caseId from body
+// Requires: manage access on the source document's server-resolved case
 // ============================================================================
-router.post('/documents/:documentId/legal-analyses', authenticate, requireLegalAnalysisFoundation, requireCaseManageAccessFromBody(), async (req: Request, res: Response): Promise<void> => {
+router.post('/documents/:documentId/legal-analyses', authenticate, requireLegalAnalysisFoundation, requireAnonymizeManageAccess('documentId', resolveCaseFromDocumentId), async (req: Request, res: Response): Promise<void> => {
   try {
     const { documentId } = req.params as { documentId: string };
     const { caseId, documentSourceType, title, analysisText, status, sourceType, aiToolName, anonymizedInputSnapshot } = req.body || {};
+    const resolvedCaseId = String((req as any).__resolvedCaseId || '');
 
-    if (!caseId) {
-      res.status(400).json({ status: 400, code: 'CASE_ID_REQUIRED', message: 'caseId is required' });
+    if (!resolvedCaseId) {
+      res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+      return;
+    }
+    if (caseId !== undefined && String(caseId) !== resolvedCaseId) {
+      res.status(400).json({ status: 400, code: 'SOURCE_CASE_MISMATCH', message: 'Source document does not belong to the provided case.' });
       return;
     }
     if (!analysisText || !String(analysisText).trim()) {
@@ -212,7 +213,7 @@ router.post('/documents/:documentId/legal-analyses', authenticate, requireLegalA
     }
 
     const analysis = await legalAnalysesService.createLegalAnalysis({
-      caseId,
+      caseId: resolvedCaseId,
       documentId,
       documentSourceType,
       title,
@@ -224,7 +225,7 @@ router.post('/documents/:documentId/legal-analyses', authenticate, requireLegalA
       createdById: getUserId(req),
     });
 
-    res.status(201).json(analysis);
+    res.status(201).json(await analysisDto(req, resolvedCaseId, analysis));
   } catch (error) {
     console.error('createLegalAnalysis error:', error instanceof Error ? error.message : 'Unknown error');
     sendServiceError(res, error);
@@ -247,21 +248,7 @@ router.get('/legal-analyses/:id', authenticate, requireLegalAnalysisFoundation, 
     }
 
     // Determine DTO level based on user's sensitive access
-    const caseId = (req as any).__resolvedCaseId;
-    const user = (req as any).user;
-    let isSensitive = false;
-    if (caseId && user?.userId) {
-      const caseRecord = await prisma.case.findUnique({
-        where: { id: caseId },
-        select: { assignedLawyerId: true, createdById: true },
-      });
-      if (caseRecord) {
-        isSensitive = hasSensitiveAccess(req, caseRecord);
-      }
-    }
-
-    const response = isSensitive ? toSensitive(analysis) : toWorking(analysis);
-    res.json(response);
+    res.json(await analysisDto(req, String((req as any).__resolvedCaseId || ''), analysis));
   } catch (error) {
     console.error('getLegalAnalysis error:', error instanceof Error ? error.message : 'Unknown error');
     sendServiceError(res, error);
@@ -286,7 +273,7 @@ router.patch('/legal-analyses/:id', authenticate, requireLegalAnalysisFoundation
       reviewedById: getUserId(req),
     });
 
-    res.json(analysis);
+    res.json(await analysisDto(req, String((req as any).__resolvedCaseId || ''), analysis));
   } catch (error) {
     console.error('updateLegalAnalysis error:', error instanceof Error ? error.message : 'Unknown error');
     sendServiceError(res, error);

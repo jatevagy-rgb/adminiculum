@@ -6,7 +6,7 @@
  * data only behind access gate.
  */
 
-import { toSummary, toWorking, toSensitive } from '../src/modules/anonymize/dto';
+import { toSummary, toWorking, toSensitive, toWorkingAnonymizationResult } from '../src/modules/anonymize/dto';
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -231,5 +231,19 @@ describe('SEC-0B1 P1: sanitizeRedactedItems edge cases', () => {
     toWorking(doc);
     const items = doc.redactedItems as any[];
     expect(items[0]).toHaveProperty('original', 'Kovács Péter');
+  });
+});
+
+describe('SEC-0B1: anonymize response DTO', () => {
+  it('does not expose original PII from an anonymize result', () => {
+    const response = toWorkingAnonymizationResult({
+      success: true,
+      anonymizedDocumentId: 'anon-1',
+      redactedText: 'Safe [TOKEN_1]',
+      redactedItems: [{ original: 'Kovács Péter', replacement: '[TOKEN_1]', position: { start: 0, end: 12, original: 'nested PII' } }],
+    });
+    const json = JSON.stringify(response);
+    expect(json).not.toContain('Kovács Péter');
+    expect(json).not.toContain('nested PII');
   });
 });

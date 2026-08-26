@@ -9,15 +9,16 @@ import { authenticate } from '../../middleware/auth';
 import {
   requireAnonymizeReadAccess,
   requireAnonymizeManageAccess,
-  requireCaseReadAccessFromQuery,
+  requireAnonymizeSensitiveAccess,
+  requireClientSensitiveAccess,
+  canAccessSensitiveCase,
   resolveCaseFromDocumentId,
   resolveCaseFromAnonymousDocumentId,
-  resolveCaseFromClientId,
   resolveCaseFromSourceDocumentId,
   hasSensitiveAccess,
   checkCaseAccess,
 } from './caseAuthorization';
-import { toSummary, toWorking, toSensitive } from './dto';
+import { toSummary, toWorking, toSensitive, toWorkingAnonymizationResult, toSensitiveClientRedactionProfile } from './dto';
 
 const router = Router();
 
@@ -66,15 +67,18 @@ router.post(
       });
 
       if (!result.success) {
-        return res.status(400).json({ error: result.error });
+        return res.status(400).json({
+          status: 400,
+          code: 'ANONYMIZATION_FAILED',
+          message: 'A dokumentum anonimizálása nem sikerült.',
+        });
       }
 
-      res.json(result);
+      res.json(toWorkingAnonymizationResult(result));
     } catch (error) {
       console.error('Anonymize error:', error);
       res.status(500).json({
         error: 'Hiba az anonimizálás során',
-        details: error instanceof Error ? error.message : String(error),
       });
     }
   },
@@ -88,7 +92,7 @@ router.get(
   '/documents/:documentId/anonymization-source',
   authenticate,
   requireAnonymizeEnabled,
-  requireAnonymizeReadAccess('documentId', resolveCaseFromDocumentId),
+  requireAnonymizeSensitiveAccess('documentId', resolveCaseFromDocumentId),
   async (req: Request, res: Response) => {
     try {
       const documentIdParam = req.params.documentId;
@@ -115,7 +119,7 @@ router.get(
   '/clients/:clientId/redaction-profile',
   authenticate,
   requireAnonymizeEnabled,
-  requireAnonymizeReadAccess('clientId', resolveCaseFromClientId),
+  requireClientSensitiveAccess('read'),
   async (req: Request, res: Response) => {
     try {
       const clientIdParam = req.params.clientId;
@@ -123,7 +127,7 @@ router.get(
 
       const profile = await anonymizeService.getClientRedactionProfile(clientId);
 
-      res.json(profile || { error: 'Nincs redakciós profil' });
+      res.json(profile ? toSensitiveClientRedactionProfile(profile as unknown as Record<string, unknown>) : { error: 'Nincs redakciós profil' });
     } catch (error) {
       console.error('Get profile error:', error);
       res.status(500).json({ error: 'Hiba a profil lekérésekor' });
@@ -139,7 +143,7 @@ router.post(
   '/clients/:clientId/redaction-profile',
   authenticate,
   requireAnonymizeEnabled,
-  requireAnonymizeManageAccess('clientId', resolveCaseFromClientId),
+  requireClientSensitiveAccess('manage'),
   async (req: Request, res: Response) => {
     try {
       const clientIdParam = req.params.clientId;
@@ -158,7 +162,7 @@ router.post(
         emails
       });
 
-      res.json(profile);
+      res.json(toSensitiveClientRedactionProfile(profile as unknown as Record<string, unknown>));
     } catch (error) {
       console.error('Upsert profile error:', error);
       res.status(500).json({ error: 'Hiba a profil mentésekor' });
@@ -246,15 +250,17 @@ router.post(
         return res.status(400).json({ error: result.error });
       }
 
+      const caseId = String((req as any).__resolvedCaseId || '');
+      const doc = await anonymizeService.getAnonymousDocument(id);
+      const sensitive = caseId && await canAccessSensitiveCase(req, caseId);
       res.json({
         success: true,
         anonymousDocId: result.anonymousDocId,
         rehydrationStatus: result.rehydrationStatus,
-        rehydratedContent: result.rehydratedContent,
-        warnings: result.warnings || [],
         totalTokens: result.totalTokens,
         resolvedTokens: result.resolvedTokens,
-        unresolvedTokens: result.unresolvedTokens
+        unresolvedTokens: result.unresolvedTokens,
+        document: doc ? (sensitive ? toSensitive(doc) : toWorking(doc)) : null,
       });
     } catch (error) {
       console.error('Import AI response error:', error);
@@ -383,11 +389,12 @@ router.get(
       } else {
         // sourceDocId path: resolve case from source document and check access
         const caseIdFromSource = await resolveCaseFromSourceDocumentId(sourceDocId as string);
-        if (caseIdFromSource) {
-          const access = await checkCaseAccess(req, caseIdFromSource, 'read');
-          if (access !== true) {
-            return res.status(403).json({ status: 403, code: 'CASE_ACCESS_FORBIDDEN', message: 'You do not have access to this case.' });
-          }
+        if (!caseIdFromSource) {
+          return res.status(404).json({ status: 404, code: 'SOURCE_DOCUMENT_NOT_FOUND', message: 'Source document not found.' });
+        }
+        const access = await checkCaseAccess(req, caseIdFromSource, 'read');
+        if (access !== true) {
+          return res.status(403).json({ status: 403, code: 'CASE_ACCESS_FORBIDDEN', message: 'You do not have access to this case.' });
         }
         docs = await anonymizeService.listAnonymousDocumentsBySource(sourceDocId as string);
       }

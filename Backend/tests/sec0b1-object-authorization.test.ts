@@ -30,6 +30,7 @@ const mockPrisma = {
   case: {
     findUnique: jest.fn(),
     findFirst: jest.fn(),
+    findMany: jest.fn(),
   },
   caseCollaborator: {
     findFirst: jest.fn(),
@@ -109,7 +110,8 @@ function requestJson(
   method: string,
   path: string,
   authenticated = true,
-  extraHeaders: Record<string, string> = {}
+  extraHeaders: Record<string, string> = {},
+  body?: unknown,
 ): Promise<TestResponse> {
   return new Promise((resolve, reject) => {
     const server = app.listen(0, '127.0.0.1', () => {
@@ -142,7 +144,7 @@ function requestJson(
         }
       );
       request.on('error', (error) => { server.close(); reject(error); });
-      request.end();
+      request.end(body === undefined ? undefined : JSON.stringify(body));
     });
   });
 }
@@ -516,8 +518,8 @@ describe('SEC-0B1: DTO leak assertions', () => {
     expect(response.body).toMatchObject({
       id: CLIENT_A_ANON_DOC_ID,
       redactedText: 'Redacted content for document A',
-      customPrompt: 'Review for risks',
     });
+    expect((response.body as any).customPrompt).toBeUndefined();
     expect((response.body as any).rehydratedContent).toBeUndefined();
     expect((response.body as any).aiResponseText).toBeUndefined();
   });
@@ -687,5 +689,136 @@ describe('SEC-0B1: Role matrix tests', () => {
       status: 403,
       code: 'CASE_ACCESS_FORBIDDEN',
     });
+  });
+});
+
+describe('SEC-0B1: P0/P1 route regression guard', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.ENABLE_AI_ANONYMIZATION = 'true';
+    process.env.ENABLE_LEGAL_ANALYSES = 'true';
+    (prisma.caseCollaborator.findFirst as jest.Mock).mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    delete process.env.ENABLE_AI_ANONYMIZATION;
+    delete process.env.ENABLE_LEGAL_ANALYSES;
+  });
+
+  it('sanitizes original PII from the anonymize route result', async () => {
+    (prisma.document.findUnique as jest.Mock).mockResolvedValue({ id: 'doc-client-a-001', caseId: CLIENT_A_CASE_ID });
+    setupCaseMock(mockCaseRecordA);
+    (mockAnonymizeService.anonymizeDocument as jest.Mock).mockResolvedValue({
+      success: true,
+      anonymizedDocumentId: CLIENT_A_ANON_DOC_ID,
+      redactedText: 'Safe [TOKEN]',
+      redactedItems: [{ original: 'Test Client A', replacement: '[TOKEN]', type: 'PERSON_NAME', position: { start: 0, end: 4, original: 'nested' } }],
+    });
+
+    const response = await requestJson(createApp(), 'POST', '/api/v1/documents/doc-client-a-001/anonymize', true,
+      { 'x-test-user-id': LAWYER_USER_ID, 'x-test-role': 'LAWYER' }, { aiTask: 'REVIEW' });
+
+    expect(response.status).toBe(200);
+    expect(JSON.stringify(response.body)).not.toContain('Test Client A');
+    expect(JSON.stringify(response.body)).not.toContain('nested');
+  });
+
+  it('denies original source text to a case reader without sensitive access', async () => {
+    const readerCase = { ...mockCaseRecordA, assignedLawyerId: 'other-lawyer', createdById: 'other-user' };
+    (prisma.document.findUnique as jest.Mock).mockResolvedValue({ id: 'doc-client-a-001', caseId: CLIENT_A_CASE_ID });
+    (prisma.case.findUnique as jest.Mock).mockResolvedValue(readerCase);
+    (prisma.caseCollaborator.findFirst as jest.Mock).mockResolvedValue({ id: 'reader-collaborator' });
+
+    const response = await requestJson(createApp(), 'GET', '/api/v1/documents/doc-client-a-001/anonymization-source', true,
+      { 'x-test-user-id': 'reader-001', 'x-test-role': 'LAWYER' });
+
+    expect(response.status).toBe(403);
+    expect(mockAnonymizeService.getAnonymizationSourceText).not.toHaveBeenCalled();
+  });
+
+  it('allows a sensitive user to retrieve original source text', async () => {
+    (prisma.document.findUnique as jest.Mock).mockResolvedValue({ id: 'doc-client-a-001', caseId: CLIENT_A_CASE_ID });
+    setupCaseMock(mockCaseRecordA);
+    (mockAnonymizeService.getAnonymizationSourceText as jest.Mock).mockResolvedValue({ success: true, sourceText: 'Original PII' });
+
+    const response = await requestJson(createApp(), 'GET', '/api/v1/documents/doc-client-a-001/anonymization-source', true,
+      { 'x-test-user-id': LAWYER_USER_ID, 'x-test-role': 'LAWYER' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ sourceText: 'Original PII' });
+  });
+
+  it('fails closed when sourceDocId cannot resolve an owning case', async () => {
+    (prisma.document.findUnique as jest.Mock).mockResolvedValue(null);
+    const response = await requestJson(createApp(), 'GET', '/api/v1/anonymous-documents?sourceDocId=unknown-source', true,
+      { 'x-test-user-id': LAWYER_USER_ID, 'x-test-role': 'LAWYER' });
+
+    expect(response.status).toBe(404);
+    expect(mockAnonymizeService.listAnonymousDocumentsBySource).not.toHaveBeenCalled();
+  });
+
+  it('denies a redaction profile when no sensitive client case relation is authorized', async () => {
+    (prisma.case.findMany as jest.Mock).mockResolvedValue([mockCaseRecordB]);
+    setupCaseMock(mockCaseRecordB);
+
+    const response = await requestJson(createApp(), 'GET', '/api/v1/clients/client-b/redaction-profile', true,
+      { 'x-test-user-id': LAWYER_USER_ID, 'x-test-role': 'LAWYER' });
+
+    expect(response.status).toBe(403);
+    expect(mockAnonymizeService.getClientRedactionProfile).not.toHaveBeenCalled();
+  });
+
+  it('returns AI rehydration through the document DTO instead of a raw result', async () => {
+    (prisma.anonymousDocument.findUnique as jest.Mock).mockResolvedValue(mockAnonymousDocumentA);
+    setupCaseMock(mockCaseRecordA);
+    (mockAnonymizeService.importAIResponse as jest.Mock).mockResolvedValue({
+      success: true, anonymousDocId: CLIENT_A_ANON_DOC_ID, rehydrationStatus: 'COMPLETE',
+      rehydratedContent: 'Raw PII must not be top-level', warnings: [{ original: 'PII' }], totalTokens: 1, resolvedTokens: 1, unresolvedTokens: 0,
+    });
+    (mockAnonymizeService.getAnonymousDocument as jest.Mock).mockResolvedValue(mockAnonymousDocumentA);
+
+    const response = await requestJson(createApp(), 'POST', `/api/v1/anonymous-documents/${CLIENT_A_ANON_DOC_ID}/import-ai-response`, true,
+      { 'x-test-user-id': LAWYER_USER_ID, 'x-test-role': 'LAWYER' }, { aiResponseText: '[TOKEN]' });
+
+    expect(response.status).toBe(200);
+    expect((response.body as any).rehydratedContent).toBeUndefined();
+    expect((response.body as any).warnings).toBeUndefined();
+    expect((response.body as any).document.rehydratedContent).toBe('Rehydrated content for A');
+  });
+
+  it('uses document ownership rather than body caseId for LegalAnalysis creation', async () => {
+    (prisma.document.findUnique as jest.Mock).mockResolvedValue({ id: 'doc-client-a-001', caseId: CLIENT_A_CASE_ID });
+    setupCaseMock(mockCaseRecordA);
+    const response = await requestJson(createApp(), 'POST', '/api/v1/documents/doc-client-a-001/legal-analyses', true,
+      { 'x-test-user-id': LAWYER_USER_ID, 'x-test-role': 'LAWYER' }, { caseId: CLIENT_B_CASE_ID, analysisText: 'Safe analysis' });
+
+    expect(response.status).toBe(400);
+    expect(mockLegalAnalysesService.createLegalAnalysis).not.toHaveBeenCalled();
+  });
+
+  it('returns LegalAnalysis through a DTO rather than the raw service record', async () => {
+    (prisma.document.findUnique as jest.Mock).mockResolvedValue({ id: 'doc-client-a-001', caseId: CLIENT_A_CASE_ID });
+    setupCaseMock(mockCaseRecordA);
+    (mockLegalAnalysesService.createLegalAnalysis as jest.Mock).mockResolvedValue(mockLegalAnalysisA);
+
+    const response = await requestJson(createApp(), 'POST', '/api/v1/documents/doc-client-a-001/legal-analyses', true,
+      { 'x-test-user-id': LAWYER_USER_ID, 'x-test-role': 'LAWYER' }, { caseId: CLIENT_A_CASE_ID, analysisText: 'Safe analysis' });
+
+    expect(response.status).toBe(201);
+    expect((response.body as any).riskMatrixDetected).toBeUndefined();
+    expect((response.body as any).anonymizedInputSnapshot).toBe('Sensitive snapshot A');
+  });
+
+  it('returns a DTO after LegalAnalysis update', async () => {
+    (prisma.legalAnalysis.findUnique as jest.Mock).mockResolvedValue(mockLegalAnalysisA);
+    setupCaseMock(mockCaseRecordA);
+    (mockLegalAnalysesService.updateLegalAnalysis as jest.Mock).mockResolvedValue(mockLegalAnalysisA);
+
+    const response = await requestJson(createApp(), 'PATCH', `/api/v1/legal-analyses/${CLIENT_A_LEGAL_ANALYSIS_ID}`, true,
+      { 'x-test-user-id': LAWYER_USER_ID, 'x-test-role': 'LAWYER' }, { analysisText: 'Updated analysis' });
+
+    expect(response.status).toBe(200);
+    expect((response.body as any).riskMatrixDetected).toBeUndefined();
+    expect((response.body as any).anonymizedInputSnapshot).toBe('Sensitive snapshot A');
   });
 });
