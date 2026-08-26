@@ -133,7 +133,7 @@ d('DEMO KFT. organizational fixture (PostgreSQL)', () => {
     await reset();
     const casesAfter = await db.case.count({ where: { id: { in: [IDS.caseEmploymentId, IDS.caseSupplierId, IDS.caseComplianceId] } } });
     expect(casesAfter).toBe(3);
-    const timeAfter = (await db.timeEntry.aggregate({ where: { matterId: { in: [IDS.matterEmploymentId, IDS.matterSupplierId, IDS.matterComplianceId] } }, _sum: { minutes: true } }))._sum ?? 0;
+    const timeAfter = (await db.timeEntry.aggregate({ where: { matterId: { in: [IDS.matterEmploymentId, IDS.matterSupplierId, IDS.matterComplianceId] } }, _sum: { minutes: true } }))._sum.minutes ?? 0;
     expect(timeAfter).toBe(875);
   });
 
