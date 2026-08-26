@@ -18,6 +18,16 @@ describe('Company workspace UI (structural)', () => {
     assert.match(page(), /ClientCompanyWorkspace/);
   });
 
+  it('keeps portal and cases inside the client workspace context', () => {
+    const tabs = read('src/components/clients/ClientWorkspaceTabs.tsx');
+    assert.match(tabs, /\["portal", "Portál", "\/portal"\]/);
+    assert.match(tabs, /\["cases", "Ügyek", "\/cases"\]/);
+    assert.doesNotMatch(tabs, /client-portal-admin/);
+    assert.doesNotMatch(tabs, /\/cases\?clientId=/);
+    assert.equal(existsSync(path.join(root, 'src/app/clients/[clientId]/portal/page.tsx')), true);
+    assert.equal(existsSync(path.join(root, 'src/app/clients/[clientId]/cases/page.tsx')), true);
+  });
+
   it('presents the six coherent sections instead of raw technical subsystems', () => {
     const src = component();
     for (const label of ['Áttekintés', 'Cégkép', 'Felmérések', 'Szerződések és kötelezettségek', 'Szervezet és felelősségek', 'Fejlődési terv']) {

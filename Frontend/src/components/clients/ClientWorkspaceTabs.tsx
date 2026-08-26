@@ -11,7 +11,7 @@ type ClientWorkspaceTabsProps = {
 const tabs = [
   ["overview", "Áttekintés", ""],
   ["organization", "Szervezet", "/szervezet"],
-  ["portal", "Portál", "/client-portal-admin"],
+  ["portal", "Portál", "/portal"],
   ["cases", "Ügyek", "/cases"],
 ] as const;
 
