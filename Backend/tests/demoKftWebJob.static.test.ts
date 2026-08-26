@@ -24,11 +24,22 @@ describe('Demo Kft. hosted activation WebJob (static guards)', () => {
     expect(runner).toContain('WEBSITE_SITE_NAME !== expectedSite');
   });
 
-  it('hard-refuses a production customer-data environment marker', () => {
+  it('designates the REAL backend App Service as the demo runtime (env authority)', () => {
     expect(runner).toContain('not a designated DEMO App Service environment');
-    // A production build as a designated demo host is allowed ONLY via the
-    // explicit demo site allowlist; a generic production path is refused.
-    expect(runner).toContain('adminiculumdemo-b1-01');
+    // The default designated demo site for our presentation deployment is the
+    // real backend App Service, overridable via DEMO_KFT_WEBJOB_EXPECTED_SITE.
+    expect(runner).toContain("DEMO_KFT_WEBJOB_EXPECTED_SITE || 'adminiculumbackend-b1-01'");
+  });
+
+  it('reset script uses an explicit hosted-demo environment contract (not a blanket runtime-marker refusal)', () => {
+    const reset = fs.readFileSync(path.join(root, 'scripts', 'demo-kft-reset.mjs'), 'utf8');
+    // Hosted execution requires the explicit demo contract (all four guards).
+    expect(reset).toContain("process.env.ADMINICULUM_RUNTIME_ENVIRONMENT !== 'demo'");
+    expect(reset).toContain('ADMINICULUM_DEMO_RESET_ALLOWED !== \'true\'');
+    expect(reset).toContain("DEMO_KFT_WEBJOB_EXPECTED_SITE || 'adminiculumbackend-b1-01'");
+    expect(reset).toContain("WEBSITE_SITE_NAME || '') !== expectedSite");
+    // Must NOT blanket-refuse merely because WEBSITE_SITE_NAME is present.
+    expect(reset).not.toContain('production runtime marker detected');
   });
 
   it('never performs a generic destructive DB reset or truncate', () => {
