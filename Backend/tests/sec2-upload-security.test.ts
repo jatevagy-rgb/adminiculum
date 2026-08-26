@@ -669,3 +669,310 @@ describe('SEC-2: Upload validation + scanner integration', () => {
     expect(validation.scanOutcome).toBe('SCAN_FAILED');
   });
 });
+
+// ---------------------------------------------------------------------------
+// SEC-2: Singular version endpoint validation (POST /documents/:id/version)
+// ---------------------------------------------------------------------------
+
+import express, { Express, NextFunction, Request, Response } from 'express';
+import http from 'http';
+
+const singularMockPrisma = {
+  document: { findUnique: jest.fn() },
+  case: { findUnique: jest.fn() },
+  caseCollaborator: { findFirst: jest.fn() },
+};
+
+jest.mock('../src/middleware/auth', () => ({
+  authenticate: (req: Request, res: Response, next: NextFunction) => {
+    if (req.headers.authorization !== 'Bearer test-token') {
+      res.status(401).json({ error: 'No token provided' });
+      return;
+    }
+    req.user = {
+      userId: String(req.headers['x-user-id'] || 'test-user'),
+      email: 'test@example.com',
+      role: String(req.headers['x-role'] || 'LAWYER') as any,
+      authProvider: 'local-jwt',
+    };
+    next();
+  },
+}));
+
+jest.mock('../src/middleware/featureAvailability', () => ({
+  isDatabaseFoundationEnabled: jest.fn(() => true),
+  sendFeatureUnavailable: jest.fn(),
+  requireDatabaseFoundation: jest.fn(() => (_req: Request, _res: Response, next: NextFunction) => next()),
+}));
+
+jest.mock('../src/modules/documents/services', () => {
+  const mockUploadNewVersion = jest.fn();
+  return {
+    __esModule: true,
+    default: {
+      searchDocuments: jest.fn(),
+      createDocument: jest.fn(),
+      getCaseDocuments: jest.fn(),
+      getDocumentById: jest.fn(),
+      uploadNewVersion: mockUploadNewVersion,
+      listDocumentVersions: jest.fn(),
+      submitForReview: jest.fn(),
+      approveDocument: jest.fn(),
+      rejectDocument: jest.fn(),
+      deleteDocument: jest.fn(),
+      getDocumentVersion: jest.fn(),
+      downloadDocumentResult: jest.fn(),
+    },
+    DocumentDeleteError: class DocumentDeleteError extends Error {},
+    DocumentStorageUploadError: class DocumentStorageUploadError extends Error {},
+  };
+});
+
+jest.mock('../src/modules/documents/reviewSuggestions.service', () => ({
+  createDocumentReviewSuggestion: jest.fn(),
+  listDocumentReviewSuggestions: jest.fn(),
+  updateDocumentReviewSuggestionStatus: jest.fn(),
+  DocumentReviewSuggestionError: class DocumentReviewSuggestionError extends Error {
+    status: number;
+    code: string;
+    constructor(status: number, code: string, message: string) {
+      super(message);
+      this.status = status;
+      this.code = code;
+    }
+  },
+}));
+
+jest.mock('../src/modules/documents/textExtractor', () => ({ extractText: jest.fn() }));
+jest.mock('../src/modules/tasks/services', () => ({
+  createTaskFromDocumentSource: jest.fn(),
+  SourceLinkedTaskError: class SourceLinkedTaskError extends Error {
+    statusCode: number;
+    code: string;
+    constructor(statusCode: number, code: string, message: string) {
+      super(message);
+      this.statusCode = statusCode;
+      this.code = code;
+    }
+  },
+}));
+
+jest.mock('../src/prisma/prisma.service', () => ({
+  prisma: singularMockPrisma,
+}));
+
+jest.mock('../src/modules/documents/workContext.service', () => ({
+  getDocumentWorkContext: jest.fn(),
+  updateDocumentWorkContext: jest.fn(),
+  linkDocumentTask: jest.fn(),
+  unlinkDocumentTask: jest.fn(),
+  listTaskDocuments: jest.fn(),
+  sendWorkContextError: jest.fn(),
+}));
+
+jest.mock('../src/modules/documents/documentComments.service', () => ({
+  createDocumentComment: jest.fn(),
+  DocumentCommentError: class DocumentCommentError extends Error {},
+  listDocumentComments: jest.fn(),
+  reopenDocumentComment: jest.fn(),
+  resolveDocumentComment: jest.fn(),
+}));
+
+jest.mock('../src/modules/documents/authorization', () => ({
+  requireDocumentReadAccess: (req: Request, res: Response, next: NextFunction) => next(),
+  requireDocumentManageAccess: (req: Request, res: Response, next: NextFunction) => next(),
+  requireHrConfidentialReadAccess: (req: Request, res: Response, next: NextFunction) => next(),
+}));
+
+jest.mock('../src/modules/cases/authorization', () => ({
+  userCanManageCase: jest.fn().mockResolvedValue(true),
+}));
+
+jest.mock('../src/modules/documentEditor/service', () => ({
+  getDocumentEditorMetadata: jest.fn(),
+}));
+
+jest.mock('../src/modules/documents/annotations.routes', () => {
+  const express = require('express');
+  return { __esModule: true, default: express.Router() };
+});
+
+jest.mock('../src/modules/documents/reviewSuggestions.routes', () => {
+  const express = require('express');
+  return { __esModule: true, default: express.Router() };
+});
+
+import documentsRoutes from '../src/modules/documents/routes';
+import documentsService from '../src/modules/documents/services';
+
+function createSingularApp(): Express {
+  const app = express();
+  app.use(express.json({ limit: '1mb' }));
+  app.use('/documents', documentsRoutes);
+  return app;
+}
+
+function requestSingular(
+  app: Express,
+  path: string,
+  body: Record<string, unknown>,
+  options: { authenticated?: boolean; headers?: Record<string, string> } = {}
+): Promise<{ status: number; body: any; text: string }> {
+  const { authenticated = true, headers = {} } = options;
+  return new Promise((resolve, reject) => {
+    const server = app.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        server.close();
+        reject(new Error('Test server address unavailable'));
+        return;
+      }
+      const req = http.request(
+        {
+          hostname: '127.0.0.1',
+          port: address.port,
+          path,
+          method: 'POST',
+          headers: {
+            ...(authenticated ? { authorization: 'Bearer test-token' } : {}),
+            'content-type': 'application/json',
+            ...headers,
+          },
+        },
+        (response) => {
+          const chunks: Buffer[] = [];
+          response.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+          response.on('end', () => {
+            server.close();
+            const text = Buffer.concat(chunks).toString('utf8');
+            resolve({ status: response.statusCode || 0, body: text ? JSON.parse(text) : null, text });
+          });
+        }
+      );
+      req.on('error', (error) => {
+        server.close();
+        reject(error);
+      });
+      req.write(JSON.stringify(body));
+      req.end();
+    });
+  });
+}
+
+describe('SEC-2: Singular version endpoint validation (POST /documents/:id/version)', () => {
+  const mockUploadNewVersion = (documentsService as any).uploadNewVersion as jest.Mock;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    singularMockPrisma.document.findUnique.mockResolvedValue({ id: 'doc-1', caseId: 'case-1' });
+    singularMockPrisma.case.findUnique.mockResolvedValue({ id: 'case-1', assignedLawyerId: 'test-user', createdById: 'test-user' });
+    singularMockPrisma.caseCollaborator.findFirst.mockResolvedValue(null);
+    mockUploadNewVersion.mockResolvedValue({ id: 'doc-1', version: 2 });
+    setWorkforceScanner(null);
+  });
+
+  afterEach(() => {
+    setWorkforceScanner(null);
+  });
+
+  it('rejects unauthenticated requests before validation', async () => {
+    const res = await requestSingular(
+      createSingularApp(),
+      '/documents/doc-1/version',
+      { fileContent: PDF_BUFFER.toString('base64'), fileName: 'contract.pdf' },
+      { authenticated: false }
+    );
+    expect(res.status).toBe(401);
+    expect(mockUploadNewVersion).not.toHaveBeenCalled();
+  });
+
+  it('rejects renamed executable (.exe renamed to .pdf) — UNSAFE_CONTENT', async () => {
+    const res = await requestSingular(
+      createSingularApp(),
+      '/documents/doc-1/version',
+      { fileContent: EXE_BUFFER.toString('base64'), fileName: 'contract.pdf' }
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('CONTENT_VALIDATION_FAILED');
+    expect(res.body.message).toContain('UNSAFE_CONTENT');
+    expect(mockUploadNewVersion).not.toHaveBeenCalled();
+  });
+
+  it('rejects fake declared MIME — extension/MIME mismatch', async () => {
+    const res = await requestSingular(
+      createSingularApp(),
+      '/documents/doc-1/version',
+      { fileContent: TXT_BUFFER.toString('base64'), fileName: 'report.pdf', mimeType: 'application/pdf' }
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('CONTENT_VALIDATION_FAILED');
+    expect(mockUploadNewVersion).not.toHaveBeenCalled();
+  });
+
+  it('rejects when unconfigured scanner returns SCAN_FAILED (fail-closed)', async () => {
+    setWorkforceScanner(null);
+    const res = await requestSingular(
+      createSingularApp(),
+      '/documents/doc-1/version',
+      { fileContent: PDF_BUFFER.toString('base64'), fileName: 'contract.pdf' }
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('CONTENT_VALIDATION_FAILED');
+    expect(res.body.message).toContain('SCAN_FAILED');
+    expect(mockUploadNewVersion).not.toHaveBeenCalled();
+  });
+
+  it('rejects when scanner returns INFECTED', async () => {
+    setWorkforceScanner({
+      provider: 'TEST_INFECTED',
+      scan: async () => ({ outcome: 'INFECTED', provider: 'TEST_INFECTED', codeSafe: 'MALWARE_DETECTED' }),
+    });
+    const res = await requestSingular(
+      createSingularApp(),
+      '/documents/doc-1/version',
+      { fileContent: PDF_BUFFER.toString('base64'), fileName: 'contract.pdf' }
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('CONTENT_VALIDATION_FAILED');
+    expect(res.body.message).toContain('INFECTED');
+    expect(mockUploadNewVersion).not.toHaveBeenCalled();
+  });
+
+  it('rejects when scanner returns SCAN_FAILED', async () => {
+    setWorkforceScanner({
+      provider: 'TEST_ERROR',
+      scan: async () => ({ outcome: 'SCAN_FAILED', provider: 'TEST_ERROR', codeSafe: 'SCANNER_TIMEOUT' }),
+    });
+    const res = await requestSingular(
+      createSingularApp(),
+      '/documents/doc-1/version',
+      { fileContent: PDF_BUFFER.toString('base64'), fileName: 'contract.pdf' }
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('CONTENT_VALIDATION_FAILED');
+    expect(res.body.message).toContain('SCAN_FAILED');
+    expect(mockUploadNewVersion).not.toHaveBeenCalled();
+  });
+
+  it('allows CLEAN valid content through to storage', async () => {
+    setWorkforceScanner(new DevMockWorkforceScanner());
+    const res = await requestSingular(
+      createSingularApp(),
+      '/documents/doc-1/version',
+      { fileContent: PDF_BUFFER.toString('base64'), fileName: 'contract.pdf' }
+    );
+    expect(res.status).toBe(200);
+    expect(mockUploadNewVersion).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects unsafe HTML content even with valid extension', async () => {
+    const res = await requestSingular(
+      createSingularApp(),
+      '/documents/doc-1/version',
+      { fileContent: HTML_BUFFER.toString('base64'), fileName: 'page.docx' }
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('CONTENT_VALIDATION_FAILED');
+    expect(mockUploadNewVersion).not.toHaveBeenCalled();
+  });
+});

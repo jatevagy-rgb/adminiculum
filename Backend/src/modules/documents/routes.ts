@@ -780,6 +780,7 @@ router.post('/:id/version', authenticate, async (req: Request, res: Response): P
   try {
     const userId = (req as any).user?.userId;
     const { fileContent, comment } = req.body;
+    const fileName = sanitizeUploadFileName(req.body?.fileName);
 
     if (!fileContent) {
       res.status(400).json({ 
@@ -808,6 +809,23 @@ router.post('/:id/version', authenticate, async (req: Request, res: Response): P
       });
       return;
     }
+
+    // SEC-2: Content validation — magic bytes, unsafe content, archive inspection
+    const contentValidation = await validateWorkforceUpload({
+      buffer: fileBuffer,
+      declaredMimeType: req.body?.mimeType,
+      originalFileName: fileName || 'document',
+      inspectArchiveContent: true,
+    });
+    if (!contentValidation.ok) {
+      res.status(400).json({
+        status: 400,
+        code: 'CONTENT_VALIDATION_FAILED',
+        message: `File content validation failed: ${contentValidation.codeSafe}`,
+      });
+      return;
+    }
+
     const result = await documentsService.uploadNewVersion(
       id,
       fileBuffer,
