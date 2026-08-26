@@ -94,10 +94,11 @@ d('Company foundation (Phase 1) (PostgreSQL)', () => {
   });
 
   it('restricts only enrollment changes to managers while preserving ordinary profile updates', async () => {
+    const lawyerWithSeniorMetadata = { ...lawyer, jobTitle: 'Managing Partner', hierarchy: 'EXECUTIVE' };
     await upsertOperatingProfile(lawyer, clientA, { summary: 'Lawyer update' });
     await upsertOperatingProfile(collaborator, clientA, { summary: 'Collaborator update' });
     await expect(upsertOperatingProfile(lawyer, clientA, { complianceEnrollmentStatus: 'SUSPENDED' })).rejects.toMatchObject({ code: 'COMPANY_MANAGE_FORBIDDEN' });
-    await expect(upsertOperatingProfile({ ...lawyer, jobTitle: 'Managing Partner', hierarchy: 'EXECUTIVE' }, clientA, { complianceEnrollmentStatus: 'SUSPENDED' })).rejects.toMatchObject({ code: 'COMPANY_MANAGE_FORBIDDEN' });
+    await expect(upsertOperatingProfile(lawyerWithSeniorMetadata, clientA, { complianceEnrollmentStatus: 'SUSPENDED' })).rejects.toMatchObject({ code: 'COMPANY_MANAGE_FORBIDDEN' });
     await expect(upsertOperatingProfile(collaborator, clientA, { complianceEnrollmentStatus: 'SUSPENDED' })).rejects.toMatchObject({ code: 'COMPANY_MANAGE_FORBIDDEN' });
     await expect(upsertOperatingProfile(partner, clientA, { complianceEnrollmentStatus: 'ENROLLED' })).resolves.toMatchObject({ complianceEnrollmentStatus: 'ENROLLED' });
   });
