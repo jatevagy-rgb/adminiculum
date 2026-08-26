@@ -27,6 +27,7 @@ import { clientSafeError } from "@/lib/clientInteractionApi";
 import { CustomerInteractionCard } from "./CustomerInteractionCard";
 import { MatterView } from "./MatterWorkspace";
 import { ClientSafeResultCard, DemoContentBanner, PortalPersonHeader, PortalProfileCard } from "./PortalPresentationPrimitives";
+import { OrganizationCompanyProfile } from "./OrganizationCompanyProfile";
 
 export type OrganizationPortalView = "home" | "matters" | "tasks" | "documents" | "messages" | "matter" | "intakes" | "new-intake" | "leadership" | "contracts" | "company";
 
@@ -310,11 +311,19 @@ function OrganizationContracts({ contracts }: { contracts: PortalOrgContract[] }
   );
 }
 
-function OrganizationCompany({ company }: { company: PortalOrgCompany | null }) {
-  if (!company) return <Section title="Vállalat" empty emptyText="Ehhez az ügyfélfelülethez jelenleg nincs közzétehető vállalati áttekintés." />;
+function OrganizationCompany({ company, onProfileUpdated }: { company: PortalOrgCompany | null; onProfileUpdated?: () => void }) {
+  if (!company) {
+    return (
+      <div className="space-y-5">
+        <OrganizationCompanyProfile onProfileUpdated={onProfileUpdated} />
+        <Section title="Vállalat" empty emptyText="Ehhez az ügyfélfelülethez jelenleg nincs közzétehető vállalati áttekintés." />
+      </div>
+    );
+  }
   const areaActivity = company.visibleMattersByArea.filter((area) => area.visibleMatterCount > 0);
   return (
     <div className="space-y-5">
+      <OrganizationCompanyProfile onProfileUpdated={onProfileUpdated} />
       <section className={card}>
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#b95e4b]">Vállalat</p>
         <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950">{company.companyName}</h1>
@@ -509,7 +518,7 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
       {view === "messages" ? <OrganizationMessages workspace={workspace} cases={state.cases} /> : null}
       {view === "tasks" ? <OrganizationTasks workspace={workspace} /> : null}
       {view === "contracts" ? <OrganizationContracts contracts={state.contracts} /> : null}
-      {view === "company" ? <OrganizationCompany company={state.company} /> : null}
+      {view === "company" ? <OrganizationCompany company={state.company} onProfileUpdated={load} /> : null}
       {view === "intakes" && !isCaseRelay ? <Section title="Megkereséseim" empty={!state.intakes.length}>{state.intakes.map((item) => <IntakeRow key={item.reference} item={item} />)}</Section> : null}
       {view === "new-intake" && !isCaseRelay ? <NewIntake units={state.units} onCreated={load} /> : null}
       {view === "leadership" ? <LeadershipSummary units={state.leadership} mode={context.selectedWorkspace?.mode} /> : null}
