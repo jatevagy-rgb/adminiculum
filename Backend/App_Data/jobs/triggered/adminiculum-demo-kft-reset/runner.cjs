@@ -30,7 +30,7 @@ const { Client } = require('pg');
 
 const jobDirectory = __dirname;
 const appRoot = process.env.DEMO_KFT_WEBJOB_ROOT || path.resolve(jobDirectory, '../../../..');
-const expectedSite = process.env.DEMO_KFT_WEBJOB_EXPECTED_SITE || 'adminiculumdemo-b1-01';
+const expectedSite = process.env.DEMO_KFT_WEBJOB_EXPECTED_SITE || 'adminiculumbackend-b1-01';
 const lockDirectory = process.env.WEBJOBS_DATA_PATH || process.env.HOME || os.tmpdir();
 const lockPath = process.env.DEMO_KFT_WEBJOB_LOCK_PATH || path.join(lockDirectory, 'adminiculum-demo-kft-reset.lock');
 
