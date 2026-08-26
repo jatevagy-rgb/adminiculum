@@ -311,7 +311,7 @@ function OrganizationContracts({ contracts }: { contracts: PortalOrgContract[] }
   );
 }
 
-function OrganizationCompany({ company, onProfileUpdated }: { company: PortalOrgCompany | null; onProfileUpdated?: () => void }) {
+function OrganizationCompany({ company, onProfileUpdated }: { company: PortalOrgCompany | null; onProfileUpdated?: () => void | Promise<void> }) {
   if (!company) {
     return (
       <div className="space-y-5">

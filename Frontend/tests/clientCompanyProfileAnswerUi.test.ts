@@ -33,7 +33,8 @@ describe("Organization Customer Company Profile / AnswerState UI", () => {
     assert.match(src, /Megadva/);
     assert.match(src, /Nem ismertként jelölve/);
     assert.match(src, /Nincs megadva/);
-    assert.match(src, /Kitöltöttség/);
+    assert.match(src, /Cégadatok/);
+    assert.match(src, /A szervezeti áttekintéshez szükséges cégadatok\./);
   });
 
   it("supports ANSWERED with typed numeric mutation (e.g. 47 -> 52) and UNKNOWN transitions", () => {
@@ -47,7 +48,11 @@ describe("Organization Customer Company Profile / AnswerState UI", () => {
     assert.match(src, /Nem ismertként jelölöm/);
     // Refreshing discovery and notifying parent after save
     assert.match(src, /loadDiscovery/);
-    assert.match(src, /onProfileUpdated\?\.()/);
+    assert.match(src, /await onProfileUpdated\?\.\(\)/);
+    assert.match(
+      src,
+      /A cégadatokat frissítettük\. A szervezeti áttekintést az új adatok alapján frissítettük\./,
+    );
   });
 
   it("uses neutral, client-safe copy and preserves UNANSWERED as absence", () => {
@@ -58,6 +63,21 @@ describe("Organization Customer Company Profile / AnswerState UI", () => {
     assert.doesNotMatch(src, /Hiányos a megfelelősége/);
     assert.doesNotMatch(src, /Ön jogszabályt sért/);
     assert.doesNotMatch(src, /Jogszabálysértés/);
+  });
+
+  it("removes compliance-console language from customer-facing organization views", () => {
+    const profile = profileSrc();
+    const home = read("src/components/client-portal/OrgHomeView.tsx");
+    for (const source of [profile, home]) {
+      assert.doesNotMatch(source, /Vállalat és megfelelőség/);
+      assert.doesNotMatch(source, /Megfelelőségi áttekintés/);
+      assert.doesNotMatch(
+        source,
+        /jogi megfelelőségi és működési értékeléshez szükséges alapvető szervezeti adatok/,
+      );
+    }
+    assert.match(home, /Vállalati profil/);
+    assert.match(home, /Szervezeti területek/);
   });
 
   it("strictly prohibits internal technical IDs, rule ASTs, and severity scores from leaking", () => {

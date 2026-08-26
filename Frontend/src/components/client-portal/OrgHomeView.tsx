@@ -110,7 +110,7 @@ function CompanyStatus({ company, summaries }: { company: PortalOrgCompany | nul
   const areas = company?.visibleMattersByArea || [];
   return (
     <section className={card}>
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Vállalat és megfelelőség</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Vállalati profil</p>
       <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">Szervezeti áttekintés</h2>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl bg-stone-50 p-4">
@@ -125,7 +125,7 @@ function CompanyStatus({ company, summaries }: { company: PortalOrgCompany | nul
       {company?.profileHeadline ? <p className="mt-4 break-words text-sm leading-6 text-stone-700">{company.profileHeadline}</p> : null}
       {areas.length ? (
         <div className="mt-4">
-          <p className="text-sm font-semibold text-stone-800">Megfelelőségi áttekintés</p>
+          <p className="text-sm font-semibold text-stone-800">Szervezeti területek</p>
           <div className="mt-2 flex flex-wrap gap-2">{areas.slice(0, 4).map((area) => <span key={area.areaName} className="rounded-full bg-[#f3ead2] px-3 py-1 text-xs text-[#6f5514]">{area.areaName}</span>)}</div>
         </div>
       ) : null}

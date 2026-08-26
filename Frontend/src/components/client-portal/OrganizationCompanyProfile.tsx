@@ -58,7 +58,7 @@ function formatQuestionValue(question: PortalCompanyProfileQuestion) {
 }
 
 type Props = {
-  onProfileUpdated?: () => void;
+  onProfileUpdated?: () => void | Promise<void>;
 };
 
 export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
@@ -140,11 +140,13 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
         status: "ANSWERED",
         ...(parsedNumber !== undefined ? { numberValue: parsedNumber } : {}),
       });
-      setSuccessMessage("A vállalati adat sikeresen elmentve.");
       setEditingKey(null);
       setEditValue("");
       await loadDiscovery();
-      onProfileUpdated?.();
+      await onProfileUpdated?.();
+      setSuccessMessage(
+        "A cégadatokat frissítettük. A szervezeti áttekintést az új adatok alapján frissítettük.",
+      );
     } catch (err) {
       setActionError(clientSafeError(err));
     } finally {
@@ -185,13 +187,13 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9b7b25]">
-            Vállalati adatok és működési profil
+            Cégadatok
           </p>
           <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">
             Vállalati profil
           </h2>
           <p className="mt-2 text-sm text-stone-600">
-            A jogi megfelelőségi és működési értékeléshez szükséges alapvető szervezeti adatok.
+            A szervezeti áttekintéshez szükséges cégadatok.
           </p>
         </div>
 

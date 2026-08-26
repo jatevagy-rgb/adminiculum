@@ -31,7 +31,7 @@ describe("Phase 5A organizational customer portal shell + home journey", () => {
 
   it("Főoldal renders Eddig / Most / Következőként journey", () => {
     const src = orgHome();
-    for (const token of ["Eddig", "Most", "Következő", "Ami most Öntől kell", "Szervezeti ügyfélfelület", "Aktív jogi munka", "Legutóbbi tevékenység", "Vállalat és megfelelőség"]) {
+    for (const token of ["Eddig", "Most", "Következő", "Ami most Öntől kell", "Szervezeti ügyfélfelület", "Aktív jogi munka", "Legutóbbi tevékenység", "Vállalati profil", "Szervezeti területek"]) {
       assert.match(src, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     }
     assert.match(src, /matter\.currentPosition/);
