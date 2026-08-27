@@ -7,6 +7,12 @@
 import { Router } from 'express';
 import reviewNotesService from './service';
 import { prisma } from '../../prisma/prisma.service';
+import { authenticate } from '../../middleware/auth';
+import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
+import {
+  requireContractGenerationReadAccess,
+  requireContractGenerationManageAccess,
+} from '../contracts/contractAuthorization';
 import {
   isDatabaseFoundationEnabled,
   requireDatabaseFoundation,
@@ -20,8 +26,10 @@ const requireReviewNotesFoundation = requireDatabaseFoundation({
   nextStep: 'Complete the contract review database reconciliation before enabling this feature.',
 });
 
+router.use(authenticate, requireWorkforceUser, requireReviewNotesFoundation);
+
 // GET /api/v1/contracts/:id/review-notes
-router.get('/:generationId/review-notes', requireReviewNotesFoundation, async (req, res) => {
+router.get('/:generationId/review-notes', requireContractGenerationReadAccess, async (req, res) => {
   try {
     const generationId = String(req.params.generationId);
     const result = await reviewNotesService.getReviewNotes(generationId);
@@ -33,22 +41,24 @@ router.get('/:generationId/review-notes', requireReviewNotesFoundation, async (r
 });
 
 // PUT /api/v1/contracts/:id/review-notes
-router.put('/:generationId/review-notes', requireReviewNotesFoundation, async (req, res) => {
+router.put('/:generationId/review-notes', requireContractGenerationManageAccess, async (req, res) => {
   try {
     const generationId = String(req.params.generationId);
-    const { overallStatus, overallTitle, overallNote, authorId, blockNotes } = req.body;
+    const { overallStatus, overallTitle, overallNote, blockNotes } = req.body;
 
     if (!overallStatus) {
       res.status(400).json({ error: 'overallStatus is required' });
       return;
     }
 
+    const authorId = req.user?.userId;
+
     const result = await reviewNotesService.upsertReviewNotes(generationId, {
       overallStatus,
       overallTitle,
       overallNote,
       authorId,
-      blockNotes
+      blockNotes,
     });
 
     res.json(result);
@@ -59,7 +69,7 @@ router.put('/:generationId/review-notes', requireReviewNotesFoundation, async (r
 });
 
 // GET /api/v1/contracts/:id/review-summary.txt
-router.get('/:generationId/review-summary.txt', requireReviewNotesFoundation, async (req, res) => {
+router.get('/:generationId/review-summary.txt', requireContractGenerationReadAccess, async (req, res) => {
   try {
     const generationId = String(req.params.generationId);
 

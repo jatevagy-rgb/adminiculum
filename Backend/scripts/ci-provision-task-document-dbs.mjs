@@ -47,6 +47,7 @@ const SUITES = [
   { name: 'adminiculum_task_lifecycle_schema_ci', env: 'TASK_LIFECYCLE_TEST_DATABASE_URL' },
   { name: 'adminiculum_task_review_decision_backend_ci', env: 'TASK_REVIEW_DECISION_TEST_DATABASE_URL' },
   { name: 'adminiculum_task_submission_backend_ci', env: 'TASK_SUBMISSION_TEST_DATABASE_URL' },
+  { name: 'adminiculum_presentation_demo_ci', env: 'DEMO_PRESENTATION_TEST_DATABASE_URL' },
 ];
 
 // Baseline rows the taskLifecycleSchema suite expects to already exist before it
@@ -110,7 +111,7 @@ async function main() {
       await lifecycle.end();
     }
 
-    console.log('PROVISION OK: four dedicated task/document databases ready.');
+    console.log('PROVISION OK: five dedicated databases ready.');
   } finally {
     await admin.end();
   }
