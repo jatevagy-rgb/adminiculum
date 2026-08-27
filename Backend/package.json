@@ -18,7 +18,7 @@
     "db:bootstrap:empty": "node scripts/db-bootstrap-empty.mjs",
     "db:migrations:verify-replay": "node scripts/verify-migration-replay.mjs",
     "test:migration:webjob": "node scripts/test-migration-webjob-runner.mjs",
-    "demo:kft:reset": "node scripts/demo-kft-reset.mjs",
+    "demo:kft:reset": "node -r dotenv/config ./node_modules/tsx/dist/cli.mjs scripts/demo-kft-reset.mjs",
     "test:demo-kft:db": "set DOTENV_CONFIG_PATH=.env.test&& node -r dotenv/config ./node_modules/jest/bin/jest.js --runInBand tests/demoKftFixture.integration.test.ts",
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx prisma/seed.ts",
@@ -69,7 +69,11 @@
     "test:task-lifecycle-schema:db": "jest --runInBand tests/taskLifecycleSchema.integration.test.ts",
     "test:task-review-decision:db": "jest --runInBand tests/taskReviewDecision.integration.test.ts",
     "test:task-submission:db": "jest --runInBand tests/taskSubmission.integration.test.ts",
-    "db:provision:task-document": "node scripts/ci-provision-task-document-dbs.mjs"
+    "db:provision:task-document": "node scripts/ci-provision-task-document-dbs.mjs",
+    "demo:presentation:reset": "node -r dotenv/config ./node_modules/tsx/dist/cli.mjs scripts/demo-presentation-reset.mjs",
+    "demo:presentation:check": "node -r dotenv/config ./node_modules/tsx/dist/cli.mjs scripts/demo-presentation-check.mjs",
+    "demo:presentation:mutate": "node -r dotenv/config ./node_modules/tsx/dist/cli.mjs scripts/demo-presentation-mutate.mjs",
+    "test:demo-fixture:db": "jest --runInBand tests/demoKftFixture.integration.test.ts"
   },
   "dependencies": {
     "@azure/identity": "^4.13.1",
