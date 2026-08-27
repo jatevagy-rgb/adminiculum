@@ -237,10 +237,10 @@ d('Organization / responsibility map (Phase 3) (PostgreSQL)', () => {
   });
 
   it('hides HR_CONFIDENTIAL documents from search for non-privileged users', async () => {
-    const adminHits = await documentsService.searchDocuments(suffix, 50, 'ADMIN');
+    const adminHits = await documentsService.searchDocuments(suffix, 50, 'ADMIN', null);
     expect(adminHits.some((d: any) => d.id === docHr)).toBe(true);
     expect(adminHits.some((d: any) => d.id === docStd)).toBe(true);
-    const lawyerHits = await documentsService.searchDocuments(suffix, 50, 'LAWYER');
+    const lawyerHits = await documentsService.searchDocuments(suffix, 50, 'LAWYER', { id: caseA });
     expect(lawyerHits.some((d: any) => d.id === docHr)).toBe(false);
     expect(lawyerHits.some((d: any) => d.id === docStd)).toBe(true);
   });

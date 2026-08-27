@@ -26,12 +26,16 @@
 import { Router, Request, Response } from 'express';
 import clauseLibraryService from './service';
 import { authenticate } from '../../middleware/auth';
+import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
+import { requireCaseReadAccess, requireCaseManageAccess } from '../cases/authorization';
+import { requireContractGenerationReadAccessFromBody } from '../contracts/contractAuthorization';
 import {
   isDatabaseFoundationEnabled,
   requireDatabaseFoundation,
 } from '../../middleware/featureAvailability';
 
 const router = Router();
+router.use(authenticate, requireWorkforceUser);
 
 // ============================================================================
 // FEATURE FLAG GUARD
@@ -46,7 +50,7 @@ const requireEnabled = requireDatabaseFoundation({
 });
 
 // Root status endpoint for staging smoke checks.
-router.get('/', authenticate, (_req: Request, res: Response) => {
+router.get('/', (_req: Request, res: Response) => {
   if (!isClauseLibraryEnabled()) {
     res.status(200).json({
       enabled: false,
@@ -236,7 +240,7 @@ router.put('/lawyer-profiles/:id', authenticate, requireEnabled, async (req: Req
  * GET /api/v1/clause-library/assembly/:caseId
  * Get assembly draft for a case
  */
-router.get('/assembly/:caseId', authenticate, requireEnabled, async (req: Request, res: Response) => {
+router.get('/assembly/:caseId', requireEnabled, requireCaseReadAccess, async (req: Request, res: Response) => {
   try {
     const assembly = await clauseLibraryService.getAssembly(String(req.params.caseId));
     if (!assembly) {
@@ -255,7 +259,7 @@ router.get('/assembly/:caseId', authenticate, requireEnabled, async (req: Reques
  * Get recommended clauses for an intake
  * Body: { contractType, intakeData, lawyerProfileId? }
  */
-router.post('/assembly/recommend', authenticate, requireEnabled, async (req: Request, res: Response) => {
+router.post('/assembly/recommend', requireEnabled, async (req: Request, res: Response) => {
   try {
     const { contractType, intakeData, lawyerProfileId } = req.body;
 
@@ -277,7 +281,7 @@ router.post('/assembly/recommend', authenticate, requireEnabled, async (req: Req
  * Get compact review guidance for generated contract document
  * Body: { documentId, contractType?, lawyerProfileId? }
  */
-router.post('/review-guidance', authenticate, requireEnabled, async (req: Request, res: Response) => {
+router.post('/review-guidance', requireEnabled, requireContractGenerationReadAccessFromBody, async (req: Request, res: Response) => {
   try {
     const { documentId, contractType, lawyerProfileId } = req.body;
 
@@ -303,7 +307,7 @@ router.post('/review-guidance', authenticate, requireEnabled, async (req: Reques
  * PUT /api/v1/clause-library/assembly/:caseId
  * Upsert assembly draft
  */
-router.put('/assembly/:caseId', authenticate, requireEnabled, async (req: Request, res: Response) => {
+router.put('/assembly/:caseId', requireEnabled, requireCaseManageAccess, async (req: Request, res: Response) => {
   try {
     const caseId = String(req.params.caseId);
     const { contractType, intakeData, selectedClauses, assembledText, status, lawyerProfileId, templateId } = req.body;
@@ -337,7 +341,7 @@ router.put('/assembly/:caseId', authenticate, requireEnabled, async (req: Reques
  * PATCH /api/v1/clause-library/assembly/:caseId/status
  * Update assembly status
  */
-router.patch('/assembly/:caseId/status', authenticate, requireEnabled, async (req: Request, res: Response) => {
+router.patch('/assembly/:caseId/status', requireEnabled, requireCaseManageAccess, async (req: Request, res: Response) => {
   try {
     const { status } = req.body;
     if (!status) {
@@ -360,7 +364,7 @@ router.patch('/assembly/:caseId/status', authenticate, requireEnabled, async (re
  * DELETE /api/v1/clause-library/assembly/:caseId
  * Delete assembly draft
  */
-router.delete('/assembly/:caseId', authenticate, requireEnabled, async (req: Request, res: Response) => {
+router.delete('/assembly/:caseId', requireEnabled, requireCaseManageAccess, async (req: Request, res: Response) => {
   try {
     const deleted = await clauseLibraryService.deleteAssembly(String(req.params.caseId));
     if (!deleted) {

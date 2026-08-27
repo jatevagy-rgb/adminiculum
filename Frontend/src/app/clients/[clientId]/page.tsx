@@ -383,6 +383,12 @@ function ClientDetailContent() {
                 <button onClick={() => setShowNewCaseModal(true)} className="adm-link-button adm-link-button-primary px-4 py-2 text-xs">
                   Új ügy
                 </button>
+                <Link
+                  href={cases.find((item) => item.status !== "CLOSED") ? `/cases/${cases.find((item) => item.status !== "CLOSED")?.id}/documents` : `/cases?clientId=${encodeURIComponent(clientId)}`}
+                  className="adm-link-button px-4 py-2 text-xs"
+                >
+                  Dokumentum hozzáadása
+                </Link>
               </div>
             </div>
 

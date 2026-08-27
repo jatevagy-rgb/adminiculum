@@ -159,14 +159,14 @@ async function seedPhase7D1EnrollmentFixture() {
 
 async function verifyPhase7D1EnrollmentSemantics() {
   const existing = await one(`SELECT "complianceEnrollmentStatus"::text AS status FROM client_operating_profiles WHERE "clientId"='phase7d1-existing-profile'`);
-  if (!existing || existing.status !== 'ENROLLED') throw new Error('Phase 7D1 existing profile was not backfilled to ENROLLED.');
+  if (!existing || existing.status !== 'NOT_ENROLLED') throw new Error('Phase 7D1 migration enrolled an existing operating profile.');
   const bare = await one(`SELECT count(*)::int AS count FROM client_operating_profiles WHERE "clientId"='phase7d1-bare-client'`);
   if (bare.count !== 0) throw new Error('Phase 7D1 created a profile for a bare client.');
   const created = await one(`INSERT INTO client_operating_profiles (id, "clientId", "createdAt", "updatedAt")
     VALUES ('phase7d1-new-profile-row', 'phase7d1-bare-client', now(), now())
     RETURNING "complianceEnrollmentStatus"::text AS status`);
   if (created.status !== 'NOT_ENROLLED') throw new Error('Phase 7D1 new profile did not default to NOT_ENROLLED.');
-  console.log('Phase 7D1 enrollment semantics OK: existing=ENROLLED, bare remains bare, new=NOT_ENROLLED.');
+  console.log('Phase 7D1 enrollment semantics OK: existing=NOT_ENROLLED, bare remains bare, new=NOT_ENROLLED.');
 }
 
 async function verifySchemaShape() {

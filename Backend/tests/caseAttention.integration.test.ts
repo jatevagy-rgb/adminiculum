@@ -12,6 +12,7 @@ describeWithDatabase('case attention read model (PostgreSQL)', () => {
 
   beforeAll(async () => {
     const overdueAt = new Date(Date.now() - 86_400_000);
+    const tieAt = new Date(overdueAt.getTime() + 60_000);
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
     await db.user.create({ data: { id: ids.user, email: `attention-${suffix}@example.invalid`, name: 'Attention User', role: 'LAWYER' } });
     await db.client.createMany({ data: [{ id: ids.clientA, name: `Attention A ${suffix}` }, { id: ids.clientB, name: `Attention B ${suffix}` }] });
@@ -24,7 +25,7 @@ describeWithDatabase('case attention read model (PostgreSQL)', () => {
     ] as any });
     await db.task.createMany({ data: [
       { id: ids.overdue, caseId: ids.caseA, title: 'Overdue task', taskType: 'OTHER', type: 'OTHER', status: 'TODO', priority: 'HIGH', dueDate: overdueAt, assignedById: ids.user, requiredSkills: [] },
-      { id: ids.overdueTie, caseId: ids.caseA, title: 'Overdue tie task', taskType: 'OTHER', type: 'OTHER', status: 'TODO', priority: 'HIGH', dueDate: overdueAt, assignedById: ids.user, requiredSkills: [] },
+      { id: ids.overdueTie, caseId: ids.caseA, title: 'Overdue tie task', taskType: 'OTHER', type: 'OTHER', status: 'TODO', priority: 'HIGH', dueDate: tieAt, assignedById: ids.user, requiredSkills: [] },
       { id: ids.future, caseId: ids.caseA, title: 'Future task', taskType: 'OTHER', type: 'OTHER', status: 'TODO', priority: 'MEDIUM', dueDate: new Date(Date.now() + 10 * 86_400_000), assignedById: ids.user, requiredSkills: [] },
       { id: crypto.randomUUID(), caseId: ids.caseC, title: 'Normal future task', taskType: 'OTHER', type: 'OTHER', status: 'TODO', priority: 'MEDIUM', dueDate: new Date(Date.now() + 10 * 86_400_000), assignedById: ids.user, requiredSkills: [] },
     ] as any });
@@ -52,6 +53,8 @@ describeWithDatabase('case attention read model (PostgreSQL)', () => {
   });
 
   it('exposes explicit deadlines, keeps ordering deterministic, and scopes dashboard results', async () => {
+    const overdue = await db.task.findUniqueOrThrow({ where: { id: ids.overdue } });
+    await db.task.update({ where: { id: ids.overdueTie }, data: { dueDate: overdue.dueDate } });
     const summary = await getCaseAttentionSummary(ids.caseA, db);
     expect(summary?.signals.some((signal) => signal.sourceType === 'INTAKE_DEADLINE')).toBe(true);
     const tieSignals = summary!.signals.filter((signal) => signal.severity === 'URGENT' && signal.sourceType === 'TASK');

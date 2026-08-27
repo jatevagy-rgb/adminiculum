@@ -18,7 +18,8 @@ import { createTypedFactAndEvaluate } from '../src/modules/compliance/typedFactM
 const databaseUrl =
   process.env.DEMO_KFT_TEST_DATABASE_URL ||
   process.env.MIGRATION_REPLAY_DATABASE_URL ||
-  process.env.CLIENT_IDENTITY_TEST_DATABASE_URL;
+  process.env.CLIENT_IDENTITY_TEST_DATABASE_URL ||
+  process.env.DATABASE_URL;
 const d = databaseUrl ? describe : describe.skip;
 
 // Mirror the reset script's stable IDs by importing the shared logic is not
@@ -74,8 +75,17 @@ d('DEMO KFT. organizational fixture (PostgreSQL)', () => {
 
   async function reset() {
     const { execFileSync } = await import('node:child_process');
-    execFileSync('node', ['scripts/demo-kft-reset.mjs'], {
-      cwd: process.cwd(),
+    const path = await import('node:path');
+    const fs = await import('node:fs');
+    const possibleTsx = [
+      path.resolve(__dirname, '../node_modules/tsx/dist/cli.mjs'),
+      path.resolve(process.cwd(), 'node_modules/tsx/dist/cli.mjs'),
+      path.resolve(process.cwd(), 'Backend/node_modules/tsx/dist/cli.mjs'),
+    ];
+    const tsxCli = possibleTsx.find((p) => fs.existsSync(p)) || 'tsx';
+    const scriptPath = path.resolve(__dirname, '../scripts/demo-kft-reset.mjs');
+    execFileSync(process.execPath, [tsxCli, scriptPath], {
+      cwd: path.resolve(__dirname, '..'),
       env: { ...process.env, ADMINICULUM_DEMO_CONTENT_ENABLED: 'true' },
       stdio: 'pipe',
     });
@@ -123,7 +133,7 @@ d('DEMO KFT. organizational fixture (PostgreSQL)', () => {
     await reset();
     const casesAfter = await db.case.count({ where: { id: { in: [IDS.caseEmploymentId, IDS.caseSupplierId, IDS.caseComplianceId] } } });
     expect(casesAfter).toBe(3);
-    const timeAfter = (await db.timeEntry.aggregate({ where: { matterId: { in: [IDS.matterEmploymentId, IDS.matterSupplierId, IDS.matterComplianceId] } }, _sum: { minutes: true } }))._sum ?? 0;
+    const timeAfter = (await db.timeEntry.aggregate({ where: { matterId: { in: [IDS.matterEmploymentId, IDS.matterSupplierId, IDS.matterComplianceId] } }, _sum: { minutes: true } }))._sum.minutes ?? 0;
     expect(timeAfter).toBe(875);
   });
 

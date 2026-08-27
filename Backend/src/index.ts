@@ -170,6 +170,14 @@ app.get('/health', (_req: Request, res: Response) => {
   });
 });
 
+app.get('/health/version', (_req: Request, res: Response) => {
+  res.json({
+    commitSha: process.env.APP_COMMIT_SHA || null,
+    buildTime: process.env.APP_BUILD_TIME || null,
+    environment: process.env.NODE_ENV || 'development',
+  });
+});
+
 app.get('/', (_req: Request, res: Response) => {
   res.json({
     name: 'Adminiculum API V2',
