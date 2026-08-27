@@ -786,6 +786,7 @@ jest.mock('../src/modules/documents/authorization', () => ({
 
 jest.mock('../src/modules/cases/authorization', () => ({
   userCanManageCase: jest.fn().mockResolvedValue(true),
+  requireCaseReadAccess: (_req: Request, _res: Response, next: NextFunction) => next(),
 }));
 
 jest.mock('../src/modules/documentEditor/service', () => ({
