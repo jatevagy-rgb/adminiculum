@@ -57,9 +57,12 @@ async function resolveContractCaseId(generationId: string): Promise<string | nul
 async function enforceContractCaseAccess(
   req: Request,
   res: Response,
-  check: (req: Request, caseId: string) => Promise<boolean | null>
+  check: (req: Request, caseId: string) => Promise<boolean | null>,
+  paramName = 'id'
 ): Promise<boolean> {
-  const generationId = String(req.params.id || '').trim();
+  const generationId = String(
+    req.params[paramName] || (paramName === 'id' ? req.params.generationId : '') || ''
+  ).trim();
   if (!generationId) {
     res.status(400).json({
       status: 400,
@@ -106,7 +109,16 @@ export async function requireContractReadAccess(
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  const allowed = await enforceContractCaseAccess(req, res, userCanReadCase);
+  const allowed = await enforceContractCaseAccess(req, res, userCanReadCase, 'id');
+  if (allowed) next();
+}
+
+export async function requireContractGenerationReadAccess(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const allowed = await enforceContractCaseAccess(req, res, userCanReadCase, 'generationId');
   if (allowed) next();
 }
 
@@ -123,7 +135,16 @@ export async function requireContractManageAccess(
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  const allowed = await enforceContractCaseAccess(req, res, userCanManageCase);
+  const allowed = await enforceContractCaseAccess(req, res, userCanManageCase, 'id');
+  if (allowed) next();
+}
+
+export async function requireContractGenerationManageAccess(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const allowed = await enforceContractCaseAccess(req, res, userCanManageCase, 'generationId');
   if (allowed) next();
 }
 

@@ -191,7 +191,60 @@ jest.mock('../src/modules/sharepoint/driveService', () => ({
   },
 }));
 
-// Mock multer — manual mock at __mocks__/multer.js handles this
+jest.mock('../src/modules/review-notes/service', () => {
+  const mock = {
+    getReviewNotes: jest.fn().mockResolvedValue({
+      id: 'rev-notes-1',
+      generationId: 'contract-gen-1',
+      overallStatus: 'NEEDS_REVISION',
+      overallTitle: 'Review Title',
+      overallNote: 'Review Note',
+      authorId: 'lawyer-a',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      blockNotes: [],
+    }),
+    upsertReviewNotes: jest.fn().mockResolvedValue({
+      id: 'rev-notes-1',
+      generationId: 'contract-gen-1',
+      overallStatus: 'NEEDS_REVISION',
+      overallTitle: 'Review Title',
+      overallNote: 'Review Note',
+      authorId: 'lawyer-a',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      blockNotes: [],
+    }),
+  };
+  return { __esModule: true, default: mock };
+});
+
+jest.mock('../src/modules/clause-library/service', () => {
+  const mock = {
+    listClauses: jest.fn().mockResolvedValue([]),
+    getClause: jest.fn().mockResolvedValue({ id: 'clause-1', title: 'Test Clause' }),
+    createClause: jest.fn().mockResolvedValue({ id: 'clause-1' }),
+    updateClause: jest.fn().mockResolvedValue({ id: 'clause-1' }),
+    deleteClause: jest.fn().mockResolvedValue(true),
+    listLawyerProfiles: jest.fn().mockResolvedValue([]),
+    getLawyerProfile: jest.fn().mockResolvedValue({ id: 'prof-1' }),
+    upsertLawyerProfile: jest.fn().mockResolvedValue({ id: 'prof-1' }),
+    getAssembly: jest.fn().mockResolvedValue({ id: 'assembly-1', caseId: 'case-a' }),
+    recommendClauses: jest.fn().mockResolvedValue([]),
+    upsertAssembly: jest.fn().mockResolvedValue({ id: 'assembly-1', caseId: 'case-a' }),
+    updateAssemblyStatus: jest.fn().mockResolvedValue({ id: 'assembly-1', caseId: 'case-a' }),
+    deleteAssembly: jest.fn().mockResolvedValue(true),
+    getReviewGuidance: jest.fn().mockResolvedValue({
+      contractType: 'ADASVETEL',
+      analyzedField: 'templateData',
+      detected: [],
+      missing: [],
+      suggested: [],
+      summary: { totalDetected: 0, totalMissing: 0, totalSuggested: 0 },
+    }),
+  };
+  return { __esModule: true, default: mock };
+});
 
 // Mock fs for contract download (file existence check)
 jest.mock('fs', () => {
@@ -216,7 +269,9 @@ jest.mock('../src/modules/sharepoint/driveService', () => ({
 // ---------------------------------------------------------------------------
 import documentsRoutes from '../src/modules/documents/routes';
 import contractsRoutes from '../src/modules/contracts/routes';
+import reviewNotesRoutes from '../src/modules/review-notes/routes';
 import generationDraftRoutes from '../src/modules/generation-draft/routes';
+import clauseLibraryRoutes from '../src/modules/clause-library/routes';
 import { prisma } from '../src/prisma/prisma.service';
 
 // ---------------------------------------------------------------------------
@@ -244,6 +299,9 @@ function requestJson(
         authorization: 'Bearer test-token',
         ...headers,
       };
+      if (headers.authorization === '') {
+        delete reqHeaders.authorization;
+      }
       const encodedBody = body === undefined ? undefined : JSON.stringify(body);
       if (encodedBody) {
         reqHeaders['content-type'] = 'application/json';
@@ -280,7 +338,9 @@ function buildApp(): Express {
   app.use(express.json());
   app.use('/api/v1/documents', documentsRoutes);
   app.use('/api/v1/contracts', contractsRoutes);
+  app.use('/api/v1/contracts', reviewNotesRoutes);
   app.use('/api/v1/generation-drafts', generationDraftRoutes);
+  app.use('/api/v1/clause-library', clauseLibraryRoutes);
   return app;
 }
 
@@ -371,15 +431,31 @@ function mockCaseA() {
   (prisma.caseCollaborator.findFirst as jest.Mock).mockResolvedValue(null);
 }
 
-/** Contract generation in Case A */
+/** Contract generation in Case A / Case B */
 function mockContractGen() {
   (prisma.contractGeneration.findUnique as jest.Mock).mockImplementation((args: any) => {
-    if (args.where.id === CONTRACT_GEN_1) {
+    if (args.where.id === CONTRACT_GEN_1 || args.where.id === 'gen-1') {
       return Promise.resolve({
         id: CONTRACT_GEN_1,
         caseId: CASE_A,
-        filePath: '/tmp/test-contract.pdf',
+        title: 'Contract A',
         fileName: 'contract.pdf',
+        filePath: '/tmp/test-contract.pdf',
+        revisionNumber: 1,
+        status: 'GENERATED',
+        parentRevisionId: null,
+      });
+    }
+    if (args.where.id === 'gen-case-b' || args.where.id === 'gen-client-b') {
+      return Promise.resolve({
+        id: 'gen-case-b',
+        caseId: CASE_B,
+        title: 'Contract B',
+        fileName: 'contract-b.pdf',
+        filePath: '/tmp/test-contract-b.pdf',
+        revisionNumber: 1,
+        status: 'GENERATED',
+        parentRevisionId: null,
       });
     }
     return Promise.resolve(null);
@@ -1039,5 +1115,167 @@ describe('SEC-1: P0/P1 adversarial authorization regressions', () => {
       requestJson(app, 'GET', '/api/v1/contracts/templates', clientHeaders),
     ]);
     expect([document.status, suggestions.status, annotations.status, templates.status]).toEqual([403, 403, 403, 403]);
+  });
+});
+
+describe('SEC-1: Nested contract review notes authorization', () => {
+  it('1. unauthenticated review-notes GET denied', async () => {
+    const res = await requestJson(app, 'GET', `/api/v1/contracts/${CONTRACT_GEN_1}/review-notes`, { authorization: '' });
+    expect(res.status).toBe(401);
+  });
+
+  it('2. unauthenticated review-notes PUT denied', async () => {
+    const res = await requestJson(app, 'PUT', `/api/v1/contracts/${CONTRACT_GEN_1}/review-notes`, { authorization: '' }, { overallStatus: 'NEEDS_REVISION' });
+    expect(res.status).toBe(401);
+  });
+
+  it('3. unauthenticated review-summary denied', async () => {
+    const res = await requestJson(app, 'GET', `/api/v1/contracts/${CONTRACT_GEN_1}/review-summary.txt`, { authorization: '' });
+    expect(res.status).toBe(401);
+  });
+
+  it('4. local CLIENT denied all three review-note routes', async () => {
+    const clientHeaders = { 'x-test-user-id': LAWYER_A, 'x-test-role': 'CLIENT' };
+    const [getNotes, putNotes, getSummary] = await Promise.all([
+      requestJson(app, 'GET', `/api/v1/contracts/${CONTRACT_GEN_1}/review-notes`, clientHeaders),
+      requestJson(app, 'PUT', `/api/v1/contracts/${CONTRACT_GEN_1}/review-notes`, clientHeaders, { overallStatus: 'NEEDS_REVISION' }),
+      requestJson(app, 'GET', `/api/v1/contracts/${CONTRACT_GEN_1}/review-summary.txt`, clientHeaders),
+    ]);
+    expect(getNotes.status).toBe(403);
+    expect((getNotes.body as any).code).toBe('WORKFORCE_ACCESS_REQUIRED');
+    expect(putNotes.status).toBe(403);
+    expect((putNotes.body as any).code).toBe('WORKFORCE_ACCESS_REQUIRED');
+    expect(getSummary.status).toBe(403);
+    expect((getSummary.body as any).code).toBe('WORKFORCE_ACCESS_REQUIRED');
+  });
+
+  it('5. Case A lawyer cannot GET Case B review notes', async () => {
+    const res = await requestJson(app, 'GET', '/api/v1/contracts/gen-case-b/review-notes', {
+      'x-test-user-id': LAWYER_A,
+      'x-test-role': 'LAWYER',
+    });
+    expect(res.status).toBe(403);
+    expect((res.body as any).code).toBe('CONTRACT_ACCESS_FORBIDDEN');
+  });
+
+  it('6. Case A lawyer cannot PUT Case B review notes', async () => {
+    const res = await requestJson(app, 'PUT', '/api/v1/contracts/gen-case-b/review-notes', {
+      'x-test-user-id': LAWYER_A,
+      'x-test-role': 'LAWYER',
+    }, { overallStatus: 'NEEDS_REVISION' });
+    expect(res.status).toBe(403);
+    expect((res.body as any).code).toBe('CONTRACT_ACCESS_FORBIDDEN');
+  });
+
+  it('7. Case A lawyer cannot export Case B review summary', async () => {
+    const res = await requestJson(app, 'GET', '/api/v1/contracts/gen-case-b/review-summary.txt', {
+      'x-test-user-id': LAWYER_A,
+      'x-test-role': 'LAWYER',
+    });
+    expect(res.status).toBe(403);
+    expect((res.body as any).code).toBe('CONTRACT_ACCESS_FORBIDDEN');
+  });
+
+  it('8. PUT authorId body spoof does not control actor identity', async () => {
+    const reviewNotesService = require('../src/modules/review-notes/service').default;
+    const res = await requestJson(app, 'PUT', `/api/v1/contracts/${CONTRACT_GEN_1}/review-notes`, {
+      'x-test-user-id': LAWYER_A,
+      'x-test-role': 'LAWYER',
+    }, {
+      overallStatus: 'NEEDS_REVISION',
+      authorId: 'spoofed-attacker-identity',
+      overallTitle: 'Review Title',
+    });
+    expect(res.status).toBe(200);
+    expect(reviewNotesService.upsertReviewNotes).toHaveBeenCalledWith(
+      CONTRACT_GEN_1,
+      expect.objectContaining({
+        authorId: LAWYER_A,
+        overallStatus: 'NEEDS_REVISION',
+      })
+    );
+  });
+});
+
+describe('SEC-1: Clause library workforce and case authorization', () => {
+  const lawyerAHeaders = { 'x-test-user-id': LAWYER_A, 'x-test-role': 'LAWYER' };
+  const clientHeaders = { 'x-test-user-id': 'client-user', 'x-test-role': 'CLIENT' };
+
+  it('9. local CLIENT denied Clause Library', async () => {
+    const [status, clauses, assembly] = await Promise.all([
+      requestJson(app, 'GET', '/api/v1/clause-library/', clientHeaders),
+      requestJson(app, 'GET', '/api/v1/clause-library/clauses', clientHeaders),
+      requestJson(app, 'GET', `/api/v1/clause-library/assembly/${CASE_A}`, clientHeaders),
+    ]);
+    expect(status.status).toBe(403);
+    expect((status.body as any).code).toBe('WORKFORCE_ACCESS_REQUIRED');
+    expect(clauses.status).toBe(403);
+    expect((clauses.body as any).code).toBe('WORKFORCE_ACCESS_REQUIRED');
+    expect(assembly.status).toBe(403);
+    expect((assembly.body as any).code).toBe('WORKFORCE_ACCESS_REQUIRED');
+  });
+
+  it('10. Case A user cannot GET Case B assembly', async () => {
+    const res = await requestJson(app, 'GET', `/api/v1/clause-library/assembly/${CASE_B}`, lawyerAHeaders);
+    expect(res.status).toBe(403);
+    expect((res.body as any).code).toBe('CASE_ACCESS_FORBIDDEN');
+  });
+
+  it('11. cannot PUT Case B assembly', async () => {
+    const res = await requestJson(app, 'PUT', `/api/v1/clause-library/assembly/${CASE_B}`, lawyerAHeaders, {
+      intakeData: { purpose: 'unauthorized' },
+    });
+    expect(res.status).toBe(403);
+    expect((res.body as any).code).toBe('CASE_ACCESS_FORBIDDEN');
+  });
+
+  it('12. cannot PATCH Case B assembly status', async () => {
+    const res = await requestJson(app, 'PATCH', `/api/v1/clause-library/assembly/${CASE_B}/status`, lawyerAHeaders, {
+      status: 'APPROVED',
+    });
+    expect(res.status).toBe(403);
+    expect((res.body as any).code).toBe('CASE_ACCESS_FORBIDDEN');
+  });
+
+  it('13. cannot DELETE Case B assembly', async () => {
+    const res = await requestJson(app, 'DELETE', `/api/v1/clause-library/assembly/${CASE_B}`, lawyerAHeaders);
+    expect(res.status).toBe(403);
+    expect((res.body as any).code).toBe('CASE_ACCESS_FORBIDDEN');
+  });
+
+  it('14. review-guidance inaccessible document denied', async () => {
+    const res = await requestJson(app, 'POST', '/api/v1/clause-library/review-guidance', lawyerAHeaders, {
+      documentId: CASE_B_DOC,
+    });
+    expect(res.status).toBe(403);
+    expect((res.body as any).code).toBe('DOCUMENT_ACCESS_FORBIDDEN');
+  });
+
+  it('15. HR_CONFIDENTIAL review-guidance denied to ordinary lawyer even with ordinary Case access', async () => {
+    const res = await requestJson(app, 'POST', '/api/v1/clause-library/review-guidance', lawyerAHeaders, {
+      documentId: HR_DOC,
+    });
+    expect(res.status).toBe(403);
+    expect((res.body as any).code).toBe('DOCUMENT_ACCESS_FORBIDDEN');
+  });
+
+  it('16. authorized workforce happy paths remain working', async () => {
+    const [reviewNotes, reviewSummary, assemblyGet, assemblyPut, guidanceStandard, guidanceAdminHr] = await Promise.all([
+      requestJson(app, 'GET', `/api/v1/contracts/${CONTRACT_GEN_1}/review-notes`, lawyerAHeaders),
+      requestJson(app, 'GET', `/api/v1/contracts/${CONTRACT_GEN_1}/review-summary.txt`, lawyerAHeaders),
+      requestJson(app, 'GET', `/api/v1/clause-library/assembly/${CASE_A}`, lawyerAHeaders),
+      requestJson(app, 'PUT', `/api/v1/clause-library/assembly/${CASE_A}`, lawyerAHeaders, { intakeData: { ok: true } }),
+      requestJson(app, 'POST', '/api/v1/clause-library/review-guidance', lawyerAHeaders, { documentId: STANDARD_DOC }),
+      requestJson(app, 'POST', '/api/v1/clause-library/review-guidance', {
+        'x-test-user-id': ADMIN_USER,
+        'x-test-role': 'ADMIN',
+      }, { documentId: HR_DOC }),
+    ]);
+    expect(reviewNotes.status).toBe(200);
+    expect(reviewSummary.status).toBe(200);
+    expect(assemblyGet.status).toBe(200);
+    expect(assemblyPut.status).toBe(200);
+    expect(guidanceStandard.status).toBe(200);
+    expect(guidanceAdminHr.status).toBe(200);
   });
 });
