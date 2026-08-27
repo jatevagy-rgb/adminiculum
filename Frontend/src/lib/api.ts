@@ -4634,6 +4634,20 @@ export async function getMatterTimeSummary(id: string): Promise<MatterTimeSummar
   return fetchApi<MatterTimeSummary>(`/matters/${encodeURIComponent(id)}/time-summary`);
 }
 
+export interface ClientSafeWorkSummary {
+  period: { from: string; to: string };
+  totalMinutes: number;
+  matters: Array<{ matterId: string; title: string; minutes: number }>;
+}
+
+export async function getClientSafeWorkSummary(period?: { from?: string; to?: string }): Promise<ClientSafeWorkSummary> {
+  const params = new URLSearchParams();
+  if (period?.from) params.set('from', period.from);
+  if (period?.to) params.set('to', period.to);
+  const query = params.toString();
+  return fetchApi<ClientSafeWorkSummary>(`/client-portal/org/work-summary${query ? `?${query}` : ''}`, { cache: 'no-store' });
+}
+
 // ============================================================================
 // WORKGROUPS - Client workload tracking
 // ============================================================================

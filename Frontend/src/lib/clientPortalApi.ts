@@ -1,4 +1,4 @@
-import { fetchApi } from './api';
+﻿import { fetchApi } from './api';
 
 export type PortalMatter = {
   id: string;
@@ -467,4 +467,19 @@ export async function getPortalOrganizationContracts() {
 
 export async function getPortalOrganizationCompany() {
   return fetchApi<PortalOrgCompany>('/client-portal/org/company', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
+}
+export type PortalCompanyProfileDiscovery = {
+  client: { name: string | null };
+  questions: Array<{
+    questionKey: string;
+    label: string;
+    status: string;
+    value: unknown;
+  }>;
+};
+export async function getPortalCompanyProfileDiscovery() {
+  return fetchApi<PortalCompanyProfileDiscovery>('/client-portal/org/company-profile', { authContext: 'customer' });
+}
+export async function answerPortalCompanyProfileQuestion(questionKey: string, payload: { status: string; numberValue?: number }) {
+  return fetchApi<any>(`/client-portal/org/company-profile/questions/${questionKey}`, { authContext: 'customer', method: 'PUT', body: JSON.stringify(payload) });
 }
