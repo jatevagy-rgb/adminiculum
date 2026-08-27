@@ -48,8 +48,17 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
 
   async function reset() {
     const { execFileSync } = await import('node:child_process');
-    execFileSync('node', ['scripts/demo-kft-reset.mjs'], {
-      cwd: process.cwd(),
+    const path = await import('node:path');
+    const fs = await import('node:fs');
+    const possibleTsx = [
+      path.resolve(__dirname, '../node_modules/tsx/dist/cli.mjs'),
+      path.resolve(process.cwd(), 'node_modules/tsx/dist/cli.mjs'),
+      path.resolve(process.cwd(), 'Backend/node_modules/tsx/dist/cli.mjs'),
+    ];
+    const tsxCli = possibleTsx.find((p) => fs.existsSync(p)) || 'tsx';
+    const scriptPath = path.resolve(__dirname, '../scripts/demo-kft-reset.mjs');
+    execFileSync(process.execPath, [tsxCli, scriptPath], {
+      cwd: path.resolve(__dirname, '..'),
       env: { ...process.env, ADMINICULUM_DEMO_CONTENT_ENABLED: 'true' },
       stdio: 'pipe',
     });
