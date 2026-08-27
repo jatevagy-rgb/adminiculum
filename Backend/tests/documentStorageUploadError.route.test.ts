@@ -73,6 +73,7 @@ jest.mock('../src/prisma/prisma.service', () => ({
 
 import documentsRoutes from '../src/modules/documents/routes';
 import documentsService, { DocumentStorageUploadError } from '../src/modules/documents/services';
+import { DevMockWorkforceScanner, setWorkforceScanner } from '../src/modules/upload-security/scannerAdapter';
 
 const mockCreateDocument = jest.spyOn(documentsService, 'createDocument');
 
@@ -132,11 +133,14 @@ function requestJson(
   });
 }
 
-const VALID_FILE_CONTENT = Buffer.from('test PDF content').toString('base64');
+// Must pass the SEC-2 magic-byte validator so these assertions reach the
+// real document service and its mocked storage provider.
+const VALID_FILE_CONTENT = Buffer.from('%PDF-1.4\n% test document\n%%EOF').toString('base64');
 
 describe('DocumentStorageUploadError → safe 502 mapping across all upload routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    setWorkforceScanner(new DevMockWorkforceScanner());
     mockPrisma.document.findUnique.mockResolvedValue({
       id: 'doc-1',
       caseId: 'case-1',
@@ -160,6 +164,10 @@ describe('DocumentStorageUploadError → safe 502 mapping across all upload rout
       success: false,
       error: 'Graph SharePoint token drive path failure',
     });
+  });
+
+  afterAll(() => {
+    setWorkforceScanner(null);
   });
 
   describe('POST /documents (create new document)', () => {
